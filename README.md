@@ -266,9 +266,9 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
 
 - [x] End-to-end encryption (E2EE) for notes and attachments. See [E2EE Documentation](docs/E2EE.md).
 - [x] Light and dark theme support.
-- [ ] Fix alarm notifications on iOS.
-- [ ] Optimize sketch saving (reduce file size by lowering precision).
-- [ ] Revenue model implementation.
+- [x] Fix alarm notifications on iOS.
+- [x] Optimize sketch saving (reduce file size by lowering precision).
+- [x] Revenue model implementation.
 - [ ] Calendar-grade reminders and recurring nudges.
 - [ ] Widgets and quick actions on mobile/desktop.
 - [ ] Theme editor (custom colors).
