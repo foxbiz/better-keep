@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Better Keep Notes is open source - View our code on GitHub, contribute to development, and verify our security. Transparency you can trust.">
+  <meta name="keywords"
+    content="Better Keep Notes, open source, GitHub, transparent, community, contribute, source code, Flutter app">
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="canonical" href="https://betterkeep.app/open-source" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Open Source - Better Keep Notes">
+  <meta property="og:description"
+    content="View our code on GitHub, contribute to development, and verify our security. Transparency you can trust.">
+  <meta property="og:image" content="https://betterkeep.app/icons/logo.png">
+  <meta property="og:url" content="https://betterkeep.app/open-source">
+  <meta property="og:site_name" content="Better Keep Notes">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Open Source - Better Keep Notes">
+  <meta name="twitter:description"
+    content="View our code on GitHub, contribute to development, and verify our security.">
+  <meta name="twitter:image" content="https://betterkeep.app/icons/logo.png">
+
+  <title>Open Source - Better Keep Notes</title>
+  <style>
+    :root {
+      --primary: #FFD54F;
+      --primary-dark: #FFC107;
+      --primary-light: #FFECB3;
+      --accent: #7C4DFF;
+      --accent-dark: #536DFE;
+      --bg-dark: #121212;
+      --bg-darker: #0a0a0a;
+      --bg-card: #1E1E1E;
+      --bg-card-hover: #2A2A2A;
+      --text-primary: #FFFFFF;
+      --text-secondary: #B0B0B0;
+      --text-muted: #757575;
+      --gradient-start: #FFD54F;
+      --gradient-end: #FF8A65;
+      --success: #66BB6A;
+      --danger: #EF5350;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+      --transition-fast: 0.2s ease;
+      --transition-normal: 0.3s ease;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.8;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      padding: 1rem 2rem;
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .nav-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    .nav-brand span {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--primary);
+    }
+
+    .btn-launch {
+      background: linear-gradient(135deg, #7C4DFF, #536DFE);
+      color: #ffffff;
+      padding: 0.6rem 1.5rem;
+      border-radius: 25px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-launch:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(124, 77, 255, 0.4);
+      color: #ffffff;
+    }
+
+    /* Mobile Menu */
+    .mobile-menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem;
+      z-index: 1001;
+    }
+
+    .mobile-menu-toggle span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text-primary);
+      margin: 5px 0;
+      transition: var(--transition-normal);
+      border-radius: 2px;
+    }
+
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(18, 18, 18, 0.98);
+      backdrop-filter: blur(20px);
+      z-index: 999;
+      padding: 5rem 2rem 2rem;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+
+    .mobile-nav.active {
+      display: flex;
+    }
+
+    .mobile-nav a {
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 1.25rem;
+      font-weight: 500;
+      padding: 0.75rem 1.5rem;
+      transition: var(--transition-normal);
+    }
+
+    /* Main Content */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 8rem 2rem 4rem;
+    }
+
+    /* Hero Section */
+    .hero {
+      text-align: center;
+      padding: 2rem 0 4rem;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Content Sections */
+    .section {
+      margin-bottom: 4rem;
+    }
+
+    .section h2 {
+      font-size: 1.75rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--primary);
+      display: inline-block;
+    }
+
+    .section p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .card h3 {
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .card h3 svg {
+      color: var(--primary);
+    }
+
+    .card ul {
+      margin-left: 1.5rem;
+      color: var(--text-secondary);
+    }
+
+    .card li {
+      margin-bottom: 0.5rem;
+    }
+
+    /* Table */
+    .open-source-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 2rem 0;
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .open-source-table th,
+    .open-source-table td {
+      padding: 1rem 1.5rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .open-source-table th {
+      background: var(--bg-darker);
+      font-weight: 600;
+    }
+
+    .open-source-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge-open {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: rgba(102, 187, 106, 0.2);
+      color: var(--success);
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .badge-gated {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: rgba(255, 152, 0, 0.2);
+      color: #FF9800;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    /* Why Section */
+    .why-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .why-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .why-card svg {
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+
+    .why-card h3 {
+      margin-bottom: 0.5rem;
+    }
+
+    .why-card p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    /* CTA */
+    .cta-section {
+      text-align: center;
+      padding: 3rem;
+      background: linear-gradient(180deg, var(--bg-card), transparent);
+      border-radius: var(--radius-lg);
+      margin-top: 4rem;
+    }
+
+    .btn-github {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 2rem;
+      background: #24292e;
+      color: white;
+      border-radius: var(--radius-md);
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .btn-github:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 6rem;
+      padding: 2rem;
+      text-align: center;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color var(--transition-fast);
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    .footer-copyright {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-toggle {
+        display: block;
+      }
+
+      .hero h1 {
+        font-size: 2rem;
+      }
+
+      .open-source-table {
+        font-size: 0.85rem;
+      }
+
+      .open-source-table th,
+      .open-source-table td {
+        padding: 0.75rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <nav>
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="icons/logo.png" alt="Better Keep Notes">
+        <span>Better Keep Notes</span>
+      </a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="encryption.html">Security</a>
+        <a href="open-source.html" class="active">Open Source</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="/#download" class="btn-launch">Get the App</a>
+      </div>
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="mobile-nav" id="mobileNav">
+    <a href="/">Home</a>
+    <a href="pricing.html">Pricing</a>
+    <a href="encryption.html">Security</a>
+    <a href="open-source.html">Open Source</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="/#download" class="btn-launch">Get the App</a>
+  </div>
+
+  <main>
+    <section class="hero">
+      <h1>📖 Open Source</h1>
+      <p>Transparency builds trust. See exactly what code runs on your device.</p>
+    </section>
+
+    <!-- Philosophy -->
+    <section class="section">
+      <h2>Our Philosophy</h2>
+      <p>
+        We believe that privacy-focused software should be auditable. That's why the core of Better Keep Notes
+        is open source. You can inspect our encryption implementation, verify there are no backdoors,
+        and even contribute improvements.
+      </p>
+      <p>
+        At the same time, we need to sustain development. That's why our hosted backend and some operational
+        tooling remain proprietary. This "open core" model lets us be transparent while maintaining a
+        sustainable business.
+      </p>
+    </section>
+
+    <!-- What's Open -->
+    <section class="section">
+      <h2>What's Open vs. Gated</h2>
+
+      <table class="open-source-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Status</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Flutter UI (all screens)</td>
+            <td><span class="badge-open">Open Source</span></td>
+            <td>Full transparency on user experience</td>
+          </tr>
+          <tr>
+            <td>Encryption logic (E2EE)</td>
+            <td><span class="badge-open">Open Source</span></td>
+            <td>Security must be auditable</td>
+          </tr>
+          <tr>
+            <td>Local database schemas</td>
+            <td><span class="badge-open">Open Source</span></td>
+            <td>Your data format should be open</td>
+          </tr>
+          <tr>
+            <td>Entitlement definitions</td>
+            <td><span class="badge-open">Open Source</span></td>
+            <td>Know exactly what each plan offers</td>
+          </tr>
+          <tr>
+            <td>Sync protocol</td>
+            <td><span class="badge-open">Open Source</span></td>
+            <td>Interoperability and trust</td>
+          </tr>
+          <tr>
+            <td>Firebase Security Rules</td>
+            <td><span class="badge-open">Open Source</span></td>
+            <td>Verify server-side access control</td>
+          </tr>
+          <tr>
+            <td>Hosted backend config</td>
+            <td><span class="badge-gated">Gated</span></td>
+            <td>Prevents free-riding on infrastructure</td>
+          </tr>
+          <tr>
+            <td>Subscription verification</td>
+            <td><span class="badge-gated">Gated</span></td>
+            <td>Business logic protection</td>
+          </tr>
+          <tr>
+            <td>Cloud Functions (Pro)</td>
+            <td><span class="badge-gated">Gated</span></td>
+            <td>Server-side business features</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Why Open Source -->
+    <section class="section">
+      <h2>Why Open Source Matters</h2>
+
+      <div class="why-grid">
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <h3>Transparency</h3>
+          <p>See exactly what the app does with your data. No hidden tracking, no secret backdoors.</p>
+        </div>
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          <h3>Security Auditing</h3>
+          <p>Security researchers can verify our encryption implementation and report vulnerabilities.</p>
+        </div>
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <h3>Community</h3>
+          <p>Developers can contribute features, fix bugs, and improve the app for everyone.</p>
+        </div>
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <h3>Learn & Build</h3>
+          <p>Use our code as a reference for building your own Flutter apps with encryption.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- License -->
+    <section class="section">
+      <h2>License</h2>
+
+      <div class="card">
+        <h3>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          MIT License
+        </h3>
+        <p>
+          The open source portions of Better Keep Notes are released under the MIT License.
+          This means you can:
+        </p>
+        <ul>
+          <li>Use the code in your own projects</li>
+          <li>Modify and distribute it</li>
+          <li>Use it commercially</li>
+          <li>Keep your modifications private if you want</li>
+        </ul>
+        <p style="margin-top: 1rem;">
+          The only requirement is to include the original copyright notice and license.
+        </p>
+      </div>
+    </section>
+
+    <!-- Contributing -->
+    <section class="section">
+      <h2>Contributing</h2>
+      <p>We welcome contributions! Here's how you can help:</p>
+
+      <div class="card">
+        <h3>Bug Reports</h3>
+        <p>Found a bug? Open an issue on GitHub with steps to reproduce.</p>
+      </div>
+
+      <div class="card">
+        <h3>Feature Requests</h3>
+        <p>Have an idea? Open a discussion and let's talk about it.</p>
+      </div>
+
+      <div class="card">
+        <h3>Pull Requests</h3>
+        <p>Ready to code? Fork the repo, make your changes, and submit a PR. Please follow our coding standards.</p>
+      </div>
+
+      <div class="card">
+        <h3>Security Issues</h3>
+        <p>Please report security vulnerabilities privately via email to <code>security@betterkeep.app</code>.</p>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+      <h2>Explore the Code</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 2rem;">
+        Star us on GitHub, open issues, or contribute code. Let's build great software together.
+      </p>
+      <a href="https://github.com/example/better-keep-notes" target="_blank" class="btn-github">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+        </svg>
+        View on GitHub
+      </a>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="encryption.html">Security</a>
+      <a href="open-source.html">Open Source</a>
+      <a href="faqs.html">FAQs</a>
+    </div>
+    <p class="footer-copyright">© 2025 Better Keep Notes. All rights reserved.</p>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const mobileNav = document.getElementById('mobileNav');
+      const toggle = document.querySelector('.mobile-menu-toggle');
+      mobileNav.classList.toggle('active');
+      toggle.classList.toggle('active');
+    }
+  </script>
+</body>
+
+</html>

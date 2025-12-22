@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Better Keep Notes Privacy Policy - We collect minimal data, never sell your information, and use end-to-end encryption to keep your notes private.">
+  <meta name="keywords"
+    content="Better Keep Notes, privacy policy, data protection, GDPR, private notes, no tracking, no ads">
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="canonical" href="https://betterkeep.app/privacy" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Privacy Policy - Better Keep Notes">
+  <meta property="og:description"
+    content="We collect minimal data, never sell your information, and use end-to-end encryption to keep your notes private.">
+  <meta property="og:image" content="https://betterkeep.app/icons/logo.png">
+  <meta property="og:url" content="https://betterkeep.app/privacy">
+  <meta property="og:site_name" content="Better Keep Notes">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Privacy Policy - Better Keep Notes">
+  <meta name="twitter:description"
+    content="We collect minimal data, never sell your information, and use end-to-end encryption.">
+  <meta name="twitter:image" content="https://betterkeep.app/icons/logo.png">
+
+  <title>Privacy Policy - Better Keep Notes</title>
+  <style>
+    :root {
+      --primary: #FFD54F;
+      --primary-dark: #FFC107;
+      --primary-light: #FFECB3;
+      --accent: #7C4DFF;
+      --accent-dark: #536DFE;
+      --bg-dark: #121212;
+      --bg-darker: #0a0a0a;
+      --bg-card: #1E1E1E;
+      --bg-card-hover: #2A2A2A;
+      --text-primary: #FFFFFF;
+      --text-secondary: #B0B0B0;
+      --text-muted: #757575;
+      --gradient-start: #FFD54F;
+      --gradient-end: #FF8A65;
+      --success: #66BB6A;
+      --danger: #EF5350;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+      --transition-fast: 0.2s ease;
+      --transition-normal: 0.3s ease;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.8;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      padding: 1rem 2rem;
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .nav-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    .nav-brand span {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--primary);
+    }
+
+    .btn-launch {
+      background: linear-gradient(135deg, #7C4DFF, #536DFE);
+      color: #ffffff;
+      padding: 0.6rem 1.5rem;
+      border-radius: 25px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-launch:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(124, 77, 255, 0.4);
+      color: #ffffff;
+    }
+
+    /* Mobile Menu */
+    .mobile-menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem;
+      z-index: 1001;
+    }
+
+    .mobile-menu-toggle span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text-primary);
+      margin: 5px 0;
+      transition: var(--transition-normal);
+      border-radius: 2px;
+    }
+
+    .mobile-menu-toggle.active span:nth-child(1) {
+      transform: rotate(45deg) translate(5px, 5px);
+    }
+
+    .mobile-menu-toggle.active span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .mobile-menu-toggle.active span:nth-child(3) {
+      transform: rotate(-45deg) translate(5px, -5px);
+    }
+
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(18, 18, 18, 0.98);
+      backdrop-filter: blur(20px);
+      z-index: 999;
+      padding: 5rem 2rem 2rem;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+
+    .mobile-nav.active {
+      display: flex;
+    }
+
+    .mobile-nav a {
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 1.25rem;
+      font-weight: 500;
+      padding: 0.75rem 1.5rem;
+      transition: var(--transition-normal);
+    }
+
+    .mobile-nav a:hover {
+      color: var(--primary);
+    }
+
+    /* Main Content */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 8rem 2rem 4rem;
+    }
+
+    .page-header {
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .page-header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #FFD54F, #FF8A65);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .page-header .last-updated {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    .content-section {
+      margin-bottom: 2.5rem;
+    }
+
+    .content-section h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: var(--primary);
+    }
+
+    .content-section h3 {
+      font-size: 1.2rem;
+      margin: 1.5rem 0 0.75rem;
+      color: var(--text-primary);
+    }
+
+    .content-section p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    .content-section ul,
+    .content-section ol {
+      color: var(--text-secondary);
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .content-section li {
+      margin-bottom: 0.5rem;
+    }
+
+    .content-section a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .content-section a:hover {
+      text-decoration: underline;
+    }
+
+    .highlight-box {
+      background: var(--bg-card);
+      border-left: 4px solid var(--primary);
+      padding: 1.5rem;
+      border-radius: 0 12px 12px 0;
+      margin: 1.5rem 0;
+    }
+
+    .highlight-box p {
+      margin-bottom: 0;
+    }
+
+    /* Footer */
+    footer {
+      background: #0a0a0a;
+      padding: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      text-align: center;
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    .footer-content p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-toggle {
+        display: block;
+      }
+
+      nav {
+        padding: 0.75rem 1rem;
+      }
+
+      .page-header h1 {
+        font-size: 1.75rem;
+      }
+
+      main {
+        padding: 5rem 1rem 2rem;
+      }
+
+      .content-section h2 {
+        font-size: 1.25rem;
+      }
+
+      .content-section h3 {
+        font-size: 1.1rem;
+      }
+
+      .highlight-box {
+        padding: 1rem;
+      }
+
+      .footer-links {
+        gap: 1rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-header h1 {
+        font-size: 1.5rem;
+      }
+
+      .content-section {
+        margin-bottom: 2rem;
+      }
+
+      .content-section ul,
+      .content-section ol {
+        margin-left: 1rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Navigation -->
+  <nav>
+    <div class="nav-container">
+      <a href="/welcome.html" class="nav-brand">
+        <img src="icons/logo.png" alt="Better Keep Notes Logo">
+        <span>Better Keep Notes</span>
+      </a>
+      <div class="nav-links">
+        <a href="/welcome.html">Home</a>
+        <a href="/faqs.html">FAQ</a>
+        <a href="/privacy.html" class="active">Privacy</a>
+        <a href="/terms.html">Terms</a>
+        <a href="/delete-user.html">Delete Account</a>
+        <a href="/" class="btn-launch">Launch App</a>
+      </div>
+      <button class="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Navigation -->
+  <div class="mobile-nav" id="mobileNav">
+    <a href="/welcome.html">Home</a>
+    <a href="/faqs.html">FAQ</a>
+    <a href="/privacy.html" class="active">Privacy</a>
+    <a href="/terms.html">Terms</a>
+    <a href="/delete-user.html">Delete Account</a>
+    <a href="/" class="btn-launch">Launch App</a>
+  </div>
+
+  <!-- Main Content -->
+  <main>
+    <header class="page-header">
+      <h1>Privacy Policy</h1>
+      <p class="last-updated">Last Updated: December 11, 2024</p>
+    </header>
+
+    <section class="content-section">
+      <h2>Introduction</h2>
+      <p>Welcome to Better Keep Notes, operated by Foxbiz Software Pvt. Ltd. ("Company", "we", "us", or "our").
+        We respect your privacy and are committed to protecting your personal data. This privacy policy will
+        inform you about how we look after your personal data when you use our application and tell you about
+        your privacy rights.</p>
+
+      <div class="highlight-box">
+        <p><strong>Our Commitment:</strong> Your notes are your private thoughts. We believe in keeping them
+          that way. We use end-to-end encryption and minimal data collection to ensure your privacy is
+          protected.</p>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>Information We Collect</h2>
+
+      <h3>Information You Provide</h3>
+      <ul>
+        <li><strong>Account Information:</strong> When you create an account, we collect your email address and
+          display name (if provided).</li>
+        <li><strong>Notes and Content:</strong> The notes, labels, and other content you create within the app.
+          This data is encrypted and stored securely.</li>
+        <li><strong>User Preferences:</strong> Your app settings and preferences.</li>
+      </ul>
+
+      <h3>Information Collected Automatically</h3>
+      <ul>
+        <li><strong>Device Information:</strong> Device type, operating system version, and unique device
+          identifiers.</li>
+        <li><strong>Usage Data:</strong> How you interact with the app, including features used and crash
+          reports.</li>
+        <li><strong>Log Data:</strong> IP address, browser type, and access times when using the web version.
+        </li>
+      </ul>
+    </section>
+
+    <section class="content-section">
+      <h2>How We Use Your Information</h2>
+      <p>We use the information we collect to:</p>
+      <ul>
+        <li>Provide, maintain, and improve our services</li>
+        <li>Sync your notes across your devices</li>
+        <li>Send important service updates and notifications</li>
+        <li>Respond to your requests and provide customer support</li>
+        <li>Detect, prevent, and address technical issues</li>
+        <li>Analyze usage patterns to improve user experience</li>
+      </ul>
+    </section>
+
+    <section class="content-section">
+      <h2>Data Security</h2>
+      <p>We implement robust security measures to protect your data:</p>
+      <ul>
+        <li><strong>Encryption:</strong> Your notes are encrypted both in transit and at rest using
+          industry-standard encryption protocols.</li>
+        <li><strong>Secure Infrastructure:</strong> We use secure cloud infrastructure with regular security
+          audits.</li>
+        <li><strong>Access Controls:</strong> Strict access controls ensure only authorized personnel can access
+          our systems.</li>
+        <li><strong>Offline Storage:</strong> Notes stored locally on your device are protected by your
+          device's security features.</li>
+      </ul>
+    </section>
+
+    <section class="content-section">
+      <h2>Data Sharing</h2>
+      <p>We do not sell your personal data. We may share your information only in the following circumstances:</p>
+      <ul>
+        <li><strong>Service Providers:</strong> With trusted third-party services that help us operate our app
+          (e.g., cloud hosting, analytics).</li>
+        <li><strong>Legal Requirements:</strong> When required by law or to protect our rights and the safety
+          of our users.</li>
+        <li><strong>Business Transfers:</strong> In connection with any merger, sale of company assets, or
+          acquisition.</li>
+      </ul>
+    </section>
+
+    <section class="content-section">
+      <h2>Your Rights</h2>
+      <p>You have the following rights regarding your personal data:</p>
+      <ul>
+        <li><strong>Access:</strong> Request a copy of your personal data.</li>
+        <li><strong>Correction:</strong> Request correction of inaccurate data.</li>
+        <li><strong>Deletion:</strong> Request deletion of your account and associated data.</li>
+        <li><strong>Export:</strong> Export your notes and data in a standard format.</li>
+        <li><strong>Withdrawal:</strong> Withdraw consent for data processing at any time.</li>
+      </ul>
+    </section>
+
+    <section class="content-section">
+      <h2>Data Retention</h2>
+      <p>We retain your personal data only for as long as necessary to provide our services and fulfill the
+        purposes described in this policy. When you delete your account, we will delete or anonymize your
+        personal data within 30 days, unless retention is required by law.</p>
+    </section>
+
+    <section class="content-section">
+      <h2>Third-Party Services</h2>
+      <p>Our app may integrate with third-party services including:</p>
+      <ul>
+        <li><strong>Firebase:</strong> For authentication, cloud storage, and analytics (provided by Google).
+        </li>
+        <li><strong>Google Sign-In:</strong> For optional account authentication.</li>
+      </ul>
+      <p>These services have their own privacy policies, and we encourage you to review them.</p>
+    </section>
+
+    <section class="content-section">
+      <h2>Children's Privacy</h2>
+      <p>Our service is not intended for children under 13 years of age. We do not knowingly collect personal
+        information from children under 13. If we learn we have collected personal information from a child
+        under 13, we will delete that information promptly.</p>
+    </section>
+
+    <section class="content-section">
+      <h2>Changes to This Policy</h2>
+      <p>We may update this privacy policy from time to time. We will notify you of any significant changes by
+        posting the new policy on this page and updating the "Last Updated" date. We encourage you to review
+        this policy periodically.</p>
+    </section>
+
+    <section class="content-section">
+      <h2>Contact Us</h2>
+      <p>If you have any questions about this Privacy Policy or our data practices, please contact us:</p>
+      <ul>
+        <li><strong>Email:</strong> <a href="mailto:contact@betterkeep.app">contact@betterkeep.app</a></li>
+        <li><strong>Company:</strong> Foxbiz Software Pvt. Ltd.</li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-links">
+        <a href="/welcome">Home</a>
+        <a href="/faqs">FAQ</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/delete-user">Delete Account</a>
+        <a href="mailto:contact@betterkeep.app">Contact</a>
+      </div>
+      <p>&copy; 2024 Foxbiz Software Pvt. Ltd. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile menu toggle
+    const menuToggle = document.querySelector('.mobile-menu-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+
+    menuToggle.addEventListener('click', () => {
+      menuToggle.classList.toggle('active');
+      mobileNav.classList.toggle('active');
+      menuToggle.setAttribute('aria-expanded',
+        menuToggle.classList.contains('active'));
+      document.body.style.overflow =
+        mobileNav.classList.contains('active') ? 'hidden' : '';
+    });
+
+    mobileNav.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        menuToggle.classList.remove('active');
+        mobileNav.classList.remove('active');
+        document.body.style.overflow = '';
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mobileNav.classList.contains('active')) {
+        menuToggle.classList.remove('active');
+        mobileNav.classList.remove('active');
+        document.body.style.overflow = '';
+      }
+    });
+  </script>
+</body>
+
+</html>

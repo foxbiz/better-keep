@@ -1,0 +1,32 @@
+{
+  "cSpell.words": [
+    "androidpublisher",
+    "audioplayers",
+    "cupertino",
+    "firebaseapp",
+    "firebasestorage",
+    "firestore",
+    "foxbiz",
+    "Kolkata",
+    "LTWH",
+    "Millis",
+    "onmount",
+    "OPFS",
+    "paise",
+    "prefs",
+    "readwrite",
+    "RECAPTCHA",
+    "RTDN",
+    "Segoe",
+    "sqflite",
+    "subcollection",
+    "subcollections",
+    "subonce",
+    "subscriptionsv",
+    "unsub",
+    "zeptomail"
+  ],
+  "files.associations": {
+    "*.env": "dotenv"
+  }
+}
