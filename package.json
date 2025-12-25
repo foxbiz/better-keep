@@ -1,0 +1,14 @@
+{
+  "name": "better-keep-notes",
+  "version": "1.0.4",
+  "description": "Better Keep Notes - Build Scripts",
+  "scripts": {
+    "firebase-emulators": "export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && cd /Users/ajit/Documents/work/better-keep && firebase emulators:start",
+    "build:windows": "flutter build windows --release --dart-define-from-file=.env && dart run msix:create --build-windows=false",
+    "build:android": "flutter build appbundle --release --dart-define-from-file=.env",
+    "build:web": "flutter build web --release --dart-define-from-file=.env"
+  },
+  "author": "Foxbiz Software Pvt. Ltd.",
+  "license": "UNLICENSED",
+  "private": true
+}

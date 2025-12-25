@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Self-Host Better Keep Notes - Contact us to run your own backend with Firebase or Supabase.">
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <title>Self-Host - Better Keep Notes</title>
+  <style>
+    :root {
+      --primary: #FFD54F;
+      --primary-dark: #FFC107;
+      --bg-dark: #121212;
+      --bg-card: #1E1E1E;
+      --text-primary: #FFFFFF;
+      --text-secondary: #B0B0B0;
+      --accent: #7C4DFF;
+      --accent-dark: #536DFE;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --radius-lg: 20px;
+      --radius-md: 12px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    nav {
+      padding: 1rem 2rem;
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .nav-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    .nav-brand span {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--primary);
+    }
+
+    .btn-launch {
+      background: linear-gradient(135deg, #7C4DFF, #536DFE);
+      color: #ffffff;
+      padding: 0.6rem 1.5rem;
+      border-radius: 25px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-launch:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(124, 77, 255, 0.4);
+      color: #ffffff;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .contact-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 3rem;
+      max-width: 600px;
+      text-align: center;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .contact-card h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .contact-card p {
+      color: var(--text-secondary);
+      margin-bottom: 2rem;
+      font-size: 1.1rem;
+    }
+
+    .contact-email {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white;
+      padding: 1rem 2rem;
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1.1rem;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .contact-email:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(124, 77, 255, 0.3);
+    }
+
+    .benefits {
+      margin-top: 2rem;
+      text-align: left;
+    }
+
+    .benefits h3 {
+      margin-bottom: 1rem;
+      color: var(--primary);
+    }
+
+    .benefits ul {
+      list-style: none;
+      color: var(--text-secondary);
+    }
+
+    .benefits li {
+      padding: 0.5rem 0;
+      padding-left: 1.5rem;
+      position: relative;
+    }
+
+    .benefits li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--primary);
+    }
+
+    footer {
+      padding: 2rem;
+      text-align: center;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    .footer-copyright {
+      color: #757575;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .contact-card {
+        padding: 2rem;
+      }
+
+      .contact-card h1 {
+        font-size: 1.75rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <nav>
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="icons/Icon-192.png" alt="Better Keep Notes">
+        <span>Better Keep Notes</span>
+      </a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="encryption.html">Security</a>
+        <a href="open-source.html">Open Source</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="/#download" class="btn-launch">Get the App</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <div class="contact-card">
+      <h1>🏠 Self-Host Better Keep</h1>
+      <p>Want to run Better Keep Notes on your own infrastructure? We'd love to help you get set up!</p>
+      
+      <a href="mailto:contact@betterkeep.app" class="contact-email">
+        �� contact@betterkeep.app
+      </a>
+
+      <div class="benefits">
+        <h3>Self-hosting includes:</h3>
+        <ul>
+          <li>Complete data ownership on your servers</li>
+          <li>Use your own Firebase or Supabase instance</li>
+          <li>All Pro features unlocked</li>
+          <li>Setup documentation and support</li>
+          <li>Privacy guaranteed - data never touches our servers</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="encryption.html">Security</a>
+      <a href="open-source.html">Open Source</a>
+      <a href="faqs.html">FAQs</a>
+    </div>
+    <p class="footer-copyright">© 2025 Better Keep Notes. All rights reserved.</p>
+  </footer>
+</body>
+
+</html>

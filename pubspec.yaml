@@ -1,0 +1,91 @@
+name: better_keep
+description: 'Notes app with enhanced features'
+publish_to: 'none'
+version: 1.0.12+28
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  crypto: ^3.0.6
+  alarm: ^5.1.5
+  sqflite_common_ffi: ^2.4.0
+  flutter_quill: ^11.5.0
+  flutter_localizations:
+    sdk: flutter
+  sqflite: ^2.4.2
+  permission_handler: ^12.0.1
+  image_picker: ^1.2.1
+  path_provider: ^2.1.5
+  flutter_image_compress: ^2.4.0
+  flutter_staggered_grid_view: ^0.7.0
+  record: ^6.1.2
+  audioplayers: ^6.5.1
+  shared_preferences: ^2.5.3
+  file_picker: ^10.3.7
+  file_selector_windows: ^0.9.3+5
+  share_plus: ^12.0.1
+  path: ^1.9.1
+  perfect_freehand: ^2.5.1
+  flutter_colorpicker: ^1.1.0
+  gal: ^2.3.2
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  google_sign_in: ^7.2.0
+  cloud_firestore: ^6.1.0
+  cloud_functions: ^6.0.4
+  firebase_storage: ^13.0.4
+  intl: ^0.20.2
+  url_launcher: ^6.3.2
+  metadata_fetch: ^0.4.2
+  http: ^1.6.0
+  sqflite_common_ffi_web: ^1.1.0
+  firebase_app_check: ^0.4.1+2
+  speech_to_text: ^7.3.0
+  cryptography: ^2.7.0
+  cryptography_flutter: ^2.3.2
+  hashlib: ^2.2.0
+  flutter_secure_storage: ^10.0.0
+  uuid: ^4.5.1
+  flutter_local_notifications: ^19.2.1
+  device_info_plus: ^12.3.0
+  package_info_plus: ^9.0.0
+  archive: ^4.0.4
+  flutter_lints: ^6.0.0
+  web: ^1.1.1
+  in_app_purchase: ^3.2.0
+  webview_flutter: ^4.13.0
+  in_app_purchase_android: ^0.4.0+8
+  receive_sharing_intent: ^1.8.1
+  app_links: ^7.0.0
+  markdown: ^7.3.0
+  flutter_html: ^3.0.0
+  flutter_quill_extensions: ^11.0.0
+
+dev_dependencies:
+  msix: ^3.16.7
+  flutter_test:
+    sdk: flutter
+
+msix_config:
+  display_name: Better Keep Notes
+  publisher_display_name: Foxbiz Software Pvt. Ltd.
+  identity_name: FoxbizSotware.BetterKeepNotes
+  publisher: 'CN=886C9A5B-2D6E-4AE6-822D-DE6C845ECD7D'
+  msix_version: 1.0.12.0
+  logo_path: assets/better_keep-512.png
+  capabilities: internetClient, internetClientServer, privateNetworkClientServer
+  protocol_activation: betterkeep
+  store: true
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/sounds/
+  fonts:
+    - family: CustomIcons
+      fonts:
+        - asset: assets/icon.ttf

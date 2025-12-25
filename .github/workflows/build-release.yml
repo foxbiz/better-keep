@@ -1,0 +1,312 @@
+name: Build Release Artifacts
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.6)'
+        required: false
+        default: ''
+
+jobs:
+  # ============================================
+  # Android APK Build
+  # ============================================
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks
+
+      - name: Create google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=keystore.jks
+          EOF
+
+      - name: Create .env file
+        run: |
+          echo '${{ secrets.ENV_FILE }}' > .env
+
+      - name: Build APK
+        run: flutter build apk --release --dart-define-from-file=.env
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  # ============================================
+  # Windows Build
+  # ============================================
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Create .env file
+        run: |
+          echo '${{ secrets.ENV_FILE }}' > .env
+
+      - name: Build Windows
+        run: flutter build windows --release --dart-define-from-file=.env
+
+      - name: Create Windows Installer with Inno Setup
+        run: |
+          choco install innosetup -y
+          @"
+          [Setup]
+          AppName=Better Keep
+          AppVersion=1.0.6
+          DefaultDirName={autopf}\BetterKeep
+          DefaultGroupName=Better Keep
+          OutputDir=.
+          OutputBaseFilename=BetterKeep-Setup
+          Compression=lzma
+          SolidCompression=yes
+
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+
+          [Icons]
+          Name: "{group}\Better Keep"; Filename: "{app}\better_keep.exe"
+          Name: "{commondesktop}\Better Keep"; Filename: "{app}\better_keep.exe"
+
+          [Registry]
+          Root: HKCR; Subkey: "betterkeep"; ValueType: string; ValueName: ""; ValueData: "URL:Better Keep Protocol"; Flags: uninsdeletekey
+          Root: HKCR; Subkey: "betterkeep"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+          Root: HKCR; Subkey: "betterkeep\shell"; ValueType: string; ValueName: ""; ValueData: ""
+          Root: HKCR; Subkey: "betterkeep\shell\open"; ValueType: string; ValueName: ""; ValueData: ""
+          Root: HKCR; Subkey: "betterkeep\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\better_keep.exe"" ""%1"""
+          "@ | Out-File -FilePath setup.iss -Encoding UTF8
+
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+        shell: pwsh
+
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: build/windows/x64/runner/Release/
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: BetterKeep-Setup.exe
+
+  # ============================================
+  # macOS Build
+  # ============================================
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Create GoogleService-Info.plist
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}' > macos/Runner/GoogleService-Info.plist
+
+      - name: Create .env file
+        run: |
+          echo '${{ secrets.ENV_FILE }}' > .env
+
+      - name: Update CocoaPods repo
+        run: |
+          cd macos
+          # Remove old lockfile to get fresh dependency resolution
+          rm -f Podfile.lock
+          pod repo update
+          pod install --repo-update
+
+      - name: Disable code signing in Xcode project
+        run: |
+          cd macos
+
+          # Use perl for more reliable pattern matching
+          perl -i -pe 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' Runner.xcodeproj/project.pbxproj
+          perl -i -pe 's/DEVELOPMENT_TEAM = [A-Z0-9]+;/DEVELOPMENT_TEAM = "";/g' Runner.xcodeproj/project.pbxproj
+          perl -i -pe 's/"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = "Apple Development"/"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-"/g' Runner.xcodeproj/project.pbxproj
+          perl -i -pe 's/CODE_SIGN_ENTITLEMENTS = Runner\/Release.entitlements;/CODE_SIGN_ENTITLEMENTS = "";/g' Runner.xcodeproj/project.pbxproj
+          perl -i -pe 's/CODE_SIGN_ENTITLEMENTS = Runner\/DebugProfile.entitlements;/CODE_SIGN_ENTITLEMENTS = "";/g' Runner.xcodeproj/project.pbxproj
+
+          # Override in xcconfig (most reliable)
+          cat >> Flutter/Release.xcconfig << 'EOF'
+          CODE_SIGN_IDENTITY=-
+          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGNING_ALLOWED=NO
+          DEVELOPMENT_TEAM=
+          CODE_SIGN_ENTITLEMENTS=
+          EOF
+
+          # Verify changes
+          echo "=== Verifying signing disabled ==="
+          grep -E "(DEVELOPMENT_TEAM|CODE_SIGN_STYLE)" Runner.xcodeproj/project.pbxproj | head -10
+
+      - name: Build macOS (unsigned)
+        run: flutter build macos --release --dart-define-from-file=.env
+        env:
+          CI: true
+
+      - name: Create DMG
+        run: |
+          # Find the app bundle
+          echo "=== Searching for .app bundle ==="
+          find build/macos -name "*.app" -type d 2>/dev/null || true
+
+          # Try common locations
+          if [ -d "build/macos/Build/Products/Release/Better Keep.app" ]; then
+            APP_PATH="build/macos/Build/Products/Release/Better Keep.app"
+          elif [ -d "build/macos/Build/Products/Release/better_keep.app" ]; then
+            APP_PATH="build/macos/Build/Products/Release/better_keep.app"
+          else
+            # Find any .app
+            APP_PATH=$(find build/macos -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+
+          echo "Using app at: $APP_PATH"
+
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: Could not find .app bundle"
+            ls -laR build/macos/ || true
+            exit 1
+          fi
+
+          hdiutil create -volname "BetterKeep" -srcfolder "$APP_PATH" -ov -format UDZO "BetterKeep.dmg"
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: BetterKeep.dmg
+
+  # ============================================
+  # Linux Build - DISABLED (Firebase not supported)
+  # ============================================
+  # Uncomment when Firebase adds Linux support
+  # build-linux:
+  #   name: Build Linux
+  #   runs-on: ubuntu-latest
+  #   ...
+
+  # ============================================
+  # Create GitHub Release
+  # ============================================
+  create-release:
+    name: Create Release
+    needs: [build-android, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+
+          # Android
+          cp artifacts/android-apk/app-release.apk release-files/BetterKeep-android.apk
+
+          # Windows
+          cp artifacts/windows-installer/BetterKeep-Setup.exe release-files/ || true
+          cd artifacts/windows-build && zip -r ../../release-files/BetterKeep-windows-portable.zip . && cd ../..
+
+          # macOS
+          cp artifacts/macos-dmg/BetterKeep.dmg release-files/ || true
+
+          # Linux - disabled until Firebase supports it
+          # cp artifacts/linux-archive/BetterKeep-linux-x64.tar.gz release-files/
+
+      - name: Generate SHA256 Checksums
+        run: |
+          cd release-files
+
+          # Generate individual checksums
+          for file in *; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" > "$file.sha256"
+            fi
+          done
+
+          # Generate combined checksums file
+          sha256sum * | grep -v ".sha256" > SHA256SUMS.txt
+
+          # Display checksums for verification
+          echo "=== SHA256 Checksums ==="
+          cat SHA256SUMS.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-files/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
