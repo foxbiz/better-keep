@@ -103,6 +103,12 @@ class IntentHandlerService {
           '[IntentHandler] File: $path, Type: $type, MimeType: $mimeType',
         );
 
+        // Skip deep link URIs (betterkeep://, http://, https://) - these are handled by app_links
+        if (_isDeepLinkUri(path)) {
+          AppLogger.log('[IntentHandler] Skipping deep link URI: $path');
+          continue;
+        }
+
         // Check if it's a text or markdown file (by extension or mime type)
         if (!_isTextOrMarkdownFile(path, mimeType)) {
           AppLogger.log('[IntentHandler] Skipping non-text file: $path');
@@ -148,6 +154,15 @@ class IntentHandlerService {
   bool _isMarkdownFile(String path) {
     final lowerPath = path.toLowerCase();
     return lowerPath.endsWith('.md') || lowerPath.endsWith('.markdown');
+  }
+
+  /// Check if the path is a deep link URI (not a file)
+  bool _isDeepLinkUri(String path) {
+    final lowerPath = path.toLowerCase();
+    // Skip custom scheme deep links and web URLs
+    return lowerPath.startsWith('betterkeep://') ||
+        lowerPath.startsWith('http://') ||
+        lowerPath.startsWith('https://');
   }
 
   /// Check if the file is a text or markdown file
