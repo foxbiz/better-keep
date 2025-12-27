@@ -3,33 +3,144 @@
     "short_name": "Better Keep",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#212121",
-    "theme_color": "#212121",
+    "background_color": "#1c1b1f",
+    "theme_color": "#1c1b1f",
     "description": "A note-taking app with rich text, better organization, and private, offline-friendly notes.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "categories": [
+        "productivity",
+        "utilities"
+    ],
     "icons": [
         {
-            "src": "icons/Icon-192.png",
+            "src": "icons/ios/16.png",
+            "sizes": "16x16",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/ios/32.png",
+            "sizes": "32x32",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/ios/64.png",
+            "sizes": "64x64",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/android/android-launchericon-48-48.png",
+            "sizes": "48x48",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/android/android-launchericon-72-72.png",
+            "sizes": "72x72",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/android/android-launchericon-96-96.png",
+            "sizes": "96x96",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/ios/128.png",
+            "sizes": "128x128",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/android/android-launchericon-144-144.png",
+            "sizes": "144x144",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/ios/180.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/android/android-launchericon-192-192.png",
             "sizes": "192x192",
             "type": "image/png"
         },
         {
-            "src": "icons/Icon-512.png",
+            "src": "icons/ios/256.png",
+            "sizes": "256x256",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/android/android-launchericon-512-512.png",
             "sizes": "512x512",
             "type": "image/png"
         },
         {
-            "src": "icons/Icon-maskable-192.png",
+            "src": "icons/ios/1024.png",
+            "sizes": "1024x1024",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/android/android-launchericon-192-192.png",
             "sizes": "192x192",
             "type": "image/png",
             "purpose": "maskable"
         },
         {
-            "src": "icons/Icon-maskable-512.png",
+            "src": "icons/android/android-launchericon-512-512.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "screenshots/1.jpg",
+            "sizes": "1080x2340",
+            "type": "image/jpeg",
+            "label": "Notes list view"
+        },
+        {
+            "src": "screenshots/2.jpg",
+            "sizes": "1080x2340",
+            "type": "image/jpeg",
+            "label": "Note editor"
+        },
+        {
+            "src": "screenshots/3.jpg",
+            "sizes": "1080x2340",
+            "type": "image/jpeg",
+            "label": "Rich text formatting"
+        },
+        {
+            "src": "screenshots/10.jpg",
+            "sizes": "2560x1504",
+            "type": "image/jpeg",
+            "form_factor": "wide",
+            "label": "Desktop notes view"
+        },
+        {
+            "src": "screenshots/11.jpg",
+            "sizes": "2560x1504",
+            "type": "image/jpeg",
+            "form_factor": "wide",
+            "label": "Desktop note editor"
+        },
+        {
+            "src": "screenshots/12.jpg",
+            "sizes": "2560x1504",
+            "type": "image/jpeg",
+            "form_factor": "wide",
+            "label": "Desktop organization"
+        }
+    ],
+    "related_applications": [
+        {
+            "platform": "play",
+            "url": "https://play.google.com/store/apps/details?id=io.foxbiz.better_keep",
+            "id": "io.foxbiz.better_keep"
+        },
+        {
+            "platform": "windows",
+            "url": "https://apps.microsoft.com/detail/9PHT5C6WK6Q1"
         }
     ]
 }

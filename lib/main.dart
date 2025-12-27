@@ -8,6 +8,7 @@ import 'package:better_keep/components/alarm_banner.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/all_day_reminder_notification_service.dart';
@@ -74,6 +75,11 @@ void main() async {
 
   // Pre-load user avatar for smooth Hero transitions
   UserAvatar.preloadAvatar();
+
+  // Initialize app install service for web PWA prompts
+  if (kIsWeb) {
+    AppInstallService.instance.init();
+  }
 
   // For logged-in users, pre-load E2EE cached status before runApp
   // This allows returning approved users to skip the loading screen

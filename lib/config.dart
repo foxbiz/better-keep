@@ -11,6 +11,13 @@ const defaultAlarmSound = "assets/sounds/2.mp3";
 /// This account bypasses certain features for easier testing.
 const String demoAccountEmail = 'better.keep.review@gmail.com';
 
+/// App store URLs
+const String playStoreUrl =
+    'https://play.google.com/store/apps/details?id=io.foxbiz.better_keep';
+const String microsoftStoreUrl =
+    'https://apps.microsoft.com/detail/9PHT5C6WK6Q1';
+const String appDeepLinkScheme = 'betterkeep://';
+
 /// Cached platform detection values - computed once at startup
 final bool isDesktop = _computeIsDesktop();
 final bool isAlarmSupported = _computeIsAlarmSupported();

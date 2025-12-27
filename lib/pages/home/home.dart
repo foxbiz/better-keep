@@ -12,6 +12,7 @@ import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/pages/setup_recovery_key_page.dart';
 import 'package:better_keep/pages/sketch_page.dart';
+import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
@@ -30,6 +31,7 @@ import 'package:better_keep/pages/user_page.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -111,7 +113,108 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     // This ensures notes load even if the E2EE status change listener missed the trigger
     _ensureSyncOnInit();
 
+    // Check if we should show install prompt (first time on web)
+    _checkInstallPrompt();
+
     super.initState();
+  }
+
+  /// Check and show install prompt for first-time web users
+  void _checkInstallPrompt() {
+    if (!kIsWeb) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final info = AppInstallService.instance.getInstallInfo();
+      if (info == null) return;
+
+      if (info.shouldShowInstallPrompt) {
+        AppInstallService.instance.markPromptShown();
+        _showInstallPromptDialog(info);
+      }
+    });
+  }
+
+  /// Show install prompt dialog based on platform
+  void _showInstallPromptDialog(AppInstallInfo info) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        IconData icon;
+        String title;
+        String message;
+        String actionLabel;
+        VoidCallback? onAction;
+
+        if (info.isIOS) {
+          icon = Icons.apple;
+          title = 'iOS App Coming Soon!';
+          message =
+              'Our iOS app is being reviewed by Apple. In the meantime, you can install Better Keep as a web app for quick access.\n\nTap Share → Add to Home Screen in Safari.';
+          actionLabel = 'Got it';
+          onAction = () => Navigator.pop(context);
+        } else if (info.isAndroid) {
+          icon = Icons.android;
+          title = 'Get the Android App';
+          message =
+              'Better Keep is available on Google Play! Get the native app for the best experience with notifications, widgets, and more.';
+          actionLabel = 'Open Play Store';
+          onAction = () {
+            Navigator.pop(context);
+            launchUrl(
+              Uri.parse(playStoreUrl),
+              mode: LaunchMode.externalApplication,
+            );
+          };
+        } else if (info.isWindows) {
+          icon = Icons.desktop_windows;
+          title = 'Get the Windows App';
+          message =
+              'Better Keep is available on Microsoft Store! Get the native app for the best experience with system integration and offline access.';
+          actionLabel = 'Open Microsoft Store';
+          onAction = () {
+            Navigator.pop(context);
+            launchUrl(
+              Uri.parse(microsoftStoreUrl),
+              mode: LaunchMode.externalApplication,
+            );
+          };
+        } else if (info.canInstallPWA) {
+          icon = Icons.install_desktop;
+          title = 'Install Better Keep';
+          message =
+              'Install Better Keep for quick access from your home screen and offline support!';
+          actionLabel = 'Install';
+          onAction = () async {
+            Navigator.pop(context);
+            await AppInstallService.instance.triggerPWAInstall();
+          };
+        } else {
+          return const SizedBox.shrink();
+        }
+
+        return AlertDialog(
+          icon: Icon(
+            icon,
+            size: 48,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                AppInstallService.instance.markPromptDismissed();
+                Navigator.pop(context);
+              },
+              child: const Text('Not now'),
+            ),
+            FilledButton(onPressed: onAction, child: Text(actionLabel)),
+          ],
+        );
+      },
+    );
   }
 
   /// Ensures sync is triggered when Home is first shown with E2EE ready.

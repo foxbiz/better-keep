@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" style="background-color: #212121">
+<html lang="en" style="background-color: #1c1b1f">
 
 <head>
     <base href="$FLUTTER_BASE_HREF">
@@ -22,9 +22,12 @@
 
     <!-- iOS meta tags & icons -->
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="better_keep">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Better Keep">
     <link rel="apple-touch-icon" href="icons/logo.png">
+
+    <!-- Theme color for browser UI -->
+    <meta name="theme-color" content="#1c1b1f">
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
@@ -38,7 +41,7 @@
             padding: 0;
             width: 100%;
             height: 100%;
-            background-color: #212121;
+            background-color: #1c1b1f;
             color: #ffffff;
         }
 
@@ -52,7 +55,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: #212121;
+            background-color: #1c1b1f;
             z-index: 9999;
             transition: opacity 0.35s ease, visibility 0.35s ease;
         }
@@ -137,6 +140,8 @@
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <!-- Razorpay Checkout Bridge for Flutter -->
     <script src="js/razorpay_checkout.js"></script>
+    <!-- App Installation Manager -->
+    <script src="js/app_install.js"></script>
 
     <script>
         (() => {

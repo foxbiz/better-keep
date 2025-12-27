@@ -16,6 +16,20 @@
       "type": "dart",
       "flutterMode": "profile",
       "toolArgs": [
+        "--web-port",
+        "63630",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "better_keep WEB (Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "toolArgs": [
+        "web-server",
+        "--web-port",
+        "63630",
         "--dart-define-from-file=.env"
       ]
     },

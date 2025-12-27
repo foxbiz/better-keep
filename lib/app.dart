@@ -7,6 +7,7 @@ import 'package:better_keep/pages/email_verification_page.dart';
 import 'package:better_keep/pages/home/home.dart';
 import 'package:better_keep/pages/login_page.dart';
 import 'package:better_keep/pages/pending_approval_page.dart';
+import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
@@ -17,6 +18,7 @@ import 'package:better_keep/services/monetization/razorpay_web.dart'
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -37,10 +39,21 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     themeData = AppState.theme;
+
+    // Update web theme colors on initial load
+    if (kIsWeb) {
+      AppInstallService.instance.updateColorsFromTheme(themeData);
+    }
+
     _themeListener = (value) {
+      final newTheme = value as ThemeData;
       setState(() {
-        themeData = value as ThemeData;
+        themeData = newTheme;
       });
+      // Update web theme colors when theme changes
+      if (kIsWeb) {
+        AppInstallService.instance.updateColorsFromTheme(newTheme);
+      }
     };
     AppState.subscribe("theme", _themeListener);
 
