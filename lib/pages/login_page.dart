@@ -307,28 +307,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         child: SafeArea(
-          child: Expanded(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(left: 32, right: 32, top: 32),
-                child: Column(
-                  children: [
-                    _isLoading ? _buildLoadingState() : _buildLoginContent(),
-                    if (_version.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          'v$_version',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.4),
-                          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(left: 32, right: 32, top: 32),
+              child: Column(
+                children: [
+                  _isLoading ? _buildLoadingState() : _buildLoginContent(),
+                  if (_version.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'v$_version',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.4),
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
           ),
