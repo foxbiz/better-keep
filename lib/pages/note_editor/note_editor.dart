@@ -1353,14 +1353,35 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                 return;
               }
 
-              _note.locked = true;
-              _note.password = password;
-              _note.save();
+              try {
+                await _note.lock(password);
+                if (mounted) {
+                  snackbar('Note locked', Colors.green);
+                }
+              } catch (e) {
+                if (mounted) {
+                  snackbar('Failed to lock note: $e', Colors.red);
+                }
+              }
             } else {
-              // Unlocking: just unlock the note
-              _note.locked = false;
-              _note.save();
+              // Removing lock: need password to decrypt before removing lock
+              final password =
+                  _note.password ?? await showLockNoteDialog(context);
+              if (password == null || password.isEmpty) {
+                return;
+              }
+              try {
+                await _note.removeLock(password);
+                if (mounted) {
+                  snackbar('Lock removed', Colors.green);
+                }
+              } catch (e) {
+                if (mounted) {
+                  snackbar('Failed to remove lock: $e', Colors.red);
+                }
+              }
             }
+            setState(() {});
           },
           title: Text('Locked'),
         ),
@@ -1392,8 +1413,21 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       .map((a) => NoteAttachment.fromJson(a.toJson()))
                       .toList(),
                 );
-                duplicatedNote.password = _note.password;
-                await duplicatedNote.save();
+                if (_note.locked &&
+                    _note.password != null &&
+                    _note.password!.isNotEmpty) {
+                  try {
+                    await duplicatedNote.lock(_note.password!);
+                  } catch (e) {
+                    if (mounted) {
+                      snackbar(
+                        'Note duplicated but failed to lock: $e',
+                        Colors.orange,
+                      );
+                    }
+                    return;
+                  }
+                }
                 if (mounted) {
                   snackbar('Note duplicated', Colors.green);
                 }

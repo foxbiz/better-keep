@@ -610,6 +610,8 @@ class E2EEService {
       _deviceManager.wasRevoked.removeListener(_onRevokedChanged);
       _listenersRegistered = false;
     }
+    // Delete the current device from Firestore before signing out
+    await _deviceManager.deleteCurrentDevice();
     // Clear cached UMK
     await _deviceManager.clearUMK();
     // Cancel all Firestore subscriptions in DeviceManager to prevent permission errors after sign-out

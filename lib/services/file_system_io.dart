@@ -83,6 +83,20 @@ class IoFileSystem implements FileSystem {
   }
 
   @override
+  Future<bool> isDirectory(String path) async {
+    final file = File(path);
+    final stats = await file.stat();
+    return stats.type == FileSystemEntityType.directory;
+  }
+
+  @override
+  Future<bool> isFile(String path) async {
+    final file = File(path);
+    final stats = await file.stat();
+    return stats.type == FileSystemEntityType.file;
+  }
+
+  @override
   Future<List<String>> list([String directory = '/']) async {
     final dir = Directory(directory);
     if (!await dir.exists()) return const [];

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, kDebugMode;
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:better_keep/services/file_system.dart';
@@ -36,6 +36,17 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   // Sync cache state
   Map<String, dynamic>? _cacheDebugInfo;
   bool _loadingCache = false;
+
+  // Database viewer state
+  List<String> _dbTables = [];
+  String? _selectedTable;
+  List<Map<String, dynamic>> _tableRows = [];
+  List<String> _tableColumns = [];
+  Map<String, double> _columnWidths = {};
+  bool _loadingDb = false;
+  int _tableRowCount = 0;
+  int _dbViewLimit = 50;
+  int _dbViewOffset = 0;
 
   @override
   void initState() {
@@ -176,6 +187,135 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
     }
   }
 
+  Future<void> _loadDbTables() async {
+    if (_loadingDb) return;
+    setState(() => _loadingDb = true);
+
+    try {
+      final tables = await AppState.db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%' ORDER BY name",
+      );
+      _dbTables = tables.map((t) => t['name'] as String).toList();
+    } catch (e) {
+      _dbTables = [];
+    }
+
+    if (mounted) {
+      setState(() => _loadingDb = false);
+    }
+  }
+
+  Future<void> _loadTableData(String tableName) async {
+    setState(() {
+      _loadingDb = true;
+      _selectedTable = tableName;
+      _dbViewOffset = 0;
+    });
+
+    try {
+      // Get row count
+      final countResult = await AppState.db.rawQuery(
+        'SELECT COUNT(*) as count FROM "$tableName"',
+      );
+      _tableRowCount = countResult.first['count'] as int? ?? 0;
+
+      // Get column info
+      final columnsResult = await AppState.db.rawQuery(
+        'PRAGMA table_info("$tableName")',
+      );
+      _tableColumns = columnsResult.map((c) => c['name'] as String).toList();
+
+      // Get rows with pagination
+      _tableRows = await AppState.db.rawQuery(
+        'SELECT * FROM "$tableName" LIMIT $_dbViewLimit OFFSET $_dbViewOffset',
+      );
+
+      // Calculate column widths based on content
+      _calculateColumnWidths();
+    } catch (e) {
+      _tableRows = [];
+      _tableColumns = [];
+      _tableRowCount = 0;
+      _columnWidths = {};
+    }
+
+    if (mounted) {
+      setState(() => _loadingDb = false);
+    }
+  }
+
+  void _calculateColumnWidths() {
+    _columnWidths = {};
+    const double minWidth = 60;
+    const double maxWidth = 250;
+    const double charWidth =
+        7.0; // Approximate width per character for monospace
+    const double headerCharWidth = 8.0; // Slightly wider for bold header
+    const double padding = 16; // Horizontal padding
+
+    for (final col in _tableColumns) {
+      // Start with header width
+      double maxContentWidth = col.length * headerCharWidth + padding;
+
+      // Check all rows for this column
+      for (final row in _tableRows) {
+        final value = _formatCellValue(row[col]);
+        final contentWidth = value.length * charWidth + padding;
+        if (contentWidth > maxContentWidth) {
+          maxContentWidth = contentWidth;
+        }
+      }
+
+      // Clamp to min/max
+      _columnWidths[col] = maxContentWidth.clamp(minWidth, maxWidth);
+    }
+  }
+
+  Future<void> _loadMoreRows() async {
+    if (_selectedTable == null || _loadingDb) return;
+    setState(() => _loadingDb = true);
+
+    try {
+      _dbViewOffset += _dbViewLimit;
+      final moreRows = await AppState.db.rawQuery(
+        'SELECT * FROM "$_selectedTable" LIMIT $_dbViewLimit OFFSET $_dbViewOffset',
+      );
+      _tableRows = [..._tableRows, ...moreRows];
+    } catch (e) {
+      // ignore
+    }
+
+    if (mounted) {
+      setState(() => _loadingDb = false);
+    }
+  }
+
+  Future<void> _deleteRow(String tableName, Map<String, dynamic> row) async {
+    // Find primary key or use rowid
+    String whereClause;
+    List<Object?> whereArgs;
+
+    if (row.containsKey('id') && row['id'] != null) {
+      whereClause = 'id = ?';
+      whereArgs = [row['id']];
+    } else if (row.containsKey('rowid') && row['rowid'] != null) {
+      whereClause = 'rowid = ?';
+      whereArgs = [row['rowid']];
+    } else {
+      // Build where clause from all columns
+      final entries = row.entries.where((e) => e.value != null).toList();
+      whereClause = entries.map((e) => '"${e.key}" = ?').join(' AND ');
+      whereArgs = entries.map((e) => e.value).toList();
+    }
+
+    await AppState.db.delete(
+      tableName,
+      where: whereClause,
+      whereArgs: whereArgs,
+    );
+    await _loadTableData(tableName);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -239,6 +379,11 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                 const Divider(),
                 // OPFS section (Web only)
                 if (kIsWeb) ...[_buildOpfsSection(), const Divider()],
+                // SQLite Database Viewer (debug only - exposes raw DB access)
+                if (kDebugMode) ...[
+                  _buildDatabaseViewerSection(),
+                  const Divider(),
+                ],
                 // Sync Cache Debug section
                 _buildCacheDebugSection(),
                 const Divider(),
@@ -417,6 +562,352 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
     } catch (e) {
       setState(() => _opfsTestResult = {'error': e.toString()});
     }
+  }
+
+  Widget _buildDatabaseViewerSection() {
+    return ExpansionTile(
+      title: const Text("SQLite Database Viewer"),
+      subtitle: Text(
+        _dbTables.isEmpty ? 'Tap to load tables' : '${_dbTables.length} tables',
+      ),
+      leading: const Icon(Icons.table_chart),
+      onExpansionChanged: (expanded) {
+        if (expanded && _dbTables.isEmpty && !_loadingDb) {
+          _loadDbTables();
+        }
+      },
+      children: [
+        if (_loadingDb && _dbTables.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_dbTables.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text("No tables found"),
+          )
+        else ...[
+          // Table selector
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _dbTables.map((table) {
+                final isSelected = _selectedTable == table;
+                return FilterChip(
+                  label: Text(table),
+                  selected: isSelected,
+                  onSelected: (_) => _loadTableData(table),
+                );
+              }).toList(),
+            ),
+          ),
+          // Table content
+          if (_selectedTable != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Text(
+                    '$_selectedTable: $_tableRowCount rows',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  if (_loadingDb)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 20),
+                    onPressed: () => _loadTableData(_selectedTable!),
+                    tooltip: 'Refresh',
+                  ),
+                ],
+              ),
+            ),
+            // Column headers and rows in a single scrollable area
+            if (_tableColumns.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                constraints: const BoxConstraints(maxHeight: 400),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: _tableColumns.fold<double>(
+                      16,
+                      (sum, col) => sum + (_columnWidths[col] ?? 100),
+                    ),
+                    child: Column(
+                      children: [
+                        // Header row
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(7),
+                            ),
+                          ),
+                          child: Row(
+                            children: _tableColumns.map((col) {
+                              return SizedBox(
+                                width: _columnWidths[col] ?? 100,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  child: Text(
+                                    col,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                        // Data rows
+                        Expanded(
+                          child: _tableRows.isEmpty && !_loadingDb
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text("No rows in this table"),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount:
+                                      _tableRows.length +
+                                      (_tableRows.length < _tableRowCount
+                                          ? 1
+                                          : 0),
+                                  itemBuilder: (context, index) {
+                                    if (index >= _tableRows.length) {
+                                      // Load more button
+                                      return Center(
+                                        child: TextButton(
+                                          onPressed: _loadingDb
+                                              ? null
+                                              : _loadMoreRows,
+                                          child: _loadingDb
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : Text(
+                                                  'Load more (${_tableRows.length}/$_tableRowCount)',
+                                                ),
+                                        ),
+                                      );
+                                    }
+                                    final row = _tableRows[index];
+                                    return InkWell(
+                                      onTap: () => _showRowDetail(row),
+                                      onLongPress: () => _showRowActions(row),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                          horizontal: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: Theme.of(context)
+                                                  .dividerColor
+                                                  .withValues(alpha: 0.3),
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: _tableColumns.map((col) {
+                                            final value = row[col];
+                                            return SizedBox(
+                                              width: _columnWidths[col] ?? 100,
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                    ),
+                                                child: Text(
+                                                  _formatCellValue(value),
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontFamily: 'monospace',
+                                                    color: value == null
+                                                        ? Theme.of(
+                                                            context,
+                                                          ).hintColor
+                                                        : null,
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+          ],
+        ],
+      ],
+    );
+  }
+
+  String _formatCellValue(dynamic value) {
+    if (value == null) return 'NULL';
+    if (value is String && value.length > 50) {
+      return '${value.substring(0, 50)}...';
+    }
+    return value.toString();
+  }
+
+  void _showRowDetail(Map<String, dynamic> row) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Row Details - $_selectedTable'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: row.entries.map((e) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      e.key,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    SelectableText(
+                      e.value?.toString() ?? 'NULL',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        color: e.value == null
+                            ? Theme.of(context).hintColor
+                            : null,
+                      ),
+                    ),
+                    const Divider(),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRowActions(Map<String, dynamic> row) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.visibility),
+              title: const Text('View Details'),
+              onTap: () {
+                Navigator.pop(context);
+                _showRowDetail(row);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: const Text('Copy as JSON'),
+              onTap: () async {
+                Navigator.pop(context);
+                final json = const JsonEncoder.withIndent('  ').convert(row);
+                // Use clipboard
+                await Share.share(json);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text(
+                'Delete Row',
+                style: TextStyle(color: Colors.red),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Delete Row?'),
+                    content: const Text(
+                      'This will permanently delete this row from the database. '
+                      'This action cannot be undone and may cause app issues.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && _selectedTable != null) {
+                  await _deleteRow(_selectedTable!, row);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildCacheDebugSection() {

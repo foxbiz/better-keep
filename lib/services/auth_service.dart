@@ -21,6 +21,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -293,6 +294,14 @@ class AuthService {
     _authStateSubscription?.cancel();
     _authStateSubscription = _auth.authStateChanges().listen((user) async {
       if (user != null && _tokenRevocationSubscription == null) {
+        // If we're in the middle of sign-in, defer starting the listener
+        // _completeSignIn will handle this after auth is fully complete
+        if (isVerifying.value) {
+          AppLogger.log(
+            "Sign-in in progress, deferring token revocation listener",
+          );
+          return;
+        }
         // User logged in and listener not running - start it
         _startTokenRevocationListener(user.uid);
         try {
@@ -614,7 +623,9 @@ class AuthService {
   }) async {
     try {
       isVerifying.value = true;
+      onStatusChange?.call("Verifying credentials...");
       await E2EESecureStorage.instance.init();
+      onStatusChange?.call("Starting sign-in...");
       await E2EESecureStorage.instance.setSignInProgress(true);
 
       onStatusChange?.call("Signing in...");
@@ -1017,11 +1028,17 @@ class AuthService {
       await _ensureUserExists(user, onStatusChange, provider);
       // Load Firestore linked providers into cache
       await refreshLinkedProviders();
+      // Start PlanService subscription listener (deferred from auth state change)
+      await PlanService.instance.startSubscriptionListener();
       // Initialize E2EE after successful login
       onStatusChange?.call("Initializing encryption...");
       await E2EEService.instance.initialize();
       // Initialize device approval notifications
       DeviceApprovalNotificationService().init();
+      // Initialize sync services after E2EE is ready
+      // This prevents Firestore connections before E2EE initialization completes
+      NoteSyncService().init();
+      LabelSyncService().init();
       // Start listening for token revocation
       _startTokenRevocationListener(user.uid);
       // Cache the token auth time for revocation detection
@@ -1054,12 +1071,22 @@ class AuthService {
     while (attempts < 3) {
       try {
         attempts++;
-        onStatusChange?.call("Verifying user profile (Attempt $attempts)...");
+
+        if (attempts > 1) {
+          onStatusChange?.call("Verifying user profile (Attempt $attempts)...");
+        } else {
+          onStatusChange?.call("Verifying user profile...");
+        }
 
         // We remove Source.server to allow the SDK to optimize,
         // but we still expect a connection for the first login.
+        AppLogger.log(
+          "[AUTH] Fetching user document for UID: ${user.uid} (Attempt $attempts)",
+        );
         final doc = await userRef.get().timeout(const Duration(seconds: 30));
-
+        AppLogger.log(
+          "[AUTH] Fetched user document for UID: ${user.uid}, exists: ${doc.exists}",
+        );
         if (!doc.exists) {
           onStatusChange?.call("Registering new user...");
           await userRef
@@ -1079,7 +1106,7 @@ class AuthService {
           if (data != null && data['scheduledDeletion'] != null) {
             onStatusChange?.call("Cancelling scheduled deletion...");
             AppLogger.log(
-              "Found scheduled deletion, calling cancelScheduledDeletion Cloud Function",
+              "[AUTH] Found scheduled deletion, calling cancelScheduledDeletion Cloud Function",
             );
             try {
               // Call Cloud Function to cancel deletion (sends email notification)
@@ -1089,18 +1116,18 @@ class AuthService {
               );
               final result = await callable.call();
               AppLogger.log(
-                "Cancelled scheduled deletion via Cloud Function for user: ${user.uid}, result: ${result.data}",
+                "[AUTH] Cancelled scheduled deletion via Cloud Function for user: ${user.uid}, result: ${result.data}",
               );
               AppLogger.log(
-                "Account deletion cancelled successfully for user: ${user.uid}",
+                "[AUTH] Account deletion cancelled successfully for user: ${user.uid}",
               );
             } catch (e, stack) {
               // Fallback to direct Firestore update if Cloud Function fails
               AppLogger.log(
-                "Cloud Function failed, falling back to direct update: $e",
+                "[AUTH] Cloud Function failed, falling back to direct update: $e",
               );
               AppLogger.log(
-                "cancelScheduledDeletion Cloud Function failed: $e\n$stack",
+                "[AUTH] cancelScheduledDeletion Cloud Function failed: $e\n$stack",
               );
               await userRef
                   .update({
@@ -1110,11 +1137,13 @@ class AuthService {
                   })
                   .timeout(const Duration(seconds: 30));
               AppLogger.log(
-                "Cancelled scheduled deletion directly for user: ${user.uid}",
+                "[AUTH] Cancelled scheduled deletion directly for user: ${user.uid}",
               );
             }
           } else {
-            AppLogger.log("No scheduled deletion found for user: ${user.uid}");
+            AppLogger.log(
+              "[AUTH] No scheduled deletion found for user: ${user.uid}",
+            );
             await userRef
                 .update({'lastSeen': FieldValue.serverTimestamp()})
                 .timeout(const Duration(seconds: 30));
@@ -1148,7 +1177,7 @@ class AuthService {
 
         return; // Success
       } catch (e) {
-        AppLogger.log("Attempt $attempts failed: $e");
+        AppLogger.log("[AUTH] Attempt $attempts failed: $e");
 
         // If it's the last attempt, or if it's a permission error (not transient), fail.
         if (attempts >= 3 || e.toString().contains("permission-denied")) {
@@ -1329,17 +1358,10 @@ class AuthService {
         AppLogger.error('Error clearing SharedPreferences: $e');
       }
 
-      // Delete local profile image
-      try {
-        final fs = await fileSystem();
-        if (_localPhotoPath != null) {
-          if (await fs.exists(_localPhotoPath!)) {
-            await fs.delete(_localPhotoPath!);
-          }
-        }
-      } catch (e) {
-        AppLogger.error('Error deleting profile image: $e');
-      }
+      // Clear File System
+      final fs = await fileSystem();
+      await _clearFileSystemRecursively(await fs.documentDir);
+      await _clearFileSystemRecursively(await fs.cacheDir);
 
       // Invalidate avatar cache so new user gets fresh avatar
       UserAvatar.invalidateCache();
@@ -1399,6 +1421,33 @@ class AuthService {
       } catch (_) {}
       // Re-throw so caller can handle it
       rethrow;
+    }
+  }
+
+  static Future<void> _clearFileSystemRecursively(String directory) async {
+    final fs = await fileSystem();
+
+    try {
+      AppLogger.log('Clearing file system directory: $directory');
+      final files = await fs.list(directory);
+      for (final file in files) {
+        final filePath = join(directory, file);
+        try {
+          final isDir = await fs.isDirectory(filePath);
+          AppLogger.log('Deleting ${isDir ? "directory" : "file"}: $filePath');
+          if (isDir) {
+            await _clearFileSystemRecursively(filePath);
+            await fs.delete(filePath);
+          } else {
+            await fs.delete(filePath);
+          }
+          AppLogger.log('Deleted: $filePath');
+        } catch (e) {
+          AppLogger.error('Error deleting file/directory $filePath: $e');
+        }
+      }
+    } catch (e) {
+      AppLogger.error('Error clearing file system: $e');
     }
   }
 }

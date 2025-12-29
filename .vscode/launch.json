@@ -7,7 +7,9 @@
       "type": "dart",
       "flutterMode": "debug",
       "toolArgs": [
-        "--dart-define-from-file=.env"
+        "--dart-define-from-file=.env",
+        "--web-port",
+        "63630"
       ]
     },
     {

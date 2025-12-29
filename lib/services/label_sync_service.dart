@@ -3,6 +3,7 @@ import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
@@ -131,12 +132,22 @@ class LabelSyncService {
         AppLogger.log("[LABEL_SYNC]Skipping sync - demo account");
         return;
       }
-      // Push sync requires Pro, but start listener for incoming sync
-      if (_canPushSync) {
-        _sync();
+      // Only start sync if E2EE is ready - otherwise wait for E2EE status change listener
+      if (E2EEService.instance.isReady) {
+        // Push sync requires Pro, but start listener for incoming sync
+        if (_canPushSync) {
+          _sync();
+        }
+        _startRemoteListener();
+      } else {
+        AppLogger.log(
+          "[LABEL_SYNC] Deferring sync - E2EE not ready (status: ${E2EEService.instance.status.value})",
+        );
       }
-      _startRemoteListener();
     }
+
+    // Listen for E2EE status changes to trigger sync when ready
+    E2EEService.instance.status.addListener(_onE2EEStatusChange);
 
     _userStreamSubscription = AuthService.userStream.listen((user) {
       if (user != null) {
@@ -146,12 +157,58 @@ class LabelSyncService {
           return;
         }
         AppState.lastLabelSynced = null;
-        refresh();
-        _startRemoteListener();
+        // Only sync if E2EE is ready - otherwise wait for E2EE status change
+        if (E2EEService.instance.isReady) {
+          refresh();
+          _startRemoteListener();
+        } else {
+          AppLogger.log(
+            "[LABEL_SYNC] Deferring sync on login - E2EE not ready (status: ${E2EEService.instance.status.value})",
+          );
+        }
       } else {
         _stopRemoteListener();
       }
     });
+  }
+
+  /// Track last known E2EE status to detect transitions
+  E2EEStatus? _lastKnownE2EEStatus;
+
+  /// Called when E2EE status changes - trigger sync when E2EE becomes ready
+  void _onE2EEStatusChange() {
+    final status = E2EEService.instance.status.value;
+    final previousStatus = _lastKnownE2EEStatus;
+    _lastKnownE2EEStatus = status;
+
+    AppLogger.log(
+      "[LABEL_SYNC] E2EE status changed from $previousStatus to $status",
+    );
+
+    // Skip sync for demo accounts
+    if (_isDemoAccount) {
+      AppLogger.log("[LABEL_SYNC] Demo account detected, skipping sync");
+      return;
+    }
+
+    // Check if we're transitioning TO a ready state from a non-ready state
+    final isNowReady =
+        status == E2EEStatus.ready ||
+        status == E2EEStatus.verifyingInBackground;
+    final wasReady =
+        previousStatus == E2EEStatus.ready ||
+        previousStatus == E2EEStatus.verifyingInBackground;
+
+    // Trigger sync when E2EE becomes ready
+    if (isNowReady && !wasReady && currentUser != null) {
+      AppLogger.log("[LABEL_SYNC] E2EE just became ready, triggering sync");
+      Future.microtask(() async {
+        AppState.lastLabelSynced = null;
+        _stopRemoteListener();
+        _startRemoteListener();
+        await refresh();
+      });
+    }
   }
 
   /// Called when subscription status changes
@@ -338,6 +395,7 @@ class LabelSyncService {
     _userStreamSubscription?.cancel();
     _userStreamSubscription = null;
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
+    E2EEService.instance.status.removeListener(_onE2EEStatusChange);
     _initialized = false;
   }
 

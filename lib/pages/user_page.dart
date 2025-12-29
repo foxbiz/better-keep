@@ -2376,20 +2376,28 @@ class _UserPageState extends State<UserPage> {
             'You have a recovery key set up. What would you like to do?',
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'remove'),
-              child: Text(
-                'Remove',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, 'update'),
-              child: const Text('Update'),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'remove'),
+                  child: Text(
+                    'Remove',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'update'),
+                  child: const Text('Update'),
+                ),
+              ],
             ),
           ],
         ),

@@ -14,6 +14,7 @@ import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/utils/week_days.dart';
 import 'package:flutter/foundation.dart';
@@ -618,6 +619,11 @@ class _NoteCardState extends State<NoteCard>
             if (note.images.isNotEmpty || note.sketches.isNotEmpty) ...[
               Builder(
                 builder: (context) {
+                  // If note is locked, show blurred thumbnails for privacy
+                  if (note.locked && !note.unlocked) {
+                    return _buildLockedThumbnailGrid(note);
+                  }
+
                   final grid = NoteImageGrid(
                     images: [
                       ...note.images,
@@ -637,12 +643,6 @@ class _NoteCardState extends State<NoteCard>
                     noteId: note.id,
                   );
 
-                  if (note.locked && !note.unlocked) {
-                    return ImageFiltered(
-                      imageFilter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                      child: grid,
-                    );
-                  }
                   return grid;
                 },
               ),
@@ -1097,5 +1097,119 @@ class _NoteCardState extends State<NoteCard>
     if (mounted) {
       setState(() {});
     }
+  }
+
+  /// Builds a grid of blurred thumbnails for locked notes.
+  /// Uses the same NoteImageGrid layout as unlocked notes to prevent size changes.
+  /// Thumbnails are pre-generated tiny images (<1KB) that are safe to display
+  /// even when note is locked - they're too low-res to reveal content.
+  Widget _buildLockedThumbnailGrid(Note note) {
+    // Build the same image list as the unlocked grid
+    final images = [
+      ...note.images,
+      ...note.sketches.map(
+        (s) => NoteImage(
+          src: s.previewImage ?? '',
+          aspectRatio:
+              "${(s.aspectRatio > 0 ? s.aspectRatio : 1.0) * 1000 ~/ 1}:1000",
+          size: 0,
+          lastModified: DateTime.now().toIso8601String(),
+          index: 0,
+          blurredThumbnail: s.blurredThumbnail,
+        ),
+      ),
+    ];
+
+    // Check if any thumbnails are available
+    final hasThumbnails = images.any((img) => img.blurredThumbnail != null);
+
+    if (!hasThumbnails) {
+      // No thumbnails available - show placeholder grid instead of trying to
+      // load encrypted files which would fail
+      return _buildLockedPlaceholderGrid(images.length);
+    }
+
+    // Use NoteImageGrid with custom thumbnail builder for exact layout match
+    return ImageFiltered(
+      imageFilter: ui.ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+      child: NoteImageGrid(
+        images: images,
+        onImageTap: (_) => _handleTap(),
+        maxHeight: 200,
+        noteId: null, // No hero animation for locked thumbnails
+        customImageBuilder: _buildThumbnailTile,
+      ),
+    );
+  }
+
+  /// Builds a placeholder grid for locked notes without thumbnails.
+  Widget _buildLockedPlaceholderGrid(int count) {
+    if (count == 0) return const SizedBox.shrink();
+
+    return Container(
+      height: 100,
+      padding: const EdgeInsets.all(8),
+      child: Row(
+        children: List.generate(
+          count.clamp(1, 3),
+          (index) => Expanded(
+            child: Container(
+              margin: EdgeInsets.only(
+                right: index < count.clamp(1, 3) - 1 ? 4 : 0,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Icon(Icons.image, color: Colors.grey.shade500, size: 32),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds a thumbnail tile for the locked note grid.
+  Widget _buildThumbnailTile(
+    NoteImage image,
+    int index,
+    int total,
+    BoxFit fit,
+  ) {
+    final thumbnailBytes = ThumbnailGenerator.decodeFromBase64(
+      image.blurredThumbnail,
+    );
+
+    if (thumbnailBytes == null) {
+      // Fallback to grey placeholder if no thumbnail
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.grey.shade300,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      );
+    }
+
+    final cacheKey = 'thumb_${image.blurredThumbnail.hashCode}';
+    if (!_base64ImageCache.containsKey(cacheKey)) {
+      // Evict oldest entries if cache is full
+      if (_base64ImageCache.length >= _maxImageCacheSize) {
+        _base64ImageCache.remove(_base64ImageCache.keys.first);
+      }
+      _base64ImageCache[cacheKey] = MemoryImage(thumbnailBytes);
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox.expand(
+        child: Image(
+          image: _base64ImageCache[cacheKey]!,
+          fit: fit,
+          gaplessPlayback: true,
+        ),
+      ),
+    );
   }
 }

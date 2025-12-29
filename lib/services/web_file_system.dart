@@ -84,6 +84,12 @@ class WebFileSystem implements FileSystem {
   Future<bool> exists(String path) => _backend.exists(path);
 
   @override
+  Future<bool> isDirectory(String path) => _backend.isDirectory(path);
+
+  @override
+  Future<bool> isFile(String path) => _backend.isFile(path);
+
+  @override
   Future<List<String>> list([String directory = '/']) =>
       _backend.list(directory);
 
@@ -298,6 +304,8 @@ abstract class _FileSystemBackend {
   Future<String> readString(String path);
   Future<bool> delete(String path);
   Future<bool> exists(String path);
+  Future<bool> isDirectory(String path);
+  Future<bool> isFile(String path);
   Future<List<String>> list(String directory);
 }
 
@@ -429,6 +437,19 @@ class _OpfsBackend implements _FileSystemBackend {
   Future<bool> exists(String path) async {
     final handle = await _getFileHandle(path, create: false);
     return handle != null;
+  }
+
+  @override
+  Future<bool> isDirectory(String path) async {
+    final segments = _segments(path);
+    final dirHandle = await _resolveDirectory(segments, create: false);
+    return dirHandle != null;
+  }
+
+  @override
+  Future<bool> isFile(String path) async {
+    final fileHandle = await _getFileHandle(path, create: false);
+    return fileHandle != null;
   }
 
   @override
@@ -613,6 +634,35 @@ class _IndexedDbBackend implements _FileSystemBackend {
     final value = await store.getObject(path);
     await txn.completed;
     return value != null;
+  }
+
+  @override
+  Future<bool> isDirectory(String path) async {
+    /// In IndexedDB backend, directories are not explicitly stored.
+    /// We consider a path to be a directory if there are any entries
+    /// that start with the given path followed by a '/'.
+    final dirPrefix = path.endsWith('/') ? path : '$path/';
+    final txn = _db!.transaction(_storeName, 'readonly');
+    final store = txn.objectStore(_storeName);
+    final cursorStream = store.openCursor(autoAdvance: true);
+    bool found = false;
+    await for (final cursor in cursorStream) {
+      if (cursor != null) {
+        final key = cursor.key.toString();
+        if (key.startsWith(dirPrefix)) {
+          found = true;
+          break; // Stop iteration early
+        }
+      }
+    }
+    await txn.completed;
+    return found;
+  }
+
+  @override
+  Future<bool> isFile(String path) async {
+    /// A path is considered a file if it exists in the store.
+    return exists(path);
   }
 
   @override

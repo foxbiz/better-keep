@@ -83,9 +83,6 @@ class NoteEncryptionService {
   /// Checks if E2EE is available (UMK is unlocked).
   bool get isE2EEAvailable => _deviceManager.getUMK() != null;
 
-  /// Encrypts note content for storage.
-  ///
-  /// Returns null if E2EE is not available.
   Future<EncryptedNoteData?> encryptNote({
     String? title,
     String? content,
@@ -125,6 +122,7 @@ class NoteEncryptionService {
   /// Decrypts note content from storage.
   ///
   /// Returns null if E2EE is not available or decryption fails.
+  /// Note: Sketch data within attachments is decrypted separately inline.
   Future<DecryptedNoteContent?> decryptNote(
     EncryptedNoteData encryptedData,
   ) async {

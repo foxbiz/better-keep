@@ -62,6 +62,17 @@ class _TooltipPopoverState extends State<TooltipPopover> {
   }
 
   @override
+  void deactivate() {
+    // Close overlay immediately when widget is removed from tree
+    // This handles cases like auth state changes during navigation
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    }
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _controller.removeListener(_notifierListener);
     _overlayEntry?.remove();

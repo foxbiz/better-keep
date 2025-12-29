@@ -234,6 +234,28 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
   }
 
   Future<void> setAction(SyncAction newAction) async {
+    // Re-read current state from DB to handle race conditions.
+    // This can happen when notes are trashed and deleted quickly - both
+    // notify("updated") and notify("deleted") may run concurrently with
+    // different in-memory objects.
+    if (id != null) {
+      final current = await getByLocalId(localId);
+      if (current != null) {
+        // Prevent downgrading from delete to upload.
+        // Once a note is marked for deletion, it should stay that way.
+        if (current.action == SyncAction.delete &&
+            newAction == SyncAction.upload) {
+          return;
+        }
+        // Update our local state to match DB (preserves remoteId etc.)
+        action = current.action;
+        remoteId = current.remoteId;
+        status = current.status;
+        createdAt = current.createdAt;
+        updatedAt = current.updatedAt;
+      }
+    }
+
     action = newAction;
     status = SyncStatus.pending;
     await save();

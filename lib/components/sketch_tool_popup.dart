@@ -61,6 +61,14 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
   }
 
   @override
+  void deactivate() {
+    // Close overlay immediately when widget is removed from tree
+    _sizePreviewEntry?.remove();
+    _sizePreviewEntry = null;
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     _sizePreviewEntry?.remove();
@@ -291,7 +299,7 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
         return Row(
           children: [
             Icon(
-              isEraser ? CustomIcons.eraser : Icons.edit,
+              isEraser ? CustomIcons.eraser : CustomIcons.pen,
               size: 16,
               color: theme.colorScheme.onSurfaceVariant,
             ),

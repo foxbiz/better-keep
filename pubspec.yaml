@@ -1,7 +1,7 @@
 name: better_keep
 description: 'Notes app with enhanced features'
 publish_to: 'none'
-version: 1.0.13+29
+version: 1.0.14+30
 
 environment:
   sdk: ^3.10.0

@@ -4,12 +4,21 @@ import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:flutter/material.dart';
 
+/// Custom image builder function type for rendering images in the grid.
+/// Used for custom rendering like blurred thumbnails for locked notes.
+typedef ImageTileBuilder =
+    Widget Function(NoteImage image, int index, int total, BoxFit fit);
+
 class NoteImageGrid extends StatelessWidget {
   final List<NoteImage> images;
   final Function(NoteImage) onImageTap;
   final double maxHeight;
   final double gap;
   final int? noteId;
+
+  /// Optional custom image builder. If provided, this is used instead of the
+  /// default image rendering. Useful for showing thumbnails in locked notes.
+  final ImageTileBuilder? customImageBuilder;
 
   const NoteImageGrid({
     super.key,
@@ -18,6 +27,7 @@ class NoteImageGrid extends StatelessWidget {
     this.maxHeight = 400,
     this.gap = 2,
     this.noteId,
+    this.customImageBuilder,
   });
 
   @override
@@ -63,6 +73,34 @@ class NoteImageGrid extends StatelessWidget {
 
     // Use contain for single images to show full image without cropping
     final fit = total == 1 ? BoxFit.contain : BoxFit.cover;
+
+    // Use custom builder if provided (e.g., for thumbnails in locked notes)
+    if (customImageBuilder != null) {
+      Widget customWidget = customImageBuilder!(image, index, total, fit);
+
+      if (showOverlay) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            customWidget,
+            Container(
+              color: Colors.black54,
+              alignment: Alignment.center,
+              child: Text(
+                '+$remaining',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      }
+
+      return customWidget;
+    }
 
     Widget imageWidget = UniversalImage(
       path: image.src,

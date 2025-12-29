@@ -180,15 +180,13 @@ class DeviceKeyPair {
 /// Key derivation algorithm type.
 enum KdfType { argon2id, pbkdf2 }
 
-/// Key derivation from passphrase using Argon2id (with PBKDF2 fallback for web).
 class KeyDerivation {
-  /// Returns the KDF algorithm used on the current platform.
-  static KdfType get currentPlatformKdf =>
-      kIsWeb ? KdfType.pbkdf2 : KdfType.argon2id;
+  /// Returns the KDF algorithm used for new recovery keys.
+  /// Using PBKDF2 on all platforms for cross-platform compatibility.
+  static KdfType get currentPlatformKdf => KdfType.pbkdf2;
 
-  /// Derives a 32-byte key from a passphrase using platform-appropriate KDF.
-  /// On web, uses PBKDF2 as Argon2id with high memory is too slow/hangs.
-  /// On native platforms, uses Argon2id in a background isolate.
+  /// Derives a 32-byte key from a passphrase using PBKDF2.
+  /// Uses PBKDF2 on all platforms for cross-platform recovery compatibility.
   ///
   /// [passphrase] - User-provided password/passphrase
   /// [salt] - Random 16-byte salt (must be stored alongside encrypted data)

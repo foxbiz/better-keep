@@ -155,6 +155,44 @@ class LocalDataEncryption {
     }
   }
 
+  /// Encrypts a string value for attachment metadata (sketch data).
+  /// Returns the encrypted string prefixed with magic bytes.
+  /// Returns the original string if files encryption is disabled or value is empty.
+  /// This is used for sketch strokes and other attachment metadata stored in SQLite.
+  Future<String> encryptAttachmentMetadata(String value) async {
+    if (value.isEmpty) return value;
+    if (!await isFilesEnabled()) return value;
+
+    // Don't double-encrypt
+    if (value.startsWith(_encryptedMagic)) return value;
+
+    try {
+      final secretKey = SecretKey(_key);
+      final nonce = _cipher.newNonce();
+      final secretBox = await _cipher.encrypt(
+        utf8.encode(value),
+        secretKey: secretKey,
+        nonce: nonce,
+      );
+
+      // Combine nonce + ciphertext + mac
+      final combined = Uint8List.fromList([
+        ...secretBox.nonce,
+        ...secretBox.cipherText,
+        ...secretBox.mac.bytes,
+      ]);
+
+      return '$_encryptedMagic${base64Encode(combined)}';
+    } catch (e) {
+      // On encryption failure, return original to avoid data loss
+      AppLogger.error(
+        'LocalDataEncryption: Failed to encrypt attachment metadata',
+        e,
+      );
+      return value;
+    }
+  }
+
   /// Decrypts a string value from SQLite.
   /// Returns the decrypted string, or the original if not encrypted.
   Future<String> decryptString(String value) async {

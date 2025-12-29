@@ -13,6 +13,8 @@ import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/pages/setup_recovery_key_page.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/services/app_install_service.dart';
+import 'package:better_keep/services/camera_detection.dart';
+import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
@@ -970,12 +972,23 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   /// Create a new image note
   Future<void> _createImageNote() async {
-    // Show image source dialog on mobile, pick from gallery on desktop
+    // On desktop, directly pick from gallery
     if (isDesktop) {
       await _pickImageAndCreateNote(ImageSource.gallery);
-    } else {
-      _showImageSourceBottomSheet();
+      return;
     }
+
+    // On web, check if camera is available
+    if (kIsWeb) {
+      final hasCamera = await hasCameraAvailable();
+      if (!hasCamera) {
+        await _pickImageAndCreateNote(ImageSource.gallery);
+        return;
+      }
+    }
+
+    // Show bottom sheet with camera/gallery options (mobile or web with camera)
+    _showImageSourceBottomSheet();
   }
 
   void _showImageSourceBottomSheet() {
@@ -1013,9 +1026,21 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   static const int _maxImageSize = 500 * 1024;
 
   Future<void> _pickImageAndCreateNote(ImageSource source) async {
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: source);
-    if (image == null) return;
+    Uint8List? imageBytes;
+    String ext = '.jpg';
+
+    // On web with camera source, use the web camera capture
+    if (kIsWeb && source == ImageSource.camera) {
+      imageBytes = await captureImageFromWebCamera();
+      if (imageBytes == null) return;
+    } else {
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: source);
+      if (image == null) return;
+      imageBytes = await image.readAsBytes();
+      ext = path.extension(image.path);
+      if (ext.isEmpty) ext = '.jpg';
+    }
 
     // Show loading dialog
     if (mounted) {
@@ -1046,7 +1071,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     try {
       final fs = await fileSystem();
       final documentDir = await fs.documentDir;
-      final ext = path.extension(image.path);
       final imagePath = path.join(
         documentDir,
         'images',
@@ -1054,9 +1078,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       );
 
       // Compress the image
-      Uint8List bytes = await _compressImageToTargetSize(
-        await image.readAsBytes(),
-      );
+      Uint8List bytes = await _compressImageToTargetSize(imageBytes);
 
       await writeEncryptedBytes(imagePath, bytes);
 

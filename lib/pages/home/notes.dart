@@ -96,7 +96,7 @@ class _NotesState extends State<Notes> {
             key: PageStorageKey('notes_scroll_view'),
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.only(top: 8, bottom: 80),
+            padding: EdgeInsets.only(top: 0, bottom: 0),
             scrollDirection: Axis.vertical,
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),

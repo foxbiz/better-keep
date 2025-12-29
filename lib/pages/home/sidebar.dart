@@ -31,7 +31,6 @@ class _SidebarState extends State<Sidebar> {
     super.initState();
     _loadInstallInfo();
 
-    // Listen for PWA becoming installable (beforeinstallprompt event)
     if (kIsWeb) {
       _installableSubscription = AppInstallService.instance.onInstallable
           .listen((_) {
@@ -145,6 +144,7 @@ class _SidebarState extends State<Sidebar> {
                   AppState.showNotes = NoteType.trashed;
                 }, AppState.showNotes == NoteType.trashed),
                 _buildTile(Icons.settings, 'Settings', () {
+                  if (!_isBigScreen) Navigator.pop(context);
                   showPage(context, const Settings());
                 }),
                 if (!kIsWeb && Platform.isAndroid)
@@ -168,103 +168,31 @@ class _SidebarState extends State<Sidebar> {
   Widget _buildInstallButton() {
     final info = _installInfo;
     if (info == null) return const SizedBox.shrink();
-    final theme = Theme.of(context);
 
     IconData icon;
     String label;
-    String subtitle;
 
     if (info.isIOS) {
       icon = Icons.install_mobile;
       label = 'Install App';
-      subtitle = 'iOS app coming soon';
     } else if (info.isAndroid) {
       icon = Icons.android;
       label = 'Get Android App';
-      subtitle = 'Available on Play Store';
     } else if (info.isWindows) {
       icon = Icons.desktop_windows;
       label = 'Get Windows App';
-      subtitle = 'Available on Microsoft Store';
     } else if (info.isMacOS) {
       icon = Icons.laptop_mac;
       label = 'Install App';
-      subtitle = info.canInstallPWA ? 'Add to Dock' : 'macOS app coming soon';
     } else if (info.canInstallPWA) {
       icon = Icons.install_desktop;
       label = 'Install App';
-      subtitle = 'Quick access & offline';
     } else {
       icon = Icons.download;
       label = 'Install App';
-      subtitle = 'Add to your device';
     }
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: widget.shrink
-          ? const EdgeInsets.only(right: 24.0, bottom: 8.0)
-          : const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(widget.shrink ? 16.0 : 12.0),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(widget.shrink ? 16.0 : 12.0),
-          onTap: _handleInstallTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: widget.shrink ? 12.0 : 12.0,
-            ),
-            child: Row(
-              children: [
-                Icon(icon, color: theme.colorScheme.primary, size: 22),
-                if (!widget.shrink) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          label,
-                          style: TextStyle(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    return _buildTile(icon, label, _handleInstallTap);
   }
 
   Widget _buildTile(

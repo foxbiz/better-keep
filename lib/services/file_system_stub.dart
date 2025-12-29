@@ -37,6 +37,12 @@ class FileSystemStub implements FileSystem {
   Future<bool> exists(String path) => _unsupported();
 
   @override
+  Future<bool> isDirectory(String path) => _unsupported();
+
+  @override
+  Future<bool> isFile(String path) => _unsupported();
+
+  @override
   Future<List<String>> list([String directory = '/']) => _unsupported();
 
   @override

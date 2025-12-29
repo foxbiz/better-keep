@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:better_keep/pages/email_login_page.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -154,7 +155,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         case 'google':
           credential = await AuthService.signInWithGoogle(
             onStatusChange: (status) {
-              if (mounted) setState(() => _statusMessage = status);
+              if (!mounted) {
+                return;
+              }
+
+              AppLogger.log("[AUTH] Google sign-in status: $status");
+              setState(() => _statusMessage = status);
             },
           );
           break;
@@ -301,32 +307,30 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: _isLoading
-                        ? _buildLoadingState()
-                        : _buildLoginContent(),
-                  ),
+          child: Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(left: 32, right: 32, top: 32),
+                child: Column(
+                  children: [
+                    _isLoading ? _buildLoadingState() : _buildLoginContent(),
+                    if (_version.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'v$_version',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              if (_version.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    'v$_version',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
       ),

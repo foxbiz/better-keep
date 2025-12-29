@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/note.dart';
 
@@ -74,9 +75,8 @@ class _UnlockNoteDialogState extends State<UnlockNoteDialog> {
       return;
     }
 
-    widget.note.password = _pinController.text;
     try {
-      await widget.note.unlock();
+      await widget.note.unlock(_pinController.text);
       if (mounted) {
         Navigator.of(context).pop(true);
       }
@@ -92,6 +92,7 @@ class _UnlockNoteDialogState extends State<UnlockNoteDialog> {
         setState(() => _error = '${e.message}. $remaining attempts remaining.');
       }
     } catch (e) {
+      AppLogger.error("[UnlockNoteDialog] Failed to unlock note: $e");
       _attempts++;
       if (_attempts >= _maxAttempts) {
         _startLockTimer();

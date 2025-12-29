@@ -263,17 +263,48 @@ class RemoteSyncCacheService {
   }
 
   /// Get all pending syncs (status is pending or failed)
+  /// Deduplicates by local_id, keeping only the most recent version per note
   List<PendingRemoteSync> getPendingSyncs() {
-    final result = <PendingRemoteSync>[];
+    // Use a Map to deduplicate by local_id, keeping the most recent version
+    final Map<int, PendingRemoteSync> deduped = {};
+    int totalBeforeDedup = 0;
+
     for (final page in _pages.values) {
       for (final sync in page.syncs.values) {
         if (sync.status == PendingRemoteSyncStatus.pending ||
             sync.status == PendingRemoteSyncStatus.failed) {
-          result.add(sync);
+          totalBeforeDedup++;
+          final existing = deduped[sync.localId];
+          if (existing == null) {
+            deduped[sync.localId] = sync;
+          } else {
+            // Keep the one with the more recent updated_at timestamp
+            final existingUpdatedAt = existing.remoteData['updated_at'];
+            final syncUpdatedAt = sync.remoteData['updated_at'];
+
+            if (existingUpdatedAt != null && syncUpdatedAt != null) {
+              final existingTime = DateTime.parse(existingUpdatedAt as String);
+              final syncTime = DateTime.parse(syncUpdatedAt as String);
+              if (syncTime.isAfter(existingTime)) {
+                deduped[sync.localId] = sync;
+              }
+            } else if (syncUpdatedAt != null) {
+              // Prefer the one with a timestamp
+              deduped[sync.localId] = sync;
+            }
+          }
         }
       }
     }
-    return result;
+
+    // Log deduplication if there were duplicates
+    if (totalBeforeDedup != deduped.length) {
+      AppLogger.log(
+        "[SYNC] CACHE: Deduplicated pending syncs: $totalBeforeDedup -> ${deduped.length} unique notes",
+      );
+    }
+
+    return deduped.values.toList();
   }
 
   /// Get all local IDs that have pending syncs

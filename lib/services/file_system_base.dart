@@ -33,4 +33,10 @@ abstract class FileSystem {
 
   /// Test OPFS functionality. Web only.
   Future<Map<String, dynamic>> testOpfs();
+
+  /// Check if path is directory
+  Future<bool> isDirectory(String path);
+
+  /// Check if path is file
+  Future<bool> isFile(String path);
 }

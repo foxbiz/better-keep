@@ -182,23 +182,17 @@ class _BetterKeepState extends State<BetterKeep> {
               e,
             );
           }
-          // Initialize all-day reminder notifications
           AllDayReminderNotificationService().init();
-          // Start sync after E2EE is initialized
           NoteSyncService().init();
           LabelSyncService().init();
         } catch (e) {
           AppLogger.error('[Main] E2EE initialization error', e);
-          // Still try to start sync services even if E2EE fails
           AllDayReminderNotificationService().init();
           NoteSyncService().init();
           LabelSyncService().init();
         }
       } else {
-        // No user logged in, start sync services anyway
         AllDayReminderNotificationService().init();
-        NoteSyncService().init();
-        LabelSyncService().init();
       }
     });
   }

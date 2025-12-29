@@ -99,10 +99,20 @@ class PlanService {
       }
 
       // Listen for auth changes to start/stop subscription listener
+      // But defer starting the listener if we're in the middle of sign-in
+      // to avoid Firestore connection conflicts
       _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((
         user,
       ) {
         if (user != null) {
+          // If we're in the middle of sign-in, defer starting the listener
+          // _completeSignIn will handle this after auth is fully complete
+          if (AuthService.isVerifying.value) {
+            AppLogger.log(
+              'PlanService: Sign-in in progress, deferring subscription listener',
+            );
+            return;
+          }
           _startSubscriptionListener(user.uid);
           // Validate when user signs in
           _validateSubscriptionWithBackend();
@@ -255,6 +265,16 @@ class PlanService {
       await prefs.setString(_cacheKey, json);
     } catch (e) {
       AppLogger.error('PlanService: Error caching subscription', e);
+    }
+  }
+
+  /// Start subscription listener for the current user.
+  /// Call this after sign-in is complete to avoid Firestore connection conflicts.
+  Future<void> startSubscriptionListener() async {
+    final user = AuthService.currentUser;
+    if (user != null) {
+      await _startSubscriptionListener(user.uid);
+      _validateSubscriptionWithBackend();
     }
   }
 

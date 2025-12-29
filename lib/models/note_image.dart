@@ -5,12 +5,18 @@ class NoteImage {
   String aspectRatio;
   String lastModified;
 
+  /// Base64-encoded tiny thumbnail for locked note previews.
+  /// Very low resolution (~24px) to ensure privacy while showing visual hint.
+  /// Should be under 1KB.
+  String? blurredThumbnail;
+
   NoteImage({
     required this.src,
     required this.size,
     required this.index,
     required this.aspectRatio,
     required this.lastModified,
+    this.blurredThumbnail,
   });
 
   factory NoteImage.fromJson(Map<String, dynamic> json) {
@@ -20,6 +26,7 @@ class NoteImage {
       size: json['size'] as int,
       lastModified: json['lastModified'] as String,
       index: json['index'] as int,
+      blurredThumbnail: json['blurredThumbnail'] as String?,
     );
   }
 
@@ -30,6 +37,7 @@ class NoteImage {
       'index': index,
       'aspectRatio': aspectRatio,
       'lastModified': lastModified,
+      if (blurredThumbnail != null) 'blurredThumbnail': blurredThumbnail,
     };
   }
 

@@ -12,6 +12,7 @@ import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -339,10 +340,16 @@ class _SketchPageState extends State<SketchPage>
         AppLogger.error('Error writing preview', e);
       });
 
+      // Generate tiny thumbnail for locked note preview (under 1KB)
+      final thumbnail = await ThumbnailGenerator.generateFromBytes(
+        compressedBytes,
+      );
+
       state.sketchData.strokes = state.strokes;
       state.sketchData.backgroundColor = state.paperColor;
       state.sketchData.previewImage = previewPath;
       state.sketchData.aspectRatio = bodySize.width / bodySize.height;
+      state.sketchData.blurredThumbnail = thumbnail;
 
       if (state.isImageBasedSketch && state.sourceAttachment != null) {
         state.sourceAttachment!.type = AttachmentType.sketch;
@@ -1157,7 +1164,9 @@ class _SketchPageState extends State<SketchPage>
     final iconButton = IconButton(
       mouseCursor: SystemMouseCursors.click,
       isSelected: isSelected,
-      icon: Icon(tool == SketchTool.eraser ? CustomIcons.eraser : Icons.edit),
+      icon: Icon(
+        tool == SketchTool.eraser ? CustomIcons.eraser : CustomIcons.pen,
+      ),
       onPressed: isSelected
           ? null // Popup is handled by SketchToolPopup
           : () {
@@ -1457,10 +1466,16 @@ class _SketchPageState extends State<SketchPage>
         AppLogger.error('Error writing preview', e);
       });
 
+      // Generate tiny thumbnail for locked note preview (under 1KB)
+      final thumbnail = await ThumbnailGenerator.generateFromBytes(
+        compressedBytes,
+      );
+
       sketchData.strokes = strokes;
       sketchData.backgroundColor = paperColor;
       sketchData.previewImage = previewPath;
       sketchData.aspectRatio = canvasSize.width / canvasSize.height;
+      sketchData.blurredThumbnail = thumbnail;
 
       // If this was an image attachment, convert it to a sketch
       if (isImageBasedSketch && sourceAttachment != null) {
@@ -1565,10 +1580,16 @@ class _SketchPageState extends State<SketchPage>
         AppLogger.error('Error writing preview', e);
       });
 
+      // Generate tiny thumbnail for locked note preview (under 1KB)
+      final thumbnail = await ThumbnailGenerator.generateFromBytes(
+        compressedBytes,
+      );
+
       _sketchData.strokes = _strokes;
       _sketchData.backgroundColor = _paperColor;
       _sketchData.previewImage = previewPath;
       _sketchData.aspectRatio = bodySize.width / bodySize.height;
+      _sketchData.blurredThumbnail = thumbnail;
 
       // If this was an image attachment, convert it to a sketch
       if (_isImageBasedSketch && widget.sourceAttachment != null) {

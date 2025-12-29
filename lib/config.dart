@@ -7,6 +7,10 @@ const bigScreenWidthThreshold = 800;
 const appLabel = "Better Keep Notes";
 const defaultAlarmSound = "assets/sounds/2.mp3";
 
+/// Maximum number of attachments (images, sketches, audio) per note.
+/// This helps maintain performance and prevents storage bloat.
+const int maxAttachmentsPerNote = 50;
+
 /// Demo account email for Google Play review and testing.
 /// This account bypasses certain features for easier testing.
 const String demoAccountEmail = 'better.keep.review@gmail.com';

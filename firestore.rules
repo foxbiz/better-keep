@@ -9,6 +9,13 @@ service cloud.firestore {
         && request.auth.token.planExpiresAt > request.time.toMillis();
     }
 
+    // Helper function to validate attachment count
+    // Maximum 50 attachments per note to maintain performance and prevent storage abuse
+    function hasValidAttachmentCount() {
+      let attachments = request.resource.data.attachments;
+      return !('attachments' in request.resource.data) || attachments == null || attachments.size() <= 50;
+    }
+
     // Match any document in the 'users' collection
     match /users/{userId} {
       // Allow creating/reading/updating/deleting the user document itself
@@ -21,9 +28,11 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == userId;
         
         // Only Pro users can write (create/update) notes to the cloud
+        // Also validates attachment count
         allow create, update: if request.auth != null 
           && request.auth.uid == userId 
-          && isPro();
+          && isPro()
+          && hasValidAttachmentCount();
         
         // Allow deletes for Pro users OR if the note exists (cleanup)
         // This allows users to delete their cloud data even after subscription ends

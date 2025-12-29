@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:perfect_freehand/perfect_freehand.dart';
@@ -23,11 +24,11 @@ enum PagePattern {
   };
 
   IconData get icon => switch (this) {
-    PagePattern.blank => Icons.note_outlined,
+    PagePattern.blank => CustomIcons.emptyPage,
     PagePattern.singleLine => Icons.horizontal_rule,
     PagePattern.doubleLine => Icons.dehaze,
     PagePattern.grid => Icons.grid_4x4,
-    PagePattern.dotGrid => Icons.grid_on_outlined,
+    PagePattern.dotGrid => CustomIcons.dotsPage,
   };
 }
 
@@ -125,6 +126,21 @@ class SketchData {
   String? backgroundImage;
   PagePattern pagePattern;
 
+  /// Base64-encoded tiny thumbnail for locked note previews.
+  /// Very low resolution (~24px) to ensure privacy while showing visual hint.
+  /// Should be under 1KB.
+  String? blurredThumbnail;
+
+  /// Encrypted strokes data for locked notes.
+  /// When note is locked, strokes are encrypted and stored here.
+  /// The regular `strokes` list will be empty when this is set.
+  String? encryptedStrokes;
+
+  /// Encrypted metadata for local data encryption (files encryption toggle).
+  /// Contains strokes, bgColor, pagePattern as encrypted JSON.
+  /// Different from encryptedStrokes which is for password-locked notes.
+  String? encryptedMetadata;
+
   SketchData({
     this.previewImage,
     this.backgroundImage,
@@ -132,31 +148,81 @@ class SketchData {
     this.strokes = const [],
     this.backgroundColor = Colors.white,
     this.pagePattern = PagePattern.blank,
+    this.blurredThumbnail,
+    this.encryptedStrokes,
+    this.encryptedMetadata,
   });
 
+  /// Returns true if this sketch has encrypted strokes (locked note)
+  bool get hasEncryptedStrokes =>
+      encryptedStrokes != null && encryptedStrokes!.isNotEmpty;
+
+  /// Returns true if this sketch has encrypted metadata (local data encryption)
+  bool get hasEncryptedMetadata =>
+      encryptedMetadata != null && encryptedMetadata!.isNotEmpty;
+
   Map<String, dynamic> toJson() => {
-    'strokes': strokes.map((s) => s.toString()).toList(),
-    'bgColor': backgroundColor.toARGB32(),
+    // If strokes are encrypted (locked note), store encrypted data
+    // bgColor and pagePattern are also included in the encrypted data
+    if (hasEncryptedStrokes) ...{
+      'encryptedStrokes': encryptedStrokes,
+      // Don't include bgColor/pagePattern - they're encrypted
+    } else ...{
+      'strokes': strokes.map((s) => s.toString()).toList(),
+      'bgColor': backgroundColor.toARGB32(),
+      'pagePattern': pagePattern.name,
+    },
     'previewImage': previewImage,
     'backgroundImage': backgroundImage,
     'aspectRatio': aspectRatio,
-    'pagePattern': pagePattern.name,
+    if (blurredThumbnail != null) 'blurredThumbnail': blurredThumbnail,
   };
 
   factory SketchData.fromJson(Map<String, dynamic> json) {
     try {
-      return SketchData(
-        strokes: (json['strokes'] as List)
+      // Check if strokes are encrypted (from locked note)
+      final encryptedStrokes = json['encryptedStrokes'] as String?;
+
+      // Check if metadata is encrypted (from local data encryption - files toggle)
+      final encryptedMetadata = json['encrypted_metadata'] as String?;
+
+      // Parse strokes only if not encrypted
+      List<SketchStroke> parsedStrokes = [];
+      Color bgColor = const Color(0xFFFFFFFF);
+      PagePattern pattern = PagePattern.blank;
+
+      // If encrypted metadata, store it for later decryption
+      // Otherwise, parse strokes and color normally
+      if (encryptedMetadata == null &&
+          encryptedStrokes == null &&
+          json['strokes'] != null) {
+        parsedStrokes = (json['strokes'] as List)
             .map((e) => SketchStroke.parse(e))
-            .toList(),
-        backgroundImage: json['backgroundImage'] as String?,
-        backgroundColor: Color(json['bgColor'] as int? ?? 0xFFFFFFFF),
-        previewImage: json['previewImage'] as String?,
-        aspectRatio: (json['aspectRatio'] as num?)?.toDouble() ?? 1.0,
-        pagePattern: PagePattern.values.firstWhere(
+            .toList();
+        bgColor = Color(json['bgColor'] as int? ?? 0xFFFFFFFF);
+        pattern = PagePattern.values.firstWhere(
           (e) => e.name == json['pagePattern'],
           orElse: () => PagePattern.blank,
-        ),
+        );
+      } else if (encryptedStrokes == null && json['bgColor'] != null) {
+        // Fallback: if bgColor exists but no strokes, parse colors anyway
+        bgColor = Color(json['bgColor'] as int? ?? 0xFFFFFFFF);
+        pattern = PagePattern.values.firstWhere(
+          (e) => e.name == json['pagePattern'],
+          orElse: () => PagePattern.blank,
+        );
+      }
+
+      return SketchData(
+        strokes: parsedStrokes,
+        encryptedStrokes: encryptedStrokes,
+        encryptedMetadata: encryptedMetadata,
+        backgroundImage: json['backgroundImage'] as String?,
+        backgroundColor: bgColor,
+        previewImage: json['previewImage'] as String?,
+        aspectRatio: (json['aspectRatio'] as num?)?.toDouble() ?? 1.0,
+        pagePattern: pattern,
+        blurredThumbnail: json['blurredThumbnail'] as String?,
       );
     } catch (e) {
       AppLogger.error('Error parsing sketch data', e);

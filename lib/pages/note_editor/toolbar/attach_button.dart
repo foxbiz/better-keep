@@ -1,4 +1,6 @@
+import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
@@ -14,6 +16,8 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/camera_detection.dart';
+import 'package:better_keep/services/camera_capture.dart';
 
 class AttachButton extends StatefulWidget {
   final Note note;
@@ -78,11 +82,35 @@ class _AttachButtonState extends State<AttachButton> {
   /// Maximum image size in bytes (500KB)
   static const int _maxImageSize = 500 * 1024;
 
+  /// Check if attachment limit is reached and show snackbar if so.
+  bool _checkAttachmentLimit() {
+    if (widget.note.attachments.length >= maxAttachmentsPerNote) {
+      snackbar(
+        'Maximum $maxAttachmentsPerNote attachments per note reached',
+        Colors.orange,
+      );
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: source);
-    if (image == null) {
-      return;
+    if (_checkAttachmentLimit()) return;
+
+    Uint8List? imageBytes;
+    String ext = '.jpg';
+
+    // On web with camera source, use the web camera capture
+    if (kIsWeb && source == ImageSource.camera) {
+      imageBytes = await captureImageFromWebCamera();
+      if (imageBytes == null) return;
+    } else {
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: source);
+      if (image == null) return;
+      imageBytes = await image.readAsBytes();
+      ext = path.extension(image.path);
+      if (ext.isEmpty) ext = '.jpg';
     }
 
     // Show loading dialog while processing
@@ -114,7 +142,6 @@ class _AttachButtonState extends State<AttachButton> {
     try {
       final fs = await fileSystem();
       final documentDir = await fs.documentDir;
-      final ext = path.extension(image.path);
       final imagePath = path.join(
         documentDir,
         'images',
@@ -122,19 +149,22 @@ class _AttachButtonState extends State<AttachButton> {
       );
 
       // Compress the image to be under 500KB
-      Uint8List bytes = await _compressImageToTargetSize(
-        await image.readAsBytes(),
-      );
+      Uint8List bytes = await _compressImageToTargetSize(imageBytes);
 
       await writeEncryptedBytes(imagePath, bytes);
 
       final decodedImage = await decodeImageFromList(bytes);
+
+      // Generate tiny thumbnail for locked note preview (under 1KB)
+      final thumbnail = await ThumbnailGenerator.generateFromBytes(bytes);
+
       final noteImage = NoteImage(
         src: imagePath,
         aspectRatio: "${decodedImage.width}:${decodedImage.height}",
         size: bytes.length,
         lastModified: DateTime.now().toIso8601String(),
         index: widget.note.images.length,
+        blurredThumbnail: thumbnail,
       );
 
       widget.note.addImage(noteImage);
@@ -206,13 +236,25 @@ class _AttachButtonState extends State<AttachButton> {
     );
   }
 
-  void _showImageSourceDialog() {
+  void _showImageSourceDialog() async {
     _controller.close();
+    // On desktop, directly pick from gallery
     if (isDesktop) {
       _pickImage(ImageSource.gallery);
       return;
     }
 
+    // On web, check if camera is available
+    if (kIsWeb) {
+      final hasCamera = await hasCameraAvailable();
+      if (!hasCamera) {
+        _pickImage(ImageSource.gallery);
+        return;
+      }
+    }
+
+    // Show bottom sheet with camera/gallery options
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
@@ -245,6 +287,8 @@ class _AttachButtonState extends State<AttachButton> {
   }
 
   void _handleAudio() async {
+    if (_checkAttachmentLimit()) return;
+
     _controller.close();
     final result = await showDialog<AudioRecordingResult>(
       context: context,
@@ -289,6 +333,8 @@ class _AttachButtonState extends State<AttachButton> {
   }
 
   void _handleSketch() async {
+    if (_checkAttachmentLimit()) return;
+
     _controller.close();
 
     showPage(

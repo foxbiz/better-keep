@@ -6,12 +6,12 @@ import 'package:better_keep/models/file_sync_track.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
-import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/note_encryption.dart';
+import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
@@ -207,13 +207,24 @@ class NoteSyncService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('last_synced_user_id', user.uid);
 
-          refresh(); // Do a full refresh on login
+          // Only refresh if E2EE is ready - otherwise wait for E2EE status change
+          // This prevents Firestore connections before E2EE initialization completes
+          if (E2EEService.instance.isReady) {
+            refresh(); // Do a full refresh on login
+          } else {
+            AppLogger.log(
+              "[SYNC] Deferring refresh - E2EE not ready (status: ${E2EEService.instance.status.value})",
+            );
+          }
         } else {
           AppLogger.log(
             "[SYNC] Session restored for same user (${user.uid}), keeping sync state",
           );
         }
-        _startRemoteListener();
+        // Only start remote listener if E2EE is ready
+        if (E2EEService.instance.isReady) {
+          _startRemoteListener();
+        }
       } else {
         _stopRemoteListener();
         await _syncCache.clear();
@@ -505,8 +516,10 @@ class NoteSyncService {
     }
 
     final e2eeStatus = E2EEService.instance.status.value;
-    // Only allow sync when E2EE is fully ready
-    return e2eeStatus == E2EEStatus.ready;
+    // Allow sync when E2EE is ready or verifying in background
+    // verifyingInBackground means user can access notes while we verify
+    return e2eeStatus == E2EEStatus.ready ||
+        e2eeStatus == E2EEStatus.verifyingInBackground;
   }
 
   /// Check if we can push/upload sync (outgoing):
@@ -539,6 +552,7 @@ class NoteSyncService {
     }
 
     DateTime? lastSynced = AppState.lastSynced;
+    final bool isFirstSync = lastSynced == null;
     Query<Map<String, dynamic>> query = _notesCollection;
     if (lastSynced != null) {
       query = query.where(
@@ -546,6 +560,8 @@ class NoteSyncService {
         isGreaterThan: lastSynced.toIso8601String(),
       );
     }
+    // Note: On first sync, we filter out deleted notes client-side because
+    // Firestore's isNotEqualTo doesn't match documents without the field.
 
     _remoteListener = query.snapshots().listen(
       (snapshot) async {
@@ -608,9 +624,16 @@ class NoteSyncService {
             continue;
           }
 
-          // Check if this is a deleted note FIRST
+          // Check if this is a deleted note
           final isDeleted =
               remoteData['deleted'] == true || remoteData['deleted'] == 1;
+
+          // On first sync, skip deleted notes - there's no point in processing
+          // thousands of deleted notes when we're starting fresh.
+          if (isFirstSync && isDeleted) {
+            skippedCount++;
+            continue;
+          }
 
           if (isDeleted) {
             AppLogger.log(
@@ -794,8 +817,12 @@ class NoteSyncService {
         statusMessage.value = "Refresh Complete";
         AppLogger.log("[SYNC] REFRESH COMPLETE: All syncs successful");
       } else {
+        final activeFailures = failedSyncs.where(
+          (s) =>
+              s.remoteData['deleted'] != true && s.remoteData['deleted'] != 1,
+        );
         AppLogger.log(
-          "[SYNC] REFRESH PARTIAL: ${failedSyncs.length} notes failed",
+          "[SYNC] REFRESH PARTIAL: ${activeFailures.length} active notes pending (${failedSyncs.length - activeFailures.length} deleted)",
         );
       }
     } catch (e, stack) {
@@ -935,7 +962,13 @@ class NoteSyncService {
             "[SYNC] PUSH: Note ${sync.localId} - remote was deleted, deleting locally",
           );
           await _handleRemoteDeletedNote(sync.localId);
-          await sync.delete();
+
+          // Confirm if note is deleted locally then delete the sync
+          final localNote = await Note.findById(sync.localId);
+          if (localNote == null) {
+            await sync.delete();
+          }
+
           _removeSyncingOutgoing(sync.localId);
           continue;
         }
@@ -979,8 +1012,33 @@ class NoteSyncService {
         final note = await Note.findById(sync.localId);
 
         if (note == null) {
-          await sync.delete();
-          _removeSyncingOutgoing(sync.localId);
+          // Note was deleted locally but sync track still has upload action.
+          // This can happen due to race conditions when notes are trashed and
+          // deleted quickly - the delete action may be overwritten by the
+          // trash update action due to concurrent notify() calls.
+          // If we have a remoteId, we should sync the deletion to remote.
+          if (sync.remoteId != null && !isRemoteDeleted) {
+            final localId = sync.localId;
+            batch.set(_notesCollection.doc(sync.remoteId), {
+              'local_id': sync.localId,
+              'deleted_at': FieldValue.serverTimestamp(),
+              'deleted': true,
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+            postCommitActions.add(() async {
+              await _deleteNoteStorage(sync.localId);
+              await sync.delete();
+              AppLogger.log(
+                "[SYNC] PUSH: Note ${sync.remoteId} deleted from remote (local note missing)",
+              );
+              _removeSyncingOutgoing(localId);
+            });
+            batchCount++;
+            pushedCount++;
+          } else {
+            await sync.delete();
+            _removeSyncingOutgoing(sync.localId);
+          }
           continue;
         }
 
@@ -1148,9 +1206,13 @@ class NoteSyncService {
       await _syncCache.clear();
       AppLogger.log("[SYNC] Cache cleared after successful sync");
     } else {
-      final failedCount = _syncCache.getPendingSyncs().length;
+      final failedSyncs = _syncCache.getPendingSyncs();
+      final activeFailures = failedSyncs.where(
+        (s) => s.remoteData['deleted'] != true && s.remoteData['deleted'] != 1,
+      );
+      final deletedFailures = failedSyncs.length - activeFailures.length;
       AppLogger.log(
-        "[SYNC] PULL PARTIAL: $failedCount notes failed, cache retained for resume",
+        "[SYNC] PULL PARTIAL: ${activeFailures.length} active + $deletedFailures deleted notes pending, cache retained",
       );
     }
   }
@@ -1162,10 +1224,12 @@ class NoteSyncService {
     DocumentSnapshot? lastDocument;
     int pageIndex = 0;
     bool hasMore = true;
-    int totalNotesFetched = 0;
+    int totalDocsFetched = 0;
+    final Set<int> uniqueLocalIds = {}; // Track unique notes across all pages
+    final bool isFirstSync = lastSynced == null;
 
     AppLogger.log(
-      "[SYNC] FETCH START: Querying Firebase for changes since ${lastSynced?.toIso8601String() ?? 'null'}",
+      "[SYNC] FETCH START: Querying Firebase for changes since ${lastSynced?.toIso8601String() ?? 'null (first sync - excluding deleted notes)'}",
     );
 
     while (hasMore) {
@@ -1180,6 +1244,8 @@ class NoteSyncService {
           isGreaterThan: lastSynced.toIso8601String(),
         );
       }
+      // Note: On first sync, we filter out deleted notes client-side because
+      // Firestore's isNotEqualTo doesn't match documents without the field.
 
       if (lastDocument != null) {
         query = query.startAfterDocument(lastDocument);
@@ -1202,10 +1268,28 @@ class NoteSyncService {
         final localId = remoteData['local_id'] as int;
         final updatedAtStr = remoteData['updated_at'] as String?;
 
+        // On first sync, skip deleted notes - there's no point in processing
+        // thousands of deleted notes when we're starting fresh.
+        final isDeleted =
+            remoteData['deleted'] == true || remoteData['deleted'] == 1;
+        if (isFirstSync && isDeleted) {
+          // Still track max updated_at so we don't re-fetch on next sync
+          if (updatedAtStr != null) {
+            final docUpdatedAt = DateTime.parse(updatedAtStr);
+            if (maxUpdatedAt == null || docUpdatedAt.isAfter(maxUpdatedAt)) {
+              maxUpdatedAt = docUpdatedAt;
+            }
+          }
+          continue;
+        }
+
         // Log each fetched note for debugging
         AppLogger.log(
           "[SYNC] FETCH: Note $localId (doc: ${doc.id}) updated_at: $updatedAtStr",
         );
+
+        // Track unique local IDs across all pages
+        uniqueLocalIds.add(localId);
 
         // Track max updated_at from this page
         if (updatedAtStr != null) {
@@ -1223,7 +1307,7 @@ class NoteSyncService {
         );
       }
 
-      totalNotesFetched += syncs.length;
+      totalDocsFetched += querySnapshot.docs.length;
 
       // Determine if there are more pages
       hasMore = querySnapshot.docs.length >= RemoteSyncCacheService.pageSize;
@@ -1256,13 +1340,21 @@ class NoteSyncService {
       pageIndex++;
 
       AppLogger.log(
-        "[SYNC] FETCH: Page $pageIndex - ${syncs.length} notes fetched, hasMore: $hasMore",
+        "[SYNC] FETCH: Page $pageIndex - ${querySnapshot.docs.length} docs fetched (${syncs.length} unique in page), hasMore: $hasMore",
       );
     }
 
-    AppLogger.log(
-      "[SYNC] FETCH COMPLETE: $totalNotesFetched notes in ${_syncCache.metadata?.totalPages ?? 0} pages",
-    );
+    // Log fetch complete with deduplication info
+    final dupCount = totalDocsFetched - uniqueLocalIds.length;
+    if (dupCount > 0) {
+      AppLogger.log(
+        "[SYNC] FETCH COMPLETE: $totalDocsFetched docs in ${_syncCache.metadata?.totalPages ?? 0} pages -> ${uniqueLocalIds.length} unique notes ($dupCount duplicates)",
+      );
+    } else {
+      AppLogger.log(
+        "[SYNC] FETCH COMPLETE: ${uniqueLocalIds.length} unique notes in ${_syncCache.metadata?.totalPages ?? 0} pages",
+      );
+    }
   }
 
   /// Process all cached pending syncs
@@ -1280,10 +1372,19 @@ class NoteSyncService {
     int syncedCount = 0;
     int skippedCount = 0;
     int failedCount = 0;
+    int deletedCount = 0; // Track deleted notes separately
+
+    // Count deleted vs active notes for better logging
+    final deletedNotes = pendingSyncs.where(
+      (s) => s.remoteData['deleted'] == true || s.remoteData['deleted'] == 1,
+    );
+    final activeNotes = pendingSyncs.length - deletedNotes.length;
 
     syncProgress.value = (syncedCount, totalCount);
     statusMessage.value = "Syncing notes...";
-    AppLogger.log("[SYNC] PROCESS START: $totalCount cached syncs to process");
+    AppLogger.log(
+      "[SYNC] PROCESS START: $totalCount cached syncs ($activeNotes active, ${deletedNotes.length} deleted)",
+    );
 
     // Track processed note IDs to avoid duplicates
     final Set<int> processedIds = {};
@@ -1310,10 +1411,8 @@ class NoteSyncService {
           await _handleRemoteDeletedNote(localId);
           await _syncCache.markCompleted(localId);
           syncedCount++;
+          deletedCount++; // Track deleted notes separately
           syncProgress.value = (syncedCount, totalCount);
-          AppLogger.log(
-            "[SYNC] PROCESS: Note $localId deleted locally (remote deletion)",
-          );
         } finally {
           _removeSyncingIncoming(localId);
         }
@@ -1389,11 +1488,19 @@ class NoteSyncService {
     // Report final status
     final failedSyncs = _syncCache.getPendingSyncs();
     if (failedSyncs.isNotEmpty) {
-      statusMessage.value = "Some notes failed to sync";
+      // Only show failure message if there are actual non-deleted failed notes
+      final activeFailures = failedSyncs.where(
+        (s) => s.remoteData['deleted'] != true && s.remoteData['deleted'] != 1,
+      );
+      if (activeFailures.isNotEmpty) {
+        statusMessage.value = "${activeFailures.length} notes failed to sync";
+      }
     }
 
+    // Calculate active synced (excluding deleted notes)
+    final activeSynced = syncedCount - deletedCount;
     AppLogger.log(
-      "[SYNC] PROCESS COMPLETE: $syncedCount synced, $skippedCount skipped, $failedCount failed",
+      "[SYNC] PROCESS COMPLETE: $activeSynced active synced, $deletedCount deleted processed, $skippedCount skipped, $failedCount failed",
     );
 
     // Reset progress when done
@@ -1455,81 +1562,44 @@ class NoteSyncService {
     final e2ee = E2EEService.instance;
     if (isEncrypted && !e2ee.isReady) {
       AppLogger.log(
-        "[SYNC] PROCESS: Note $localId skipped - encrypted but E2EE not ready",
+        "[SYNC] PROCESS: Note $localId FAILED - encrypted but E2EE not ready (status: ${e2ee.status.value})",
       );
       return false; // Return false to retry later when E2EE is ready
     }
 
     // Decrypt E2EE data if encrypted
-    final decryptedData = await _decryptNoteData(remoteData);
+    final updatedNoteData = await _decryptNoteData(remoteData);
 
     // Double-check decryption succeeded for encrypted notes
-    if (isEncrypted && decryptedData.containsKey('e2ee_ciphertext')) {
+    if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
       // Decryption failed - still contains encrypted data
       AppLogger.log(
-        "[SYNC] PROCESS: Note $localId skipped - decryption failed",
+        "[SYNC] PROCESS: Note $localId FAILED - decryption failed (E2EE status: ${e2ee.status.value}, isReady: ${e2ee.isReady})",
       );
       return false;
     }
 
     final note =
-        await Note.findById(decryptedData['local_id'] as int) ??
-        Note(id: decryptedData['local_id'] as int);
-
-    note.pinned = decryptedData['pinned'] == 1;
-    note.locked = decryptedData['locked'] == 1;
-    note.trashed = decryptedData['trashed'] == 1;
-    note.archived = decryptedData['archived'] == 1;
-    note.readOnly = decryptedData['read_only'] == 1;
-    note.completed = decryptedData['completed'] == 1;
-    note.title = decryptedData['title'] as String?;
-    note.labels = decryptedData['labels'] as String?;
-    final colorValue = decryptedData['color'];
-    if (colorValue != null) {
-      note.color = Color(int.tryParse(colorValue.toString()) ?? 0xFFFFFFFF);
-    }
-    note.content = decryptedData['content'] as String?;
-    note.plainText = decryptedData['plain_text'] as String?;
+        await Note.findById(updatedNoteData['local_id'] as int) ??
+        Note(id: updatedNoteData['local_id'] as int);
 
     // Download attachments - if any fail, don't sync this note
-    final attachments = await _downloadAttachments(
-      remoteData['attachments'],
-      note,
-    );
+    final attachmentData = remoteData['attachments'];
+    final attachments = await _downloadAttachments(attachmentData, note);
     if (attachments == null) {
       // Attachment download failed - log and skip this note
+      final attachmentCount = (attachmentData is List)
+          ? attachmentData.length
+          : 0;
       AppLogger.log(
-        "Skipping sync for note ${note.id} due to attachment download failure",
+        "[SYNC] PROCESS: Note ${note.id} FAILED - attachment download failed ($attachmentCount attachments)",
       );
       _markSyncFailed(note.id!);
       return false;
     }
-    note.attachments = attachments;
 
-    if (remoteData['updated_at'] != null) {
-      note.updatedAt = DateTime.parse(remoteData['updated_at'] as String);
-    } else {
-      note.updatedAt = DateTime.now();
-    }
-
-    if (remoteData['reminder'] != null) {
-      final reminderData = remoteData['reminder'];
-      if (reminderData is String) {
-        note.reminder = Reminder.fromJson(
-          jsonDecode(reminderData) as Map<String, Object?>,
-        );
-      } else if (reminderData is Map) {
-        note.reminder = Reminder.fromJson(
-          Map<String, Object?>.from(reminderData),
-        );
-      }
-      // Only set alarm if the reminder is not completed
-      if (!note.completed) {
-        note.setAlarm();
-      }
-    }
-
-    await note.save(false);
+    updatedNoteData['attachments'] = attachments;
+    await note.updateFromJson(updatedNoteData);
 
     // Create or update sync track to link local note with remote document
     // This ensures we can properly sync deletes and updates later
@@ -1817,7 +1887,7 @@ class NoteSyncService {
           statusMessage.value = "Uploading media...";
           _setNoteStatus(note.id!, "Uploading media...");
 
-          var fileBytes = await fs.readBytes(src);
+          var fileBytes = await readEncryptedBytes(src);
 
           // Encrypt file if E2EE is enabled
           final e2ee = E2EEService.instance;
@@ -2038,6 +2108,7 @@ class NoteSyncService {
   }
 
   /// Encrypts note data if E2EE is enabled.
+  /// Encrypts title, content, and sensitive sketch data within attachments.
   Future<Map<String, dynamic>> _encryptNoteData(
     Map<String, dynamic> noteData,
   ) async {
@@ -2061,12 +2132,95 @@ class NoteSyncService {
     result.remove('title');
     result.remove('content');
     result.remove('plain_text');
+
+    // Encrypt sensitive sketch data within attachments
+    if (result['attachments'] != null) {
+      result['attachments'] = await _encryptSketchDataInAttachments(
+        result['attachments'],
+      );
+    }
+
     result.addAll(encrypted.toFirestore());
 
     return result;
   }
 
+  /// Encrypts sensitive sketch data (strokes, bgColor, pagePattern) inline within attachments.
+  /// File URLs and thumbnails are kept unencrypted for sync and preview.
+  Future<dynamic> _encryptSketchDataInAttachments(dynamic attachments) async {
+    final e2ee = E2EEService.instance;
+    final umk = e2ee.deviceManager.getUMK();
+    if (umk == null) return attachments;
+
+    List<dynamic> attachmentList;
+    if (attachments is String) {
+      try {
+        attachmentList = json.decode(attachments) as List;
+      } catch (e) {
+        return attachments;
+      }
+    } else if (attachments is List) {
+      attachmentList = List.from(attachments);
+    } else {
+      return attachments;
+    }
+
+    final result = <Map<String, dynamic>>[];
+    for (final att in attachmentList) {
+      if (att is! Map<String, dynamic>) {
+        result.add(att as Map<String, dynamic>);
+        continue;
+      }
+
+      final type = att['type'] as String?;
+      final data = att['data'] as Map<String, dynamic>?;
+
+      if (type != 'sketch' || data == null) {
+        // Non-sketch attachments pass through unchanged
+        result.add(Map<String, dynamic>.from(att));
+        continue;
+      }
+
+      // Extract sensitive sketch data to encrypt
+      final sensitiveData = {
+        if (data['strokes'] != null) 'strokes': data['strokes'],
+        if (data['bgColor'] != null) 'bgColor': data['bgColor'],
+        if (data['pagePattern'] != null) 'pagePattern': data['pagePattern'],
+      };
+
+      if (sensitiveData.isEmpty) {
+        result.add(Map<String, dynamic>.from(att));
+        continue;
+      }
+
+      // Encrypt the sensitive data
+      final sensitiveJson = json.encode(sensitiveData);
+      final encryptedData = await AuthenticatedCipher.encryptString(
+        sensitiveJson,
+        umk,
+      );
+
+      // Create new sketch data with encrypted fields
+      final newData = <String, dynamic>{
+        if (data['previewImage'] != null) 'previewImage': data['previewImage'],
+        if (data['backgroundImage'] != null)
+          'backgroundImage': data['backgroundImage'],
+        if (data['blurredThumbnail'] != null)
+          'blurredThumbnail': data['blurredThumbnail'],
+        if (data['aspectRatio'] != null) 'aspectRatio': data['aspectRatio'],
+        // Encrypted sketch data
+        'e2ee_sketch_ciphertext': encryptedData.ciphertext,
+        'e2ee_sketch_nonce': encryptedData.nonce,
+      };
+
+      result.add({'type': type, 'data': newData});
+    }
+
+    return result;
+  }
+
   /// Decrypts note data if it contains E2EE encrypted content.
+  /// Also decrypts sketch data within attachments if encrypted.
   Future<Map<String, dynamic>> _decryptNoteData(
     Map<String, dynamic> noteData,
   ) async {
@@ -2099,11 +2253,91 @@ class NoteSyncService {
       result['content'] = decrypted.content;
       result['plain_text'] = decrypted.plainText;
 
+      // Decrypt sketch data within attachments
+      if (result['attachments'] != null) {
+        result['attachments'] = await _decryptSketchDataInAttachments(
+          result['attachments'],
+        );
+      }
+
       return result;
     } catch (e) {
       AppLogger.error('E2EE: Failed to decrypt note', e);
       return noteData;
     }
+  }
+
+  /// Decrypts sensitive sketch data within attachments.
+  /// Restores strokes, bgColor, pagePattern from encrypted fields.
+  Future<dynamic> _decryptSketchDataInAttachments(dynamic attachments) async {
+    final e2ee = E2EEService.instance;
+    final umk = e2ee.deviceManager.getUMK();
+    if (umk == null) return attachments;
+
+    List<dynamic> attachmentList;
+    if (attachments is String) {
+      try {
+        attachmentList = json.decode(attachments) as List;
+      } catch (e) {
+        return attachments;
+      }
+    } else if (attachments is List) {
+      attachmentList = List.from(attachments);
+    } else {
+      return attachments;
+    }
+
+    final result = <Map<String, dynamic>>[];
+    for (final att in attachmentList) {
+      if (att is! Map<String, dynamic>) {
+        result.add(att as Map<String, dynamic>);
+        continue;
+      }
+
+      final type = att['type'] as String?;
+      final data = att['data'] as Map<String, dynamic>?;
+
+      if (type != 'sketch' || data == null) {
+        // Non-sketch attachments pass through unchanged
+        result.add(Map<String, dynamic>.from(att));
+        continue;
+      }
+
+      // Check if sketch has encrypted data
+      final ciphertext = data['e2ee_sketch_ciphertext'] as String?;
+      final nonce = data['e2ee_sketch_nonce'] as String?;
+
+      if (ciphertext == null || nonce == null) {
+        // No encrypted data, pass through (backward compatibility)
+        result.add(Map<String, dynamic>.from(att));
+        continue;
+      }
+
+      try {
+        // Decrypt the sensitive data
+        final decryptedJson = await AuthenticatedCipher.decryptString(
+          ciphertext,
+          nonce,
+          umk,
+        );
+        final sensitiveData =
+            json.decode(decryptedJson) as Map<String, dynamic>;
+
+        // Merge decrypted data back into sketch
+        final newData = Map<String, dynamic>.from(data);
+        newData.remove('e2ee_sketch_ciphertext');
+        newData.remove('e2ee_sketch_nonce');
+        newData.addAll(sensitiveData);
+
+        result.add({'type': type, 'data': newData});
+      } catch (e) {
+        AppLogger.error('E2EE: Failed to decrypt sketch data', e);
+        // Keep as-is on failure
+        result.add(Map<String, dynamic>.from(att));
+      }
+    }
+
+    return result;
   }
 
   /// Verifies that a remote file still exists in Firebase Storage.

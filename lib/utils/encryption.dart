@@ -117,3 +117,90 @@ Future<String> encrypt(String data, String password) =>
 /// Decrypts data with AES-GCM or legacy XOR. Alias for [decryptAsync].
 Future<String> decrypt(String encryptedData, String password) =>
     decryptAsync(encryptedData, password);
+
+/// Header bytes for encrypted binary data: "ENCP" (Encrypted with Password)
+const _encryptedPasswordHeader = [0x45, 0x4E, 0x43, 0x50];
+
+/// Encrypts binary data using AES-GCM with a password-derived key.
+/// Used for encrypting attachments when a note is locked.
+///
+/// Format: [ENCP header (4)] + [nonce (12)] + [ciphertext] + [mac (16)]
+Future<Uint8List> encryptBytesWithPassword(
+  Uint8List data,
+  String password,
+) async {
+  if (data.isEmpty) return data;
+  if (password.isEmpty) {
+    throw ArgumentError('Password cannot be empty');
+  }
+
+  final key = await _deriveKey(password);
+  final secretBox = await _algorithm.encrypt(data, secretKey: key);
+
+  // Format: header + nonce + ciphertext + mac
+  final result = Uint8List(
+    4 + secretBox.nonce.length + secretBox.cipherText.length + 16,
+  );
+  result.setRange(0, 4, _encryptedPasswordHeader);
+  result.setRange(4, 4 + secretBox.nonce.length, secretBox.nonce);
+  result.setRange(
+    4 + secretBox.nonce.length,
+    4 + secretBox.nonce.length + secretBox.cipherText.length,
+    secretBox.cipherText,
+  );
+  result.setRange(result.length - 16, result.length, secretBox.mac.bytes);
+
+  return result;
+}
+
+/// Decrypts binary data encrypted with [encryptBytesWithPassword].
+/// Returns the original data if decryption succeeds, throws on failure.
+Future<Uint8List> decryptBytesWithPassword(
+  Uint8List encryptedData,
+  String password,
+) async {
+  if (encryptedData.isEmpty) return encryptedData;
+  if (password.isEmpty) {
+    throw ArgumentError('Password cannot be empty');
+  }
+
+  // Check for ENCP header
+  if (!isBytesPasswordEncrypted(encryptedData)) {
+    throw const FormatException('Data is not password-encrypted');
+  }
+
+  const nonceLength = 12;
+  const macLength = 16;
+  const headerLength = 4;
+
+  if (encryptedData.length < headerLength + nonceLength + macLength) {
+    throw const FormatException('Invalid encrypted data: too short');
+  }
+
+  final key = await _deriveKey(password);
+
+  final nonce = encryptedData.sublist(headerLength, headerLength + nonceLength);
+  final cipherText = encryptedData.sublist(
+    headerLength + nonceLength,
+    encryptedData.length - macLength,
+  );
+  final macBytes = encryptedData.sublist(encryptedData.length - macLength);
+
+  final secretBox = SecretBox(cipherText, nonce: nonce, mac: Mac(macBytes));
+
+  try {
+    final plaintext = await _algorithm.decrypt(secretBox, secretKey: key);
+    return Uint8List.fromList(plaintext);
+  } on SecretBoxAuthenticationError {
+    throw const FormatException('Incorrect password or corrupted data');
+  }
+}
+
+/// Checks if binary data has the password-encrypted header "ENCP".
+bool isBytesPasswordEncrypted(Uint8List data) {
+  if (data.length < 4) return false;
+  return data[0] == _encryptedPasswordHeader[0] &&
+      data[1] == _encryptedPasswordHeader[1] &&
+      data[2] == _encryptedPasswordHeader[2] &&
+      data[3] == _encryptedPasswordHeader[3];
+}
