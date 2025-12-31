@@ -1,14 +1,14 @@
 import 'dart:convert';
 
+import 'package:better_keep/ui/show_page.dart';
 import 'package:flutter/foundation.dart' show compute, kDebugMode;
-import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/models/sync/note_sync_track.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:better_keep/services/file_system.dart';
-import 'package:better_keep/services/note_sync_service.dart';
-import 'package:better_keep/services/remote_sync_cache_service.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/services/sync/note_sync_service.dart';
+import 'package:better_keep/services/sync/remote_sync_cache_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
@@ -45,7 +45,7 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   Map<String, double> _columnWidths = {};
   bool _loadingDb = false;
   int _tableRowCount = 0;
-  int _dbViewLimit = 50;
+  final int _dbViewLimit = 50;
   int _dbViewOffset = 0;
 
   @override
@@ -864,8 +864,7 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
               onTap: () async {
                 Navigator.pop(context);
                 final json = const JsonEncoder.withIndent('  ').convert(row);
-                // Use clipboard
-                await Share.share(json);
+                await SharePlus.instance.share(ShareParams(text: json));
               },
             ),
             ListTile(

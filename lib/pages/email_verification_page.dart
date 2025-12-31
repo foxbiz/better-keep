@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/otp_input_field.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';

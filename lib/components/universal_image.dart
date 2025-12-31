@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:better_keep/utils/file_utils.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
-import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/services/sync/note_sync_service.dart';
 import 'package:flutter/material.dart';
 
 /// Global in-memory cache for image bytes to support smooth Hero animations.

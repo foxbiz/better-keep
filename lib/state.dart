@@ -1,5 +1,6 @@
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
 import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,8 @@ final _defaultState = {
   "morning_time": const TimeOfDay(hour: 6, minute: 0),
   "afternoon_time": const TimeOfDay(hour: 12, minute: 0),
   "evening_time": const TimeOfDay(hour: 18, minute: 0),
+  "cache_dir": "",
+  "document_dir": "",
 };
 
 class AppState {
@@ -74,9 +77,12 @@ class AppState {
     _state["alarm_sound"] = alarmSound;
     _state["scaffold_messenger_key"] = scaffoldMessengerKey;
     _state["navigator_key"] = navigatorKey;
+    _state["cache_dir"] = "";
+    _state["document_dir"] = "";
   }
 
   static Future<void> init({SharedPreferences? prefs}) async {
+    final fs = await fileSystem();
     // Use provided prefs or load fresh (caching for later use)
     _prefs = prefs ?? await SharedPreferences.getInstance();
     final prefsInstance = _prefs!;
@@ -183,6 +189,9 @@ class AppState {
     // Load sync progress visibility setting
     _state["show_sync_progress"] =
         prefsInstance.getBool("show_sync_progress") ?? true;
+
+    _state["cache_dir"] = await fs.cacheDir;
+    _state["document_dir"] = await fs.documentDir;
   }
 
   static Object? get(String key) {
@@ -436,6 +445,14 @@ class AppState {
       p.setInt("evening_time_hour", time.hour);
       p.setInt("evening_time_minute", time.minute);
     });
+  }
+
+  static String get cacheDir {
+    return _state["cache_dir"] as String;
+  }
+
+  static String get documentDir {
+    return _state["document_dir"] as String;
   }
 
   static void subscribe(String key, void Function(dynamic) callback) {

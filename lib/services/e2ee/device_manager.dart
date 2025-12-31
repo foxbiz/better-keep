@@ -7,7 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/firebase_options.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/utils/logger.dart';

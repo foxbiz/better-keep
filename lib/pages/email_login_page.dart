@@ -1,5 +1,5 @@
 import 'package:better_keep/config.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 

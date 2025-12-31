@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
-import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sync/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 

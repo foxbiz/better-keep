@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/firebase_options.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:better_keep/services/monetization/entitlements.dart';
 import 'package:better_keep/services/monetization/subscription_service.dart';

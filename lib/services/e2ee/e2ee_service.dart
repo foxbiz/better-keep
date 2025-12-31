@@ -6,7 +6,7 @@ library;
 
 import 'dart:async';
 
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/note_encryption.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';

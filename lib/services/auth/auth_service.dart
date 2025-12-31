@@ -7,12 +7,12 @@ import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
-import 'package:better_keep/services/label_sync_service.dart';
+import 'package:better_keep/services/sync/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
-import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sync/note_sync_service.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
-import 'package:better_keep/services/file_system.dart';
-import 'package:better_keep/services/desktop_auth_service.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/services/auth/desktop_auth_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,7 +25,7 @@ import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:better_keep/services/web_oauth_stub.dart'
+import 'package:better_keep/services/auth/web_oauth_stub.dart'
     if (dart.library.html) 'package:better_keep/services/web_oauth.dart'
     as web_oauth;
 
@@ -1358,10 +1358,8 @@ class AuthService {
         AppLogger.error('Error clearing SharedPreferences: $e');
       }
 
-      // Clear File System
-      final fs = await fileSystem();
-      await _clearFileSystemRecursively(await fs.documentDir);
-      await _clearFileSystemRecursively(await fs.cacheDir);
+      await _clearFileSystemRecursively(AppState.documentDir);
+      await _clearFileSystemRecursively(AppState.cacheDir);
 
       // Invalidate avatar cache so new user gets fresh avatar
       UserAvatar.invalidateCache();

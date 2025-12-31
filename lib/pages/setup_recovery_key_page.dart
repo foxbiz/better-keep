@@ -1,5 +1,5 @@
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
-import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/ui/show_page.dart';
 import 'package:flutter/material.dart';
 
 /// Page for setting up or updating a recovery passphrase.

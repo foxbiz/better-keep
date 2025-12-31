@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
@@ -18,14 +19,13 @@ class FileUtils {
 
     // Check if it's a path in the Caches directory
     if (pathName.contains('/Library/Caches/')) {
-      final cacheDir = await fs.cacheDir;
       // Try to find the part after 'Caches/'
       final parts = pathName.split('/Library/Caches/');
       if (parts.length > 1) {
         final relativePath = parts[1];
-        return path.join(cacheDir, relativePath);
+        return path.join(AppState.cacheDir, relativePath);
       }
-      return path.join(cacheDir, path.basename(pathName));
+      return path.join(AppState.cacheDir, path.basename(pathName));
     }
 
     // Check if it's a path in the Documents directory

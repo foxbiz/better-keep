@@ -5,21 +5,20 @@ import 'dart:ui' as ui;
 import 'package:better_keep/components/page_pattern_painter.dart';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/components/sketch_tool_popup.dart';
-import 'package:better_keep/models/note_attachment.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/components/adaptive_toolbar.dart';
 import 'package:better_keep/dialogs/delete_dialog.dart';
-import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/models/attachments/sketch_attachment.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/dialogs/color_picker.dart';
 import 'package:perfect_freehand/perfect_freehand.dart';
@@ -28,8 +27,8 @@ const Size kA4Size = Size(794, 1123); // A4 at 96 DPI
 
 class SketchPage extends StatefulWidget {
   final Note note;
-  final SketchData sketch;
-  final NoteAttachment? sourceAttachment;
+  final SketchAttachment sketch;
+  final Attachment? sourceAttachment;
   final String? heroTag;
 
   /// Index of the current sketch in note.sketches list, used for pagination
@@ -97,14 +96,14 @@ class _SketchPageState extends State<SketchPage>
   /// Captured state for pending debounced save
   _PendingSaveState? _pendingSaveState;
 
-  late SketchData _sketchData;
+  late SketchAttachment _sketchData;
   int _currentSketchIndex = 0;
-  SketchData?
+  SketchAttachment?
   _pendingNewSketch; // Stores unsaved new sketch when navigating away
 
   /// Local copy of sketches for smooth navigation
   /// This is independent of widget.note.sketches to prevent UI flicker when note updates
-  late List<SketchData> _localSketches;
+  late List<SketchAttachment> _localSketches;
 
   /// Get total number of sketches (local sketches plus pending new sketch if any)
   int get _totalSketches =>
@@ -141,7 +140,7 @@ class _SketchPageState extends State<SketchPage>
     _toolbarAnimationController.forward();
 
     // Initialize local sketches from note - this won't change when note updates
-    _localSketches = List<SketchData>.from(widget.note.sketches);
+    _localSketches = List<SketchAttachment>.from(widget.note.sketches);
 
     _sketchData = widget.sketch;
     // Initialize sketch index from parameter or find it in the list
@@ -159,15 +158,13 @@ class _SketchPageState extends State<SketchPage>
 
     // For image-based sketches, use the stored aspect ratio to set initial canvas size
     // This prevents the hero animation from stretching to A4 and snapping back
-    if (_isImageBasedSketch && _sketchData.aspectRatio > 0) {
+    final aspectRatio = _canvasSize.width / _canvasSize.height;
+    if (_isImageBasedSketch && aspectRatio > 0) {
       // Use A4 width as base and calculate height from aspect ratio
-      _canvasSize = Size(
-        kA4Size.width,
-        kA4Size.width / _sketchData.aspectRatio,
-      );
+      _canvasSize = Size(kA4Size.width, kA4Size.width / aspectRatio);
     }
 
-    _strokes = List<SketchStroke>.from(_sketchData.strokes);
+    _strokes = List.from(_sketchData.strokes);
     _paperColor = _isImageBasedSketch
         ? Colors.transparent
         : _sketchData.backgroundColor;
@@ -176,6 +173,7 @@ class _SketchPageState extends State<SketchPage>
     if (_sketchData.backgroundImage != null) {
       _loadBackgroundImage();
     }
+
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -310,46 +308,8 @@ class _SketchPageState extends State<SketchPage>
         patternPainter.paint(canvas, bodySize);
       }
 
-      // Draw strokes
-      final painter = SketchPainter(strokes: state.strokes);
-      painter.paint(canvas, bodySize);
-
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(
-        bodySize.width.toInt(),
-        bodySize.height.toInt(),
-      );
-      final pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
-
-      if (pngBytes == null) {
-        throw 'Failed to encode sketch image';
-      }
-
-      final compressedBytes = await _compressSketchPreview(
-        pngBytes.buffer.asUint8List(),
-      );
-
-      final fs = await fileSystem();
-      String previewPath = path.join(
-        await fs.documentDir,
-        'sketches',
-        '${DateTime.now().millisecondsSinceEpoch}_preview.jpg',
-      );
-      // Fire and forget - don't await file write to prevent OPFS blocking UI
-      writeEncryptedBytes(previewPath, compressedBytes).catchError((e) {
-        AppLogger.error('Error writing preview', e);
-      });
-
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(
-        compressedBytes,
-      );
-
       state.sketchData.strokes = state.strokes;
       state.sketchData.backgroundColor = state.paperColor;
-      state.sketchData.previewImage = previewPath;
-      state.sketchData.aspectRatio = bodySize.width / bodySize.height;
-      state.sketchData.blurredThumbnail = thumbnail;
 
       if (state.isImageBasedSketch && state.sourceAttachment != null) {
         state.sourceAttachment!.type = AttachmentType.sketch;
@@ -587,7 +547,7 @@ class _SketchPageState extends State<SketchPage>
     }
 
     // Create new sketch data
-    final newSketch = SketchData(
+    final newSketch = SketchAttachment(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
     );
 
@@ -986,24 +946,20 @@ class _SketchPageState extends State<SketchPage>
                             fromHeroContext,
                             toHeroContext,
                           ) {
-                            // Use the preview image during flight for smooth transition
-                            if (_sketchData.previewImage != null) {
-                              return AnimatedBuilder(
-                                animation: animation,
-                                builder: (context, child) {
-                                  return ClipRRect(
-                                    borderRadius: BorderRadius.circular(
-                                      8 * (1 - animation.value),
-                                    ),
-                                    child: UniversalImage(
-                                      path: _sketchData.previewImage!,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  );
-                                },
-                              );
-                            }
-                            return toHeroContext.widget;
+                            return AnimatedBuilder(
+                              animation: animation,
+                              builder: (context, child) {
+                                return ClipRRect(
+                                  borderRadius: BorderRadius.circular(
+                                    8 * (1 - animation.value),
+                                  ),
+                                  child: UniversalImage(
+                                    path: _sketchData.previewPath,
+                                    fit: BoxFit.contain,
+                                  ),
+                                );
+                              },
+                            );
                           },
                       child: interactiveViewer,
                     );
@@ -1384,13 +1340,13 @@ class _SketchPageState extends State<SketchPage>
   static Future<void> _saveSketchAsync({
     required List<SketchStroke> strokes,
     required bool isDeleted,
-    required SketchData sketchData,
+    required SketchAttachment sketchData,
     required Note note,
     required Size canvasSize,
     required Color paperColor,
     required bool isImageBasedSketch,
     required ui.Image? loadedBackgroundImage,
-    required NoteAttachment? sourceAttachment,
+    required Attachment? sourceAttachment,
   }) async {
     if (isDeleted) {
       note.removeSketch(sketchData);
@@ -1466,16 +1422,8 @@ class _SketchPageState extends State<SketchPage>
         AppLogger.error('Error writing preview', e);
       });
 
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(
-        compressedBytes,
-      );
-
       sketchData.strokes = strokes;
       sketchData.backgroundColor = paperColor;
-      sketchData.previewImage = previewPath;
-      sketchData.aspectRatio = canvasSize.width / canvasSize.height;
-      sketchData.blurredThumbnail = thumbnail;
 
       // If this was an image attachment, convert it to a sketch
       if (isImageBasedSketch && sourceAttachment != null) {
@@ -1516,80 +1464,8 @@ class _SketchPageState extends State<SketchPage>
       }
 
       _autoSaveTimer?.cancel();
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final bodySize = _canvasSize;
-
-      // Draw background
-      if (_isImageBasedSketch) {
-        // For image-based sketch, use transparent background
-        canvas.drawColor(Colors.transparent, BlendMode.clear);
-      } else {
-        canvas.drawColor(_paperColor, BlendMode.src);
-      }
-
-      if (_loadedBackgroundImage != null) {
-        paintImage(
-          canvas: canvas,
-          rect: Offset.zero & bodySize,
-          image: _loadedBackgroundImage!,
-          fit: _isImageBasedSketch ? BoxFit.fill : BoxFit.contain,
-        );
-      }
-
-      // Draw page pattern
-      if (!_isImageBasedSketch &&
-          _sketchData.pagePattern != PagePattern.blank) {
-        final patternPainter = PagePatternPainter(
-          pattern: _sketchData.pagePattern,
-          lineColor: isDark(_paperColor)
-              ? Colors.white.withValues(alpha: 0.25)
-              : Colors.black.withValues(alpha: 0.18),
-        );
-        patternPainter.paint(canvas, bodySize);
-      }
-
-      // Draw strokes
-      final painter = SketchPainter(strokes: _strokes);
-      painter.paint(canvas, bodySize);
-
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(
-        bodySize.width.toInt(),
-        bodySize.height.toInt(),
-      );
-      final pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
-
-      if (pngBytes == null) {
-        throw 'Failed to encode sketch image';
-      }
-
-      // Compress the preview image to be under 500KB
-      final compressedBytes = await _compressSketchPreview(
-        pngBytes.buffer.asUint8List(),
-      );
-
-      final fs = await fileSystem();
-      String previewPath = path.join(
-        await fs.documentDir,
-        'sketches',
-        '${DateTime.now().millisecondsSinceEpoch}_preview.jpg',
-      );
-      // Fire and forget - don't await file write to prevent OPFS blocking UI
-      writeEncryptedBytes(previewPath, compressedBytes).catchError((e) {
-        AppLogger.error('Error writing preview', e);
-      });
-
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(
-        compressedBytes,
-      );
-
       _sketchData.strokes = _strokes;
       _sketchData.backgroundColor = _paperColor;
-      _sketchData.previewImage = previewPath;
-      _sketchData.aspectRatio = bodySize.width / bodySize.height;
-      _sketchData.blurredThumbnail = thumbnail;
 
       // If this was an image attachment, convert it to a sketch
       if (_isImageBasedSketch && widget.sourceAttachment != null) {
@@ -1811,15 +1687,15 @@ class SketchPainter extends CustomPainter {
 
 /// Captures the state needed for a debounced save operation
 class _PendingSaveState {
-  final SketchData sketchData;
+  final SketchAttachment sketchData;
   final List<SketchStroke> strokes;
   final Color paperColor;
   final Size canvasSize;
   final bool isImageBasedSketch;
   final ui.Image? loadedBackgroundImage;
   final Note note;
-  final NoteAttachment? sourceAttachment;
-  final List<SketchData> localSketches;
+  final Attachment? sourceAttachment;
+  final List<SketchAttachment> localSketches;
   final void Function(int)? onIndexUpdate;
 
   _PendingSaveState({

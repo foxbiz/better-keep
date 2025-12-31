@@ -8,7 +8,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:better_keep/firebase_options.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';

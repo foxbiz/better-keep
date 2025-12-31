@@ -3,9 +3,9 @@ import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/home/labels.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
-import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sync/note_sync_service.dart';
 import 'package:better_keep/state.dart';
-import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/ui/show_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 

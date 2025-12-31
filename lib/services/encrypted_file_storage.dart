@@ -7,7 +7,7 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 
 /// Writes bytes to a file, optionally encrypting them based on local data

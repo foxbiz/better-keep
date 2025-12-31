@@ -1,4 +1,4 @@
-import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/models/attachments/sketch_attachment.dart';
 import 'package:flutter/material.dart';
 
 /// A CustomPainter that draws page patterns (lines, grids, dots) for sketches.

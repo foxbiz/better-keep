@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:better_keep/config.dart';
-import 'package:better_keep/models/file_sync_track.dart';
+import 'package:better_keep/models/sync/file_sync_track.dart';
 import 'package:better_keep/models/label.dart';
-import 'package:better_keep/models/label_sync_track.dart';
+import 'package:better_keep/models/sync/label_sync_track.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/models/sync/note_sync_track.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;

@@ -6,21 +6,18 @@ import 'package:alarm/alarm.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/base_model.dart';
-import 'package:better_keep/models/note_attachment.dart';
-import 'package:better_keep/models/note_image.dart';
-import 'package:better_keep/models/note_recording.dart';
-import 'package:better_keep/models/sketch.dart';
-import 'package:better_keep/models/note_sync_track.dart';
-import 'package:better_keep/services/alarm_id_service.dart';
-import 'package:better_keep/services/all_day_reminder_notification_service.dart';
-import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
+import 'package:better_keep/models/attachments/image_attachment.dart';
+import 'package:better_keep/models/attachments/recording_attachment.dart';
+import 'package:better_keep/models/attachments/sketch_attachment.dart';
+import 'package:better_keep/models/sync/note_sync_track.dart';
+import 'package:better_keep/services/reminder/alarm_id_service.dart';
+import 'package:better_keep/services/reminder/all_day_reminder_notification_service.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
-import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sync/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -65,7 +62,7 @@ class Note extends BaseModel<Note> {
   Reminder? reminder;
   DateTime? createdAt;
   DateTime? updatedAt;
-  List<NoteAttachment> attachments;
+  List<Attachment> attachments;
 
   bool _unlocked = false;
 
@@ -241,7 +238,7 @@ class Note extends BaseModel<Note> {
     return !hasTitle && !hasContent && attachments.isEmpty;
   }
 
-  List<NoteImage> get images {
+  List<ImageAttachment> get images {
     return List.unmodifiable(
       attachments
           .where((attachment) => attachment.type == AttachmentType.image)
@@ -249,7 +246,7 @@ class Note extends BaseModel<Note> {
     );
   }
 
-  List<SketchData> get sketches {
+  List<SketchAttachment> get sketches {
     return List.unmodifiable(
       attachments
           .where((attachment) => attachment.type == AttachmentType.sketch)
@@ -258,7 +255,7 @@ class Note extends BaseModel<Note> {
   }
 
   /// Returns audio recordings attached to this note
-  List<NoteRecording> get recordings {
+  List<RecordingAttachment> get recordings {
     return List.unmodifiable(
       attachments
           .where((attachment) => attachment.type == AttachmentType.audio)
@@ -291,7 +288,7 @@ class Note extends BaseModel<Note> {
     this.readOnly = false,
     this.completed = false,
     this.color = Colors.transparent,
-    List<NoteAttachment>? attachments,
+    List<Attachment>? attachments,
   }) : _locked = locked,
        attachments = attachments ?? [];
 
@@ -310,7 +307,7 @@ class Note extends BaseModel<Note> {
 
     // Parse attachments - handle both encrypted and unencrypted formats
     // If encrypted, store raw string for async decryption later
-    List<NoteAttachment> parsedAttachments = [];
+    List<Attachment> parsedAttachments = [];
     String? rawAttachmentsStr;
     if (obj['attachments'] != null) {
       final attachmentsData = obj['attachments'];
@@ -323,7 +320,7 @@ class Note extends BaseModel<Note> {
           // Try to parse as JSON
           try {
             parsedAttachments = (json.decode(attachmentsData) as List)
-                .map((e) => NoteAttachment.fromJson(e))
+                .map((e) => Attachment.fromJson(e))
                 .toList();
           } catch (e) {
             AppLogger.error('Error parsing attachments in fromJson', e);
@@ -332,7 +329,7 @@ class Note extends BaseModel<Note> {
       } else if (attachmentsData is List) {
         // Already a list (from sync)
         parsedAttachments = attachmentsData
-            .map((e) => NoteAttachment.fromJson(e as Map<String, dynamic>))
+            .map((e) => Attachment.fromJson(e as Map<String, dynamic>))
             .toList();
       }
     }
@@ -426,18 +423,18 @@ class Note extends BaseModel<Note> {
     // Handle attachments - can be List<NoteAttachment>, JSON string, or List<dynamic>
     if (obj['attachments'] != null) {
       final attachmentsData = obj['attachments'];
-      if (attachmentsData is List<NoteAttachment>) {
+      if (attachmentsData is List<Attachment>) {
         // Already parsed NoteAttachment objects (from sync service)
         attachments = attachmentsData;
       } else if (attachmentsData is String) {
         // JSON string from database
         attachments = (json.decode(attachmentsData) as List)
-            .map((e) => NoteAttachment.fromJson(e as Map<String, dynamic>))
+            .map((e) => Attachment.fromJson(e as Map<String, dynamic>))
             .toList();
       } else if (attachmentsData is List) {
         // List of maps (from Firebase)
         attachments = attachmentsData
-            .map((e) => NoteAttachment.fromJson(e as Map<String, dynamic>))
+            .map((e) => Attachment.fromJson(e as Map<String, dynamic>))
             .toList();
       }
     }
@@ -476,7 +473,7 @@ class Note extends BaseModel<Note> {
         );
         final List attachmentList = json.decode(decryptedStr);
         attachments = attachmentList
-            .map((a) => NoteAttachment.fromJson(a as Map<String, dynamic>))
+            .map((a) => Attachment.fromJson(a as Map<String, dynamic>))
             .toList();
         _rawEncryptedAttachments = null; // Clear after successful decryption
       } catch (e) {
@@ -486,28 +483,9 @@ class Note extends BaseModel<Note> {
 
     // Decrypt sketch metadata within attachments (files encryption toggle)
     for (final attachment in attachments) {
-      if (attachment.type == AttachmentType.sketch &&
-          attachment.sketch != null &&
-          attachment.sketch!.hasEncryptedMetadata) {
+      if (attachment.type == AttachmentType.sketch) {
         try {
-          final decryptedMetadata = await localEncryption.decryptString(
-            attachment.sketch!.encryptedMetadata!,
-          );
-          final metadata =
-              json.decode(decryptedMetadata) as Map<String, dynamic>;
-
-          // Restore strokes, bgColor, pagePattern from decrypted metadata
-          attachment.sketch!.strokes = (metadata['strokes'] as List)
-              .map((e) => SketchStroke.parse(e as String))
-              .toList();
-          attachment.sketch!.backgroundColor = Color(
-            metadata['bgColor'] as int? ?? 0xFFFFFFFF,
-          );
-          attachment.sketch!.pagePattern = PagePattern.values.firstWhere(
-            (e) => e.name == metadata['pagePattern'],
-            orElse: () => PagePattern.blank,
-          );
-          attachment.sketch!.encryptedMetadata = null; // Clear after decryption
+          attachment.sketch!.unlock(password!); // Clear after decryption
         } catch (e) {
           AppLogger.error('Error decrypting sketch metadata', e);
         }
@@ -573,14 +551,7 @@ class Note extends BaseModel<Note> {
       _locked = true;
       _unlocked = false;
 
-      // Generate thumbnails for attachments that don't have them yet
-      await _generateMissingThumbnails();
-
-      // Encrypt sketch stroke data with the password
-      await _encryptSketchData(password);
-
-      // Encrypt all attachment files with the password
-      await _encryptAttachments(password);
+      // TODO: lock attachments as well
 
       await save();
     } catch (e) {
@@ -593,15 +564,10 @@ class Note extends BaseModel<Note> {
       return;
     }
 
+    // TODO: unlock attachments as well
+
     try {
       jsonDecode(content ?? '');
-      try {
-        await _decryptAttachments(password);
-        await _decryptSketchData(password);
-      } catch (e) {
-        AppLogger.log("Error decrypting attachments: $e");
-        throw const NoteUnlockException('Incorrect PIN or corrupted note data');
-      }
       _unlocked = true;
       _password = password;
       return;
@@ -618,12 +584,6 @@ class Note extends BaseModel<Note> {
       _unlocked = true;
       _password = password;
       content = decryptedContent;
-
-      // Decrypt attachment files
-      await _decryptAttachments(password);
-
-      // Decrypt sketch stroke data
-      await _decryptSketchData(password);
     } on FormatException {
       throw const NoteUnlockException('Incorrect PIN or corrupted note data');
     } catch (e) {
@@ -652,283 +612,36 @@ class Note extends BaseModel<Note> {
     await save();
   }
 
-  /// Encrypts all attachment files with the given password.
-  /// Files are encrypted in-place - the original file is replaced with encrypted version.
-  Future<void> _encryptAttachments(String password) async {
-    final fs = await fileSystem();
-
-    for (final attachment in attachments) {
-      // Get all paths for this attachment (sketches may have multiple files)
-      final paths = _getAttachmentPaths(attachment);
-
-      for (final path in paths) {
-        try {
-          if (path.isEmpty) continue;
-
-          // Skip if file doesn't exist locally
-          if (!await fs.exists(path)) continue;
-
-          // Read the file (potentially already encrypted with local data encryption)
-          final data = await readEncryptedBytes(path);
-
-          // Skip if already password-encrypted
-          if (isBytesPasswordEncrypted(data)) continue;
-
-          // Encrypt with password
-          final encrypted = await encryptBytesWithPassword(data, password);
-
-          // Write back (with local data encryption if enabled)
-          await writeEncryptedBytes(path, encrypted);
-
-          AppLogger.log('Encrypted attachment: $path');
-        } catch (e) {
-          AppLogger.error('Error encrypting attachment', e);
-        }
-      }
-    }
-  }
-
-  /// Decrypts all attachment files with the given password.
-  /// Files are decrypted in-place - the encrypted file is replaced with decrypted version.
-  Future<void> _decryptAttachments(String password) async {
-    final fs = await fileSystem();
-
-    for (final attachment in attachments) {
-      // Get all paths for this attachment (sketches may have multiple files)
-      final paths = _getAttachmentPaths(attachment);
-
-      for (final path in paths) {
-        try {
-          if (path.isEmpty) continue;
-
-          // Skip if file doesn't exist locally
-          if (!await fs.exists(path)) continue;
-
-          // Read the file (handles local data encryption automatically)
-          final data = await readEncryptedBytes(path);
-
-          // Skip if not password-encrypted
-          if (!isBytesPasswordEncrypted(data)) continue;
-
-          // Decrypt with password
-          final decrypted = await decryptBytesWithPassword(data, password);
-
-          // Write back (with local data encryption if enabled)
-          await writeEncryptedBytes(path, decrypted);
-
-          AppLogger.log('Decrypted attachment: $path');
-        } catch (e) {
-          AppLogger.error('Error decrypting attachment', e);
-        }
-      }
-    }
-  }
-
-  /// Encrypts sketch stroke data with the given password.
-  /// The strokes are serialized to JSON, encrypted, and stored in encryptedStrokes.
-  /// This protects the actual drawing data (paths, colors, sizes) in locked notes.
-  Future<void> _encryptSketchData(String password) async {
-    for (final attachment in attachments) {
-      if (attachment.type != AttachmentType.sketch) continue;
-
-      final sketch = attachment.sketch;
-      if (sketch == null) continue;
-
-      // Skip if no strokes to encrypt
-      if (sketch.strokes.isEmpty && !sketch.hasEncryptedStrokes) continue;
-
-      // Skip if already encrypted
-      if (sketch.hasEncryptedStrokes) continue;
-
-      try {
-        // Serialize all sensitive sketch data to JSON
-        final sensitiveData = {
-          'strokes': sketch.strokes.map((s) => s.toString()).toList(),
-          'bgColor': sketch.backgroundColor.toARGB32(),
-          'pagePattern': sketch.pagePattern.name,
-        };
-        final sensitiveJson = json.encode(sensitiveData);
-
-        // Encrypt the sketch data
-        final encrypted = await encrypt(sensitiveJson, password);
-
-        // Store encrypted data and clear plaintext
-        sketch.encryptedStrokes = encrypted;
-        sketch.strokes = [];
-
-        AppLogger.log('Encrypted sketch data');
-      } catch (e) {
-        AppLogger.error('Error encrypting sketch data', e);
-      }
-    }
-  }
-
-  /// Decrypts sketch stroke data with the given password.
-  /// Restores the strokes list from encrypted data.
-  Future<void> _decryptSketchData(String password) async {
-    for (final attachment in attachments) {
-      if (attachment.type != AttachmentType.sketch) continue;
-
-      final sketch = attachment.sketch;
-      if (sketch == null || !sketch.hasEncryptedStrokes) continue;
-
-      try {
-        // Decrypt the sketch data
-        final decryptedJson = await decrypt(sketch.encryptedStrokes!, password);
-        final data = json.decode(decryptedJson);
-
-        // Handle both old format (just strokes array) and new format (object with strokes, bgColor, pagePattern)
-        if (data is List) {
-          // Old format: just strokes array
-          sketch.strokes = data
-              .map((e) => SketchStroke.parse(e as String))
-              .toList();
-        } else if (data is Map<String, dynamic>) {
-          // New format: object with all sensitive data
-          if (data['strokes'] != null) {
-            sketch.strokes = (data['strokes'] as List)
-                .map((e) => SketchStroke.parse(e as String))
-                .toList();
-          }
-          if (data['bgColor'] != null) {
-            sketch.backgroundColor = Color(data['bgColor'] as int);
-          }
-          if (data['pagePattern'] != null) {
-            sketch.pagePattern = PagePattern.values.firstWhere(
-              (e) => e.name == data['pagePattern'],
-              orElse: () => PagePattern.blank,
-            );
-          }
-        }
-
-        // Clear encrypted data
-        sketch.encryptedStrokes = null;
-
-        AppLogger.log('Decrypted sketch data');
-      } catch (e) {
-        AppLogger.error('Error decrypting sketch data', e);
-        rethrow; // Let unlock handle the error
-      }
-    }
-  }
-
-  /// Generates thumbnails for attachments that don't have them yet.
-  /// Must be called before encrypting attachments (files must be readable).
-  Future<void> _generateMissingThumbnails() async {
-    final fs = await fileSystem();
-
-    for (final attachment in attachments) {
-      try {
-        if (attachment.type == AttachmentType.image) {
-          final image = attachment.image;
-          if (image == null || image.blurredThumbnail != null) continue;
-
-          final path = image.src;
-          if (path.isEmpty || !await fs.exists(path)) continue;
-
-          final data = await readEncryptedBytes(path);
-          final thumbnail = await ThumbnailGenerator.generateFromBytes(data);
-          if (thumbnail != null) {
-            image.blurredThumbnail = thumbnail;
-            AppLogger.log('Generated thumbnail for image: $path');
-          }
-        } else if (attachment.type == AttachmentType.sketch) {
-          final sketch = attachment.sketch;
-          if (sketch == null || sketch.blurredThumbnail != null) continue;
-
-          final path = sketch.previewImage;
-          if (path == null || path.isEmpty || !await fs.exists(path)) continue;
-
-          final data = await readEncryptedBytes(path);
-          final thumbnail = await ThumbnailGenerator.generateFromBytes(data);
-          if (thumbnail != null) {
-            sketch.blurredThumbnail = thumbnail;
-            AppLogger.log('Generated thumbnail for sketch: $path');
-          }
-        }
-      } catch (e) {
-        AppLogger.error('Error generating thumbnail', e);
-      }
-    }
-  }
-
-  /// Gets all file paths for an attachment.
-  /// Sketches may have both a preview image and a background image.
-  List<String> _getAttachmentPaths(NoteAttachment attachment) {
-    switch (attachment.type) {
-      case AttachmentType.image:
-        final src = attachment.image?.src;
-        return src != null ? [src] : [];
-      case AttachmentType.sketch:
-        final paths = <String>[];
-        if (attachment.sketch?.previewImage != null) {
-          paths.add(attachment.sketch!.previewImage!);
-        }
-        if (attachment.sketch?.backgroundImage != null) {
-          paths.add(attachment.sketch!.backgroundImage!);
-        }
-        return paths;
-      case AttachmentType.audio:
-        final src = attachment.recording?.src;
-        return src != null ? [src] : [];
-    }
-  }
-
-  Future<void> addImage(NoteImage image) async {
+  Future<void> addImage(ImageAttachment image) async {
     if (hasImage(image)) {
       return;
     }
 
-    attachments.add(NoteAttachment.image(image));
-
-    // If note is locked and unlocked, encrypt the new attachment
-    if (_locked && _unlocked && _password != null) {
-      await _encryptSingleAttachment(image.src, _password!);
-    }
-
+    attachments.add(Attachment.image(image));
     await save();
   }
 
-  /// Encrypts a single attachment file with the note's password.
-  Future<void> _encryptSingleAttachment(String? path, String password) async {
-    if (path == null || path.isEmpty) return;
-
-    final fs = await fileSystem();
-    if (!await fs.exists(path)) return;
-
-    try {
-      final data = await readEncryptedBytes(path);
-      if (isBytesPasswordEncrypted(data)) return; // Already encrypted
-
-      final encrypted = await encryptBytesWithPassword(data, password);
-      await writeEncryptedBytes(path, encrypted);
-      AppLogger.log('Encrypted new attachment: $path');
-    } catch (e) {
-      AppLogger.error('Error encrypting new attachment', e);
-    }
-  }
-
   /// Add an image directly without saving (for batch operations)
-  void addImageDirectly(NoteImage image) {
+  void addImageDirectly(ImageAttachment image) {
     if (hasImage(image)) {
       return;
     }
-    attachments.add(NoteAttachment.image(image));
+    attachments.add(Attachment.image(image));
   }
 
   /// Add an attachment directly without saving (for batch operations)
-  void addAttachmentDirectly(NoteAttachment attachment) {
+  void addAttachmentDirectly(Attachment attachment) {
     attachments.add(attachment);
   }
 
-  bool hasImage(NoteImage image) {
+  bool hasImage(ImageAttachment image) {
     return attachments.any(
       (attachment) =>
           attachment.type == AttachmentType.image && attachment.image == image,
     );
   }
 
-  Future<NoteAttachment> removeImage(NoteImage image) async {
+  Future<Attachment> removeImage(ImageAttachment image) async {
     if (!hasImage(image)) {
       throw Exception("Image not found in note attachments");
     }
@@ -942,33 +655,16 @@ class Note extends BaseModel<Note> {
     return removed;
   }
 
-  Future<void> addSketch(SketchData sketch) async {
+  Future<void> addSketch(SketchAttachment sketch) async {
     if (hasSketch(sketch)) {
       return;
     }
 
-    String previewImageSrc = sketch.previewImage ?? '';
-
-    if (previewImageSrc.isEmpty) {
-      snackbar("Error saving sketch, no preview available", Colors.red);
-      AppLogger.error('Error adding sketch to note: no preview image');
-      return;
-    }
-
-    attachments.add(NoteAttachment.sketch(sketch));
-
-    // If note is locked and unlocked, encrypt the new attachment
-    if (_locked && _unlocked && _password != null) {
-      await _encryptSingleAttachment(sketch.previewImage, _password!);
-      if (sketch.backgroundImage != null) {
-        await _encryptSingleAttachment(sketch.backgroundImage, _password!);
-      }
-    }
-
+    attachments.add(Attachment.sketch(sketch));
     await save();
   }
 
-  bool hasSketch(SketchData sketch) {
+  bool hasSketch(SketchAttachment sketch) {
     return attachments.any(
       (attachment) =>
           attachment.type == AttachmentType.sketch &&
@@ -976,7 +672,7 @@ class Note extends BaseModel<Note> {
     );
   }
 
-  Future<NoteAttachment> removeSketch(SketchData sketch) async {
+  Future<Attachment> removeSketch(SketchAttachment sketch) async {
     if (!hasSketch(sketch)) {
       throw Exception("Sketch not found in note attachments");
     }
@@ -991,20 +687,20 @@ class Note extends BaseModel<Note> {
     return removed;
   }
 
-  void addRecording(NoteRecording recording) async {
-    if (hasRecording(recording.src)) {
+  void addRecording(RecordingAttachment recording) async {
+    if (hasRecording(recording.path)) {
       return;
     }
 
-    attachments.add(NoteAttachment.audio(recording));
+    attachments.add(Attachment.audio(recording));
     await save();
   }
 
-  Future<void> updateRecording(NoteRecording recording) async {
+  Future<void> updateRecording(RecordingAttachment recording) async {
     final index = attachments.indexWhere(
       (attachment) =>
           attachment.type == AttachmentType.audio &&
-          attachment.recording!.src == recording.src,
+          attachment.recording!.id == recording.id,
     );
     if (index != -1) {
       attachments[index].recording = recording;
@@ -1012,23 +708,23 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  bool hasRecording(String src) {
+  bool hasRecording(String id) {
     return attachments.any(
       (attachment) =>
           attachment.type == AttachmentType.audio &&
-          attachment.recording!.src == src,
+          attachment.recording!.id == id,
     );
   }
 
-  Future<NoteAttachment> removeRecording(String src) async {
-    if (!hasRecording(src)) {
+  Future<Attachment> removeRecording(String id) async {
+    if (!hasRecording(id)) {
       throw Exception("Audio recording not found in note attachments");
     }
 
     final removed = attachments.firstWhere(
       (attachment) =>
           attachment.type == AttachmentType.audio &&
-          attachment.recording!.src == src,
+          attachment.recording!.id == id,
     );
     attachments.remove(removed);
     await save();
@@ -1208,6 +904,7 @@ class Note extends BaseModel<Note> {
     }
 
     try {
+      // TODO: save attachments also
       await AppState.db.insert(model, jsonObj);
       notify("created", trackSync);
       return id!;
@@ -1231,40 +928,6 @@ class Note extends BaseModel<Note> {
     trashed = false;
     readOnly = false;
     await save();
-  }
-
-  Future<void> _deleteLocalFiles() async {
-    try {
-      final fs = await fileSystem();
-      for (final attachment in attachments) {
-        final List<String> files = [];
-
-        switch (attachment.type) {
-          case AttachmentType.image:
-            files.add(attachment.image!.src);
-            break;
-          case AttachmentType.sketch:
-            if (attachment.sketch!.backgroundImage != null) {
-              files.add(attachment.sketch!.backgroundImage!);
-            }
-            if (attachment.sketch!.previewImage != null) {
-              files.add(attachment.sketch!.previewImage!);
-            }
-            break;
-          case AttachmentType.audio:
-            files.add(attachment.recording!.src);
-            break;
-        }
-
-        for (final file in files) {
-          if (await fs.exists(file)) {
-            await fs.delete(file);
-          }
-        }
-      }
-    } catch (e) {
-      AppLogger.log("Error deleting local files: $e");
-    }
   }
 
   Future<int> delete() async {
@@ -1292,7 +955,9 @@ class Note extends BaseModel<Note> {
       where: "id = ?",
       whereArgs: [noteId],
     );
-    await _deleteLocalFiles();
+
+    // TODO: delete attachments
+
     // Emit the deleted event for UI listeners (without sync tracking since
     // we already updated the sync track above)
     super.notify("deleted");
@@ -1348,34 +1013,7 @@ class Note extends BaseModel<Note> {
     // Encrypt sketch data within attachments if files encryption is enabled
     final encryptedAttachments = <Map<String, dynamic>>[];
     for (final attachment in attachments) {
-      final attachmentJson = attachment.toJson();
-
-      // Encrypt sketch metadata (strokes, bgColor, pagePattern) if files encryption is enabled
-      if (attachment.type == AttachmentType.sketch &&
-          attachment.sketch != null) {
-        final sketch = attachment.sketch!;
-        final sketchMetadata = json.encode({
-          'strokes': sketch.strokes.map((s) => s.toString()).toList(),
-          'bgColor': sketch.backgroundColor.toARGB32(),
-          'pagePattern': sketch.pagePattern.name,
-        });
-        final encryptedMetadata = await localEncryption
-            .encryptAttachmentMetadata(sketchMetadata);
-
-        // If encrypted (different from original), store as encrypted field
-        if (encryptedMetadata != sketchMetadata) {
-          attachmentJson['data'] = {
-            'encrypted_metadata': encryptedMetadata,
-            'previewImage': sketch.previewImage,
-            'backgroundImage': sketch.backgroundImage,
-            'aspectRatio': sketch.aspectRatio,
-            if (sketch.blurredThumbnail != null)
-              'blurredThumbnail': sketch.blurredThumbnail,
-          };
-        }
-      }
-
-      encryptedAttachments.add(attachmentJson);
+      encryptedAttachments.add(attachment.toJson());
     }
 
     final attachmentsJson = json.encode(encryptedAttachments);

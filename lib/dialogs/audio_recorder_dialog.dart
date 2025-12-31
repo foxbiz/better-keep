@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
@@ -140,7 +141,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
     try {
       if (await _audioRecorder.hasPermission()) {
         final fs = await fileSystem();
-        final audioDir = await fs.documentDir;
+        final audioDir = AppState.documentDir;
         final audioPath = path.join(
           audioDir,
           'audio',

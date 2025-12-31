@@ -1,4 +1,4 @@
-import 'package:better_keep/services/reminder_permission_service.dart';
+import 'package:better_keep/services/reminder/reminder_permission_service.dart';
 import 'package:better_keep/utils/week_days.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/reminder.dart';

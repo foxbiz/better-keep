@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:better_keep/firebase_options.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/services/monetization/subscription_status.dart';

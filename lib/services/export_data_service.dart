@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_attachment.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -161,9 +161,7 @@ class ExportDataService {
               // Use decrypted file reading to handle encrypted attachments
               final fileData = await _getAttachmentDataDecrypted(attachment);
               if (fileData != null && fileData.isNotEmpty) {
-                final fileName = _getAttachmentFileName(attachment);
-                final noteFolder = 'attachments/note_${note.id}';
-                final filePath = '$noteFolder/$fileName';
+                final filePath = 'attachments/note_${note.id}/${attachment.id}';
 
                 archive.addFile(_createArchiveFile(filePath, fileData));
                 AppLogger.log(
@@ -339,58 +337,33 @@ Exported on: ${DateTime.now().toIso8601String()}
   }
 
   /// Convert an attachment to exportable JSON
-  Map<String, dynamic> _attachmentToExportJson(NoteAttachment attachment) {
+  Map<String, dynamic> _attachmentToExportJson(Attachment attachment) {
     switch (attachment.type) {
       case AttachmentType.image:
         return {
           'type': 'image',
-          'fileName': _getFileNameFromPath(attachment.image!.src),
-          'originalPath': attachment.image!.src,
+          'fileName': attachment.image!.id,
+          'originalPath': attachment.image!.path,
           'aspectRatio': attachment.image!.aspectRatio,
-          'size': attachment.image!.size,
+          'size': attachment.image!.dimension,
         };
       case AttachmentType.sketch:
         return {
           'type': 'sketch',
-          'fileName': _getFileNameFromPath(
-            attachment.sketch!.previewImage ?? '',
-          ),
-          'originalPath': attachment.sketch!.previewImage,
+          'fileName': attachment.sketch!.id,
+          'originalPath': attachment.sketch!.previewPath,
           'strokeCount': attachment.sketch!.strokes.length,
         };
       case AttachmentType.audio:
         return {
           'type': 'audio',
-          'fileName': _getFileNameFromPath(attachment.recording!.src),
-          'originalPath': attachment.recording!.src,
+          'fileName': attachment.recording!.id,
+          'originalPath': attachment.recording!.path,
           'length': attachment.recording!.length,
           'title': attachment.recording!.title,
           'transcript': attachment.recording!.transcript,
         };
     }
-  }
-
-  /// Get a filename for an attachment
-  String _getAttachmentFileName(NoteAttachment attachment) {
-    switch (attachment.type) {
-      case AttachmentType.image:
-        return _getFileNameFromPath(attachment.image!.src);
-      case AttachmentType.sketch:
-        final path = attachment.sketch!.previewImage ?? 'sketch.png';
-        return _getFileNameFromPath(path);
-      case AttachmentType.audio:
-        return _getFileNameFromPath(attachment.recording!.src);
-    }
-  }
-
-  /// Extract filename from a path (and sanitize for ZIP)
-  String _getFileNameFromPath(String path) {
-    final parts = path.split('/');
-    final fileName = parts.isNotEmpty ? parts.last : 'unknown';
-    // Sanitize the filename for ZIP compatibility
-    return fileName
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'\s+'), '_');
   }
 
   /// Save ZIP for web (download)
@@ -460,25 +433,19 @@ Exported on: ${DateTime.now().toIso8601String()}
   }
 
   /// Get attachment data with automatic decryption for encrypted files
-  Future<Uint8List?> _getAttachmentDataDecrypted(
-    NoteAttachment attachment,
-  ) async {
+  Future<Uint8List?> _getAttachmentDataDecrypted(Attachment attachment) async {
     String? path;
 
     switch (attachment.type) {
       case AttachmentType.image:
-        path = attachment.image!.src;
+        path = attachment.image!.path;
         break;
       case AttachmentType.sketch:
-        path = attachment.sketch!.previewImage;
+        path = attachment.sketch!.previewPath;
         break;
       case AttachmentType.audio:
-        path = attachment.recording!.src;
+        path = attachment.recording!.path;
         break;
-    }
-
-    if (path == null || path.isEmpty) {
-      return null;
     }
 
     // Handle remote URLs
@@ -544,21 +511,20 @@ Exported on: ${DateTime.now().toIso8601String()}
       buffer.writeln();
 
       for (final attachment in note.attachments) {
-        final fileName = _getAttachmentFileName(attachment);
-        final relativePath = '../attachments/note_${note.id}/$fileName';
+        final relativePath = '../attachments/note_${note.id}/${attachment.id}';
 
         switch (attachment.type) {
           case AttachmentType.image:
-            buffer.writeln('![$fileName]($relativePath)');
+            buffer.writeln('![${attachment.id}]($relativePath)');
             buffer.writeln();
             break;
           case AttachmentType.sketch:
-            buffer.writeln('![Sketch: $fileName]($relativePath)');
+            buffer.writeln('![Sketch: ${attachment.id}]($relativePath)');
             buffer.writeln();
             break;
           case AttachmentType.audio:
             final recording = attachment.recording!;
-            buffer.writeln('🎵 **Audio:** [$fileName]($relativePath)');
+            buffer.writeln('🎵 **Audio:** [${attachment.id}]($relativePath)');
             if (recording.title?.isNotEmpty == true) {
               buffer.writeln('  - Title: ${recording.title}');
             }

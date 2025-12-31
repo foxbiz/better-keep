@@ -5,7 +5,7 @@ import 'package:better_keep/pages/nerd_stats_page.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/themes/theme_registry.dart';
-import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/ui/show_page.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';

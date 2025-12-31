@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:better_keep/services/monetization/plan_service.dart';
@@ -81,8 +81,7 @@ class RazorpayService {
   /// Set the theme color for Razorpay checkout dialog
   /// [color] should be a Color object from the current theme
   void setThemeColor(Color color) {
-    // Convert to hex, pad to 8 chars (AARRGGBB), then take last 6 (RRGGBB)
-    final hex = color.value.toRadixString(16).padLeft(8, '0');
+    final hex = color.toARGB32().toRadixString(16).padLeft(8, '0');
     _themeColor = hex.substring(2).toUpperCase();
     AppLogger.log('RazorpayService: Theme color set to #$_themeColor');
   }

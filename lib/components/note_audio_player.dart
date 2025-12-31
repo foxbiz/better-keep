@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
-import 'package:better_keep/models/note_recording.dart';
+import 'package:better_keep/models/attachments/recording_attachment.dart';
 import 'package:better_keep/utils/file_utils.dart';
 import 'package:flutter/material.dart';
 
 class NoteAudioPlayer extends StatefulWidget {
-  final NoteRecording recording;
+  final RecordingAttachment recording;
   final VoidCallback onDelete;
-  final void Function(NoteRecording)? onUpdate;
+  final void Function(RecordingAttachment)? onUpdate;
 
   const NoteAudioPlayer({
     super.key,
@@ -81,23 +81,19 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
   Future<void> _initAudioSource() async {
     try {
       Source source;
-      if (widget.recording.src.startsWith('http')) {
-        source = UrlSource(widget.recording.src);
-      } else {
-        // Fix path for iOS where container ID changes between app launches
-        final fixedPath = await FileUtils.fixPath(widget.recording.src);
+      // Fix path for iOS where container ID changes between app launches
+      final fixedPath = await FileUtils.fixPath(widget.recording.path);
 
-        // Check if file exists and has content
-        final file = File(fixedPath);
-        if (!await file.exists()) {
-          return;
-        }
-        final fileSize = await file.length();
-        if (fileSize == 0) {
-          return;
-        }
-        source = DeviceFileSource(fixedPath);
+      // Check if file exists and has content
+      final file = File(fixedPath);
+      if (!await file.exists()) {
+        return;
       }
+      final fileSize = await file.length();
+      if (fileSize == 0) {
+        return;
+      }
+      source = DeviceFileSource(fixedPath);
 
       await _audioPlayer.setSource(source);
 
@@ -216,8 +212,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
               final newTitle = titleController.text.trim();
               if (widget.onUpdate != null) {
                 widget.onUpdate!(
-                  NoteRecording(
-                    src: widget.recording.src,
+                  RecordingAttachment(
                     length: widget.recording.length,
                     title: newTitle.isNotEmpty ? newTitle : null,
                     transcript: widget.recording.transcript,

@@ -2,7 +2,7 @@ import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/dialogs/loading_dialog.dart';
 import 'package:better_keep/dialogs/otp_dialog.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';

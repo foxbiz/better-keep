@@ -7,18 +7,17 @@ import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/config.dart';
-import 'package:better_keep/models/note_image.dart';
-import 'package:better_keep/models/note_recording.dart';
-import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/models/attachments/image_attachment.dart';
+import 'package:better_keep/models/attachments/recording_attachment.dart';
+import 'package:better_keep/models/attachments/sketch_attachment.dart';
 import 'package:better_keep/pages/setup_recovery_key_page.dart';
 import 'package:better_keep/pages/sketch_page.dart';
-import 'package:better_keep/services/app_install_service.dart';
-import 'package:better_keep/services/camera_detection.dart';
-import 'package:better_keep/services/camera_capture.dart';
+import 'package:better_keep/services/app_install/app_install_service.dart';
+import 'package:better_keep/services/camera/camera_detection.dart';
+import 'package:better_keep/services/camera/camera_capture.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
-import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/ui/show_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
@@ -30,7 +29,7 @@ import 'package:better_keep/pages/home/notes.dart';
 import 'package:better_keep/pages/home/sidebar.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/pages/user_page.dart';
-import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sync/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -886,7 +885,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       context,
       SketchPage(
         note: note,
-        sketch: SketchData(
+        sketch: SketchAttachment(
           backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
         ),
       ),
@@ -928,8 +927,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
       // Add recording to note
       note.addRecording(
-        NoteRecording(
-          src: result.path,
+        RecordingAttachment(
           title: result.title ?? 'Audio Recording',
           length: result.length,
           transcript: result.transcription,
@@ -1069,10 +1067,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     }
 
     try {
-      final fs = await fileSystem();
-      final documentDir = await fs.documentDir;
       final imagePath = path.join(
-        documentDir,
+        AppState.documentDir,
         'images',
         '${DateTime.now().millisecondsSinceEpoch}$ext',
       );
@@ -1083,12 +1079,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       await writeEncryptedBytes(imagePath, bytes);
 
       final decodedImage = await decodeImageFromList(bytes);
-      final noteImage = NoteImage(
-        src: imagePath,
-        aspectRatio: "${decodedImage.width}:${decodedImage.height}",
-        size: bytes.length,
+      final noteImage = ImageAttachment(
+        dimension: Size(
+          decodedImage.width.toDouble(),
+          decodedImage.height.toDouble(),
+        ),
         lastModified: DateTime.now().toIso8601String(),
-        index: 0,
       );
 
       // Create note with image

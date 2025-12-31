@@ -1,17 +1,17 @@
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/dialogs/delete_dialog.dart';
-import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/ui/show_page.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_attachment.dart';
-import 'package:better_keep/models/note_image.dart';
-import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
+import 'package:better_keep/models/attachments/image_attachment.dart';
+import 'package:better_keep/models/attachments/sketch_attachment.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 
 class ImageViewer extends StatefulWidget {
   final Note note;
-  final NoteImage image;
-  final NoteAttachment? attachment;
+  final ImageAttachment image;
+  final Attachment? attachment;
   final String? heroTag;
 
   const ImageViewer({
@@ -27,7 +27,7 @@ class ImageViewer extends StatefulWidget {
 }
 
 class _ImageViewerState extends State<ImageViewer> {
-  late NoteImage _currentImage;
+  late ImageAttachment _currentImage;
 
   @override
   void initState() {
@@ -59,11 +59,9 @@ class _ImageViewerState extends State<ImageViewer> {
       body: Center(
         child: InteractiveViewer(
           child: Hero(
-            tag:
-                widget.heroTag ??
-                "image_${widget.note.id}_${_currentImage.src}",
+            tag: _currentImage.path,
             child: UniversalImage(
-              path: _currentImage.src,
+              path: _currentImage.path,
               errorBuilder: (context, error, stackTrace) {
                 return const Center(
                   child: Icon(Icons.error, color: Colors.red),
@@ -94,7 +92,7 @@ class _ImageViewerState extends State<ImageViewer> {
       context,
       SketchPage(
         note: widget.note,
-        sketch: SketchData(backgroundImage: _currentImage.src),
+        sketch: SketchAttachment(backgroundImage: _currentImage.path),
         sourceAttachment: widget.attachment,
       ),
     );

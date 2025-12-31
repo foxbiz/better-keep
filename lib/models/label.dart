@@ -1,5 +1,5 @@
 import 'package:better_keep/models/base_model.dart';
-import 'package:better_keep/services/label_sync_service.dart';
+import 'package:better_keep/services/sync/label_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:sqflite/sqflite.dart';
 

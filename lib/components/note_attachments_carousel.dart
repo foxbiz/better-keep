@@ -1,14 +1,14 @@
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_attachment.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
 import 'package:better_keep/pages/image_viewer.dart';
 import 'package:better_keep/pages/sketch_page.dart';
-import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/ui/show_page.dart';
 import 'package:flutter/material.dart';
 
 class NoteAttachmentsCarousel extends StatefulWidget {
-  final double height;
   final Note note;
+  final double height;
   final void Function()? onPop;
 
   const NoteAttachmentsCarousel({
@@ -24,7 +24,7 @@ class NoteAttachmentsCarousel extends StatefulWidget {
 }
 
 class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
-  late List<NoteAttachment> _cachedAttachments;
+  late List<Attachment> _cachedAttachments;
 
   @override
   void initState() {
@@ -62,7 +62,7 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
 
           if (isImage) {
             final image = attachment.image!;
-            final heroTag = 'image_${widget.note.id}_${image.src}';
+            final heroTag = image.path;
             return Padding(
               padding: EdgeInsets.only(
                 left: index == 0 ? 8 : 8,
@@ -89,10 +89,13 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
                 child: Hero(
                   tag: heroTag,
                   child: AspectRatio(
-                    aspectRatio: image.ratio,
+                    aspectRatio: image.aspectRatio,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: UniversalImage(path: image.src, fit: BoxFit.cover),
+                      child: UniversalImage(
+                        path: image.path,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                 ),
@@ -101,9 +104,6 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
           } else {
             final sketch = attachment.sketch!;
             final sketchIndex = widget.note.sketches.indexOf(sketch);
-            final heroTag = sketch.previewImage != null
-                ? 'sketch_${widget.note.id}_${sketch.previewImage}'
-                : null;
             return Padding(
               padding: EdgeInsets.only(
                 left: index == 0 ? 8 : 8,
@@ -118,7 +118,7 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
                     SketchPage(
                       note: widget.note,
                       sketch: sketch,
-                      heroTag: heroTag,
+                      heroTag: sketch.previewPath,
                       initialIndex: sketchIndex >= 0 ? sketchIndex : null,
                     ),
                   );
@@ -127,41 +127,19 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
                     widget.onPop!();
                   }
                 },
-                child: sketch.previewImage != null
-                    ? Hero(
-                        tag: heroTag!,
-                        child: AspectRatio(
-                          aspectRatio: sketch.aspectRatio > 0
-                              ? sketch.aspectRatio
-                              : 1.0,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: UniversalImage(
-                              path: sketch.previewImage!,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                      )
-                    : AspectRatio(
-                        aspectRatio: sketch.aspectRatio > 0
-                            ? sketch.aspectRatio
-                            : 1.0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: sketch.backgroundColor,
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: CustomPaint(
-                              painter: SketchPainter(strokes: sketch.strokes),
-                              size: Size.infinite,
-                            ),
-                          ),
-                        ),
+                child: Hero(
+                  tag: sketch.previewPath,
+                  child: AspectRatio(
+                    aspectRatio: sketch.aspectRatio,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: UniversalImage(
+                        path: sketch.previewPath,
+                        fit: BoxFit.contain,
                       ),
+                    ),
+                  ),
+                ),
               ),
             );
           }
@@ -188,14 +166,14 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
 
       switch (a.type) {
         case AttachmentType.image:
-          if (a.image?.src != b.image?.src) return true;
+          if (a.image?.path != b.image?.path) return true;
         case AttachmentType.sketch:
-          if (a.sketch?.previewImage != b.sketch?.previewImage ||
+          if (a.sketch?.previewPath != b.sketch?.previewPath ||
               a.sketch?.backgroundImage != b.sketch?.backgroundImage) {
             return true;
           }
         case AttachmentType.audio:
-          if (a.recording?.src != b.recording?.src) return true;
+          if (a.recording?.id != b.recording?.id) return true;
       }
     }
     return false;

@@ -1,29 +1,29 @@
 import 'package:better_keep/dialogs/snackbar.dart';
-import 'package:better_keep/utils/utils.dart';
-import 'package:better_keep/utils/thumbnail_generator.dart';
+import 'package:better_keep/ui/show_page.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_recording.dart';
+import 'package:better_keep/models/attachments/recording_attachment.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/models/attachments/sketch_attachment.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:better_keep/models/note_image.dart';
+import 'package:better_keep/models/attachments/image_attachment.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
-import 'package:better_keep/services/camera_detection.dart';
-import 'package:better_keep/services/camera_capture.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/services/camera/camera_detection.dart';
+import 'package:better_keep/services/camera/camera_capture.dart';
 
 class AttachButton extends StatefulWidget {
   final Note note;
   final bool readOnly;
   final Color? parentColor;
-  final void Function(String text, NoteRecording recording)? onAppendTranscript;
+  final void Function(String text, RecordingAttachment recording)?
+  onAppendTranscript;
 
   const AttachButton({
     super.key,
@@ -155,16 +155,12 @@ class _AttachButtonState extends State<AttachButton> {
 
       final decodedImage = await decodeImageFromList(bytes);
 
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(bytes);
-
-      final noteImage = NoteImage(
-        src: imagePath,
-        aspectRatio: "${decodedImage.width}:${decodedImage.height}",
-        size: bytes.length,
+      final noteImage = ImageAttachment(
+        dimension: Size(
+          decodedImage.width.toDouble(),
+          decodedImage.height.toDouble(),
+        ),
         lastModified: DateTime.now().toIso8601String(),
-        index: widget.note.images.length,
-        blurredThumbnail: thumbnail,
       );
 
       widget.note.addImage(noteImage);
@@ -297,8 +293,7 @@ class _AttachButtonState extends State<AttachButton> {
 
     if (result != null && mounted) {
       widget.note.addRecording(
-        NoteRecording(
-          src: result.path,
+        RecordingAttachment(
           title: result.title,
           length: result.length,
           transcript: result.transcription,
@@ -308,8 +303,7 @@ class _AttachButtonState extends State<AttachButton> {
       if (result.transcription != null &&
           result.transcription!.isNotEmpty &&
           widget.onAppendTranscript != null) {
-        final recording = NoteRecording(
-          src: result.path,
+        final recording = RecordingAttachment(
           title: result.title,
           length: result.length,
           transcript: result.transcription,
@@ -341,7 +335,7 @@ class _AttachButtonState extends State<AttachButton> {
       context,
       SketchPage(
         note: widget.note,
-        sketch: SketchData(
+        sketch: SketchAttachment(
           backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
         ),
       ),

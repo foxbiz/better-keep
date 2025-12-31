@@ -538,7 +538,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
     debugPrint(
-      'PaywallSheet: Primary color = $primaryColor (value: 0x${primaryColor.value.toRadixString(16)})',
+      'PaywallSheet: Primary color = $primaryColor (value: 0x${primaryColor.toARGB32().toRadixString(16)})',
     );
     RazorpayService.instance.setThemeColor(primaryColor);
     debugPrint(
@@ -975,7 +975,7 @@ class _PaywallPageState extends State<PaywallPage> {
     final themeData = Theme.of(context);
     final primaryColor = themeData.colorScheme.primary;
     debugPrint(
-      'PaywallPage: Primary color = $primaryColor (value: 0x${primaryColor.value.toRadixString(16)})',
+      'PaywallPage: Primary color = $primaryColor (value: 0x${primaryColor.toARGB32().toRadixString(16)})',
     );
     RazorpayService.instance.setThemeColor(primaryColor);
     debugPrint(

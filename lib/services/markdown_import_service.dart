@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_attachment.dart';
-import 'package:better_keep/models/note_recording.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
+import 'package:better_keep/models/attachments/recording_attachment.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -685,8 +685,8 @@ class MarkdownImportService {
 
   /// Add audio to the note as an attachment
   static void _addAudioToNote(Note note, String localPath) {
-    final recording = NoteRecording(src: localPath);
-    final attachment = NoteAttachment.audio(recording);
+    final recording = RecordingAttachment();
+    final attachment = Attachment.audio(recording);
     note.addAttachmentDirectly(attachment);
     AppLogger.log('[MarkdownImport] Added audio attachment');
   }

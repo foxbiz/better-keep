@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/models/label.dart';
-import 'package:better_keep/models/label_sync_track.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/models/sync/label_sync_track.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/state.dart';

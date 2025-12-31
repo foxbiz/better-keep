@@ -1,7 +1,8 @@
 import 'dart:convert';
 
-import 'package:better_keep/models/pending_remote_sync.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/models/sync/pending_remote_sync.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:path/path.dart' as path;
 
@@ -18,9 +19,6 @@ class RemoteSyncCacheService {
 
   /// Page size for fetching notes from Firebase
   static const int pageSize = 20;
-
-  /// Cache directory name
-  static const String _cacheDir = 'remote_sync_cache';
 
   /// Metadata file name
   static const String _metadataFile = 'metadata.json';
@@ -39,9 +37,7 @@ class RemoteSyncCacheService {
 
   /// Get cache directory path
   Future<String> _getCacheDir() async {
-    final fs = await fileSystem();
-    final cacheDir = await fs.cacheDir;
-    return path.join(cacheDir, _cacheDir);
+    return path.join(AppState.cacheDir, 'remote_sync_cache');
   }
 
   /// Initialize the cache service - loads existing cache from disk

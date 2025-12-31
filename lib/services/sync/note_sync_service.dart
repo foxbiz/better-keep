@@ -2,20 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:better_keep/firebase_options.dart';
-import 'package:better_keep/models/file_sync_track.dart';
+import 'package:better_keep/models/sync/file_sync_track.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_attachment.dart';
-import 'package:better_keep/models/pending_remote_sync.dart';
-import 'package:better_keep/models/note_sync_track.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
+import 'package:better_keep/models/sync/pending_remote_sync.dart';
+import 'package:better_keep/models/sync/note_sync_track.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/note_encryption.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
-import 'package:better_keep/services/remote_sync_cache_service.dart';
+import 'package:better_keep/services/sync/remote_sync_cache_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -1635,12 +1635,12 @@ class NoteSyncService {
     for (final trackedFile in trackedFiles) {
       final isOrphaned = !note.attachments.any((att) {
         final files = switch (att.type) {
-          AttachmentType.image => [att.image!.src],
+          AttachmentType.image => [att.image!.path],
           AttachmentType.sketch => [
-            att.sketch!.previewImage ?? '',
+            att.sketch!.previewPath,
             att.sketch!.backgroundImage ?? '',
           ],
-          AttachmentType.audio => [att.recording!.src],
+          AttachmentType.audio => [att.recording!.path],
         }.where((path) => path.isNotEmpty).toList();
         // Check both local and remote paths since attachments may have either
         return files.contains(trackedFile.localPath) ||
@@ -1672,14 +1672,14 @@ class NoteSyncService {
   /// Downloads attachments and returns the list of successfully downloaded attachments.
   /// Returns null if any attachment has a temporary failure (to retry later).
   /// Attachments with permanent failures (file doesn't exist) are skipped but don't block sync.
-  Future<List<NoteAttachment>?> _downloadAttachments(
+  Future<List<Attachment>?> _downloadAttachments(
     List<dynamic> attachmentData,
     Note note,
   ) async {
-    List<NoteAttachment> attachments = [];
+    List<Attachment> attachments = [];
 
     for (final data in attachmentData) {
-      final attachment = NoteAttachment.fromJson(data as Map<String, dynamic>);
+      final attachment = Attachment.fromJson(data as Map<String, dynamic>);
       final result = await _downloadAttachment(attachment, note);
 
       switch (result) {
@@ -1710,23 +1710,13 @@ class NoteSyncService {
   /// Result of uploading attachments - contains data and success status
   /// Returns null if any required upload failed
   Future<List<dynamic>?> _uploadAttachments(
-    List<NoteAttachment> attachments,
+    List<Attachment> attachments,
     Note note,
   ) async {
     List<dynamic> attachmentData = [];
     bool hasFailure = false;
 
     for (final attachment in attachments) {
-      // Skip sketch attachments without a preview image
-      if (attachment.type == AttachmentType.sketch &&
-          (attachment.sketch!.previewImage == null ||
-              attachment.sketch!.previewImage!.isEmpty)) {
-        AppLogger.log(
-          "Skipping sketch attachment without preview image for note ${note.id}",
-        );
-        continue;
-      }
-
       // Get remote URLs for the attachment without modifying the original
       final result = await _getRemoteAttachmentJson(attachment, note);
 
@@ -1758,7 +1748,7 @@ class NoteSyncService {
   /// Does NOT modify the original attachment - local note keeps local paths
   /// Returns null if upload fails (to signal sync should be aborted)
   Future<Map<String, dynamic>?> _getRemoteAttachmentJson(
-    NoteAttachment attachment,
+    Attachment attachment,
     Note note,
   ) async {
     // Start with the current JSON representation
@@ -1766,12 +1756,12 @@ class NoteSyncService {
 
     // Upload main file and update JSON with remote URL
     final src = switch (attachment.type) {
-      AttachmentType.image => attachment.image!.src,
-      AttachmentType.sketch => attachment.sketch!.previewImage,
-      AttachmentType.audio => attachment.recording!.src,
+      AttachmentType.image => attachment.image!.path,
+      AttachmentType.sketch => attachment.sketch!.previewPath,
+      AttachmentType.audio => attachment.recording!.path,
     };
 
-    if (src != null && src.isNotEmpty && !src.startsWith('http')) {
+    if (!src.startsWith('http')) {
       final remoteUrl = await _uploadFile(src, note, 'main');
       // Update the JSON 'data' field, not the original attachment
       // toJson() returns {'type': '...', 'data': {...}} structure
@@ -1931,35 +1921,28 @@ class NoteSyncService {
   /// Returns DownloadResult.success if downloaded, permanentFailure if file doesn't exist,
   /// or temporaryFailure for retryable errors
   Future<DownloadResult> _downloadAttachment(
-    NoteAttachment attachment,
+    Attachment attachment,
     Note note,
   ) async {
     // Download main file
     String? src = switch (attachment.type) {
-      AttachmentType.image => attachment.image!.src,
-      AttachmentType.sketch => attachment.sketch!.previewImage,
-      AttachmentType.audio => attachment.recording?.src,
+      AttachmentType.image => attachment.image!.path,
+      AttachmentType.sketch => attachment.sketch!.previewPath,
+      AttachmentType.audio => attachment.recording!.path,
     };
 
-    if (src != null && src.isNotEmpty && src.startsWith('http')) {
-      final result = await _downloadFile(src, note, 'main');
-      if (result.isSuccess && result.localPath != null) {
-        switch (attachment.type) {
-          case AttachmentType.image:
-            attachment.image!.src = result.localPath!;
-            break;
-          case AttachmentType.sketch:
-            attachment.sketch!.previewImage = result.localPath;
-            break;
-          case AttachmentType.audio:
-            attachment.recording!.src = result.localPath!;
-            break;
-        }
-      } else {
-        // Download failed - return the failure type
+    if (src.startsWith('http')) {
+      final localPath = switch (attachment.type) {
+        AttachmentType.image => attachment.image!.path,
+        AttachmentType.sketch => attachment.sketch!.path,
+        AttachmentType.audio => attachment.recording!.path,
+      };
+
+      final result = await _downloadFile(src, localPath, note);
+      if (!result.isSuccess || result.localPath == null) {
         return result.result;
       }
-    } else if (src != null && src.isNotEmpty && !src.startsWith('http')) {
+    } else if (!src.startsWith('http')) {
       // Local path - check if file exists
       final fs = await fileSystem();
       if (!await fs.exists(src)) {
@@ -1977,7 +1960,11 @@ class NoteSyncService {
         attachment.sketch!.backgroundImage!.isNotEmpty &&
         attachment.sketch!.backgroundImage!.startsWith('http')) {
       final bgSrc = attachment.sketch!.backgroundImage!;
-      final result = await _downloadFile(bgSrc, note, 'bg');
+      final localBgPath = path.join(
+        AppState.documentDir,
+        'note_${note.id}_sketch_bg_${DateTime.now().millisecondsSinceEpoch}.${path.extension(bgSrc).replaceFirst('.', '')}',
+      );
+      final result = await _downloadFile(bgSrc, localBgPath, note);
       if (result.isSuccess && result.localPath != null) {
         attachment.sketch!.backgroundImage = result.localPath;
       }
@@ -1990,8 +1977,8 @@ class NoteSyncService {
   /// Helper to download a single file and return local path with result status
   Future<FileDownloadResult> _downloadFile(
     String src,
+    String localPath,
     Note note,
-    String suffix,
   ) async {
     if (!src.startsWith('http')) {
       return FileDownloadResult(DownloadResult.temporaryFailure);
@@ -2027,17 +2014,9 @@ class NoteSyncService {
     statusMessage.value = "Downloading media...";
     _setNoteStatus(note.id!, "Downloading media...");
 
-    // Use FileSystem interface for cross-platform compatibility
-    final documentsDir = await fs.documentDir;
-    final attachmentsPath = path.join(documentsDir, 'attachments');
-
     // Ensure attachments directory exists by writing a placeholder if needed
     // The FileSystem interface creates directories automatically on write
 
-    final localPath = path.join(
-      attachmentsPath,
-      '${note.id}_${suffix}_${DateTime.now().millisecondsSinceEpoch}${path.extension(src).split('?').first}',
-    );
     try {
       final downloadedBytes = await _storage.refFromURL(src).getData();
       if (downloadedBytes == null) {

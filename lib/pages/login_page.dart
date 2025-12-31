@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:better_keep/pages/email_login_page.dart';
-import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth/auth_service.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';

@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/file_system/file_system.dart';
+import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
@@ -8,17 +9,9 @@ class AppLogger {
   /// Maximum log file size in bytes (1MB)
   static const int _maxLogSize = 1024 * 1024;
 
-  static Future<String> get _logPath async {
-    final fs = await fileSystem();
-    final directory = await fs.cacheDir;
-    return path.join(directory, 'log.txt');
-  }
+  static String get _logPath => path.join(AppState.cacheDir, 'log.txt');
 
-  static Future<String> get _oldLogPath async {
-    final fs = await fileSystem();
-    final directory = await fs.cacheDir;
-    return path.join(directory, 'log.old.txt');
-  }
+  static String get _oldLogPath => path.join(AppState.cacheDir, 'log.old.txt');
 
   static Future<void> log(String message) async {
     await _writeLog(message, isError: false);
@@ -49,13 +42,12 @@ class AppLogger {
 
     try {
       final fs = await fileSystem();
-      final logPath = await _logPath;
 
       // Check if log rotation is needed
-      await _rotateLogIfNeeded(fs, logPath);
+      await _rotateLogIfNeeded(fs, _logPath);
 
       // Append to file
-      await fs.writeString(logPath, '$logMessage\n', append: true);
+      await fs.writeString(_logPath, '$logMessage\n', append: true);
     } catch (e) {
       debugPrint("Failed to write log to file: $e");
     }
@@ -71,7 +63,7 @@ class AppLogger {
       if (bytes.length > _maxLogSize) {
         final content = utf8.decode(bytes, allowMalformed: true);
         // Move current log to old log (overwrite)
-        final oldLogPath = await _oldLogPath;
+        final oldLogPath = _oldLogPath;
         // Keep only the last half of the log
         final truncatedContent = content.substring(content.length ~/ 2);
         await fs.writeString(oldLogPath, truncatedContent);

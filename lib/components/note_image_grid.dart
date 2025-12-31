@@ -1,17 +1,17 @@
 import 'dart:math';
 
 import 'package:better_keep/components/universal_image.dart';
-import 'package:better_keep/models/note_image.dart';
+import 'package:better_keep/models/attachments/image_attachment.dart';
 import 'package:flutter/material.dart';
 
 /// Custom image builder function type for rendering images in the grid.
 /// Used for custom rendering like blurred thumbnails for locked notes.
 typedef ImageTileBuilder =
-    Widget Function(NoteImage image, int index, int total, BoxFit fit);
+    Widget Function(ImageAttachment image, int index, int total, BoxFit fit);
 
 class NoteImageGrid extends StatelessWidget {
-  final List<NoteImage> images;
-  final Function(NoteImage) onImageTap;
+  final List<ImageAttachment> images;
+  final Function(ImageAttachment) onImageTap;
   final double maxHeight;
   final double gap;
   final int? noteId;
@@ -67,7 +67,7 @@ class NoteImageGrid extends StatelessWidget {
     );
   }
 
-  Widget _buildImageTile(NoteImage image, int index, int total) {
+  Widget _buildImageTile(ImageAttachment image, int index, int total) {
     bool showOverlay = index == 3 && total > 4;
     int remaining = total - 4;
 
@@ -103,7 +103,7 @@ class NoteImageGrid extends StatelessWidget {
     }
 
     Widget imageWidget = UniversalImage(
-      path: image.src,
+      path: image.path,
       fit: fit,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
@@ -123,8 +123,7 @@ class NoteImageGrid extends StatelessWidget {
 
     // Wrap in Hero for smooth transition to note editor
     if (noteId != null) {
-      final heroTag = 'image_${noteId}_${image.src}';
-      imageWidget = Hero(tag: heroTag, child: imageWidget);
+      imageWidget = Hero(tag: image.path, child: imageWidget);
     }
 
     return Container(
@@ -159,15 +158,15 @@ class NoteImageGrid extends StatelessWidget {
 
     // 1 Image
     if (count == 1) {
-      final ratio = images[0].ratio;
+      final ratio = images[0].aspectRatio;
       height = width / ratio;
       if (height > maxHeight) height = maxHeight;
       items.add(Rect.fromLTWH(0, 0, width, height));
     }
     // 2 Images
     else if (count == 2) {
-      final r1 = images[0].ratio;
-      final r2 = images[1].ratio;
+      final r1 = images[0].aspectRatio;
+      final r2 = images[1].aspectRatio;
       // h * r1 + gap + h * r2 = width
       // h * (r1 + r2) = width - gap
       final h = (width - gap) / (r1 + r2);
@@ -179,9 +178,9 @@ class NoteImageGrid extends StatelessWidget {
     }
     // 3 Images
     else if (count == 3) {
-      final r1 = images[0].ratio;
-      final r2 = images[1].ratio;
-      final r3 = images[2].ratio;
+      final r1 = images[0].aspectRatio;
+      final r2 = images[1].aspectRatio;
+      final r3 = images[2].aspectRatio;
 
       final firstIsLandscape = r1 > 1.2;
 
@@ -258,8 +257,8 @@ class NoteImageGrid extends StatelessWidget {
     else {
       // 2 Rows of 2 images (Dynamic widths)
       // Row 1
-      final r1 = images[0].ratio;
-      final r2 = images[1].ratio;
+      final r1 = images[0].aspectRatio;
+      final r2 = images[1].aspectRatio;
       final h1 = (width - gap) / (r1 + r2);
       final w1 = h1 * r1;
 
@@ -267,8 +266,8 @@ class NoteImageGrid extends StatelessWidget {
       items.add(Rect.fromLTWH(w1 + gap, 0, width - w1 - gap, h1));
 
       // Row 2
-      final r3 = images[2].ratio;
-      final r4 = images[3].ratio;
+      final r3 = images[2].aspectRatio;
+      final r4 = images[3].aspectRatio;
       final h2 = (width - gap) / (r3 + r4);
       final w3 = h2 * r3;
 

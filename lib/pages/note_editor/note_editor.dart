@@ -22,8 +22,8 @@ import 'package:better_keep/dialogs/labels.dart';
 import 'package:better_keep/dialogs/lock_note_dialog.dart';
 import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_attachment.dart';
-import 'package:better_keep/models/note_recording.dart';
+import 'package:better_keep/models/attachments/attachment.dart';
+import 'package:better_keep/models/attachments/recording_attachment.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -121,7 +121,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
   }
 
-  void _appendTranscriptToNote(String text, NoteRecording recording) {
+  void _appendTranscriptToNote(String text, RecordingAttachment recording) {
     if (text.isEmpty) return;
 
     final document = _controller.document;
@@ -131,11 +131,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     final plainText = document.toPlainText();
     final firstLineEnd = plainText.indexOf('\n');
     final titleLength = firstLineEnd > 0 ? firstLineEnd : 0;
-
-    // Find the index of this recording in attachments
-    final recordingIndex = _note.recordings.indexWhere(
-      (r) => r.src == recording.src,
-    );
 
     // Create audio tag text with # prefix
     final audioTitle = recording.title ?? 'Audio Recording';
@@ -158,7 +153,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _controller.formatText(
       audioTagStart,
       audioTagLength,
-      LinkAttribute('audio://$recordingIndex'),
+      LinkAttribute('audio://${recording.id}'),
     );
 
     // Make audio tag bold
@@ -268,7 +263,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   }
 
   /// Get recording by audio link index
-  NoteRecording? _getRecordingByIndex(int index) {
+  RecordingAttachment? _getRecordingByIndex(int index) {
     final recordings = _note.recordings;
     if (index >= 0 && index < recordings.length) {
       return recordings[index];
@@ -276,8 +271,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     return null;
   }
 
-  void _scrollToAndPlayAudio(String audioSrc) {
-    final key = _audioPlayerKeys[audioSrc];
+  void _scrollToAndPlayAudio(String audioId) {
+    final key = _audioPlayerKeys[audioId];
     if (key?.currentContext != null) {
       // Scroll to the audio player
       Scrollable.ensureVisible(
@@ -724,15 +719,15 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       final index = entry.key;
                       final recording = entry.value;
                       // Get or create a key for this audio player
-                      _audioPlayerKeys[recording.src] ??= GlobalKey();
+                      _audioPlayerKeys[recording.id] ??= GlobalKey();
                       return NoteAudioPlayer(
-                        key: _audioPlayerKeys[recording.src],
+                        key: _audioPlayerKeys[recording.id],
                         recording: recording,
                         onDelete: () async {
                           // Remove audio tag from document before deleting recording
                           _removeAudioTagsForIndex(index);
-                          await _note.removeRecording(recording.src);
-                          _audioPlayerKeys.remove(recording.src);
+                          await _note.removeRecording(recording.id);
+                          _audioPlayerKeys.remove(recording.id);
                           setState(() {});
                         },
                         onUpdate: (updatedRecording) async {
@@ -1029,7 +1024,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         : Colors.black.withValues(alpha: 0.05);
 
     // For audio links, find the matching recording by index
-    NoteRecording? audioRecording;
+    RecordingAttachment? audioRecording;
     if (isAudioLink) {
       final indexStr = _linkUrl!.substring(8); // Remove 'audio://'
       final index = int.tryParse(indexStr);
@@ -1040,7 +1035,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
     void onTapLink() async {
       if (isAudioLink && audioRecording != null) {
-        _scrollToAndPlayAudio(audioRecording.src);
+        _scrollToAndPlayAudio(audioRecording.id);
       } else if (!isAudioLink) {
         final uri = Uri.parse(_linkUrl!);
         if (await canLaunchUrl(uri)) {
@@ -1176,7 +1171,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   color: foregroundColor,
                 ),
                 onPressed: () {
-                  _scrollToAndPlayAudio(audioRecording!.src);
+                  _scrollToAndPlayAudio(audioRecording!.id);
                 },
               ),
             IconButton(
@@ -1410,7 +1405,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   locked: _note.locked,
                   readOnly: _note.readOnly,
                   attachments: _note.attachments
-                      .map((a) => NoteAttachment.fromJson(a.toJson()))
+                      .map((a) => Attachment.fromJson(a.toJson()))
                       .toList(),
                 );
                 if (_note.locked &&
