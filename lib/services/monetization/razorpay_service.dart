@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:better_keep/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/services/monetization/user_plan.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -71,6 +73,22 @@ class RazorpayService {
 
   // Loading state
   final ValueNotifier<bool> isLoading = ValueNotifier(false);
+
+  // Theme color for Razorpay checkout dialog (hex color without #)
+  // Set this before calling purchaseSubscription to match app theme
+  String _themeColor = 'FFA726'; // Default orange
+
+  /// Set the theme color for Razorpay checkout dialog
+  /// [color] should be a Color object from the current theme
+  void setThemeColor(Color color) {
+    // Convert to hex, pad to 8 chars (AARRGGBB), then take last 6 (RRGGBB)
+    final hex = color.value.toRadixString(16).padLeft(8, '0');
+    _themeColor = hex.substring(2).toUpperCase();
+    AppLogger.log('RazorpayService: Theme color set to #$_themeColor');
+  }
+
+  /// Get the current theme color as hex string with #
+  String get themeColorHex => '#$_themeColor';
 
   // Last error message
   String? _lastError;
@@ -185,31 +203,40 @@ class RazorpayService {
   ///
   /// Creates a subscription in Razorpay and opens checkout.
   /// On successful payment, verifies with backend and activates subscription.
+  /// [currency] defaults to the currently selected currency from SubscriptionService.
   Future<RazorpayPaymentResult> purchaseSubscription({
     required bool yearly,
+    String? currency,
   }) async {
     final user = AuthService.currentUser;
     if (user == null) {
       return RazorpayPaymentResult.failed('Please sign in first');
     }
 
+    // Use provided currency or get from SubscriptionService
+    final selectedCurrency =
+        currency ?? SubscriptionService.instance.selectedCurrency.value.code;
+
     try {
       isLoading.value = true;
       _lastError = null;
 
       // Step 1: Create subscription on backend
-      AppLogger.log('RazorpayService: Creating subscription (yearly: $yearly)');
+      AppLogger.log(
+        'RazorpayService: Creating subscription (yearly: $yearly, currency: $selectedCurrency)',
+      );
 
       final Map<String, dynamic> createData;
       if (_usesLocalServer) {
         createData = await _callCloudFunction('createRazorpaySubscription', {
           'yearly': yearly,
+          'currency': selectedCurrency,
         });
       } else {
         final functions = FirebaseFunctions.instance;
         final createResult = await functions
             .httpsCallable('createRazorpaySubscription')
-            .call({'yearly': yearly});
+            .call({'yearly': yearly, 'currency': selectedCurrency});
         createData = Map<String, dynamic>.from(createResult.data as Map);
       }
 
@@ -303,17 +330,27 @@ class RazorpayService {
     required String description,
     required String email,
   }) async {
+    AppLogger.log(
+      'RazorpayService: _openSubscriptionCheckout called with theme: $themeColorHex',
+    );
     if (kIsWeb) {
+      AppLogger.log(
+        'RazorpayService: Using WEB checkout with theme: $themeColorHex',
+      );
       return razorpay_platform.openSubscriptionCheckout(
         keyId: keyId,
         subscriptionId: subscriptionId,
         name: 'Better Keep',
         description: description,
         email: email,
+        theme: themeColorHex,
       );
     } else if (Platform.isWindows || Platform.isLinux || Platform.isAndroid) {
       // Use browser checkout with local callback server for desktop and Android
       // Android uses this when Google Play billing is not available (e.g., Huawei devices)
+      AppLogger.log(
+        'RazorpayService: Using DESKTOP/ANDROID checkout with theme: $themeColorHex',
+      );
       return _openBrowserSubscriptionCheckout(
         keyId: keyId,
         subscriptionId: subscriptionId,
@@ -334,6 +371,9 @@ class RazorpayService {
     required String email,
   }) async {
     // Import and use the desktop webview implementation
+    AppLogger.log(
+      'RazorpayService: _openBrowserSubscriptionCheckout with theme: $themeColorHex',
+    );
     try {
       final result = await razorpay_platform.openDesktopSubscriptionCheckout(
         keyId: keyId,
@@ -341,6 +381,7 @@ class RazorpayService {
         name: 'Better Keep',
         description: description,
         email: email,
+        theme: themeColorHex,
       );
       return result;
     } catch (e) {

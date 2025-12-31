@@ -38,11 +38,15 @@ Future<RazorpayPaymentResult> openSubscriptionCheckout({
   String? contact,
   String theme = '#FFA726',
 }) async {
+  // ignore: avoid_print
+  print('razorpay_web: openSubscriptionCheckout called with theme: $theme');
   if (!isRazorpayLoaded()) {
     return RazorpayPaymentResult.failed('Razorpay SDK not loaded');
   }
 
   try {
+    // ignore: avoid_print
+    print('razorpay_web: Creating options with theme: $theme');
     final options =
         <String, dynamic>{
               'keyId': keyId,
@@ -177,6 +181,7 @@ Future<RazorpayPaymentResult> openDesktopSubscriptionCheckout({
   required String name,
   required String description,
   required String email,
+  String theme = '#FFA726',
 }) async {
   // On web, this should not be called - use openSubscriptionCheckout instead
   return RazorpayPaymentResult.failed('Use web checkout on this platform');
@@ -190,6 +195,7 @@ Future<RazorpayPaymentResult> openDesktopOrderCheckout({
   required String name,
   required String description,
   required String email,
+  String theme = '#FFA726',
 }) async {
   // On web, this should not be called - use openOrderCheckout instead
   return RazorpayPaymentResult.failed('Use web checkout on this platform');

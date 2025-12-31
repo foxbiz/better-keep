@@ -1,6 +1,7 @@
 {
   "cSpell.words": [
     "androidpublisher",
+    "appbundle",
     "audioplayers",
     "betterkeep",
     "ciphertext",
@@ -10,6 +11,7 @@
     "firestore",
     "foxbiz",
     "Kolkata",
+    "libexec",
     "LTWH",
     "Millis",
     "onmount",
@@ -24,8 +26,10 @@
     "RTDN",
     "Segoe",
     "sqflite",
+    "subcol",
     "subcollection",
     "subcollections",
+    "sublabel",
     "subonce",
     "subscriptionsv",
     "unsub",
@@ -33,5 +37,9 @@
   ],
   "files.associations": {
     "*.env": "dotenv"
-  }
+  },
+  "editor.codeActionsOnSave": {
+    "quickFix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
 }

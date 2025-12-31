@@ -1,7 +1,6 @@
 import 'dart:convert';
-
 import 'package:better_keep/services/file_system.dart';
-import 'package:flutter/rendering.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 
@@ -44,7 +43,9 @@ class AppLogger {
     final prefix = isError ? '!' : '';
     final logMessage = "$prefix[$timestamp] $message";
 
-    debugPrint(logMessage); // Print to debugger
+    if (kDebugMode) {
+      debugPrint(logMessage);
+    }
 
     try {
       final fs = await fileSystem();

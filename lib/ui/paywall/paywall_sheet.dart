@@ -1,4 +1,5 @@
 import 'package:better_keep/services/monetization/monetization.dart';
+import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:flutter/material.dart';
 
 /// Shows the paywall as a full-screen page.
@@ -357,6 +358,26 @@ class _PricingOptionsState extends State<_PricingOptions> {
     if (!_pricesAvailable && !SubscriptionService.instance.usesRazorpay) {
       _loadProducts();
     }
+    // Listen to currency changes to update prices
+    if (SubscriptionService.instance.usesRazorpay) {
+      SubscriptionService.instance.selectedCurrency.addListener(
+        _onCurrencyChanged,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    if (SubscriptionService.instance.usesRazorpay) {
+      SubscriptionService.instance.selectedCurrency.removeListener(
+        _onCurrencyChanged,
+      );
+    }
+    super.dispose();
+  }
+
+  void _onCurrencyChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadProducts() async {
@@ -384,10 +405,12 @@ class _PricingOptionsState extends State<_PricingOptions> {
       );
     }
 
-    // If prices aren't available (web/desktop or products not loaded), show redirect button
+    // If prices aren't available (products not loaded for mobile IAP), show redirect button
     if (!_pricesAvailable) {
       return Column(
         children: [
+          // Currency selector disabled - Razorpay Subscriptions only supports INR
+          // for most Indian merchants. USD requires special approval.
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -416,7 +439,12 @@ class _PricingOptionsState extends State<_PricingOptions> {
 
     return Column(
       children: [
-        // Toggle
+        if (SubscriptionService.instance.usesRazorpay) ...[
+          _buildCurrencySelector(theme),
+          const SizedBox(height: 12),
+        ],
+
+        // Plan period toggle
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
@@ -467,7 +495,56 @@ class _PricingOptionsState extends State<_PricingOptions> {
     );
   }
 
+  Widget _buildCurrencySelector(ThemeData theme) {
+    final currentCurrency = SubscriptionService.instance.selectedCurrency.value;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          'Currency: ',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 8),
+        SegmentedButton<RazorpayCurrency>(
+          segments: [
+            ButtonSegment<RazorpayCurrency>(
+              value: RazorpayCurrency.usd,
+              label: const Text('USD (\$)'),
+            ),
+            ButtonSegment<RazorpayCurrency>(
+              value: RazorpayCurrency.inr,
+              label: const Text('INR (₹)'),
+            ),
+          ],
+          selected: {currentCurrency},
+          onSelectionChanged: (Set<RazorpayCurrency> selected) {
+            SubscriptionService.instance.selectedCurrency.value =
+                selected.first;
+          },
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _handleSubscribe(BuildContext context) async {
+    // Set Razorpay theme color to match the app's primary color
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    debugPrint(
+      'PaywallSheet: Primary color = $primaryColor (value: 0x${primaryColor.value.toRadixString(16)})',
+    );
+    RazorpayService.instance.setThemeColor(primaryColor);
+    debugPrint(
+      'PaywallSheet: After setThemeColor, themeColorHex = ${RazorpayService.instance.themeColorHex}',
+    );
+
     final result = await SubscriptionService.instance.purchaseSubscription(
       yearly: _yearlySelected,
     );
@@ -894,6 +971,17 @@ class _PaywallPageState extends State<PaywallPage> {
   }
 
   Future<void> _handleSubscribe() async {
+    // Set Razorpay theme color to match the app's primary color
+    final themeData = Theme.of(context);
+    final primaryColor = themeData.colorScheme.primary;
+    debugPrint(
+      'PaywallPage: Primary color = $primaryColor (value: 0x${primaryColor.value.toRadixString(16)})',
+    );
+    RazorpayService.instance.setThemeColor(primaryColor);
+    debugPrint(
+      'PaywallPage: After setThemeColor, themeColorHex = ${RazorpayService.instance.themeColorHex}',
+    );
+
     final result = await SubscriptionService.instance.purchaseSubscription(
       yearly: _yearlySelected,
     );

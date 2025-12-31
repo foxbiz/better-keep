@@ -121,8 +121,7 @@ class UserAvatar extends StatefulWidget {
   State<UserAvatar> createState() => _UserAvatarState();
 }
 
-class _UserAvatarState extends State<UserAvatar>
-    with SingleTickerProviderStateMixin {
+class _UserAvatarState extends State<UserAvatar> with TickerProviderStateMixin {
   AnimationController? _animationController;
 
   @override
@@ -147,14 +146,15 @@ class _UserAvatarState extends State<UserAvatar>
 
   void _onSubscriptionChange() {
     if (mounted) {
-      setState(() {
-        _initAnimationIfNeeded();
-        // Dispose animation controller if no longer pro
-        if (!PlanService.instance.isPaid && _animationController != null) {
-          _animationController?.dispose();
-          _animationController = null;
-        }
-      });
+      final isPro = widget.showProBorder && PlanService.instance.isPaid;
+      // Dispose animation controller if no longer pro
+      if (!isPro && _animationController != null) {
+        _animationController?.dispose();
+        _animationController = null;
+      }
+      // Create animation controller if now pro
+      _initAnimationIfNeeded();
+      setState(() {});
     }
   }
 

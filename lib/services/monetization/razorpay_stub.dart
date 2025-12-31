@@ -57,11 +57,15 @@ Future<RazorpayPaymentResult> openDesktopSubscriptionCheckout({
   required String name,
   required String description,
   required String email,
+  String theme = '#FFA726',
 }) async {
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isAndroid) {
     return RazorpayPaymentResult.failed('Platform not supported');
   }
 
+  AppLogger.log(
+    'RazorpayStub: openDesktopSubscriptionCheckout called with theme: $theme',
+  );
   AppLogger.log(
     'RazorpayStub: Opening subscription checkout for $subscriptionId (platform: ${Platform.operatingSystem})',
   );
@@ -74,6 +78,7 @@ Future<RazorpayPaymentResult> openDesktopSubscriptionCheckout({
       'name': name,
       'description': description,
       'email': email,
+      'theme': theme,
     },
   );
 }
@@ -87,6 +92,7 @@ Future<RazorpayPaymentResult> openDesktopOrderCheckout({
   required String name,
   required String description,
   required String email,
+  String theme = '#FFA726',
 }) async {
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isAndroid) {
     return RazorpayPaymentResult.failed('Platform not supported');
@@ -106,6 +112,7 @@ Future<RazorpayPaymentResult> openDesktopOrderCheckout({
       'name': name,
       'description': description,
       'email': email,
+      'theme': theme,
     },
   );
 }
@@ -403,6 +410,7 @@ String _generateCheckoutHtml({
   final name = _escapeJs(params['name'] ?? 'Better Keep Notes');
   final description = _escapeJs(params['description'] ?? '');
   final email = _escapeJs(params['email'] ?? '');
+  final theme = _escapeJs(params['theme'] ?? '#FFA726');
 
   final isSubscription = type == 'subscription';
 
@@ -434,7 +442,7 @@ String _generateCheckoutHtml({
       width: 80px;
       height: 80px;
       margin: 0 auto 24px;
-      background: #FFA726;
+      background: $theme;
       border-radius: 20px;
       display: flex;
       align-items: center;
@@ -452,7 +460,7 @@ String _generateCheckoutHtml({
     }
     .test-badge {
       display: inline-block;
-      background: #ff9800;
+      background: $theme;
       color: #000;
       padding: 4px 12px;
       border-radius: 4px;
@@ -554,7 +562,7 @@ String _generateCheckoutHtml({
         description: '$description',
         image: 'https://betterkeep.app/icons/logo.png',
         prefill: { email: '$email' },
-        theme: { color: '#FFA726' },
+        theme: { color: '$theme' },
         modal: {
           ondismiss: function() { redirectWithResult('cancelled'); },
           escape: true,
@@ -577,7 +585,7 @@ String _generateCheckoutHtml({
         description: '$description',
         image: 'https://betterkeep.app/icons/logo.png',
         prefill: { email: '$email' },
-        theme: { color: '#FFA726' },
+        theme: { color: '$theme' },
         modal: {
           ondismiss: function() { redirectWithResult('cancelled'); },
           escape: true,

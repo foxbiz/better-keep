@@ -21,11 +21,19 @@
    * @param {string} options.theme - Theme color (hex)
    */
   window.openRazorpaySubscription = function (options) {
+    console.log('razorpay_checkout.js: openRazorpaySubscription called');
+    console.log('razorpay_checkout.js: options received:', JSON.stringify(options));
+    console.log('razorpay_checkout.js: theme color:', options.theme);
     return new Promise((resolve, reject) => {
       if (typeof Razorpay === 'undefined') {
         reject({ error: 'Razorpay SDK not loaded' });
         return;
       }
+
+      const themeColor = options.theme || '#FFA726';
+      // Use a dark backdrop to match dark app themes
+      const backdropColor = options.backdropColor || 'rgba(0, 0, 0, 0.7)';
+      console.log('razorpay_checkout.js: Using theme color:', themeColor);
 
       const rzpOptions = {
         key: options.keyId,
@@ -38,7 +46,8 @@
           contact: options.prefillContact || '',
         },
         theme: {
-          color: options.theme || '#FFA726',
+          color: themeColor,
+          backdrop_color: backdropColor,
         },
         modal: {
           ondismiss: function () {

@@ -16,6 +16,16 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Supported currencies for Razorpay payments
+enum RazorpayCurrency {
+  usd('USD', '\$'),
+  inr('INR', '₹');
+
+  const RazorpayCurrency(this.code, this.symbol);
+  final String code;
+  final String symbol;
+}
+
 /// Product IDs for in-app purchases
 class ProductIds {
   /// Subscription product ID (same for both plans)
@@ -66,6 +76,19 @@ class VerifyPurchaseResult {
   });
 }
 
+/// Razorpay pricing by currency
+/// Amounts are in smallest currency unit (cents for USD, paise for INR)
+const Map<RazorpayCurrency, Map<String, int>> razorpayPricing = {
+  RazorpayCurrency.usd: {
+    'monthly': 299, // $2.99
+    'yearly': 1999, // $19.99
+  },
+  RazorpayCurrency.inr: {
+    'monthly': 23000, // ₹230
+    'yearly': 162500, // ₹1625
+  },
+};
+
 /// Handles subscription purchases across platforms.
 ///
 /// - Mobile (iOS/Android): Uses in_app_purchase plugin
@@ -84,6 +107,13 @@ class SubscriptionService {
 
   // Loading state
   final ValueNotifier<bool> isLoading = ValueNotifier(false);
+
+  // Currency selection for Razorpay
+  // NOTE: Razorpay Subscriptions API only supports INR for most Indian merchants.
+  // USD subscriptions require special approval from Razorpay. Default to INR.
+  final ValueNotifier<RazorpayCurrency> selectedCurrency = ValueNotifier(
+    RazorpayCurrency.usd,
+  );
 
   // Last purchase error (for showing to user)
   String? _lastPurchaseError;
@@ -606,10 +636,24 @@ Expected IDs: ${ProductIds.all}
   /// Get display price for a base plan from IAP or Razorpay.
   /// Throws [ProductNotAvailableException] if product is not loaded.
   String getDisplayPrice({required bool yearly}) {
-    // For Razorpay platforms (web, Windows, Linux), return fixed INR prices
+    // For Razorpay platforms (web, Windows, Linux), return prices based on selected currency
     if (usesRazorpay) {
-      // Razorpay prices: ₹230/month, ₹1625/year
-      return yearly ? '₹1,625' : '₹230';
+      final currency = selectedCurrency.value;
+      final pricing = razorpayPricing[currency]!;
+      final amount = yearly ? pricing['yearly']! : pricing['monthly']!;
+      // Format based on currency
+      if (currency == RazorpayCurrency.inr) {
+        // Format INR: ₹1,625 or ₹230
+        final formatted = (amount / 100).toStringAsFixed(0);
+        final withCommas = formatted.replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
+        return '₹$withCommas';
+      } else {
+        // Format USD: $19.99 or $2.99
+        return '\$${(amount / 100).toStringAsFixed(2)}';
+      }
     }
 
     // Try to get price from loaded products
@@ -673,11 +717,12 @@ Expected IDs: ${ProductIds.all}
   /// Get raw price values for calculating savings.
   /// Throws [ProductNotAvailableException] if product is not loaded.
   (double, double) getRawPrices() {
-    // For Razorpay platforms (web, Windows, Linux), return fixed INR prices
+    // For Razorpay platforms (web, Windows, Linux), return prices based on selected currency
     if (usesRazorpay) {
-      // Razorpay prices: ₹230/month, ₹1625/year
-      // Monthly * 12 = ₹2760, Yearly = ₹1625 (save ₹1135 = ~41%)
-      return (230.0, 1625.0);
+      final currency = selectedCurrency.value;
+      final pricing = razorpayPricing[currency]!;
+      final divisor = currency == RazorpayCurrency.inr ? 100.0 : 100.0;
+      return (pricing['monthly']! / divisor, pricing['yearly']! / divisor);
     }
 
     final product = _products.cast<ProductDetails?>().firstWhere(
@@ -802,9 +847,16 @@ Expected IDs: ${ProductIds.all}
     }
 
     // Also check Firebase for existing subscription (backup check)
+    // Backend now properly excludes trial subscriptions
     try {
       isLoading.value = true;
+      AppLogger.log(
+        'SubscriptionService: Calling checkExistingSubscription...',
+      );
       final existingCheck = await checkExistingSubscription();
+      AppLogger.log(
+        'SubscriptionService: checkExistingSubscription result - hasSubscription: ${existingCheck.hasSubscription}, restored: ${existingCheck.restored}',
+      );
 
       if (existingCheck.hasSubscription) {
         isLoading.value = false;

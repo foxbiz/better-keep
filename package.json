@@ -4,6 +4,7 @@
   "description": "Better Keep Notes - Build Scripts",
   "scripts": {
     "firebase-emulators": "export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && cd /Users/ajit/Documents/work/better-keep && firebase emulators:start",
+    "build:functions": "cd functions && npm install && npm run build",
     "build:windows": "flutter build windows --release --dart-define-from-file=.env && dart run msix:create --build-windows=false",
     "build:android": "flutter build appbundle --release --dart-define-from-file=.env",
     "build:web": "flutter build web --release --dart-define-from-file=.env"
