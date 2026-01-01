@@ -1,0 +1,17 @@
+[
+  {
+    "origin": [
+      "http://localhost:63630",
+      "https://better-keep-notes.web.app",
+      "https://keep.foxbiz.io",
+      "https://betterkeep.app"
+    ],
+    "method": [
+      "GET",
+      "PUT",
+      "POST",
+      "DELETE"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

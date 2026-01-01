@@ -1,0 +1,16 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.foxbiz.better_keep",
+      "sha256_cert_fingerprints": [
+        "6F:D4:7C:DE:8F:E8:D4:CE:BA:02:A4:8D:79:06:F2:31:24:61:CA:66:D4:42:66:59:B1:5A:C6:07:1D:7C:E3:AC",
+        "38:9F:A2:B8:61:B7:21:AB:33:1F:5C:7A:F7:11:B6:6E:58:FB:A1:D8:74:30:E2:56:9E:F7:5A:8A:3F:6A:88:7C"
+      ]
+    }
+  }
+]

@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Better Keep Notes Security - Your notes are protected with AES-256 end-to-end encryption. Only you can read your notes, not even we can access them.">
+  <meta name="keywords"
+    content="Better Keep Notes, security, encryption, end-to-end encryption, E2EE, AES-256, private notes, secure notes app">
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="canonical" href="https://betterkeep.app/encryption" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Security & Encryption - Better Keep Notes">
+  <meta property="og:description"
+    content="Your notes are protected with AES-256 end-to-end encryption. Only you can read your notes.">
+  <meta property="og:image" content="https://betterkeep.app/icons/logo.png">
+  <meta property="og:url" content="https://betterkeep.app/encryption">
+  <meta property="og:site_name" content="Better Keep Notes">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Security & Encryption - Better Keep Notes">
+  <meta name="twitter:description"
+    content="Your notes are protected with AES-256 end-to-end encryption. Only you can read your notes.">
+  <meta name="twitter:image" content="https://betterkeep.app/icons/logo.png">
+
+  <title>Security & Encryption - Better Keep Notes</title>
+  <style>
+    :root {
+      --primary: #FFD54F;
+      --primary-dark: #FFC107;
+      --primary-light: #FFECB3;
+      --accent: #7C4DFF;
+      --accent-dark: #536DFE;
+      --bg-dark: #121212;
+      --bg-darker: #0a0a0a;
+      --bg-card: #1E1E1E;
+      --bg-card-hover: #2A2A2A;
+      --text-primary: #FFFFFF;
+      --text-secondary: #B0B0B0;
+      --text-muted: #757575;
+      --gradient-start: #FFD54F;
+      --gradient-end: #FF8A65;
+      --success: #66BB6A;
+      --danger: #EF5350;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+      --transition-fast: 0.2s ease;
+      --transition-normal: 0.3s ease;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.8;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      padding: 1rem 2rem;
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .nav-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    .nav-brand span {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--primary);
+    }
+
+    .btn-launch {
+      background: linear-gradient(135deg, #7C4DFF, #536DFE);
+      color: #ffffff;
+      padding: 0.6rem 1.5rem;
+      border-radius: 25px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-launch:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(124, 77, 255, 0.4);
+      color: #ffffff;
+    }
+
+    /* Mobile Menu */
+    .mobile-menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem;
+      z-index: 1001;
+    }
+
+    .mobile-menu-toggle span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text-primary);
+      margin: 5px 0;
+      transition: var(--transition-normal);
+      border-radius: 2px;
+    }
+
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(18, 18, 18, 0.98);
+      backdrop-filter: blur(20px);
+      z-index: 999;
+      padding: 5rem 2rem 2rem;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+
+    .mobile-nav.active {
+      display: flex;
+    }
+
+    .mobile-nav a {
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 1.25rem;
+      font-weight: 500;
+      padding: 0.75rem 1.5rem;
+      transition: var(--transition-normal);
+    }
+
+    /* Main Content */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 8rem 2rem 4rem;
+    }
+
+    /* Hero Section */
+    .hero {
+      text-align: center;
+      padding: 2rem 0 4rem;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Content Sections */
+    .section {
+      margin-bottom: 4rem;
+    }
+
+    .section h2 {
+      font-size: 1.75rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--primary);
+      display: inline-block;
+    }
+
+    .section p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    .section ul {
+      color: var(--text-secondary);
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .section li {
+      margin-bottom: 0.5rem;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .card h3 {
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .card h3 svg {
+      color: var(--primary);
+    }
+
+    /* Features Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .feature-card svg {
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+
+    .feature-card h3 {
+      margin-bottom: 0.5rem;
+    }
+
+    .feature-card p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    /* Code Block */
+    .code-block {
+      background: var(--bg-darker);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--success);
+      border: 1px solid var(--border-subtle);
+    }
+
+    /* Alert */
+    .alert {
+      padding: 1rem 1.5rem;
+      border-radius: var(--radius-md);
+      margin: 1.5rem 0;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .alert svg {
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .alert-success {
+      background: rgba(102, 187, 106, 0.15);
+      border: 1px solid rgba(102, 187, 106, 0.3);
+    }
+
+    .alert-success svg {
+      color: var(--success);
+    }
+
+    /* Encryption Flow Diagram */
+    .encryption-flow {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      margin: 2rem 0;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .flow-step {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 0;
+      position: relative;
+    }
+
+    .flow-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 20px;
+      bottom: 0;
+      width: 2px;
+      height: 20px;
+      background: var(--border-subtle);
+    }
+
+    .flow-icon {
+      width: 42px;
+      height: 42px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .flow-icon svg {
+      color: var(--bg-dark);
+    }
+
+    .flow-content h4 {
+      margin-bottom: 0.25rem;
+    }
+
+    .flow-content p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 6rem;
+      padding: 2rem;
+      text-align: center;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color var(--transition-fast);
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    .footer-copyright {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-toggle {
+        display: block;
+      }
+
+      .hero h1 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <nav>
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="icons/logo.png" alt="Better Keep Notes">
+        <span>Better Keep Notes</span>
+      </a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="encryption.html" class="active">Security</a>
+        <a href="open-source.html">Open Source</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="/#download" class="btn-launch">Get the App</a>
+      </div>
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="mobile-nav" id="mobileNav">
+    <a href="/">Home</a>
+    <a href="pricing.html">Pricing</a>
+    <a href="encryption.html">Security</a>
+    <a href="open-source.html">Open Source</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="/#download" class="btn-launch">Get the App</a>
+  </div>
+
+  <main>
+    <section class="hero">
+      <h1>🔐 Security & Encryption</h1>
+      <p>Your notes are protected with industry-standard end-to-end encryption. Only you can read them.</p>
+    </section>
+
+    <!-- Overview -->
+    <section class="section">
+      <h2>Security Overview</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <h3>End-to-End Encryption</h3>
+          <p>Notes are encrypted on your device before being uploaded. We cannot read your data.</p>
+        </div>
+        <div class="feature-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          <h3>Zero-Knowledge Architecture</h3>
+          <p>Your encryption keys never leave your devices. Even we can't decrypt your notes.</p>
+        </div>
+        <div class="feature-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+          </svg>
+          <h3>No Metadata Leakage</h3>
+          <p>Note titles, labels, and content are all encrypted. Only timestamps are visible.</p>
+        </div>
+        <div class="feature-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+          <h3>Open Source Crypto</h3>
+          <p>We use well-audited cryptographic libraries. No custom "security through obscurity".</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Encryption Details -->
+    <section class="section">
+      <h2>Technical Details</h2>
+
+      <div class="card">
+        <h3>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 6v6l4 2"></path>
+          </svg>
+          Cryptographic Algorithms
+        </h3>
+        <ul>
+          <li><strong>Symmetric Encryption:</strong> AES-256-GCM for note content</li>
+          <li><strong>Key Derivation:</strong> PBKDF2 with SHA-256, 100,000 iterations</li>
+          <li><strong>Key Exchange:</strong> X25519 (Curve25519 ECDH)</li>
+          <li><strong>Digital Signatures:</strong> Ed25519 for device verification</li>
+          <li><strong>Random Number Generation:</strong> Platform-native CSPRNG</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          Key Management
+        </h3>
+        <p>Your encryption keys are generated on your device and never transmitted to our servers.</p>
+        <ul>
+          <li><strong>Master Key:</strong> Derived from your account credentials using PBKDF2</li>
+          <li><strong>Device Keys:</strong> Unique keypair generated per device</li>
+          <li><strong>Note Keys:</strong> Random symmetric key per note, encrypted with your master key</li>
+          <li><strong>Recovery Key:</strong> Optional 24-word mnemonic for account recovery</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- How E2EE Works -->
+    <section class="section">
+      <h2>How End-to-End Encryption Works</h2>
+
+      <div class="encryption-flow">
+        <div class="flow-step">
+          <div class="flow-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </div>
+          <div class="flow-content">
+            <h4>1. You Write a Note</h4>
+            <p>Your note exists only in memory on your device.</p>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <div class="flow-content">
+            <h4>2. Local Encryption</h4>
+            <p>A unique AES-256-GCM key is generated. Your note is encrypted with this key.</p>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <div class="flow-content">
+            <h4>3. Key Encryption</h4>
+            <p>The note's key is encrypted with your master key (derived from your credentials).</p>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+          </div>
+          <div class="flow-content">
+            <h4>4. Secure Upload</h4>
+            <p>Only encrypted data is sent to our servers over TLS. We never see plaintext.</p>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+          </div>
+          <div class="flow-content">
+            <h4>5. Sync to Other Devices</h4>
+            <p>Your other devices decrypt using your master key. Notes are readable only by you.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-success">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <div>
+          <strong>Result:</strong> Even if someone gains access to our servers, they cannot read your notes. Only
+          devices with your master key can decrypt them.
+        </div>
+      </div>
+    </section>
+
+    <!-- Locked Notes -->
+    <section class="section">
+      <h2>PIN-Protected Notes</h2>
+      <p>
+        Locked notes add an additional layer of encryption on top of the standard E2EE.
+        When you lock a note with a PIN:
+      </p>
+      <ul>
+        <li>The note content is encrypted with a key derived from your PIN</li>
+        <li>This encrypted content is then encrypted again with your master key for sync</li>
+        <li>The PIN never leaves your device or gets stored anywhere</li>
+        <li>If you forget your PIN, the note cannot be recovered (by design)</li>
+      </ul>
+      <div class="code-block">
+        Locked Note = E2EE( PIN_Encrypt( Your Note ) )
+      </div>
+    </section>
+
+    <!-- What We Can See -->
+    <section class="section">
+      <h2>What We Can See vs. Cannot See</h2>
+
+      <div class="card">
+        <h3>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          What We CAN See (Metadata)
+        </h3>
+        <ul>
+          <li>Your email address (for authentication)</li>
+          <li>Timestamps of when notes were created/modified</li>
+          <li>Encrypted blob sizes (how big encrypted notes are)</li>
+          <li>Device information (for multi-device sync)</li>
+          <li>Aggregate usage statistics (anonymized)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+            </path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+          What We CANNOT See
+        </h3>
+        <ul>
+          <li>Note titles</li>
+          <li>Note content (text, checklists, etc.)</li>
+          <li>Labels/tags</li>
+          <li>Colors</li>
+          <li>Attachment contents (images, files)</li>
+          <li>Anything inside your notes</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Recovery -->
+    <section class="section">
+      <h2>Account Recovery</h2>
+      <p>
+        Because we use true end-to-end encryption, we cannot reset your encryption keys if you lose access.
+        That's why we provide a <strong>recovery key</strong> when you set up E2EE.
+      </p>
+      <div class="card">
+        <h3>Recovery Key</h3>
+        <p>
+          Your recovery key is a 24-word mnemonic phrase that can restore access to your encrypted notes.
+          Store it somewhere safe—if you lose both your device access and recovery key, your encrypted notes cannot be
+          recovered.
+        </p>
+        <div class="code-block">
+          Example: abandon ability able about above absent absorb abstract ...
+          (Store your actual recovery key securely, not in digital notes!)
+        </div>
+      </div>
+    </section>
+
+    <!-- Security Practices -->
+    <section class="section">
+      <h2>Our Security Practices</h2>
+      <ul>
+        <li><strong>Regular audits:</strong> We regularly review our cryptographic implementation</li>
+        <li><strong>Dependency updates:</strong> Security patches are applied promptly</li>
+        <li><strong>Open source:</strong> Our encryption code is open for inspection</li>
+        <li><strong>No telemetry:</strong> We don't collect analytics on your note content</li>
+        <li><strong>Secure infrastructure:</strong> Firebase/GCP with SOC 2 compliance</li>
+        <li><strong>TLS everywhere:</strong> All data in transit is encrypted</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="encryption.html">Security</a>
+      <a href="open-source.html">Open Source</a>
+      <a href="faqs.html">FAQs</a>
+    </div>
+    <p class="footer-copyright">© 2025 Better Keep Notes. All rights reserved.</p>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const mobileNav = document.getElementById('mobileNav');
+      const toggle = document.querySelector('.mobile-menu-toggle');
+      mobileNav.classList.toggle('active');
+      toggle.classList.toggle('active');
+    }
+  </script>
+</body>
+
+</html>

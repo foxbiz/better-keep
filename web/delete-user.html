@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Delete Your Account - Better Keep Notes. Learn how to delete your data and what happens when you do.">
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <title>Delete Your Account - Better Keep Notes</title>
+  <style>
+    :root {
+      --primary: #FFD54F;
+      --primary-dark: #FFC107;
+      --primary-light: #FFECB3;
+      --accent: #7C4DFF;
+      --accent-dark: #536DFE;
+      --bg-dark: #121212;
+      --bg-darker: #0a0a0a;
+      --bg-card: #1E1E1E;
+      --bg-card-hover: #2A2A2A;
+      --text-primary: #FFFFFF;
+      --text-secondary: #B0B0B0;
+      --text-muted: #757575;
+      --gradient-start: #FFD54F;
+      --gradient-end: #FF8A65;
+      --danger: #EF5350;
+      --danger-dark: #C62828;
+      --success: #66BB6A;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+      --transition-fast: 0.2s ease;
+      --transition-normal: 0.3s ease;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.8;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      padding: 1rem 2rem;
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .nav-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    .nav-brand span {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--primary);
+    }
+
+    .btn-launch {
+      background: linear-gradient(135deg, #7C4DFF, #536DFE);
+      color: #ffffff;
+      padding: 0.6rem 1.5rem;
+      border-radius: 25px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-launch:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(124, 77, 255, 0.4);
+      color: #ffffff;
+    }
+
+    /* Mobile Menu */
+    .mobile-menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem;
+      z-index: 1001;
+    }
+
+    .mobile-menu-toggle span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text-primary);
+      margin: 5px 0;
+      transition: var(--transition-normal);
+      border-radius: 2px;
+    }
+
+    .mobile-menu-toggle.active span:nth-child(1) {
+      transform: rotate(45deg) translate(5px, 5px);
+    }
+
+    .mobile-menu-toggle.active span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .mobile-menu-toggle.active span:nth-child(3) {
+      transform: rotate(-45deg) translate(5px, -5px);
+    }
+
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(18, 18, 18, 0.98);
+      backdrop-filter: blur(20px);
+      z-index: 999;
+      padding: 5rem 2rem 2rem;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+
+    .mobile-nav.active {
+      display: flex;
+    }
+
+    .mobile-nav a {
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 1.25rem;
+      font-weight: 500;
+      padding: 0.75rem 1.5rem;
+      transition: var(--transition-normal);
+    }
+
+    .mobile-nav a:hover {
+      color: var(--primary);
+    }
+
+    /* Main Content */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 8rem 2rem 4rem;
+    }
+
+    .page-header {
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .page-header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #EF5350, #FF8A65);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .page-header .last-updated {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    .content-section {
+      margin-bottom: 2.5rem;
+    }
+
+    .content-section h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: var(--primary);
+    }
+
+    .content-section h3 {
+      font-size: 1.2rem;
+      margin: 1.5rem 0 0.75rem;
+      color: var(--text-primary);
+    }
+
+    .content-section p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    .content-section ul,
+    .content-section ol {
+      color: var(--text-secondary);
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .content-section li {
+      margin-bottom: 0.5rem;
+    }
+
+    .content-section a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .content-section a:hover {
+      text-decoration: underline;
+    }
+
+    .highlight-box {
+      background: var(--bg-card);
+      border-left: 4px solid var(--primary);
+      padding: 1.5rem;
+      border-radius: 0 12px 12px 0;
+      margin: 1.5rem 0;
+    }
+
+    .highlight-box p {
+      margin-bottom: 0;
+    }
+
+    .warning-box {
+      background: rgba(239, 83, 80, 0.1);
+      border-left: 4px solid var(--danger);
+      padding: 1.5rem;
+      border-radius: 0 12px 12px 0;
+      margin: 1.5rem 0;
+    }
+
+    .warning-box p {
+      margin-bottom: 0;
+      color: var(--text-secondary);
+    }
+
+    .warning-box strong {
+      color: var(--danger);
+    }
+
+    .success-box {
+      background: rgba(102, 187, 106, 0.1);
+      border-left: 4px solid var(--success);
+      padding: 1.5rem;
+      border-radius: 0 12px 12px 0;
+      margin: 1.5rem 0;
+    }
+
+    .success-box p {
+      margin-bottom: 0;
+    }
+
+    .steps-container {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 2rem;
+      margin: 1.5rem 0;
+    }
+
+    .step {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .step:last-child {
+      margin-bottom: 0;
+    }
+
+    .step-number {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #FFD54F, #FF8A65);
+      color: #000;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step-content h4 {
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .step-content p {
+      color: var(--text-secondary);
+      margin-bottom: 0;
+      font-size: 0.95rem;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      background: var(--bg-card);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .data-table th,
+    .data-table td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .data-table th {
+      background: rgba(255, 213, 79, 0.1);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .data-table td {
+      color: var(--text-secondary);
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .badge-deleted {
+      background: rgba(239, 83, 80, 0.2);
+      color: var(--danger);
+    }
+
+    .badge-retained {
+      background: rgba(102, 187, 106, 0.2);
+      color: var(--success);
+    }
+
+    .timeline {
+      position: relative;
+      padding-left: 2rem;
+      margin: 1.5rem 0;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--primary), var(--danger));
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 1.5rem;
+      padding-left: 1rem;
+    }
+
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -2rem;
+      top: 0.5rem;
+      width: 12px;
+      height: 12px;
+      background: var(--bg-dark);
+      border: 2px solid var(--primary);
+      border-radius: 50%;
+    }
+
+    .timeline-item.danger::before {
+      border-color: var(--danger);
+    }
+
+    .timeline-item h4 {
+      color: var(--text-primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .timeline-item p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin: 0;
+    }
+
+    /* Footer */
+    footer {
+      background: #0a0a0a;
+      padding: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      text-align: center;
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    .footer-content p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-toggle {
+        display: block;
+      }
+
+      nav {
+        padding: 0.75rem 1rem;
+      }
+
+      .page-header h1 {
+        font-size: 1.75rem;
+      }
+
+      main {
+        padding: 5rem 1rem 2rem;
+      }
+
+      .content-section h2 {
+        font-size: 1.25rem;
+      }
+
+      .content-section h3 {
+        font-size: 1.1rem;
+      }
+
+      .data-table {
+        font-size: 0.85rem;
+      }
+
+      .data-table th,
+      .data-table td {
+        padding: 0.75rem 0.5rem;
+      }
+
+      .steps-container {
+        padding: 1.5rem;
+      }
+
+      .step {
+        gap: 0.75rem;
+      }
+
+      .step-number {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+      }
+
+      .timeline {
+        padding-left: 1.5rem;
+      }
+
+      .footer-links {
+        gap: 1rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-header h1 {
+        font-size: 1.5rem;
+      }
+
+      .content-section {
+        margin-bottom: 2rem;
+      }
+
+      .content-section ul,
+      .content-section ol {
+        margin-left: 1rem;
+      }
+
+      .data-table {
+        font-size: 0.8rem;
+      }
+
+      .data-table th,
+      .data-table td {
+        padding: 0.5rem;
+      }
+
+      .badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+      }
+
+      .highlight-box,
+      .warning-box,
+      .success-box {
+        padding: 1rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Navigation -->
+  <nav>
+    <div class="nav-container">
+      <a href="/welcome" class="nav-brand">
+        <img src="icons/logo.png" alt="Better Keep Notes Logo">
+        <span>Better Keep Notes</span>
+      </a>
+      <div class="nav-links">
+        <a href="/welcome">Home</a>
+        <a href="/faqs">FAQ</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/delete-user" class="active">Delete Account</a>
+        <a href="/" class="btn-launch">Launch App</a>
+      </div>
+      <button class="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Navigation -->
+  <div class="mobile-nav" id="mobileNav">
+    <a href="/welcome">Home</a>
+    <a href="/faqs">FAQ</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="/delete-user" class="active">Delete Account</a>
+    <a href="/" class="btn-launch">Launch App</a>
+  </div>
+
+  <!-- Main Content -->
+  <main>
+    <header class="page-header">
+      <h1>Delete Your Account</h1>
+      <p class="last-updated">Last Updated: December 21, 2025</p>
+    </header>
+
+    <section class="content-section">
+      <h2>Overview</h2>
+      <p>At Better Keep Notes, we respect your right to control your personal data. This page explains how you
+        can request deletion of your account and data, what data will be deleted, the deletion timeline, and
+        how you can recover your account if you change your mind.</p>
+
+      <div class="highlight-box">
+        <p><strong>Your Rights:</strong> Under data protection regulations including GDPR and similar laws, you
+          have the right to request deletion of your personal data. We make this process straightforward and
+          transparent.</p>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>How to Delete Your Account</h2>
+      <p>You can request account deletion directly from within the Better Keep Notes app:</p>
+
+      <div class="steps-container">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h4>Open the App</h4>
+            <p>Launch Better Keep Notes on any of your devices and sign in to your account.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h4>Go to Your Profile</h4>
+            <p>Tap on your profile picture or avatar in the top corner to access your account settings.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h4>Find "Danger Zone"</h4>
+            <p>Scroll down to the "Danger Zone" section at the bottom of your profile page.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <h4>Tap "Delete My Account"</h4>
+            <p>Click the "Delete My Account" button. A warning dialog will appear explaining the consequences.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">5</div>
+          <div class="step-content">
+            <h4>Confirm Deletion</h4>
+            <p>Review the warning carefully and tap "Delete Account" to proceed to the verification step.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">6</div>
+          <div class="step-content">
+            <h4>Verify Your Email</h4>
+            <p>A 6-digit verification code will be sent to your registered email address. Enter this code to
+              confirm you own the account. The code expires in 10 minutes.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">7</div>
+          <div class="step-content">
+            <h4>Deletion Scheduled</h4>
+            <p>Once verified, your account will be scheduled for permanent deletion after 30 days. You can cancel
+              by signing back in during this grace period.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">8</div>
+          <div class="step-content">
+            <h4>Export Your Data (Optional)</h4>
+            <p>After deletion is scheduled, you'll be offered to export your data before being signed out.
+              Click "Export Data" to download a ZIP file containing all your notes and attachments, or "Skip"
+              to sign out immediately.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="success-box">
+        <p><strong>💡 Tip:</strong> We strongly recommend exporting your data when prompted after scheduling deletion.
+          The export includes all your notes, labels, and attachments in a portable ZIP format that you can
+          keep for your records or import into other applications.</p>
+      </div>
+
+      <h3>Alternative: Contact Us</h3>
+      <p>If you cannot access the app or prefer to request deletion via email, you can contact us at
+        <a href="mailto:contact@betterkeep.app">contact@betterkeep.app</a> with the subject line "Account Deletion
+        Request".
+        Please include the email address associated with your account for verification.
+      </p>
+    </section>
+
+    <section class="content-section">
+      <h2>What Data Will Be Deleted</h2>
+      <p>When your account deletion is processed, the following data will be permanently removed from our
+        servers:</p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Data Type</th>
+            <th>Description</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Account Information</strong></td>
+            <td>Your email address, display name, and profile photo</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+          <tr>
+            <td><strong>Notes & Content</strong></td>
+            <td>All notes, checklists, sketches, and text content you've created</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+          <tr>
+            <td><strong>Labels & Organization</strong></td>
+            <td>All labels, categories, and organizational structures</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+          <tr>
+            <td><strong>Attachments & Media</strong></td>
+            <td>Images, voice recordings, and other media files attached to notes</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+          <tr>
+            <td><strong>Encryption Keys</strong></td>
+            <td>Device keys and encryption data used for end-to-end encryption</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+          <tr>
+            <td><strong>Device Information</strong></td>
+            <td>List of registered devices and approval requests</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+          <tr>
+            <td><strong>User Preferences</strong></td>
+            <td>App settings, theme preferences, and notification settings</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+          <tr>
+            <td><strong>Firebase Authentication</strong></td>
+            <td>Your authentication credentials and sign-in methods</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="warning-box">
+        <p><strong>⚠️ Important:</strong> Once the 30-day grace period ends, all data deletion is permanent and
+          irreversible. We cannot recover your notes or any other data after this point.</p>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>Data Retention During Deletion</h2>
+      <p>Some data may be retained for limited periods even after account deletion for the following purposes:</p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Data Type</th>
+            <th>Retention Period</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Server Logs</strong></td>
+            <td>Up to 90 days</td>
+            <td>Security monitoring and abuse prevention</td>
+          </tr>
+          <tr>
+            <td><strong>Backup Archives</strong></td>
+            <td>Up to 30 days</td>
+            <td>Disaster recovery (automatically purged)</td>
+          </tr>
+          <tr>
+            <td><strong>Legal Hold Data</strong></td>
+            <td>As required by law</td>
+            <td>Legal compliance and regulatory requirements</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Note: Any retained data is anonymized or encrypted and cannot be used to identify you or access your
+        content.</p>
+    </section>
+
+    <section class="content-section">
+      <h2>Deletion Timeline</h2>
+      <p>Your account deletion follows this timeline:</p>
+
+      <div class="timeline">
+        <div class="timeline-item">
+          <h4>Day 0: Deletion Requested</h4>
+          <p>You confirm account deletion. Your account is immediately signed out and marked for deletion.</p>
+        </div>
+        <div class="timeline-item">
+          <h4>Days 1-29: Grace Period</h4>
+          <p>Your data remains intact but inaccessible. You can cancel deletion by signing back in during this
+            period.</p>
+        </div>
+        <div class="timeline-item danger">
+          <h4>Day 30: Permanent Deletion</h4>
+          <p>All your data is permanently and irreversibly deleted from our servers. No recovery is possible
+            after this point.</p>
+        </div>
+        <div class="timeline-item danger">
+          <h4>Day 30-60: Backup Purge</h4>
+          <p>Data is removed from backup systems as they cycle through normal retention periods.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>How to Cancel Deletion (Recovery)</h2>
+      <p>Changed your mind? You can recover your account during the 30-day grace period:</p>
+
+      <div class="success-box">
+        <p><strong>✓ Recovery is Simple:</strong> Simply sign back into Better Keep Notes with your Google account
+          within 30 days of requesting deletion. Your deletion request will be automatically cancelled and all
+          your data will be restored.</p>
+      </div>
+
+      <h3>Recovery Steps</h3>
+      <ol>
+        <li>Open Better Keep Notes on any device</li>
+        <li>Tap "Sign In" and use your Google account</li>
+        <li>Your scheduled deletion will be automatically cancelled</li>
+        <li>All your notes and data will be available again</li>
+      </ol>
+
+      <div class="warning-box">
+        <p><strong>⚠️ Time Limit:</strong> Recovery is only possible during the 30-day grace period. After
+          day 30, your data is permanently deleted and cannot be recovered by any means.</p>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>Local Data</h2>
+      <p>In addition to server data, Better Keep Notes stores data locally on your device. When you delete your
+        account:</p>
+
+      <ul>
+        <li><strong>Automatic Cleanup:</strong> Local data is cleared when you are signed out after requesting
+          deletion.</li>
+        <li><strong>Manual Cleanup:</strong> You can also uninstall the app to remove all local data.</li>
+        <li><strong>Other Devices:</strong> Local data on other devices will be cleared when you next open
+          the app on those devices.</li>
+      </ul>
+
+      <h3>To Manually Clear Local Data</h3>
+      <p>If you want to ensure all local data is removed:</p>
+      <ul>
+        <li><strong>Android:</strong> Go to Settings → Apps → Better Keep Notes → Storage → Clear Data</li>
+        <li><strong>iOS:</strong> Uninstall and reinstall the app, or delete the app entirely</li>
+        <li><strong>Web:</strong> Clear your browser's site data for Better Keep Notes</li>
+        <li><strong>Desktop:</strong> Uninstall the application and delete the app data folder</li>
+      </ul>
+    </section>
+
+    <section class="content-section">
+      <h2>Export Your Data</h2>
+      <p>Before deleting your account, you can export all your data to keep a local backup. The export feature
+        creates a ZIP file containing:</p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>File/Folder</th>
+            <th>Contents</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>notes/</strong></td>
+            <td>Unlocked notes exported as individual Markdown (.md) files, preserving formatting</td>
+          </tr>
+          <tr>
+            <td><strong>locked_notes.json</strong></td>
+            <td>Locked (encrypted) notes in JSON format with encrypted content preserved</td>
+          </tr>
+          <tr>
+            <td><strong>labels.json</strong></td>
+            <td>All your labels and categories</td>
+          </tr>
+          <tr>
+            <td><strong>attachments/</strong></td>
+            <td>All images, audio recordings, and sketches organized by note</td>
+          </tr>
+          <tr>
+            <td><strong>metadata.json</strong></td>
+            <td>Export information and statistics</td>
+          </tr>
+          <tr>
+            <td><strong>README.txt</strong></td>
+            <td>Documentation explaining the export format</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>How to Export</h3>
+      <div class="steps-container">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h4>Start the Deletion Process</h4>
+            <p>Follow the account deletion steps above (go to Profile → Danger Zone → Delete My Account).</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h4>Complete Email Verification</h4>
+            <p>Enter the 6-digit verification code sent to your email to confirm your identity.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h4>Choose "Export Data"</h4>
+            <p>After deletion is scheduled, you'll see an option to export your data. Click "Export Data".</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <h4>Save the ZIP File</h4>
+            <p>The ZIP file will be saved to your Downloads folder (or Documents on mobile). You can also share
+              it to cloud storage or other apps.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="highlight-box">
+        <p><strong>Data Portability:</strong> Unlocked notes are exported as Markdown files, which are universally
+          compatible and can be opened in any text editor or note-taking app. Locked notes remain encrypted in
+          JSON format for security. This ensures you always have access to your data.</p>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>Before You Delete</h2>
+      <p>We recommend taking these steps before deleting your account:</p>
+
+      <ol>
+        <li><strong>Export Your Data:</strong> Use the app's export feature to download a backup of your notes
+          before deletion.</li>
+        <li><strong>Check All Devices:</strong> Make sure you have access to any notes stored only locally on
+          other devices.</li>
+        <li><strong>Save Important Information:</strong> Copy any critical information to another location.</li>
+        <li><strong>Review Shared Content:</strong> If you've shared any notes, inform collaborators before
+          deletion.</li>
+      </ol>
+    </section>
+
+    <section class="content-section">
+      <h2>Frequently Asked Questions</h2>
+
+      <h3>Why do I need to verify my email to delete my account?</h3>
+      <p>Email verification is an additional security measure to confirm you truly own the account being deleted.
+        This protects against unauthorized deletion if someone gains access to your device. We send a 6-digit
+        code to your registered email that expires in 10 minutes.</p>
+
+      <h3>I didn't receive the verification code. What should I do?</h3>
+      <p>Check your spam or junk folder first. The email is sent from <strong>noreply@betterkeep.app</strong>.
+        If you still don't see it after a few minutes, try requesting a new code. Make sure the email address
+        on your account is correct and accessible.</p>
+
+      <h3>Can I delete specific notes instead of my entire account?</h3>
+      <p>Yes! You can delete individual notes by moving them to trash and then emptying the trash. You don't
+        need to delete your entire account to remove specific content.</p>
+
+      <h3>Will my notes be visible to anyone during the grace period?</h3>
+      <p>No. Once you request deletion, your account is signed out and your data becomes inaccessible to
+        everyone, including you (unless you cancel the deletion by signing back in).</p>
+
+      <h3>Can Better Keep Notes staff access my data during deletion?</h3>
+      <p>No. Your notes are end-to-end encrypted. Even our staff cannot read your note contents. The deletion
+        process is automated and does not involve human review of your data.</p>
+
+      <h3>What happens if I create a new account with the same email after deletion?</h3>
+      <p>After the 30-day period, your old data is permanently deleted. If you create a new account with the
+        same email address, it will be a completely fresh account with no access to previous data.</p>
+
+      <h3>How do I know my data has been deleted?</h3>
+      <p>After the 30-day grace period, you will not be able to sign into your old account. If you try to
+        sign in, you'll be prompted to create a new account, confirming the old account no longer exists.</p>
+
+      <h3>Is there any way to expedite the deletion process?</h3>
+      <p>The 30-day grace period is designed to protect you from accidental deletion. If you have urgent
+        security concerns, please contact us at <a href="mailto:contact@betterkeep.app">contact@betterkeep.app</a>
+        and we'll assist you.</p>
+    </section>
+
+    <section class="content-section">
+      <h2>Contact Us</h2>
+      <p>If you have any questions about account deletion or need assistance, please contact us:</p>
+      <ul>
+        <li><strong>Email:</strong> <a href="mailto:contact@betterkeep.app">contact@betterkeep.app</a></li>
+        <li><strong>Subject:</strong> Account Deletion Inquiry</li>
+        <li><strong>Company:</strong> Foxbiz Software Pvt. Ltd.</li>
+      </ul>
+      <p>We typically respond within 2-3 business days.</p>
+    </section>
+
+    <section class="content-section">
+      <h2>Related Policies</h2>
+      <ul>
+        <li><a href="/privacy">Privacy Policy</a> - Learn how we collect and protect your data</li>
+        <li><a href="/terms">Terms of Service</a> - Understand our terms of use</li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-links">
+        <a href="/welcome">Home</a>
+        <a href="/faqs">FAQ</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/delete-user">Delete Account</a>
+        <a href="mailto:contact@betterkeep.app">Contact</a>
+      </div>
+      <p>&copy; 2024 Foxbiz Software Pvt. Ltd. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile menu toggle
+    const menuToggle = document.querySelector('.mobile-menu-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+
+    menuToggle.addEventListener('click', () => {
+      menuToggle.classList.toggle('active');
+      mobileNav.classList.toggle('active');
+      menuToggle.setAttribute('aria-expanded',
+        menuToggle.classList.contains('active'));
+      document.body.style.overflow =
+        mobileNav.classList.contains('active') ? 'hidden' : '';
+    });
+
+    mobileNav.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        menuToggle.classList.remove('active');
+        mobileNav.classList.remove('active');
+        document.body.style.overflow = '';
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mobileNav.classList.contains('active')) {
+        menuToggle.classList.remove('active');
+        mobileNav.classList.remove('active');
+        document.body.style.overflow = '';
+      }
+    });
+  </script>
+</body>
+
+</html>

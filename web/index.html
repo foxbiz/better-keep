@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" style="background-color: #1c1b1f">
+
+<head>
+    <base href="$FLUTTER_BASE_HREF">
+
+    <meta charset="UTF-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="description"
+        content="Better Keep - A note-taking app with rich text, better organization, and private, offline-friendly notes.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Better Keep">
+    <meta property="og:description"
+        content="Better Keep - A note-taking app with rich text, better organization, and private, offline-friendly notes.">
+    <meta property="og:image" content="icons/logo.png">
+    <meta property="og:url" content="https://betterkeep.app">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Better Keep">
+    <meta name="twitter:description"
+        content="Better Keep - A note-taking app with rich text, better organization, and private, offline-friendly notes.">
+    <meta name="twitter:image" content="icons/logo.png">
+
+    <!-- iOS meta tags & icons -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Better Keep">
+    <link rel="apple-touch-icon" href="icons/logo.png">
+
+    <!-- Theme color for browser UI -->
+    <meta name="theme-color" content="#1c1b1f">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+
+    <title>Better Keep</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1c1b1f;
+            color: #ffffff;
+        }
+
+        body.loader-active {
+            overflow: hidden;
+        }
+
+        #app-loader {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #1c1b1f;
+            z-index: 9999;
+            transition: opacity 0.35s ease, visibility 0.35s ease;
+        }
+
+        #app-loader.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        #app-loader .loader-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        #app-loader .loader-logo {
+            width: 96px;
+            height: 96px;
+            animation: logoPulse 2.4s ease-in-out infinite;
+        }
+
+        #app-loader .loader-bar {
+            width: 180px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+            position: relative;
+        }
+
+        #app-loader .loader-bar-fill {
+            position: absolute;
+            inset: 0;
+            width: 35%;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), #ffffff, rgba(255, 255, 255, 0.1));
+            animation: loaderSlide 1.2s ease-in-out infinite;
+        }
+
+        @keyframes loaderSlide {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            50% {
+                transform: translateX(0);
+                width: 65%;
+            }
+
+            100% {
+                transform: translateX(220%);
+            }
+        }
+
+        @keyframes logoPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 0.9;
+            }
+
+            50% {
+                transform: scale(1.08);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class="loader-active" style="background-color: inherit">
+    <div id="app-loader">
+        <div class="loader-inner">
+            <img src="icons/logo.svg" alt="Better Keep logo" class="loader-logo" />
+            <div class="loader-bar" aria-hidden="true">
+                <div class="loader-bar-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Razorpay Checkout SDK -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <!-- Razorpay Checkout Bridge for Flutter -->
+    <script src="js/razorpay_checkout.js"></script>
+    <!-- App Installation Manager -->
+    <script src="js/app_install.js"></script>
+
+    <script>
+        (() => {
+            // Handle routing for static pages
+            const path = window.location.pathname;
+            const staticRoutes = {
+                '/welcome': 'welcome.html',
+                '/privacy': 'privacy.html',
+                '/terms': 'terms.html'
+            };
+
+            if (staticRoutes[path]) {
+                window.location.replace(staticRoutes[path]);
+                return;
+            }
+
+            const loader = document.getElementById('app-loader');
+            const removeLoader = () => {
+                if (!loader || loader.classList.contains('hidden')) {
+                    return;
+                }
+                loader.classList.add('hidden');
+                document.body.classList.remove('loader-active');
+                loader.addEventListener('transitionend', () => loader.remove(), { once: true });
+            };
+
+            window.addEventListener('flutter-first-frame', removeLoader);
+            window.addEventListener('error', removeLoader, { once: true });
+            window.addEventListener('load', () => {
+                setTimeout(removeLoader, 15000);
+            });
+        })();
+    </script>
+    <script src="flutter_bootstrap.js" async></script>
+</body>
+
+</html>

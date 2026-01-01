@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Better Keep - Payment</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 40px 20px;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .logo {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: #FFA726;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      margin: 0 0 32px;
+      color: #aaa;
+      font-size: 14px;
+    }
+
+    .loading {
+      margin-top: 32px;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255, 167, 38, 0.2);
+      border-top-color: #FFA726;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading p {
+      color: #888;
+      font-size: 14px;
+    }
+
+    .error {
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid rgba(244, 67, 54, 0.3);
+      border-radius: 12px;
+      padding: 24px;
+      margin-top: 24px;
+    }
+
+    .error h2 {
+      color: #f44336;
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+
+    .error p {
+      color: #ccc;
+      margin: 0 0 20px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 12px 32px;
+      background: #FFA726;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+
+    .btn:hover {
+      background: #FFB74D;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: #aaa;
+      border: 1px solid #444;
+      margin-left: 12px;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    .info {
+      margin-top: 32px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      font-size: 13px;
+      color: #888;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="logo">📝</div>
+    <h1>Better Keep Notes</h1>
+    <p class="subtitle">Secure Payment</p>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Initializing payment...</p>
+    </div>
+
+    <div class="error" id="error" style="display: none;">
+      <h2>Payment Error</h2>
+      <p id="error-message">Something went wrong. Please try again.</p>
+      <button class="btn" onclick="retryPayment()">Try Again</button>
+      <button class="btn btn-secondary" onclick="cancelPayment()">Cancel</button>
+    </div>
+
+    <div class="info" id="info" style="display: none;">
+      <p>Complete the payment in the Razorpay popup window. If the popup doesn't appear, please disable your popup
+        blocker and try again.</p>
+    </div>
+  </div>
+
+  <script>
+    // Parse URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const callbackUrl = urlParams.get('callback');
+
+    // Payment parameters
+    const key = urlParams.get('key');
+    const subscriptionId = urlParams.get('subscription_id');
+    const name = urlParams.get('name') || 'Better Keep Notes';
+    const description = urlParams.get('description') || 'Pro Subscription';
+    const email = urlParams.get('email') || '';
+
+    function showError(message) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error-message').textContent = message;
+    }
+
+    function redirectWithResult(status, params = {}) {
+      if (!callbackUrl) {
+        showError('No callback URL provided. Please close this window and try again from the app.');
+        return;
+      }
+
+      try {
+        const url = new URL(callbackUrl);
+        url.searchParams.set('status', status);
+        Object.entries(params).forEach(([key, value]) => {
+          if (value) url.searchParams.set(key, value);
+        });
+        window.location.href = url.toString();
+      } catch (e) {
+        showError('Invalid callback URL. Please close this window and try again from the app.');
+      }
+    }
+
+    function cancelPayment() {
+      redirectWithResult('cancelled');
+    }
+
+    function retryPayment() {
+      location.reload();
+    }
+
+    function initializePayment() {
+      // Validate required parameters
+      if (!key) {
+        showError('Missing API key. Please try again from the app.');
+        return;
+      }
+
+      if (!callbackUrl) {
+        showError('Missing callback URL. Please try again from the app.');
+        return;
+      }
+
+      if (!subscriptionId) {
+        showError('Missing subscription ID. Please try again from the app.');
+        return;
+      }
+
+      try {
+        const options = {
+          key: key,
+          subscription_id: subscriptionId,
+          name: name,
+          description: description,
+          image: 'https://betterkeep.app/icons/logo.png',
+          prefill: {
+            email: email
+          },
+          theme: {
+            color: '#FFA726'
+          },
+          modal: {
+            ondismiss: function () {
+              redirectWithResult('cancelled');
+            },
+            escape: true,
+            animation: true,
+            confirm_close: true
+          },
+          handler: function (response) {
+            redirectWithResult('success', {
+              payment_id: response.razorpay_payment_id,
+              subscription_id: response.razorpay_subscription_id,
+              signature: response.razorpay_signature
+            });
+          }
+        };
+
+        const rzp = new Razorpay(options);
+
+        rzp.on('payment.failed', function (response) {
+          redirectWithResult('error', {
+            message: response.error.description || 'Payment failed'
+          });
+        });
+
+        // Show info and open checkout
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('info').style.display = 'block';
+
+        // Small delay to ensure page is fully loaded
+        setTimeout(() => {
+          rzp.open();
+        }, 500);
+
+      } catch (e) {
+        showError('Failed to initialize payment: ' + (e.message || 'Unknown error'));
+      }
+    }
+
+    // Initialize when page loads
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializePayment);
+    } else {
+      initializePayment();
+    }
+  </script>
+</body>
+
+</html>

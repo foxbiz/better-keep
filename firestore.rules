@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user has an active Pro subscription
+    // Uses custom claims set by Cloud Functions when subscription is verified
+    function isPro() {
+      return request.auth.token.plan == 'pro' 
+        && request.auth.token.planExpiresAt != null
+        && request.auth.token.planExpiresAt > request.time.toMillis();
+    }
+
+    // Helper function to validate attachment count
+    // Maximum 50 attachments per note to maintain performance and prevent storage abuse
+    function hasValidAttachmentCount() {
+      let attachments = request.resource.data.attachments;
+      return !('attachments' in request.resource.data) || attachments == null || attachments.size() <= 50;
+    }
+
+    // Match any document in the 'users' collection
+    match /users/{userId} {
+      // Allow creating/reading/updating/deleting the user document itself
+      // ONLY if the request comes from the authenticated user with that UID
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Notes subcollection - requires Pro subscription for writes
+      match /notes/{noteId} {
+        // Allow reads for all authenticated owners (needed for migration/download)
+        allow read: if request.auth != null && request.auth.uid == userId;
+        
+        // Only Pro users can write (create/update) notes to the cloud
+        // Also validates attachment count
+        allow create, update: if request.auth != null 
+          && request.auth.uid == userId 
+          && isPro()
+          && hasValidAttachmentCount();
+        
+        // Allow deletes for Pro users OR if the note exists (cleanup)
+        // This allows users to delete their cloud data even after subscription ends
+        allow delete: if request.auth != null 
+          && request.auth.uid == userId 
+          && (isPro() || resource != null);
+      }
+
+      // Labels subcollection - same rules as notes
+      match /labels/{labelId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null 
+          && request.auth.uid == userId 
+          && isPro();
+        allow delete: if request.auth != null 
+          && request.auth.uid == userId 
+          && (isPro() || resource != null);
+      }
+
+      // Subscription subcollection - read only for owner, write only by Cloud Functions
+      match /subscription/{document=**} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        // Writes are handled by Cloud Functions with admin SDK, so deny client writes
+        allow write: if false;
+      }
+
+      // Other subcollections (settings, preferences, etc.) - allow for owner
+      match /{subcollection}/{document=**} {
+        // Exclude notes, labels, and subscription which have specific rules above
+        allow read, write: if request.auth != null 
+          && request.auth.uid == userId
+          && !(subcollection in ['notes', 'labels', 'subscription']);
+      }
+    }
+
+    // Global subscriptions collection - used for subscription lookups
+    // Only Cloud Functions should write here
+    match /subscriptions/{subscriptionId} {
+      allow read: if false; // Only backend access
+      allow write: if false; // Only backend access
+    }
+
+    // Payments collection - only Cloud Functions should access
+    match /payments/{paymentId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Shares collection - for note sharing feature
+    match /shares/{shareId} {
+      // Anyone can read to check share status (encrypted content is safe)
+      allow read: if true;
+      
+      // Only authenticated owner can create/update/delete shares
+      allow create: if request.auth != null 
+        && request.resource.data.owner_uid == request.auth.uid;
+      
+      allow update: if request.auth != null 
+        && resource.data.owner_uid == request.auth.uid;
+      
+      allow delete: if request.auth != null 
+        && resource.data.owner_uid == request.auth.uid;
+      
+      // Access requests subcollection
+      match /requests/{requestId} {
+        // Owner can read all requests
+        // Anyone can read a specific request (to check their own status)
+        allow read: if true;
+        
+        // Anyone can create a request (to request access)
+        allow create: if request.resource.data.status == 'pending';
+        
+        // Only owner can update (approve/deny)
+        allow update: if request.auth != null 
+          && get(/databases/$(database)/documents/shares/$(shareId)).data.owner_uid == request.auth.uid;
+        
+        // Only owner can delete requests
+        allow delete: if request.auth != null 
+          && get(/databases/$(database)/documents/shares/$(shareId)).data.owner_uid == request.auth.uid;
+      }
+    }
+  }
+}

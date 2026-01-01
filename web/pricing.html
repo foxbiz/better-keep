@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="Better Keep Notes Pricing - Free local notes forever, upgrade to Pro for cloud sync with end-to-end encryption. No ads, no tracking.">
+  <meta name="keywords"
+    content="Better Keep Notes, pricing, free notes app, pro subscription, cloud sync, encrypted notes, note-taking app">
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="canonical" href="https://betterkeep.app/pricing" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Pricing - Better Keep Notes">
+  <meta property="og:description"
+    content="Free local notes forever. Upgrade to Pro for cloud sync with end-to-end encryption. No ads, no tracking.">
+  <meta property="og:image" content="https://betterkeep.app/icons/logo.png">
+  <meta property="og:url" content="https://betterkeep.app/pricing">
+  <meta property="og:site_name" content="Better Keep Notes">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Pricing - Better Keep Notes">
+  <meta name="twitter:description"
+    content="Free local notes forever. Upgrade to Pro for cloud sync with end-to-end encryption.">
+  <meta name="twitter:image" content="https://betterkeep.app/icons/logo.png">
+
+  <title>Pricing - Better Keep Notes</title>
+  <style>
+    :root {
+      --primary: #FFD54F;
+      --primary-dark: #FFC107;
+      --primary-light: #FFECB3;
+      --accent: #7C4DFF;
+      --accent-dark: #536DFE;
+      --bg-dark: #121212;
+      --bg-darker: #0a0a0a;
+      --bg-card: #1E1E1E;
+      --bg-card-hover: #2A2A2A;
+      --text-primary: #FFFFFF;
+      --text-secondary: #B0B0B0;
+      --text-muted: #757575;
+      --gradient-start: #FFD54F;
+      --gradient-end: #FF8A65;
+      --success: #66BB6A;
+      --danger: #EF5350;
+      --border-subtle: rgba(255, 255, 255, 0.1);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+      --transition-fast: 0.2s ease;
+      --transition-normal: 0.3s ease;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.8;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      padding: 1rem 2rem;
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+
+    .nav-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    .nav-brand span {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--primary);
+    }
+
+    .btn-launch {
+      background: linear-gradient(135deg, #7C4DFF, #536DFE);
+      color: #ffffff;
+      padding: 0.6rem 1.5rem;
+      border-radius: 25px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-launch:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(124, 77, 255, 0.4);
+      color: #ffffff;
+    }
+
+    /* Mobile Menu */
+    .mobile-menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem;
+      z-index: 1001;
+    }
+
+    .mobile-menu-toggle span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text-primary);
+      margin: 5px 0;
+      transition: var(--transition-normal);
+      border-radius: 2px;
+    }
+
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(18, 18, 18, 0.98);
+      backdrop-filter: blur(20px);
+      z-index: 999;
+      padding: 5rem 2rem 2rem;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+
+    .mobile-nav.active {
+      display: flex;
+    }
+
+    .mobile-nav a {
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 1.25rem;
+      font-weight: 500;
+      padding: 0.75rem 1.5rem;
+      transition: var(--transition-normal);
+    }
+
+    .mobile-nav a:hover {
+      color: var(--primary);
+    }
+
+    /* Main Content */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 8rem 2rem 4rem;
+    }
+
+    /* Hero Section */
+    .hero {
+      text-align: center;
+      padding: 2rem 0 4rem;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Pricing Cards */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-top: 3rem;
+    }
+
+    .pricing-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      border: 1px solid var(--border-subtle);
+      transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+      position: relative;
+    }
+
+    .pricing-card:hover {
+      transform: translateY(-8px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .pricing-card.featured {
+      border: 2px solid var(--primary);
+      background: linear-gradient(180deg, rgba(255, 213, 79, 0.1), var(--bg-card));
+    }
+
+    .pricing-card.featured::before {
+      content: 'MOST POPULAR';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--primary);
+      color: var(--bg-dark);
+      padding: 0.25rem 1rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .plan-name {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .plan-description {
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .plan-price {
+      margin-bottom: 1.5rem;
+    }
+
+    .price-amount {
+      font-size: 3rem;
+      font-weight: 700;
+    }
+
+    .price-period {
+      color: var(--text-secondary);
+    }
+
+    .price-yearly {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+
+    .feature-list {
+      list-style: none;
+      margin: 1.5rem 0;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.5rem 0;
+      color: var(--text-secondary);
+    }
+
+    .feature-list li svg {
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+
+    .feature-list li.included svg {
+      color: var(--success);
+    }
+
+    .feature-list li.excluded svg {
+      color: var(--text-muted);
+    }
+
+    .feature-list li.excluded {
+      color: var(--text-muted);
+    }
+
+    .feature-list li.highlight {
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .feature-list li.highlight svg {
+      color: var(--primary);
+    }
+
+    .btn-primary {
+      display: block;
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(124, 77, 255, 0.3);
+    }
+
+    .btn-secondary {
+      display: block;
+      width: 100%;
+      padding: 1rem;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: background var(--transition-fast), border-color var(--transition-fast);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--text-muted);
+    }
+
+    /* Feature Comparison Table */
+    .comparison-section {
+      margin-top: 6rem;
+    }
+
+    .comparison-section h2 {
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 1rem 1.5rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .comparison-table th {
+      background: var(--bg-darker);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .comparison-table th:not(:first-child) {
+      text-align: center;
+    }
+
+    .comparison-table td:not(:first-child) {
+      text-align: center;
+    }
+
+    .comparison-table td.feature-name {
+      color: var(--text-secondary);
+    }
+
+    .comparison-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .check-icon {
+      color: var(--success);
+    }
+
+    .x-icon {
+      color: var(--text-muted);
+    }
+
+    /* Why Pay Section */
+    .why-pay-section {
+      margin-top: 6rem;
+      background: linear-gradient(180deg, var(--bg-card), transparent);
+      border-radius: var(--radius-lg);
+      padding: 3rem;
+      text-align: center;
+    }
+
+    .why-pay-section h2 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .why-pay-section p {
+      color: var(--text-secondary);
+      max-width: 700px;
+      margin: 0 auto 2rem;
+      line-height: 1.8;
+    }
+
+    .why-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .why-card {
+      background: var(--bg-card);
+      padding: 1.5rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .why-card svg {
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+
+    .why-card h3 {
+      margin-bottom: 0.5rem;
+    }
+
+    .why-card p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    /* Free Forever Section */
+    .free-forever {
+      margin-top: 6rem;
+      padding: 3rem;
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .free-forever h2 {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .free-features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .free-feature {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--bg-darker);
+      border-radius: var(--radius-sm);
+    }
+
+    .free-feature svg {
+      color: var(--success);
+      flex-shrink: 0;
+    }
+
+    /* FAQ Section */
+    .faq-section {
+      margin-top: 6rem;
+    }
+
+    .faq-section h2 {
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .faq-item {
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      margin-bottom: 1rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .faq-question {
+      padding: 1.25rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 500;
+    }
+
+    .faq-answer {
+      padding: 0 1.25rem 1.25rem;
+      color: var(--text-secondary);
+      display: none;
+    }
+
+    .faq-item.active .faq-answer {
+      display: block;
+    }
+
+    .faq-item.active .faq-question svg {
+      transform: rotate(180deg);
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 6rem;
+      padding: 2rem;
+      text-align: center;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color var(--transition-fast);
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    .footer-copyright {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-toggle {
+        display: block;
+      }
+
+      .hero h1 {
+        font-size: 2rem;
+      }
+
+      .pricing-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .comparison-table {
+        font-size: 0.85rem;
+      }
+
+      .comparison-table th,
+      .comparison-table td {
+        padding: 0.75rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <nav>
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="icons/logo.png" alt="Better Keep Notes">
+        <span>Better Keep Notes</span>
+      </a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="pricing.html" class="active">Pricing</a>
+        <a href="encryption.html">Security</a>
+        <a href="open-source.html">Open Source</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="/#download" class="btn-launch">Get the App</a>
+      </div>
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="mobile-nav" id="mobileNav">
+    <a href="/">Home</a>
+    <a href="pricing.html">Pricing</a>
+    <a href="encryption.html">Security</a>
+    <a href="open-source.html">Open Source</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="/#download" class="btn-launch">Get the App</a>
+  </div>
+
+  <main>
+    <section class="hero">
+      <h1>Simple, Honest Pricing</h1>
+      <p>Keep your notes free forever with local storage. Upgrade to Pro for cloud sync and advanced features.</p>
+      <p style="margin-top: 1rem; color: var(--text-muted);">Subscriptions are available through the app on your device.
+      </p>
+      <a href="/#download" class="btn-primary"
+        style="display: inline-block; margin-top: 1.5rem; width: auto; padding: 1rem 2rem;">Get the App</a>
+    </section>
+
+    <!-- Feature Comparison Table -->
+    <section class="comparison-section">
+      <h2>Feature Comparison</h2>
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Free</th>
+            <th>Pro</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="feature-name">Local notes</td>
+            <td>Unlimited</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td class="feature-name">Locked notes</td>
+            <td>Up to 5</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td class="feature-name">Real-time cloud sync</td>
+            <td><span class="x-icon">✕</span></td>
+            <td><span class="check-icon">✓</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Why We Charge Section -->
+    <section class="why-pay-section">
+      <h2>Why Do We Charge?</h2>
+      <p>
+        Better Keep Notes is built with care by a small team. We believe in honest, sustainable software—no ads, no data
+        selling,
+        no dark patterns. Here's where your subscription goes:
+      </p>
+      <div class="why-cards">
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <h3>Server Infrastructure</h3>
+          <p>Cloud sync and real-time features require servers that cost real money to run and maintain securely.</p>
+        </div>
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <h3>End-to-End Encryption</h3>
+          <p>Strong encryption is computationally expensive. We invest in proper cryptography to keep your data truly
+            private.</p>
+        </div>
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+          <h3>Ongoing Development</h3>
+          <p>New features, bug fixes, and cross-platform support across 6 platforms takes continuous effort.</p>
+        </div>
+        <div class="why-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <h3>No Ads, No Tracking</h3>
+          <p>Your subscription means we never need to monetize your attention or data. You're the customer, not the
+            product.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Free Forever Section -->
+    <section class="free-forever">
+      <h2>🎁 Free Forever</h2>
+      <p style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem;">
+        These features will always be free, no account required:
+      </p>
+      <div class="free-features">
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>Unlimited local notes</span>
+        </div>
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>Local encryption</span>
+        </div>
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>5 locked notes</span>
+        </div>
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>Labels & colors</span>
+        </div>
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>Pin notes</span>
+        </div>
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>Reminders</span>
+        </div>
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>Read-only mode</span>
+        </div>
+        <div class="free-feature">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"></path>
+          </svg>
+          <span>Works offline</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section">
+      <h2>Frequently Asked Questions</h2>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I use the app without creating an account?</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          Yes! Better Keep Notes works completely offline without any account. All free features are available without
+          signing up. You only need an account if you want to sync your notes across devices.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>What happens when my Pro subscription expires?</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          Your notes are always yours. When your subscription expires, you'll still have access to all your local notes.
+          Cloud sync will pause, but your data remains safe and encrypted locally. You can export everything at any
+          time.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Is there a free trial for Pro?</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          Yes! New users get a 7-day free trial of Pro features. No credit card required to start. If you decide Pro
+          isn't for you, you'll automatically switch to the free plan.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I switch between monthly and yearly billing?</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          Yes, you can change your billing cycle at any time. If you switch from monthly to yearly, you'll get a
+          prorated credit for your remaining monthly subscription.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I self-host Better Keep Notes?</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          Yes! If you're interested in running your own backend with Firebase or Supabase, please contact us at
+          <a href="mailto:contact@betterkeep.app" style="color: var(--primary);">contact@betterkeep.app</a> and we'll
+          help you get set up.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I get a refund?</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div class="faq-answer">
+          Yes. If you're not satisfied within the first 30 days, contact us for a full refund. For subscriptions
+          purchased through app stores, refunds are processed according to their respective policies.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="encryption.html">Security</a>
+      <a href="open-source.html">Open Source</a>
+      <a href="faqs.html">FAQs</a>
+    </div>
+    <p class="footer-copyright">© 2025 Better Keep Notes. All rights reserved.</p>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const mobileNav = document.getElementById('mobileNav');
+      const toggle = document.querySelector('.mobile-menu-toggle');
+      mobileNav.classList.toggle('active');
+      toggle.classList.toggle('active');
+    }
+
+    function toggleFaq(element) {
+      const faqItem = element.parentElement;
+      faqItem.classList.toggle('active');
+    }
+  </script>
+</body>
+
+</html>

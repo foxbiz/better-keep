@@ -1,0 +1,16 @@
+Simple Text Note
+
+This is a simple text file that can be opened in Better Keep Notes.
+
+When you open this file with the app:
+- A new note will be created
+- The filename becomes the title
+- The content is imported as-is
+
+Test features:
+✓ Multi-line support
+✓ Special characters: @#$%^&*
+✓ Numbers: 1234567890
+✓ Unicode: 你好世界 🌍
+
+Try opening this file with Better Keep Notes!

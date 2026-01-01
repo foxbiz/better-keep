@@ -1,0 +1,62 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "better_keep (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "debug",
+      "toolArgs": [
+        "--dart-define-from-file=.env",
+        "--web-port",
+        "63630"
+      ]
+    },
+    {
+      "name": "better_keep (Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "toolArgs": [
+        "--web-port",
+        "63630",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "better_keep WEB (Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "toolArgs": [
+        "web-server",
+        "--web-port",
+        "63630",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "better_keep (Release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "toolArgs": [
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "better_keep (Web Server)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "-d",
+        "web-server",
+        "--web-port",
+        "63630"
+      ],
+      "toolArgs": [
+        "--dart-define-from-file=.env"
+      ]
+    }
+  ]
+}

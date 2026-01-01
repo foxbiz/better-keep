@@ -1,0 +1,46 @@
+{
+  "cSpell.words": [
+    "androidpublisher",
+    "appbundle",
+    "audioplayers",
+    "betterkeep",
+    "ciphertext",
+    "cupertino",
+    "firebaseapp",
+    "firebasestorage",
+    "firestore",
+    "foxbiz",
+    "Kolkata",
+    "libexec",
+    "LTWH",
+    "Millis",
+    "onmount",
+    "OPFS",
+    "paise",
+    "prefs",
+    "readwrite",
+    "RECAPTCHA",
+    "redownloaded",
+    "redownloading",
+    "Regen",
+    "retryable",
+    "RTDN",
+    "Segoe",
+    "sqflite",
+    "subcol",
+    "subcollection",
+    "subcollections",
+    "sublabel",
+    "subonce",
+    "subscriptionsv",
+    "unsub",
+    "zeptomail"
+  ],
+  "files.associations": {
+    "*.env": "dotenv"
+  },
+  "editor.codeActionsOnSave": {
+    "quickFix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+}
