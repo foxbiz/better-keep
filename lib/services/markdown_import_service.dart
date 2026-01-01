@@ -5,9 +5,9 @@ import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
@@ -626,7 +626,7 @@ class MarkdownImportService {
     if (bytes.length <= _maxImageSize) {
       // Light compression even for small images
       try {
-        return await FlutterImageCompress.compressWithList(bytes, quality: 90);
+        return await ImageCompressor.compressWithList(bytes, quality: 90);
       } catch (e) {
         return bytes;
       }
@@ -639,7 +639,7 @@ class MarkdownImportService {
 
     while (quality >= 50) {
       try {
-        compressed = await FlutterImageCompress.compressWithList(
+        compressed = await ImageCompressor.compressWithList(
           bytes,
           quality: quality,
           minWidth: minDim,
@@ -661,7 +661,7 @@ class MarkdownImportService {
     quality = 70;
     while (minDim >= 640) {
       try {
-        compressed = await FlutterImageCompress.compressWithList(
+        compressed = await ImageCompressor.compressWithList(
           bytes,
           quality: quality,
           minWidth: minDim,

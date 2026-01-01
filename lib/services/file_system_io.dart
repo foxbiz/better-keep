@@ -17,7 +17,12 @@ class IoFileSystem implements FileSystem {
 
   @override
   Future<String> get documentDir async {
-    final dir = await getApplicationDocumentsDirectory();
+    // IMPORTANT: Use getApplicationSupportDirectory() instead of getApplicationDocumentsDirectory()
+    // On Windows, getApplicationDocumentsDirectory() returns the user's Documents folder
+    // (e.g., C:\Users\<user>\Documents), which would cause _clearFileSystemRecursively
+    // to delete ALL user documents on sign out!
+    // getApplicationSupportDirectory() returns an app-specific directory that's safe to clear.
+    final dir = await getApplicationSupportDirectory();
     return dir.path;
   }
 

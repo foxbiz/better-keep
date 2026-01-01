@@ -513,4 +513,10 @@ class RecoveryKeyService {
       return false;
     }
   }
+
+  /// Clears cached Firestore instance.
+  /// Call this during signout to ensure a fresh instance is created on next signin.
+  void clearFirestoreCache() {
+    _firestoreInstance = null;
+  }
 }

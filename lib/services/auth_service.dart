@@ -9,6 +9,7 @@ import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/services/file_system.dart';
@@ -279,15 +280,45 @@ class AuthService {
       }
     } else if (uid != null && email != null) {
       // We have cached user data but currentUser is null
-      // This means Firebase Auth SDK already invalidated the session (e.g., on page refresh)
-      // The user was previously logged in but their account no longer exists in Firebase Auth
-      AppLogger.log(
-        "No currentUser but have cached profile (uid: $uid), marking session as invalid",
-      );
-      AppLogger.log(
-        "Session invalid: cached user data exists but Firebase currentUser is null",
-      );
-      sessionInvalid.value = true;
+      // This could mean:
+      // 1. Firebase Auth SDK already invalidated the session (e.g., deleted user)
+      // 2. Hot reload on desktop where Firebase Auth takes time to reinitialize
+      //
+      // On Windows/Linux desktop, give Firebase Auth a moment to reinitialize
+      // before marking the session as invalid
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+        // Wait briefly for Firebase Auth to potentially reinitialize
+        await Future.delayed(const Duration(milliseconds: 500));
+        final userAfterDelay = _auth.currentUser;
+        if (userAfterDelay != null) {
+          // Firebase Auth reinitialized successfully
+          AppLogger.log(
+            "Firebase Auth reinitialized after delay, user: ${userAfterDelay.uid}",
+          );
+          _startTokenRevocationListener(userAfterDelay.uid);
+          try {
+            final idTokenResult = await userAfterDelay.getIdTokenResult(false);
+            _cachedTokenAuthTime = idTokenResult.authTime;
+          } catch (e) {
+            AppLogger.error("Error getting token after delay: $e");
+          }
+        } else {
+          // Still no user after delay - session is truly invalid
+          AppLogger.log(
+            "No currentUser after delay, marking session as invalid",
+          );
+          sessionInvalid.value = true;
+        }
+      } else {
+        // On other platforms, mark session as invalid immediately
+        AppLogger.log(
+          "No currentUser but have cached profile (uid: $uid), marking session as invalid",
+        );
+        AppLogger.log(
+          "Session invalid: cached user data exists but Firebase currentUser is null",
+        );
+        sessionInvalid.value = true;
+      }
     }
 
     // Listen for auth state changes to start/stop the revocation listener
@@ -412,9 +443,18 @@ class AuthService {
     try {
       isVerifying.value = true;
 
+      // Ensure Firestore network is enabled (may have been left disabled after signout)
+      await _ensureNetworkEnabled();
+
+      // On web, check if E2EE storage is properly configured before using it
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+
       // Mark sign-in as in progress (for crash recovery)
-      await E2EESecureStorage.instance.init();
-      await E2EESecureStorage.instance.setSignInProgress(true);
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.init();
+        await E2EESecureStorage.instance.setSignInProgress(true);
+      }
 
       UserCredential userCredential;
 
@@ -474,7 +514,9 @@ class AuthService {
           final idTokenResult = await userCredential.user!.getIdTokenResult();
           _cachedTokenAuthTime = idTokenResult.authTime;
           // Clear sign-in progress flag on success
-          await E2EESecureStorage.instance.setSignInProgress(false);
+          if (canUseE2EEStorage) {
+            await E2EESecureStorage.instance.setSignInProgress(false);
+          }
         } catch (e) {
           await signOut();
           rethrow;
@@ -496,8 +538,14 @@ class AuthService {
   }) async {
     try {
       isVerifying.value = true;
-      await E2EESecureStorage.instance.init();
-      await E2EESecureStorage.instance.setSignInProgress(true);
+      await _ensureNetworkEnabled();
+
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.init();
+        await E2EESecureStorage.instance.setSignInProgress(true);
+      }
 
       UserCredential userCredential;
 
@@ -526,8 +574,14 @@ class AuthService {
   }) async {
     try {
       isVerifying.value = true;
-      await E2EESecureStorage.instance.init();
-      await E2EESecureStorage.instance.setSignInProgress(true);
+      await _ensureNetworkEnabled();
+
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.init();
+        await E2EESecureStorage.instance.setSignInProgress(true);
+      }
 
       UserCredential userCredential;
 
@@ -556,8 +610,14 @@ class AuthService {
   }) async {
     try {
       isVerifying.value = true;
-      await E2EESecureStorage.instance.init();
-      await E2EESecureStorage.instance.setSignInProgress(true);
+      await _ensureNetworkEnabled();
+
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.init();
+        await E2EESecureStorage.instance.setSignInProgress(true);
+      }
 
       UserCredential userCredential;
 
@@ -589,8 +649,14 @@ class AuthService {
   }) async {
     try {
       isVerifying.value = true;
-      await E2EESecureStorage.instance.init();
-      await E2EESecureStorage.instance.setSignInProgress(true);
+      await _ensureNetworkEnabled();
+
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.init();
+        await E2EESecureStorage.instance.setSignInProgress(true);
+      }
 
       onStatusChange?.call("Creating account...");
       final userCredential = await _auth.createUserWithEmailAndPassword(
@@ -601,7 +667,9 @@ class AuthService {
       if (userCredential.user != null) {
         // Keep user signed in - app.dart will show EmailVerificationPage
         // which will send OTP for verification
-        await E2EESecureStorage.instance.setSignInProgress(false);
+        if (canUseE2EEStorage) {
+          await E2EESecureStorage.instance.setSignInProgress(false);
+        }
         onStatusChange?.call("Account created!");
       }
 
@@ -624,9 +692,21 @@ class AuthService {
     try {
       isVerifying.value = true;
       onStatusChange?.call("Verifying credentials...");
-      await E2EESecureStorage.instance.init();
-      onStatusChange?.call("Starting sign-in...");
-      await E2EESecureStorage.instance.setSignInProgress(true);
+
+      // Ensure Firestore network is enabled (may have been left disabled after signout)
+      await _ensureNetworkEnabled();
+
+      // On web, check if E2EE storage is properly configured before using it
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.init();
+        onStatusChange?.call("Starting sign-in...");
+        await E2EESecureStorage.instance.setSignInProgress(true);
+      } else {
+        onStatusChange?.call("Starting sign-in...");
+      }
 
       onStatusChange?.call("Signing in...");
       final userCredential = await _auth.signInWithEmailAndPassword(
@@ -643,7 +723,9 @@ class AuthService {
           // Email not verified - keep user signed in
           // app.dart will show EmailVerificationPage
           onStatusChange?.call("Email verification required...");
-          await E2EESecureStorage.instance.setSignInProgress(false);
+          if (canUseE2EEStorage) {
+            await E2EESecureStorage.instance.setSignInProgress(false);
+          }
           // Return the credential - app.dart will handle showing verification page
           return userCredential;
         }
@@ -1014,17 +1096,6 @@ class AuthService {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // Ensure Firestore network is enabled (may have been left disabled after signout)
-      try {
-        final firestore = FirebaseFirestore.instanceFor(
-          app: Firebase.app(),
-          databaseId: DefaultFirebaseOptions.databaseId,
-        );
-        await firestore.enableNetwork();
-      } catch (e) {
-        AppLogger.error('Error enabling Firestore network during sign-in: $e');
-      }
-
       await _ensureUserExists(user, onStatusChange, provider);
       // Load Firestore linked providers into cache
       await refreshLinkedProviders();
@@ -1045,7 +1116,11 @@ class AuthService {
       final idTokenResult = await user.getIdTokenResult();
       _cachedTokenAuthTime = idTokenResult.authTime;
       // Clear sign-in progress flag on success
-      await E2EESecureStorage.instance.setSignInProgress(false);
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.setSignInProgress(false);
+      }
     } catch (e) {
       await signOut();
       rethrow;
@@ -1273,6 +1348,19 @@ class AuthService {
     _currentUserId = null;
   }
 
+  /// Ensures Firestore network is enabled (may have been left disabled after signout)
+  static Future<void> _ensureNetworkEnabled() async {
+    try {
+      final firestore = FirebaseFirestore.instanceFor(
+        app: Firebase.app(),
+        databaseId: DefaultFirebaseOptions.databaseId,
+      );
+      await firestore.enableNetwork();
+    } catch (e) {
+      AppLogger.error('Error enabling Firestore network: $e');
+    }
+  }
+
   static Future<void> signOut() async {
     try {
       // Stop token revocation listener
@@ -1306,6 +1394,12 @@ class AuthService {
         LabelSyncService().dispose();
       } catch (e) {
         AppLogger.error('Error disposing LabelSyncService: $e');
+      }
+
+      try {
+        NoteShareService().dispose();
+      } catch (e) {
+        AppLogger.error('Error disposing NoteShareService: $e');
       }
 
       try {
@@ -1383,32 +1477,27 @@ class AuthService {
         AppLogger.error('Error resetting AppState: $e');
       }
 
+      // Re-enable Firestore network after signing out
+      // Note: We intentionally do NOT call terminate() or clearPersistence() because:
+      // 1. terminate() makes the Firestore instance permanently unusable until app restart
+      // 2. clearPersistence() requires terminate() first, which breaks re-login
+      // Security rules will prevent access to old cached data from other users
+      try {
+        final firestore = FirebaseFirestore.instanceFor(
+          app: Firebase.app(),
+          databaseId: DefaultFirebaseOptions.databaseId,
+        );
+        await firestore.enableNetwork();
+      } catch (e) {
+        AppLogger.error('Error re-enabling Firestore network: $e');
+      }
+
       // Sign Out
       if (!kIsWeb &&
           (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
         await _googleSignIn.signOut();
       }
       await _auth.signOut();
-
-      // Re-enable network and clear Firestore persistence cache for next login
-      try {
-        final firestore = FirebaseFirestore.instanceFor(
-          app: Firebase.app(),
-          databaseId: DefaultFirebaseOptions.databaseId,
-        );
-        // IMPORTANT: Re-enable network first to ensure next login works
-        // This must happen even if clearPersistence fails
-        await firestore.enableNetwork();
-        // Try to clear persistence (may fail if there are active listeners)
-        try {
-          await firestore.clearPersistence();
-        } catch (e) {
-          // clearPersistence may fail if there are active listeners, ignore
-          AppLogger.error('Error clearing Firestore persistence: $e');
-        }
-      } catch (e) {
-        AppLogger.error('Error re-enabling Firestore network: $e');
-      }
 
       // Reinitialize database after sign out
       await Future.microtask(() {});

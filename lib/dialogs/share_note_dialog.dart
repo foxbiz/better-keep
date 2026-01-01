@@ -5,6 +5,7 @@ import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/export_data_service.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/note_share_service.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -850,6 +851,10 @@ Future<void> showShareNoteDialog(BuildContext context, Note note) async {
 /// Get attachment files as XFiles for sharing
 Future<List<XFile>> _getAttachmentFiles(Note note) async {
   final List<XFile> files = [];
+
+  // Early return if no attachments
+  if (note.attachments.isEmpty) return files;
+
   final fs = await fileSystem();
 
   for (final attachment in note.attachments) {
@@ -860,16 +865,33 @@ Future<List<XFile>> _getAttachmentFiles(Note note) async {
     switch (attachment.type) {
       case AttachmentType.image:
         sourcePath = attachment.image?.src;
-        mimeType = 'image/jpeg';
-        fileName = 'image_${files.length}.jpg';
+        // Detect MIME type from file extension
+        final ext = sourcePath?.split('.').lastOrNull?.toLowerCase();
+        mimeType = switch (ext) {
+          'png' => 'image/png',
+          'gif' => 'image/gif',
+          'webp' => 'image/webp',
+          _ => 'image/jpeg',
+        };
+        fileName = 'image_${files.length}.${ext ?? 'jpg'}';
       case AttachmentType.sketch:
         sourcePath = attachment.sketch?.previewImage;
         mimeType = 'image/png';
         fileName = 'sketch_${files.length}.png';
       case AttachmentType.audio:
         sourcePath = attachment.recording?.src;
-        mimeType = 'audio/m4a';
-        fileName = attachment.recording?.title ?? 'audio_${files.length}.m4a';
+        // Detect audio MIME type from file extension
+        final audioExt = sourcePath?.split('.').lastOrNull?.toLowerCase();
+        mimeType = switch (audioExt) {
+          'mp3' => 'audio/mpeg',
+          'wav' => 'audio/wav',
+          'aac' => 'audio/aac',
+          'ogg' => 'audio/ogg',
+          _ => 'audio/mp4', // m4a is audio/mp4
+        };
+        fileName =
+            attachment.recording?.title ??
+            'audio_${files.length}.${audioExt ?? 'm4a'}';
     }
 
     if (sourcePath == null) continue;
@@ -883,8 +905,12 @@ Future<List<XFile>> _getAttachmentFiles(Note note) async {
       try {
         final bytes = await fs.readBytes(sourcePath);
         files.add(XFile.fromData(bytes, name: fileName, mimeType: mimeType));
-      } catch (_) {
-        // Skip this attachment if we can't read it
+      } catch (e2) {
+        // Log the failure but continue with other attachments
+        AppLogger.error(
+          'Failed to read attachment for sharing: $sourcePath',
+          e2,
+        );
       }
     }
   }

@@ -33,6 +33,11 @@ class E2EESecureStorage {
     defaultValue: '',
   );
 
+  /// Check if web storage is properly configured (WEB_STORAGE_KEY is set)
+  static bool get isWebStorageConfigured {
+    return _webStorageKeyHex.isNotEmpty && _webStorageKeyHex.length == 64;
+  }
+
   static Uint8List? _webStorageKeyCache;
   static Uint8List get _webStorageKey {
     if (_webStorageKeyCache != null) return _webStorageKeyCache!;

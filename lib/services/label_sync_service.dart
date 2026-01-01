@@ -404,6 +404,8 @@ class LabelSyncService {
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     E2EEService.instance.status.removeListener(_onE2EEStatusChange);
     _initialized = false;
+    // Clear cached Firestore instance so a fresh one is created after signout/signin
+    _firestoreInstance = null;
   }
 
   Future<void> sync([bool now = false]) async {

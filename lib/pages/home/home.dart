@@ -19,9 +19,9 @@ import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/components/animated_icon.dart';
@@ -1129,10 +1129,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   Future<Uint8List> _compressImageToTargetSize(Uint8List imageBytes) async {
     if (imageBytes.length <= _maxImageSize) {
-      return await FlutterImageCompress.compressWithList(
-        imageBytes,
-        quality: 90,
-      );
+      return await ImageCompressor.compressWithList(imageBytes, quality: 90);
     }
 
     int quality = 85;
@@ -1141,7 +1138,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     Uint8List compressed = imageBytes;
 
     while (quality >= 50) {
-      compressed = await FlutterImageCompress.compressWithList(
+      compressed = await ImageCompressor.compressWithList(
         imageBytes,
         quality: quality,
         minWidth: minWidth,
@@ -1153,7 +1150,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
     quality = 70;
     while (minWidth >= 800) {
-      compressed = await FlutterImageCompress.compressWithList(
+      compressed = await ImageCompressor.compressWithList(
         imageBytes,
         quality: quality,
         minWidth: minWidth,
@@ -1164,7 +1161,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       minHeight = (minHeight * 0.75).toInt();
     }
 
-    return await FlutterImageCompress.compressWithList(
+    return await ImageCompressor.compressWithList(
       imageBytes,
       quality: 50,
       minWidth: 800,

@@ -765,6 +765,8 @@ class NoteSyncService {
     E2EEService.instance.status.removeListener(_onE2EEStatusChange);
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     _initialized = false;
+    // Clear cached Firestore instance so a fresh one is created after signout/signin
+    _firestoreInstance = null;
   }
 
   Reference getNoteDocsRef(int noteId) {
@@ -2092,6 +2094,8 @@ class NoteSyncService {
         // Generate preview from strokes
         // This is safe because we're in the sync download flow and the note
         // will be saved with trackSync=false, so it won't trigger another sync.
+        // Note: On desktop platforms, this will skip preview generation due to
+        // platform limitations - the carousel will use CustomPaint fallback.
         final oldPreviewPath = sketch.previewImage;
         sketch.previewImage = null;
         sketch.blurredThumbnail = null;
@@ -2100,16 +2104,14 @@ class NoteSyncService {
           if (success) {
             AppLogger.log('Generated preview for note ${note.id} after sync');
             // Invalidate old preview image from cache so UI shows updated image
+            // Note: Don't invalidate the new path - generatePreview already
+            // populated the cache with the new image bytes
             if (oldPreviewPath != null && oldPreviewPath.isNotEmpty) {
               UniversalImageCache.instance.invalidate(oldPreviewPath);
             }
-            // Also invalidate new path in case it's the same
-            if (sketch.previewImage != null) {
-              UniversalImageCache.instance.invalidate(sketch.previewImage!);
-            }
-          } else {
-            AppLogger.log('Failed to generate preview for note ${note.id}');
           }
+          // If generatePreview returns false, it's okay - on desktop it will
+          // use CustomPaint fallback, preview will be generated when sketch is opened
         } catch (e) {
           AppLogger.error('Error generating preview after sync', e);
         }

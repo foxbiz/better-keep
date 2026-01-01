@@ -616,6 +616,8 @@ class E2EEService {
     await _deviceManager.clearUMK();
     // Cancel all Firestore subscriptions in DeviceManager to prevent permission errors after sign-out
     await _deviceManager.dispose();
+    // Clear RecoveryKeyService Firestore cache
+    RecoveryKeyService.instance.clearFirestoreCache();
     await _secureStorage.clearAll();
     status.value = E2EEStatus.notInitialized;
   }

@@ -12,7 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
@@ -178,10 +178,7 @@ class _AttachButtonState extends State<AttachButton> {
   Future<Uint8List> _compressImageToTargetSize(Uint8List imageBytes) async {
     // If already under target, just do a light compression
     if (imageBytes.length <= _maxImageSize) {
-      return await FlutterImageCompress.compressWithList(
-        imageBytes,
-        quality: 90,
-      );
+      return await ImageCompressor.compressWithList(imageBytes, quality: 90);
     }
 
     // Start with quality 85 and full size
@@ -192,7 +189,7 @@ class _AttachButtonState extends State<AttachButton> {
 
     // Try progressively lower quality first
     while (quality >= 50) {
-      compressed = await FlutterImageCompress.compressWithList(
+      compressed = await ImageCompressor.compressWithList(
         imageBytes,
         quality: quality,
         minWidth: minWidth,
@@ -209,7 +206,7 @@ class _AttachButtonState extends State<AttachButton> {
     // If still too large, reduce dimensions progressively
     quality = 70;
     while (minWidth >= 800) {
-      compressed = await FlutterImageCompress.compressWithList(
+      compressed = await ImageCompressor.compressWithList(
         imageBytes,
         quality: quality,
         minWidth: minWidth,
@@ -225,7 +222,7 @@ class _AttachButtonState extends State<AttachButton> {
     }
 
     // Final attempt with minimum settings
-    return await FlutterImageCompress.compressWithList(
+    return await ImageCompressor.compressWithList(
       imageBytes,
       quality: 50,
       minWidth: 800,

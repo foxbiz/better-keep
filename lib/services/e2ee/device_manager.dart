@@ -934,6 +934,8 @@ class DeviceManager {
     _currentDeviceStatusSubscription = null;
     _approvalSubscription = null;
     _pendingApprovalsSubscription = null;
+    // Clear cached Firestore instance so a fresh one is created after signout/signin
+    _firestoreInstance = null;
   }
 
   /// Wraps UMK for a device using its public key.

@@ -173,6 +173,8 @@ class NoteShareService {
   void dispose() {
     _pendingRequestsSubscription?.cancel();
     _activeSharesSubscription?.cancel();
+    // Clear cached Firestore instance so a fresh one is created after signout/signin
+    _firestoreInstance = null;
   }
 
   /// Get existing active share link for a note (if any)

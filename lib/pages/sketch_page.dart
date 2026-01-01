@@ -13,6 +13,7 @@ import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
+import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -1476,7 +1477,7 @@ class _SketchPageState extends State<SketchPage>
   /// so this runs on main thread but is async to allow UI to breathe.
   static Future<Uint8List> _compressSketchPreview(Uint8List pngBytes) async {
     // First try: quality 80, original size
-    var compressed = await FlutterImageCompress.compressWithList(
+    var compressed = await ImageCompressor.compressWithList(
       pngBytes,
       quality: 80,
       format: CompressFormat.jpeg,
@@ -1487,7 +1488,7 @@ class _SketchPageState extends State<SketchPage>
     }
 
     // Second try: quality 60, reduced size
-    compressed = await FlutterImageCompress.compressWithList(
+    compressed = await ImageCompressor.compressWithList(
       pngBytes,
       quality: 60,
       minWidth: 1200,
@@ -1500,7 +1501,7 @@ class _SketchPageState extends State<SketchPage>
     }
 
     // Final try: quality 50, smaller size
-    return FlutterImageCompress.compressWithList(
+    return ImageCompressor.compressWithList(
       pngBytes,
       quality: 50,
       minWidth: 800,

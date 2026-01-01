@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 
 /// Controller for managing the popup menu state
 class AdaptivePopupController extends ChangeNotifier {
@@ -150,14 +149,6 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
-  bool _isHovering = false;
-  bool _isOverlayHovering = false;
-
-  bool get _isDesktop =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.macOS ||
-          defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.linux);
 
   @override
   void initState() {
@@ -548,38 +539,13 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
   }
 
   void _onHover(bool isHovering) {
-    if (!widget.showOnHover || !_isDesktop) return;
-
-    _isHovering = isHovering;
-    _controller.setHovered(isHovering);
-
-    if (isHovering) {
-      Future.delayed(Duration(milliseconds: widget.hoverDelay), () {
-        if (_isHovering && mounted && !_controller.isOpen) {
-          _controller.open();
-        }
-      });
-    } else {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (!_isHovering && !_isOverlayHovering && mounted) {
-          _controller.close();
-        }
-      });
-    }
+    // Hover-based popup disabled to prevent flickering issues on Windows
+    return;
   }
 
   void _onOverlayHover(bool isHovering) {
-    if (!widget.showOnHover || !_isDesktop) return;
-
-    _isOverlayHovering = isHovering;
-
-    if (!isHovering) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (!_isHovering && !_isOverlayHovering && mounted) {
-          _controller.close();
-        }
-      });
-    }
+    // Hover-based popup disabled to prevent flickering issues on Windows
+    return;
   }
 
   @override

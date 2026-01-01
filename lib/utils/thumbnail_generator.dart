@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:better_keep/utils/image_compressor.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 /// Utility for generating tiny blurred thumbnails for locked note previews.
@@ -29,7 +30,7 @@ class ThumbnailGenerator {
       int quality = 20;
       int width = _thumbnailWidth;
 
-      Uint8List thumbnail = await FlutterImageCompress.compressWithList(
+      Uint8List thumbnail = await ImageCompressor.compressWithList(
         imageBytes,
         quality: quality,
         minWidth: width,
@@ -42,7 +43,7 @@ class ThumbnailGenerator {
       // If still too large, reduce quality further
       while (thumbnail.length > _maxThumbnailBytes && quality > 5) {
         quality -= 5;
-        final result = await FlutterImageCompress.compressWithList(
+        final result = await ImageCompressor.compressWithList(
           imageBytes,
           quality: quality,
           minWidth: width,
@@ -56,7 +57,7 @@ class ThumbnailGenerator {
       // If still too large, reduce dimensions
       while (thumbnail.length > _maxThumbnailBytes && width > 8) {
         width = (width * 0.7).toInt();
-        final result = await FlutterImageCompress.compressWithList(
+        final result = await ImageCompressor.compressWithList(
           imageBytes,
           quality: quality,
           minWidth: width,

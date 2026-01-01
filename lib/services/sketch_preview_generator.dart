@@ -5,6 +5,7 @@ import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
+import 'package:better_keep/utils/image_compressor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as path;
@@ -233,7 +234,7 @@ class SketchPreviewGenerator {
   /// Compress preview image to be under 500KB
   static Future<Uint8List> _compressPreview(Uint8List pngBytes) async {
     // Try quality 85 first
-    var compressed = await FlutterImageCompress.compressWithList(
+    var compressed = await ImageCompressor.compressWithList(
       pngBytes,
       quality: 85,
       format: CompressFormat.jpeg,
@@ -244,7 +245,7 @@ class SketchPreviewGenerator {
     }
 
     // Try quality 70
-    compressed = await FlutterImageCompress.compressWithList(
+    compressed = await ImageCompressor.compressWithList(
       pngBytes,
       quality: 70,
       format: CompressFormat.jpeg,
@@ -255,7 +256,7 @@ class SketchPreviewGenerator {
     }
 
     // Final try: quality 50, smaller size
-    return FlutterImageCompress.compressWithList(
+    return ImageCompressor.compressWithList(
       pngBytes,
       quality: 50,
       minWidth: 800,
