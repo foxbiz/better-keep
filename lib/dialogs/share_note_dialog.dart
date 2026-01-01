@@ -1,6 +1,9 @@
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/share_link.dart';
+import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/export_data_service.dart';
+import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -844,20 +847,82 @@ Future<void> showShareNoteDialog(BuildContext context, Note note) async {
   }
 }
 
+/// Get attachment files as XFiles for sharing
+Future<List<XFile>> _getAttachmentFiles(Note note) async {
+  final List<XFile> files = [];
+  final fs = await fileSystem();
+
+  for (final attachment in note.attachments) {
+    String? sourcePath;
+    String? mimeType;
+    String? fileName;
+
+    switch (attachment.type) {
+      case AttachmentType.image:
+        sourcePath = attachment.image?.src;
+        mimeType = 'image/jpeg';
+        fileName = 'image_${files.length}.jpg';
+      case AttachmentType.sketch:
+        sourcePath = attachment.sketch?.previewImage;
+        mimeType = 'image/png';
+        fileName = 'sketch_${files.length}.png';
+      case AttachmentType.audio:
+        sourcePath = attachment.recording?.src;
+        mimeType = 'audio/m4a';
+        fileName = attachment.recording?.title ?? 'audio_${files.length}.m4a';
+    }
+
+    if (sourcePath == null) continue;
+
+    try {
+      // Read file bytes (handles decryption if encrypted)
+      final bytes = await readEncryptedBytes(sourcePath);
+      files.add(XFile.fromData(bytes, name: fileName, mimeType: mimeType));
+    } catch (e) {
+      // Try raw read as fallback
+      try {
+        final bytes = await fs.readBytes(sourcePath);
+        files.add(XFile.fromData(bytes, name: fileName, mimeType: mimeType));
+      } catch (_) {
+        // Skip this attachment if we can't read it
+      }
+    }
+  }
+
+  return files;
+}
+
 Future<void> _shareAsText(BuildContext context, Note note) async {
   final text = note.plainText ?? '';
   final title = note.title ?? 'Note';
 
+  // Get attachment files
+  final attachmentFiles = await _getAttachmentFiles(note);
+
   await SharePlus.instance.share(
-    ShareParams(text: '$title\n\n$text', title: title),
+    ShareParams(
+      text: '$title\n\n$text',
+      title: title,
+      files: attachmentFiles.isNotEmpty ? attachmentFiles : null,
+    ),
   );
 }
 
 Future<void> _shareAsMarkdown(BuildContext context, Note note) async {
-  final markdown = ExportDataService().noteToMarkdown(note);
+  final markdown = ExportDataService().noteToMarkdown(
+    note,
+    includeMetadata: false,
+  );
   final title = note.title ?? 'Note';
 
+  // Get attachment files
+  final attachmentFiles = await _getAttachmentFiles(note);
+
   await SharePlus.instance.share(
-    ShareParams(text: markdown, title: '$title.md'),
+    ShareParams(
+      text: markdown,
+      title: '$title.md',
+      files: attachmentFiles.isNotEmpty ? attachmentFiles : null,
+    ),
   );
 }

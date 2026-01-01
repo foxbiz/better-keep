@@ -422,12 +422,15 @@ class _SketchPageState extends State<SketchPage>
       final strokesJson = json.encode(state.sketchData.toStrokesFileJson());
       // Set strokesFilePath before write so toJson() assertion passes
       state.sketchData.strokesFilePath = strokesFilePath;
-      writeEncryptedBytes(
-        strokesFilePath,
-        Uint8List.fromList(utf8.encode(strokesJson)),
-      ).catchError((e) {
+      // Await strokes file write - must complete before note save triggers sync
+      try {
+        await writeEncryptedBytes(
+          strokesFilePath,
+          Uint8List.fromList(utf8.encode(strokesJson)),
+        );
+      } catch (e) {
         AppLogger.error('Error writing strokes file', e);
-      });
+      }
 
       if (state.isImageBasedSketch && state.sourceAttachment != null) {
         state.sourceAttachment!.type = AttachmentType.sketch;
@@ -1627,12 +1630,15 @@ class _SketchPageState extends State<SketchPage>
       // Set strokesFilePath before write so toJson() assertion passes
       sketchData.strokesFilePath = strokesFilePath;
       final strokesJson = json.encode(sketchData.toStrokesFileJson());
-      writeEncryptedBytes(
-        strokesFilePath,
-        Uint8List.fromList(utf8.encode(strokesJson)),
-      ).catchError((e) {
+      // Await strokes file write - must complete before note save triggers sync
+      try {
+        await writeEncryptedBytes(
+          strokesFilePath,
+          Uint8List.fromList(utf8.encode(strokesJson)),
+        );
+      } catch (e) {
         AppLogger.error('Error writing strokes file', e);
-      });
+      }
 
       // If this was an image attachment, convert it to a sketch
       if (isImageBasedSketch && sourceAttachment != null) {
@@ -1773,12 +1779,15 @@ class _SketchPageState extends State<SketchPage>
       // Set strokesFilePath before write so toJson() assertion passes
       _sketchData.strokesFilePath = strokesFilePath;
       final strokesJson = json.encode(_sketchData.toStrokesFileJson());
-      writeEncryptedBytes(
-        strokesFilePath,
-        Uint8List.fromList(utf8.encode(strokesJson)),
-      ).catchError((e) {
+      // Await strokes file write - must complete before note save triggers sync
+      try {
+        await writeEncryptedBytes(
+          strokesFilePath,
+          Uint8List.fromList(utf8.encode(strokesJson)),
+        );
+      } catch (e) {
         AppLogger.error('Error writing strokes file', e);
-      });
+      }
 
       // If this was an image attachment, convert it to a sketch
       if (_isImageBasedSketch && widget.sourceAttachment != null) {
