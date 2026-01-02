@@ -196,8 +196,8 @@ class PlanService {
       final result = await SubscriptionService.instance
           .checkExistingSubscription();
 
-      if (!result.hasSubscription) {
-        // Backend says no subscription - user's subscription was cancelled/expired
+      if (!result.hasSubscription && !result.isTrial) {
+        // Backend says no subscription and not a trial user - subscription was cancelled/expired
         // The backend already deleted the Firestore doc, which will trigger
         // our listener to update. But let's also clear cache immediately.
         AppLogger.log(
@@ -205,6 +205,10 @@ class PlanService {
         );
         _setSubscription(SubscriptionStatus.free);
         await _cacheSubscription(SubscriptionStatus.free);
+      } else if (result.isTrial) {
+        // User is on trial - don't change their status
+        // The backend returns hasSubscription: false for trial users to allow upgrades
+        AppLogger.log('PlanService: User is on trial, keeping current status');
       } else {
         AppLogger.log('PlanService: Backend confirmed subscription is active');
       }

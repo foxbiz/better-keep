@@ -136,7 +136,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
             'No account found with this email. Please sign up first.';
       } else if (errorStr.contains('wrong-password') ||
           errorStr.contains('invalid-credential')) {
-        errorMessage = 'Incorrect password. Please try again.';
+        errorMessage = 'Incorrect password or email. Please try again.';
       } else if (errorStr.contains('email-already-in-use')) {
         errorMessage =
             'An account already exists with this email. Try signing in or use a different sign-in method.';

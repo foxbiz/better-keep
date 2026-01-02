@@ -52,11 +52,13 @@ class ProductNotAvailableException implements Exception {
 class ExistingSubscriptionResult {
   final bool hasSubscription;
   final bool restored;
+  final bool isTrial;
   final Map<String, dynamic>? subscription;
 
   ExistingSubscriptionResult({
     required this.hasSubscription,
     this.restored = false,
+    this.isTrial = false,
     this.subscription,
   });
 }
@@ -925,13 +927,19 @@ Expected IDs: ${ProductIds.all}
         return ExistingSubscriptionResult(
           hasSubscription: true,
           restored: data['restored'] == true,
+          isTrial: data['isTrial'] == true,
           subscription: data['subscription'] != null
               ? Map<String, dynamic>.from(data['subscription'] as Map)
               : null,
         );
       }
 
-      return ExistingSubscriptionResult(hasSubscription: false);
+      // Check if user is on trial - backend returns hasSubscription: false
+      // for trial users to allow upgrades, but we shouldn't reset their status
+      return ExistingSubscriptionResult(
+        hasSubscription: false,
+        isTrial: data['isTrial'] == true,
+      );
     } catch (e) {
       AppLogger.error(
         'SubscriptionService: Error checking existing subscription',
