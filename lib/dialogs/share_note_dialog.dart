@@ -6,6 +6,7 @@ import 'package:better_keep/services/export_data_service.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -824,6 +825,15 @@ Future<void> showShareNoteDialog(BuildContext context, Note note) async {
     return;
   }
 
+  // On web, directly open secure link dialog (text/markdown sharing doesn't work)
+  if (kIsWeb) {
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => _SecureLinkDialog(note: note),
+    );
+    return;
+  }
+
   // Show the share type picker first
   final shareType = await showDialog<_ShareType>(
     context: context,
@@ -852,65 +862,90 @@ Future<void> showShareNoteDialog(BuildContext context, Note note) async {
 Future<List<XFile>> _getAttachmentFiles(Note note) async {
   final List<XFile> files = [];
 
-  // Early return if no attachments
   if (note.attachments.isEmpty) return files;
 
   final fs = await fileSystem();
 
+  // Collect unique files: Map<sourcePath, (fileName, mimeType)>
+  final Map<String, (String, String)> uniqueFiles = {};
+
+  int imageIdx = 0;
+  int sketchIdx = 0;
+  int audioIdx = 0;
+
   for (final attachment in note.attachments) {
-    String? sourcePath;
-    String? mimeType;
-    String? fileName;
+    String? path;
+    String name;
+    String mime;
 
     switch (attachment.type) {
       case AttachmentType.image:
-        sourcePath = attachment.image?.src;
-        // Detect MIME type from file extension
-        final ext = sourcePath?.split('.').lastOrNull?.toLowerCase();
-        mimeType = switch (ext) {
+        path = attachment.image?.src;
+        if (path == null || uniqueFiles.containsKey(path)) continue;
+        final ext = path.split('.').lastOrNull?.toLowerCase() ?? 'jpg';
+        mime = switch (ext) {
           'png' => 'image/png',
           'gif' => 'image/gif',
           'webp' => 'image/webp',
           _ => 'image/jpeg',
         };
-        fileName = 'image_${files.length}.${ext ?? 'jpg'}';
+        name = 'image_$imageIdx.$ext';
+        imageIdx++;
+
       case AttachmentType.sketch:
-        sourcePath = attachment.sketch?.previewImage;
-        mimeType = 'image/png';
-        fileName = 'sketch_${files.length}.png';
+        path = attachment.sketch?.previewImage;
+        if (path == null || uniqueFiles.containsKey(path)) continue;
+        mime = 'image/png';
+        name = 'sketch_$sketchIdx.png';
+        sketchIdx++;
+
       case AttachmentType.audio:
-        sourcePath = attachment.recording?.src;
-        // Detect audio MIME type from file extension
-        final audioExt = sourcePath?.split('.').lastOrNull?.toLowerCase();
-        mimeType = switch (audioExt) {
+        path = attachment.recording?.src;
+        if (path == null || uniqueFiles.containsKey(path)) continue;
+        final ext = path.split('.').lastOrNull?.toLowerCase() ?? 'm4a';
+        mime = switch (ext) {
           'mp3' => 'audio/mpeg',
           'wav' => 'audio/wav',
           'aac' => 'audio/aac',
           'ogg' => 'audio/ogg',
-          _ => 'audio/mp4', // m4a is audio/mp4
+          _ => 'audio/mp4',
         };
-        fileName =
-            attachment.recording?.title ??
-            'audio_${files.length}.${audioExt ?? 'm4a'}';
+        final title = attachment.recording?.title;
+        if (title != null && title.isNotEmpty) {
+          name = title.contains('.') ? title : '$title.$ext';
+        } else {
+          name = 'audio_$audioIdx.$ext';
+        }
+        audioIdx++;
     }
 
-    if (sourcePath == null) continue;
+    uniqueFiles[path] = (name, mime);
+  }
+
+  // Get cache directory for sharing (uses FileSystem abstraction - web-safe)
+  final cacheDir = await fs.cacheDir;
+  final shareDirPath = '$cacheDir/share_attachments';
+  await fs.createDirectory(shareDirPath);
+
+  // Read each unique file and write to temp with proper name
+  for (final entry in uniqueFiles.entries) {
+    final sourcePath = entry.key;
+    final (name, mime) = entry.value;
+    final destPath = '$shareDirPath/$name';
 
     try {
       // Read file bytes (handles decryption if encrypted)
       final bytes = await readEncryptedBytes(sourcePath);
-      files.add(XFile.fromData(bytes, name: fileName, mimeType: mimeType));
+      // Write to temp file with proper name
+      await fs.writeBytes(destPath, bytes);
+      files.add(XFile(destPath, mimeType: mime));
     } catch (e) {
-      // Try raw read as fallback
       try {
         final bytes = await fs.readBytes(sourcePath);
-        files.add(XFile.fromData(bytes, name: fileName, mimeType: mimeType));
+        await fs.writeBytes(destPath, bytes);
+        files.add(XFile(destPath, mimeType: mime));
       } catch (e2) {
-        // Log the failure but continue with other attachments
-        AppLogger.error(
-          'Failed to read attachment for sharing: $sourcePath',
-          e2,
-        );
+        AppLogger.error('Failed to read attachment: $sourcePath', e2);
       }
     }
   }
