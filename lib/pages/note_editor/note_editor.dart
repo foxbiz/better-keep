@@ -25,6 +25,7 @@ import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/note_recording.dart';
+import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -63,6 +64,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   bool _isLoadingMetadata = false;
 
   final ScrollController _quillScrollController = ScrollController();
+  final ScrollController _carouselScrollController = ScrollController();
   final Map<String, GlobalKey> _audioPlayerKeys = {};
   late final Note _note;
   late FocusNode _focusNode;
@@ -120,6 +122,20 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  void _scrollToAttachments() {
+    // Scroll carousel to end to show the newly added attachment
+    // Use a delay to ensure the UI has rebuilt with the new attachment
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted && _carouselScrollController.hasClients) {
+        _carouselScrollController.animateTo(
+          _carouselScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _appendTranscriptToNote(String text, NoteRecording recording) {
@@ -300,10 +316,13 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _changeTimer?.cancel();
     _changesSubscription?.cancel();
-    _saveNote();
+    // Pass flag to clear password after save completes (if setting enabled)
+    _saveNote(clearPasswordAfterSave: AppState.forgetLockedNotePassword);
     _controller.removeListener(_didChangeSelection);
     _controller.dispose();
     _note.unsub("changed", _onNoteChanged);
+    _carouselScrollController.dispose();
+
     super.dispose();
   }
 
@@ -481,6 +500,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     NoteAttachmentsCarousel(
                       note: _note,
                       onPop: () => setState(() {}),
+                      scrollController: _carouselScrollController,
                     ),
                     Theme(
                       data: Theme.of(context).copyWith(
@@ -784,6 +804,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         readOnly: _note.readOnly,
         note: _note,
         onAppendTranscript: _appendTranscriptToNote,
+        onAttachmentAdded: _scrollToAttachments,
       ),
       TextColorButton(
         color: textColor,
@@ -853,7 +874,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     );
   }
 
-  void _saveNote() async {
+  void _saveNote({bool clearPasswordAfterSave = false}) async {
     // If deleteIfUnchanged is set and content hasn't meaningfully changed, delete instead of save
     if (widget.deleteIfUnchanged && _initialPlainText != null) {
       final currentPlainText = _controller.document.toPlainText().trim();
@@ -881,12 +902,20 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     final newContent = json.encode(_controller.document.toDelta().toJson());
 
     if (oldContent == newContent) {
+      // Even if content unchanged, clear password if requested
+      if (clearPasswordAfterSave && _note.locked) {
+        _note.clearPassword();
+      }
       return;
     }
 
     try {
       final plainText = _controller.document.toPlainText().trim();
       await _note.setContent(newContent, plainText);
+      // Clear password after successful save if setting is enabled
+      if (clearPasswordAfterSave && _note.locked) {
+        _note.clearPassword();
+      }
     } catch (e) {
       AppLogger.error('Error saving note', e);
       snackbar("Error saving note", Colors.red);

@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:better_keep/config.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 bool isDark(Color? color) {
@@ -7,9 +10,15 @@ bool isDark(Color? color) {
       ThemeData.estimateBrightnessForColor(color) == Brightness.dark;
 }
 
+bool _isMobilePlatform() {
+  if (kIsWeb) return false;
+  return Platform.isAndroid || Platform.isIOS;
+}
+
 Future<dynamic> showPage(BuildContext context, Widget page) {
   final isBigScreen =
-      MediaQuery.of(context).size.width >= bigScreenWidthThreshold;
+      MediaQuery.of(context).size.width >= bigScreenWidthThreshold &&
+      !_isMobilePlatform();
 
   if (isBigScreen) {
     // Check if we're already inside a dialog route to avoid stacking barriers

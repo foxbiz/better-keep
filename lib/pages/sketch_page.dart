@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:better_keep/components/adaptive_popup_menu.dart';
 import 'package:better_keep/components/page_pattern_painter.dart';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/components/sketch_tool_popup.dart';
@@ -16,6 +17,7 @@ import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/components/adaptive_toolbar.dart';
@@ -71,8 +73,24 @@ class _SketchPageState extends State<SketchPage>
   late Animation<double> _toolbarFadeAnimation;
   bool _isToolbarVisible = true;
 
+  // Appbar animation
+  late AnimationController _appbarAnimationController;
+  late Animation<Offset> _appbarSlideAnimation;
+  late Animation<double> _appbarFadeAnimation;
+  bool _isAppbarVisible = true;
+
+  // Double tap detection
+  DateTime? _lastTapTime;
+  static const _doubleTapThreshold = Duration(milliseconds: 200);
+  Timer? _pendingDotTimer;
+  Offset? _pendingDotPosition;
+  double? _pendingDotPressure;
+
   bool _hasFitted = false;
   SketchTool _selectedTool = SketchTool.pen;
+
+  /// Whether move/pan mode is active (not a drawing tool)
+  bool _isMoveMode = false;
 
   /// The currently selected drawing tool mode (pen, pencil, brush, highlighter)
   /// Initialized from AppState in initState for persistence
@@ -81,9 +99,16 @@ class _SketchPageState extends State<SketchPage>
   int _activePointerCount = 0;
   bool _isMultiTouch = false;
 
+  /// Track if we've started drawing (passed movement threshold)
+  bool _hasStartedDrawing = false;
+
+  /// Initial touch position for gesture detection
+  Offset? _initialTouchPosition;
+
+  /// Minimum distance to move before starting a stroke (helps distinguish from pinch)
+  static const double _strokeStartThreshold = 3.0;
+
   Timer? _autoSaveTimer;
-  late double _penSize;
-  late double _eraserSize;
   SketchStroke? _currentStroke;
   List<SketchStroke> _strokes = [];
   ui.Image? _loadedBackgroundImage;
@@ -129,8 +154,6 @@ class _SketchPageState extends State<SketchPage>
     // Load persisted sketch preferences from AppState
     _selectedPenMode = AppState.sketchTool;
     _selectedTool = _selectedPenMode;
-    _penSize = AppState.sketchPenSize;
-    _eraserSize = AppState.sketchEraserSize;
     _selectedColor = AppState.sketchPenColor;
 
     // Initialize toolbar animation controller
@@ -154,6 +177,28 @@ class _SketchPageState extends State<SketchPage>
     );
     // Start with toolbar visible
     _toolbarAnimationController.forward();
+
+    // Initialize appbar animation controller
+    _appbarAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    _appbarSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _appbarAnimationController,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        );
+    _appbarFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _appbarAnimationController,
+        curve: Curves.easeOut,
+      ),
+    );
+    // Start with appbar visible
+    _appbarAnimationController.forward();
 
     // Initialize local sketches from note - this won't change when note updates
     _localSketches = List<SketchData>.from(widget.note.sketches);
@@ -238,24 +283,49 @@ class _SketchPageState extends State<SketchPage>
 
   @override
   void dispose() {
+    // Restore system UI when leaving the page
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+      overlays: SystemUiOverlay.values,
+    );
     _toolbarAnimationController.dispose();
+    _appbarAnimationController.dispose();
     _transformationController.dispose();
+    _pagesPopupController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _autoSaveTimer?.cancel();
+    _pendingDotTimer?.cancel();
     // Flush any pending debounced save immediately
     _flushPendingSave();
     super.dispose();
   }
 
-  /// Toggle toolbar visibility with animation
+  /// Toggle toolbar and appbar visibility with animation
   void _toggleToolbar() {
+    // Cancel any pending dot placement on double tap
+    _pendingDotTimer?.cancel();
+    _pendingDotTimer = null;
+    _pendingDotPosition = null;
+    _pendingDotPressure = null;
+    _lastTapTime = null;
+
     setState(() {
       _isToolbarVisible = !_isToolbarVisible;
+      _isAppbarVisible = !_isAppbarVisible;
     });
     if (_isToolbarVisible) {
       _toolbarAnimationController.forward();
+      _appbarAnimationController.forward();
+      // Show system UI (status bar)
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.edgeToEdge,
+        overlays: SystemUiOverlay.values,
+      );
     } else {
       _toolbarAnimationController.reverse();
+      _appbarAnimationController.reverse();
+      // Hide system UI (status bar) for fullscreen
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     }
   }
 
@@ -512,6 +582,9 @@ class _SketchPageState extends State<SketchPage>
     final bgPath = newSketch.backgroundImage;
     final cachedBgImage = bgPath != null ? _backgroundImageCache[bgPath] : null;
 
+    // Keep current paper color to prevent flash while loading
+    final previousPaperColor = _paperColor;
+
     setState(() {
       _currentSketchIndex = index;
       _sketchData = newSketch;
@@ -526,10 +599,15 @@ class _SketchPageState extends State<SketchPage>
           _sketchData.backgroundImage != null &&
           _sketchData.backgroundImage!.isNotEmpty;
 
-      // Update paper color
-      _paperColor = _isImageBasedSketch
-          ? Colors.transparent
-          : _sketchData.backgroundColor;
+      // Keep previous paper color if strokes need to be loaded from file
+      // (the actual color will be set when strokes file is loaded)
+      if (_strokes.isEmpty && _sketchData.hasStrokesFile) {
+        _paperColor = previousPaperColor;
+      } else {
+        _paperColor = _isImageBasedSketch
+            ? Colors.transparent
+            : _sketchData.backgroundColor;
+      }
       _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
 
       // Use cached background image if available for instant render
@@ -554,8 +632,18 @@ class _SketchPageState extends State<SketchPage>
       _hasFitted = false;
     });
 
-    // Load background image if present and not cached
-    if (_sketchData.backgroundImage != null && cachedBgImage == null) {
+    // Load strokes from file if needed (strokes might be empty if stored in file)
+    if (_strokes.isEmpty && _sketchData.hasStrokesFile) {
+      _loadStrokesFromFile().then((_) {
+        // Load background image after strokes are loaded
+        if (mounted &&
+            _sketchData.backgroundImage != null &&
+            cachedBgImage == null) {
+          _loadBackgroundImage();
+        }
+      });
+    } else if (_sketchData.backgroundImage != null && cachedBgImage == null) {
+      // Load background image if present and not cached
       _loadBackgroundImage();
     }
   }
@@ -665,6 +753,10 @@ class _SketchPageState extends State<SketchPage>
 
   /// Create a new blank sketch
   void _createNewSketch() async {
+    // Capture current sketch settings before saving
+    final currentBgColor = _sketchData.backgroundColor;
+    final currentPagePattern = _sketchData.pagePattern;
+
     // Save current sketch first if it has strokes
     if (_strokes.isNotEmpty) {
       await _save();
@@ -676,9 +768,10 @@ class _SketchPageState extends State<SketchPage>
       return;
     }
 
-    // Create new sketch data
+    // Create new sketch data with same settings as current sketch
     final newSketch = SketchData(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+      backgroundColor: currentBgColor,
+      pagePattern: currentPagePattern,
     );
 
     setState(() {
@@ -766,92 +859,149 @@ class _SketchPageState extends State<SketchPage>
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false,
+        extendBodyBehindAppBar: true,
         backgroundColor: _backgroundColor,
-        appBar: AppBar(
-          backgroundColor: _backgroundColor,
-          foregroundColor: _foregroundColor,
-          iconTheme: IconThemeData(color: _foregroundColor),
-          actionsIconTheme: IconThemeData(color: _foregroundColor),
-          leading: BackButton(color: _foregroundColor),
-          titleTextStyle: TextStyle(
-            color: _foregroundColor,
-            fontSize: 20,
-            fontWeight: FontWeight.w500,
-          ),
-          actions: [
-            // Add new sketch button
-            IconButton(
-              icon: const Icon(Icons.add),
-              color: _foregroundColor,
-              onPressed: _createNewSketch,
-              tooltip: 'New Sketch',
-            ),
-            if (!_isImageBasedSketch)
-              IconButton(
-                icon: const Icon(Icons.color_lens),
-                color: _foregroundColor,
-                onPressed: () => _pickColor(true),
-                tooltip: 'Paper Color',
-              ),
-            if (!_isImageBasedSketch)
-              PopupMenuButton<PagePattern>(
-                icon: Icon(
-                  _sketchData.pagePattern.icon,
-                  color: _foregroundColor,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: SlideTransition(
+            position: _appbarSlideAnimation,
+            child: FadeTransition(
+              opacity: _appbarFadeAnimation,
+              child: AppBar(
+                backgroundColor: _backgroundColor.withValues(alpha: 0.8),
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                flexibleSpace: ClipRect(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(color: Colors.transparent),
+                  ),
                 ),
-                tooltip: 'Page Pattern',
-                onSelected: (pattern) {
-                  setState(() {
-                    _sketchData.pagePattern = pattern;
-                    _isDirty = true;
-                  });
-                },
-                itemBuilder: (context) => PagePattern.values.map((pattern) {
-                  final isSelected = _sketchData.pagePattern == pattern;
-                  return PopupMenuItem(
-                    value: pattern,
-                    child: Row(
-                      children: [
-                        Icon(
-                          pattern.icon,
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          pattern.displayName,
-                          style: isSelected
-                              ? TextStyle(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                )
-                              : null,
-                        ),
-                      ],
+                foregroundColor: _foregroundColor,
+                iconTheme: IconThemeData(color: _foregroundColor),
+                actionsIconTheme: IconThemeData(color: _foregroundColor),
+                leading: BackButton(color: _foregroundColor),
+                titleTextStyle: TextStyle(
+                  color: _foregroundColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                ),
+                actions: [
+                  if (!_isImageBasedSketch)
+                    IconButton(
+                      icon: const Icon(Icons.color_lens),
+                      color: _foregroundColor,
+                      onPressed: () => _pickColor(true),
+                      tooltip: 'Paper Color',
                     ),
-                  );
-                }).toList(),
+                  if (!_isImageBasedSketch)
+                    PopupMenuButton<PagePattern>(
+                      icon: Icon(
+                        _sketchData.pagePattern.icon,
+                        color: _foregroundColor,
+                      ),
+                      tooltip: 'Page Pattern',
+                      onSelected: (pattern) {
+                        setState(() {
+                          _sketchData.pagePattern = pattern;
+                          _isDirty = true;
+                        });
+                      },
+                      itemBuilder: (context) => PagePattern.values.map((
+                        pattern,
+                      ) {
+                        final isSelected = _sketchData.pagePattern == pattern;
+                        return PopupMenuItem(
+                          value: pattern,
+                          child: Row(
+                            children: [
+                              Icon(
+                                pattern.icon,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                pattern.displayName,
+                                style: isSelected
+                                    ? TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        fontWeight: FontWeight.w600,
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  // Overflow menu for save and delete actions
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, color: _foregroundColor),
+                    tooltip: 'More options',
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'save':
+                          _saveToGallery();
+                          break;
+                        case 'delete':
+                          _deleteCurrentSketch();
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (_strokes.isNotEmpty)
+                        PopupMenuItem(
+                          value: 'save',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.save_alt,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text('Save to Gallery'),
+                            ],
+                          ),
+                        ),
+                      if (_localSketches.contains(_sketchData) ||
+                          _pendingNewSketch == _sketchData)
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Delete',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-            if (_strokes.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.save_alt),
-                color: _foregroundColor,
-                onPressed: _saveToGallery,
-                tooltip: 'Save to Gallery',
-              ),
-            if (_localSketches.contains(_sketchData) ||
-                _pendingNewSketch == _sketchData)
-              IconButton(
-                icon: const Icon(Icons.delete),
-                color: Theme.of(context).colorScheme.error,
-                onPressed: _deleteCurrentSketch,
-              ),
-          ],
+            ),
+          ),
         ),
-        body: Column(
+        body: Stack(
           children: [
-            Expanded(
+            // Canvas - fills the entire screen including behind appbar
+            Positioned.fill(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   if (!_hasFitted) {
@@ -905,10 +1055,13 @@ class _SketchPageState extends State<SketchPage>
                           child: MouseRegion(
                             cursor: SystemMouseCursors.none,
                             onHover: (event) {
-                              setState(() {
-                                _cursorPosition = event.localPosition;
-                                _isMouseInput = true;
-                              });
+                              // Only show cursor indicator for actual mouse, not stylus hover
+                              if (event.kind == ui.PointerDeviceKind.mouse) {
+                                setState(() {
+                                  _cursorPosition = event.localPosition;
+                                  _isMouseInput = true;
+                                });
+                              }
                             },
                             onExit: (event) {
                               setState(() {
@@ -917,7 +1070,7 @@ class _SketchPageState extends State<SketchPage>
                             },
                             child: Listener(
                               onPointerDown: (details) {
-                                if (widget.note.readOnly) return;
+                                if (widget.note.readOnly || _isMoveMode) return;
                                 setState(() {
                                   _isMouseInput =
                                       details.kind ==
@@ -925,36 +1078,112 @@ class _SketchPageState extends State<SketchPage>
                                   _cursorPosition = details.localPosition;
                                   _activePointerCount++;
                                   if (_activePointerCount > 1) {
+                                    // Multi-touch detected - cancel any stroke
                                     _isMultiTouch = true;
                                     _currentStroke = null;
+                                    _hasStartedDrawing = false;
+                                    _initialTouchPosition = null;
                                   } else if (!_isMultiTouch) {
-                                    _startStroke(
-                                      details.localPosition.dx,
-                                      details.localPosition.dy,
-                                      details.pressure,
-                                    );
+                                    // Store initial position, don't start stroke yet
+                                    _initialTouchPosition =
+                                        details.localPosition;
+                                    _hasStartedDrawing = false;
                                   }
                                 });
                               },
                               onPointerMove: (details) {
-                                if (widget.note.readOnly) return;
+                                if (widget.note.readOnly || _isMoveMode) return;
                                 setState(() {
                                   _cursorPosition = details.localPosition;
                                 });
-                                if (_isMultiTouch) return;
-                                _updateStroke(
-                                  details.localPosition.dx,
-                                  details.localPosition.dy,
-                                  details.pressure,
-                                );
+                                if (_isMultiTouch) {
+                                  // Multi-touch in progress - ensure stroke is cancelled
+                                  if (_currentStroke != null) {
+                                    setState(() {
+                                      _currentStroke = null;
+                                      _hasStartedDrawing = false;
+                                    });
+                                  }
+                                  return;
+                                }
+
+                                // Check if we should start drawing
+                                if (!_hasStartedDrawing &&
+                                    _initialTouchPosition != null) {
+                                  final distance =
+                                      (details.localPosition -
+                                              _initialTouchPosition!)
+                                          .distance;
+                                  if (distance >= _strokeStartThreshold) {
+                                    // Start the stroke from initial position
+                                    _hasStartedDrawing = true;
+                                    _startStroke(
+                                      _initialTouchPosition!.dx,
+                                      _initialTouchPosition!.dy,
+                                      details.pressure,
+                                    );
+                                  }
+                                }
+
+                                if (_hasStartedDrawing) {
+                                  _updateStroke(
+                                    details.localPosition.dx,
+                                    details.localPosition.dy,
+                                    details.pressure,
+                                  );
+                                }
                               },
                               onPointerUp: (details) {
-                                if (widget.note.readOnly) return;
+                                if (widget.note.readOnly || _isMoveMode) return;
                                 setState(() {
                                   _activePointerCount--;
                                   if (_activePointerCount == 0) {
                                     _isMultiTouch = false;
-                                    _endStroke();
+                                    if (_hasStartedDrawing) {
+                                      _endStroke();
+                                    } else if (_initialTouchPosition != null &&
+                                        _selectedTool != SketchTool.eraser) {
+                                      // Check for double tap - cancel any pending dot
+                                      final now = DateTime.now();
+                                      final isDoubleTap =
+                                          _lastTapTime != null &&
+                                          now.difference(_lastTapTime!) <
+                                              _doubleTapThreshold;
+                                      _lastTapTime = now;
+
+                                      if (isDoubleTap) {
+                                        // Cancel pending dot and toggle fullscreen on double tap
+                                        _pendingDotTimer?.cancel();
+                                        _pendingDotTimer = null;
+                                        _pendingDotPosition = null;
+                                        _pendingDotPressure = null;
+                                        _toggleToolbar();
+                                      } else {
+                                        // Store dot info and wait for potential second tap
+                                        _pendingDotPosition =
+                                            _initialTouchPosition;
+                                        _pendingDotPressure = details.pressure;
+                                        _pendingDotTimer?.cancel();
+                                        _pendingDotTimer = Timer(
+                                          _doubleTapThreshold,
+                                          () {
+                                            if (_pendingDotPosition != null) {
+                                              _placeDot(
+                                                _pendingDotPosition!.dx,
+                                                _pendingDotPosition!.dy,
+                                                _pendingDotPressure,
+                                              );
+                                              _pendingDotPosition = null;
+                                              _pendingDotPressure = null;
+                                              // Reset tap time so next tap is treated as fresh
+                                              _lastTapTime = null;
+                                            }
+                                          },
+                                        );
+                                      }
+                                    }
+                                    _hasStartedDrawing = false;
+                                    _initialTouchPosition = null;
                                     // Hide cursor for touch input when drawing ends
                                     if (!_isMouseInput) {
                                       _cursorPosition = null;
@@ -963,12 +1192,15 @@ class _SketchPageState extends State<SketchPage>
                                 });
                               },
                               onPointerCancel: (details) {
-                                if (widget.note.readOnly) return;
+                                if (widget.note.readOnly || _isMoveMode) return;
                                 setState(() {
                                   _activePointerCount--;
                                   if (_activePointerCount == 0) {
                                     _isMultiTouch = false;
-                                    _endStroke();
+                                    // Don't save stroke on cancel
+                                    _currentStroke = null;
+                                    _hasStartedDrawing = false;
+                                    _initialTouchPosition = null;
                                     // Hide cursor for touch input when drawing ends
                                     if (!_isMouseInput) {
                                       _cursorPosition = null;
@@ -988,15 +1220,16 @@ class _SketchPageState extends State<SketchPage>
                             ),
                           ),
                         ),
-                        // Custom cursor indicator - show for mouse always, for touch only while drawing
+                        // Custom cursor indicator - show for mouse always, for eraser while drawing
                         if (_cursorPosition != null &&
-                            (_isMouseInput || _currentStroke != null))
+                            (_isMouseInput ||
+                                (_currentStroke != null &&
+                                    _selectedTool == SketchTool.eraser)))
                           Builder(
                             builder: (context) {
-                              final toolSize =
-                                  _selectedTool == SketchTool.eraser
-                                  ? _eraserSize
-                                  : _penSize;
+                              final toolSize = AppState.getSketchToolSize(
+                                _selectedTool,
+                              );
                               // Minimum display size for visibility
                               const minDisplaySize = 16.0;
                               final displaySize = toolSize < minDisplaySize
@@ -1063,18 +1296,15 @@ class _SketchPageState extends State<SketchPage>
                     ),
                   );
 
-                  final interactiveViewer = GestureDetector(
-                    onDoubleTap: _toggleToolbar,
-                    child: InteractiveViewer(
-                      transformationController: _transformationController,
-                      boundaryMargin: const EdgeInsets.all(2000),
-                      minScale: 0.01,
-                      maxScale: 5.0,
-                      panEnabled: false,
-                      scaleEnabled: true,
-                      constrained: false,
-                      child: canvasWidget,
-                    ),
+                  final interactiveViewer = InteractiveViewer(
+                    transformationController: _transformationController,
+                    boundaryMargin: const EdgeInsets.all(2000),
+                    minScale: 0.01,
+                    maxScale: 5.0,
+                    panEnabled: _isMoveMode,
+                    scaleEnabled: true,
+                    constrained: false,
+                    child: canvasWidget,
                   );
 
                   if (widget.heroTag != null) {
@@ -1114,142 +1344,96 @@ class _SketchPageState extends State<SketchPage>
                 },
               ),
             ),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) {
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: FadeTransition(opacity: animation, child: child),
-                );
-              },
-              child: widget.note.readOnly
-                  ? const SizedBox.shrink()
-                  : SlideTransition(
-                      position: _toolbarSlideAnimation,
-                      child: FadeTransition(
-                        opacity: _toolbarFadeAnimation,
-                        child: AdaptiveToolbar(
-                          parentColor: _backgroundColor,
-                          child: GestureDetector(
-                            onHorizontalDragEnd: _showPagination
-                                ? (details) {
-                                    // Swipe left to go to next sketch
-                                    if (details.primaryVelocity != null &&
-                                        details.primaryVelocity! < -200) {
-                                      _navigateToSketch(
-                                        _currentSketchIndex + 1,
-                                      );
+            // Floating toolbar at the bottom
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 1),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: FadeTransition(opacity: animation, child: child),
+                  );
+                },
+                child: widget.note.readOnly
+                    ? const SizedBox.shrink()
+                    : SlideTransition(
+                        position: _toolbarSlideAnimation,
+                        child: FadeTransition(
+                          opacity: _toolbarFadeAnimation,
+                          child: AdaptiveToolbar(
+                            parentColor: _backgroundColor,
+                            child: GestureDetector(
+                              onHorizontalDragEnd: _showPagination
+                                  ? (details) {
+                                      // Swipe left to go to next sketch
+                                      if (details.primaryVelocity != null &&
+                                          details.primaryVelocity! < -200) {
+                                        _navigateToSketch(
+                                          _currentSketchIndex + 1,
+                                        );
+                                      }
+                                      // Swipe right to go to previous sketch
+                                      else if (details.primaryVelocity !=
+                                              null &&
+                                          details.primaryVelocity! > 200) {
+                                        _navigateToSketch(
+                                          _currentSketchIndex - 1,
+                                        );
+                                      }
                                     }
-                                    // Swipe right to go to previous sketch
-                                    else if (details.primaryVelocity != null &&
-                                        details.primaryVelocity! > 200) {
-                                      _navigateToSketch(
-                                        _currentSketchIndex - 1,
-                                      );
-                                    }
-                                  }
-                                : null,
-                            child: CustomScrollView(
-                              scrollDirection: Axis.horizontal,
-                              shrinkWrap: true,
-                              slivers: [
-                                // Previous sketch button
-                                if (_showPagination)
+                                  : null,
+                              child: CustomScrollView(
+                                scrollDirection: Axis.horizontal,
+                                shrinkWrap: true,
+                                slivers: [
+                                  // Pages grid button - always visible for page management
+                                  _buildPagesGridButton(),
                                   IconButton(
-                                    icon: const Icon(Icons.chevron_left),
-                                    onPressed: _currentSketchIndex > 0
-                                        ? () => _navigateToSketch(
-                                            _currentSketchIndex - 1,
-                                          )
-                                        : null,
-                                    tooltip: 'Previous sketch',
+                                    icon: const Icon(Icons.undo),
+                                    onPressed: _undoCount == 0
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              --_undoCount;
+                                              _redoStack.add(
+                                                _strokes.removeLast(),
+                                              );
+                                              _isDirty = true;
+                                            });
+                                          },
                                   ),
-                                // Page indicator
-                                if (_showPagination)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        '${_currentSketchIndex + 1}/$_totalSketches',
-                                        style: TextStyle(
-                                          color: _foregroundColor.withValues(
-                                            alpha: 0.7,
-                                          ),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                // Next sketch button
-                                if (_showPagination)
                                   IconButton(
-                                    icon: const Icon(Icons.chevron_right),
-                                    onPressed:
-                                        _currentSketchIndex < _totalSketches - 1
-                                        ? () => _navigateToSketch(
-                                            _currentSketchIndex + 1,
-                                          )
-                                        : null,
-                                    tooltip: 'Next sketch',
+                                    icon: const Icon(Icons.redo),
+                                    onPressed: _redoStack.isEmpty
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              ++_undoCount;
+                                              _strokes.add(
+                                                _redoStack.removeLast(),
+                                              );
+                                              _isDirty = true;
+                                            });
+                                          },
                                   ),
-                                // Divider between pagination and tools
-                                if (_showPagination)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8,
-                                    ),
-                                    child: VerticalDivider(
-                                      width: 16,
-                                      thickness: 1,
-                                      color: _foregroundColor.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                    ),
-                                  ),
-                                IconButton(
-                                  icon: const Icon(Icons.undo),
-                                  onPressed: _undoCount == 0
-                                      ? null
-                                      : () {
-                                          setState(() {
-                                            --_undoCount;
-                                            _redoStack.add(
-                                              _strokes.removeLast(),
-                                            );
-                                            _isDirty = true;
-                                          });
-                                        },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.redo),
-                                  onPressed: _redoStack.isEmpty
-                                      ? null
-                                      : () {
-                                          setState(() {
-                                            ++_undoCount;
-                                            _strokes.add(
-                                              _redoStack.removeLast(),
-                                            );
-                                            _isDirty = true;
-                                          });
-                                        },
-                                ),
-                                _buildToolButtonButton(SketchTool.pen),
-                                _buildToolButtonButton(SketchTool.eraser),
-                              ].map((el) => SliverToBoxAdapter(child: el)).toList(),
+                                  _buildMoveToolButton(),
+                                  _buildToolButtonButton(SketchTool.pen),
+                                  _buildToolButtonButton(SketchTool.eraser),
+                                ].map((el) => SliverToBoxAdapter(child: el)).toList(),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
+              ),
             ),
           ],
         ),
@@ -1257,10 +1441,33 @@ class _SketchPageState extends State<SketchPage>
     );
   }
 
+  /// Builds the move/pan tool button
+  Widget _buildMoveToolButton() {
+    return IconButton(
+      mouseCursor: SystemMouseCursors.click,
+      isSelected: _isMoveMode,
+      icon: const Icon(Icons.open_with_rounded),
+      tooltip: 'Move',
+      onPressed: () {
+        setState(() {
+          _isMoveMode = !_isMoveMode;
+          // When entering move mode, deselect any active stroke
+          if (_isMoveMode) {
+            _currentStroke = null;
+            _hasStartedDrawing = false;
+            _initialTouchPosition = null;
+          }
+        });
+      },
+    );
+  }
+
   Widget _buildToolButtonButton(SketchTool tool) {
     // For drawing tools (non-eraser), check if any drawing tool is selected
     final isEraser = tool == SketchTool.eraser;
-    final isSelected = isEraser
+    final isSelected = _isMoveMode
+        ? false // No drawing tool is selected when in move mode
+        : isEraser
         ? _selectedTool == SketchTool.eraser
         : _selectedTool.isDrawingTool;
     final toolType = isEraser ? SketchToolType.eraser : SketchToolType.pen;
@@ -1276,6 +1483,7 @@ class _SketchPageState extends State<SketchPage>
           ? null // Popup is handled by SketchToolPopup
           : () {
               setState(() {
+                _isMoveMode = false; // Exit move mode when selecting a tool
                 if (isEraser) {
                   _selectedTool = SketchTool.eraser;
                 } else {
@@ -1288,29 +1496,23 @@ class _SketchPageState extends State<SketchPage>
 
     // When selected, wrap in popup for tool options
     if (isSelected) {
+      // Get the current tool for size (eraser uses eraser, pen uses selectedPenMode)
+      final currentTool = isEraser ? SketchTool.eraser : _selectedPenMode;
       return SketchToolPopup(
         toolType: toolType,
         selectedPenMode: _selectedPenMode,
         selectedColor: _selectedColor,
-        penSize: _penSize,
-        eraserSize: _eraserSize,
+        toolSize: AppState.getSketchToolSize(currentTool),
         onColorChanged: (color) {
           setState(() {
             _selectedColor = color;
           });
           AppState.sketchPenColor = color;
         },
-        onPenSizeChanged: (size) {
+        onSizeChanged: (size) {
           setState(() {
-            _penSize = size;
+            AppState.setSketchToolSize(currentTool, size);
           });
-          AppState.sketchPenSize = size;
-        },
-        onEraserSizeChanged: (size) {
-          setState(() {
-            _eraserSize = size;
-          });
-          AppState.sketchEraserSize = size;
         },
         onPenModeChanged: (mode) {
           setState(() {
@@ -1325,6 +1527,167 @@ class _SketchPageState extends State<SketchPage>
     }
 
     return iconButton;
+  }
+
+  /// Controller for the pages grid popup
+  final AdaptivePopupController _pagesPopupController =
+      AdaptivePopupController();
+
+  /// Builds a button that opens a popup grid of all sketch page previews
+  Widget _buildPagesGridButton() {
+    return AdaptivePopupMenu(
+      controller: _pagesPopupController,
+      width: 260,
+      builder: (context, close) =>
+          SizedBox(height: 300, child: _buildPagesGrid(context, close)),
+      child: IconButton(
+        onPressed: _pagesPopupController.toggle,
+        tooltip: 'View all pages',
+        icon: Badge(
+          label: Text(
+            '${_currentSketchIndex + 1}/$_totalSketches',
+            style: const TextStyle(fontSize: 10),
+          ),
+          child: const Icon(Icons.grid_view_rounded),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the scrollable grid of page previews
+  Widget _buildPagesGrid(BuildContext parentContext, VoidCallback close) {
+    // +1 for the "Add new page" button at the end
+    final itemCount = _totalSketches + 1;
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(8),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 0.75, // Slightly taller for A4-like pages
+      ),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        // Last item is the "Add new page" button
+        if (index == _totalSketches) {
+          return _buildAddPageButton(context, close);
+        }
+
+        final isSelected = index == _currentSketchIndex;
+        final isPendingSketch = index >= _localSketches.length;
+        final sketch = isPendingSketch
+            ? _pendingNewSketch
+            : _localSketches[index];
+
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              close();
+              _navigateToSketch(index);
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isSelected
+                      ? Theme.of(parentContext).colorScheme.primary
+                      : _foregroundColor.withValues(alpha: 0.2),
+                  width: isSelected ? 2 : 1,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Background color
+                    Container(color: sketch?.backgroundColor ?? Colors.white),
+                    // Preview image
+                    if (sketch?.previewImage != null &&
+                        sketch!.previewImage!.isNotEmpty)
+                      UniversalImage(
+                        path: sketch.previewImage!,
+                        fit: BoxFit.cover,
+                      ),
+                    // Page number badge
+                    Positioned(
+                      right: 4,
+                      bottom: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Theme.of(parentContext).colorScheme.primary
+                              : Colors.black54,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Builds the "Add new page" button for the pages grid
+  Widget _buildAddPageButton(BuildContext context, VoidCallback close) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          close();
+          _createNewSketch();
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _foregroundColor.withValues(alpha: 0.2),
+              width: 1,
+            ),
+            color: _foregroundColor.withValues(alpha: 0.05),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_rounded,
+                color: _foregroundColor.withValues(alpha: 0.5),
+                size: 32,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'New',
+                style: TextStyle(
+                  color: _foregroundColor.withValues(alpha: 0.5),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadBackgroundImage() async {
@@ -1376,12 +1739,24 @@ class _SketchPageState extends State<SketchPage>
   }
 
   void _fitToScreen(double viewportWidth, double viewportHeight) {
+    final appBarHeight = MediaQuery.of(context).padding.top + kToolbarHeight;
+
     final double scaleX = viewportWidth / _canvasSize.width;
     final double scaleY = viewportHeight / _canvasSize.height;
     final double scale = min(scaleX, scaleY) * 0.95;
 
     final double offsetX = (viewportWidth - _canvasSize.width * scale) / 2;
-    final double offsetY = (viewportHeight - _canvasSize.height * scale) / 2;
+    double offsetY = (viewportHeight - _canvasSize.height * scale) / 2;
+
+    // If the canvas would overlap with the appbar when centered, push it down
+    if (offsetY < appBarHeight) {
+      final availableHeight = viewportHeight - appBarHeight;
+      final adjustedScale =
+          min(scaleX, availableHeight / _canvasSize.height) * 0.95;
+      offsetY =
+          appBarHeight +
+          (availableHeight - _canvasSize.height * adjustedScale) / 2;
+    }
 
     _transformationController.value = Matrix4.identity()
       ..setEntry(0, 3, offsetX)
@@ -1398,7 +1773,7 @@ class _SketchPageState extends State<SketchPage>
         // Pressure is still limited to 3 decimals as that's sufficient
         points: '$x,$y,${(pressure ?? 0.5).toStringAsFixed(3)}',
         color: _selectedColor,
-        size: _selectedTool == SketchTool.eraser ? _eraserSize : _penSize,
+        size: AppState.getSketchToolSize(_selectedTool),
         tool: _selectedTool,
       );
     });
@@ -1423,6 +1798,27 @@ class _SketchPageState extends State<SketchPage>
         _currentStroke = null;
         _isDirty = true;
       }
+    });
+
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(seconds: 3), _save);
+  }
+
+  /// Place a dot at the given position (for quick taps)
+  void _placeDot(double x, double y, double? pressure) {
+    final p = (pressure ?? 0.5).toStringAsFixed(3);
+    // Create a stroke with two points very close together to form a dot
+    final dot = SketchStroke(
+      points: '$x,$y,$p;${x + 0.1},${y + 0.1},$p',
+      color: _selectedColor,
+      size: AppState.getSketchToolSize(_selectedTool),
+      tool: _selectedTool,
+    );
+    setState(() {
+      ++_undoCount;
+      _redoStack.clear();
+      _strokes.add(dot);
+      _isDirty = true;
     });
 
     _autoSaveTimer?.cancel();
@@ -2080,27 +2476,6 @@ class SketchPainter extends CustomPainter {
       ..isAntiAlias = true;
 
     canvas.drawPath(path, paint);
-
-    // Add texture overlay for graphite effect - draw lighter strokes along path
-    if (points.length > 2) {
-      final texturePaint = Paint()
-        ..color = stroke.color.withValues(alpha: 0.15)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke.size * 0.3
-        ..strokeCap = StrokeCap.round;
-
-      // Draw subtle texture lines
-      for (int i = 0; i < points.length - 1; i += 3) {
-        final p1 = Offset(points[i].x, points[i].y);
-        final p2 = Offset(points[i + 1].x, points[i + 1].y);
-        // Slight offset for texture
-        final offset = Offset(
-          (i % 5 - 2) * stroke.size * 0.05,
-          ((i + 1) % 5 - 2) * stroke.size * 0.05,
-        );
-        canvas.drawLine(p1 + offset, p2 + offset, texturePaint);
-      }
-    }
   }
 
   /// Brush stroke - variable width based on velocity, tapered ends with buttery smooth Bezier curves

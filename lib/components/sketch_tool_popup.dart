@@ -14,11 +14,9 @@ class SketchToolPopup extends StatefulWidget {
   final SketchToolType toolType;
   final SketchTool selectedPenMode;
   final Color selectedColor;
-  final double penSize;
-  final double eraserSize;
+  final double toolSize;
   final ValueChanged<Color> onColorChanged;
-  final ValueChanged<double> onPenSizeChanged;
-  final ValueChanged<double> onEraserSizeChanged;
+  final ValueChanged<double> onSizeChanged;
   final ValueChanged<SketchTool> onPenModeChanged;
   final Widget child;
 
@@ -27,11 +25,9 @@ class SketchToolPopup extends StatefulWidget {
     required this.toolType,
     required this.selectedPenMode,
     required this.selectedColor,
-    required this.penSize,
-    required this.eraserSize,
+    required this.toolSize,
     required this.onColorChanged,
-    required this.onPenSizeChanged,
-    required this.onEraserSizeChanged,
+    required this.onSizeChanged,
     required this.onPenModeChanged,
     required this.child,
   });
@@ -59,9 +55,7 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
   }
 
   void _updateCurrentSize() {
-    _currentSize = widget.toolType == SketchToolType.eraser
-        ? widget.eraserSize
-        : widget.penSize;
+    _currentSize = widget.toolSize;
     _sizeNotifier.value = _currentSize;
   }
 
@@ -90,14 +84,17 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
             child: ValueListenableBuilder<double>(
               valueListenable: _sizeNotifier,
               builder: (context, value, child) {
+                // For pen tools, show a more realistic preview
+                // The actual stroke is thinner due to thinning (0.4) and pressure
+                // Eraser uses full size since it's a simple circle
+                final isEraser = widget.toolType == SketchToolType.eraser;
+                final displaySize = isEraser ? value : value * 0.6;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 50),
-                  width: value,
-                  height: value,
+                  width: displaySize,
+                  height: displaySize,
                   decoration: BoxDecoration(
-                    color: widget.toolType == SketchToolType.eraser
-                        ? Colors.white
-                        : widget.selectedColor,
+                    color: isEraser ? Colors.white : widget.selectedColor,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.grey),
                   ),
@@ -417,11 +414,7 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
                       _currentSize = value;
                     });
                     _sizeNotifier.value = value;
-                    if (isEraser) {
-                      widget.onEraserSizeChanged(value);
-                    } else {
-                      widget.onPenSizeChanged(value);
-                    }
+                    widget.onSizeChanged(value);
                   },
                   onChangeEnd: (_) {
                     _hideSizePreview();

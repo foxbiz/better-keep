@@ -125,6 +125,14 @@ class Note extends BaseModel<Note> {
   bool get unlocked => _unlocked;
   String? get password => _password;
 
+  /// Clears the cached password from memory.
+  /// The note remains locked but will require the password to be entered again
+  /// to unlock it. This is useful for security when leaving the note editor.
+  void clearPassword() {
+    _password = null;
+    _unlocked = false;
+  }
+
   /// Returns true if the note has any checkboxes
   bool get hasCheckboxes => checkboxCount.total > 0;
 

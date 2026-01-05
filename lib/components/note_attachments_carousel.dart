@@ -10,12 +10,14 @@ class NoteAttachmentsCarousel extends StatefulWidget {
   final double height;
   final Note note;
   final void Function()? onPop;
+  final ScrollController? scrollController;
 
   const NoteAttachmentsCarousel({
     super.key,
     this.onPop,
     this.height = 250,
     required this.note,
+    this.scrollController,
   });
 
   @override
@@ -63,6 +65,7 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
     return SizedBox(
       height: widget.height,
       child: ListView.builder(
+        controller: widget.scrollController,
         scrollDirection: Axis.horizontal,
         itemCount: totalCount,
         itemBuilder: (context, index) {
@@ -185,9 +188,29 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
 
   void _noteChangeListener(dynamic _) {
     if (_attachmentsChanged()) {
+      final wasAdded =
+          widget.note.attachments.length > _cachedAttachments.length;
       _cachedAttachments = List.from(widget.note.attachments);
       setState(() {});
+      // Scroll to end if a new attachment was added
+      if (wasAdded) {
+        _scrollToEnd();
+      }
     }
+  }
+
+  void _scrollToEnd() {
+    if (widget.scrollController == null) return;
+    // Wait for the frame to be rendered, then scroll
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.scrollController!.hasClients) {
+        widget.scrollController!.animateTo(
+          widget.scrollController!.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   bool _attachmentsChanged() {

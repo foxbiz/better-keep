@@ -331,6 +331,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           return;
         }
 
+        _searchController.clear();
         _searchFocusNode.unfocus();
         setState(() {
           _searchMode = false;

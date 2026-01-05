@@ -620,7 +620,11 @@ class _NoteCardState extends State<NoteCard>
               Builder(
                 builder: (context) {
                   // If note is locked, show blurred thumbnails for privacy
-                  if (note.locked && !note.unlocked) {
+                  // Always blur if forget password setting is enabled
+                  final shouldBlur =
+                      note.locked &&
+                      (!note.unlocked || AppState.forgetLockedNotePassword);
+                  if (shouldBlur) {
                     return _buildLockedThumbnailGrid(note);
                   }
 
@@ -670,7 +674,10 @@ class _NoteCardState extends State<NoteCard>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      note.unlocked ? Icons.lock_open : Icons.lock,
+                      // Show locked icon if forget password setting is enabled
+                      (note.unlocked && !AppState.forgetLockedNotePassword)
+                          ? Icons.lock_open
+                          : Icons.lock,
                       size: 16.0,
                       color: foregroundColor,
                     ),

@@ -25,6 +25,7 @@ class AttachButton extends StatefulWidget {
   final bool readOnly;
   final Color? parentColor;
   final void Function(String text, NoteRecording recording)? onAppendTranscript;
+  final VoidCallback? onAttachmentAdded;
 
   const AttachButton({
     super.key,
@@ -32,6 +33,7 @@ class AttachButton extends StatefulWidget {
     required this.note,
     this.readOnly = false,
     this.onAppendTranscript,
+    this.onAttachmentAdded,
   });
 
   @override
@@ -165,6 +167,7 @@ class _AttachButtonState extends State<AttachButton> {
       );
 
       widget.note.addImage(noteImage);
+      widget.onAttachmentAdded?.call();
     } finally {
       // Dismiss loading dialog
       if (mounted && Navigator.canPop(context)) {
@@ -298,6 +301,7 @@ class _AttachButtonState extends State<AttachButton> {
           transcript: result.transcription,
         ),
       );
+      widget.onAttachmentAdded?.call();
       // Append transcription to note if provided
       if (result.transcription != null &&
           result.transcription!.isNotEmpty &&
@@ -331,7 +335,7 @@ class _AttachButtonState extends State<AttachButton> {
 
     _controller.close();
 
-    showPage(
+    await showPage(
       context,
       SketchPage(
         note: widget.note,
@@ -340,5 +344,7 @@ class _AttachButtonState extends State<AttachButton> {
         ),
       ),
     );
+    // Scroll to attachment after returning from sketch page if sketch was added
+    widget.onAttachmentAdded?.call();
   }
 }

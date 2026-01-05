@@ -38,6 +38,7 @@ class _SettingsState extends State<Settings> {
   bool _notesEncryptionEnabled = false;
   bool _filesEncryptionEnabled = false;
   bool _localEncryptionAvailable = false;
+  bool _forgetLockedNotePassword = AppState.forgetLockedNotePassword;
 
   final List<String> _sounds = [
     'assets/sounds/1.mp3',
@@ -64,6 +65,10 @@ class _SettingsState extends State<Settings> {
     AppState.subscribe("morning_time", _morningTimeListener);
     AppState.subscribe("afternoon_time", _afternoonTimeListener);
     AppState.subscribe("evening_time", _eveningTimeListener);
+    AppState.subscribe(
+      "forget_locked_note_password",
+      _forgetLockedNotePasswordListener,
+    );
   }
 
   @override
@@ -77,6 +82,10 @@ class _SettingsState extends State<Settings> {
     AppState.unsubscribe("morning_time", _morningTimeListener);
     AppState.unsubscribe("afternoon_time", _afternoonTimeListener);
     AppState.unsubscribe("evening_time", _eveningTimeListener);
+    AppState.unsubscribe(
+      "forget_locked_note_password",
+      _forgetLockedNotePasswordListener,
+    );
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -90,6 +99,12 @@ class _SettingsState extends State<Settings> {
   void _followSystemThemeListener(dynamic value) {
     setState(() {
       _followSystemTheme = value as bool;
+    });
+  }
+
+  void _forgetLockedNotePasswordListener(dynamic value) {
+    setState(() {
+      _forgetLockedNotePassword = value as bool;
     });
   }
 
@@ -320,6 +335,27 @@ class _SettingsState extends State<Settings> {
             ),
             const Divider(),
           ],
+
+          // Locked Notes Section
+          const ListTile(
+            title: Text(
+              'Locked Notes',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text('Privacy settings for locked notes'),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.lock_clock),
+            title: const Text('Forget Password on Close'),
+            subtitle: const Text(
+              'Require re-entering PIN when reopening a locked note',
+            ),
+            value: _forgetLockedNotePassword,
+            onChanged: (value) {
+              AppState.forgetLockedNotePassword = value;
+            },
+          ),
+          const Divider(),
 
           // About & Help Section
           ListTile(

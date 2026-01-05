@@ -29,8 +29,12 @@ final _defaultState = {
   "evening_time": const TimeOfDay(hour: 18, minute: 0),
   "sketch_tool": SketchTool.pen,
   "sketch_pen_size": 5.0,
+  "sketch_pencil_size": 3.0,
+  "sketch_brush_size": 12.0,
+  "sketch_highlighter_size": 20.0,
   "sketch_eraser_size": 20.0,
   "sketch_pen_color": Colors.black,
+  "forget_locked_note_password": false,
 };
 
 class AppState {
@@ -170,6 +174,18 @@ class AppState {
     if (penSize != null) {
       _state["sketch_pen_size"] = penSize;
     }
+    final pencilSize = prefsInstance.getDouble("sketch_pencil_size");
+    if (pencilSize != null) {
+      _state["sketch_pencil_size"] = pencilSize;
+    }
+    final brushSize = prefsInstance.getDouble("sketch_brush_size");
+    if (brushSize != null) {
+      _state["sketch_brush_size"] = brushSize;
+    }
+    final highlighterSize = prefsInstance.getDouble("sketch_highlighter_size");
+    if (highlighterSize != null) {
+      _state["sketch_highlighter_size"] = highlighterSize;
+    }
     final eraserSize = prefsInstance.getDouble("sketch_eraser_size");
     if (eraserSize != null) {
       _state["sketch_eraser_size"] = eraserSize;
@@ -211,6 +227,10 @@ class AppState {
     // Load sync progress visibility setting
     _state["show_sync_progress"] =
         prefsInstance.getBool("show_sync_progress") ?? true;
+
+    // Load forget locked note password setting
+    _state["forget_locked_note_password"] =
+        prefsInstance.getBool("forget_locked_note_password") ?? false;
   }
 
   static Object? get(String key) {
@@ -360,6 +380,33 @@ class AppState {
     _persistToPrefs((p) async => p.setDouble("sketch_pen_size", value));
   }
 
+  static double get sketchPencilSize {
+    return _state["sketch_pencil_size"] as double;
+  }
+
+  static set sketchPencilSize(double value) {
+    set("sketch_pencil_size", value);
+    _persistToPrefs((p) async => p.setDouble("sketch_pencil_size", value));
+  }
+
+  static double get sketchBrushSize {
+    return _state["sketch_brush_size"] as double;
+  }
+
+  static set sketchBrushSize(double value) {
+    set("sketch_brush_size", value);
+    _persistToPrefs((p) async => p.setDouble("sketch_brush_size", value));
+  }
+
+  static double get sketchHighlighterSize {
+    return _state["sketch_highlighter_size"] as double;
+  }
+
+  static set sketchHighlighterSize(double value) {
+    set("sketch_highlighter_size", value);
+    _persistToPrefs((p) async => p.setDouble("sketch_highlighter_size", value));
+  }
+
   static double get sketchEraserSize {
     return _state["sketch_eraser_size"] as double;
   }
@@ -367,6 +414,38 @@ class AppState {
   static set sketchEraserSize(double value) {
     set("sketch_eraser_size", value);
     _persistToPrefs((p) async => p.setDouble("sketch_eraser_size", value));
+  }
+
+  /// Get size for a specific sketch tool
+  static double getSketchToolSize(SketchTool tool) {
+    return switch (tool) {
+      SketchTool.pen => sketchPenSize,
+      SketchTool.pencil => sketchPencilSize,
+      SketchTool.brush => sketchBrushSize,
+      SketchTool.highlighter => sketchHighlighterSize,
+      SketchTool.eraser => sketchEraserSize,
+    };
+  }
+
+  /// Set size for a specific sketch tool
+  static void setSketchToolSize(SketchTool tool, double value) {
+    switch (tool) {
+      case SketchTool.pen:
+        sketchPenSize = value;
+        break;
+      case SketchTool.pencil:
+        sketchPencilSize = value;
+        break;
+      case SketchTool.brush:
+        sketchBrushSize = value;
+        break;
+      case SketchTool.highlighter:
+        sketchHighlighterSize = value;
+        break;
+      case SketchTool.eraser:
+        sketchEraserSize = value;
+        break;
+    }
   }
 
   static Color get sketchPenColor {
@@ -502,6 +581,18 @@ class AppState {
       p.setInt("evening_time_hour", time.hour);
       p.setInt("evening_time_minute", time.minute);
     });
+  }
+
+  /// Whether to forget locked note password after closing the note editor
+  static bool get forgetLockedNotePassword {
+    return _state["forget_locked_note_password"] as bool? ?? false;
+  }
+
+  static set forgetLockedNotePassword(bool value) {
+    set("forget_locked_note_password", value);
+    _persistToPrefs(
+      (p) async => p.setBool("forget_locked_note_password", value),
+    );
   }
 
   static void subscribe(String key, void Function(dynamic) callback) {

@@ -87,6 +87,12 @@ export default onCall(
 			);
 
 			// Create a subscription
+			// Razorpay limits total_count based on billing period:
+			// - Monthly: max 100 cycles (about 8 years)
+			// - Yearly: max 100 cycles (about 100 years)
+			// Using conservative values to stay within limits
+			const totalCount = yearly ? 50 : 100;
+
 			const subscription = await razorpayRequest(
 				keyId,
 				keySecret,
@@ -94,8 +100,7 @@ export default onCall(
 				"/subscriptions",
 				{
 					plan_id: planId,
-					total_count: 120, // Max billing cycles
-					quantity: 1,
+					total_count: totalCount,
 					customer_notify: 1,
 					notes: {
 						userId: userId,
