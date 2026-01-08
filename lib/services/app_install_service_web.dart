@@ -12,6 +12,7 @@ class AppInstallInfo {
   final String? storeUrl;
   final bool promptShown;
   final bool promptDismissed;
+  final bool openAppBannerDismissed;
   final bool isIOS;
   final bool isAndroid;
   final bool isWindows;
@@ -26,6 +27,7 @@ class AppInstallInfo {
     this.storeUrl,
     required this.promptShown,
     required this.promptDismissed,
+    required this.openAppBannerDismissed,
     required this.isIOS,
     required this.isAndroid,
     required this.isWindows,
@@ -52,7 +54,12 @@ class AppInstallInfo {
     if (!kIsWeb) return false;
     if (promptShown || promptDismissed) return false;
     if (pwaInstalled) return false;
-    return true;
+    // Only show prompt if we have something to offer:
+    // - Native app available (Android, Windows)
+    // - iOS (coming soon message)
+    // - PWA can be installed
+    // Don't show empty prompts for macOS/Linux without PWA support
+    return hasNativeApp || isIOS || canInstallPWA;
   }
 
   /// Get the appropriate action label
@@ -94,11 +101,37 @@ extension _BetterKeepInstallJSExtension on _BetterKeepInstallJS {
   external void markPromptDismissed();
   external void tryOpenNativeApp();
   external String? getStoreUrl();
-  external JSPromise<JSObject> triggerPWAInstall();
+  external JSPromise<JSAny?> triggerPWAInstall();
   external void showIOSInstallInstructions();
   external _InstallInfoJS getInstallInfo();
   external void updateThemeColor(String color);
   external void updateBackgroundColor(String color);
+  external JSPromise<JSBoolean> checkNativeAppInstalled();
+  external JSPromise<JSAny?> shouldShowOpenAppBanner();
+  external void markOpenAppBannerDismissed();
+}
+
+@JS()
+@staticInterop
+class _PWAInstallResultJS {}
+
+extension _PWAInstallResultJSExtension on _PWAInstallResultJS {
+  external bool get success;
+  // ignore: unused_element - kept for completeness of JS API
+  external String? get reason;
+  // ignore: unused_element - kept for completeness of JS API
+  external String? get outcome;
+}
+
+@JS()
+@staticInterop
+class _OpenAppBannerInfoJS {}
+
+extension _OpenAppBannerInfoJSExtension on _OpenAppBannerInfoJS {
+  external bool get show;
+  external String? get platform;
+  external String? get appUrl;
+  external String? get storeUrl;
 }
 
 @JS()
@@ -112,6 +145,7 @@ extension _InstallInfoJSExtension on _InstallInfoJS {
   external String? get storeUrl;
   external bool get promptShown;
   external bool get promptDismissed;
+  external bool get openAppBannerDismissed;
   external bool get isIOS;
   external bool get isAndroid;
   external bool get isWindows;
@@ -194,6 +228,7 @@ class AppInstallService {
       storeUrl: info.storeUrl,
       promptShown: info.promptShown,
       promptDismissed: info.promptDismissed,
+      openAppBannerDismissed: info.openAppBannerDismissed,
       isIOS: info.isIOS,
       isAndroid: info.isAndroid,
       isWindows: info.isWindows,
@@ -240,10 +275,10 @@ class AppInstallService {
     if (js == null) return false;
 
     try {
-      final result = await js.triggerPWAInstall().toDart;
-      // Access 'success' property from JSObject
-      final success = (result as dynamic)['success'] as bool?;
-      return success ?? false;
+      final jsResult = await js.triggerPWAInstall().toDart;
+      if (jsResult == null) return false;
+      final result = jsResult as _PWAInstallResultJS;
+      return result.success;
     } catch (e) {
       debugPrint('PWA install error: $e');
       return false;
@@ -291,9 +326,68 @@ class AppInstallService {
     updateBackgroundColor(bgColor);
   }
 
+  /// Check if native app is installed (Android only, via getInstalledRelatedApps API)
+  Future<bool> checkNativeAppInstalled() async {
+    if (!kIsWeb) return false;
+    final js = _betterKeepInstall;
+    if (js == null) return false;
+
+    try {
+      final result = await js.checkNativeAppInstalled().toDart;
+      return result.toDart;
+    } catch (e) {
+      debugPrint('Error checking native app: $e');
+      return false;
+    }
+  }
+
+  /// Check if we should show the "open in app" banner
+  /// Returns info about whether to show and platform details
+  Future<OpenAppBannerInfo?> shouldShowOpenAppBanner() async {
+    if (!kIsWeb) return null;
+    final js = _betterKeepInstall;
+    if (js == null) return null;
+
+    try {
+      final jsResult = await js.shouldShowOpenAppBanner().toDart;
+      if (jsResult == null) return null;
+      final result = jsResult as _OpenAppBannerInfoJS;
+      return OpenAppBannerInfo(
+        show: result.show,
+        platform: result.platform,
+        appUrl: result.appUrl,
+        storeUrl: result.storeUrl,
+      );
+    } catch (e) {
+      debugPrint('Error checking open app banner: $e');
+      return null;
+    }
+  }
+
+  /// Mark the "open in app" banner as dismissed
+  void markOpenAppBannerDismissed() {
+    if (!kIsWeb) return;
+    _betterKeepInstall?.markOpenAppBannerDismissed();
+  }
+
   /// Dispose resources
   void dispose() {
     _installableController.close();
     _installedController.close();
   }
+}
+
+/// Information about whether to show the "open in app" banner
+class OpenAppBannerInfo {
+  final bool show;
+  final String? platform;
+  final String? appUrl;
+  final String? storeUrl;
+
+  OpenAppBannerInfo({
+    required this.show,
+    this.platform,
+    this.appUrl,
+    this.storeUrl,
+  });
 }

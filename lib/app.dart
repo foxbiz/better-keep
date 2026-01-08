@@ -1,5 +1,6 @@
 import 'package:better_keep/components/alarm_banner.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
+import 'package:better_keep/components/open_in_app_banner.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/pages/account_recovery_page.dart';
@@ -118,6 +119,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             OverlayEntry(
               builder: (context) => Column(
                 children: [
+                  // Show "Open in App" banner on web when native app is installed
+                  const OpenInAppBanner(),
                   const AlarmBanner(),
                   const SessionInvalidBanner(),
                   Expanded(child: child ?? const SizedBox.shrink()),

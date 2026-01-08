@@ -7,7 +7,7 @@
     "theme_color": "#1c1b1f",
     "description": "A note-taking app with rich text, better organization, and private, offline-friendly notes.",
     "orientation": "portrait-primary",
-    "prefer_related_applications": false,
+    "prefer_related_applications": true,
     "categories": [
         "productivity",
         "utilities"

@@ -9,6 +9,7 @@ class AppInstallInfo {
   final String? storeUrl;
   final bool promptShown;
   final bool promptDismissed;
+  final bool openAppBannerDismissed;
   final bool isIOS;
   final bool isAndroid;
   final bool isWindows;
@@ -23,6 +24,7 @@ class AppInstallInfo {
     this.storeUrl,
     required this.promptShown,
     required this.promptDismissed,
+    required this.openAppBannerDismissed,
     required this.isIOS,
     required this.isAndroid,
     required this.isWindows,
@@ -96,9 +98,33 @@ class AppInstallService {
   /// Update both theme and background colors from a ThemeData - no-op on non-web platforms
   void updateColorsFromTheme(ThemeData theme) {}
 
+  /// Check if native app is installed - always false on non-web platforms
+  Future<bool> checkNativeAppInstalled() async => false;
+
+  /// Check if we should show the "open in app" banner - always null on non-web platforms
+  Future<OpenAppBannerInfo?> shouldShowOpenAppBanner() async => null;
+
+  /// Mark the "open in app" banner as dismissed - no-op on non-web platforms
+  void markOpenAppBannerDismissed() {}
+
   /// Dispose resources
   void dispose() {
     _installableController.close();
     _installedController.close();
   }
+}
+
+/// Information about whether to show the "open in app" banner
+class OpenAppBannerInfo {
+  final bool show;
+  final String? platform;
+  final String? appUrl;
+  final String? storeUrl;
+
+  OpenAppBannerInfo({
+    required this.show,
+    this.platform,
+    this.appUrl,
+    this.storeUrl,
+  });
 }

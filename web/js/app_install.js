@@ -8,7 +8,9 @@
   const STORAGE_KEYS = {
     PROMPT_SHOWN: 'bk_install_prompt_shown',
     PROMPT_DISMISSED: 'bk_install_prompt_dismissed',
-    PWA_INSTALLED: 'bk_pwa_installed'
+    PWA_INSTALLED: 'bk_pwa_installed',
+    OPEN_APP_BANNER_DISMISSED: 'bk_open_app_banner_dismissed',
+    NATIVE_APP_INSTALLED: 'bk_native_app_installed'
   };
 
   const APP_URLS = {
@@ -17,8 +19,120 @@
     deepLink: 'betterkeep://'
   };
 
+  const APP_IDS = {
+    android: 'io.foxbiz.better_keep'
+  };
+
+  // Cached native app installed status
+  let nativeAppInstalledPromise = null;
+
   // Store the deferred prompt for later use
   let deferredPrompt = null;
+
+  /**
+   * Check if native app is installed using getInstalledRelatedApps API (Android Chrome only)
+   * This is the most reliable way to detect if the native app is installed
+   */
+  async function checkNativeAppInstalled() {
+    // Return cached result if available
+    if (nativeAppInstalledPromise) {
+      return nativeAppInstalledPromise;
+    }
+
+    // Check if API is available (Chrome 80+ on Android)
+    if ('getInstalledRelatedApps' in navigator) {
+      nativeAppInstalledPromise = (async () => {
+        try {
+          const relatedApps = await navigator.getInstalledRelatedApps();
+          const isInstalled = relatedApps.some(app => app.id === APP_IDS.android);
+          if (isInstalled) {
+            localStorage.setItem(STORAGE_KEYS.NATIVE_APP_INSTALLED, 'true');
+          }
+          return isInstalled;
+        } catch (e) {
+          console.error('Error checking installed apps:', e);
+          return false;
+        }
+      })();
+      return nativeAppInstalledPromise;
+    }
+
+    // Fallback: check localStorage (set if user previously opened app via intent)
+    return localStorage.getItem(STORAGE_KEYS.NATIVE_APP_INSTALLED) === 'true';
+  }
+
+  /**
+   * Check if the "open in app" banner was dismissed
+   */
+  function wasOpenAppBannerDismissed() {
+    return localStorage.getItem(STORAGE_KEYS.OPEN_APP_BANNER_DISMISSED) === 'true';
+  }
+
+  /**
+   * Mark the "open in app" banner as dismissed
+   */
+  function markOpenAppBannerDismissed() {
+    localStorage.setItem(STORAGE_KEYS.OPEN_APP_BANNER_DISMISSED, 'true');
+  }
+
+  /**
+   * Check if we should show the "open in app" banner
+   * Returns: { show: boolean, platform: string, appUrl: string }
+   */
+  async function shouldShowOpenAppBanner() {
+    const platform = getPlatform();
+
+    // Debug: Add ?showAppBanner=true to URL to force show banner for testing
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('showAppBanner') === 'true') {
+      return {
+        show: true,
+        platform: platform,
+        appUrl: APP_URLS.deepLink,
+        storeUrl: getStoreUrl()
+      };
+    }
+
+    // Only show on platforms with native apps
+    if (platform !== 'android' && platform !== 'windows') {
+      return { show: false };
+    }
+
+    // Don't show if already running as PWA
+    if (isPWAInstalled()) {
+      return { show: false };
+    }
+
+    // Don't show if user dismissed it
+    if (wasOpenAppBannerDismissed()) {
+      return { show: false };
+    }
+
+    // For Android, check if app is actually installed
+    if (platform === 'android') {
+      const isInstalled = await checkNativeAppInstalled();
+      if (isInstalled) {
+        return {
+          show: true,
+          platform: 'android',
+          appUrl: APP_URLS.deepLink,
+          storeUrl: APP_URLS.android
+        };
+      }
+      // App not installed - don't show "open in app" banner
+      // The regular install prompt will handle this
+      return { show: false };
+    }
+
+    // For Windows, we can't reliably detect if MSIX app is installed
+    // Show a softer prompt that they can dismiss
+    return {
+      show: true,
+      platform: 'windows',
+      appUrl: APP_URLS.deepLink,
+      storeUrl: APP_URLS.windows
+    };
+  }
 
   /**
    * Update the theme color meta tag for the browser
@@ -213,6 +327,7 @@
     const storeUrl = getStoreUrl();
     const promptShown = wasPromptShown();
     const promptDismissed = wasPromptDismissed();
+    const openAppBannerDismissed = wasOpenAppBannerDismissed();
 
     return {
       platform,
@@ -221,6 +336,7 @@
       storeUrl,
       promptShown,
       promptDismissed,
+      openAppBannerDismissed,
       isIOS: platform === 'ios',
       isAndroid: platform === 'android',
       isWindows: platform === 'windows',
@@ -244,6 +360,16 @@
     window.dispatchEvent(new CustomEvent('bk-pwa-installed'));
   });
 
+  // Check for native app installation on page load (Android)
+  // This helps pre-populate the banner state
+  if (getPlatform() === 'android') {
+    checkNativeAppInstalled().then(isInstalled => {
+      if (isInstalled && !wasOpenAppBannerDismissed() && !isPWAInstalled()) {
+        window.dispatchEvent(new CustomEvent('bk-native-app-detected'));
+      }
+    });
+  }
+
   // Expose API to Flutter
   window.BetterKeepInstall = {
     getPlatform,
@@ -259,7 +385,13 @@
     getInstallInfo,
     updateThemeColor,
     updateBackgroundColor,
-    APP_URLS
+    // New functions for "open in app" banner
+    checkNativeAppInstalled,
+    shouldShowOpenAppBanner,
+    wasOpenAppBannerDismissed,
+    markOpenAppBannerDismissed,
+    APP_URLS,
+    APP_IDS
   };
 
 })();

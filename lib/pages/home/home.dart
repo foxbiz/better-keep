@@ -134,6 +134,14 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       if (info == null) return;
 
       if (info.shouldShowInstallPrompt) {
+        // Double-check we actually have something to offer before showing dialog
+        final hasContent =
+            info.isIOS ||
+            info.isAndroid ||
+            info.isWindows ||
+            info.canInstallPWA;
+        if (!hasContent) return;
+
         AppInstallService.instance.markPromptShown();
         _showInstallPromptDialog(info);
       }
@@ -195,6 +203,9 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
             await AppInstallService.instance.triggerPWAInstall();
           };
         } else {
+          // Nothing to offer - don't show dialog
+          // This should never be reached due to guard in _checkInstallPrompt
+          Navigator.pop(context);
           return const SizedBox.shrink();
         }
 
