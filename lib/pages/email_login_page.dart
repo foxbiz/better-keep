@@ -1,4 +1,5 @@
 import 'package:better_keep/config.dart';
+import 'package:better_keep/pages/password_reset_page.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
@@ -174,35 +175,14 @@ class _EmailLoginPageState extends State<EmailLoginPage>
     }
   }
 
-  Future<void> _handleForgotPassword() async {
+  void _handleForgotPassword() {
     final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email address first')),
-      );
-      return;
-    }
-
-    try {
-      await AuthService.sendPasswordResetEmail(email);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password reset email sent! Check your inbox.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send reset email: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) =>
+            PasswordResetPage(initialEmail: email.isNotEmpty ? email : null),
+      ),
+    );
   }
 
   @override

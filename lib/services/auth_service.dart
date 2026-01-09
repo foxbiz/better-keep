@@ -742,9 +742,45 @@ class AuthService {
     }
   }
 
-  /// Send password reset email
+  /// Send password reset email (legacy - keeping for backwards compatibility)
   static Future<void> sendPasswordResetEmail(String email) async {
     await _auth.sendPasswordResetEmail(email: email);
+  }
+
+  // ============================================================
+  // PASSWORD RESET OTP
+  // ============================================================
+
+  /// Send OTP for password reset
+  /// Returns a map with 'success', 'message', and 'maskedEmail'
+  static Future<Map<String, dynamic>> sendPasswordResetOtp(String email) async {
+    final functions = FirebaseFunctions.instanceFor(
+      app: Firebase.app(),
+      region: 'us-central1',
+    );
+    final callable = functions.httpsCallable('sendPasswordResetOtp');
+    final result = await callable.call({'email': email});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  /// Reset password with OTP verification
+  /// Returns a map with 'success' and 'message'
+  static Future<Map<String, dynamic>> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String newPassword,
+  }) async {
+    final functions = FirebaseFunctions.instanceFor(
+      app: Firebase.app(),
+      region: 'us-central1',
+    );
+    final callable = functions.httpsCallable('resetPasswordWithOtp');
+    final result = await callable.call({
+      'email': email,
+      'otp': otp,
+      'newPassword': newPassword,
+    });
+    return Map<String, dynamic>.from(result.data as Map);
   }
 
   // ============================================================

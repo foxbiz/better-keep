@@ -552,7 +552,7 @@ export default onRequest(
 				const [localPart, domain] = email.split("@");
 				const maskedLocal =
 					localPart.length <= 2
-						? localPart[0] + "*"
+						? `${localPart[0]}*`
 						: localPart.slice(0, 2) +
 							"*".repeat(Math.min(localPart.length - 2, 5));
 				const domainParts = domain.split(".");
@@ -561,7 +561,7 @@ export default onRequest(
 						i === domainParts.length - 1
 							? part // Keep TLD visible (.com, .org)
 							: part.length <= 2
-								? part[0] + "*"
+								? `${part[0]}*`
 								: part.slice(0, 2) + "*".repeat(Math.min(part.length - 2, 3)),
 					)
 					.join(".");

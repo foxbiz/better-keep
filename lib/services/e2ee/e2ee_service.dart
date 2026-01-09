@@ -228,7 +228,20 @@ class E2EEService {
         final isFirst = await _deviceManager.isFirstDevice();
 
         if (isFirst) {
-          // First device - automatically set up E2EE
+          // No devices exist - but check if user has a recovery key
+          // This handles the case where user signed out (device was deleted)
+          // but still has a recovery key to restore their encryption
+          final hasRecoveryKey = await _recoveryKeyService.hasRecoveryKey();
+          if (hasRecoveryKey) {
+            AppLogger.log(
+              'E2EE: No devices but recovery key exists, prompting for recovery',
+            );
+            status.value = E2EEStatus.needsRecovery;
+            await _secureStorage.cacheDeviceStatus('needs_recovery');
+            return;
+          }
+
+          // Truly first device with no recovery key - set up fresh E2EE
           AppLogger.log('E2EE: First device, automatically setting up E2EE...');
           statusMessage.value = 'Securing your account...';
           await setupE2EE();

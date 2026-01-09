@@ -17,6 +17,7 @@ import playStoreWebhook from "./exports/playStoreWebhook";
 import processScheduledDeletions from "./exports/processScheduledDeletions";
 import razorpayWebhook from "./exports/razorpayWebhook";
 import requestAccountLinkOtp from "./exports/requestAccountLinkOtp";
+import resetPasswordWithOtp from "./exports/resetPasswordWithOtp";
 import restoreSubscription from "./exports/restoreSubscription";
 import resumeRazorpaySubscription from "./exports/resumeRazorpaySubscription";
 import revokeSharesOnNoteDelete from "./exports/revokeSharesOnNoteDelete";
@@ -24,6 +25,7 @@ import scheduleAccountDeletion from "./exports/scheduleAccountDeletion";
 import sendDeletionOtp from "./exports/sendDeletionOtp";
 import sendDeletionReminders from "./exports/sendDeletionReminders";
 import sendEmailVerificationOtp from "./exports/sendEmailVerificationOtp";
+import sendPasswordResetOtp from "./exports/sendPasswordResetOtp";
 import sendStartFreshOtp from "./exports/sendStartFreshOtp";
 import startFreshWithOtp from "./exports/startFreshWithOtp";
 import verifyAccountLinkOtp from "./exports/verifyAccountLinkOtp";
@@ -40,6 +42,8 @@ export {
 	verifyDeletionOtp,
 	sendEmailVerificationOtp,
 	verifyEmailVerificationOtp,
+	sendPasswordResetOtp,
+	resetPasswordWithOtp,
 	sendStartFreshOtp,
 	startFreshWithOtp,
 	requestAccountLinkOtp,
