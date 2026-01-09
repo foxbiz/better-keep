@@ -783,6 +783,21 @@ class AuthService {
     return Map<String, dynamic>.from(result.data as Map);
   }
 
+  /// Verify password reset OTP (without resetting password)
+  /// Returns a map with 'success' and 'message'
+  static Future<Map<String, dynamic>> verifyPasswordResetOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final functions = FirebaseFunctions.instanceFor(
+      app: Firebase.app(),
+      region: 'us-central1',
+    );
+    final callable = functions.httpsCallable('verifyPasswordResetOtp');
+    final result = await callable.call({'email': email, 'otp': otp});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
   // ============================================================
   // EMAIL VERIFICATION OTP
   // ============================================================

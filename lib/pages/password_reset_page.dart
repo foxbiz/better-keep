@@ -158,8 +158,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
     });
   }
 
-  /// Move to password entry step after OTP is entered
-  void _proceedToPasswordStep() {
+  /// Step 2: Verify OTP before proceeding to password step
+  Future<void> _verifyOtpAndProceed() async {
     if (_otp.length != 6) {
       setState(() {
         _errorMessage = 'Please enter the complete 6-digit code';
@@ -168,13 +168,41 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
     }
 
     setState(() {
+      _isLoading = true;
       _errorMessage = null;
-      _currentStep = _ResetStep.newPassword;
     });
 
-    Future.delayed(const Duration(milliseconds: 100), () {
-      _passwordFocusNode.requestFocus();
-    });
+    try {
+      await AuthService.verifyPasswordResetOtp(email: _email, otp: _otp);
+
+      if (mounted) {
+        setState(() {
+          _currentStep = _ResetStep.newPassword;
+        });
+        Future.delayed(const Duration(milliseconds: 100), () {
+          _passwordFocusNode.requestFocus();
+        });
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.message ?? 'Invalid verification code';
+        });
+        _otpController.clear();
+        _otpFocusNode.requestFocus();
+      }
+    } catch (e) {
+      AppLogger.error('Error verifying OTP: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Verification failed. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   /// Step 3: Reset password with OTP verification
@@ -253,10 +281,10 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
     }
   }
 
-  /// Handle OTP input changes - auto-proceed when 6 digits entered
+  /// Handle OTP input changes - auto-verify when 6 digits entered
   void _onOtpChanged(String value) {
     if (value.length == 6) {
-      _proceedToPasswordStep();
+      _verifyOtpAndProceed();
     }
   }
 
@@ -504,7 +532,9 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
           autofocus: true,
           accentColor: colorScheme.error,
           onChanged: _onOtpChanged,
-          onSubmitted: _otp.length == 6 ? _proceedToPasswordStep : null,
+          onSubmitted: _otp.length == 6 && !_isLoading
+              ? _verifyOtpAndProceed
+              : null,
         ),
 
         // Error message
@@ -519,9 +549,20 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: _otp.length == 6 ? _proceedToPasswordStep : null,
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text('Continue'),
+            onPressed: _otp.length == 6 && !_isLoading
+                ? _verifyOtpAndProceed
+                : null,
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.arrow_forward),
+            label: Text(_isLoading ? 'Verifying...' : 'Continue'),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: colorScheme.error,

@@ -1,5 +1,4 @@
-import * as admin from "firebase-admin";
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { auth, db } from "../config";
@@ -69,7 +68,7 @@ export default onCall(async (request: CallableRequest<{ otp: string }>) => {
 		// Verify OTP
 		if (otpData.otp !== providedOtp) {
 			await otpRef.update({
-				attempts: admin.firestore.FieldValue.increment(1),
+				attempts: FieldValue.increment(1),
 			});
 
 			const remainingAttempts = 4 - otpData.attempts;

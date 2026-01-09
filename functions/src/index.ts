@@ -31,6 +31,7 @@ import startFreshWithOtp from "./exports/startFreshWithOtp";
 import verifyAccountLinkOtp from "./exports/verifyAccountLinkOtp";
 import verifyDeletionOtp from "./exports/verifyDeletionOtp";
 import verifyEmailVerificationOtp from "./exports/verifyEmailVerificationOtp";
+import verifyPasswordResetOtp from "./exports/verifyPasswordResetOtp";
 import verifyPurchase from "./exports/verifyPurchase";
 import verifyRazorpaySubscription from "./exports/verifyRazorpaySubscription";
 
@@ -43,6 +44,7 @@ export {
 	sendEmailVerificationOtp,
 	verifyEmailVerificationOtp,
 	sendPasswordResetOtp,
+	verifyPasswordResetOtp,
 	resetPasswordWithOtp,
 	sendStartFreshOtp,
 	startFreshWithOtp,
