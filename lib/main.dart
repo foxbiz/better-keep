@@ -227,6 +227,29 @@ class _BetterKeepState extends State<BetterKeep> {
     if (uri.scheme == 'betterkeep' && uri.host == 'auth') {
       AuthService.handleOAuthCallback(uri);
     }
+
+    // Handle password reset complete (betterkeep://password-reset-complete?email=xxx)
+    // This is triggered when user completes password reset in browser (Windows/Linux)
+    if (uri.scheme == 'betterkeep' && uri.host == 'password-reset-complete') {
+      final email = uri.queryParameters['email'];
+      AppLogger.log('[DeepLink] Password reset complete for: $email');
+
+      // Show a snackbar notification to confirm password was reset
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = AppState.navigatorKey.currentContext;
+        if (context != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Password reset successful! Please sign in with your new password.',
+              ),
+              backgroundColor: Colors.green.shade700,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      });
+    }
   }
 
   @override

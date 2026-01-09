@@ -3,6 +3,7 @@ import 'package:better_keep/pages/password_reset_page.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class EmailLoginPage extends StatefulWidget {
   const EmailLoginPage({super.key});
@@ -175,8 +176,21 @@ class _EmailLoginPageState extends State<EmailLoginPage>
     }
   }
 
-  void _handleForgotPassword() {
+  Future<void> _handleForgotPassword() async {
     final email = _emailController.text.trim();
+
+    // On Windows/Linux, open browser for password reset
+    // (Cloud Functions SDK not supported on these platforms)
+    if (isDesktop) {
+      final resetUrl = Uri.parse(
+        'https://betterkeep.app/reset-password.html${email.isNotEmpty ? '?email=${Uri.encodeComponent(email)}' : ''}',
+      );
+      await launchUrl(resetUrl, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    // On other platforms, use in-app OTP flow
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) =>
