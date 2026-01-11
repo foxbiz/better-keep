@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:better_keep/components/alarm_banner.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
@@ -233,6 +235,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                               onPressed: () {
                                 E2EEService.instance.status.value =
                                     E2EEStatus.notInitialized;
+                                E2EEService.instance.resetInitialization();
                                 E2EEService.instance.initialize();
                               },
                               icon: const Icon(Icons.refresh),
@@ -321,13 +324,55 @@ class _E2EELoadingWidget extends StatefulWidget {
 
 class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
   bool _showTimeoutOptions = false;
-  static const _timeoutDuration = Duration(seconds: 15);
+  int _retryCount = 0;
+  Timer? _autoRetryTimer;
+  Timer? _showOptionsTimer;
+  static const _autoRetryTimeout = Duration(seconds: 10);
+  static const _showOptionsTimeout = Duration(seconds: 15);
+  static const _maxAutoRetries = 3;
 
   @override
   void initState() {
     super.initState();
-    // Show timeout options after 15 seconds
-    Future.delayed(_timeoutDuration, () {
+    // Start auto-retry timer - if still stuck on notInitialized after timeout,
+    // automatically trigger initialize() to recover from race conditions
+    _scheduleAutoRetry();
+  }
+
+  @override
+  void dispose() {
+    _autoRetryTimer?.cancel();
+    _showOptionsTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleAutoRetry() {
+    _autoRetryTimer?.cancel();
+    _autoRetryTimer = Timer(_autoRetryTimeout, () {
+      if (!mounted) return;
+      if (E2EEService.instance.status.value != E2EEStatus.notInitialized) {
+        return;
+      }
+
+      if (_retryCount < _maxAutoRetries) {
+        _retryCount++;
+        AppLogger.log(
+          '[Auth] E2EE init timeout, auto-retrying (attempt $_retryCount/$_maxAutoRetries)',
+        );
+        E2EEService.instance.initialize();
+        // Schedule next auto-retry
+        _scheduleAutoRetry();
+      } else {
+        // Max retries exhausted, transition to error state
+        AppLogger.log(
+          '[Auth] E2EE init failed after $_maxAutoRetries auto-retries, showing error',
+        );
+        E2EEService.instance.status.value = E2EEStatus.error;
+      }
+    });
+
+    // Also show manual retry options after a longer timeout (only once)
+    _showOptionsTimer ??= Timer(_showOptionsTimeout, () {
       if (mounted &&
           E2EEService.instance.status.value == E2EEStatus.notInitialized) {
         setState(() => _showTimeoutOptions = true);
@@ -394,8 +439,13 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
               OutlinedButton.icon(
                 onPressed: () {
                   setState(() => _showTimeoutOptions = false);
+                  _retryCount = 0;
+                  _showOptionsTimer?.cancel();
+                  _showOptionsTimer = null;
                   E2EEService.instance.status.value = E2EEStatus.notInitialized;
+                  E2EEService.instance.resetInitialization();
                   E2EEService.instance.initialize();
+                  _scheduleAutoRetry();
                 },
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('Retry'),

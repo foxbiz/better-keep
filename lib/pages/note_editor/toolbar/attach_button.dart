@@ -61,6 +61,7 @@ class _AttachButtonState extends State<AttachButton> {
       controller: _controller,
       parentColor: widget.parentColor,
       showLabels: true,
+      fitContent: true,
       items: (context) => [
         AdaptiveMenuItem(
           icon: Icons.image,
@@ -76,9 +77,16 @@ class _AttachButtonState extends State<AttachButton> {
       ],
       child: IconButton(
         onPressed: _controller.isDisabled ? null : _controller.toggle,
-        icon: const Icon(Icons.attach_file),
+        icon: _buildIconWithIndicator(const Icon(Icons.attach_file)),
         tooltip: 'Attach',
       ),
+    );
+  }
+
+  Widget _buildIconWithIndicator(Widget icon) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [icon, const Icon(Icons.arrow_drop_down, size: 16)],
     );
   }
 

@@ -1,20 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:better_keep/components/adaptive_toolbar.dart';
+import 'package:better_keep/dialogs/checkbox_cascade_dialog.dart';
+import 'package:better_keep/dialogs/export_dialog.dart';
+import 'package:better_keep/dialogs/paste_dialog.dart';
 import 'package:better_keep/dialogs/share_note_dialog.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/pages/content_preview_page.dart';
 import 'package:better_keep/pages/note_editor/toolbar/align_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/attach_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/checklist_button.dart';
+import 'package:better_keep/pages/note_editor/toolbar/indent_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/link_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/style_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_color_button.dart';
-import 'package:better_keep/services/export_data_service.dart';
+import 'package:better_keep/pages/note_editor/toolbar/text_size_button.dart';
+import 'package:better_keep/services/checkbox_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/components/note_attachments_carousel.dart';
 import 'package:better_keep/components/note_audio_player.dart';
@@ -31,8 +37,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class NoteEditor extends StatefulWidget {
@@ -72,6 +76,14 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   late Color _backgroundColor;
   bool _isKeyboardVisible = false;
   String? _initialPlainText;
+
+  // Checkbox cascade/bubble handling
+  final CheckboxService _checkboxService = CheckboxService();
+  bool _isApplyingCheckboxChanges = false;
+  bool _isHandlingCheckboxChange =
+      false; // Prevent re-entry while dialog is showing
+  // Track offsets that were auto-updated via bubble-up (skip cascade for these)
+  final Set<int> _bubbleUpdatedOffsets = {};
 
   bool get _isEditingTitle {
     final selection = _controller.selection;
@@ -316,11 +328,15 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _changeTimer?.cancel();
     _changesSubscription?.cancel();
+    // Clear checkbox tracking state
+    _bubbleUpdatedOffsets.clear();
+    _checkboxService.invalidateCache();
     // Pass flag to clear password after save completes (if setting enabled)
     _saveNote(clearPasswordAfterSave: AppState.forgetLockedNotePassword);
     _controller.removeListener(_didChangeSelection);
     _controller.dispose();
     _note.unsub("changed", _onNoteChanged);
+    _quillScrollController.dispose();
     _carouselScrollController.dispose();
 
     super.dispose();
@@ -404,8 +420,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final defaultStyles = DefaultStyles();
-
     Color backgroundColor = _backgroundColor == Colors.transparent
         ? Theme.of(context).colorScheme.surface
         : _backgroundColor;
@@ -486,6 +500,29 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       _note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
                     ),
                   ),
+                  IconButton(
+                    color: foregroundColor,
+                    onPressed: () async {
+                      final selectedLabels = await labels(
+                        context,
+                        mode: Labels.labelsModeSelect,
+                        initiallySelected: _note.labels != null
+                            ? _note.labels!.split(',')
+                            : [],
+                      );
+                      if (selectedLabels != null) {
+                        _note.labels = selectedLabels.join(',');
+                        _note.save();
+                        setState(() {});
+                      }
+                    },
+                    icon: Icon(
+                      _note.labels != null && _note.labels!.isNotEmpty
+                          ? Icons.label
+                          : Icons.label_outline,
+                    ),
+                    tooltip: 'Labels',
+                  ),
                   PopupMenuButton(itemBuilder: _buildPopupMenu),
                 ],
         ),
@@ -532,113 +569,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                             enableInteractiveSelection: true,
                             enableSelectionToolbar: true,
                             placeholder: 'Start typing your note...',
-                            customStyles: DefaultStyles(
-                              // Default text color based on note background
-                              color: foregroundColor,
-                              paragraph: DefaultTextBlockStyle(
-                                TextStyle(fontSize: 16, color: foregroundColor),
-                                HorizontalSpacing.zero,
-                                VerticalSpacing.zero,
-                                VerticalSpacing.zero,
-                                null,
-                              ),
-                              h1: DefaultTextBlockStyle(
-                                (defaultStyles.h1?.style ??
-                                        TextStyle(fontSize: 28))
-                                    .copyWith(color: foregroundColor),
-                                defaultStyles.h1?.horizontalSpacing ??
-                                    HorizontalSpacing.zero,
-                                VerticalSpacing(0, 10),
-                                defaultStyles.h1?.lineSpacing ??
-                                    VerticalSpacing.zero,
-                                defaultStyles.h1?.decoration,
-                              ),
-                              h2: DefaultTextBlockStyle(
-                                (defaultStyles.h2?.style ??
-                                        TextStyle(fontSize: 24))
-                                    .copyWith(color: foregroundColor),
-                                defaultStyles.h2?.horizontalSpacing ??
-                                    HorizontalSpacing.zero,
-                                defaultStyles.h2?.verticalSpacing ??
-                                    VerticalSpacing.zero,
-                                defaultStyles.h2?.lineSpacing ??
-                                    VerticalSpacing.zero,
-                                defaultStyles.h2?.decoration,
-                              ),
-                              h3: DefaultTextBlockStyle(
-                                (defaultStyles.h3?.style ??
-                                        TextStyle(fontSize: 20))
-                                    .copyWith(color: foregroundColor),
-                                defaultStyles.h3?.horizontalSpacing ??
-                                    HorizontalSpacing.zero,
-                                defaultStyles.h3?.verticalSpacing ??
-                                    VerticalSpacing.zero,
-                                defaultStyles.h3?.lineSpacing ??
-                                    VerticalSpacing.zero,
-                                defaultStyles.h3?.decoration,
-                              ),
-                              placeHolder: DefaultTextBlockStyle(
-                                TextStyle(
-                                  fontSize: 16,
-                                  color: placeholderColor,
-                                ),
-                                HorizontalSpacing.zero,
-                                VerticalSpacing.zero,
-                                VerticalSpacing.zero,
-                                null,
-                              ),
-                              // Inline styles with proper foreground color
-                              bold: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: foregroundColor,
-                              ),
-                              italic: TextStyle(
-                                fontStyle: FontStyle.italic,
-                                color: foregroundColor,
-                              ),
-                              underline: TextStyle(
-                                decoration: TextDecoration.underline,
-                                decorationColor: foregroundColor,
-                                color: foregroundColor,
-                              ),
-                              strikeThrough: TextStyle(
-                                decoration: TextDecoration.lineThrough,
-                                decorationColor: foregroundColor,
-                                color: foregroundColor,
-                              ),
-                              link: TextStyle(
-                                color: isDark(backgroundColor)
-                                    ? Colors.lightBlueAccent
-                                    : Colors.blue,
-                                decoration: TextDecoration.underline,
-                              ),
-                              code: DefaultTextBlockStyle(
-                                TextStyle(
-                                  fontSize: 14,
-                                  color: foregroundColor,
-                                  fontFamily: 'monospace',
-                                ),
-                                HorizontalSpacing.zero,
-                                VerticalSpacing(4, 4),
-                                VerticalSpacing.zero,
-                                BoxDecoration(
-                                  color: isDark(backgroundColor)
-                                      ? Colors.white.withAlpha(20)
-                                      : Colors.black.withAlpha(15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              inlineCode: InlineCodeStyle(
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: foregroundColor,
-                                  fontFamily: 'monospace',
-                                ),
-                                backgroundColor: isDark(backgroundColor)
-                                    ? Colors.white.withAlpha(20)
-                                    : Colors.black.withAlpha(15),
-                                radius: const Radius.circular(4),
-                              ),
+                            customLeadingBlockBuilder:
+                                customLeadingBlockBuilder,
+                            customStyles: buildQuillStyles(
+                              foregroundColor: foregroundColor,
+                              backgroundColor: backgroundColor,
+                              placeholderColor: placeholderColor,
                             ),
                             embedBuilders: kIsWeb
                                 ? FlutterQuillEmbeds.editorWebBuilders()
@@ -836,6 +772,18 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         readOnly: _note.readOnly,
         isEditingTitle: _isEditingTitle,
       ),
+      IndentButton(
+        focusNode: _focusNode,
+        controller: _controller,
+        readOnly: _note.readOnly,
+        isEditingTitle: _isEditingTitle,
+      ),
+      TextSizeButton(
+        focusNode: _focusNode,
+        controller: _controller,
+        readOnly: _note.readOnly,
+        isEditingTitle: _isEditingTitle,
+      ),
     ];
 
     return AdaptiveToolbar(
@@ -868,6 +816,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   Widget _styleButton(Attribute attribute) {
     return StyleButton(
       attribute: attribute,
+      focusNode: _focusNode,
       controller: _controller,
       readOnly: _note.readOnly,
       isEditingTitle: _isEditingTitle,
@@ -1230,6 +1179,13 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   }
 
   void _controllerChangesListener(DocChange event) {
+    // Always set the save timer for any document change (including cascade/bubble)
+    _changeTimer?.cancel();
+    _changeTimer = Timer(Duration(seconds: 1), _saveNote);
+
+    // Skip checkbox/title processing if we're applying checkbox cascade/bubble changes
+    if (_isApplyingCheckboxChanges) return;
+
     final lines = _controller.document.toPlainText().split('\n');
     final newTitle = lines.isNotEmpty ? lines.first : null;
 
@@ -1245,81 +1201,218 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       });
     }
 
-    _changeTimer?.cancel();
-    _changeTimer = Timer(Duration(seconds: 1), _saveNote);
+    // Handle nested checkbox cascade/bubble logic
+    // Fire-and-forget with error handling
+    _handleCheckboxChange(event).catchError((error) {
+      // Log error but don't crash - checkbox cascade is non-critical
+      debugPrint('Checkbox cascade error: $error');
+    });
   }
 
-  Future<void> _saveAsMarkdown() async {
-    try {
-      // Convert note to markdown
-      final markdown = ExportDataService().noteToMarkdown(_note);
-      final fileName = _sanitizeFileName(_note.title ?? 'Untitled');
-      final markdownBytes = utf8.encode(markdown);
+  /// Handle nested checkbox cascade (parent→children) and bubble (children→parent) logic
+  Future<void> _handleCheckboxChange(DocChange event) async {
+    // Prevent re-entry while dialog is showing or changes are being applied
+    if (_isHandlingCheckboxChange || _isApplyingCheckboxChanges) return;
 
-      if (kIsWeb) {
-        // On web, use XFile.fromData to trigger download
-        await SharePlus.instance.share(
-          ShareParams(
-            files: [
-              XFile.fromData(
-                Uint8List.fromList(markdownBytes),
-                name: '$fileName.md',
-                mimeType: 'text/markdown',
-              ),
-            ],
-          ),
+    // Detect if a checkbox was toggled
+    final changeResult = _checkboxService.detectChange(
+      event.before,
+      event.change,
+    );
+
+    if (changeResult == null) return;
+
+    _isHandlingCheckboxChange = true;
+    try {
+      // Parse the checkbox tree
+      final nodes = _checkboxService.parseCheckboxTree(_controller.document);
+      if (nodes.isEmpty) return;
+
+      // Find the node that was changed
+      final nodeIndex = _checkboxService.getNodeIndexAtOffset(
+        changeResult.offset,
+      );
+      if (nodeIndex == null) return;
+
+      final isChecking = changeResult.isChecked;
+
+      // Check if this checkbox was auto-updated via bubble-up
+      // If so, skip cascade confirmation (it was an indirect update)
+      final wasBubbleUpdated = _bubbleUpdatedOffsets.remove(
+        changeResult.offset,
+      );
+
+      if (!wasBubbleUpdated) {
+        // Check for cascade (parent has children that need updating)
+        final cascadeTargets = _checkboxService.getCascadeTargets(
+          nodeIndex,
+          isChecking,
+          nodes,
         );
-        return;
+
+        if (cascadeTargets.isNotEmpty && mounted) {
+          // Show confirmation dialog
+          final confirmed = await showCheckboxCascadeDialog(
+            context,
+            isChecking: isChecking,
+            affectedCount: cascadeTargets.length,
+          );
+
+          // Check mounted after async gap
+          if (!mounted) return;
+
+          if (confirmed) {
+            // Re-parse tree in case document changed while dialog was showing
+            final freshNodes = _checkboxService.parseCheckboxTree(
+              _controller.document,
+            );
+            final freshNodeIndex = _checkboxService.getNodeIndexAtOffset(
+              changeResult.offset,
+            );
+
+            if (freshNodeIndex != null) {
+              final freshCascadeTargets = _checkboxService.getCascadeTargets(
+                freshNodeIndex,
+                isChecking,
+                freshNodes,
+              );
+
+              // Apply cascade changes
+              _isApplyingCheckboxChanges = true;
+              try {
+                _checkboxService.applyCheckboxChanges(
+                  _controller,
+                  freshCascadeTargets,
+                  isChecking,
+                );
+              } finally {
+                _isApplyingCheckboxChanges = false;
+              }
+            }
+          } else {
+            // User cancelled - revert the parent checkbox
+            _isApplyingCheckboxChanges = true;
+            try {
+              _controller.formatText(
+                changeResult.offset,
+                0,
+                changeResult.wasChecked
+                    ? Attribute.checked
+                    : Attribute.unchecked,
+              );
+              _checkboxService.invalidateCache();
+            } finally {
+              _isApplyingCheckboxChanges = false;
+            }
+            return; // Don't proceed with bubble logic
+          }
+        }
       }
 
-      // Save to temp directory and share
-      final tempDir = await getTemporaryDirectory();
-      final filePath = '${tempDir.path}/$fileName.md';
-      final file = File(filePath);
-      await file.writeAsString(markdown);
+      // Check mounted before bubble logic
+      if (!mounted) return;
 
-      // Share the file
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(filePath)], title: '$fileName.md'),
+      // Check for bubble (all siblings checked → check parent, or any sibling unchecked → uncheck parent)
+      // Re-parse the tree after potential cascade changes
+      final updatedNodes = _checkboxService.parseCheckboxTree(
+        _controller.document,
       );
-    } catch (e) {
-      snackbar('Failed to save: $e', Colors.red);
+      final updatedNodeIndex = _checkboxService.getNodeIndexAtOffset(
+        changeResult.offset,
+      );
+
+      if (updatedNodeIndex != null) {
+        final bubbleTargets = _checkboxService.getBubbleTargets(
+          updatedNodeIndex,
+          isChecking,
+          updatedNodes,
+        );
+
+        if (bubbleTargets.isNotEmpty) {
+          _isApplyingCheckboxChanges = true;
+          try {
+            for (final target in bubbleTargets) {
+              // Track this offset as auto-updated via bubble-up
+              // Limit set size to prevent memory leak from stale offsets
+              if (_bubbleUpdatedOffsets.length > 100) {
+                _bubbleUpdatedOffsets.clear();
+              }
+              _bubbleUpdatedOffsets.add(target.offset);
+              _controller.formatText(
+                target.offset,
+                0,
+                target.newState ? Attribute.checked : Attribute.unchecked,
+              );
+            }
+            _checkboxService.invalidateCache();
+          } finally {
+            _isApplyingCheckboxChanges = false;
+          }
+        }
+      }
+    } finally {
+      _isHandlingCheckboxChange = false;
+      // DON'T clear _bubbleUpdatedOffsets here!
+      // Stream events are async - bubble updates trigger listener calls AFTER this finally block.
+      // The .remove() call in wasBubbleUpdated handles cleanup.
+      // Full clear only happens in dispose().
     }
   }
 
-  String _sanitizeFileName(String name) {
-    if (name.isEmpty) return 'untitled';
-    return name
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'\s+'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .substring(0, name.length > 50 ? 50 : name.length)
-        .trim();
+  /// Handles the "Paste as" menu action with proper mounted checks
+  Future<void> _handlePasteAs(BuildContext context) async {
+    // Capture navigator before async gap to avoid using stale context
+    final navigator = Navigator.of(context);
+
+    final result = await showPasteOptions(context);
+
+    if (!mounted) return;
+
+    switch (result) {
+      case PasteCancelled():
+        // User cancelled, do nothing
+        break;
+
+      case PastePlainText(:final text):
+        try {
+          insertPlainTextIntoController(_controller, text);
+          snackbar('Pasted as plain text', Colors.green);
+        } catch (e) {
+          snackbar('Failed to paste: $e', Colors.red);
+        }
+        break;
+
+      case PasteFormattedPreview(:final markdownText):
+        // Navigate to preview page using captured navigator
+        final document = await navigator.push<Document>(
+          MaterialPageRoute(
+            builder: (context) => ContentPreviewPage(
+              title: 'Pasted Content',
+              content: markdownText,
+              isMarkdown: true,
+              insertMode: true,
+            ),
+          ),
+        );
+
+        if (!mounted) return;
+
+        if (document != null) {
+          try {
+            insertDocumentIntoController(_controller, document);
+            snackbar('Content inserted', Colors.green);
+          } catch (e) {
+            snackbar('Failed to insert content: $e', Colors.red);
+          }
+        }
+        break;
+    }
   }
 
   List<PopupMenuEntry> _buildPopupMenu(BuildContext context) {
     bool isSaved = _note.id != null;
 
     return [
-      PopupMenuItem(
-        height: 20,
-        child: ListTile(leading: Icon(Icons.label), title: Text('Labels')),
-        onTap: () async {
-          final selectedLabels = await labels(
-            context,
-            mode: Labels.labelsModeSelect,
-            initiallySelected: _note.labels != null
-                ? _note.labels!.split(',')
-                : [],
-          );
-          if (selectedLabels != null) {
-            _note.labels = selectedLabels.join(',');
-            _note.save();
-            setState(() {});
-          }
-        },
-      ),
-      PopupMenuDivider(),
       PopupMenuItem(
         height: 20,
         child: CheckboxListTile(
@@ -1419,11 +1512,21 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       PopupMenuDivider(),
       PopupMenuItem(
         height: 20,
-        onTap: () => _saveAsMarkdown(),
+        onTap: () => showExportOptions(context, _note, _controller),
+        child: ListTile(leading: Icon(Icons.save_alt), title: Text('Save as')),
+      ),
+      PopupMenuItem(
+        height: 20,
+        onTap: () => showCopyOptions(context, _note, _controller),
         child: ListTile(
-          leading: Icon(Icons.save_alt),
-          title: Text('Save as Markdown'),
+          leading: Icon(Icons.content_copy),
+          title: Text('Copy as'),
         ),
+      ),
+      PopupMenuItem(
+        height: 20,
+        onTap: () => _handlePasteAs(context),
+        child: ListTile(leading: Icon(Icons.paste), title: Text('Paste as')),
       ),
       PopupMenuItem(
         height: 20,

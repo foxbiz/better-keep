@@ -83,8 +83,19 @@ void main() async {
 
   // For logged-in users, pre-load E2EE cached status before runApp
   // This allows returning approved users to skip the loading screen
+  // If not a returning approved user, start E2EE initialization immediately
+  // to avoid race condition where UI shows loading but init hasn't started
   if (AuthService.currentUser != null) {
-    await E2EEService.instance.preloadCachedStatus();
+    final isReturningApprovedUser = await E2EEService.instance
+        .preloadCachedStatus();
+    if (!isReturningApprovedUser) {
+      AppLogger.log(
+        '[Main] Not a returning approved user, starting E2EE init before runApp',
+      );
+      // Don't await - let it run in background while UI renders
+      // The _E2EELoadingWidget will show progress and handle retries if needed
+      E2EEService.instance.initialize();
+    }
   }
 
   AppLogger.log('[Main] Starting runApp');

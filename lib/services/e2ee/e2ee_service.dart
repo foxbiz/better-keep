@@ -79,6 +79,10 @@ class E2EEService {
   /// Tracks whether status change listeners have been registered.
   bool _listenersRegistered = false;
 
+  /// Completer to guard against concurrent initialize() calls.
+  /// Multiple callers will receive the same Future.
+  Completer<void>? _initCompleter;
+
   /// Gets the device manager for device operations.
   DeviceManager get deviceManager => _deviceManager;
 
@@ -146,7 +150,19 @@ class E2EEService {
   /// Uses cached status for fast startup, then verifies with Firebase in background.
   /// For returning users with approved status, verification happens in background
   /// while they can immediately access their notes.
+  ///
+  /// This method is idempotent - concurrent calls return the same Future.
   Future<void> initialize() async {
+    // Guard against concurrent initialization
+    // If already initializing, return the same Future
+    if (_initCompleter != null) {
+      AppLogger.log(
+        'E2EE: Initialize already in progress, returning existing Future',
+      );
+      return _initCompleter!.future;
+    }
+    _initCompleter = Completer<void>();
+
     try {
       AppLogger.log('E2EE: Initializing...');
 
@@ -161,6 +177,7 @@ class E2EEService {
         await _deviceManager.init();
         // Continue verification in background
         _verifyApprovedStatusInBackground();
+        _initCompleter?.complete();
         return;
       }
 
@@ -202,6 +219,7 @@ class E2EEService {
               await _deviceManager.init();
               // Continue verification in background
               _verifyApprovedStatusInBackground();
+              _initCompleter?.complete();
               return;
             case 'pending':
               status.value = E2EEStatus.pendingApproval;
@@ -238,6 +256,7 @@ class E2EEService {
             );
             status.value = E2EEStatus.needsRecovery;
             await _secureStorage.cacheDeviceStatus('needs_recovery');
+            _initCompleter?.complete();
             return;
           }
 
@@ -245,6 +264,7 @@ class E2EEService {
           AppLogger.log('E2EE: First device, automatically setting up E2EE...');
           statusMessage.value = 'Securing your account...';
           await setupE2EE();
+          _initCompleter?.complete();
           return;
         }
 
@@ -260,6 +280,7 @@ class E2EEService {
             );
             statusMessage.value = 'Setting up demo account...';
             await setupE2EE();
+            _initCompleter?.complete();
             return;
           }
           AppLogger.log(
@@ -267,6 +288,7 @@ class E2EEService {
           );
           status.value = E2EEStatus.needsRecovery;
           await _secureStorage.cacheDeviceStatus('needs_recovery');
+          _initCompleter?.complete();
           return;
         }
 
@@ -286,6 +308,7 @@ class E2EEService {
             statusMessage.value = 'Setting up demo account...';
             await _deviceManager.clearAllDevices();
             await setupE2EE();
+            _initCompleter?.complete();
             return;
           }
           AppLogger.log(
@@ -293,6 +316,7 @@ class E2EEService {
           );
           status.value = E2EEStatus.needsRecovery;
           await _secureStorage.cacheDeviceStatus('needs_recovery');
+          _initCompleter?.complete();
           return;
         }
 
@@ -305,6 +329,7 @@ class E2EEService {
           statusMessage.value = 'Setting up demo account...';
           await _deviceManager.clearAllDevices();
           await setupE2EE();
+          _initCompleter?.complete();
           return;
         }
         AppLogger.log('E2EE: Registering new device...');
@@ -313,6 +338,7 @@ class E2EEService {
         status.value = E2EEStatus.pendingApproval;
         await _secureStorage.cacheDeviceStatus('pending');
         listenForStatusChanges();
+        _initCompleter?.complete();
         return;
       }
 
@@ -349,6 +375,7 @@ class E2EEService {
               );
               statusMessage.value = 'Setting up demo account...';
               await setupE2EE();
+              _initCompleter?.complete();
               return;
             }
             AppLogger.log(
@@ -371,6 +398,7 @@ class E2EEService {
                 statusMessage.value = 'Setting up demo account...';
                 await _deviceManager.clearAllDevices();
                 await setupE2EE();
+                _initCompleter?.complete();
                 return;
               }
               AppLogger.log(
@@ -388,6 +416,7 @@ class E2EEService {
                 statusMessage.value = 'Setting up demo account...';
                 await _deviceManager.clearAllDevices();
                 await setupE2EE();
+                _initCompleter?.complete();
                 return;
               }
               statusMessage.value = 'Adding this device...';
@@ -398,6 +427,7 @@ class E2EEService {
             }
           }
         }
+        _initCompleter?.complete();
         return;
       }
 
@@ -411,6 +441,7 @@ class E2EEService {
         status.value = E2EEStatus.revoked;
         await _secureStorage.cacheDeviceStatus('revoked');
         _deviceManager.setRevokedFlag();
+        _initCompleter?.complete();
         return;
       }
 
@@ -422,6 +453,7 @@ class E2EEService {
         status.value = E2EEStatus.pendingApproval;
         await _secureStorage.cacheDeviceStatus('pending');
         listenForStatusChanges();
+        _initCompleter?.complete();
         return;
       }
 
@@ -429,6 +461,7 @@ class E2EEService {
         // Should not happen if device exists, but handle gracefully
         AppLogger.log('E2EE: Device in unknown state');
         status.value = E2EEStatus.error;
+        _initCompleter?.complete();
         return;
       }
 
@@ -439,6 +472,7 @@ class E2EEService {
         await _secureStorage.cacheDeviceStatus('approved');
         // Listen for status changes (revocation, etc.)
         listenForStatusChanges();
+        _initCompleter?.complete();
         return;
       }
 
@@ -450,14 +484,18 @@ class E2EEService {
         await _secureStorage.cacheDeviceStatus('approved');
         // Listen for status changes (revocation, etc.)
         listenForStatusChanges();
+        _initCompleter?.complete();
         return;
       }
 
       AppLogger.log('E2EE: Could not unlock UMK');
       status.value = E2EEStatus.error;
+      _initCompleter?.complete();
     } catch (e, stack) {
       AppLogger.error('E2EE: Initialization error', e, stack);
       status.value = E2EEStatus.error;
+      _initCompleter?.completeError(e, stack);
+      _initCompleter = null; // Allow retry on error
     }
   }
 
@@ -616,6 +654,13 @@ class E2EEService {
     }
   }
 
+  /// Resets the initialization guard.
+  /// Call this on sign-out to allow re-initialization for a new user.
+  void resetInitialization() {
+    _initCompleter = null;
+    AppLogger.log('E2EE: Initialization guard reset');
+  }
+
   /// Cleans up resources.
   Future<void> dispose() async {
     if (_listenersRegistered) {
@@ -633,6 +678,8 @@ class E2EEService {
     RecoveryKeyService.instance.clearFirestoreCache();
     await _secureStorage.clearAll();
     status.value = E2EEStatus.notInitialized;
+    // Reset initialization guard to allow re-init for new user
+    resetInitialization();
   }
 
   /// Starts fresh by clearing all devices and creating a new UMK.
@@ -652,6 +699,9 @@ class E2EEService {
     // Reset status
     status.value = E2EEStatus.notInitialized;
     statusMessage.value = '';
+
+    // Reset initialization guard before re-initializing
+    resetInitialization();
 
     // Re-initialize (will now be first device)
     await initialize();

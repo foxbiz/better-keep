@@ -14,6 +14,7 @@ import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/utils/week_days.dart';
@@ -65,15 +66,64 @@ class _NoteCardState extends State<NoteCard>
   }
 
   /// Creates a truncated document limited to maxChars characters
+  /// Preserves Delta attributes (checkboxes, formatting, etc.) during truncation
   Document? _createTruncatedDocument(Document? doc, {int maxChars = 500}) {
     if (doc == null) return null;
 
     final plainText = doc.toPlainText();
     if (plainText.length <= maxChars) return doc;
 
-    // Truncate at maxChars and add ellipsis
-    final truncatedText = '${plainText.substring(0, maxChars)}...';
-    return Document()..insert(0, truncatedText);
+    // Iterate through Delta operations preserving attributes
+    final delta = doc.toDelta();
+    final newOps = <Map<String, dynamic>>[];
+    int charCount = 0;
+    bool truncated = false;
+
+    for (final op in delta.toList()) {
+      if (!op.isInsert || truncated) continue;
+
+      final data = op.data;
+      final attributes = op.attributes;
+
+      if (data is String) {
+        final remaining = maxChars - charCount;
+        if (remaining <= 0) {
+          truncated = true;
+          continue;
+        }
+
+        if (data.length <= remaining) {
+          // Include entire operation with its attributes
+          newOps.add({
+            'insert': data,
+            if (attributes != null) 'attributes': attributes,
+          });
+          charCount += data.length;
+        } else {
+          // Truncate this text segment and add ellipsis
+          newOps.add({'insert': '${data.substring(0, remaining)}...'});
+          truncated = true;
+        }
+      } else {
+        // Embeds (images, etc.) - include as-is, don't count toward char limit
+        newOps.add({
+          'insert': data,
+          if (attributes != null) 'attributes': attributes,
+        });
+      }
+    }
+
+    // Ensure document ends with newline (required by Quill)
+    if (newOps.isEmpty) {
+      newOps.add({'insert': '\n'});
+    } else {
+      final lastInsert = newOps.last['insert'];
+      if (lastInsert is String && !lastInsert.endsWith('\n')) {
+        newOps.add({'insert': '\n'});
+      }
+    }
+
+    return Document.fromJson(newOps);
   }
 
   @override
@@ -710,126 +760,12 @@ class _NoteCardState extends State<NoteCard>
                             scrollController: _scrollController,
                             focusNode: _focusNode,
                             config: QuillEditorConfig(
-                              customStyles: DefaultStyles(
-                                // Default text color based on note background
-                                color: foregroundColor,
-                                paragraph: DefaultTextBlockStyle(
-                                  TextStyle(
-                                    fontSize: 16,
-                                    color: foregroundColor,
-                                  ),
-                                  HorizontalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  null,
-                                ),
-                                h1: DefaultTextBlockStyle(
-                                  TextStyle(
-                                    fontSize: 28,
-                                    color: foregroundColor,
-                                  ),
-                                  HorizontalSpacing.zero,
-                                  VerticalSpacing(0, 10),
-                                  VerticalSpacing.zero,
-                                  null,
-                                ),
-                                h2: DefaultTextBlockStyle(
-                                  TextStyle(
-                                    fontSize: 24,
-                                    color: foregroundColor,
-                                  ),
-                                  HorizontalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  null,
-                                ),
-                                h3: DefaultTextBlockStyle(
-                                  TextStyle(
-                                    fontSize: 20,
-                                    color: foregroundColor,
-                                  ),
-                                  HorizontalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  null,
-                                ),
-                                quote: DefaultTextBlockStyle(
-                                  TextStyle(color: secondaryColor),
-                                  HorizontalSpacing.zero,
-                                  VerticalSpacing(4, 4),
-                                  VerticalSpacing.zero,
-                                  BoxDecoration(
-                                    border: Border(
-                                      left: BorderSide(
-                                        color: secondaryColor,
-                                        width: 3,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                lists: DefaultListBlockStyle(
-                                  TextStyle(
-                                    fontSize: 16,
-                                    color: foregroundColor,
-                                  ),
-                                  HorizontalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  null,
-                                  null,
-                                ),
-                                code: DefaultTextBlockStyle(
-                                  TextStyle(
-                                    fontSize: 14,
-                                    color: foregroundColor,
-                                    fontFamily: 'monospace',
-                                  ),
-                                  HorizontalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  VerticalSpacing.zero,
-                                  BoxDecoration(
-                                    color: isDark(noteColor)
-                                        ? Colors.white.withAlpha(20)
-                                        : Colors.black.withAlpha(15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                                inlineCode: InlineCodeStyle(
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: foregroundColor,
-                                    fontFamily: 'monospace',
-                                  ),
-                                  backgroundColor: isDark(noteColor)
-                                      ? Colors.white.withAlpha(20)
-                                      : Colors.black.withAlpha(15),
-                                  radius: const Radius.circular(4),
-                                ),
-                                // Inline styles with proper foreground color
-                                bold: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: foregroundColor,
-                                ),
-                                italic: TextStyle(
-                                  fontStyle: FontStyle.italic,
-                                  color: foregroundColor,
-                                ),
-                                underline: TextStyle(
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: foregroundColor,
-                                  color: foregroundColor,
-                                ),
-                                strikeThrough: TextStyle(
-                                  decoration: TextDecoration.lineThrough,
-                                  decorationColor: foregroundColor,
-                                  color: foregroundColor,
-                                ),
-                                link: TextStyle(
-                                  color: isDark(noteColor)
-                                      ? Colors.lightBlueAccent
-                                      : Colors.blue,
-                                  decoration: TextDecoration.underline,
-                                ),
+                              customLeadingBlockBuilder:
+                                  customLeadingBlockBuilder,
+                              customStyles: buildQuillStyles(
+                                foregroundColor: foregroundColor,
+                                backgroundColor: noteColor,
+                                secondaryColor: secondaryColor,
                               ),
                               embedBuilders: kIsWeb
                                   ? FlutterQuillEmbeds.editorWebBuilders()

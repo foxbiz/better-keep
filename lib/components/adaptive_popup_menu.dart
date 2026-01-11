@@ -120,6 +120,9 @@ class AdaptivePopupMenu extends StatefulWidget {
   /// Animation duration
   final Duration animationDuration;
 
+  /// Whether to fit the popup width to its content (desktop only)
+  final bool fitContent;
+
   const AdaptivePopupMenu({
     super.key,
     required this.child,
@@ -134,6 +137,7 @@ class AdaptivePopupMenu extends StatefulWidget {
     this.width,
     this.showLabels = false,
     this.animationDuration = const Duration(milliseconds: 200),
+    this.fitContent = false,
   });
 
   @override
@@ -377,14 +381,16 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
     final double effectiveMaxWidth =
         width?.clamp(0.0, maxWidth) ?? (isMobile ? maxWidth : 400);
 
-    return Material(
+    Widget content = Material(
       elevation: 16,
       shadowColor: Colors.black54,
       borderRadius: BorderRadius.circular(16),
       color: backgroundColor,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          minWidth: isMobile ? effectiveMaxWidth : 120,
+          minWidth: isMobile || !widget.fitContent
+              ? (isMobile ? effectiveMaxWidth : 120)
+              : 0,
           maxWidth: effectiveMaxWidth,
           maxHeight: screenSize.height * 0.5,
         ),
@@ -395,7 +401,9 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
               padding: const EdgeInsets.all(12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: widget.fitContent
+                    ? CrossAxisAlignment.center
+                    : CrossAxisAlignment.stretch,
                 children: _buildContent(foregroundColor),
               ),
             ),
@@ -403,6 +411,12 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
         ),
       ),
     );
+
+    // Wrap with IntrinsicWidth when fitContent is enabled on desktop
+    if (widget.fitContent && !isMobile) {
+      return IntrinsicWidth(child: content);
+    }
+    return content;
   }
 
   List<Widget> _buildContent(Color foregroundColor) {

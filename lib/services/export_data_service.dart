@@ -591,7 +591,15 @@ Exported on: ${DateTime.now().toIso8601String()}
     buffer.writeln('<small>');
     final metadata = <String>[];
     if (note.labels?.isNotEmpty == true) {
-      metadata.add('Labels: ${note.labels}');
+      // Clean up labels string - remove leading/trailing commas and spaces
+      final cleanLabels = note.labels!
+          .split(',')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty)
+          .join(', ');
+      if (cleanLabels.isNotEmpty) {
+        metadata.add('Labels: $cleanLabels');
+      }
     }
     if (note.createdAt != null) {
       metadata.add('Created: ${note.createdAt!.toIso8601String()}');
@@ -680,6 +688,9 @@ Exported on: ${DateTime.now().toIso8601String()}
 
     String prefix = '';
     String suffix = '';
+    bool useHtmlWrapper = false;
+    String? alignStyle;
+    int indentLevel = 0;
 
     if (attributes != null) {
       // Headers
@@ -716,9 +727,45 @@ Exported on: ${DateTime.now().toIso8601String()}
         buffer.writeln('```');
         return;
       }
+
+      // Indentation
+      if (attributes.containsKey('indent')) {
+        final indent = attributes['indent'];
+        if (indent is int) {
+          indentLevel = indent;
+        }
+      }
+
+      // Alignment
+      if (attributes.containsKey('align')) {
+        final align = attributes['align'] as String?;
+        if (align != null && align != 'left') {
+          alignStyle = align;
+          useHtmlWrapper = true;
+        }
+      }
     }
 
-    buffer.writeln('$prefix$text$suffix');
+    // Apply indentation
+    String indentPrefix = '';
+    if (indentLevel > 0) {
+      indentPrefix = '&nbsp;&nbsp;&nbsp;&nbsp;' * indentLevel;
+      useHtmlWrapper = true;
+    }
+
+    if (useHtmlWrapper) {
+      // Use HTML div for alignment and indentation
+      final styleProps = <String>[];
+      if (alignStyle != null) {
+        styleProps.add('text-align: $alignStyle');
+      }
+      final style = styleProps.isNotEmpty
+          ? ' style="${styleProps.join('; ')}"'
+          : '';
+      buffer.writeln('<div$style>$indentPrefix$prefix$text$suffix</div>');
+    } else {
+      buffer.writeln('$prefix$text$suffix');
+    }
   }
 
   /// Apply inline formatting to text
@@ -751,6 +798,16 @@ Exported on: ${DateTime.now().toIso8601String()}
     if (attributes.containsKey('link')) {
       final link = attributes['link'] as String;
       result = '[$result]($link)';
+    }
+
+    // Custom font size (use HTML span)
+    if (attributes.containsKey('size')) {
+      final size = attributes['size'];
+      if (size != null) {
+        // Size can be a string like "12" or a number
+        final sizeValue = size is String ? size : size.toString();
+        result = '<span style="font-size: ${sizeValue}px">$result</span>';
+      }
     }
 
     return result;

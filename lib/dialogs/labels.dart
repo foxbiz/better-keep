@@ -138,41 +138,45 @@ class _LabelsState extends State<Labels> {
 
     List<Widget> children = [];
 
-    if (widget.mode == Labels.labelsModeManage) {
+    // Show new label input in both manage mode and select mode
+    children.add(_buildNewLabelInput());
+    children.add(Divider(height: 1));
+
+    // Show empty state message when no labels exist
+    if (labels!.isEmpty) {
       children.add(
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
+          padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _newLabelController,
-                  focusNode: _newLabelFocusNode,
-                  decoration: InputDecoration(
-                    hintText: 'New label name',
-                    isDense: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                  onSubmitted: (_) => _addLabelFromInput(),
+              Icon(
+                Icons.label_outline,
+                size: 48,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+              SizedBox(height: 12),
+              Text(
+                'No labels yet',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-              SizedBox(width: 8),
-              IconButton(
-                icon: Icon(Icons.add),
-                onPressed: _addLabelFromInput,
-                tooltip: 'Add label',
+              SizedBox(height: 4),
+              Text(
+                'Create a label above to organize your notes',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
               ),
             ],
           ),
         ),
       );
-      children.add(Divider(height: 1));
     }
 
     for (int i = 0; i < labels!.length; i++) {
@@ -249,6 +253,40 @@ class _LabelsState extends State<Labels> {
     );
   }
 
+  Widget _buildNewLabelInput() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _newLabelController,
+              focusNode: _newLabelFocusNode,
+              decoration: InputDecoration(
+                hintText: 'New label name',
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+              ),
+              onSubmitted: (_) => _addLabelFromInput(),
+            ),
+          ),
+          SizedBox(width: 8),
+          IconButton(
+            icon: Icon(Icons.add),
+            onPressed: _addLabelFromInput,
+            tooltip: 'Add label',
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addLabelFromInput() {
     final labelName = _newLabelController.text.trim();
     if (labelName.isEmpty) return;
@@ -256,5 +294,13 @@ class _LabelsState extends State<Labels> {
     label.save();
     _newLabelController.clear();
     _newLabelFocusNode.requestFocus();
+
+    // Auto-select the newly created label in select mode
+    if (widget.mode == Labels.labelsModeSelect) {
+      selectedLabels.add(labelName);
+      if (widget.onSelect != null) {
+        widget.onSelect!(selectedLabels);
+      }
+    }
   }
 }

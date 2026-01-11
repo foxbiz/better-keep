@@ -36,6 +36,12 @@ class _AlignButtonState extends State<AlignButton> {
   }
 
   @override
+  void didUpdateWidget(AlignButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.isDisabled = widget.readOnly || widget.isEditingTitle;
+  }
+
+  @override
   void dispose() {
     widget.controller.removeListener(_onSelectionChanged);
     _controller.dispose();
@@ -85,6 +91,7 @@ class _AlignButtonState extends State<AlignButton> {
     }
     _updateCurrentAlignment();
     _controller.close();
+    widget.focusNode.requestFocus();
   }
 
   @override
@@ -92,6 +99,7 @@ class _AlignButtonState extends State<AlignButton> {
     return AdaptivePopupMenu(
       controller: _controller,
       parentColor: widget.parentColor,
+      fitContent: true,
       items: (context) => [
         AdaptiveMenuItem(
           icon: Icons.format_align_left,
@@ -114,9 +122,16 @@ class _AlignButtonState extends State<AlignButton> {
       ],
       child: IconButton(
         onPressed: _controller.isDisabled ? null : _controller.toggle,
-        icon: Icon(_getAlignIcon()),
+        icon: _buildIconWithIndicator(Icon(_getAlignIcon())),
         tooltip: 'Align',
       ),
+    );
+  }
+
+  Widget _buildIconWithIndicator(Widget icon) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [icon, const Icon(Icons.arrow_drop_down, size: 16)],
     );
   }
 }

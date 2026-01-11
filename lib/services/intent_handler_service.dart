@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:better_keep/pages/file_preview_page.dart';
+import 'package:better_keep/pages/content_preview_page.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
@@ -219,7 +219,7 @@ class IntentHandlerService {
     }
   }
 
-  /// Navigate to the file preview page
+  /// Navigate to the content preview page
   void _navigateToPreview({
     required String fileName,
     required String content,
@@ -229,8 +229,8 @@ class IntentHandlerService {
     if (context != null && context.mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => FilePreviewPage(
-            fileName: fileName,
+          builder: (context) => ContentPreviewPage(
+            title: fileName,
             content: content,
             isMarkdown: isMarkdown,
           ),

@@ -18,12 +18,14 @@ const iconMap = {
 class StyleButton extends StatefulWidget {
   final QuillController controller;
   final Attribute attribute;
+  final FocusNode focusNode;
   final bool isEditingTitle;
   final bool readOnly;
 
   const StyleButton({
     super.key,
     required this.readOnly,
+    required this.focusNode,
     required this.controller,
     required this.attribute,
     required this.isEditingTitle,
@@ -119,6 +121,7 @@ class _StyleButtonState extends State<StyleButton> {
                 widget.controller.skipRequestKeyboard = false;
               }
 
+              widget.focusNode.requestFocus();
               setState(() {});
             },
     );
