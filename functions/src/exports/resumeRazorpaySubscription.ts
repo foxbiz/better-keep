@@ -1,4 +1,3 @@
-import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
@@ -92,7 +91,7 @@ export default onCall(
 				await subDoc.ref.update({
 					autoRenew: true,
 					subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
-					cancelledAt: admin.firestore.FieldValue.delete(),
+					cancelledAt: FieldValue.delete(),
 					updatedAt: FieldValue.serverTimestamp(),
 				});
 

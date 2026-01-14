@@ -1,4 +1,4 @@
-import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { auth, db, emailPassword } from "../config";
@@ -60,8 +60,8 @@ export default onCall(
 
 			// Remove the scheduled deletion field and tokensRevokedAt
 			await userRef.update({
-				scheduledDeletion: admin.firestore.FieldValue.delete(),
-				tokensRevokedAt: admin.firestore.FieldValue.delete(),
+				scheduledDeletion: FieldValue.delete(),
+				tokensRevokedAt: FieldValue.delete(),
 			});
 
 			console.log(`Cancelled scheduled deletion for user: ${userId}`);

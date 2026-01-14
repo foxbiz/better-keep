@@ -1,5 +1,4 @@
-import * as admin from "firebase-admin";
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { db } from "../config";
@@ -69,7 +68,7 @@ export default onCall(async (request: CallableRequest<{ otp: string }>) => {
 		// Verify OTP
 		if (otpData.otp !== providedOtp) {
 			await otpRef.update({
-				attempts: admin.firestore.FieldValue.increment(1),
+				attempts: FieldValue.increment(1),
 			});
 
 			const remainingAttempts = 4 - attempts;
@@ -115,13 +114,14 @@ export default onCall(async (request: CallableRequest<{ otp: string }>) => {
 			);
 		}
 
-		// Clear recovery key if exists
+		// Clear recovery key document if exists
+		// Recovery key is stored at users/{userId}/e2ee/recovery_key
 		await userRef
-			.update({
-				recoveryKey: admin.firestore.FieldValue.delete(),
-			})
+			.collection("e2ee")
+			.doc("recovery_key")
+			.delete()
 			.catch(() => {
-				// User doc might not have this field, ignore error
+				// Recovery key might not exist, ignore error
 			});
 
 		console.log(`Start fresh completed for user ${userId}`);
