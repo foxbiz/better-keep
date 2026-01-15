@@ -1,6 +1,6 @@
 {
   "name": "better-keep-notes",
-  "version": "1.0.41",
+  "version": "1.0.42",
   "description": "Better Keep Notes - Build Scripts",
   "scripts": {
     "firebase-emulators": "export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && firebase emulators:start",
