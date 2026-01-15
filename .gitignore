@@ -51,4 +51,4 @@ app.*.map.json
 firebase.json
 web/firebase-config.json
 .env
-.firebase/hosting.YnVpbGQvd2Vi.cache
+.firebase/

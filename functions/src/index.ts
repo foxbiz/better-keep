@@ -10,6 +10,7 @@ import confirmAccountLink from "./exports/confirmAccountLink";
 import createCustomToken from "./exports/createCustomToken";
 import createRazorpaySubscription from "./exports/createRazorpaySubscription";
 import debugDeleteSubscription from "./exports/debugDeleteSubscription";
+import getPublicStats from "./exports/getPublicStats";
 import grantTrialOnFirstSignIn from "./exports/grantTrialOnFirstSignIn";
 import oauthCallback from "./exports/oauthCallback";
 import oauthStart from "./exports/oauthStart";
@@ -28,6 +29,7 @@ import sendEmailVerificationOtp from "./exports/sendEmailVerificationOtp";
 import sendPasswordResetOtp from "./exports/sendPasswordResetOtp";
 import sendStartFreshOtp from "./exports/sendStartFreshOtp";
 import startFreshWithOtp from "./exports/startFreshWithOtp";
+import updatePublicStats from "./exports/updatePublicStats";
 import verifyAccountLinkOtp from "./exports/verifyAccountLinkOtp";
 import verifyDeletionOtp from "./exports/verifyDeletionOtp";
 import verifyEmailVerificationOtp from "./exports/verifyEmailVerificationOtp";
@@ -72,4 +74,6 @@ export {
 	cleanupFailedRazorpayPayments,
 	grantTrialOnFirstSignIn,
 	checkExpiredTrials,
+	getPublicStats,
+	updatePublicStats,
 };

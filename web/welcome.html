@@ -271,6 +271,30 @@
       max-width: 500px;
     }
 
+    .user-count-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 0.5rem 1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    .user-count-badge .count {
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .user-count-badge svg {
+      width: 16px;
+      height: 16px;
+      fill: var(--primary);
+    }
+
     .hero-buttons {
       display: flex;
       gap: 1rem;
@@ -1195,6 +1219,13 @@
         <h1>Your Notes, <span>Reimagined</span></h1>
         <p>Better Keep Notes brings you a beautiful, private note-taking experience with rich text formatting,
           better organization, and offline-friendly sync across all your devices.</p>
+        <div class="user-count-badge" id="userCountBadge" style="display: none;">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+          </svg>
+          <span><span class="count" id="userCount">0</span> users trust Better Keep</span>
+        </div>
         <div class="hero-buttons">
           <a href="/" class="btn-primary">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -1631,6 +1662,21 @@
         document.body.style.overflow = '';
       }
     });
+
+    // Fetch and display user count
+    (function fetchUserCount() {
+      fetch('https://us-central1-better-keep-notes.cloudfunctions.net/getPublicStats')
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.message && data.message !== '0' && data.message !== 'error') {
+            document.getElementById('userCount').textContent = data.message;
+            document.getElementById('userCountBadge').style.display = 'inline-flex';
+          }
+        })
+        .catch(() => {
+          // Silently fail - badge stays hidden
+        });
+    })();
   </script>
 </body>
 

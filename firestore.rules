@@ -9,6 +9,13 @@ service cloud.firestore {
         && request.auth.token.planExpiresAt > request.time.toMillis();
     }
 
+    // Public statistics - read-only access for user count badges
+    // Only Cloud Functions can write via Admin SDK
+    match /stats/public {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Helper function to validate attachment count
     // Maximum 50 attachments per note to maintain performance and prevent storage abuse
     function hasValidAttachmentCount() {
