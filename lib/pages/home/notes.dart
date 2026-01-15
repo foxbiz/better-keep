@@ -103,8 +103,8 @@ class NotesState extends State<Notes> {
 
   @override
   Widget build(BuildContext context) {
-    // Folder view needs a different layout structure
-    if (AppState.notesViewMode == NoteViewMode.folder) {
+    // Folder view needs a different layout structure (but not during search)
+    if (AppState.notesViewMode == NoteViewMode.folder && !widget.searchMode) {
       return _buildFolderModeLayout();
     }
 
@@ -120,23 +120,33 @@ class NotesState extends State<Notes> {
             await NoteSyncService().refresh();
             await _fetchNotes();
           },
-          child: CustomScrollView(
+          child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverFillRemaining(
-                hasScrollBody: true,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: 1200,
-                      maxHeight: constraints.maxHeight,
-                    ),
-                    child: _buildNotesView(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: 1200),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Labels row with view mode toggle and folder grouping toggle
+                      if (AppState.showNotes == NoteType.all &&
+                          !_selectionMode &&
+                          !widget.searchMode)
+                        Labels(
+                          key: Key('labels_widget_folder'),
+                          // In folder mode, Labels widget is shown for view mode toggle only.
+                          // Label filtering is handled via folder navigation, not chip selection.
+                          onSelect: (_) {},
+                        ),
+                      _buildNotesView(),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -393,6 +403,11 @@ class NotesState extends State<Notes> {
           ],
         ),
       );
+    }
+
+    // During search, bypass folder view and use grid view instead
+    if (widget.searchMode && AppState.notesViewMode == NoteViewMode.folder) {
+      return _buildGridView();
     }
 
     // Folder view mode

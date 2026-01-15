@@ -1,7 +1,6 @@
 import 'package:better_keep/components/folder_breadcrumb.dart';
 import 'package:better_keep/components/folder_tile.dart';
 import 'package:better_keep/components/note_card.dart';
-import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/note_grouping.dart';
@@ -47,9 +46,6 @@ class FolderViewState extends State<FolderView> {
   /// Current grouping mode
   late FolderGroupBy _groupBy;
 
-  /// Flag to prevent double navigation when folder becomes empty
-  bool _pendingEmptyFolderNavigation = false;
-
   /// Get note groups for the current notes
   NoteGroups _getGroups() {
     return createNoteGroups(widget.notes.toList());
@@ -71,32 +67,7 @@ class FolderViewState extends State<FolderView> {
   @override
   void didUpdateWidget(FolderView oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // Check if current folder is still valid after notes change
-    if (_currentFolder != null && !_pendingEmptyFolderNavigation) {
-      final groups = _getGroups();
-      final notesInFolder = _getNotesForFolder(groups, _currentFolder!);
-      if (notesInFolder.isEmpty) {
-        // Folder is now empty, navigate back to root
-        _pendingEmptyFolderNavigation = true;
-        final folderToCheck = _currentFolder;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _pendingEmptyFolderNavigation = false;
-          // Re-verify folder is still empty (notes may have been added)
-          if (_currentFolder != folderToCheck) return;
-          final currentGroups = _getGroups();
-          final currentNotes = _getNotesForFolder(
-            currentGroups,
-            _currentFolder!,
-          );
-          if (currentNotes.isEmpty) {
-            snackbar('Folder is now empty');
-            _navigateToRoot();
-          }
-        });
-      }
-    }
+    // Empty folders now just show the empty notes view instead of navigating away
   }
 
   FolderGroupBy _loadGroupBy() {
@@ -112,17 +83,6 @@ class FolderViewState extends State<FolderView> {
           : FolderGroupBy.labels;
       _currentFolder = null; // Reset to root when grouping changes
     });
-    widget.onInsideFolder?.call(false);
-  }
-
-  void _setGroupBy(FolderGroupBy groupBy) {
-    setState(() {
-      _groupBy = groupBy;
-      _currentFolder = null;
-    });
-    AppState.folderGroupBy = groupBy == FolderGroupBy.colors
-        ? 'colors'
-        : 'labels';
     widget.onInsideFolder?.call(false);
   }
 
@@ -184,53 +144,20 @@ class FolderViewState extends State<FolderView> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Show breadcrumb when inside a folder, toggle when at root
+        // Show breadcrumb when inside a folder
         if (_currentFolder != null)
           FolderBreadcrumb(
             location: _currentFolder!,
             onHomePressed: _navigateToRoot,
-          )
-        else if (!widget.selectionMode && !widget.searchMode)
-          _buildGroupToggle(),
+          ),
 
         // Content area
-        Expanded(
-          child: _currentFolder != null
-              ? _buildNotesGrid(_getNotesForFolder(groups, _currentFolder!))
-              : _buildFoldersGrid(groups),
-        ),
+        _currentFolder != null
+            ? _buildNotesGrid(_getNotesForFolder(groups, _currentFolder!))
+            : _buildFoldersGrid(groups),
       ],
-    );
-  }
-
-  Widget _buildGroupToggle() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Row(
-        children: [
-          SegmentedButton<FolderGroupBy>(
-            segments: const [
-              ButtonSegment(
-                value: FolderGroupBy.labels,
-                label: Text('Labels'),
-                icon: Icon(Icons.label_outline),
-              ),
-              ButtonSegment(
-                value: FolderGroupBy.colors,
-                label: Text('Colors'),
-                icon: Icon(Icons.palette_outlined),
-              ),
-            ],
-            selected: {_groupBy},
-            onSelectionChanged: (selected) => _setGroupBy(selected.first),
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ],
-      ),
     );
   }
 

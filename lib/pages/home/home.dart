@@ -811,7 +811,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                 : Padding(
                     padding: const EdgeInsets.only(left: 12, right: 4),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(6),
@@ -822,14 +821,23 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Text(
-                          appLabel,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 18,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                appLabel,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 18,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ],

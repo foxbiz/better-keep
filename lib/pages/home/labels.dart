@@ -1,4 +1,7 @@
 import 'package:better_keep/models/label.dart';
+import 'package:better_keep/pages/home/widgets/view_mode_toggle.dart';
+import 'package:better_keep/pages/home/views/folder_view.dart';
+import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 
 class Labels extends StatefulWidget {
@@ -12,6 +15,8 @@ class Labels extends StatefulWidget {
 class _LabelsState extends State<Labels> {
   List<Label> _labels = [];
   final List<String> _selectedLabels = [];
+  late NoteViewMode _viewMode;
+  late FolderGroupBy _folderGroupBy;
 
   void _labelsListener(LabelEvent event) {
     setState(() {
@@ -31,6 +36,9 @@ class _LabelsState extends State<Labels> {
   @override
   void initState() {
     super.initState();
+    _viewMode = AppState.notesViewMode;
+    _folderGroupBy = _loadFolderGroupBy();
+
     Label.get().then((fetchedLabels) {
       if (mounted) {
         setState(() {
@@ -39,12 +47,51 @@ class _LabelsState extends State<Labels> {
       }
     });
     Label.on("changed", _labelsListener);
+    AppState.subscribe("notes_view_mode", _onViewModeChanged);
+    AppState.subscribe("folder_group_by", _onFolderGroupByChanged);
   }
 
   @override
   void dispose() {
     Label.off("changed", _labelsListener);
+    AppState.unsubscribe("notes_view_mode", _onViewModeChanged);
+    AppState.unsubscribe("folder_group_by", _onFolderGroupByChanged);
     super.dispose();
+  }
+
+  FolderGroupBy _loadFolderGroupBy() {
+    final stored = AppState.folderGroupBy;
+    return stored == 'colors' ? FolderGroupBy.colors : FolderGroupBy.labels;
+  }
+
+  void _onViewModeChanged(dynamic value) {
+    if (!mounted) return;
+    if (value is! NoteViewMode) return;
+    setState(() {
+      _viewMode = value;
+      // Reset label filters when view mode changes
+      _selectedLabels.clear();
+    });
+    // Notify parent to reset the notes filter
+    widget.onSelect([]);
+  }
+
+  void _onFolderGroupByChanged(dynamic value) {
+    if (!mounted) return;
+    setState(() {
+      _folderGroupBy = value == 'colors'
+          ? FolderGroupBy.colors
+          : FolderGroupBy.labels;
+    });
+  }
+
+  void _setFolderGroupBy(FolderGroupBy groupBy) {
+    setState(() {
+      _folderGroupBy = groupBy;
+    });
+    AppState.folderGroupBy = groupBy == FolderGroupBy.colors
+        ? 'colors'
+        : 'labels';
   }
 
   void _clearSelection() {
@@ -56,10 +103,6 @@ class _LabelsState extends State<Labels> {
 
   @override
   Widget build(BuildContext context) {
-    if (_labels.isEmpty) {
-      return SizedBox.shrink();
-    }
-
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final hasSelection = _selectedLabels.isNotEmpty;
@@ -71,80 +114,118 @@ class _LabelsState extends State<Labels> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           children: [
-            AnimatedSize(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              alignment: Alignment.centerLeft,
-              child: hasSelection
-                  ? Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: AnimatedOpacity(
-                        opacity: hasSelection ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 150),
-                        child: ActionChip(
-                          avatar: Icon(
-                            Icons.close,
-                            size: 18,
-                            color: colorScheme.onSurfaceVariant,
+            // View mode toggle icon
+            const ViewModeToggle(),
+            const SizedBox(width: 8),
+
+            // Show folder grouping toggle when in folder mode
+            if (_viewMode == NoteViewMode.folder)
+              _buildFolderGroupToggle(colorScheme)
+            else if (_labels.isNotEmpty) ...[
+              // Show labels when not in folder mode
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                alignment: Alignment.centerLeft,
+                child: hasSelection
+                    ? Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: AnimatedOpacity(
+                          opacity: hasSelection ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 150),
+                          child: ActionChip(
+                            avatar: Icon(
+                              Icons.close,
+                              size: 18,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            label: Text('Clear'),
+                            onPressed: _clearSelection,
+                            backgroundColor:
+                                colorScheme.surfaceContainerHighest,
+                            side: BorderSide.none,
+                            labelStyle: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
                           ),
-                          label: Text('Clear'),
-                          onPressed: _clearSelection,
-                          backgroundColor: colorScheme.surfaceContainerHighest,
-                          side: BorderSide.none,
-                          labelStyle: TextStyle(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
                         ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-            ..._labels.asMap().entries.map((entry) {
-              final index = entry.key;
-              final label = entry.value;
-              final isSelected = _selectedLabels.contains(label.name);
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index < _labels.length - 1 ? 8 : 0,
-                ),
-                child: FilterChip(
-                  selected: isSelected,
-                  label: Text(label.name),
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedLabels.add(label.name);
-                      } else {
-                        _selectedLabels.remove(label.name);
-                      }
-                      widget.onSelect(
-                        _labels
-                            .where((lbl) => _selectedLabels.contains(lbl.name))
-                            .toList(),
-                      );
-                    });
-                  },
-                  showCheckmark: false,
-                  avatar: isSelected
-                      ? Icon(Icons.check, size: 18)
-                      : Icon(Icons.label_outline, size: 18),
-                  backgroundColor: colorScheme.surfaceContainerHighest,
-                  selectedColor: colorScheme.primaryContainer,
-                  labelStyle: TextStyle(
-                    color: isSelected
-                        ? colorScheme.onPrimaryContainer
-                        : colorScheme.onSurfaceVariant,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              ..._labels.asMap().entries.map((entry) {
+                final index = entry.key;
+                final label = entry.value;
+                final isSelected = _selectedLabels.contains(label.name);
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index < _labels.length - 1 ? 8 : 0,
                   ),
-                  side: BorderSide.none,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                ),
-              );
-            }),
+                  child: FilterChip(
+                    selected: isSelected,
+                    label: Text(label.name),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedLabels.add(label.name);
+                        } else {
+                          _selectedLabels.remove(label.name);
+                        }
+                        widget.onSelect(
+                          _labels
+                              .where(
+                                (lbl) => _selectedLabels.contains(lbl.name),
+                              )
+                              .toList(),
+                        );
+                      });
+                    },
+                    showCheckmark: false,
+                    avatar: isSelected
+                        ? Icon(Icons.check, size: 18)
+                        : Icon(Icons.label_outline, size: 18),
+                    backgroundColor: colorScheme.surfaceContainerHighest,
+                    selectedColor: colorScheme.primaryContainer,
+                    labelStyle: TextStyle(
+                      color: isSelected
+                          ? colorScheme.onPrimaryContainer
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                    ),
+                    side: BorderSide.none,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  ),
+                );
+              }),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFolderGroupToggle(ColorScheme colorScheme) {
+    return SegmentedButton<FolderGroupBy>(
+      segments: const [
+        ButtonSegment(
+          value: FolderGroupBy.labels,
+          label: Text('Labels'),
+          icon: Icon(Icons.label_outline),
+        ),
+        ButtonSegment(
+          value: FolderGroupBy.colors,
+          label: Text('Colors'),
+          icon: Icon(Icons.palette_outlined),
+        ),
+      ],
+      selected: {_folderGroupBy},
+      onSelectionChanged: (selected) => _setFolderGroupBy(selected.first),
+      style: const ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
