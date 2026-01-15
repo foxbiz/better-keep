@@ -35,6 +35,11 @@ export default onSchedule(
 			failed: 0,
 		};
 
+		// Create transporter once outside the loop for efficiency
+		const transporter = getEmailTransporter(emailPassword.value());
+		const senderEmail = process.env.EMAIL_FROM;
+		const senderName = process.env.EMAIL_NAME;
+
 		for (const doc of snapshot.docs) {
 			const userId = doc.id;
 			const userData = doc.data();
@@ -59,10 +64,6 @@ export default onSchedule(
 					month: "long",
 					day: "numeric",
 				});
-
-				const transporter = getEmailTransporter(emailPassword.value());
-				const senderEmail = process.env.EMAIL_FROM;
-				const senderName = process.env.EMAIL_NAME;
 
 				const mailOptions = {
 					from: `"${senderName}" <${senderEmail}>`,

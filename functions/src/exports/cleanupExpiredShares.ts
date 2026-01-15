@@ -1,15 +1,5 @@
-import { getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-
-// Initialize Firebase Admin if not already initialized
-if (getApps().length === 0) {
-	initializeApp();
-}
-
-const db = getFirestore();
-const storage = getStorage();
+import { db, storage } from "../config";
 
 /**
  * Delete all attachment files for a share from Firebase Storage
