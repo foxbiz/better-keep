@@ -1,3 +1,4 @@
+import 'package:better_keep/models/label.dart';
 import 'package:better_keep/services/markdown_import_service.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/models/note.dart';
@@ -27,12 +28,16 @@ class ContentPreviewPage extends StatefulWidget {
   /// and returns the Document on confirmation instead of creating a new note
   final bool insertMode;
 
+  /// Optional label name to apply to the imported note
+  final String? labelName;
+
   const ContentPreviewPage({
     super.key,
     required this.title,
     required this.content,
     required this.isMarkdown,
     this.insertMode = false,
+    this.labelName,
   });
 
   @override
@@ -63,7 +68,11 @@ class _ContentPreviewPageState extends State<ContentPreviewPage> {
       );
     } else {
       // Plain text - create simple document
-      final document = Document()..insert(0, widget.content);
+      // Ensure content ends with newline (required by flutter_quill)
+      final content = widget.content.endsWith('\n')
+          ? widget.content
+          : '${widget.content}\n';
+      final document = Document()..insert(0, content);
       _previewController = QuillController(
         document: document,
         selection: const TextSelection.collapsed(offset: 0),
@@ -160,6 +169,13 @@ class _ContentPreviewPageState extends State<ContentPreviewPage> {
           title: _noteTitle,
           textContent: widget.content,
         );
+      }
+
+      // Apply label if provided (e.g., "Shared File" for file imports)
+      if (widget.labelName != null && widget.labelName!.isNotEmpty) {
+        await Label.getOrCreateSystemLabel(widget.labelName!);
+        note.labels = widget.labelName!;
+        await note.save();
       }
 
       if (!mounted) return;

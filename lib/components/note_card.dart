@@ -94,14 +94,14 @@ class _NoteCardState extends State<NoteCard>
 
         if (data.length <= remaining) {
           // Include entire operation with its attributes
-          newOps.add({
-            'insert': data,
-            if (attributes != null) 'attributes': attributes,
-          });
+          newOps.add(op.toJson());
           charCount += data.length;
         } else {
           // Truncate this text segment and add ellipsis
-          newOps.add({'insert': '${data.substring(0, remaining)}...'});
+          newOps.add({
+            'insert': '...',
+            'attributes': {'italic': true, 'color': 'grey'},
+          });
           truncated = true;
         }
       } else {
@@ -592,7 +592,11 @@ class _NoteCardState extends State<NoteCard>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: EdgeInsets.only(
+                bottom: (note.title != null && note.title!.trim().isNotEmpty)
+                    ? 12
+                    : 0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -646,7 +650,10 @@ class _NoteCardState extends State<NoteCard>
                       ),
                     ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    padding: EdgeInsets.only(
+                      top: 8.0,
+                      bottom: (note.title != null && note.title!.trim().isNotEmpty) ? 8.0 : 0,
+                    ),
                     child: Text(
                       "${weekDaysShort[time.weekday - 1]} ${time.day}/${time.month}/${time.year}",
                       style: TextStyle(fontSize: 12, color: secondaryColor),
@@ -655,9 +662,9 @@ class _NoteCardState extends State<NoteCard>
                 ],
               ),
             ),
-            if (note.title != null && note.title!.isNotEmpty) ...[
+            if (note.title != null && note.title!.trim().isNotEmpty) ...[
               Text(
-                note.title!,
+                note.title!.trim(),
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

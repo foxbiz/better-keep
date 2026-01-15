@@ -21,6 +21,7 @@ import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -243,7 +244,7 @@ class Note extends BaseModel<Note> {
         return null;
       }
 
-      return Document.fromJson(parsed);
+      return documentFromJsonSafe(parsed);
     } catch (e) {
       // Log parse errors to help debug corrupted content (but not for locked notes)
       if (!_locked) {

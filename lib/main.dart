@@ -7,6 +7,7 @@ import 'package:better_keep/app.dart';
 import 'package:better_keep/components/alarm_banner.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/user_avatar.dart';
+import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/database.dart';
@@ -382,6 +383,8 @@ class _BetterKeepState extends State<BetterKeep> {
       final db = await initDatabase();
       // Set up database getter for local data encryption migration
       LocalDataEncryption.setDatabaseGetter(() => db);
+      // Ensure system labels exist (Shared Text, Shared File)
+      await Label.ensureSystemLabels();
       setState(() {
         this.db = db;
       });

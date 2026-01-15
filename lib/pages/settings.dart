@@ -190,20 +190,19 @@ class _SettingsState extends State<Settings> {
   }
 
   Widget _buildViewModeOption(NoteViewMode mode, IconData icon, String label) {
-    return RadioListTile<NoteViewMode>(
-      value: mode,
-      groupValue: _notesViewMode,
-      onChanged: (value) {
-        if (value != null) {
-          setState(() {
-            _notesViewMode = value;
-          });
-          AppState.notesViewMode = value;
-          Navigator.pop(context);
-        }
-      },
+    return ListTile(
+      leading: Icon(icon),
       title: Text(label),
-      secondary: Icon(icon),
+      trailing: _notesViewMode == mode
+          ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
+          : null,
+      onTap: () {
+        setState(() {
+          _notesViewMode = mode;
+        });
+        AppState.notesViewMode = mode;
+        Navigator.pop(context);
+      },
     );
   }
 

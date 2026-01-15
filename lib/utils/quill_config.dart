@@ -1,6 +1,43 @@
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_quill/internal.dart' show InsertRule;
+import 'package:flutter_quill/quill_delta.dart';
+
+/// Ensures that a Quill delta operations list ends with a newline character.
+/// flutter_quill requires all documents to end with '\n', otherwise it throws
+/// an assertion error: 'doc.last.data as String).endsWith('\n')': is not true.
+///
+/// Returns the original list if it already ends with a newline, or a new list
+/// with a newline appended.
+List<dynamic> ensureDeltaEndsWithNewline(List<dynamic> ops) {
+  if (ops.isEmpty) {
+    return [
+      {'insert': '\n'},
+    ];
+  }
+
+  final lastOp = ops.last;
+  if (lastOp is Map) {
+    final lastInsert = lastOp['insert'];
+    if (lastInsert is String && lastInsert.endsWith('\n')) {
+      return ops;
+    }
+  }
+
+  // Need to add a newline
+  return [
+    ...ops,
+    {'insert': '\n'},
+  ];
+}
+
+/// Creates a Document from JSON ops, ensuring it ends with a newline.
+/// This safely handles corrupted or malformed content that might not end
+/// with the required '\n' character.
+Document documentFromJsonSafe(List<dynamic> ops) {
+  return Document.fromJson(ensureDeltaEndsWithNewline(ops));
+}
 
 /// Custom leading block builder that fixes ordered list numbering when
 /// checkboxes or other list types are nested inside.
@@ -239,3 +276,121 @@ DefaultStyles buildQuillStyles({
         : null,
   );
 }
+
+/// Custom insert rule that resets heading format when inserting a newline
+/// at the beginning of a heading line.
+///
+/// The default `ResetLineFormatOnNewLineRule` only handles newlines inserted
+/// at the END of a heading line. This rule handles the case where a newline
+/// is inserted at the BEGINNING of a heading line (before any text).
+///
+/// Example scenario:
+/// - User has a heading: "# My Heading"
+/// - User places cursor at the very start of the heading and presses Enter
+/// - Without this rule: Both the new empty line AND the original line are headings
+/// - With this rule: The new empty line gets the heading style (but it's empty so
+///   effectively ignored), and the original content becomes plain text
+@immutable
+class ResetHeadingOnNewEmptyLineRule extends InsertRule {
+  const ResetHeadingOnNewEmptyLineRule();
+
+  @override
+  Delta? applyRule(
+    Document document,
+    int index, {
+    int? len,
+    Object? data,
+    Attribute? attribute,
+  }) {
+    // Only handle single newline insertions
+    if (data is! String || data != '\n') {
+      return null;
+    }
+
+    final itr = DeltaIterator(document.toDelta());
+    final prev = itr.skip(index);
+
+    // Check if we're at the beginning of a line (previous char is newline or start of doc)
+    final isAtLineStart =
+        prev == null ||
+        (prev.data is String && (prev.data as String).endsWith('\n'));
+
+    if (!isAtLineStart) {
+      return null;
+    }
+
+    // Get the current operation (what comes after the insertion point)
+    final cur = itr.next();
+    if (cur.data is! String) {
+      return null;
+    }
+
+    // Look for the next newline to get line attributes
+    final nextNewLine = _findNextNewLine(itr, cur);
+    if (nextNewLine.operation == null) {
+      return null;
+    }
+
+    final lineAttrs = nextNewLine.operation!.attributes;
+    if (lineAttrs == null || !lineAttrs.containsKey(Attribute.header.key)) {
+      // Not a heading line, let default rules handle it
+      return null;
+    }
+
+    // We're inserting at the start of a heading line.
+    // The new empty line gets the heading attributes, and we reset
+    // the heading on the original content line (which is now the second line).
+    //
+    // Delta operations:
+    // 1. retain to insertion point
+    // 2. insert newline WITH heading attributes (the new empty line becomes heading)
+    // 3. skip to the original line's newline and reset its heading attribute
+    return Delta()
+      ..retain(index + (len ?? 0))
+      ..insert('\n', lineAttrs) // New line gets the heading style
+      ..retain(nextNewLine.skipped!) // Skip to the original newline
+      ..retain(1, Attribute.header.toJson()); // Reset heading on original line
+  }
+}
+
+/// Helper to find the next newline operation from current position.
+/// Returns the operation containing the newline and the number of characters
+/// to skip to reach that newline (not including the newline itself).
+_NewLineResult _findNextNewLine(DeltaIterator iterator, Operation current) {
+  // Check if current operation contains a newline
+  final currentData = current.data;
+  if (currentData is String) {
+    final lineBreak = currentData.indexOf('\n');
+    if (lineBreak >= 0) {
+      // Return the index within the current operation to the newline
+      return _NewLineResult(current, lineBreak);
+    }
+  }
+
+  // Search forward
+  int skipped = current.length!;
+  while (iterator.hasNext) {
+    final op = iterator.next();
+    final opData = op.data;
+    if (opData is String) {
+      final lineBreak = opData.indexOf('\n');
+      if (lineBreak >= 0) {
+        return _NewLineResult(op, skipped + lineBreak);
+      }
+    }
+    skipped += op.length!;
+  }
+  return const _NewLineResult(null, null);
+}
+
+@immutable
+class _NewLineResult {
+  const _NewLineResult(this.operation, this.skipped);
+
+  final Operation? operation;
+  final int? skipped;
+}
+
+/// List of custom rules to be applied to Quill documents.
+/// These rules are applied before the default flutter_quill rules.
+const List<Rule> customQuillRules = [ResetHeadingOnNewEmptyLineRule()];

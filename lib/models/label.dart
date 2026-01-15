@@ -14,7 +14,16 @@ class Label extends BaseModel<Label> {
   static final ModelSchema<Label> _schema = _createSchema();
   static const model = "label";
 
+  /// System label names - these are auto-created and cannot be deleted
+  static const String sharedTextLabelName = 'Shared Text';
+  static const String sharedFileLabelName = 'Shared File';
+  static const List<String> systemLabelNames = [
+    sharedTextLabelName,
+    sharedFileLabelName,
+  ];
+
   String name;
+  bool isSystem;
   DateTime? createdAt;
   DateTime? updatedAt;
 
@@ -41,12 +50,19 @@ class Label extends BaseModel<Label> {
     return Label.fromJson(result.first);
   }
 
-  Label({super.id, required this.name, this.createdAt, this.updatedAt});
+  Label({
+    super.id,
+    required this.name,
+    this.isSystem = false,
+    this.createdAt,
+    this.updatedAt,
+  });
 
   factory Label.fromJson(Map<String, Object?> json) {
     return Label(
       id: json["id"] as int?,
       name: json["name"] as String,
+      isSystem: (json["is_system"] as int?) == 1,
       createdAt: json["created_at"] != null
           ? DateTime.parse(json["created_at"] as String)
           : null,
@@ -60,6 +76,7 @@ class Label extends BaseModel<Label> {
     return {
       "id": id,
       "name": name,
+      "is_system": isSystem ? 1 : 0,
       "created_at": createdAt?.toIso8601String(),
       "updated_at": updatedAt?.toIso8601String(),
     };
@@ -114,9 +131,36 @@ class Label extends BaseModel<Label> {
     return Label(
       name: name,
       id: id,
+      isSystem: isSystem,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
+  }
+
+  /// Ensures all system labels exist in the database.
+  /// Call this on app startup.
+  static Future<void> ensureSystemLabels() async {
+    final existingLabels = await Label.get();
+    final existingNames = existingLabels.map((l) => l.name).toSet();
+
+    for (final labelName in systemLabelNames) {
+      if (!existingNames.contains(labelName)) {
+        final label = Label(name: labelName, isSystem: true);
+        await label.save(sync: true);
+      }
+    }
+  }
+
+  /// Gets a system label by name, creating it if it doesn't exist.
+  static Future<Label> getOrCreateSystemLabel(String name) async {
+    final existingLabels = await Label.get();
+    final existing = existingLabels.where((l) => l.name == name).firstOrNull;
+    if (existing != null) {
+      return existing;
+    }
+    final label = Label(name: name, isSystem: true);
+    await label.save(sync: true);
+    return label;
   }
 
   static void on(String event, LabelListener callback) {
@@ -145,6 +189,7 @@ class _LabelSchema implements ModelSchema<Label> {
       CREATE TABLE IF NOT EXISTS label (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
+        is_system INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -160,6 +205,12 @@ class _LabelSchema implements ModelSchema<Label> {
       );
       await db.execute(
         "ALTER TABLE label ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+      );
+    }
+    if (oldVersion < 3) {
+      // Add is_system column for system labels that cannot be deleted
+      await db.execute(
+        "ALTER TABLE label ADD COLUMN is_system INTEGER DEFAULT 0",
       );
     }
   }

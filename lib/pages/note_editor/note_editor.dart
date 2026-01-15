@@ -107,8 +107,11 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _backgroundColor = _note.color;
 
     Document document = _note.content != ''
-        ? Document.fromJson(json.decode(_note.content as String))
+        ? documentFromJsonSafe(json.decode(_note.content as String))
         : Document();
+
+    // Register custom rules to handle heading reset on new lines before headings
+    document.setCustomRules(customQuillRules);
 
     _controller = QuillController(
       readOnly: _note.readOnly || _note.trashed,
@@ -837,7 +840,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       }
     }
 
-    if (_note.isEmpty) {
+    final plainText = _controller.document.toPlainText().trim();
+
+    if (_note.isEmpty && plainText.isEmpty) {
       try {
         await _note.delete();
       } catch (e) {
@@ -859,7 +864,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
 
     try {
-      final plainText = _controller.document.toPlainText().trim();
       await _note.setContent(newContent, plainText);
       // Clear password after successful save if setting is enabled
       if (clearPasswordAfterSave && _note.locked) {

@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'package:better_keep/models/label.dart';
+import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/content_preview_page.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -84,7 +87,7 @@ class IntentHandlerService {
     }
   }
 
-  /// Handle shared files (e.g., .txt, .md files)
+  /// Handle shared files (e.g., .txt, .md files) or shared text
   void _handleSharedFiles(List<SharedMediaFile> files) async {
     if (files.isEmpty) {
       AppLogger.log('[IntentHandler] No files received');
@@ -106,6 +109,13 @@ class IntentHandlerService {
         // Skip deep link URIs (betterkeep://, http://, https://) - these are handled by app_links
         if (_isDeepLinkUri(path)) {
           AppLogger.log('[IntentHandler] Skipping deep link URI: $path');
+          continue;
+        }
+
+        // Handle shared text (from text selection or share menu)
+        if (type == SharedMediaType.text) {
+          AppLogger.log('[IntentHandler] Handling shared text');
+          await _createNoteFromSharedText(path);
           continue;
         }
 
@@ -142,11 +152,56 @@ class IntentHandlerService {
           fileName: fileName,
           content: fileContent,
           isMarkdown: isMarkdown,
+          labelName: Label.sharedFileLabelName,
         );
       } catch (e) {
         AppLogger.error('[IntentHandler] Error processing file', e);
         _showError('An error occurred while opening the file.');
       }
+    }
+  }
+
+  /// Create a note directly from shared text (silently saves)
+  Future<void> _createNoteFromSharedText(String sharedText) async {
+    sharedText = sharedText.trim();
+    if (sharedText.isEmpty) {
+      AppLogger.log('[IntentHandler] Shared text is empty');
+      return;
+    }
+
+    try {
+      // Create Quill Delta for plain text
+      final delta = <Map<String, dynamic>>[];
+
+      // Add content
+      delta.add({'insert': "\n$sharedText\n"});
+
+      // Get or create the "Shared Text" system label
+      final label = await Label.getOrCreateSystemLabel(
+        Label.sharedTextLabelName,
+      );
+
+      // Create and save the note with the system label
+      final note = Note(
+        title: '',
+        content: json.encode(delta),
+        plainText: sharedText,
+        labels: label.name,
+      );
+      await note.save();
+
+      AppLogger.log(
+        '[IntentHandler] Created note from shared text: ${note.id}',
+      );
+
+      // Show confirmation
+      _showSuccess('Note saved');
+    } catch (e) {
+      AppLogger.error(
+        '[IntentHandler] Error creating note from shared text',
+        e,
+      );
+      _showError('Failed to save note.');
     }
   }
 
@@ -219,11 +274,26 @@ class IntentHandlerService {
     }
   }
 
+  /// Show success message to user
+  void _showSuccess(String message) {
+    final scaffoldMessenger = AppState.scaffoldMessengerKey.currentState;
+    if (scaffoldMessenger != null) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   /// Navigate to the content preview page
   void _navigateToPreview({
     required String fileName,
     required String content,
     required bool isMarkdown,
+    String? labelName,
   }) {
     final context = AppState.navigatorKey.currentContext;
     if (context != null && context.mounted) {
@@ -233,6 +303,7 @@ class IntentHandlerService {
             title: fileName,
             content: content,
             isMarkdown: isMarkdown,
+            labelName: labelName,
           ),
         ),
       );

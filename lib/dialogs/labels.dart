@@ -220,36 +220,40 @@ class _LabelsState extends State<Labels> {
 
     return ListTile(
       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-      leading: Icon(Icons.label),
+      leading: Icon(label.isSystem ? Icons.lock_outline : Icons.label),
       title: Text(label.name),
-      onTap: () async {
-        final newName = await prompt(
-          context,
-          title: "Edit ${label.name}",
-          placeholder: 'Enter new name',
-          currentText: label.name,
-        );
-        if (newName == null || newName.isEmpty) {
-          return;
-        }
+      onTap: label.isSystem
+          ? null
+          : () async {
+              final newName = await prompt(
+                context,
+                title: "Edit ${label.name}",
+                placeholder: 'Enter new name',
+                currentText: label.name,
+              );
+              if (newName == null || newName.isEmpty) {
+                return;
+              }
 
-        label.name = newName;
-        label.save();
-      },
-      trailing: IconButton(
-        icon: Icon(Icons.delete),
-        onPressed: () async {
-          var confirmation = await showDeleteDialog(
-            context,
-            title: "Delete Label",
-            message:
-                "Are you sure you want to delete this label (${label.name})?",
-          );
-          if (confirmation == true) {
-            label.delete();
-          }
-        },
-      ),
+              label.name = newName;
+              label.save();
+            },
+      trailing: label.isSystem
+          ? null
+          : IconButton(
+              icon: Icon(Icons.delete),
+              onPressed: () async {
+                var confirmation = await showDeleteDialog(
+                  context,
+                  title: "Delete Label",
+                  message:
+                      "Are you sure you want to delete this label (${label.name})?",
+                );
+                if (confirmation == true) {
+                  label.delete();
+                }
+              },
+            ),
     );
   }
 
