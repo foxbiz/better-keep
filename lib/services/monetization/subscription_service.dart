@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/country_detection_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/services/monetization/subscription_status.dart';
@@ -110,6 +111,12 @@ class SubscriptionService {
   // Loading state
   final ValueNotifier<bool> isLoading = ValueNotifier(false);
 
+  // Currency detection loading state (for showing loading indicator in paywall)
+  final ValueNotifier<bool> isCurrencyLoading = ValueNotifier(false);
+
+  // Flag to prevent multiple currency initialization calls
+  bool _currencyInitialized = false;
+
   // Currency selection for Razorpay
   // NOTE: Razorpay Subscriptions API only supports INR for most Indian merchants.
   // USD subscriptions require special approval from Razorpay. Default to INR.
@@ -173,6 +180,8 @@ Expected IDs: ${ProductIds.all}
       AppLogger.log(
         'SubscriptionService: Web platform, using external checkout',
       );
+      // Initialize currency for web (always uses Razorpay)
+      await _initializeCurrency();
       return;
     }
 
@@ -182,6 +191,48 @@ Expected IDs: ${ProductIds.all}
       AppLogger.log(
         'SubscriptionService: Desktop platform, using external checkout',
       );
+    }
+
+    // Initialize currency after IAP check so usesRazorpay is accurate
+    if (usesRazorpay) {
+      await _initializeCurrency();
+    }
+  }
+
+  /// Initialize currency selection based on detected country
+  Future<void> _initializeCurrency() async {
+    // Guard against multiple/concurrent calls
+    if (_currencyInitialized || isCurrencyLoading.value) {
+      AppLogger.log(
+        'SubscriptionService: Currency already initialized or in progress, skipping',
+      );
+      return;
+    }
+    _currencyInitialized = true;
+
+    isCurrencyLoading.value = true;
+    try {
+      final countryCode = await CountryDetectionService.detectCountryCode();
+      // Set INR for India, USD for all other countries
+      if (countryCode.toUpperCase() == 'IN') {
+        selectedCurrency.value = RazorpayCurrency.inr;
+        AppLogger.log(
+          'SubscriptionService: Currency set to INR (India detected)',
+        );
+      } else {
+        selectedCurrency.value = RazorpayCurrency.usd;
+        AppLogger.log(
+          'SubscriptionService: Currency set to USD (country: $countryCode)',
+        );
+      }
+    } catch (e) {
+      AppLogger.error(
+        'SubscriptionService: Error detecting country, defaulting to USD',
+        e,
+      );
+      selectedCurrency.value = RazorpayCurrency.usd;
+    } finally {
+      isCurrencyLoading.value = false;
     }
   }
 

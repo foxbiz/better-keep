@@ -382,6 +382,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
 
   Future<void> _loadProducts() async {
     if (_isLoadingProducts) return;
+    if (!mounted) return;
     setState(() => _isLoadingProducts = true);
 
     await SubscriptionService.instance.reloadProducts();
@@ -406,33 +407,26 @@ class _PricingOptionsState extends State<_PricingOptions> {
     }
 
     // If prices aren't available (products not loaded for mobile IAP), show redirect button
-    if (!_pricesAvailable) {
+    // But for Razorpay, we always have hardcoded prices, so show full UI
+    if (!_pricesAvailable && !SubscriptionService.instance.usesRazorpay) {
       return Column(
         children: [
-          // Currency selector disabled - Razorpay Subscriptions only supports INR
-          // for most Indian merchants. USD requires special approval.
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: () => _handleSubscribe(context),
               icon: const Icon(Icons.rocket_launch),
-              label: Text(
-                SubscriptionService.instance.usesRazorpay
-                    ? 'Subscribe Now'
-                    : 'Loading failed - Try again',
-              ),
+              label: const Text('Loading failed - Try again'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ),
-          if (!SubscriptionService.instance.usesRazorpay) ...[
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: _loadProducts,
-              child: const Text('Reload prices'),
-            ),
-          ],
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _loadProducts,
+            child: const Text('Reload prices'),
+          ),
         ],
       );
     }
@@ -496,40 +490,83 @@ class _PricingOptionsState extends State<_PricingOptions> {
   }
 
   Widget _buildCurrencySelector(ThemeData theme) {
-    final currentCurrency = SubscriptionService.instance.selectedCurrency.value;
+    return ValueListenableBuilder<bool>(
+      valueListenable: SubscriptionService.instance.isCurrencyLoading,
+      builder: (context, isLoading, _) {
+        if (isLoading) {
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Detecting your location...',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          );
+        }
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          'Currency: ',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(width: 8),
-        SegmentedButton<RazorpayCurrency>(
-          segments: [
-            ButtonSegment<RazorpayCurrency>(
-              value: RazorpayCurrency.usd,
-              label: const Text('USD (\$)'),
-            ),
-            ButtonSegment<RazorpayCurrency>(
-              value: RazorpayCurrency.inr,
-              label: const Text('INR (₹)'),
-            ),
-          ],
-          selected: {currentCurrency},
-          onSelectionChanged: (Set<RazorpayCurrency> selected) {
-            SubscriptionService.instance.selectedCurrency.value =
-                selected.first;
+        return ValueListenableBuilder<RazorpayCurrency>(
+          valueListenable: SubscriptionService.instance.selectedCurrency,
+          builder: (context, currentCurrency, _) {
+            return Column(
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: SegmentedButton<RazorpayCurrency>(
+                    segments: const [
+                      ButtonSegment<RazorpayCurrency>(
+                        value: RazorpayCurrency.usd,
+                        label: Text('USD (\$)'),
+                      ),
+                      ButtonSegment<RazorpayCurrency>(
+                        value: RazorpayCurrency.inr,
+                        label: Text('INR (₹)'),
+                      ),
+                    ],
+                    selected: {currentCurrency},
+                    onSelectionChanged: (Set<RazorpayCurrency> selected) {
+                      SubscriptionService.instance.selectedCurrency.value =
+                          selected.first;
+                    },
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    expandedInsets: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Use INR for Indian cards, USD for international cards',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.7,
+                    ),
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
           },
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -698,6 +735,12 @@ class _PaywallPageState extends State<PaywallPage> {
     super.initState();
     SubscriptionService.instance.isLoading.addListener(_onLoadingChange);
     PlanService.instance.statusNotifier.addListener(_onSubscriptionChange);
+    // Listen to currency changes to update prices
+    if (SubscriptionService.instance.usesRazorpay) {
+      SubscriptionService.instance.selectedCurrency.addListener(
+        _onCurrencyChanged,
+      );
+    }
     // If products aren't available, try to reload them (only for mobile IAP)
     if (!_pricesAvailable && !SubscriptionService.instance.usesRazorpay) {
       _loadProducts();
@@ -733,7 +776,16 @@ class _PaywallPageState extends State<PaywallPage> {
   void dispose() {
     SubscriptionService.instance.isLoading.removeListener(_onLoadingChange);
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
+    if (SubscriptionService.instance.usesRazorpay) {
+      SubscriptionService.instance.selectedCurrency.removeListener(
+        _onCurrencyChanged,
+      );
+    }
     super.dispose();
+  }
+
+  void _onCurrencyChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onLoadingChange() {
@@ -779,6 +831,7 @@ class _PaywallPageState extends State<PaywallPage> {
 
   Future<void> _loadProducts() async {
     if (_isLoadingProducts) return;
+    if (!mounted) return;
     setState(() => _isLoadingProducts = true);
 
     await SubscriptionService.instance.reloadProducts();
@@ -786,6 +839,88 @@ class _PaywallPageState extends State<PaywallPage> {
     if (mounted) {
       setState(() => _isLoadingProducts = false);
     }
+  }
+
+  Widget _buildCurrencySelector(ThemeData theme) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: SubscriptionService.instance.isCurrencyLoading,
+      builder: (context, isLoading, _) {
+        if (isLoading) {
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Detecting your location...',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          );
+        }
+
+        return ValueListenableBuilder<RazorpayCurrency>(
+          valueListenable: SubscriptionService.instance.selectedCurrency,
+          builder: (context, currentCurrency, _) {
+            return Column(
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: SegmentedButton<RazorpayCurrency>(
+                    segments: const [
+                      ButtonSegment<RazorpayCurrency>(
+                        value: RazorpayCurrency.usd,
+                        label: Text('USD (\$)'),
+                      ),
+                      ButtonSegment<RazorpayCurrency>(
+                        value: RazorpayCurrency.inr,
+                        label: Text('INR (₹)'),
+                      ),
+                    ],
+                    selected: {currentCurrency},
+                    onSelectionChanged: (Set<RazorpayCurrency> selected) {
+                      SubscriptionService.instance.selectedCurrency.value =
+                          selected.first;
+                      setState(() {}); // Refresh prices
+                    },
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    expandedInsets: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Use INR for Indian cards, USD for international cards',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.7,
+                    ),
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -856,7 +991,14 @@ class _PaywallPageState extends State<PaywallPage> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
-                    ] else if (_pricesAvailable) ...[
+                    ] else if (_pricesAvailable ||
+                        SubscriptionService.instance.usesRazorpay) ...[
+                      // Currency selector for Razorpay platforms
+                      if (SubscriptionService.instance.usesRazorpay) ...[
+                        _buildCurrencySelector(theme),
+                        const SizedBox(height: 16),
+                      ],
+
                       // Pricing toggle
                       Container(
                         padding: const EdgeInsets.all(4),
