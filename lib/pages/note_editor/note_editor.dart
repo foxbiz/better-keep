@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/components/adaptive_toolbar.dart';
+import 'package:better_keep/components/toolbar_layout_toggle_button.dart';
+import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/checkbox_cascade_dialog.dart';
 import 'package:better_keep/dialogs/export_dialog.dart';
 import 'package:better_keep/dialogs/paste_dialog.dart';
@@ -69,12 +71,14 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   final ScrollController _quillScrollController = ScrollController();
   final ScrollController _carouselScrollController = ScrollController();
+  final ScrollController _toolbarScrollController = ScrollController();
   final Map<String, GlobalKey> _audioPlayerKeys = {};
   late final Note _note;
   late FocusNode _focusNode;
   late QuillController _controller;
   late Color _backgroundColor;
   bool _isKeyboardVisible = false;
+  bool _toolbarGridMode = false;
   String? _initialPlainText;
 
   // Checkbox cascade/bubble handling
@@ -129,8 +133,39 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       _controllerChangesListener,
     );
 
+    // Subscribe to toolbar grid mode changes
+    _toolbarGridMode = AppState.toolbarGridMode;
+    AppState.subscribe("toolbar_grid_mode", _toolbarGridModeListener);
+
+    // Setup toolbar scroll controller
+    _toolbarScrollController.addListener(() {
+      if (_toolbarScrollController.hasClients) {
+        AppState.toolbarScrollOffset = _toolbarScrollController.offset;
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_toolbarScrollController.hasClients &&
+          AppState.toolbarScrollOffset > 0) {
+        final maxOffset = _toolbarScrollController.position.maxScrollExtent;
+        final clampedOffset = AppState.toolbarScrollOffset.clamp(
+          0.0,
+          maxOffset,
+        );
+        _toolbarScrollController.jumpTo(clampedOffset);
+      }
+    });
+
     // Subscribe to note changes for audio recordings
     _note.sub("changed", _onNoteChanged);
+  }
+
+  void _toolbarGridModeListener(dynamic value) {
+    if (mounted) {
+      setState(() {
+        _toolbarGridMode = value as bool;
+      });
+    }
   }
 
   void _onNoteChanged(dynamic _) {
@@ -339,8 +374,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _controller.removeListener(_didChangeSelection);
     _controller.dispose();
     _note.unsub("changed", _onNoteChanged);
+    AppState.unsubscribe("toolbar_grid_mode", _toolbarGridModeListener);
     _quillScrollController.dispose();
     _carouselScrollController.dispose();
+    _toolbarScrollController.dispose();
 
     super.dispose();
   }
@@ -789,9 +826,24 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       ),
     ];
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final iconSize = getToolbarIconSize(screenWidth);
+
+    // Calculate if toggle button should be shown
+    // Estimate: icon button ~48px (icon + padding), with some buffer
+    final toolbarItemCount =
+        toolbarItems.length + (isIOS && _isKeyboardVisible ? 1 : 0);
+    final estimatedIconWidth = 48.0;
+    final availableWidth = screenWidth - 32 - 32; // minus margins and padding
+    final fitsInOneRow =
+        (toolbarItemCount * estimatedIconWidth) <= availableWidth;
+
     return AdaptiveToolbar(
       parentColor: noteColor,
+      iconSize: iconSize,
+      isGridMode: _toolbarGridMode,
       child: CustomScrollView(
+        controller: _toolbarScrollController,
         scrollDirection: Axis.horizontal,
         shrinkWrap: true,
         slivers: [
@@ -811,6 +863,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
               ),
             ),
           ...toolbarItems.map((el) => SliverToBoxAdapter(child: el)),
+          // Add toolbar layout toggle button as last item
+          SliverToBoxAdapter(
+            child: ToolbarLayoutToggleButton(showToggle: !fitsInOneRow),
+          ),
         ],
       ),
     );

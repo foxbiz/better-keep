@@ -40,6 +40,8 @@ final _defaultState = {
   "forget_locked_note_password": false,
   "notes_view_mode": NoteViewMode.grid,
   "folder_group_by": "labels",
+  "toolbar_grid_mode": false,
+  "toolbar_scroll_offset": 0.0,
 };
 
 class AppState {
@@ -251,6 +253,10 @@ class AppState {
     // Load forget locked note password setting
     _state["forget_locked_note_password"] =
         prefsInstance.getBool("forget_locked_note_password") ?? false;
+
+    // Load toolbar grid mode setting
+    _state["toolbar_grid_mode"] =
+        prefsInstance.getBool("toolbar_grid_mode") ?? false;
   }
 
   static Object? get(String key) {
@@ -633,6 +639,24 @@ class AppState {
   static set folderGroupBy(String value) {
     set("folder_group_by", value);
     _persistToPrefs((p) async => p.setString("folder_group_by", value));
+  }
+
+  static bool get toolbarGridMode {
+    return _state["toolbar_grid_mode"] as bool? ?? false;
+  }
+
+  static set toolbarGridMode(bool value) {
+    set("toolbar_grid_mode", value);
+    _persistToPrefs((p) async => p.setBool("toolbar_grid_mode", value));
+  }
+
+  static double get toolbarScrollOffset {
+    return _state["toolbar_scroll_offset"] as double? ?? 0.0;
+  }
+
+  static set toolbarScrollOffset(double value) {
+    set("toolbar_scroll_offset", value);
+    // No persistence needed - session only
   }
 
   static void subscribe(String key, void Function(dynamic) callback) {

@@ -6,11 +6,15 @@ import 'package:flutter/material.dart';
 class AdaptiveToolbar extends StatelessWidget {
   final Color parentColor;
   final Widget child;
+  final double? iconSize;
+  final bool isGridMode;
 
   const AdaptiveToolbar({
     super.key,
     required this.parentColor,
     required this.child,
+    this.iconSize,
+    this.isGridMode = false,
   });
 
   @override
@@ -35,7 +39,7 @@ class AdaptiveToolbar extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(8),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(100),
+          borderRadius: BorderRadius.circular(isGridMode ? 16 : 100),
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
@@ -50,10 +54,16 @@ class AdaptiveToolbar extends StatelessWidget {
                 ],
                 color: backgroundColor,
               ),
-              height: 50,
+              height: isGridMode ? null : 50,
+              constraints: isGridMode
+                  ? const BoxConstraints(minHeight: 50, maxHeight: 150)
+                  : const BoxConstraints(minHeight: 50, maxHeight: 50),
               child: IconButtonTheme(
                 data: IconButtonThemeData(
                   style: ButtonStyle(
+                    iconSize: iconSize != null
+                        ? WidgetStateProperty.all(iconSize)
+                        : null,
                     foregroundColor: WidgetStateProperty.resolveWith((states) {
                       if (states.contains(WidgetState.selected)) {
                         return selectedColor;
@@ -66,10 +76,36 @@ class AdaptiveToolbar extends StatelessWidget {
                   ),
                 ),
                 child: IconTheme(
-                  data: IconThemeData(color: foregroundColor),
+                  data: IconThemeData(color: foregroundColor, size: iconSize),
                   child: DefaultTextStyle(
                     style: TextStyle(color: foregroundColor),
-                    child: child,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      child: isGridMode
+                          ? SingleChildScrollView(
+                              key: const ValueKey('grid'),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                                child: Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  alignment: WrapAlignment.center,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: _extractChildren(child),
+                                ),
+                              ),
+                            )
+                          : SizedBox(
+                              key: const ValueKey('scroll'),
+                              height: 50,
+                              child: child,
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -78,5 +114,26 @@ class AdaptiveToolbar extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Extract children from CustomScrollView slivers for use in Wrap widget.
+  ///
+  /// Note: Only handles [SliverToBoxAdapter] slivers. Other sliver types
+  /// (e.g., SliverList, SliverGrid) are silently skipped. This is intentional
+  /// as the toolbar only uses SliverToBoxAdapter for its items.
+  List<Widget> _extractChildren(Widget child) {
+    if (child is CustomScrollView) {
+      final slivers = child.slivers;
+      final children = <Widget>[];
+      for (final sliver in slivers) {
+        if (sliver is SliverToBoxAdapter) {
+          if (sliver.child != null) {
+            children.add(sliver.child!);
+          }
+        }
+      }
+      return children;
+    }
+    return [child];
   }
 }

@@ -7,6 +7,18 @@ const bigScreenWidthThreshold = 800;
 const appLabel = "Better Keep Notes";
 const defaultAlarmSound = "assets/sounds/2.mp3";
 
+/// Get responsive toolbar icon size based on screen width
+/// Returns smaller icons on mobile devices for better space utilization
+double getToolbarIconSize(double screenWidth) {
+  if (screenWidth < 400) {
+    return 18.0;
+  } else if (screenWidth < 600) {
+    return 20.0;
+  } else {
+    return 24.0;
+  }
+}
+
 /// Maximum number of attachments (images, sketches, audio) per note.
 /// This helps maintain performance and prevents storage bloat.
 const int maxAttachmentsPerNote = 50;
