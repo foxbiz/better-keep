@@ -65,7 +65,7 @@ class _LabelsState extends State<Labels> {
     final hasSelection = _selectedLabels.isNotEmpty;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8),

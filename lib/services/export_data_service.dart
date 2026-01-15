@@ -746,11 +746,10 @@ Exported on: ${DateTime.now().toIso8601String()}
       }
     }
 
-    // Apply indentation
+    // Apply indentation (4 spaces per level for proper markdown nesting)
     String indentPrefix = '';
     if (indentLevel > 0) {
-      indentPrefix = '&nbsp;&nbsp;&nbsp;&nbsp;' * indentLevel;
-      useHtmlWrapper = true;
+      indentPrefix = '    ' * indentLevel;
     }
 
     if (useHtmlWrapper) {
@@ -764,7 +763,7 @@ Exported on: ${DateTime.now().toIso8601String()}
           : '';
       buffer.writeln('<div$style>$indentPrefix$prefix$text$suffix</div>');
     } else {
-      buffer.writeln('$prefix$text$suffix');
+      buffer.writeln('$indentPrefix$prefix$text$suffix');
     }
   }
 

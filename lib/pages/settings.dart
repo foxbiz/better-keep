@@ -39,6 +39,7 @@ class _SettingsState extends State<Settings> {
   bool _filesEncryptionEnabled = false;
   bool _localEncryptionAvailable = false;
   bool _forgetLockedNotePassword = AppState.forgetLockedNotePassword;
+  NoteViewMode _notesViewMode = AppState.notesViewMode;
 
   final List<String> _sounds = [
     'assets/sounds/1.mp3',
@@ -65,6 +66,7 @@ class _SettingsState extends State<Settings> {
     AppState.subscribe("morning_time", _morningTimeListener);
     AppState.subscribe("afternoon_time", _afternoonTimeListener);
     AppState.subscribe("evening_time", _eveningTimeListener);
+    AppState.subscribe("notes_view_mode", _notesViewModeListener);
     AppState.subscribe(
       "forget_locked_note_password",
       _forgetLockedNotePasswordListener,
@@ -82,6 +84,7 @@ class _SettingsState extends State<Settings> {
     AppState.unsubscribe("morning_time", _morningTimeListener);
     AppState.unsubscribe("afternoon_time", _afternoonTimeListener);
     AppState.unsubscribe("evening_time", _eveningTimeListener);
+    AppState.unsubscribe("notes_view_mode", _notesViewModeListener);
     AppState.unsubscribe(
       "forget_locked_note_password",
       _forgetLockedNotePasswordListener,
@@ -132,6 +135,12 @@ class _SettingsState extends State<Settings> {
     });
   }
 
+  void _notesViewModeListener(dynamic value) {
+    setState(() {
+      _notesViewMode = value as NoteViewMode;
+    });
+  }
+
   void _morningTimeListener(dynamic value) {
     setState(() {
       _morningTime = value as TimeOfDay;
@@ -148,6 +157,54 @@ class _SettingsState extends State<Settings> {
     setState(() {
       _eveningTime = value as TimeOfDay;
     });
+  }
+
+  String _getViewModeName(NoteViewMode mode) {
+    switch (mode) {
+      case NoteViewMode.grid:
+        return 'Grid View';
+      case NoteViewMode.list:
+        return 'List View';
+      case NoteViewMode.folder:
+        return 'Folder View';
+    }
+  }
+
+  void _showViewModeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select View Mode'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildViewModeOption(NoteViewMode.grid, Icons.grid_view, 'Grid'),
+            const Divider(),
+            _buildViewModeOption(NoteViewMode.list, Icons.list, 'List'),
+            const Divider(),
+            _buildViewModeOption(NoteViewMode.folder, Icons.folder, 'Folder'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewModeOption(NoteViewMode mode, IconData icon, String label) {
+    return RadioListTile<NoteViewMode>(
+      value: mode,
+      groupValue: _notesViewMode,
+      onChanged: (value) {
+        if (value != null) {
+          setState(() {
+            _notesViewMode = value;
+          });
+          AppState.notesViewMode = value;
+          Navigator.pop(context);
+        }
+      },
+      title: Text(label),
+      secondary: Icon(icon),
+    );
   }
 
   String _formatTime(TimeOfDay time) {
@@ -223,6 +280,16 @@ class _SettingsState extends State<Settings> {
             onTap: _followSystemTheme
                 ? null
                 : () => _showThemePicker(isDarkMode),
+          ),
+          const Divider(),
+
+          // Notes View Settings
+          ListTile(
+            leading: const Icon(Icons.view_column),
+            title: const Text('View Mode'),
+            subtitle: Text(_getViewModeName(_notesViewMode)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showViewModeDialog(),
           ),
           const Divider(),
 

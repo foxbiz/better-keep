@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/home/labels.dart';
+import 'package:better_keep/pages/home/views/folder_view.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
@@ -12,17 +13,31 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 class Notes extends StatefulWidget {
   final String? searchQuery;
   final bool searchMode;
-  const Notes({super.key, this.searchQuery, this.searchMode = false});
+
+  /// Callback when folder navigation state changes (for PopScope sync)
+  final VoidCallback? onInsideFolderChanged;
+  const Notes({
+    super.key,
+    this.searchQuery,
+    this.searchMode = false,
+    this.onInsideFolderChanged,
+  });
 
   @override
-  State<Notes> createState() => _NotesState();
+  State<Notes> createState() => NotesState();
 }
 
-class _NotesState extends State<Notes> {
+class NotesState extends State<Notes> {
   static const _gap = 8.0;
 
   late bool _selectionMode;
   final ScrollController _scrollController = ScrollController();
+
+  /// Key to access FolderView state for back navigation
+  final GlobalKey<FolderViewState> _folderViewKey = GlobalKey();
+
+  /// Whether we're currently inside a folder (for back gesture handling)
+  bool _insideFolder = false;
 
   Iterable<Note>? _notes;
   double _pendingOffset = 0.0;
@@ -41,6 +56,7 @@ class _NotesState extends State<Notes> {
     Note.on("changed", _notesListener);
     AppState.subscribe("show_notes", _showNotesListener);
     AppState.subscribe("selected_notes", _selectedNotesListener);
+    AppState.subscribe("notes_view_mode", _viewModeListener);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -76,15 +92,27 @@ class _NotesState extends State<Notes> {
 
   @override
   void dispose() {
+    _updateShowLoaderTimeout?.cancel();
     _scrollController.dispose();
     Note.off("changed", _notesListener);
     AppState.unsubscribe("show_notes", _showNotesListener);
     AppState.unsubscribe("selected_notes", _selectedNotesListener);
+    AppState.unsubscribe("notes_view_mode", _viewModeListener);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Folder view needs a different layout structure
+    if (AppState.notesViewMode == NoteViewMode.folder) {
+      return _buildFolderModeLayout();
+    }
+
+    return _buildScrollableLayout();
+  }
+
+  /// Build layout for folder view mode (with pull-to-refresh support)
+  Widget _buildFolderModeLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
         return RefreshIndicator(
@@ -92,8 +120,42 @@ class _NotesState extends State<Notes> {
             await NoteSyncService().refresh();
             await _fetchNotes();
           },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverFillRemaining(
+                hasScrollBody: true,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: 1200,
+                      maxHeight: constraints.maxHeight,
+                    ),
+                    child: _buildNotesView(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build scrollable layout for grid/list view modes
+  Widget _buildScrollableLayout() {
+    final viewMode = AppState.notesViewMode;
+    return LayoutBuilder(
+      key: ValueKey('scrollable_layout_$viewMode'),
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: () async {
+            await NoteSyncService().refresh();
+            await _fetchNotes();
+          },
           child: SingleChildScrollView(
-            key: PageStorageKey('notes_scroll_view'),
+            key: PageStorageKey('notes_scroll_view_$viewMode'),
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.only(top: 0, bottom: 0),
@@ -149,6 +211,10 @@ class _NotesState extends State<Notes> {
   }
 
   void _showNotesListener(dynamic payload) async {
+    // Reset folder navigation when note type changes
+    _folderViewKey.currentState?.resetFolder();
+    _insideFolder = false;
+
     setState(() {
       _notes = null;
       _pendingOffset = 0.0;
@@ -162,6 +228,13 @@ class _NotesState extends State<Notes> {
     setState(() {
       _selectionMode = selectedNotes.isNotEmpty;
     });
+  }
+
+  void _viewModeListener(dynamic payload) {
+    // Reset folder navigation when view mode changes
+    _folderViewKey.currentState?.resetFolder();
+    _insideFolder = false;
+    setState(() {});
   }
 
   /// Sorts notes with pinned notes first, then by updated_at, then by created_at
@@ -322,8 +395,37 @@ class _NotesState extends State<Notes> {
       );
     }
 
+    // Folder view mode
+    if (AppState.notesViewMode == NoteViewMode.folder) {
+      return _buildFolderView();
+    }
+
+    // List view mode
+    if (AppState.notesViewMode == NoteViewMode.list) {
+      return _buildListView();
+    }
+
+    // Grid view mode (default)
+    return _buildGridView();
+  }
+
+  Widget _buildFolderView() {
+    // Pass _notes directly (not .toList()) to enable identity-based caching in FolderView
+    return FolderView(
+      key: _folderViewKey,
+      notes: _notes!,
+      selectionMode: _selectionMode,
+      searchMode: widget.searchMode,
+      onInsideFolder: (inside) {
+        _insideFolder = inside;
+        widget.onInsideFolderChanged?.call();
+      },
+    );
+  }
+
+  Widget _buildGridView() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: _gap),
+      padding: const EdgeInsets.fromLTRB(_gap, 0, _gap, 24),
       child: LayoutBuilder(
         builder: (context, constraints) {
           // Use actual available width instead of screen width
@@ -362,4 +464,41 @@ class _NotesState extends State<Notes> {
       ),
     );
   }
+
+  Widget _buildListView() {
+    // Sort notes with proper priority order
+    final sortedNotes = _sortNotes(_notes!.toList());
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(_gap, 0, _gap, 24),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: sortedNotes.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final note = sortedNotes[index];
+              return NoteCard(key: ValueKey(note.id), note: note, index: index);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Handle back navigation for folder view
+  /// Returns true if back was handled (was inside folder)
+  bool handleBack() {
+    if (AppState.notesViewMode == NoteViewMode.folder && _insideFolder) {
+      return _folderViewKey.currentState?.handleBack() ?? false;
+    }
+    return false;
+  }
+
+  /// Whether we're currently inside a folder
+  bool get isInsideFolder => _insideFolder;
 }

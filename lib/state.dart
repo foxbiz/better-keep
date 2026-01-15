@@ -8,6 +8,9 @@ import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+/// View modes for displaying notes
+enum NoteViewMode { grid, list, folder }
+
 final _defaultState = {
   "db": null,
   "theme_id": ThemeRegistry.defaultDarkThemeId,
@@ -35,6 +38,8 @@ final _defaultState = {
   "sketch_eraser_size": 20.0,
   "sketch_pen_color": Colors.black,
   "forget_locked_note_password": false,
+  "notes_view_mode": NoteViewMode.grid,
+  "folder_group_by": "labels",
 };
 
 class AppState {
@@ -167,6 +172,21 @@ class AppState {
         (t) => t.name == sketchToolName,
         orElse: () => SketchTool.pen,
       );
+    }
+
+    // Load notes view mode preference
+    final notesViewModeName = prefsInstance.getString("notes_view_mode");
+    if (notesViewModeName != null) {
+      _state["notes_view_mode"] = NoteViewMode.values.firstWhere(
+        (t) => t.name == notesViewModeName,
+        orElse: () => NoteViewMode.grid,
+      );
+    }
+
+    // Load folder group by preference
+    final folderGroupByValue = prefsInstance.getString("folder_group_by");
+    if (folderGroupByValue != null) {
+      _state["folder_group_by"] = folderGroupByValue;
     }
 
     // Load sketch pen/eraser size and color preferences
@@ -593,6 +613,26 @@ class AppState {
     _persistToPrefs(
       (p) async => p.setBool("forget_locked_note_password", value),
     );
+  }
+
+  /// View mode for displaying notes (grid, list, or folder)
+  static NoteViewMode get notesViewMode {
+    return _state["notes_view_mode"] as NoteViewMode? ?? NoteViewMode.grid;
+  }
+
+  static set notesViewMode(NoteViewMode value) {
+    set("notes_view_mode", value);
+    _persistToPrefs((p) async => p.setString("notes_view_mode", value.name));
+  }
+
+  /// Folder grouping mode ('labels' or 'colors')
+  static String get folderGroupBy {
+    return _state["folder_group_by"] as String? ?? "labels";
+  }
+
+  static set folderGroupBy(String value) {
+    set("folder_group_by", value);
+    _persistToPrefs((p) async => p.setString("folder_group_by", value));
   }
 
   static void subscribe(String key, void Function(dynamic) callback) {

@@ -49,6 +49,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   late bool _selectionMode;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final GlobalKey<NotesState> _notesKey = GlobalKey<NotesState>();
 
   bool _shouldAnimateIcon = false;
   bool _searchMode = false;
@@ -330,10 +331,17 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final isInsideFolder = _notesKey.currentState?.isInsideFolder ?? false;
     return PopScope(
-      canPop: !_searchMode && !_selectionMode,
+      canPop: !_searchMode && !_selectionMode && !isInsideFolder,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
+          return;
+        }
+
+        // First try to handle folder back navigation
+        if (_notesKey.currentState?.handleBack() ?? false) {
+          setState(() {}); // Refresh to update canPop
           return;
         }
 
@@ -407,8 +415,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                         ),
                       Expanded(
                         child: Notes(
+                          key: _notesKey,
                           searchMode: _searchMode,
                           searchQuery: _searchController.text,
+                          onInsideFolderChanged: () => setState(() {}),
                         ),
                       ),
                     ],
