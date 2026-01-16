@@ -6,6 +6,8 @@
     "firebase-emulators": "export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && firebase emulators:start",
     "build:functions": "cd functions && npm install && npm run build",
     "build:windows": "flutter build windows --release --dart-define-from-file=.env && dart run msix:create --build-windows=false",
+    "build:macos": "flutter build macos --release --dart-define-from-file=.env",
+    "build:ios": "flutter build ios --release --dart-define-from-file=.env",
     "build:android": "flutter build appbundle --release --dart-define-from-file=.env",
     "build:web": "flutter build web --release --dart-define-from-file=.env",
     "build:icons": "dart ./scripts/generate_custom_icons.dart"
