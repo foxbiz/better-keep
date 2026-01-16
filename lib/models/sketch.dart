@@ -50,7 +50,7 @@ enum PagePattern {
   };
 
   IconData get icon => switch (this) {
-    PagePattern.blank => CustomIcons.emptyPage,
+    PagePattern.blank => CustomIcons.fileEmpty,
     PagePattern.singleLine => Icons.horizontal_rule,
     PagePattern.doubleLine => Icons.dehaze,
     PagePattern.grid => Icons.grid_4x4,

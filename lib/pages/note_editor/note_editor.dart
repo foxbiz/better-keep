@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/components/adaptive_toolbar.dart';
-import 'package:better_keep/components/toolbar_layout_toggle_button.dart';
-import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/checkbox_cascade_dialog.dart';
 import 'package:better_keep/dialogs/export_dialog.dart';
 import 'package:better_keep/dialogs/paste_dialog.dart';
@@ -15,9 +13,11 @@ import 'package:better_keep/pages/note_editor/toolbar/attach_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/checklist_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/indent_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/link_button.dart';
+import 'package:better_keep/pages/note_editor/toolbar/redo_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/style_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_color_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_size_button.dart';
+import 'package:better_keep/pages/note_editor/toolbar/undo_button.dart';
 import 'package:better_keep/services/checkbox_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
@@ -78,7 +78,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   late QuillController _controller;
   late Color _backgroundColor;
   bool _isKeyboardVisible = false;
-  bool _toolbarGridMode = false;
   String? _initialPlainText;
 
   // Checkbox cascade/bubble handling
@@ -133,39 +132,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       _controllerChangesListener,
     );
 
-    // Subscribe to toolbar grid mode changes
-    _toolbarGridMode = AppState.toolbarGridMode;
-    AppState.subscribe("toolbar_grid_mode", _toolbarGridModeListener);
-
-    // Setup toolbar scroll controller
-    _toolbarScrollController.addListener(() {
-      if (_toolbarScrollController.hasClients) {
-        AppState.toolbarScrollOffset = _toolbarScrollController.offset;
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_toolbarScrollController.hasClients &&
-          AppState.toolbarScrollOffset > 0) {
-        final maxOffset = _toolbarScrollController.position.maxScrollExtent;
-        final clampedOffset = AppState.toolbarScrollOffset.clamp(
-          0.0,
-          maxOffset,
-        );
-        _toolbarScrollController.jumpTo(clampedOffset);
-      }
-    });
-
     // Subscribe to note changes for audio recordings
     _note.sub("changed", _onNoteChanged);
-  }
-
-  void _toolbarGridModeListener(dynamic value) {
-    if (mounted) {
-      setState(() {
-        _toolbarGridMode = value as bool;
-      });
-    }
   }
 
   void _onNoteChanged(dynamic _) {
@@ -374,7 +342,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _controller.removeListener(_didChangeSelection);
     _controller.dispose();
     _note.unsub("changed", _onNoteChanged);
-    AppState.unsubscribe("toolbar_grid_mode", _toolbarGridModeListener);
     _quillScrollController.dispose();
     _carouselScrollController.dispose();
     _toolbarScrollController.dispose();
@@ -773,102 +740,84 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     Color textColor = isDark(noteColor) ? Colors.white : Colors.black;
     final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
 
-    final toolbarItems = <Widget>[
-      QuillToolbarHistoryButton(controller: _controller, isUndo: true),
-      QuillToolbarHistoryButton(controller: _controller, isUndo: false),
-      AttachButton(
-        readOnly: _note.readOnly,
-        note: _note,
-        onAppendTranscript: _appendTranscriptToNote,
-        onAttachmentAdded: _scrollToAttachments,
-      ),
-      TextColorButton(
-        color: textColor,
-        focusNode: _focusNode,
-        readOnly: _note.readOnly,
-        controller: _controller,
-        isEditingTitle: _isEditingTitle,
-      ),
-      CheckListButton(
-        focusNode: _focusNode,
-        controller: _controller,
-        readOnly: _note.readOnly,
-        isEditingTitle: _isEditingTitle,
-      ),
-      LinkButton(
-        controller: _controller,
-        readOnly: _note.readOnly,
-        isEditingTitle: _isEditingTitle,
-      ),
-      _styleButton(Attribute.ul),
-      _styleButton(Attribute.ol),
-      _styleButton(Attribute.strikeThrough),
-      _styleButton(Attribute.bold),
-      _styleButton(Attribute.italic),
-      _styleButton(Attribute.underline),
-      AlignButton(
-        focusNode: _focusNode,
-        controller: _controller,
-        readOnly: _note.readOnly,
-        isEditingTitle: _isEditingTitle,
-      ),
-      IndentButton(
-        focusNode: _focusNode,
-        controller: _controller,
-        readOnly: _note.readOnly,
-        isEditingTitle: _isEditingTitle,
-      ),
-      TextSizeButton(
-        focusNode: _focusNode,
-        controller: _controller,
-        readOnly: _note.readOnly,
-        isEditingTitle: _isEditingTitle,
-      ),
-    ];
-
-    final screenWidth = MediaQuery.of(context).size.width;
-    final iconSize = getToolbarIconSize(screenWidth);
-
-    // Calculate if toggle button should be shown
-    // Estimate: icon button ~48px (icon + padding), with some buffer
-    final toolbarItemCount =
-        toolbarItems.length + (isIOS && _isKeyboardVisible ? 1 : 0);
-    final estimatedIconWidth = 48.0;
-    final availableWidth = screenWidth - 32 - 32; // minus margins and padding
-    final fitsInOneRow =
-        (toolbarItemCount * estimatedIconWidth) <= availableWidth;
-
     return AdaptiveToolbar(
+      key: Key('note_editor_toolbar'),
       parentColor: noteColor,
-      iconSize: iconSize,
-      isGridMode: _toolbarGridMode,
-      child: CustomScrollView(
-        controller: _toolbarScrollController,
-        scrollDirection: Axis.horizontal,
-        shrinkWrap: true,
-        slivers: [
-          // Keyboard dismiss button for iOS - first, only when keyboard visible
-          if (isIOS)
-            SliverToBoxAdapter(
-              child: AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                child: _isKeyboardVisible
-                    ? IconButton(
-                        icon: const Icon(Icons.keyboard_hide),
-                        onPressed: () => _focusNode.unfocus(),
-                        tooltip: 'Hide keyboard',
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-          ...toolbarItems.map((el) => SliverToBoxAdapter(child: el)),
-          // Add toolbar layout toggle button as last item
-          SliverToBoxAdapter(
-            child: ToolbarLayoutToggleButton(showToggle: !fitsInOneRow),
+      scrollController: _toolbarScrollController,
+      children: [
+        if (isIOS)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            child: _isKeyboardVisible
+                ? IconButton(
+                    icon: const Icon(Icons.keyboard_hide),
+                    onPressed: () => _focusNode.unfocus(),
+                    tooltip: 'Hide keyboard',
+                  )
+                : const SizedBox.shrink(),
           ),
-        ],
-      ),
+        UndoButton(
+          readOnly: _note.readOnly,
+          controller: _controller,
+          focusNode: _focusNode,
+          isEditingTitle: _isEditingTitle,
+        ),
+        RedoButton(
+          readOnly: _note.readOnly,
+          controller: _controller,
+          focusNode: _focusNode,
+          isEditingTitle: _isEditingTitle,
+        ),
+        AttachButton(
+          readOnly: _note.readOnly,
+          note: _note,
+          onAppendTranscript: _appendTranscriptToNote,
+          onAttachmentAdded: _scrollToAttachments,
+        ),
+        TextColorButton(
+          color: textColor,
+          focusNode: _focusNode,
+          readOnly: _note.readOnly,
+          controller: _controller,
+          isEditingTitle: _isEditingTitle,
+        ),
+        CheckListButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
+          isEditingTitle: _isEditingTitle,
+        ),
+        LinkButton(
+          controller: _controller,
+          readOnly: _note.readOnly,
+          isEditingTitle: _isEditingTitle,
+        ),
+        _styleButton(Attribute.ul),
+        _styleButton(Attribute.ol),
+        _styleButton(Attribute.strikeThrough),
+        _styleButton(Attribute.bold),
+        _styleButton(Attribute.italic),
+        _styleButton(Attribute.underline),
+        AlignButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
+          isEditingTitle: _isEditingTitle,
+        ),
+        IndentButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
+          isEditingTitle: _isEditingTitle,
+        ),
+        TextSizeButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
+          isEditingTitle: _isEditingTitle,
+        ),
+      ],
     );
   }
 

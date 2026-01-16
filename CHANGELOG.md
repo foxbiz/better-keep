@@ -5,6 +5,28 @@ All notable changes to Better Keep will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.43] - 2026-01-17
+
+### Changed
+- **Adaptive Toolbar Refactor**: Consolidated toolbar layout logic with per-toolbar grid mode persistence
+  - Each toolbar now remembers its own expanded/collapsed state independently
+  - Improved responsive icon sizing based on screen width
+- Replaced QuillToolbarHistoryButton with custom UndoButton and RedoButton widgets for better control
+
+### Removed
+- Removed unused ToolbarLayoutToggleButton component (merged into AdaptiveToolbar)
+- Removed unused TooltipPopover component
+- Removed unused SubscriptionSettingsSection page
+- Removed deprecated `appDeepLinkScheme` constant
+- Removed deprecated `getToolbarIconSize()` function
+
+### Technical
+- Migrated toolbar grid mode storage from single global value to keyed per-toolbar persistence
+- Updated custom icons generation script to use stdout/stderr instead of Flutter's debugPrint
+- Added `-webkit-tap-highlight-color: transparent` to web index.html for better mobile UX
+
+---
+
 ## [1.0.42] - 2026-01-16
 
 ### Added

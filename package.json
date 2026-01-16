@@ -7,7 +7,8 @@
     "build:functions": "cd functions && npm install && npm run build",
     "build:windows": "flutter build windows --release --dart-define-from-file=.env && dart run msix:create --build-windows=false",
     "build:android": "flutter build appbundle --release --dart-define-from-file=.env",
-    "build:web": "flutter build web --release --dart-define-from-file=.env"
+    "build:web": "flutter build web --release --dart-define-from-file=.env",
+    "build:icons": "dart ./scripts/generate_custom_icons.dart"
   },
   "author": "Foxbiz Software Pvt. Ltd.",
   "license": "UNLICENSED",

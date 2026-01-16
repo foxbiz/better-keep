@@ -1,7 +1,6 @@
 #!/usr/bin/env dart
 
 import 'dart:io';
-import 'package:flutter/cupertino.dart';
 
 void main() async {
   final projectRoot = Directory.current.path;
@@ -9,19 +8,19 @@ void main() async {
   final dartFile = File('$projectRoot/lib/ui/custom_icons.dart');
 
   if (!await cssFile.exists()) {
-    debugPrint('Error: assets/icon.data not found');
+    stderr.writeln('Error: assets/icon.data not found');
     exit(1);
   }
 
   final cssContent = await cssFile.readAsString();
   final icons = parseCssIcons(cssContent);
 
-  debugPrint('Found ${icons.length} unique icons');
+  stdout.writeln('Found ${icons.length} unique icons');
 
   final dartContent = generateDartFile(icons);
   await dartFile.writeAsString(dartContent);
 
-  debugPrint('Generated lib/ui/custom_icons.dart');
+  stdout.writeln('Generated lib/ui/custom_icons.dart');
 }
 
 /// Represents an icon with its primary name, code point, and all aliases

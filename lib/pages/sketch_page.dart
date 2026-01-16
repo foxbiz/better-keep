@@ -21,7 +21,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/components/adaptive_toolbar.dart';
-import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/delete_dialog.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/state.dart';
@@ -58,7 +57,6 @@ class _SketchPageState extends State<SketchPage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
-  final ScrollController _toolbarScrollController = ScrollController();
 
   /// Selected pen color - initialized from AppState in initState
   late Color _selectedColor;
@@ -144,10 +142,6 @@ class _SketchPageState extends State<SketchPage>
   /// Get total number of sketches (local sketches plus pending new sketch if any)
   int get _totalSketches =>
       _localSketches.length + (_pendingNewSketch != null ? 1 : 0);
-
-  /// Check if pagination should be shown
-  /// Show when there are multiple sketches OR when viewing existing sketches with a new unsaved one
-  bool get _showPagination => _totalSketches > 1;
 
   @override
   void initState() {
@@ -299,7 +293,6 @@ class _SketchPageState extends State<SketchPage>
     _toolbarAnimationController.dispose();
     _appbarAnimationController.dispose();
     _transformationController.dispose();
-    _toolbarScrollController.dispose();
     _pagesPopupController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _autoSaveTimer?.cancel();
@@ -1377,97 +1370,39 @@ class _SketchPageState extends State<SketchPage>
                         position: _toolbarSlideAnimation,
                         child: FadeTransition(
                           opacity: _toolbarFadeAnimation,
-                          child: Builder(
-                            builder: (context) {
-                              final screenWidth = MediaQuery.of(
-                                context,
-                              ).size.width;
-                              final iconSize = getToolbarIconSize(screenWidth);
-
-                              return AdaptiveToolbar(
-                                parentColor: _backgroundColor,
-                                iconSize: iconSize,
-                                isGridMode:
-                                    false, // Sketch toolbar doesn't need grid mode
-                                child: GestureDetector(
-                                  onHorizontalDragEnd: _showPagination
-                                      ? (details) {
-                                          // Swipe left to go to next sketch
-                                          if (details.primaryVelocity != null &&
-                                              details.primaryVelocity! < -200) {
-                                            _navigateToSketch(
-                                              _currentSketchIndex + 1,
-                                            );
-                                          }
-                                          // Swipe right to go to previous sketch
-                                          else if (details.primaryVelocity !=
-                                                  null &&
-                                              details.primaryVelocity! > 200) {
-                                            _navigateToSketch(
-                                              _currentSketchIndex - 1,
-                                            );
-                                          }
-                                        }
-                                      : null,
-                                  child: SizedBox(
-                                    height: 50,
-                                    child: CustomScrollView(
-                                      controller: _toolbarScrollController,
-                                      scrollDirection: Axis.horizontal,
-                                      shrinkWrap: true,
-                                      slivers:
-                                          [
-                                                // Pages grid button - always visible for page management
-                                                _buildPagesGridButton(),
-                                                IconButton(
-                                                  icon: const Icon(Icons.undo),
-                                                  onPressed: _undoCount == 0
-                                                      ? null
-                                                      : () {
-                                                          setState(() {
-                                                            --_undoCount;
-                                                            _redoStack.add(
-                                                              _strokes
-                                                                  .removeLast(),
-                                                            );
-                                                            _isDirty = true;
-                                                          });
-                                                        },
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(Icons.redo),
-                                                  onPressed: _redoStack.isEmpty
-                                                      ? null
-                                                      : () {
-                                                          setState(() {
-                                                            ++_undoCount;
-                                                            _strokes.add(
-                                                              _redoStack
-                                                                  .removeLast(),
-                                                            );
-                                                            _isDirty = true;
-                                                          });
-                                                        },
-                                                ),
-                                                _buildMoveToolButton(),
-                                                _buildToolButtonButton(
-                                                  SketchTool.pen,
-                                                ),
-                                                _buildToolButtonButton(
-                                                  SketchTool.eraser,
-                                                ),
-                                              ]
-                                              .map(
-                                                (el) => SliverToBoxAdapter(
-                                                  child: el,
-                                                ),
-                                              )
-                                              .toList(),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
+                          child: AdaptiveToolbar(
+                            key: Key('sketch_page_toolbar'),
+                            parentColor: _backgroundColor,
+                            children: [
+                              _buildPagesGridButton(),
+                              IconButton(
+                                icon: const Icon(Icons.undo),
+                                onPressed: _undoCount == 0
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          --_undoCount;
+                                          _redoStack.add(_strokes.removeLast());
+                                          _isDirty = true;
+                                        });
+                                      },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.redo),
+                                onPressed: _redoStack.isEmpty
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          ++_undoCount;
+                                          _strokes.add(_redoStack.removeLast());
+                                          _isDirty = true;
+                                        });
+                                      },
+                              ),
+                              _buildMoveToolButton(),
+                              _buildToolButtonButton(SketchTool.pen),
+                              _buildToolButtonButton(SketchTool.eraser),
+                            ],
                           ),
                         ),
                       ),

@@ -36,9 +36,9 @@ abstract final class CustomIcons {
   /// Also known as: rubber, clear
   static const IconData eraser = IconData(0xe906, fontFamily: _fontFamily);
 
-  /// Icon: **file-empty** — `U+E907`
+  /// Icon: **file-empty1** — `U+E907`
   ///
-  /// Also known as: file, document, paper, page, new, empty, blank
+  /// Also known as: file1, document1, paper1, page1, new1, empty1, blank1
   static const IconData fileEmpty = IconData(0xe907, fontFamily: _fontFamily);
 
   /// Icon: **highlight** — `U+E908`
@@ -109,12 +109,18 @@ abstract final class CustomIcons {
   /// Icon: **checkbox-checked** — `U+E915`
   ///
   /// Also known as: checkbox, tick, checked, selected
-  static const IconData checkboxChecked = IconData(0xe915, fontFamily: _fontFamily);
+  static const IconData checkboxChecked = IconData(
+    0xe915,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **checkbox-unchecked** — `U+E916`
   ///
   /// Also known as: checkbox1, unchecked, square
-  static const IconData checkboxUnchecked = IconData(0xe916, fontFamily: _fontFamily);
+  static const IconData checkboxUnchecked = IconData(
+    0xe916,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **bin** — `U+E917`
   ///
@@ -151,7 +157,10 @@ abstract final class CustomIcons {
   /// Icon: **color-sampler** — `U+E91F`
   ///
   /// Also known as: colors, style, design, art1
-  static const IconData colorSampler = IconData(0xe91f, fontFamily: _fontFamily);
+  static const IconData colorSampler = IconData(
+    0xe91f,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **bell-check** — `U+E920`
   ///
@@ -196,22 +205,34 @@ abstract final class CustomIcons {
   /// Icon: **paragraph-justify** — `U+E928`
   ///
   /// Also known as: wysiwyg, justify
-  static const IconData paragraphJustify = IconData(0xe928, fontFamily: _fontFamily);
+  static const IconData paragraphJustify = IconData(
+    0xe928,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **paragraph-center** — `U+E929`
   ///
   /// Also known as: wysiwyg1, align-center, center
-  static const IconData paragraphCenter = IconData(0xe929, fontFamily: _fontFamily);
+  static const IconData paragraphCenter = IconData(
+    0xe929,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **paragraph-right** — `U+E92A`
   ///
   /// Also known as: wysiwyg6, align-right, right1
-  static const IconData paragraphRight = IconData(0xe92a, fontFamily: _fontFamily);
+  static const IconData paragraphRight = IconData(
+    0xe92a,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **paragraph-left** — `U+E92B`
   ///
   /// Also known as: wysiwyg7, align-left, left2
-  static const IconData paragraphLeft = IconData(0xe92b, fontFamily: _fontFamily);
+  static const IconData paragraphLeft = IconData(
+    0xe92b,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **italic** — `U+E92C`
   ///
@@ -226,7 +247,10 @@ abstract final class CustomIcons {
   /// Icon: **strikethrough** — `U+E92E`
   ///
   /// Also known as: wysiwyg4
-  static const IconData strikethrough = IconData(0xe92e, fontFamily: _fontFamily);
+  static const IconData strikethrough = IconData(
+    0xe92e,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **list** — `U+E92F`
   ///
@@ -236,7 +260,10 @@ abstract final class CustomIcons {
   /// Icon: **list-numbered** — `U+E930`
   ///
   /// Also known as: options2
-  static const IconData listNumbered = IconData(0xe930, fontFamily: _fontFamily);
+  static const IconData listNumbered = IconData(
+    0xe930,
+    fontFamily: _fontFamily,
+  );
 
   /// Icon: **link** — `U+E931`
   ///
@@ -257,7 +284,4 @@ abstract final class CustomIcons {
   ///
   /// Also known as: left1, arrow-left1
   static const IconData undo = IconData(0xe934, fontFamily: _fontFamily);
-
-  /// Icon: **empty-page** — `U+E935`
-  static const IconData emptyPage = IconData(0xe935, fontFamily: _fontFamily);
 }

@@ -1,31 +1,66 @@
 import 'dart:ui';
-
+import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 
-class AdaptiveToolbar extends StatelessWidget {
+class AdaptiveToolbar extends StatefulWidget {
   final Color parentColor;
-  final Widget child;
-  final double? iconSize;
-  final bool isGridMode;
+  final List<Widget> children;
+  final ScrollController? scrollController;
+
+  static double get iconSize => switch (WidgetsBinding
+      .instance
+      .platformDispatcher
+      .views
+      .first
+      .display
+      .size
+      .width) {
+    < 400 => 16.0,
+    < 600 => 18.0,
+    _ => 20.0,
+  };
 
   const AdaptiveToolbar({
-    super.key,
+    required super.key,
+    required this.children,
     required this.parentColor,
-    required this.child,
-    this.iconSize,
-    this.isGridMode = false,
+    this.scrollController,
   });
 
   @override
-  Widget build(BuildContext context) {
-    late Color backgroundColor;
-    late Color foregroundColor;
-    late Color disabledColor;
-    const Color selectedColor = Colors.amber;
+  State<AdaptiveToolbar> createState() => _AdaptiveToolbarState();
+}
 
-    // When parent is light, use dark toolbar for contrast (and vice versa)
-    if (isDark(parentColor)) {
+class _AdaptiveToolbarState extends State<AdaptiveToolbar> {
+  late final double iconSize;
+  late Color backgroundColor;
+  late Color foregroundColor;
+  late Color disabledColor;
+
+  late bool isGridMode;
+  late final ScrollController _scrollController;
+
+  bool showToggleLayout = false;
+  Color selectedColor = Colors.amber;
+
+  Widget get layoutToggleButton => IconButton(
+    icon: Icon(
+      isGridMode ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+    ),
+    tooltip: isGridMode ? 'Collapse toolbar' : 'Expand toolbar',
+    onPressed: () {
+      AppState.setToolbarGridMode(widget.key.toString(), !isGridMode);
+    },
+  );
+
+  @override
+  void initState() {
+    _scrollController = widget.scrollController ?? ScrollController();
+    iconSize = AdaptiveToolbar.iconSize;
+    isGridMode = AppState.getToolbarGridMode(widget.key.toString());
+
+    if (isDark(widget.parentColor)) {
       backgroundColor = const Color.fromARGB(123, 255, 255, 255);
       foregroundColor = Colors.black;
       disabledColor = Colors.black38;
@@ -35,6 +70,37 @@ class AdaptiveToolbar extends StatelessWidget {
       disabledColor = Colors.white38;
     }
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        showToggleLayout = _scrollController.position.maxScrollExtent > 0;
+      } else {
+        showToggleLayout = isGridMode;
+      }
+
+      if (mounted) {
+        setState(() {});
+      }
+    });
+
+    AppState.subscribe("toolbar_grid_modes", _updateLayoutMode);
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    AppState.unsubscribe("toolbar_grid_modes", _updateLayoutMode);
+    if (widget.scrollController == null) {
+      _scrollController.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    double hPadding = isGridMode ? 0.0 : 16.0;
+    double buttonSize = iconSize + 8.0 < 36.0 ? 36.0 : iconSize + 8.0;
+    double rowHeight = buttonSize + 8.0;
+
     return SafeArea(
       child: Container(
         margin: const EdgeInsets.all(8),
@@ -43,7 +109,7 @@ class AdaptiveToolbar extends StatelessWidget {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: hPadding),
               decoration: BoxDecoration(
                 boxShadow: [
                   BoxShadow(
@@ -54,16 +120,21 @@ class AdaptiveToolbar extends StatelessWidget {
                 ],
                 color: backgroundColor,
               ),
-              height: isGridMode ? null : 50,
+              height: isGridMode ? null : rowHeight,
               constraints: isGridMode
-                  ? const BoxConstraints(minHeight: 50, maxHeight: 150)
-                  : const BoxConstraints(minHeight: 50, maxHeight: 50),
+                  ? BoxConstraints(
+                      minHeight: rowHeight,
+                      maxHeight: rowHeight * 3,
+                    )
+                  : BoxConstraints(minHeight: rowHeight, maxHeight: rowHeight),
               child: IconButtonTheme(
                 data: IconButtonThemeData(
                   style: ButtonStyle(
-                    iconSize: iconSize != null
-                        ? WidgetStateProperty.all(iconSize)
-                        : null,
+                    iconSize: WidgetStateProperty.all(iconSize),
+                    minimumSize: WidgetStateProperty.all(
+                      Size(buttonSize, buttonSize),
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     foregroundColor: WidgetStateProperty.resolveWith((states) {
                       if (states.contains(WidgetState.selected)) {
                         return selectedColor;
@@ -77,36 +148,9 @@ class AdaptiveToolbar extends StatelessWidget {
                 ),
                 child: IconTheme(
                   data: IconThemeData(color: foregroundColor, size: iconSize),
-                  child: DefaultTextStyle(
-                    style: TextStyle(color: foregroundColor),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(opacity: animation, child: child);
-                      },
-                      child: isGridMode
-                          ? SingleChildScrollView(
-                              key: const ValueKey('grid'),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 4,
-                                ),
-                                child: Wrap(
-                                  spacing: 4,
-                                  runSpacing: 4,
-                                  alignment: WrapAlignment.center,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: _extractChildren(child),
-                                ),
-                              ),
-                            )
-                          : SizedBox(
-                              key: const ValueKey('scroll'),
-                              height: 50,
-                              child: child,
-                            ),
-                    ),
-                  ),
+                  child: isGridMode
+                      ? _buildGridLayout(buttonSize, rowHeight)
+                      : _buildScrollLayout(buttonSize, rowHeight),
                 ),
               ),
             ),
@@ -116,24 +160,49 @@ class AdaptiveToolbar extends StatelessWidget {
     );
   }
 
-  /// Extract children from CustomScrollView slivers for use in Wrap widget.
-  ///
-  /// Note: Only handles [SliverToBoxAdapter] slivers. Other sliver types
-  /// (e.g., SliverList, SliverGrid) are silently skipped. This is intentional
-  /// as the toolbar only uses SliverToBoxAdapter for its items.
-  List<Widget> _extractChildren(Widget child) {
-    if (child is CustomScrollView) {
-      final slivers = child.slivers;
-      final children = <Widget>[];
-      for (final sliver in slivers) {
-        if (sliver is SliverToBoxAdapter) {
-          if (sliver.child != null) {
-            children.add(sliver.child!);
-          }
-        }
-      }
-      return children;
+  void _updateLayoutMode(dynamic _) {
+    setState(() {
+      isGridMode = AppState.getToolbarGridMode(widget.key.toString());
+    });
+  }
+
+  Widget _buildScrollLayout(double buttonSize, double rowHeight) {
+    List<Widget> children = [];
+
+    for (final child in widget.children) {
+      children.add(SliverToBoxAdapter(child: child));
     }
-    return [child];
+
+    if (showToggleLayout) {
+      children.add(SliverToBoxAdapter(child: layoutToggleButton));
+    }
+
+    return SizedBox(
+      key: const ValueKey('scroll_layout'),
+      height: rowHeight,
+      child: CustomScrollView(
+        scrollDirection: Axis.horizontal,
+        controller: _scrollController,
+        slivers: children,
+        shrinkWrap: true,
+      ),
+    );
+  }
+
+  Widget _buildGridLayout(double buttonSize, double rowHeight) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      key: const ValueKey('grid'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Wrap(
+          spacing: 0,
+          runSpacing: 0,
+          alignment: WrapAlignment.start,
+          verticalDirection: VerticalDirection.up,
+          children: [...widget.children, layoutToggleButton],
+        ),
+      ),
+    );
   }
 }

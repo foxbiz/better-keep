@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/sketch.dart';
@@ -40,8 +41,7 @@ final _defaultState = {
   "forget_locked_note_password": false,
   "notes_view_mode": NoteViewMode.grid,
   "folder_group_by": "labels",
-  "toolbar_grid_mode": false,
-  "toolbar_scroll_offset": 0.0,
+  "toolbar_grid_modes": <String, bool>{},
 };
 
 class AppState {
@@ -90,6 +90,10 @@ class AppState {
     _state["alarm_sound"] = alarmSound;
     _state["scaffold_messenger_key"] = scaffoldMessengerKey;
     _state["navigator_key"] = navigatorKey;
+    _state["recent_colors"] = <Color>[];
+    _state["selected_notes"] = <Note>[];
+    _state["toolbar_grid_modes"] = <String, bool>{};
+    notify("reset", null);
   }
 
   static Future<void> init({SharedPreferences? prefs}) async {
@@ -254,9 +258,13 @@ class AppState {
     _state["forget_locked_note_password"] =
         prefsInstance.getBool("forget_locked_note_password") ?? false;
 
-    // Load toolbar grid mode setting
-    _state["toolbar_grid_mode"] =
-        prefsInstance.getBool("toolbar_grid_mode") ?? false;
+    final toolbarModesJson =
+        jsonDecode(prefsInstance.getString("toolbar_grid_modes") ?? "{}")
+            as Map<String, dynamic>;
+
+    _state["toolbar_grid_modes"] = toolbarModesJson.map(
+      (key, value) => MapEntry(key, value as bool),
+    );
   }
 
   static Object? get(String key) {
@@ -641,22 +649,19 @@ class AppState {
     _persistToPrefs((p) async => p.setString("folder_group_by", value));
   }
 
-  static bool get toolbarGridMode {
-    return _state["toolbar_grid_mode"] as bool? ?? false;
+  static bool getToolbarGridMode(String key) {
+    final modes = _state["toolbar_grid_modes"] ?? {};
+    return (modes as Map<String, bool>)[key] ?? false;
   }
 
-  static set toolbarGridMode(bool value) {
-    set("toolbar_grid_mode", value);
-    _persistToPrefs((p) async => p.setBool("toolbar_grid_mode", value));
-  }
-
-  static double get toolbarScrollOffset {
-    return _state["toolbar_scroll_offset"] as double? ?? 0.0;
-  }
-
-  static set toolbarScrollOffset(double value) {
-    set("toolbar_scroll_offset", value);
-    // No persistence needed - session only
+  static void setToolbarGridMode(String key, bool value) {
+    final modes =
+        _state["toolbar_grid_modes"] as Map<String, bool>? ?? <String, bool>{};
+    modes[key] = value;
+    set("toolbar_grid_modes", modes);
+    _persistToPrefs(
+      (p) async => p.setString("toolbar_grid_modes", jsonEncode(modes)),
+    );
   }
 
   static void subscribe(String key, void Function(dynamic) callback) {
