@@ -381,9 +381,7 @@ class _BetterKeepState extends State<BetterKeep> {
   Future<void> _initDb() async {
     try {
       final db = await initDatabase();
-      // Set up database getter for local data encryption migration
       LocalDataEncryption.setDatabaseGetter(() => db);
-      // Ensure system labels exist (Shared Text, Shared File)
       await Label.ensureSystemLabels();
       setState(() {
         this.db = db;

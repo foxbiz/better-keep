@@ -13,8 +13,6 @@ extension LabelEventData on LabelEvent {
 class Label extends BaseModel<Label> {
   static final ModelSchema<Label> _schema = _createSchema();
   static const model = "label";
-
-  /// System label names - these are auto-created and cannot be deleted
   static const String sharedTextLabelName = 'Shared Text';
   static const String sharedFileLabelName = 'Shared File';
   static const List<String> systemLabelNames = [
@@ -137,7 +135,6 @@ class Label extends BaseModel<Label> {
     );
   }
 
-  /// Ensures all system labels exist in the database.
   /// Call this on app startup.
   static Future<void> ensureSystemLabels() async {
     final existingLabels = await Label.get();
@@ -146,7 +143,7 @@ class Label extends BaseModel<Label> {
     for (final labelName in systemLabelNames) {
       if (!existingNames.contains(labelName)) {
         final label = Label(name: labelName, isSystem: true);
-        await label.save(sync: true);
+        await label.save(sync: false);
       }
     }
   }
@@ -159,7 +156,7 @@ class Label extends BaseModel<Label> {
       return existing;
     }
     final label = Label(name: name, isSystem: true);
-    await label.save(sync: true);
+    await label.save(sync: false);
     return label;
   }
 
