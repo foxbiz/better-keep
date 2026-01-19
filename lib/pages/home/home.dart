@@ -898,7 +898,15 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         BubbleMenuItem(
           icon: Icons.draw,
           label: 'Sketch',
-          onTap: () => _createSketchNote(),
+          onTap: () => showPage(
+            context,
+            SketchPage(
+              note: _createNewNote(),
+              sketch: SketchData(
+                backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+              ),
+            ),
+          ),
         ),
         BubbleMenuItem(
           icon: Icons.check_box_outlined,
@@ -909,17 +917,30 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     );
   }
 
-  /// Create a new sketch note
-  void _createSketchNote() {
-    final note = Note(content: '');
-    showPage(
-      context,
-      SketchPage(
-        note: note,
-        sketch: SketchData(
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-        ),
-      ),
+  Note _createNewNote({String? title, String? content}) {
+    final labels = <String>[];
+    final Color color;
+    final currentFolder = AppState.currentFolder;
+    if (currentFolder != null) {
+      if (currentFolder.labelName != null &&
+          currentFolder.labelName!.isNotEmpty) {
+        labels.add(currentFolder.labelName!);
+      }
+
+      if (currentFolder.color != null) {
+        color = currentFolder.color!;
+      } else {
+        color = Colors.transparent;
+      }
+    } else {
+      color = Colors.transparent;
+    }
+
+    return Note(
+      title: title,
+      content: content,
+      labels: labels.join(','),
+      color: color,
     );
   }
 
@@ -950,11 +971,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         result.transcription,
       );
 
-      final note = Note(
-        title: title,
-        content: contentJson,
-        plainText: result.transcription ?? '',
-      );
+      final note = _createNewNote(title: title, content: contentJson);
 
       // Add recording to note
       note.addRecording(
@@ -969,7 +986,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       await note.save();
 
       if (mounted) {
-        // Open the note in editor
         showPage(context, NoteEditor(note: note));
       }
     }
@@ -1118,11 +1134,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       );
 
       // Create note with image
-      final note = Note(
+      final note = _createNewNote(
         content: json.encode([
           {'insert': '\n'},
         ]),
-        plainText: '',
       );
       note.addImage(noteImage);
       await note.save();
@@ -1203,7 +1218,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       },
     ]);
 
-    final note = Note(title: 'Tasks', content: contentJson, plainText: 'Tasks');
+    final note = _createNewNote(title: 'Tasks', content: contentJson);
 
     await note.save();
 
