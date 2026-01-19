@@ -1690,6 +1690,7 @@ class NoteSyncService {
         final files = switch (att.type) {
           AttachmentType.image => [att.image!.src],
           AttachmentType.sketch => [
+            att.sketch!.strokesFilePath ?? '',
             att.sketch!.previewImage ?? '',
             att.sketch!.backgroundImage ?? '',
           ],
