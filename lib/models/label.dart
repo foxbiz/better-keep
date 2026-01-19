@@ -1,4 +1,5 @@
 import 'package:better_keep/models/base_model.dart';
+import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:sqflite/sqflite.dart';
@@ -24,6 +25,7 @@ class Label extends BaseModel<Label> {
 
   String name;
   bool isSystem;
+  int? notesCount;
   DateTime? createdAt;
   DateTime? updatedAt;
 
@@ -39,8 +41,8 @@ class Label extends BaseModel<Label> {
     return _schema.upgradeTable(db, oldVersion, newVersion);
   }
 
-  static Future<List<Label>> get() {
-    return _schema.get([]);
+  static Future<List<Label>> get({bool countNotes = false}) {
+    return _schema.get([countNotes]);
   }
 
   static Future<Label?> findById(int id) async {
@@ -124,6 +126,17 @@ class Label extends BaseModel<Label> {
     if (sync) {
       LabelSyncService().queueDelete(labelId);
     }
+
+    final notes = await Note.filterByLabels([name]);
+    for (final note in notes) {
+      if (note.labels != null) {
+        note.labels = note.labels!
+            .split(',')
+            .where((l) => l.trim() != name)
+            .join(',');
+      }
+      note.save(false);
+    }
     return rowsDeleted;
   }
 
@@ -199,7 +212,6 @@ class _LabelSchema implements ModelSchema<Label> {
   @override
   Future<void> upgradeTable(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add created_at and updated_at columns
       await db.execute(
         "ALTER TABLE label ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
       );
@@ -208,7 +220,6 @@ class _LabelSchema implements ModelSchema<Label> {
       );
     }
     if (oldVersion < 3) {
-      // Add is_system column for system labels that cannot be deleted
       await db.execute(
         "ALTER TABLE label ADD COLUMN is_system INTEGER DEFAULT 0",
       );
@@ -217,8 +228,30 @@ class _LabelSchema implements ModelSchema<Label> {
 
   @override
   Future<List<Label>> get(List<dynamic> args) async {
+    bool countNotes = args.isNotEmpty && args[0] == true;
     final db = AppState.db;
     final result = await db.query(Label.model);
-    return result.map(Label.fromJson).toList();
+    final labels = <Label>[];
+
+    for (final row in result) {
+      final label = Label.fromJson(row);
+      if (countNotes) {
+        label.notesCount = await Note.countByLabels([label.name]);
+      }
+      labels.add(label);
+    }
+    return labels;
+  }
+
+  @override
+  Future<int> count(List<dynamic> args) async {
+    final db = AppState.db;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as count FROM ${Label.model}",
+    );
+    if (result.isNotEmpty) {
+      return result.first['count'] as int;
+    }
+    return 0;
   }
 }

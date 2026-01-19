@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'package:better_keep/models/label.dart';
+import 'package:better_keep/pages/home/folder_breadcrumb.dart';
+import 'package:better_keep/components/folder_tile.dart';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/home/labels.dart';
-import 'package:better_keep/pages/home/views/folder_view.dart';
+import 'package:better_keep/pages/home/view_mode_toggle.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
+import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -14,14 +19,7 @@ class Notes extends StatefulWidget {
   final String? searchQuery;
   final bool searchMode;
 
-  /// Callback when folder navigation state changes (for PopScope sync)
-  final VoidCallback? onInsideFolderChanged;
-  const Notes({
-    super.key,
-    this.searchQuery,
-    this.searchMode = false,
-    this.onInsideFolderChanged,
-  });
+  const Notes({super.key, this.searchQuery, this.searchMode = false});
 
   @override
   State<Notes> createState() => NotesState();
@@ -33,30 +31,29 @@ class NotesState extends State<Notes> {
   late bool _selectionMode;
   final ScrollController _scrollController = ScrollController();
 
-  /// Key to access FolderView state for back navigation
-  final GlobalKey<FolderViewState> _folderViewKey = GlobalKey();
-
-  /// Whether we're currently inside a folder (for back gesture handling)
-  bool _insideFolder = false;
-
   Iterable<Note>? _notes;
+  Iterable<Label>? _labels;
+  Iterable<NoteColor>? _colors;
+  int? _notesCountWithoutLabels;
   double _pendingOffset = 0.0;
   bool _showLoader = false;
   Timer? _updateShowLoaderTimeout;
 
   @override
   void initState() {
-    _fetchNotes();
+    _fetchData();
 
     _selectionMode = AppState.selectedNotes.isNotEmpty;
     _scrollController.addListener(() {
       _pendingOffset = _scrollController.offset;
     });
 
+    Label.on("changed", _fetchData);
     Note.on("changed", _notesListener);
-    AppState.subscribe("show_notes", _showNotesListener);
-    AppState.subscribe("selected_notes", _selectedNotesListener);
+    AppState.subscribe("show_notes", _fetchData);
     AppState.subscribe("notes_view_mode", _viewModeListener);
+    AppState.subscribe("selected_notes", _selectedNotesListener);
+    AppState.subscribe("current_folder", _updateCurrentFolderListener);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -67,132 +64,162 @@ class NotesState extends State<Notes> {
   }
 
   @override
-  void didUpdateWidget(Notes oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.searchQuery != widget.searchQuery ||
-        oldWidget.searchMode != widget.searchMode) {
-      _fetchNotes();
-    }
-  }
-
-  Future<void> _fetchNotes() async {
-    _startLoading();
-    final fetchedNotes = await Note.get(
-      AppState.showNotes,
-      AppState.filterLabels,
-      widget.searchQuery,
-    );
-    _stopLoading();
-    if (mounted) {
-      setState(() {
-        _notes = fetchedNotes;
-      });
-    }
-  }
-
-  @override
   void dispose() {
     _updateShowLoaderTimeout?.cancel();
     _scrollController.dispose();
+    Label.off("changed", _fetchData);
     Note.off("changed", _notesListener);
-    AppState.unsubscribe("show_notes", _showNotesListener);
-    AppState.unsubscribe("selected_notes", _selectedNotesListener);
+    AppState.unsubscribe("show_notes", _fetchData);
     AppState.unsubscribe("notes_view_mode", _viewModeListener);
+    AppState.unsubscribe("selected_notes", _selectedNotesListener);
+    AppState.unsubscribe("current_folder", _updateCurrentFolderListener);
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    // Folder view needs a different layout structure (but not during search)
-    if (AppState.notesViewMode == NoteViewMode.folder && !widget.searchMode) {
-      return _buildFolderModeLayout();
+  void didUpdateWidget(Notes oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchQuery != widget.searchQuery ||
+        oldWidget.searchMode != widget.searchMode) {
+      _fetchData();
     }
-
-    return _buildScrollableLayout();
   }
 
-  /// Build layout for folder view mode (with pull-to-refresh support)
+  @override
+  Widget build(BuildContext context) {
+    if (!AppState.notesViewMode.isFolderMode ||
+        widget.searchMode ||
+        AppState.showNotes != NoteType.all) {
+      return _buildDefaultLayout();
+    }
+
+    return _buildFolderModeLayout();
+  }
+
   Widget _buildFolderModeLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
+        Widget content;
+        if (_notes == null) {
+          if (!_showLoader) {
+            content = SizedBox.shrink();
+          } else {
+            content = Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            );
+          }
+        } else if (AppState.currentFolder != null) {
+          content = _buildNotesView();
+        } else {
+          content = _buildFoldersGrid();
+        }
+
         return RefreshIndicator(
-          onRefresh: () async {
-            await NoteSyncService().refresh();
-            await _fetchNotes();
-          },
-          child: SingleChildScrollView(
+          onRefresh: refresh,
+          child: CustomScrollView(
+            controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 1200),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Labels row with view mode toggle and folder grouping toggle
-                      if (AppState.showNotes == NoteType.all &&
-                          !_selectionMode &&
-                          !widget.searchMode)
-                        Labels(
-                          key: Key('labels_widget_folder'),
-                          // In folder mode, Labels widget is shown for view mode toggle only.
-                          // Label filtering is handled via folder navigation, not chip selection.
-                          onSelect: (_) {},
-                        ),
-                      _buildNotesView(),
-                    ],
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _StickyHeaderDelegate(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                    child: Row(
+                      children: [
+                        ViewModeToggle(),
+                        FolderBreadcrumb(location: AppState.currentFolder),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              SliverToBoxAdapter(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: 1200),
+                      child: content,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  /// Build scrollable layout for grid/list view modes
-  Widget _buildScrollableLayout() {
+  Widget _buildDefaultLayout() {
     final viewMode = AppState.notesViewMode;
+
     return LayoutBuilder(
-      key: ValueKey('scrollable_layout_$viewMode'),
+      key: ValueKey('default_layout_$viewMode'),
       builder: (context, constraints) {
         return RefreshIndicator(
-          onRefresh: () async {
-            await NoteSyncService().refresh();
-            await _fetchNotes();
-          },
-          child: SingleChildScrollView(
+          onRefresh: refresh,
+          child: CustomScrollView(
             key: PageStorageKey('notes_scroll_view_$viewMode'),
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.only(top: 0, bottom: 0),
             scrollDirection: Axis.vertical,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Align(
-                alignment: Alignment.topCenter,
+            slivers: [
+              if (AppState.showNotes == NoteType.all &&
+                  !widget.searchMode &&
+                  !_selectionMode)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _StickyHeaderDelegate(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          ViewModeToggle(),
+                          Labels(
+                            key: Key('labels_widget'),
+                            onSelect: (selectedLabel) async {
+                              _scrollController.jumpTo(0.0);
+                              _startLoading();
+                              _notes = await Note.get(
+                                AppState.showNotes,
+                                selectedLabel.map((e) => e.name).toList(),
+                              );
+                              _stopLoading();
+                              if (context.mounted) {
+                                setState(() {});
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              SliverToBoxAdapter(
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 1200),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (AppState.showNotes == NoteType.all) _buildLabelList(),
-                      _buildNotesView(),
-                    ],
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: 1200),
+                      child: _buildNotesView(),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         );
       },
     );
   }
 
-  /// Returns appropriate icon and message for empty state based on current view
   (IconData, String) _getEmptyStateContent() {
     if (widget.searchMode) {
       return (Icons.search_off, 'No matching notes');
@@ -205,6 +232,33 @@ class NotesState extends State<Notes> {
       NoteType.locked => (Icons.lock_outline, 'No locked notes'),
       NoteType.reminder => (Icons.notifications_none, 'No reminders set'),
     };
+  }
+
+  Future<void> refresh() async {
+    try {
+      _scrollController.jumpTo(0.0);
+      await NoteSyncService().refresh();
+      await LabelSyncService().refresh();
+    } catch (e) {
+      AppLogger.error("[REFRESH] Error refreshing data: $e");
+    }
+    await _fetchData();
+  }
+
+  Future<void> _fetchData([dynamic _]) async {
+    _startLoading();
+    _notes = await Note.get(
+      AppState.showNotes,
+      AppState.filterLabels,
+      widget.searchQuery,
+    );
+    _colors = await Note.getAllColors();
+    _labels = await Label.get(countNotes: true);
+    _notesCountWithoutLabels = await Note.countByLabels(null);
+    _stopLoading();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _startLoading() {
@@ -220,19 +274,6 @@ class NotesState extends State<Notes> {
     if (_showLoader) setState(() => _showLoader = false);
   }
 
-  void _showNotesListener(dynamic payload) async {
-    // Reset folder navigation when note type changes
-    _folderViewKey.currentState?.resetFolder();
-    _insideFolder = false;
-
-    setState(() {
-      _notes = null;
-      _pendingOffset = 0.0;
-    });
-
-    _fetchNotes();
-  }
-
   void _selectedNotesListener(dynamic payload) {
     final selectedNotes = payload as List<Note>;
     setState(() {
@@ -240,27 +281,24 @@ class NotesState extends State<Notes> {
     });
   }
 
-  void _viewModeListener(dynamic payload) {
-    // Reset folder navigation when view mode changes
-    _folderViewKey.currentState?.resetFolder();
-    _insideFolder = false;
+  void _viewModeListener(dynamic payload) async {
+    AppState.currentFolder = null;
+    await _fetchData();
+  }
+
+  void _updateCurrentFolderListener(dynamic payload) {
+    if (!mounted) return;
     setState(() {});
   }
 
-  /// Sorts notes with pinned notes first, then by updated_at, then by created_at
   List<Note> _sortNotes(List<Note> notes) {
     final sorted = [...notes];
     sorted.sort((a, b) {
-      // 1. Pinned first
       if (a.pinned != b.pinned) return b.pinned ? 1 : -1;
-
-      // 2. Updated at (newer first)
       final updatedA = a.updatedAt ?? DateTime(1970);
       final updatedB = b.updatedAt ?? DateTime(1970);
       final updatedCmp = updatedB.compareTo(updatedA);
       if (updatedCmp != 0) return updatedCmp;
-
-      // 3. Created at (newer first)
       final createdA = a.createdAt ?? DateTime(1970);
       final createdB = b.createdAt ?? DateTime(1970);
       return createdB.compareTo(createdA);
@@ -270,7 +308,7 @@ class NotesState extends State<Notes> {
 
   void _notesListener(NoteEvent event) {
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
-      _fetchNotes();
+      _fetchData();
       return;
     }
 
@@ -278,8 +316,6 @@ class NotesState extends State<Notes> {
       AppState.selectedNotes = [];
     }
 
-    // If notes haven't loaded yet, we can't update the list.
-    // We'll just let _fetchNotes handle it when it completes.
     if (_notes == null) {
       return;
     }
@@ -297,7 +333,6 @@ class NotesState extends State<Notes> {
           NoteType.reminder =>
             newNote.trashed ||
                 newNote.reminder == null ||
-                // Only remove if completed AND not a repeating reminder
                 (newNote.completed &&
                     !(newNote.reminder?.isRepeating ?? false)),
           _ => newNote.trashed || newNote.archived,
@@ -311,7 +346,6 @@ class NotesState extends State<Notes> {
       if (index != -1) {
         notesList[index] = newNote;
       } else {
-        // Insert new note at appropriate position based on pinned status
         final insertIndex = newNote.pinned
             ? 0
             : notesList.indexWhere((n) => !n.pinned);
@@ -330,33 +364,6 @@ class NotesState extends State<Notes> {
     }
 
     setState(() {});
-  }
-
-  Widget _buildLabelList() {
-    if (!_selectionMode && !widget.searchMode) {
-      return Labels(
-        key: Key('labels_widget'),
-        onSelect: (selectedLabel) async {
-          setState(() {
-            _notes = null;
-            _pendingOffset = 0.0;
-          });
-          _startLoading();
-          final notes = await Note.get(
-            AppState.showNotes,
-            selectedLabel.map((e) => e.name).toList(),
-          );
-          _stopLoading();
-          if (context.mounted) {
-            setState(() {
-              _notes = notes;
-            });
-          }
-        },
-      );
-    }
-
-    return SizedBox.shrink();
   }
 
   Widget _buildNotesView() {
@@ -405,37 +412,39 @@ class NotesState extends State<Notes> {
       );
     }
 
-    // During search, bypass folder view and use grid view instead
-    if (widget.searchMode && AppState.notesViewMode == NoteViewMode.folder) {
+    if (widget.searchMode) {
       return _buildGridView();
     }
 
-    // Folder view mode
-    if (AppState.notesViewMode == NoteViewMode.folder) {
-      return _buildFolderView();
-    }
-
-    // List view mode
     if (AppState.notesViewMode == NoteViewMode.list) {
-      return _buildListView();
+      final sortedNotes = _sortNotes(_notes!.toList());
+
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(_gap, 0, _gap, 24),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sortedNotes.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final note = sortedNotes[index];
+                return NoteCard(
+                  key: ValueKey(note.id),
+                  note: note,
+                  index: index,
+                );
+              },
+            ),
+          ),
+        ),
+      );
     }
 
-    // Grid view mode (default)
     return _buildGridView();
-  }
-
-  Widget _buildFolderView() {
-    // Pass _notes directly (not .toList()) to enable identity-based caching in FolderView
-    return FolderView(
-      key: _folderViewKey,
-      notes: _notes!,
-      selectionMode: _selectionMode,
-      searchMode: widget.searchMode,
-      onInsideFolder: (inside) {
-        _insideFolder = inside;
-        widget.onInsideFolderChanged?.call();
-      },
-    );
   }
 
   Widget _buildGridView() {
@@ -443,8 +452,6 @@ class NotesState extends State<Notes> {
       padding: const EdgeInsets.fromLTRB(_gap, 0, _gap, 24),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Use actual available width instead of screen width
-          // to properly account for sidebar on big screens
           final availableWidth = constraints.maxWidth;
           final crossAxisCount = availableWidth > 900
               ? 4
@@ -452,16 +459,9 @@ class NotesState extends State<Notes> {
               ? 3
               : 2;
 
-          // Sort notes with proper priority order
-          // (pinned first, then by updatedAt, then createdAt)
           final sortedNotes = _sortNotes(_notes!.toList());
-
-          // Create a key based on note order to force layout refresh when order changes
           final orderKey = sortedNotes.map((n) => n.id).join('-');
 
-          // MasonryGridView places items in shortest column first
-          // First/most important notes appear at top-left area
-          // Cards maintain their natural height (no stretching)
           return MasonryGridView.count(
             key: ValueKey(orderKey),
             shrinkWrap: true,
@@ -480,40 +480,164 @@ class NotesState extends State<Notes> {
     );
   }
 
-  Widget _buildListView() {
-    // Sort notes with proper priority order
-    final sortedNotes = _sortNotes(_notes!.toList());
+  Widget _buildFoldersGrid() {
+    final folders = <Widget>[];
+
+    folders.add(
+      FolderTile(
+        type: FolderType.pinned,
+        noteCount: 0,
+        onTap: () => _openFolder(const FolderLocation.pinned()),
+      ),
+    );
+
+    if (AppState.notesViewMode == NoteViewMode.folderLabels &&
+        _labels != null) {
+      folders.add(
+        FolderTile(
+          type: FolderType.unlabeled,
+          noteCount: _notesCountWithoutLabels ?? 0,
+          onTap: () => _openFolder(FolderLocation.label('')),
+        ),
+      );
+
+      for (final label in _labels!) {
+        folders.add(
+          FolderTile(
+            type: FolderType.label,
+            labelName: label.name,
+            noteCount: label.notesCount ?? 0,
+            onTap: () => _openFolder(FolderLocation.label(label.name)),
+          ),
+        );
+      }
+    } else if (AppState.notesViewMode == NoteViewMode.folderColors &&
+        _colors != null) {
+      for (final color in _colors!) {
+        folders.add(
+          FolderTile(
+            type: FolderType.color,
+            color: color.value,
+            noteCount: color.count,
+            onTap: () => _openFolder(FolderLocation.color(color.value)),
+          ),
+        );
+      }
+    }
+
+    if (folders.isEmpty) {
+      return _buildEmptyState();
+    }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(_gap, 0, _gap, 24),
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: _gap),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.maxWidth;
+          final crossAxisCount = availableWidth > 900
+              ? 6
+              : availableWidth > 600
+              ? 4
+              : 3;
+
+          return GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: sortedNotes.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final note = sortedNotes[index];
-              return NoteCard(key: ValueKey(note.id), note: note, index: index);
-            },
-          ),
-        ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+              childAspectRatio: 1.1,
+            ),
+            itemCount: folders.length,
+            itemBuilder: (context, index) => folders[index],
+          );
+        },
       ),
     );
   }
 
-  /// Handle back navigation for folder view
-  /// Returns true if back was handled (was inside folder)
-  bool handleBack() {
-    if (AppState.notesViewMode == NoteViewMode.folder && _insideFolder) {
-      return _folderViewKey.currentState?.handleBack() ?? false;
-    }
-    return false;
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.folder_open_outlined, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            AppState.notesViewMode == NoteViewMode.folderLabels
+                ? 'No labels yet'
+                : 'No colored notes yet',
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            AppState.notesViewMode == NoteViewMode.folderLabels
+                ? 'Add labels to your notes to organize them into folders'
+                : 'Add colors to your notes to organize them into folders',
+            style: const TextStyle(fontSize: 14, color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 
-  /// Whether we're currently inside a folder
-  bool get isInsideFolder => _insideFolder;
+  void _openFolder(FolderLocation location) async {
+    AppState.currentFolder = location;
+
+    _notes = null;
+    _scrollController.jumpTo(0.0);
+    _startLoading();
+
+    if (location.isPinned) {
+      _notes = await Note.get(NoteType.pinned);
+    } else if (location.labelName != null) {
+      _notes = await Note.filterByLabels(
+        location.labelName!.isEmpty ? null : [location.labelName!],
+      );
+    } else if (location.color != null) {
+      _notes = await Note.filterByColor(location.color!);
+    }
+
+    _stopLoading();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+}
+
+class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  static const height = 48.0;
+
+  _StickyHeaderDelegate({required this.child});
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final isScrolled = shrinkOffset > 0;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      color: isScrolled ? colorScheme.surfaceContainer : colorScheme.surface,
+      margin: EdgeInsets.only(bottom: 8),
+      height: height,
+      child: child,
+    );
+  }
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  bool shouldRebuild(covariant _StickyHeaderDelegate oldDelegate) {
+    return oldDelegate.child != child;
+  }
 }

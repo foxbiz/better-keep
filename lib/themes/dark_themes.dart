@@ -60,6 +60,7 @@ class DarkThemes {
           return const TextStyle(color: Colors.white70);
         }),
       ),
+      appBarTheme: AppBarTheme(surfaceTintColor: Colors.transparent),
     );
   }
 

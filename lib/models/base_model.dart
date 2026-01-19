@@ -59,6 +59,7 @@ abstract class ModelSchema<T extends BaseModel<T>> {
   Future<void> upgradeTable(Database db, int oldVersion, int newVersion);
 
   Future<List<T>> get(List<dynamic> args);
+  Future<int> count(List<dynamic> args);
 }
 
 abstract class BaseModel<T extends BaseModel<T>> {

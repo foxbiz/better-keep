@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/sketch.dart';
@@ -9,8 +10,15 @@ import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
-/// View modes for displaying notes
-enum NoteViewMode { grid, list, folder }
+enum NoteViewMode {
+  grid,
+  list,
+  folderLabels,
+  folderColors;
+
+  bool get isFolderMode =>
+      [NoteViewMode.folderLabels, NoteViewMode.folderColors].contains(this);
+}
 
 final _defaultState = {
   "db": null,
@@ -40,7 +48,7 @@ final _defaultState = {
   "sketch_pen_color": Colors.black,
   "forget_locked_note_password": false,
   "notes_view_mode": NoteViewMode.grid,
-  "folder_group_by": "labels",
+  "current_folder": null,
   "toolbar_grid_modes": <String, bool>{},
 };
 
@@ -189,12 +197,6 @@ class AppState {
       );
     }
 
-    // Load folder group by preference
-    final folderGroupByValue = prefsInstance.getString("folder_group_by");
-    if (folderGroupByValue != null) {
-      _state["folder_group_by"] = folderGroupByValue;
-    }
-
     // Load sketch pen/eraser size and color preferences
     final penSize = prefsInstance.getDouble("sketch_pen_size");
     if (penSize != null) {
@@ -265,6 +267,8 @@ class AppState {
     _state["toolbar_grid_modes"] = toolbarModesJson.map(
       (key, value) => MapEntry(key, value as bool),
     );
+
+    _state["current_folder"] = prefsInstance.getString("current_folder");
   }
 
   static Object? get(String key) {
@@ -639,14 +643,19 @@ class AppState {
     _persistToPrefs((p) async => p.setString("notes_view_mode", value.name));
   }
 
-  /// Folder grouping mode ('labels' or 'colors')
-  static String get folderGroupBy {
-    return _state["folder_group_by"] as String? ?? "labels";
+  static FolderLocation? get currentFolder {
+    try {
+      final locStr = _state["current_folder"] as String? ?? "";
+      return locStr.isEmpty ? null : FolderLocation.fromString(locStr);
+    } catch (e) {
+      return null;
+    }
   }
 
-  static set folderGroupBy(String value) {
-    set("folder_group_by", value);
-    _persistToPrefs((p) async => p.setString("folder_group_by", value));
+  static set currentFolder(FolderLocation? value) {
+    final locStr = value?.toStorageString() ?? "";
+    set("current_folder", locStr);
+    _persistToPrefs((p) async => p.setString("current_folder", locStr));
   }
 
   static bool getToolbarGridMode(String key) {

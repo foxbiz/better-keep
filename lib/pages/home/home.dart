@@ -233,13 +233,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     );
   }
 
-  /// Ensures sync is triggered when Home is first shown with E2EE ready.
-  /// This is a fallback for when the status change listener doesn't trigger sync
-  /// (e.g., after device approval).
   void _ensureSyncOnInit() {
-    // Only trigger if E2EE is ready and we're not already syncing
     if (E2EEService.instance.isReady && !NoteSyncService().isSyncing.value) {
-      // Use post-frame callback to avoid blocking widget build
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && E2EEService.instance.isReady) {
           NoteSyncService().refresh();
@@ -331,17 +326,16 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final isInsideFolder = _notesKey.currentState?.isInsideFolder ?? false;
     return PopScope(
-      canPop: !_searchMode && !_selectionMode && !isInsideFolder,
+      canPop: !_searchMode && !_selectionMode && AppState.currentFolder == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           return;
         }
 
         // First try to handle folder back navigation
-        if (_notesKey.currentState?.handleBack() ?? false) {
-          setState(() {}); // Refresh to update canPop
+        if (AppState.currentFolder != null) {
+          AppState.currentFolder = null;
           return;
         }
 
@@ -418,7 +412,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                           key: _notesKey,
                           searchMode: _searchMode,
                           searchQuery: _searchController.text,
-                          onInsideFolderChanged: () => setState(() {}),
                         ),
                       ),
                     ],
@@ -599,7 +592,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
     bool showRefresh = false;
     if (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      // if is touch device, don't show refresh button
       showRefresh =
           !MediaQuery.of(context).size.shortestSide.isFinite ||
           MediaQuery.of(context).size.shortestSide > 600;
@@ -609,9 +601,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       return [
         if (showRefresh)
           IconButton(
-            onPressed: () {
-              NoteSyncService().refresh();
-            },
+            onPressed: _notesKey.currentState?.refresh,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
@@ -642,9 +632,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     return [
       if (showRefresh)
         IconButton(
-          onPressed: () {
-            NoteSyncService().refresh();
-          },
+          onPressed: _notesKey.currentState?.refresh,
           icon: const Icon(Icons.refresh),
           tooltip: 'Refresh',
         ),

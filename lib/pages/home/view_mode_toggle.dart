@@ -1,7 +1,6 @@
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 
-/// A widget that shows the current view mode icon and allows changing it
 class ViewModeToggle extends StatefulWidget {
   const ViewModeToggle({super.key});
 
@@ -39,8 +38,10 @@ class _ViewModeToggleState extends State<ViewModeToggle> {
         return Icons.grid_view;
       case NoteViewMode.list:
         return Icons.list;
-      case NoteViewMode.folder:
-        return Icons.folder;
+      case NoteViewMode.folderLabels:
+        return Icons.label;
+      case NoteViewMode.folderColors:
+        return Icons.color_lens;
     }
   }
 
@@ -48,7 +49,7 @@ class _ViewModeToggleState extends State<ViewModeToggle> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select View Mode'),
+        title: const Text('Select View'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -56,7 +57,17 @@ class _ViewModeToggleState extends State<ViewModeToggle> {
             const Divider(),
             _buildViewModeOption(NoteViewMode.list, Icons.list, 'List'),
             const Divider(),
-            _buildViewModeOption(NoteViewMode.folder, Icons.folder, 'Folder'),
+            _buildViewModeOption(
+              NoteViewMode.folderLabels,
+              Icons.label,
+              'Labels',
+            ),
+            const Divider(),
+            _buildViewModeOption(
+              NoteViewMode.folderColors,
+              Icons.color_lens,
+              'Colors',
+            ),
           ],
         ),
       ),

@@ -136,11 +136,11 @@ class SubscriptionStatus {
       inGracePeriod: data['inGracePeriod'] as bool? ?? false,
       gracePeriodEndsAt: _parseDateTime(data['gracePeriodEndsAt']),
       willAutoRenew:
-          data['willAutoRenew'] ?? data['autoRenew'] as bool? ?? false,
-      purchasePlatform: data['purchasePlatform'] ?? data['source'] as String?,
+          (data['willAutoRenew'] ?? data['autoRenew']) as bool? ?? false,
+      purchasePlatform: (data['purchasePlatform'] ?? data['source']) as String?,
       storeSubscriptionId:
-          data['storeSubscriptionId'] ??
-          data['razorpaySubscriptionId'] as String?,
+          (data['storeSubscriptionId'] ?? data['razorpaySubscriptionId'])
+              as String?,
       lastVerifiedAt: _parseDateTime(
         data['lastVerifiedAt'] ?? data['updatedAt'],
       ),
