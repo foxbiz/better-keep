@@ -6,10 +6,11 @@
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
+      "args": [
+        "--web-port=63630"
+      ],
       "toolArgs": [
-        "--dart-define-from-file=.env",
-        "--web-port",
-        "63630"
+        "--dart-define-from-file=.env"
       ]
     },
     {
@@ -17,9 +18,10 @@
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
+      "args": [
+        "--web-port=63630"
+      ],
       "toolArgs": [
-        "--web-port",
-        "63630",
         "--dart-define-from-file=.env"
       ]
     },
@@ -28,10 +30,12 @@
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
-      "toolArgs": [
+      "args": [
+        "-d",
         "web-server",
-        "--web-port",
-        "63630",
+        "--web-port=63630"
+      ],
+      "toolArgs": [
         "--dart-define-from-file=.env"
       ]
     },
@@ -51,8 +55,7 @@
       "args": [
         "-d",
         "web-server",
-        "--web-port",
-        "63630"
+        "--web-port=63630"
       ],
       "toolArgs": [
         "--dart-define-from-file=.env"
