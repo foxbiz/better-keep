@@ -261,7 +261,9 @@ class NotesState extends State<Notes> {
 
   Future<List<Note>> _fetchNotes() async {
     final location = AppState.currentFolder;
-    if (widget.searchMode || location == null) {
+    if (widget.searchMode ||
+        location == null ||
+        AppState.showNotes != NoteType.all) {
       return await Note.get(
         AppState.showNotes,
         AppState.filterLabels,
