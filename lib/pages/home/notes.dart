@@ -38,6 +38,7 @@ class NotesState extends State<Notes> {
   double _pendingOffset = 0.0;
   bool _showLoader = false;
   Timer? _updateShowLoaderTimeout;
+  Timer? _folderUpdateDebounce;
 
   @override
   void initState() {
@@ -65,6 +66,7 @@ class NotesState extends State<Notes> {
 
   @override
   void dispose() {
+    _folderUpdateDebounce?.cancel();
     _updateShowLoaderTimeout?.cancel();
     _scrollController.dispose();
     Label.off("changed", _fetchData);
@@ -310,6 +312,20 @@ class NotesState extends State<Notes> {
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       _fetchData();
       return;
+    }
+
+    if (AppState.notesViewMode.isFolderMode) {
+      _folderUpdateDebounce?.cancel();
+      _folderUpdateDebounce = Timer(
+        const Duration(milliseconds: 300),
+        () async {
+          _colors = await Note.getAllColors();
+          _labels = await Label.get(countNotes: true);
+          if (mounted) {
+            setState(() {});
+          }
+        },
+      );
     }
 
     if (AppState.selectedNotes.isNotEmpty) {

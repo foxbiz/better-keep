@@ -881,8 +881,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         });
       },
       onDefaultAction: () {
-        // Default action: open new note
-        showPage(context, NoteEditor());
+        showPage(context, NoteEditor(note: _createNewNote(content: '[]')));
       },
       items: [
         BubbleMenuItem(
