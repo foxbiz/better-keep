@@ -95,10 +95,10 @@ class _BubbleMenuState extends State<BubbleMenu>
   bool _isWaitingToOpen = false;
   bool _isTouching = false;
 
-  // Threshold for considering a "move" vs a tap
   static const double _moveThreshold = 10.0;
-  // Delay before showing menu to distinguish tap from hold
   static const Duration _menuOpenDelay = Duration(milliseconds: 150);
+  static const double _startAngle = math.pi * 0.52;
+  static const double _endAngle = math.pi * 1.08;
 
   @override
   void initState() {
@@ -107,7 +107,6 @@ class _BubbleMenuState extends State<BubbleMenu>
       duration: widget.animationDuration,
       vsync: this,
     );
-
     _expandAnimation = CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeOutBack,
@@ -119,6 +118,18 @@ class _BubbleMenuState extends State<BubbleMenu>
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  double _getAngleStep() {
+    final itemCount = widget.items.length;
+    return itemCount > 1 ? (_endAngle - _startAngle) / (itemCount - 1) : 0.0;
+  }
+
+  double _getBaseAngle(int index) {
+    final itemCount = widget.items.length;
+    return itemCount > 1
+        ? _startAngle + (_getAngleStep() * index)
+        : math.pi * 0.75;
   }
 
   void _openMenu() {
@@ -135,15 +146,12 @@ class _BubbleMenuState extends State<BubbleMenu>
 
   void _closeMenu({int? selectedIndex}) {
     if (!_isMenuOpen) return;
-
     final wasHovering = selectedIndex != null;
-
     setState(() {
       _isMenuOpen = false;
       _hoveredItemIndex = null;
     });
     widget.onMenuStateChanged?.call(false);
-
     _animationController.reverse().then((_) {
       if (wasHovering &&
           selectedIndex >= 0 &&
@@ -158,32 +166,20 @@ class _BubbleMenuState extends State<BubbleMenu>
     _startPosition = details.localPosition;
     _hasMoved = false;
     _isWaitingToOpen = true;
-    setState(() {
-      _isTouching = true;
-    });
-
-    // Delay opening menu to distinguish quick tap from hold
+    setState(() => _isTouching = true);
     Future.delayed(_menuOpenDelay, () {
-      if (_isWaitingToOpen && mounted) {
-        _openMenu();
-      }
+      if (_isWaitingToOpen && mounted) _openMenu();
     });
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
     if (!_isMenuOpen) return;
-
     final currentPosition = details.localPosition;
-    final distance = (currentPosition - _startPosition).distance;
-
-    if (distance > _moveThreshold) {
+    if ((currentPosition - _startPosition).distance > _moveThreshold) {
       _hasMoved = true;
     }
-
-    // Update current position for ghost FAB
     _currentPosition = currentPosition;
 
-    // Translate from FAB-local coordinates to Stack coordinates for hover detection
     final totalWidth = widget.itemDistance + widget.itemSize + widget.fabSize;
     final totalHeight =
         widget.itemDistance + widget.itemSize + widget.fabSize + 24;
@@ -194,100 +190,54 @@ class _BubbleMenuState extends State<BubbleMenu>
       fabTop + currentPosition.dy,
     );
 
-    // Calculate which item (if any) the finger is hovering over
     final hoveredIndex = _getHoveredItemIndex(stackPosition);
-    final previousHoveredIndex = _hoveredItemIndex;
-
-    // Always update state to ensure UI stays in sync
-    setState(() {
-      _hoveredItemIndex = hoveredIndex;
-    });
-    if (hoveredIndex != null && hoveredIndex != previousHoveredIndex) {
-      HapticFeedback.selectionClick();
+    if (hoveredIndex != _hoveredItemIndex) {
+      setState(() => _hoveredItemIndex = hoveredIndex);
+      if (hoveredIndex != null) HapticFeedback.selectionClick();
+    } else {
+      setState(() {});
     }
   }
 
   void _handlePanEnd(DragEndDetails details) {
-    setState(() {
-      _isTouching = false;
-    });
-
-    // If menu hasn't opened yet (quick tap), trigger default action
+    setState(() => _isTouching = false);
     if (_isWaitingToOpen && !_isMenuOpen) {
       _isWaitingToOpen = false;
       HapticFeedback.lightImpact();
       widget.onDefaultAction?.call();
       return;
     }
-
     _isWaitingToOpen = false;
     if (!_isMenuOpen) return;
-
     if (_hoveredItemIndex != null) {
-      // User slid to an item and released
       _closeMenu(selectedIndex: _hoveredItemIndex);
     } else {
-      // User didn't select any item - just close without action
       _closeMenu();
     }
   }
 
   void _handlePanCancel() {
     _isWaitingToOpen = false;
-    setState(() {
-      _isTouching = false;
-    });
+    setState(() => _isTouching = false);
     _closeMenu();
   }
 
   int? _getHoveredItemIndex(Offset localPosition) {
-    final items = widget.items;
-    final itemCount = items.length;
-
-    // Check each menu item position
-    for (int i = 0; i < itemCount; i++) {
-      final itemCenter = _getItemCenter(i, itemCount);
-      final distance = (localPosition - itemCenter).distance;
-
-      // If finger is within the item's radius (with some padding)
-      if (distance <= widget.itemSize / 2 + 12) {
-        return i;
-      }
-    }
-
-    return null;
-  }
-
-  Offset _getItemCenter(int index, int itemCount) {
-    // Calculate angle for this item - arc going left from the FAB (right-aligned)
-    const startAngle = math.pi * 0.52; // ~94 degrees (just past vertical)
-    const endAngle = math.pi * 1.08; // ~194 degrees (just past horizontal left)
-    final angleStep = itemCount > 1
-        ? (endAngle - startAngle) / (itemCount - 1)
-        : 0.0;
-    final angle = itemCount > 1
-        ? startAngle + (angleStep * index)
-        : math.pi * 0.75;
-
+    final itemCount = widget.items.length;
     final totalWidth = widget.itemDistance + widget.itemSize + widget.fabSize;
     final totalHeight =
         widget.itemDistance + widget.itemSize + widget.fabSize + 24;
-
-    // Match the rendering calculation in _buildMenuItems
-    // FAB is on the right side
     final fabCenterX = totalWidth - widget.fabSize / 2;
-    final x = fabCenterX + math.cos(angle) * widget.itemDistance;
 
-    // Y calculation: items are positioned from bottom, convert to top-based coordinate
-    // In rendering: bottom = widget.fabSize / 2 - y - widget.itemSize / 2 + 24
-    // where y = widget.fabSize / 2 - math.sin(angle) * distance - widget.itemSize / 2
-    // Simplifying: bottom = math.sin(angle) * distance + 24
-    // Converting to top coordinate: top = totalHeight - bottom - itemSize
-    // Item center Y = totalHeight - (math.sin(angle) * distance + 24) - widget.itemSize / 2
-    final bottomFromOrigin = math.sin(angle) * widget.itemDistance + 24;
-    final y = totalHeight - bottomFromOrigin - widget.itemSize / 2;
-
-    return Offset(x, y);
+    for (int i = 0; i < itemCount; i++) {
+      final angle = _getBaseAngle(i);
+      final x = fabCenterX + math.cos(angle) * widget.itemDistance;
+      final bottomFromOrigin = math.sin(angle) * widget.itemDistance + 24;
+      final y = totalHeight - bottomFromOrigin - widget.itemSize / 2;
+      final distance = (localPosition - Offset(x, y)).distance;
+      if (distance <= widget.itemSize / 2 + 16) return i;
+    }
+    return null;
   }
 
   @override
@@ -295,8 +245,6 @@ class _BubbleMenuState extends State<BubbleMenu>
     final colorScheme = Theme.of(context).colorScheme;
     final fabColor = widget.fabColor ?? colorScheme.primaryContainer;
     final fabIconColor = widget.fabIconColor ?? colorScheme.onPrimaryContainer;
-
-    // Adjusted for right-aligned FAB with items going to the left
     final totalWidth = widget.itemDistance + widget.itemSize + widget.fabSize;
     final totalHeight =
         widget.itemDistance + widget.itemSize + widget.fabSize + 24;
@@ -307,69 +255,24 @@ class _BubbleMenuState extends State<BubbleMenu>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Menu items layer (only visible when menu is open)
           AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Menu items arranged in an arc above the FAB
                   ..._buildMenuItems(context),
-
-                  // Ghost FAB that follows finger when sliding
                   if (_isMenuOpen && _hasMoved)
-                    Builder(
-                      builder: (context) {
-                        // Translate from FAB-local coordinates to Stack coordinates
-                        final fabLeft = totalWidth - widget.fabSize;
-                        final fabTop = totalHeight - widget.fabSize;
-                        final ghostX =
-                            fabLeft +
-                            _currentPosition.dx -
-                            widget.fabSize * 0.4;
-                        final ghostY =
-                            fabTop + _currentPosition.dy - widget.fabSize * 0.4;
-
-                        return Positioned(
-                          left: ghostX,
-                          top: ghostY,
-                          child: IgnorePointer(
-                            child: Opacity(
-                              opacity: 0.4,
-                              child: Container(
-                                width: widget.fabSize * 0.8,
-                                height: widget.fabSize * 0.8,
-                                decoration: BoxDecoration(
-                                  color: fabColor,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  widget.fabIcon,
-                                  color: fabIconColor.withValues(alpha: 0.7),
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                    _buildGhostFab(
+                      fabColor,
+                      fabIconColor,
+                      totalWidth,
+                      totalHeight,
                     ),
                 ],
               );
             },
           ),
-
-          // FAB with gesture detection - only the FAB area responds to gestures
           Positioned(
             bottom: 0,
             right: 0,
@@ -387,11 +290,48 @@ class _BubbleMenuState extends State<BubbleMenu>
     );
   }
 
+  Widget _buildGhostFab(
+    Color fabColor,
+    Color fabIconColor,
+    double totalWidth,
+    double totalHeight,
+  ) {
+    final fabLeft = totalWidth - widget.fabSize;
+    final fabTop = totalHeight - widget.fabSize;
+    return Positioned(
+      left: fabLeft + _currentPosition.dx - widget.fabSize * 0.4,
+      top: fabTop + _currentPosition.dy - widget.fabSize * 0.4,
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: 0.4,
+          child: Container(
+            width: widget.fabSize * 0.8,
+            height: widget.fabSize * 0.8,
+            decoration: BoxDecoration(
+              color: fabColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(
+              widget.fabIcon,
+              color: fabIconColor.withValues(alpha: 0.7),
+              size: 20,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFab(Color fabColor, Color fabIconColor) {
     final scale = _isMenuOpen ? 1.0 + (_expandAnimation.value * 0.1) : 1.0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Animate from squircle (16) to circle (fabSize / 2) on touch
     final borderRadius = _isTouching || _isMenuOpen ? widget.fabSize / 2 : 16.0;
 
     return Transform.scale(
@@ -425,7 +365,7 @@ class _BubbleMenuState extends State<BubbleMenu>
             ),
           ),
           child: AnimatedRotation(
-            turns: _isMenuOpen ? 0.125 : 0, // 45 degrees
+            turns: _isMenuOpen ? 0.125 : 0,
             duration: widget.animationDuration,
             curve: Curves.easeOutCubic,
             child: Icon(widget.fabIcon, color: fabIconColor, size: 28),
@@ -439,26 +379,13 @@ class _BubbleMenuState extends State<BubbleMenu>
     final colorScheme = Theme.of(context).colorScheme;
     final items = widget.items;
     final itemCount = items.length;
-
-    // Arc going to the left for right-aligned FAB - balanced to avoid overflow
-    const startAngle = math.pi * 0.52; // ~94 degrees (just past vertical)
-    const endAngle = math.pi * 1.08; // ~194 degrees (just past horizontal left)
-    final angleStep = itemCount > 1
-        ? (endAngle - startAngle) / (itemCount - 1)
-        : 0.0;
-
     final totalWidth = widget.itemDistance + widget.itemSize + widget.fabSize;
+    final fabCenterX = totalWidth - widget.fabSize / 2;
 
     return List.generate(itemCount, (index) {
       final item = items[index];
       final isHovered = _hoveredItemIndex == index;
 
-      // Calculate angle and position
-      final angle = itemCount > 1
-          ? startAngle + (angleStep * index)
-          : math.pi * 0.75;
-
-      // Stagger animation for each item
       final itemDelay = index / itemCount;
       final itemProgress = Interval(
         itemDelay * 0.3,
@@ -466,103 +393,130 @@ class _BubbleMenuState extends State<BubbleMenu>
         curve: Curves.easeOutBack,
       ).transform(_animationController.value);
 
-      // Calculate position based on animation
+      final baseAngle = _getBaseAngle(index);
       final distance = widget.itemDistance * itemProgress;
-      // FAB is on the right side
-      final fabCenterX = totalWidth - widget.fabSize / 2;
-      final x = fabCenterX + math.cos(angle) * distance - widget.itemSize / 2;
-      final y =
-          widget.fabSize / 2 - math.sin(angle) * distance - widget.itemSize / 2;
+      final baseX =
+          fabCenterX + math.cos(baseAngle) * distance - widget.itemSize / 2;
+      final baseY =
+          widget.fabSize / 2 -
+          math.sin(baseAngle) * distance -
+          widget.itemSize / 2;
 
-      final itemOpacity = itemProgress.clamp(0.0, 1.0);
-      final itemScale = itemProgress * (isHovered ? 1.2 : 1.0);
-
-      // Colors
       final bgColor = item.backgroundColor ?? colorScheme.secondaryContainer;
       final iconColor = item.iconColor ?? colorScheme.onSecondaryContainer;
       final hoveredBgColor = colorScheme.primary;
       final hoveredIconColor = colorScheme.onPrimary;
 
+      double targetOffsetX = 0;
+      double targetOffsetY = 0;
+
+      if (_hoveredItemIndex != null && itemProgress > 0 && !isHovered) {
+        final diff = index - _hoveredItemIndex!;
+        if (diff.abs() == 1) {
+          final pushDistance = widget.itemSize * 0.08;
+          targetOffsetX = math.cos(baseAngle) * pushDistance * diff.sign;
+          targetOffsetY = -math.sin(baseAngle) * pushDistance * diff.sign;
+        }
+      }
+
       return Positioned(
-        bottom: widget.fabSize / 2 - y - widget.itemSize / 2 + 24,
-        left: x,
-        child: Opacity(
-          opacity: itemOpacity,
-          child: Transform.scale(
-            scale: itemScale,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Label - only show when hovered
-                AnimatedOpacity(
-                  opacity: isHovered ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: AnimatedSlide(
-                    offset: isHovered ? Offset.zero : const Offset(0, 0.5),
-                    duration: const Duration(milliseconds: 150),
-                    curve: Curves.easeOutCubic,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+        bottom: widget.fabSize / 2 - baseY - widget.itemSize / 2 + 24,
+        left: baseX,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: isHovered ? 1.0 : 0.0),
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          builder: (context, hoverValue, child) {
+            return TweenAnimationBuilder<Offset>(
+              tween: Tween(
+                begin: Offset.zero,
+                end: Offset(targetOffsetX, targetOffsetY),
+              ),
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              builder: (context, offset, child) {
+                final currentScale = itemProgress * (1.0 + hoverValue * 0.1);
+                return Transform.translate(
+                  offset: offset,
+                  child: Transform.scale(
+                    scale: currentScale,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedOpacity(
+                          opacity: isHovered ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 150),
+                          child: AnimatedSlide(
+                            offset: isHovered
+                                ? Offset.zero
+                                : const Offset(0, 0.5),
+                            duration: const Duration(milliseconds: 150),
+                            curve: Curves.easeOutCubic,
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.15),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                item.label,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: colorScheme.onPrimary,
+                                ),
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                      child: Text(
-                        item.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onPrimary,
                         ),
-                      ),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          curve: Curves.easeOutCubic,
+                          width: widget.itemSize,
+                          height: widget.itemSize,
+                          decoration: BoxDecoration(
+                            color: isHovered ? hoveredBgColor : bgColor,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: isHovered ? 0.25 : 0.15,
+                                ),
+                                blurRadius: isHovered ? 12 : 8,
+                                offset: const Offset(0, 3),
+                              ),
+                              if (isHovered)
+                                BoxShadow(
+                                  color: hoveredBgColor.withValues(alpha: 0.4),
+                                  blurRadius: 16,
+                                  spreadRadius: 2,
+                                ),
+                            ],
+                          ),
+                          child: Icon(
+                            item.icon,
+                            size: widget.itemSize * 0.5,
+                            color: isHovered ? hoveredIconColor : iconColor,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                // Bubble
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  curve: Curves.easeOutCubic,
-                  width: widget.itemSize,
-                  height: widget.itemSize,
-                  decoration: BoxDecoration(
-                    color: isHovered ? hoveredBgColor : bgColor,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: isHovered ? 0.25 : 0.15,
-                        ),
-                        blurRadius: isHovered ? 12 : 8,
-                        offset: const Offset(0, 3),
-                      ),
-                      if (isHovered)
-                        BoxShadow(
-                          color: hoveredBgColor.withValues(alpha: 0.4),
-                          blurRadius: 16,
-                          spreadRadius: 2,
-                        ),
-                    ],
-                  ),
-                  child: Icon(
-                    item.icon,
-                    size: widget.itemSize * 0.5,
-                    color: isHovered ? hoveredIconColor : iconColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
+                );
+              },
+            );
+          },
         ),
       );
     });

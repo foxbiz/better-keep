@@ -93,14 +93,34 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
   }
 
   Future<void> _initRecorder() async {
-    final status = await Permission.microphone.request();
-    if (!mounted) return;
-    setState(() {
-      _permissionDenied = status != PermissionStatus.granted;
-    });
+    // permission_handler doesn't support macOS/Linux, use record package's API instead
+    final isDesktop =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
+    if (isDesktop) {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!mounted) return;
+      setState(() {
+        _permissionDenied = !hasPermission;
+      });
+    } else {
+      final status = await Permission.microphone.request();
+      if (!mounted) return;
+      setState(() {
+        _permissionDenied = status != PermissionStatus.granted;
+      });
+    }
   }
 
   Future<void> _initSpeechToText() async {
+    // Skip speech-to-text on macOS/Linux - plugin crashes due to TCC permission issues
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux)) {
+      _speechAvailable = false;
+      return;
+    }
     try {
       _speechAvailable = await _speechToText.initialize(
         onError: _onSpeechError,
