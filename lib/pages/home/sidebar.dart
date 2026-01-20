@@ -5,7 +5,7 @@ import 'package:better_keep/components/logo.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/labels.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/pages/settings.dart';
+import 'package:better_keep/pages/settings/settings.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/state.dart';

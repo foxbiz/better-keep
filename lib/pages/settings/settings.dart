@@ -1,7 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:better_keep/pages/about_page.dart';
 import 'package:better_keep/pages/help_page.dart';
-import 'package:better_keep/pages/nerd_stats_page.dart';
+import 'package:better_keep/pages/settings/nerd_stats_page.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/themes/theme_registry.dart';
