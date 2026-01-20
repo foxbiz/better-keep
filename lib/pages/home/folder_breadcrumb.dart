@@ -121,7 +121,7 @@ class FolderBreadcrumb extends StatelessWidget {
 
   Widget _buildCurrentFolder(ThemeData theme) {
     if (location == null) {
-      return SizedBox.shrink();
+      return const SizedBox.shrink();
     }
 
     if (location!.isPinned) {

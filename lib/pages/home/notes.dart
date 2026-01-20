@@ -249,11 +249,7 @@ class NotesState extends State<Notes> {
 
   Future<void> _fetchData([dynamic _]) async {
     _startLoading();
-    _notes = await Note.get(
-      AppState.showNotes,
-      AppState.filterLabels,
-      widget.searchQuery,
-    );
+    _notes = await _fetchNotes();
     _colors = await Note.getAllColors();
     _labels = await Label.get(countNotes: true);
     _notesCountWithoutLabels = await Note.countByLabels(null);
@@ -261,6 +257,32 @@ class NotesState extends State<Notes> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<List<Note>> _fetchNotes() async {
+    final location = AppState.currentFolder;
+    if (widget.searchMode || location == null) {
+      return await Note.get(
+        AppState.showNotes,
+        AppState.filterLabels,
+        widget.searchQuery,
+      );
+    }
+
+    final Iterable<Note> notes;
+    if (location.isPinned) {
+      notes = await Note.get(NoteType.pinned);
+    } else if (location.labelName != null) {
+      notes = await Note.filterByLabels(
+        location.labelName!.isEmpty ? null : [location.labelName!],
+      );
+    } else if (location.color != null) {
+      notes = await Note.filterByColor(location.color!);
+    } else {
+      notes = [];
+    }
+
+    return notes.toList();
   }
 
   void _startLoading() {
@@ -605,17 +627,7 @@ class NotesState extends State<Notes> {
     _notes = null;
     _scrollController.jumpTo(0.0);
     _startLoading();
-
-    if (location.isPinned) {
-      _notes = await Note.get(NoteType.pinned);
-    } else if (location.labelName != null) {
-      _notes = await Note.filterByLabels(
-        location.labelName!.isEmpty ? null : [location.labelName!],
-      );
-    } else if (location.color != null) {
-      _notes = await Note.filterByColor(location.color!);
-    }
-
+    _notes = await _fetchNotes();
     _stopLoading();
     if (mounted) {
       setState(() {});
