@@ -135,14 +135,10 @@ class FolderTile extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Unlabeled',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: foregroundColor.withValues(alpha: 0.9),
-                fontWeight: FontWeight.w600,
-                fontSize: 10,
-              ),
-              textAlign: TextAlign.center,
+            Icon(
+              Icons.label_off,
+              size: 22,
+              color: foregroundColor.withValues(alpha: 0.9),
             ),
             Text(
               '$noteCount',

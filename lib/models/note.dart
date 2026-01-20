@@ -35,7 +35,13 @@ import 'package:uuid/uuid.dart';
 typedef NoteEvent = ModelEvent<Note>;
 typedef NoteListener = ModelListener<Note>;
 
-/// Exception thrown when a note cannot be unlocked
+class NoteColor {
+  final Color value;
+  final int count;
+
+  NoteColor(this.value, this.count);
+}
+
 class NoteUnlockException implements Exception {
   final String message;
   const NoteUnlockException(this.message);
@@ -162,6 +168,57 @@ class Note extends BaseModel<Note> {
     String? searchQuery,
   ]) {
     return _schema.get([type, filterLabels, searchQuery]);
+  }
+
+  static Future<int> count(
+    NoteType type, [
+    List<String>? filterLabels,
+    String? searchQuery,
+  ]) {
+    return _schema.count([type, filterLabels, searchQuery]);
+  }
+
+  static Future<List<Note>> filterByColor(Color color) {
+    return _schema.get([NoteType.all, null, null, color.toARGB32().toString()]);
+  }
+
+  static Future<int> countByColor(Color color) {
+    return _schema.count([
+      NoteType.all,
+      null,
+      null,
+      color.toARGB32().toString(),
+    ]);
+  }
+
+  static Future<List<Note>> filterByLabels(List<String>? filterLabels) {
+    if (filterLabels == null) {
+      return _schema.get([NoteType.all, null, null, null, true]);
+    }
+
+    return _schema.get([NoteType.all, filterLabels]);
+  }
+
+  static Future<int> countByLabels(List<String>? filterLabels) {
+    if (filterLabels == null) {
+      return _schema.count([NoteType.all, null, null, null, true]);
+    }
+
+    return _schema.count([NoteType.all, filterLabels]);
+  }
+
+  static Future<List<NoteColor>> getAllColors() async {
+    final rows = await AppState.db.rawQuery('''
+        SELECT DISTINCT color, COUNT(*) as count
+        FROM note
+        GROUP BY color
+        ORDER BY color ASC;
+      ''');
+    return rows.map((row) {
+      final colorValue = int.tryParse(row['color'] as String? ?? '') ?? 0;
+      final count = row['count'] as int? ?? 0;
+      return NoteColor(Color(colorValue), count);
+    }).toList();
   }
 
   String get body {
@@ -327,19 +384,14 @@ class Note extends BaseModel<Note> {
       }
     }
 
-    // Parse attachments - handle both encrypted and unencrypted formats
-    // If encrypted, store raw string for async decryption later
     List<NoteAttachment> parsedAttachments = [];
     String? rawAttachmentsStr;
     if (obj['attachments'] != null) {
       final attachmentsData = obj['attachments'];
       if (attachmentsData is String) {
-        // Check if it's encrypted (starts with ENC: marker)
         if (LocalDataEncryption.isEncrypted(attachmentsData)) {
-          // Store raw string for async decryption in decryptFields()
           rawAttachmentsStr = attachmentsData;
         } else {
-          // Try to parse as JSON
           try {
             parsedAttachments = (json.decode(attachmentsData) as List)
                 .map((e) => NoteAttachment.fromJson(e))
@@ -349,7 +401,6 @@ class Note extends BaseModel<Note> {
           }
         }
       } else if (attachmentsData is List) {
-        // Already a list (from sync)
         parsedAttachments = attachmentsData
             .map((e) => NoteAttachment.fromJson(e as Map<String, dynamic>))
             .toList();
@@ -467,17 +518,12 @@ class Note extends BaseModel<Note> {
     return this;
   }
 
-  /// Creates a Note from JSON with decryption of locally encrypted fields.
-  /// Use this when loading notes from the local database.
   static Future<Note> fromJsonAsync(Map<String, dynamic> obj) async {
     final note = Note.fromJson(obj);
     await note.decryptFields();
     return note;
   }
 
-  /// Decrypts locally encrypted fields (content and attachments).
-  /// Title and plainText are not encrypted to preserve search functionality.
-  /// Called automatically when loading notes from the database.
   Future<void> decryptFields() async {
     final localEncryption = LocalDataEncryption.instance;
 
@@ -486,8 +532,6 @@ class Note extends BaseModel<Note> {
       content = await localEncryption.decryptString(content!);
     }
 
-    // Decrypt attachments if they were encrypted as whole blob (legacy format)
-    // This handles backward compatibility - old attachments were not encrypted
     if (_rawEncryptedAttachments != null) {
       try {
         final decryptedStr = await localEncryption.decryptString(
@@ -497,13 +541,12 @@ class Note extends BaseModel<Note> {
         attachments = attachmentList
             .map((a) => NoteAttachment.fromJson(a as Map<String, dynamic>))
             .toList();
-        _rawEncryptedAttachments = null; // Clear after successful decryption
+        _rawEncryptedAttachments = null;
       } catch (e) {
         AppLogger.error('Error decrypting attachments', e);
       }
     }
 
-    // Decrypt sketch metadata within attachments (files encryption toggle)
     for (final attachment in attachments) {
       if (attachment.type == AttachmentType.sketch &&
           attachment.sketch != null &&
@@ -515,7 +558,6 @@ class Note extends BaseModel<Note> {
           final metadata =
               json.decode(decryptedMetadata) as Map<String, dynamic>;
 
-          // Restore strokes, bgColor, pagePattern from decrypted metadata
           attachment.sketch!.strokes = (metadata['strokes'] as List)
               .map((e) => SketchStroke.parse(e as String))
               .toList();
@@ -526,7 +568,7 @@ class Note extends BaseModel<Note> {
             (e) => e.name == metadata['pagePattern'],
             orElse: () => PagePattern.blank,
           );
-          attachment.sketch!.encryptedMetadata = null; // Clear after decryption
+          attachment.sketch!.encryptedMetadata = null;
         } catch (e) {
           AppLogger.error('Error decrypting sketch metadata', e);
         }
@@ -534,8 +576,6 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Updates the sync track for this note.
-  /// This is an awaitable version of the sync track update logic from notify().
   Future<void> _updateSyncTrack(SyncAction action) async {
     if (id == null) {
       AppLogger.log(
@@ -592,15 +632,9 @@ class Note extends BaseModel<Note> {
       _locked = true;
       _unlocked = false;
 
-      // Generate thumbnails for attachments that don't have them yet
       await _generateMissingThumbnails();
-
-      // Encrypt sketch stroke data with the password
       await _encryptSketchData(password);
-
-      // Encrypt all attachment files with the password
       await _encryptAttachments(password);
-
       await save();
     } catch (e) {
       AppLogger.log("Error locking note: $e");
@@ -638,10 +672,7 @@ class Note extends BaseModel<Note> {
       _password = password;
       content = decryptedContent;
 
-      // Decrypt attachment files
       await _decryptAttachments(password);
-
-      // Decrypt sketch stroke data
       await _decryptSketchData(password);
     } on FormatException {
       throw const NoteUnlockException('Incorrect PIN or corrupted note data');
@@ -650,9 +681,6 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Permanently removes the lock from a note.
-  /// This decrypts the content and attachments, then removes the lock flag.
-  /// Unlike [unlock], this method permanently removes the lock and saves the note.
   Future<void> removeLock(String password) async {
     if (!_locked) {
       return;
@@ -671,34 +699,20 @@ class Note extends BaseModel<Note> {
     await save();
   }
 
-  /// Encrypts all attachment files with the given password.
-  /// Files are encrypted in-place - the original file is replaced with encrypted version.
   Future<void> _encryptAttachments(String password) async {
     final fs = await fileSystem();
 
     for (final attachment in attachments) {
-      // Get all paths for this attachment (sketches may have multiple files)
       final paths = _getAttachmentPaths(attachment);
 
       for (final path in paths) {
         try {
           if (path.isEmpty) continue;
-
-          // Skip if file doesn't exist locally
           if (!await fs.exists(path)) continue;
-
-          // Read the file (potentially already encrypted with local data encryption)
           final data = await readEncryptedBytes(path);
-
-          // Skip if already password-encrypted
           if (isBytesPasswordEncrypted(data)) continue;
-
-          // Encrypt with password
           final encrypted = await encryptBytesWithPassword(data, password);
-
-          // Write back (with local data encryption if enabled)
           await writeEncryptedBytes(path, encrypted);
-
           AppLogger.log('Encrypted attachment: $path');
         } catch (e) {
           AppLogger.error('Error encrypting attachment', e);
@@ -707,34 +721,20 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Decrypts all attachment files with the given password.
-  /// Files are decrypted in-place - the encrypted file is replaced with decrypted version.
   Future<void> _decryptAttachments(String password) async {
     final fs = await fileSystem();
 
     for (final attachment in attachments) {
-      // Get all paths for this attachment (sketches may have multiple files)
       final paths = _getAttachmentPaths(attachment);
 
       for (final path in paths) {
         try {
           if (path.isEmpty) continue;
-
-          // Skip if file doesn't exist locally
           if (!await fs.exists(path)) continue;
-
-          // Read the file (handles local data encryption automatically)
           final data = await readEncryptedBytes(path);
-
-          // Skip if not password-encrypted
           if (!isBytesPasswordEncrypted(data)) continue;
-
-          // Decrypt with password
           final decrypted = await decryptBytesWithPassword(data, password);
-
-          // Write back (with local data encryption if enabled)
           await writeEncryptedBytes(path, decrypted);
-
           AppLogger.log('Decrypted attachment: $path');
         } catch (e) {
           AppLogger.error('Error decrypting attachment', e);
@@ -743,8 +743,6 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Migrates old sketches with inline strokes to the new strokes file format.
-  /// This ensures all sketches have a strokesFilePath before saving.
   Future<void> _migrateSketchesToStrokesFiles() async {
     final fs = await fileSystem();
     final documentsDir = await fs.documentDir;
@@ -776,35 +774,24 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Encrypts sketch stroke data with the given password.
-  /// The strokes are serialized to JSON, encrypted, and stored in encryptedStrokes.
-  /// This protects the actual drawing data (paths, colors, sizes) in locked notes.
   Future<void> _encryptSketchData(String password) async {
     for (final attachment in attachments) {
       if (attachment.type != AttachmentType.sketch) continue;
 
       final sketch = attachment.sketch;
       if (sketch == null) continue;
-
-      // Skip if no strokes to encrypt
       if (sketch.strokes.isEmpty && !sketch.hasEncryptedStrokes) continue;
-
-      // Skip if already encrypted
       if (sketch.hasEncryptedStrokes) continue;
 
       try {
-        // Serialize all sensitive sketch data to JSON
         final sensitiveData = {
           'strokes': sketch.strokes.map((s) => s.toString()).toList(),
           'bgColor': sketch.backgroundColor.toARGB32(),
           'pagePattern': sketch.pagePattern.name,
         };
         final sensitiveJson = json.encode(sensitiveData);
-
-        // Encrypt the sketch data
         final encrypted = await encrypt(sensitiveJson, password);
 
-        // Store encrypted data and clear plaintext
         sketch.encryptedStrokes = encrypted;
         sketch.strokes = [];
 
@@ -815,8 +802,6 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Decrypts sketch stroke data with the given password.
-  /// Restores the strokes list from encrypted data.
   Future<void> _decryptSketchData(String password) async {
     for (final attachment in attachments) {
       if (attachment.type != AttachmentType.sketch) continue;
@@ -829,14 +814,11 @@ class Note extends BaseModel<Note> {
         final decryptedJson = await decrypt(sketch.encryptedStrokes!, password);
         final data = json.decode(decryptedJson);
 
-        // Handle both old format (just strokes array) and new format (object with strokes, bgColor, pagePattern)
         if (data is List) {
-          // Old format: just strokes array
           sketch.strokes = data
               .map((e) => SketchStroke.parse(e as String))
               .toList();
         } else if (data is Map<String, dynamic>) {
-          // New format: object with all sensitive data
           if (data['strokes'] != null) {
             sketch.strokes = (data['strokes'] as List)
                 .map((e) => SketchStroke.parse(e as String))
@@ -852,10 +834,7 @@ class Note extends BaseModel<Note> {
             );
           }
         }
-
-        // Clear encrypted data
         sketch.encryptedStrokes = null;
-
         AppLogger.log('Decrypted sketch data');
       } catch (e) {
         AppLogger.error('Error decrypting sketch data', e);
@@ -864,8 +843,6 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Generates thumbnails for attachments that don't have them yet.
-  /// Must be called before encrypting attachments (files must be readable).
   Future<void> _generateMissingThumbnails() async {
     final fs = await fileSystem();
 
@@ -904,8 +881,6 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  /// Gets all file paths for an attachment.
-  /// Sketches may have a preview image, background image, and strokes file.
   List<String> _getAttachmentPaths(NoteAttachment attachment) {
     switch (attachment.type) {
       case AttachmentType.image:
@@ -1382,9 +1357,6 @@ class Note extends BaseModel<Note> {
       await AlarmIdService.removeAlarmId(noteId);
     }
 
-    // Update sync track BEFORE deleting from local database.
-    // This ensures the delete action is properly recorded and the remoteId
-    // is preserved from any existing sync track.
     await _updateSyncTrack(SyncAction.delete);
 
     int result = await AppState.db.delete(
@@ -1393,23 +1365,16 @@ class Note extends BaseModel<Note> {
       whereArgs: [noteId],
     );
     await _deleteLocalFiles();
-    // Emit the deleted event for UI listeners (without sync tracking since
-    // we already updated the sync track above)
     super.notify("deleted");
     return result;
   }
 
-  /// Prepares and returns JSON for saving to database.
-  /// Handles encryption of locked notes asynchronously.
   Future<Map<String, dynamic>> toJsonAsync() async {
-    // Prepare content for saving
     String? contentToSave = content;
     String? plainTextToSave = plainText;
 
-    // Encrypt content if note is locked and was unlocked for editing
     if (_locked && _unlocked) {
       if (_password == null || _password!.isEmpty) {
-        // Reset unlocked state if no password - prevents data loss
         _unlocked = false;
         AppLogger.log(
           'Warning: Locked note without password, keeping existing content',
@@ -1421,7 +1386,6 @@ class Note extends BaseModel<Note> {
           content = contentToSave; // Update instance state
         } catch (e) {
           AppLogger.log('Error encrypting note content: $e');
-          // Keep existing content rather than losing data
           _unlocked = false;
         }
       }
@@ -1500,8 +1464,6 @@ class Note extends BaseModel<Note> {
     };
   }
 
-  /// Returns JSON representation of the note for display/serialization.
-  /// NOTE: This does not encrypt locked notes. Use [toJsonAsync] for saving.
   Map<String, dynamic> toJson() {
     final plainTextValue = _locked ? '' : (document?.toPlainText() ?? '');
 
@@ -1594,11 +1556,31 @@ class _NoteSchema implements ModelSchema<Note> {
 
   @override
   Future<List<Note>> get(List<dynamic> args) async {
+    final rows = await getOrCountRows(false, args);
+    final notes = await Future.wait(rows.map(Note.fromJsonAsync));
+    return notes;
+  }
+
+  @override
+  Future<int> count(List<dynamic> args) async {
+    final rows = await getOrCountRows(true, args);
+    if (rows.isNotEmpty && rows.first.containsKey('count')) {
+      return rows.first['count'] as int;
+    }
+    return 0;
+  }
+
+  Future<List<Map<String, dynamic>>> getOrCountRows(
+    bool count,
+    List<dynamic> args,
+  ) async {
     NoteType filter = args.isNotEmpty ? args[0] as NoteType : NoteType.all;
     List<String>? filterLabels = args.length > 1
         ? args[1] as List<String>?
         : null;
     String? searchQuery = args.length > 2 ? args[2] as String? : null;
+    String? color = args.length > 3 ? args[3] as String? : null;
+    bool? withoutLabel = args.length > 4 ? args[4] as bool? : null;
 
     List<String> whereClauses = [
       switch (filter) {
@@ -1607,13 +1589,12 @@ class _NoteSchema implements ModelSchema<Note> {
         NoteType.pinned => "pinned = 1",
         NoteType.trashed => "trashed = 1",
         NoteType.reminder =>
-          // Show all reminders including completed repeating ones (Daily, Weekly, Monthly, Yearly)
           "reminder IS NOT NULL AND trashed = 0 AND (completed = 0 OR reminder LIKE '%Daily%' OR reminder LIKE '%Weekly%' OR reminder LIKE '%Monthly%' OR reminder LIKE '%Yearly%')",
         _ => "trashed = 0 AND archived = 0",
       },
     ];
 
-    List<String> searchArgs = [];
+    List<String> whereArgs = [];
     if (searchQuery != null && searchQuery.isNotEmpty) {
       // Escape special characters and use parameterized query to prevent SQL injection
       final sanitizedQuery = searchQuery
@@ -1622,71 +1603,73 @@ class _NoteSchema implements ModelSchema<Note> {
       whereClauses.add(
         "(title LIKE ? ESCAPE '\\' OR plain_text LIKE ? ESCAPE '\\')",
       );
-      searchArgs.add('%$sanitizedQuery%');
-      searchArgs.add('%$sanitizedQuery%');
+      whereArgs.add('%$sanitizedQuery%');
+      whereArgs.add('%$sanitizedQuery%');
+    }
+
+    if (color != null && color.isNotEmpty) {
+      whereClauses.add("color = ?");
+      whereArgs.add(color);
     }
 
     if (filterLabels == null || filterLabels.isEmpty) {
-      final rows = await AppState.db.query(
-        Note.model,
-        orderBy: "pinned DESC, updated_at DESC",
-        where: whereClauses.join(" AND "),
-        whereArgs: searchArgs.isNotEmpty ? searchArgs : null,
-      );
-      final notes = await Future.wait(rows.map(Note.fromJsonAsync));
-      return notes;
+      if (withoutLabel == true) {
+        whereClauses.add("(labels IS NULL OR labels = '')");
+      }
+      return await AppState.db.rawQuery('''
+          SELECT ${count ? "COUNT(id) as count" : "*"}
+          FROM note
+          WHERE ${whereClauses.join(" AND ")}
+          ORDER BY pinned DESC, updated_at DESC;
+        ''', whereArgs);
     }
 
     final placeholders = List.filled(filterLabels.length, '?').join(', ');
-    final sql =
-        '''
-WITH RECURSIVE splitter(id, part, rest) AS (
-  SELECT
-    id,
-    TRIM(SUBSTR(
-      labels,
-      1,
-      CASE INSTR(labels, ',')
-        WHEN 0 THEN LENGTH(labels)
-        ELSE INSTR(labels, ',') - 1
-      END
-    )) AS part,
-    TRIM(CASE INSTR(labels, ',')
-      WHEN 0 THEN ''
-      ELSE SUBSTR(labels, INSTR(labels, ',') + 1)
-    END) AS rest
-  FROM note
-  WHERE labels IS NOT NULL AND labels <> ''
-  UNION ALL
-  SELECT
-    id,
-    TRIM(SUBSTR(
-      rest,
-      1,
-      CASE INSTR(rest, ',')
-        WHEN 0 THEN LENGTH(rest)
-        ELSE INSTR(rest, ',') - 1
-      END
-    )) AS part,
-    TRIM(CASE INSTR(rest, ',')
-      WHEN 0 THEN ''
-      ELSE SUBSTR(rest, INSTR(rest, ',') + 1)
-    END) AS rest
-  FROM splitter
-  WHERE rest <> ''
-)
-SELECT DISTINCT n.*
-FROM note n
-JOIN splitter s ON s.id = n.id
-WHERE ${whereClauses.join(" AND ")}
-  AND s.part IN ($placeholders)
-ORDER BY n.pinned DESC, n.updated_at DESC;
-''';
-    final rows = await AppState.db.rawQuery(sql, [
-      ...searchArgs,
-      ...filterLabels,
-    ]);
-    final notes = await Future.wait(rows.map(Note.fromJsonAsync));
-    return notes;
+    return await AppState.db.rawQuery(
+      '''
+        WITH RECURSIVE splitter(id, part, rest) AS (
+          SELECT
+            id,
+            TRIM(SUBSTR(
+              labels,
+              1,
+              CASE INSTR(labels, ',')
+                WHEN 0 THEN LENGTH(labels)
+                ELSE INSTR(labels, ',') - 1
+              END
+            )) AS part,
+            TRIM(CASE INSTR(labels, ',')
+              WHEN 0 THEN ''
+              ELSE SUBSTR(labels, INSTR(labels, ',') + 1)
+            END) AS rest
+          FROM note
+          WHERE labels IS NOT NULL AND labels <> ''
+          UNION ALL
+          SELECT
+            id,
+            TRIM(SUBSTR(
+              rest,
+              1,
+              CASE INSTR(rest, ',')
+                WHEN 0 THEN LENGTH(rest)
+                ELSE INSTR(rest, ',') - 1
+              END
+            )) AS part,
+            TRIM(CASE INSTR(rest, ',')
+              WHEN 0 THEN ''
+              ELSE SUBSTR(rest, INSTR(rest, ',') + 1)
+            END) AS rest
+          FROM splitter
+          WHERE rest <> ''
+        )
+        SELECT ${count ? "COUNT(DISTINCT n.id) as count" : "DISTINCT n.*"}
+        FROM note n
+        JOIN splitter s ON s.id = n.id
+        WHERE ${whereClauses.join(" AND ")}
+          AND s.part IN ($placeholders)
+        ORDER BY n.pinned DESC, n.updated_at DESC;
+      ''',
+      [...whereArgs, ...filterLabels],
+    );
   }
 }

@@ -289,6 +289,11 @@ class _SyncTrackSchema implements ModelSchema<NoteSyncTrack> {
   Future<List<NoteSyncTrack>> get(List<dynamic> args) async {
     return [];
   }
+
+  @override
+  Future<int> count(List<dynamic> args) async {
+    return 0;
+  }
 }
 
 ModelSchema<NoteSyncTrack> _createSchema() {
