@@ -856,50 +856,65 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           onAppendTranscript: _appendTranscriptToNote,
           onAttachmentAdded: _scrollToAttachments,
         ),
-        if (!_isEditingTitle) ...[
-          TextColorButton(
-            color: textColor,
-            focusNode: _focusNode,
-            readOnly: _note.readOnly,
-            controller: _controller,
-            isEditingTitle: _isEditingTitle,
+        // Animated formatting buttons - hidden when editing title
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          alignment: Alignment.centerLeft,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 150),
+            opacity: _isEditingTitle ? 0.0 : 1.0,
+            child: _isEditingTitle
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextColorButton(
+                        color: textColor,
+                        focusNode: _focusNode,
+                        readOnly: _note.readOnly,
+                        controller: _controller,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      CheckListButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      LinkButton(
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      _styleButton(Attribute.ul),
+                      _styleButton(Attribute.ol),
+                      _styleButton(Attribute.strikeThrough),
+                      _styleButton(Attribute.bold),
+                      _styleButton(Attribute.italic),
+                      _styleButton(Attribute.underline),
+                      AlignButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      IndentButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      TextSizeButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                    ],
+                  ),
           ),
-          CheckListButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
-          LinkButton(
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
-          _styleButton(Attribute.ul),
-          _styleButton(Attribute.ol),
-          _styleButton(Attribute.strikeThrough),
-          _styleButton(Attribute.bold),
-          _styleButton(Attribute.italic),
-          _styleButton(Attribute.underline),
-          AlignButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
-          IndentButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
-          TextSizeButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
-        ],
+        ),
       ],
     );
   }
