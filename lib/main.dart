@@ -382,7 +382,7 @@ class _BetterKeepState extends State<BetterKeep> {
     try {
       final db = await initDatabase();
       LocalDataEncryption.setDatabaseGetter(() => db);
-      await Label.ensureSystemLabels();
+      await Label.fixLabels();
       setState(() {
         this.db = db;
       });

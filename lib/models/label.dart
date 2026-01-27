@@ -50,6 +50,50 @@ class Label extends BaseModel<Label> {
     return Label.fromJson(result.first);
   }
 
+  /// Add missing labels and remove duplicates.
+  static Future<void> fixLabels() async {
+    final db = AppState.db;
+    final allLabels = await db.rawQuery("SELECT labels from note");
+    final existingLabels = await Label.get();
+    final existingNames = existingLabels.map((l) => l.name).toSet();
+
+    for (final labelName in systemLabelNames) {
+      if (!existingNames.contains(labelName)) {
+        final label = Label(name: labelName, isSystem: true);
+        await label.save(sync: false);
+        existingLabels.add(label);
+      }
+    }
+
+    for (final row in allLabels) {
+      final labelsString = row['labels'] as String?;
+      if (labelsString != null && labelsString.isNotEmpty) {
+        final labels = labelsString.split(',').map((l) => l.trim());
+        for (final label in labels) {
+          if (!existingNames.contains(label)) {
+            final newLabel = Label(name: label);
+            await newLabel.save(sync: false);
+            existingLabels.add(newLabel);
+            existingNames.add(label);
+          }
+        }
+      }
+    }
+
+    final List<Label> originalLabels = [];
+
+    for (final label in existingLabels) {
+      if (label.name.isEmpty ||
+          originalLabels.any((l) => l.name == label.name && l.id != label.id)) {
+        await label.delete(sync: false);
+      } else {
+        originalLabels.add(label);
+      }
+    }
+
+    return;
+  }
+
   Label({
     super.id,
     required this.name,
@@ -146,19 +190,6 @@ class Label extends BaseModel<Label> {
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
-  }
-
-  /// Call this on app startup.
-  static Future<void> ensureSystemLabels() async {
-    final existingLabels = await Label.get();
-    final existingNames = existingLabels.map((l) => l.name).toSet();
-
-    for (final labelName in systemLabelNames) {
-      if (!existingNames.contains(labelName)) {
-        final label = Label(name: labelName, isSystem: true);
-        await label.save(sync: false);
-      }
-    }
   }
 
   /// Gets a system label by name, creating it if it doesn't exist.

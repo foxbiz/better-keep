@@ -183,20 +183,22 @@ class NotesState extends State<Notes> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           ViewModeToggle(),
-                          Labels(
-                            key: Key('labels_widget'),
-                            onSelect: (selectedLabel) async {
-                              _scrollController.jumpTo(0.0);
-                              _startLoading();
-                              _notes = await Note.get(
-                                AppState.showNotes,
-                                selectedLabel.map((e) => e.name).toList(),
-                              );
-                              _stopLoading();
-                              if (context.mounted) {
-                                setState(() {});
-                              }
-                            },
+                          Expanded(
+                            child: Labels(
+                              key: Key('labels_widget'),
+                              onSelect: (selectedLabel) async {
+                                _scrollController.jumpTo(0.0);
+                                _startLoading();
+                                _notes = await Note.get(
+                                  AppState.showNotes,
+                                  selectedLabel.map((e) => e.name).toList(),
+                                );
+                                _stopLoading();
+                                if (context.mounted) {
+                                  setState(() {});
+                                }
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -239,6 +241,7 @@ class NotesState extends State<Notes> {
   Future<void> refresh() async {
     try {
       _scrollController.jumpTo(0.0);
+      await Label.fixLabels();
       await NoteSyncService().refresh();
       await LabelSyncService().refresh();
     } catch (e) {
