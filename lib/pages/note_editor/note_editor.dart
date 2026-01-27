@@ -36,6 +36,7 @@ import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
@@ -94,6 +95,85 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     final firstLine = _controller.document.toPlainText().split('\n').first;
     final offset = firstLine.length;
     return start <= offset;
+  }
+
+  /// Strips all inline formatting (bold, italic, underline, strikethrough, color, size, link)
+  /// from the title (first line), keeping only H1.
+  void _stripTitleFormatting() {
+    final plainText = _controller.document.toPlainText();
+    final firstLineEnd = plainText.indexOf('\n');
+    final titleLength = firstLineEnd > 0 ? firstLineEnd : plainText.length - 1;
+
+    if (titleLength <= 0) return;
+
+    // Remove all inline attributes from the title
+    // We apply null values to clear these attributes
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.bold, null),
+    );
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.italic, null),
+    );
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.underline, null),
+    );
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.strikeThrough, null),
+    );
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.link, null),
+    );
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.color, null),
+    );
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.background, null),
+    );
+    _controller.formatText(
+      0,
+      titleLength,
+      Attribute.clone(Attribute.size, null),
+    );
+  }
+
+  /// Handles keyboard events to block formatting shortcuts when editing title
+  KeyEventResult? _handleKeyPressed(KeyEvent event, Node? node) {
+    // Only intercept key down events
+    if (event is! KeyDownEvent) return null;
+
+    // Check if we're editing the title
+    if (!_isEditingTitle) return null;
+
+    // Check for formatting shortcuts (Cmd/Ctrl + B, I, U)
+    final isMetaPressed =
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed;
+
+    if (isMetaPressed) {
+      final key = event.logicalKey;
+      // Block bold (Cmd+B), italic (Cmd+I), underline (Cmd+U)
+      if (key == LogicalKeyboardKey.keyB ||
+          key == LogicalKeyboardKey.keyI ||
+          key == LogicalKeyboardKey.keyU) {
+        return KeyEventResult.handled;
+      }
+    }
+
+    return null;
   }
 
   @override
@@ -575,7 +655,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                             showCursor: !_note.readOnly && !_note.trashed,
                             enableInteractiveSelection: true,
                             enableSelectionToolbar: true,
-                            placeholder: 'Start typing your note...',
+                            placeholder: 'Add a title...',
+                            onKeyPressed: _handleKeyPressed,
                             customLeadingBlockBuilder:
                                 customLeadingBlockBuilder,
                             customStyles: buildQuillStyles(
@@ -775,47 +856,64 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           onAppendTranscript: _appendTranscriptToNote,
           onAttachmentAdded: _scrollToAttachments,
         ),
-        TextColorButton(
-          color: textColor,
-          focusNode: _focusNode,
-          readOnly: _note.readOnly,
-          controller: _controller,
-          isEditingTitle: _isEditingTitle,
-        ),
-        CheckListButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-          isEditingTitle: _isEditingTitle,
-        ),
-        LinkButton(
-          controller: _controller,
-          readOnly: _note.readOnly,
-          isEditingTitle: _isEditingTitle,
-        ),
-        _styleButton(Attribute.ul),
-        _styleButton(Attribute.ol),
-        _styleButton(Attribute.strikeThrough),
-        _styleButton(Attribute.bold),
-        _styleButton(Attribute.italic),
-        _styleButton(Attribute.underline),
-        AlignButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-          isEditingTitle: _isEditingTitle,
-        ),
-        IndentButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-          isEditingTitle: _isEditingTitle,
-        ),
-        TextSizeButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-          isEditingTitle: _isEditingTitle,
+        // Animated formatting buttons - hidden when editing title
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          alignment: Alignment.centerLeft,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 150),
+            opacity: _isEditingTitle ? 0.0 : 1.0,
+            child: _isEditingTitle
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextColorButton(
+                        color: textColor,
+                        focusNode: _focusNode,
+                        readOnly: _note.readOnly,
+                        controller: _controller,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      CheckListButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      LinkButton(
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      _styleButton(Attribute.ul),
+                      _styleButton(Attribute.ol),
+                      _styleButton(Attribute.strikeThrough),
+                      _styleButton(Attribute.bold),
+                      _styleButton(Attribute.italic),
+                      _styleButton(Attribute.underline),
+                      AlignButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      IndentButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                      TextSizeButton(
+                        focusNode: _focusNode,
+                        controller: _controller,
+                        readOnly: _note.readOnly,
+                        isEditingTitle: _isEditingTitle,
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ],
     );
@@ -1203,6 +1301,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         _controller.formatText(0, 0, Attribute.clone(Attribute.h1, null));
       } else {
         _controller.formatText(0, newTitle.length, Attribute.h1);
+        // Strip any inline formatting from the title
+        _stripTitleFormatting();
       }
       _note.title = newTitle ?? '';
       setState(() {
