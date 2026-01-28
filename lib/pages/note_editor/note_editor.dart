@@ -281,18 +281,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
 
     if (_titleFocusNode.hasFocus) {
-      // Show FAB immediately when title gets focus
       setState(() {
         _showAttachmentFab = true;
-      });
-    } else {
-      // Delay hiding FAB to allow gesture completion
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted && !_titleFocusNode.hasFocus) {
-          setState(() {
-            _showAttachmentFab = false;
-          });
-        }
       });
     }
   }
@@ -306,17 +296,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       setState(() {
         _showAttachmentFab = false;
       });
-    } else {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted && !_focusNode.hasFocus) {
-          setState(() {
-            _showAttachmentFab = true;
-          });
-        }
-      });
     }
-
-    _focusNode.removeListener(_focusListener);
   }
 
   void _onNoteChanged(dynamic _) {
