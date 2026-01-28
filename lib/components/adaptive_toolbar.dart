@@ -7,6 +7,7 @@ class AdaptiveToolbar extends StatefulWidget {
   final Color parentColor;
   final List<Widget> children;
   final ScrollController? scrollController;
+  final bool hideToggle;
 
   static double get iconSize => switch (WidgetsBinding
       .instance
@@ -26,6 +27,7 @@ class AdaptiveToolbar extends StatefulWidget {
     required this.children,
     required this.parentColor,
     this.scrollController,
+    this.hideToggle = false,
   });
 
   @override
@@ -173,7 +175,7 @@ class _AdaptiveToolbarState extends State<AdaptiveToolbar> {
       children.add(SliverToBoxAdapter(child: child));
     }
 
-    if (showToggleLayout) {
+    if (showToggleLayout && !widget.hideToggle) {
       children.add(SliverToBoxAdapter(child: layoutToggleButton));
     }
 
@@ -200,7 +202,10 @@ class _AdaptiveToolbarState extends State<AdaptiveToolbar> {
           runSpacing: 0,
           alignment: WrapAlignment.start,
           verticalDirection: VerticalDirection.up,
-          children: [...widget.children, layoutToggleButton],
+          children: [
+            ...widget.children,
+            if (!widget.hideToggle) layoutToggleButton,
+          ],
         ),
       ),
     );
