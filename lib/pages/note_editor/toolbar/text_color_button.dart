@@ -7,7 +7,6 @@ class TextColorButton extends StatefulWidget {
   final FocusNode focusNode;
   final Color color;
   final bool readOnly;
-  final bool isEditingTitle;
 
   const TextColorButton({
     super.key,
@@ -15,7 +14,6 @@ class TextColorButton extends StatefulWidget {
     required this.readOnly,
     required this.focusNode,
     required this.controller,
-    this.isEditingTitle = false,
   });
 
   @override
@@ -58,7 +56,7 @@ class _TextColorButtonState extends State<TextColorButton> {
 
   @override
   Widget build(BuildContext context) {
-    final isDisabled = widget.readOnly || widget.isEditingTitle;
+    final isDisabled = widget.readOnly;
     return IconButton(
       isSelected: enabled,
       icon: Icon(Icons.text_format),

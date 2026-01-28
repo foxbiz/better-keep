@@ -18,7 +18,6 @@ enum TextSizeOption {
 
 class TextSizeButton extends StatefulWidget {
   final bool readOnly;
-  final bool isEditingTitle;
   final FocusNode focusNode;
   final Color? parentColor;
   final QuillController controller;
@@ -29,7 +28,6 @@ class TextSizeButton extends StatefulWidget {
     required this.readOnly,
     required this.focusNode,
     required this.controller,
-    required this.isEditingTitle,
   });
 
   @override
@@ -42,7 +40,7 @@ class _TextSizeButtonState extends State<TextSizeButton> {
 
   @override
   void initState() {
-    _controller.isDisabled = widget.readOnly || widget.isEditingTitle;
+    _controller.isDisabled = widget.readOnly;
     widget.controller.addListener(_onSelectionChanged);
     _updateCurrentSize();
     super.initState();
@@ -51,7 +49,7 @@ class _TextSizeButtonState extends State<TextSizeButton> {
   @override
   void didUpdateWidget(TextSizeButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _controller.isDisabled = widget.readOnly || widget.isEditingTitle;
+    _controller.isDisabled = widget.readOnly;
   }
 
   @override

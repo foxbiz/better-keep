@@ -203,8 +203,12 @@ class _BubbleMenuState extends State<BubbleMenu>
     setState(() => _isTouching = false);
     if (_isWaitingToOpen && !_isMenuOpen) {
       _isWaitingToOpen = false;
-      HapticFeedback.lightImpact();
-      widget.onDefaultAction?.call();
+      if (widget.onDefaultAction != null) {
+        HapticFeedback.lightImpact();
+        widget.onDefaultAction!();
+      } else {
+        _openMenu();
+      }
       return;
     }
     _isWaitingToOpen = false;
@@ -249,12 +253,18 @@ class _BubbleMenuState extends State<BubbleMenu>
     final totalHeight =
         widget.itemDistance + widget.itemSize + widget.fabSize + 24;
 
-    return SizedBox(
-      width: totalWidth,
-      height: totalHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
+    return TapRegion(
+      onTapOutside: (_) {
+        if (_isMenuOpen) {
+          _closeMenu();
+        }
+      },
+      child: SizedBox(
+        width: totalWidth,
+        height: totalHeight,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
           AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
@@ -285,7 +295,8 @@ class _BubbleMenuState extends State<BubbleMenu>
               child: _buildFab(fabColor, fabIconColor),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -480,34 +491,53 @@ class _BubbleMenuState extends State<BubbleMenu>
                             ),
                           ),
                         ),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          curve: Curves.easeOutCubic,
-                          width: widget.itemSize,
-                          height: widget.itemSize,
-                          decoration: BoxDecoration(
-                            color: isHovered ? hoveredBgColor : bgColor,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(
-                                  alpha: isHovered ? 0.25 : 0.15,
-                                ),
-                                blurRadius: isHovered ? 12 : 8,
-                                offset: const Offset(0, 3),
+                        GestureDetector(
+                          onTap: () {
+                            if (_isMenuOpen) {
+                              _closeMenu(selectedIndex: index);
+                            }
+                          },
+                          child: MouseRegion(
+                            onEnter: (_) {
+                              if (_isMenuOpen) {
+                                setState(() => _hoveredItemIndex = index);
+                              }
+                            },
+                            onExit: (_) {
+                              if (_isMenuOpen && _hoveredItemIndex == index) {
+                                setState(() => _hoveredItemIndex = null);
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              curve: Curves.easeOutCubic,
+                              width: widget.itemSize,
+                              height: widget.itemSize,
+                              decoration: BoxDecoration(
+                                color: isHovered ? hoveredBgColor : bgColor,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(
+                                      alpha: isHovered ? 0.25 : 0.15,
+                                    ),
+                                    blurRadius: isHovered ? 12 : 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                  if (isHovered)
+                                    BoxShadow(
+                                      color: hoveredBgColor.withValues(alpha: 0.4),
+                                      blurRadius: 16,
+                                      spreadRadius: 2,
+                                    ),
+                                ],
                               ),
-                              if (isHovered)
-                                BoxShadow(
-                                  color: hoveredBgColor.withValues(alpha: 0.4),
-                                  blurRadius: 16,
-                                  spreadRadius: 2,
-                                ),
-                            ],
-                          ),
-                          child: Icon(
-                            item.icon,
-                            size: widget.itemSize * 0.5,
-                            color: isHovered ? hoveredIconColor : iconColor,
+                              child: Icon(
+                                item.icon,
+                                size: widget.itemSize * 0.5,
+                                color: isHovered ? hoveredIconColor : iconColor,
+                              ),
+                            ),
                           ),
                         ),
                       ],
