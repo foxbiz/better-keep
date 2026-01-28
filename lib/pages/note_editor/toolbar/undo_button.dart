@@ -3,7 +3,6 @@ import 'package:flutter_quill/flutter_quill.dart';
 
 class UndoButton extends StatefulWidget {
   final QuillController controller;
-  final bool isEditingTitle;
   final bool readOnly;
   final FocusNode focusNode;
 
@@ -12,7 +11,6 @@ class UndoButton extends StatefulWidget {
     required this.readOnly,
     required this.controller,
     required this.focusNode,
-    required this.isEditingTitle,
   });
 
   @override

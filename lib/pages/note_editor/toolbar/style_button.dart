@@ -19,7 +19,6 @@ class StyleButton extends StatefulWidget {
   final QuillController controller;
   final Attribute attribute;
   final FocusNode focusNode;
-  final bool isEditingTitle;
   final bool readOnly;
 
   const StyleButton({
@@ -28,7 +27,6 @@ class StyleButton extends StatefulWidget {
     required this.focusNode,
     required this.controller,
     required this.attribute,
-    required this.isEditingTitle,
   });
 
   @override
@@ -105,7 +103,7 @@ class _StyleButtonState extends State<StyleButton> {
     return IconButton(
       isSelected: enabled,
       icon: Icon(_getIcon()),
-      onPressed: widget.isEditingTitle || widget.readOnly
+      onPressed: widget.readOnly
           ? null
           : () async {
               final shouldSkipKeyboard = !widget.attribute.isInline;

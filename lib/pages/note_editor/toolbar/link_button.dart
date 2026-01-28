@@ -4,14 +4,12 @@ import 'package:flutter_quill/flutter_quill.dart';
 
 class LinkButton extends StatefulWidget {
   final QuillController controller;
-  final bool isEditingTitle;
   final bool readOnly;
 
   const LinkButton({
     super.key,
     required this.readOnly,
     required this.controller,
-    required this.isEditingTitle,
   });
 
   @override
@@ -41,8 +39,7 @@ class _LinkButtonState extends State<LinkButton> {
 
   @override
   Widget build(BuildContext context) {
-    // Always enabled (except when editing title or readOnly)
-    final enabled = !widget.isEditingTitle && !widget.readOnly;
+    final enabled = !widget.readOnly;
 
     return IconButton(
       isSelected: isLink,

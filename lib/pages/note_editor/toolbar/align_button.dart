@@ -4,7 +4,6 @@ import 'package:better_keep/components/adaptive_popup_menu.dart';
 
 class AlignButton extends StatefulWidget {
   final bool readOnly;
-  final bool isEditingTitle;
   final FocusNode focusNode;
   final Color? parentColor;
   final QuillController controller;
@@ -15,7 +14,6 @@ class AlignButton extends StatefulWidget {
     required this.readOnly,
     required this.focusNode,
     required this.controller,
-    required this.isEditingTitle,
   });
 
   @override
@@ -29,7 +27,7 @@ class _AlignButtonState extends State<AlignButton> {
 
   @override
   void initState() {
-    _controller.isDisabled = widget.readOnly || widget.isEditingTitle;
+    _controller.isDisabled = widget.readOnly;
     widget.controller.addListener(_onSelectionChanged);
     _updateCurrentAlignment();
     super.initState();
@@ -38,7 +36,7 @@ class _AlignButtonState extends State<AlignButton> {
   @override
   void didUpdateWidget(AlignButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _controller.isDisabled = widget.readOnly || widget.isEditingTitle;
+    _controller.isDisabled = widget.readOnly;
   }
 
   @override

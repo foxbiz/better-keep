@@ -4,7 +4,6 @@ import 'package:better_keep/components/adaptive_popup_menu.dart';
 
 class IndentButton extends StatefulWidget {
   final bool readOnly;
-  final bool isEditingTitle;
   final FocusNode focusNode;
   final Color? parentColor;
   final QuillController controller;
@@ -15,7 +14,6 @@ class IndentButton extends StatefulWidget {
     required this.readOnly,
     required this.focusNode,
     required this.controller,
-    required this.isEditingTitle,
   });
 
   @override
@@ -27,14 +25,14 @@ class _IndentButtonState extends State<IndentButton> {
 
   @override
   void initState() {
-    _controller.isDisabled = widget.readOnly || widget.isEditingTitle;
+    _controller.isDisabled = widget.readOnly;
     super.initState();
   }
 
   @override
   void didUpdateWidget(IndentButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _controller.isDisabled = widget.readOnly || widget.isEditingTitle;
+    _controller.isDisabled = widget.readOnly;
   }
 
   @override

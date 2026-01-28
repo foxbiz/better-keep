@@ -4,7 +4,6 @@ import 'package:flutter_quill/flutter_quill.dart';
 class CheckListButton extends StatefulWidget {
   final QuillController controller;
   final FocusNode focusNode;
-  final bool isEditingTitle;
   final bool readOnly;
 
   const CheckListButton({
@@ -12,7 +11,6 @@ class CheckListButton extends StatefulWidget {
     required this.readOnly,
     required this.controller,
     required this.focusNode,
-    required this.isEditingTitle,
   });
 
   @override
@@ -64,7 +62,7 @@ class _CheckListButtonState extends State<CheckListButton> {
     return IconButton(
       isSelected: enabled && !widget.readOnly,
       icon: Icon(Icons.check_box_outlined),
-      onPressed: widget.isEditingTitle || widget.readOnly
+      onPressed: widget.readOnly
           ? null
           : () async {
               enabled = _getIsToggled(_selectionStyle.attributes);

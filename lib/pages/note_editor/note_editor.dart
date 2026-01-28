@@ -2,11 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/components/adaptive_toolbar.dart';
+import 'package:better_keep/components/bubble_menu.dart';
+import 'package:better_keep/config.dart';
+import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
 import 'package:better_keep/dialogs/checkbox_cascade_dialog.dart';
 import 'package:better_keep/dialogs/export_dialog.dart';
 import 'package:better_keep/dialogs/paste_dialog.dart';
 import 'package:better_keep/dialogs/share_note_dialog.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/models/note_image.dart';
+import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/pages/content_preview_page.dart';
 import 'package:better_keep/pages/note_editor/toolbar/align_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/attach_button.dart';
@@ -18,11 +23,18 @@ import 'package:better_keep/pages/note_editor/toolbar/style_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_color_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_size_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/undo_button.dart';
+import 'package:better_keep/pages/sketch_page.dart';
+import 'package:better_keep/services/camera_capture.dart';
+import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/checkbox_service.dart';
+import 'package:better_keep/services/encrypted_file_storage.dart';
+import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
+import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
+import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/components/note_attachments_carousel.dart';
 import 'package:better_keep/components/note_audio_player.dart';
@@ -39,8 +51,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
+import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 class NoteEditor extends StatefulWidget {
   final Note? note;
@@ -89,10 +104,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       false; // Prevent re-entry while dialog is showing
   // Track offsets that were auto-updated via bubble-up (skip cascade for these)
   final Set<int> _bubbleUpdatedOffsets = {};
-
-  bool get _isEditingTitle {
-    return _titleFocusNode.hasFocus;
-  }
+  // Track whether to show the attachment FAB (delayed to prevent gesture interruption)
+  bool _showAttachmentFab = true;
 
   /// Handles keyboard events to block formatting shortcuts when editing title
   /// and to handle Backspace at start of content to move focus to title
@@ -114,7 +127,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
 
     // Check if we're editing the title
-    if (!_isEditingTitle) return null;
+    if (!_titleFocusNode.hasFocus) return null;
 
     // Check for formatting shortcuts (Cmd/Ctrl + B, I, U)
     final isMetaPressed =
@@ -134,6 +147,43 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     return null;
   }
 
+  /// Handles Enter key pressed in title field.
+  /// Splits the title at cursor position: keeps text before cursor as title,
+  /// moves text after cursor to the beginning of Quill content.
+  void _handleTitleEnterPressed() {
+    final cursorPos = _titleController.selection.baseOffset;
+    final titleText = _titleController.text;
+
+    // If cursor position is invalid or at the end, just move focus
+    if (cursorPos < 0 || cursorPos >= titleText.length) {
+      _focusNode.requestFocus();
+      _controller.updateSelection(
+        const TextSelection.collapsed(offset: 0),
+        ChangeSource.local,
+      );
+      return;
+    }
+
+    // Split title at cursor position
+    final keepInTitle = titleText.substring(0, cursorPos);
+    final moveToContent = titleText.substring(cursorPos);
+
+    // Update title to only keep text before cursor
+    _titleController.text = keepInTitle;
+
+    // Insert moved text at the beginning of Quill content
+    if (moveToContent.isNotEmpty) {
+      _controller.document.insert(0, moveToContent);
+    }
+
+    // Move focus to content and position cursor at the start (before inserted text)
+    _focusNode.requestFocus();
+    _controller.updateSelection(
+      const TextSelection.collapsed(offset: 0),
+      ChangeSource.local,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -148,24 +198,54 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _titleFocusNode = FocusNode(canRequestFocus: true);
     _backgroundColor = _note.color;
 
-    Document document = _note.content != ''
-        ? documentFromJsonSafe(json.decode(_note.content as String))
+    // Parse content and extract title (H1) from Delta JSON
+    String initialTitle = '';
+    List<dynamic> contentDeltaJson = [];
+
+    if (_note.content != null && _note.content!.isNotEmpty) {
+      final parsed = json.decode(_note.content!) as List<dynamic>;
+
+      // Find the H1 header newline operation
+      // Check for both '\n' (correct) and '\\n' (legacy corrupted format)
+      int h1Index = -1;
+      for (int i = 0; i < parsed.length; i++) {
+        final op = parsed[i] as Map<String, dynamic>;
+        final insert = op['insert'];
+        final attrs = op['attributes'] as Map<String, dynamic>?;
+        if ((insert == '\n' || insert == '\\n') && attrs?['header'] == 1) {
+          h1Index = i;
+          break;
+        }
+      }
+
+      if (h1Index >= 0) {
+        // Collect title text from operations before the H1 newline
+        final titleBuffer = StringBuffer();
+        for (int i = 0; i < h1Index; i++) {
+          final op = parsed[i] as Map<String, dynamic>;
+          final insert = op['insert'];
+          if (insert is String) {
+            titleBuffer.write(insert);
+          }
+        }
+        initialTitle = titleBuffer.toString();
+
+        // Content is everything after the H1 newline operation
+        contentDeltaJson = parsed.sublist(h1Index + 1);
+      } else {
+        // No H1 found, use entire content as-is (no title)
+        contentDeltaJson = parsed;
+      }
+    }
+
+    // Create document from remaining content (or empty)
+    Document document = contentDeltaJson.isNotEmpty
+        ? documentFromJsonSafe(contentDeltaJson)
         : Document();
 
     // Register custom rules to handle heading reset on new lines before headings
     document.setCustomRules(customQuillRules);
 
-    // Extract first line as title and remove it from document
-    String initialTitle = '';
-    if (document.length > 1) {
-      final plainText = document.toPlainText();
-      final firstLineEnd = plainText.indexOf('\n');
-      if (firstLineEnd > 0) {
-        initialTitle = plainText.substring(0, firstLineEnd);
-        // Remove first line from document (title + newline)
-        document.delete(0, firstLineEnd + 1);
-      }
-    }
     _titleController = TextEditingController(text: initialTitle);
 
     _controller = QuillController(
@@ -190,15 +270,53 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       _changeTimer = Timer(Duration(seconds: 1), _saveNote);
     });
 
-    // Add title focus listener to update toolbar visibility
-    _titleFocusNode.addListener(() {
-      if (mounted) {
-        setState(() {});
-      }
-    });
-
-    // Subscribe to note changes for audio recordings
+    _focusNode.addListener(_focusListener);
+    _titleFocusNode.addListener(_titleFocusListener);
     _note.sub("changed", _onNoteChanged);
+  }
+
+  void _titleFocusListener() {
+    if (!mounted) {
+      return;
+    }
+
+    if (_titleFocusNode.hasFocus) {
+      // Show FAB immediately when title gets focus
+      setState(() {
+        _showAttachmentFab = true;
+      });
+    } else {
+      // Delay hiding FAB to allow gesture completion
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && !_titleFocusNode.hasFocus) {
+          setState(() {
+            _showAttachmentFab = false;
+          });
+        }
+      });
+    }
+  }
+
+  void _focusListener() {
+    if (!mounted) {
+      return;
+    }
+
+    if (_focusNode.hasFocus) {
+      setState(() {
+        _showAttachmentFab = false;
+      });
+    } else {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && !_focusNode.hasFocus) {
+          setState(() {
+            _showAttachmentFab = true;
+          });
+        }
+      });
+    }
+
+    _focusNode.removeListener(_focusListener);
   }
 
   void _onNoteChanged(dynamic _) {
@@ -404,6 +522,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _carouselScrollController.dispose();
     _toolbarScrollController.dispose();
 
+    _focusNode.removeListener(_focusListener);
+    _titleFocusNode.removeListener(_titleFocusListener);
+
     super.dispose();
   }
 
@@ -509,6 +630,32 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         Navigator.of(context).pop();
       },
       child: Scaffold(
+        floatingActionButton:
+            _showAttachmentFab && !_note.readOnly && !_note.trashed
+            ? BubbleMenu(
+                fabIcon: Icons.attach_file,
+                fabSize: 56,
+                itemDistance: 100,
+                itemSize: 48,
+                items: [
+                  BubbleMenuItem(
+                    icon: Icons.image,
+                    label: 'Image',
+                    onTap: _showImageSourceDialog,
+                  ),
+                  BubbleMenuItem(
+                    icon: Icons.mic,
+                    label: 'Audio',
+                    onTap: _handleAudioAttachment,
+                  ),
+                  BubbleMenuItem(
+                    icon: Icons.draw,
+                    label: 'Sketch',
+                    onTap: _handleSketchAttachment,
+                  ),
+                ],
+              )
+            : null,
         appBar: AppBar(
           backgroundColor: backgroundColor,
           foregroundColor: foregroundColor,
@@ -611,32 +758,41 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                         left: 16,
                         right: 16,
                       ),
-                      child: TextField(
-                        controller: _titleController,
-                        focusNode: _titleFocusNode,
-                        autofocus:
-                            widget.autoFocus ||
-                            (!_note.readOnly && _note.content == ''),
-                        readOnly: _note.readOnly || _note.trashed,
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600,
-                          color: foregroundColor,
-                        ),
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          hintText: 'Title your thought',
-                          hintStyle: TextStyle(
+                      child: Focus(
+                        onKeyEvent: (node, event) {
+                          // Intercept Enter key to move text after cursor to content
+                          if (event is KeyDownEvent &&
+                              event.logicalKey == LogicalKeyboardKey.enter) {
+                            _handleTitleEnterPressed();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          controller: _titleController,
+                          focusNode: _titleFocusNode,
+                          autofocus:
+                              widget.autoFocus ||
+                              (!_note.readOnly && _note.content == ''),
+                          readOnly: _note.readOnly || _note.trashed,
+                          maxLines: null,
+                          keyboardType: TextInputType.text,
+                          textInputAction: TextInputAction.next,
+                          style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w600,
-                            color: placeholderColor,
+                            color: foregroundColor,
+                          ),
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            hintText: 'Title your thought',
+                            hintStyle: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
+                              color: placeholderColor,
+                            ),
                           ),
                         ),
-                        onSubmitted: (_) {
-                          // Move focus to content on Enter
-                          _focusNode.requestFocus();
-                        },
                       ),
                     ),
                     Theme(
@@ -767,8 +923,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                             customLinkPrefixes: const ['audio://'],
                             linkActionPickerDelegate: _audioLinkActionPicker,
                             onLaunchUrl: (url) {
-                              // Don't launch URLs on tap - just show the preview
-                              // The preview handles launching when clicked
                               return;
                             },
                           ),
@@ -778,13 +932,11 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     ..._note.recordings.asMap().entries.map((entry) {
                       final index = entry.key;
                       final recording = entry.value;
-                      // Get or create a key for this audio player
                       _audioPlayerKeys[recording.src] ??= GlobalKey();
                       return NoteAudioPlayer(
                         key: _audioPlayerKeys[recording.src],
                         recording: recording,
                         onDelete: () async {
-                          // Remove audio tag from document before deleting recording
                           _removeAudioTagsForIndex(index);
                           await _note.removeRecording(recording.src);
                           _audioPlayerKeys.remove(recording.src);
@@ -802,28 +954,279 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
             ),
             if (!_note.trashed && !_note.readOnly)
               _buildLinkPreview(backgroundColor, foregroundColor),
-            ClipRect(
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 200),
+            if (!_note.trashed && !_note.readOnly)
+              AnimatedSlide(
+                offset: _showAttachmentFab ? const Offset(0, 1) : Offset.zero,
+                duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
-                offset: (!_note.trashed && !_note.readOnly)
-                    ? Offset.zero
-                    : const Offset(0, 1),
                 child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 150),
-                  curve: Curves.easeOut,
-                  opacity: (!_note.trashed && !_note.readOnly) ? 1.0 : 0.0,
-                  child: IgnorePointer(
-                    ignoring: _note.trashed || _note.readOnly,
-                    child: RepaintBoundary(child: _buildToolbar()),
-                  ),
+                  opacity: _showAttachmentFab ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: _buildToolbar(),
                 ),
               ),
-            ),
           ],
         ),
       ),
     );
+  }
+
+  /// Maximum image size in bytes (500KB)
+  static const int _maxImageSize = 500 * 1024;
+
+  /// Check if attachment limit is reached and show snackbar if so.
+  bool _checkAttachmentLimit() {
+    if (_note.attachments.length >= maxAttachmentsPerNote) {
+      snackbar(
+        'Maximum $maxAttachmentsPerNote attachments per note reached',
+        Colors.orange,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /// Compresses an image to be under [_maxImageSize] bytes.
+  Future<Uint8List> _compressImageToTargetSize(Uint8List imageBytes) async {
+    // If already under target, just do a light compression
+    if (imageBytes.length <= _maxImageSize) {
+      return await ImageCompressor.compressWithList(imageBytes, quality: 90);
+    }
+
+    // Start with quality 85 and full size
+    int quality = 85;
+    int minWidth = 1920;
+    int minHeight = 1920;
+    Uint8List compressed = imageBytes;
+
+    // Try progressively lower quality first
+    while (quality >= 50) {
+      compressed = await ImageCompressor.compressWithList(
+        imageBytes,
+        quality: quality,
+        minWidth: minWidth,
+        minHeight: minHeight,
+      );
+
+      if (compressed.length <= _maxImageSize) {
+        return compressed;
+      }
+
+      quality -= 10;
+    }
+
+    // If still too large, reduce dimensions progressively
+    quality = 70;
+    while (minWidth >= 800) {
+      compressed = await ImageCompressor.compressWithList(
+        imageBytes,
+        quality: quality,
+        minWidth: minWidth,
+        minHeight: minHeight,
+      );
+
+      if (compressed.length <= _maxImageSize) {
+        return compressed;
+      }
+
+      minWidth = (minWidth * 0.75).toInt();
+      minHeight = (minHeight * 0.75).toInt();
+    }
+
+    // Final attempt with minimum settings
+    return await ImageCompressor.compressWithList(
+      imageBytes,
+      quality: 50,
+      minWidth: 800,
+      minHeight: 800,
+    );
+  }
+
+  void _showImageSourceDialog() async {
+    if (_checkAttachmentLimit()) return;
+
+    // On desktop, directly pick from gallery
+    if (isDesktop) {
+      _pickImage(ImageSource.gallery);
+      return;
+    }
+
+    // On web, check if camera is available
+    if (kIsWeb) {
+      final hasCamera = await hasCameraAvailable();
+      if (!hasCamera) {
+        _pickImage(ImageSource.gallery);
+        return;
+      }
+    }
+
+    // Show bottom sheet with camera/gallery options
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.image),
+                title: const Text('Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    Uint8List? imageBytes;
+    String ext = '.jpg';
+
+    // On web with camera source, use the web camera capture
+    if (kIsWeb && source == ImageSource.camera) {
+      imageBytes = await captureImageFromWebCamera();
+      if (imageBytes == null) return;
+    } else {
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: source);
+      if (image == null) return;
+      imageBytes = await image.readAsBytes();
+      ext = path.extension(image.path);
+      if (ext.isEmpty) ext = '.jpg';
+    }
+
+    // Show loading dialog while processing
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Processing image...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    try {
+      final fs = await fileSystem();
+      final documentDir = await fs.documentDir;
+      final imagePath = path.join(documentDir, '${Uuid().v4()}$ext');
+
+      // Compress the image to be under 500KB
+      Uint8List bytes = await _compressImageToTargetSize(imageBytes);
+
+      await writeEncryptedBytes(imagePath, bytes);
+
+      final decodedImage = await decodeImageFromList(bytes);
+
+      // Generate tiny thumbnail for locked note preview (under 1KB)
+      final thumbnail = await ThumbnailGenerator.generateFromBytes(bytes);
+
+      final noteImage = NoteImage(
+        src: imagePath,
+        aspectRatio: "${decodedImage.width}:${decodedImage.height}",
+        size: bytes.length,
+        lastModified: DateTime.now().toIso8601String(),
+        index: _note.images.length,
+        blurredThumbnail: thumbnail,
+      );
+
+      _note.addImage(noteImage);
+      _scrollToAttachments();
+    } finally {
+      // Dismiss loading dialog
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    }
+  }
+
+  void _handleAudioAttachment() async {
+    if (_checkAttachmentLimit()) return;
+
+    final result = await showDialog<AudioRecordingResult>(
+      context: context,
+      builder: (context) => const AudioRecorderDialog(),
+    );
+
+    if (result != null && mounted) {
+      _note.addRecording(
+        NoteRecording(
+          src: result.path,
+          title: result.title,
+          length: result.length,
+          transcript: result.transcription,
+        ),
+      );
+      _scrollToAttachments();
+      // Append transcription to note if provided
+      if (result.transcription != null && result.transcription!.isNotEmpty) {
+        final recording = NoteRecording(
+          src: result.path,
+          title: result.title,
+          length: result.length,
+          transcript: result.transcription,
+        );
+        _appendTranscriptToNote(result.transcription!, recording);
+      }
+      // Set note title from first few words if note has no title
+      if (_titleController.text.isEmpty &&
+          result.transcription != null &&
+          result.transcription!.isNotEmpty) {
+        final words = result.transcription!
+            .split(' ')
+            .where((w) => w.isNotEmpty)
+            .toList();
+        if (words.isNotEmpty) {
+          final titleWords = words.take(5).join(' ');
+          _titleController.text = titleWords + (words.length > 5 ? '...' : '');
+        }
+      }
+    }
+  }
+
+  void _handleSketchAttachment() async {
+    if (_checkAttachmentLimit()) return;
+
+    await showPage(
+      context,
+      SketchPage(
+        note: _note,
+        sketch: SketchData(
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+        ),
+      ),
+    );
+    _scrollToAttachments();
   }
 
   Widget _buildToolbar() {
@@ -835,7 +1238,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       key: Key('note_editor_toolbar'),
       parentColor: noteColor,
       scrollController: _toolbarScrollController,
-      hideToggle: _isEditingTitle,
       children: [
         if (isIOS)
           AnimatedSize(
@@ -853,13 +1255,11 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           readOnly: _note.readOnly,
           controller: _controller,
           focusNode: _focusNode,
-          isEditingTitle: _isEditingTitle,
         ),
         RedoButton(
           readOnly: _note.readOnly,
           controller: _controller,
           focusNode: _focusNode,
-          isEditingTitle: _isEditingTitle,
         ),
         AttachButton(
           readOnly: _note.readOnly,
@@ -867,75 +1267,40 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           onAppendTranscript: _appendTranscriptToNote,
           onAttachmentAdded: _scrollToAttachments,
         ),
-        // Formatting buttons - each animated independently when editing title
-        _animatedToolbarButton(
-          TextColorButton(
-            color: textColor,
-            focusNode: _focusNode,
-            readOnly: _note.readOnly,
-            controller: _controller,
-            isEditingTitle: _isEditingTitle,
-          ),
+        TextColorButton(
+          color: textColor,
+          focusNode: _focusNode,
+          readOnly: _note.readOnly,
+          controller: _controller,
         ),
-        _animatedToolbarButton(
-          CheckListButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
+        CheckListButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
         ),
-        _animatedToolbarButton(
-          LinkButton(
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
+        LinkButton(controller: _controller, readOnly: _note.readOnly),
+        _styleButton(Attribute.ul),
+        _styleButton(Attribute.ol),
+        _styleButton(Attribute.strikeThrough),
+        _styleButton(Attribute.bold),
+        _styleButton(Attribute.italic),
+        _styleButton(Attribute.underline),
+        AlignButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
         ),
-        _animatedToolbarButton(_styleButton(Attribute.ul)),
-        _animatedToolbarButton(_styleButton(Attribute.ol)),
-        _animatedToolbarButton(_styleButton(Attribute.strikeThrough)),
-        _animatedToolbarButton(_styleButton(Attribute.bold)),
-        _animatedToolbarButton(_styleButton(Attribute.italic)),
-        _animatedToolbarButton(_styleButton(Attribute.underline)),
-        _animatedToolbarButton(
-          AlignButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
+        IndentButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
         ),
-        _animatedToolbarButton(
-          IndentButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
-        ),
-        _animatedToolbarButton(
-          TextSizeButton(
-            focusNode: _focusNode,
-            controller: _controller,
-            readOnly: _note.readOnly,
-            isEditingTitle: _isEditingTitle,
-          ),
+        TextSizeButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
         ),
       ],
-    );
-  }
-
-  /// Wraps a toolbar button with animation for show/hide when editing title
-  Widget _animatedToolbarButton(Widget child) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 150),
-        opacity: _isEditingTitle ? 0.0 : 1.0,
-        child: _isEditingTitle ? const SizedBox.shrink() : child,
-      ),
     );
   }
 
@@ -945,7 +1310,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       focusNode: _focusNode,
       controller: _controller,
       readOnly: _note.readOnly,
-      isEditingTitle: _isEditingTitle,
     );
   }
 
@@ -962,7 +1326,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     if (title.isNotEmpty) {
       combinedDeltaJson.add({'insert': title});
       combinedDeltaJson.add({
-        'insert': '\\n',
+        'insert': '\n',
         'attributes': {'header': 1},
       });
     }
