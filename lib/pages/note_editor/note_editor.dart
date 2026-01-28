@@ -64,7 +64,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   static const int _maxImageCacheSize = 50;
 
   StreamSubscription? _changesSubscription;
-  String? _title;
   String? _linkUrl;
   Timer? _changeTimer;
   Metadata? _linkMetadata;
@@ -76,6 +75,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   final Map<String, GlobalKey> _audioPlayerKeys = {};
   late final Note _note;
   late FocusNode _focusNode;
+  late FocusNode _titleFocusNode;
+  late TextEditingController _titleController;
   late QuillController _controller;
   late Color _backgroundColor;
   bool _isKeyboardVisible = false;
@@ -90,70 +91,27 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   final Set<int> _bubbleUpdatedOffsets = {};
 
   bool get _isEditingTitle {
-    final selection = _controller.selection;
-    final start = selection.start;
-    final firstLine = _controller.document.toPlainText().split('\n').first;
-    final offset = firstLine.length;
-    return start <= offset;
-  }
-
-  /// Strips all inline formatting (bold, italic, underline, strikethrough, color, size, link)
-  /// from the title (first line), keeping only H1.
-  void _stripTitleFormatting() {
-    final plainText = _controller.document.toPlainText();
-    final firstLineEnd = plainText.indexOf('\n');
-    final titleLength = firstLineEnd > 0 ? firstLineEnd : plainText.length - 1;
-
-    if (titleLength <= 0) return;
-
-    // Remove all inline attributes from the title
-    // We apply null values to clear these attributes
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.bold, null),
-    );
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.italic, null),
-    );
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.underline, null),
-    );
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.strikeThrough, null),
-    );
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.link, null),
-    );
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.color, null),
-    );
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.background, null),
-    );
-    _controller.formatText(
-      0,
-      titleLength,
-      Attribute.clone(Attribute.size, null),
-    );
+    return _titleFocusNode.hasFocus;
   }
 
   /// Handles keyboard events to block formatting shortcuts when editing title
+  /// and to handle Backspace at start of content to move focus to title
   KeyEventResult? _handleKeyPressed(KeyEvent event, Node? node) {
     // Only intercept key down events
     if (event is! KeyDownEvent) return null;
+
+    // Handle Backspace at start of content - move focus to title
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      final selection = _controller.selection;
+      if (selection.start == 0 && selection.end == 0) {
+        // Cursor is at position 0, move focus to title at end
+        _titleFocusNode.requestFocus();
+        _titleController.selection = TextSelection.collapsed(
+          offset: _titleController.text.length,
+        );
+        return KeyEventResult.handled;
+      }
+    }
 
     // Check if we're editing the title
     if (!_isEditingTitle) return null;
@@ -187,6 +145,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
 
     _focusNode = FocusNode(canRequestFocus: true);
+    _titleFocusNode = FocusNode(canRequestFocus: true);
     _backgroundColor = _note.color;
 
     Document document = _note.content != ''
@@ -195,6 +154,19 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
     // Register custom rules to handle heading reset on new lines before headings
     document.setCustomRules(customQuillRules);
+
+    // Extract first line as title and remove it from document
+    String initialTitle = '';
+    if (document.length > 1) {
+      final plainText = document.toPlainText();
+      final firstLineEnd = plainText.indexOf('\n');
+      if (firstLineEnd > 0) {
+        initialTitle = plainText.substring(0, firstLineEnd);
+        // Remove first line from document (title + newline)
+        document.delete(0, firstLineEnd + 1);
+      }
+    }
+    _titleController = TextEditingController(text: initialTitle);
 
     _controller = QuillController(
       readOnly: _note.readOnly || _note.trashed,
@@ -211,6 +183,19 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _changesSubscription = _controller.changes.listen(
       _controllerChangesListener,
     );
+
+    // Add title change listener for auto-save
+    _titleController.addListener(() {
+      _changeTimer?.cancel();
+      _changeTimer = Timer(Duration(seconds: 1), _saveNote);
+    });
+
+    // Add title focus listener to update toolbar visibility
+    _titleFocusNode.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
 
     // Subscribe to note changes for audio recordings
     _note.sub("changed", _onNoteChanged);
@@ -241,11 +226,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
     final document = _controller.document;
     final length = document.length;
-
-    // Get the title length (first line) to preserve its formatting
-    final plainText = document.toPlainText();
-    final firstLineEnd = plainText.indexOf('\n');
-    final titleLength = firstLineEnd > 0 ? firstLineEnd : 0;
 
     // Find the index of this recording in attachments
     final recordingIndex = _note.recordings.indexWhere(
@@ -286,11 +266,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       transcriptLength,
       Attribute.blockQuote,
     );
-
-    // Re-apply h1 to the title line to ensure it's preserved
-    if (titleLength > 0) {
-      _controller.formatText(0, titleLength, Attribute.h1);
-    }
 
     // Move cursor to the end
     _controller.updateSelection(
@@ -421,6 +396,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _saveNote(clearPasswordAfterSave: AppState.forgetLockedNotePassword);
     _controller.removeListener(_didChangeSelection);
     _controller.dispose();
+    _titleController.dispose();
+    _focusNode.dispose();
+    _titleFocusNode.dispose();
     _note.unsub("changed", _onNoteChanged);
     _quillScrollController.dispose();
     _carouselScrollController.dispose();
@@ -626,6 +604,41 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       onPop: () => setState(() {}),
                       scrollController: _carouselScrollController,
                     ),
+                    // Title TextField
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        top: 16,
+                        left: 16,
+                        right: 16,
+                      ),
+                      child: TextField(
+                        controller: _titleController,
+                        focusNode: _titleFocusNode,
+                        autofocus:
+                            widget.autoFocus ||
+                            (!_note.readOnly && _note.content == ''),
+                        readOnly: _note.readOnly || _note.trashed,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
+                          color: foregroundColor,
+                        ),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          hintText: 'Title your thought',
+                          hintStyle: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w600,
+                            color: placeholderColor,
+                          ),
+                        ),
+                        onSubmitted: (_) {
+                          // Move focus to content on Enter
+                          _focusNode.requestFocus();
+                        },
+                      ),
+                    ),
                     Theme(
                       data: Theme.of(context).copyWith(
                         checkboxTheme: CheckboxThemeData(
@@ -655,7 +668,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                             showCursor: !_note.readOnly && !_note.trashed,
                             enableInteractiveSelection: true,
                             enableSelectionToolbar: true,
-                            placeholder: 'Add a title...',
+                            placeholder: 'Start writing...',
                             onKeyPressed: _handleKeyPressed,
                             customLeadingBlockBuilder:
                                 customLeadingBlockBuilder,
@@ -751,9 +764,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                                           },
                                     ),
                                   ),
-                            autoFocus:
-                                widget.autoFocus ||
-                                (!_note.readOnly && _note.content == ''),
                             customLinkPrefixes: const ['audio://'],
                             linkActionPickerDelegate: _audioLinkActionPicker,
                             onLaunchUrl: (url) {
@@ -825,6 +835,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       key: Key('note_editor_toolbar'),
       parentColor: noteColor,
       scrollController: _toolbarScrollController,
+      hideToggle: _isEditingTitle,
       children: [
         if (isIOS)
           AnimatedSize(
@@ -856,66 +867,75 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           onAppendTranscript: _appendTranscriptToNote,
           onAttachmentAdded: _scrollToAttachments,
         ),
-        // Animated formatting buttons - hidden when editing title
-        AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: Alignment.centerLeft,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 150),
-            opacity: _isEditingTitle ? 0.0 : 1.0,
-            child: _isEditingTitle
-                ? const SizedBox.shrink()
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextColorButton(
-                        color: textColor,
-                        focusNode: _focusNode,
-                        readOnly: _note.readOnly,
-                        controller: _controller,
-                        isEditingTitle: _isEditingTitle,
-                      ),
-                      CheckListButton(
-                        focusNode: _focusNode,
-                        controller: _controller,
-                        readOnly: _note.readOnly,
-                        isEditingTitle: _isEditingTitle,
-                      ),
-                      LinkButton(
-                        controller: _controller,
-                        readOnly: _note.readOnly,
-                        isEditingTitle: _isEditingTitle,
-                      ),
-                      _styleButton(Attribute.ul),
-                      _styleButton(Attribute.ol),
-                      _styleButton(Attribute.strikeThrough),
-                      _styleButton(Attribute.bold),
-                      _styleButton(Attribute.italic),
-                      _styleButton(Attribute.underline),
-                      AlignButton(
-                        focusNode: _focusNode,
-                        controller: _controller,
-                        readOnly: _note.readOnly,
-                        isEditingTitle: _isEditingTitle,
-                      ),
-                      IndentButton(
-                        focusNode: _focusNode,
-                        controller: _controller,
-                        readOnly: _note.readOnly,
-                        isEditingTitle: _isEditingTitle,
-                      ),
-                      TextSizeButton(
-                        focusNode: _focusNode,
-                        controller: _controller,
-                        readOnly: _note.readOnly,
-                        isEditingTitle: _isEditingTitle,
-                      ),
-                    ],
-                  ),
+        // Formatting buttons - each animated independently when editing title
+        _animatedToolbarButton(
+          TextColorButton(
+            color: textColor,
+            focusNode: _focusNode,
+            readOnly: _note.readOnly,
+            controller: _controller,
+            isEditingTitle: _isEditingTitle,
+          ),
+        ),
+        _animatedToolbarButton(
+          CheckListButton(
+            focusNode: _focusNode,
+            controller: _controller,
+            readOnly: _note.readOnly,
+            isEditingTitle: _isEditingTitle,
+          ),
+        ),
+        _animatedToolbarButton(
+          LinkButton(
+            controller: _controller,
+            readOnly: _note.readOnly,
+            isEditingTitle: _isEditingTitle,
+          ),
+        ),
+        _animatedToolbarButton(_styleButton(Attribute.ul)),
+        _animatedToolbarButton(_styleButton(Attribute.ol)),
+        _animatedToolbarButton(_styleButton(Attribute.strikeThrough)),
+        _animatedToolbarButton(_styleButton(Attribute.bold)),
+        _animatedToolbarButton(_styleButton(Attribute.italic)),
+        _animatedToolbarButton(_styleButton(Attribute.underline)),
+        _animatedToolbarButton(
+          AlignButton(
+            focusNode: _focusNode,
+            controller: _controller,
+            readOnly: _note.readOnly,
+            isEditingTitle: _isEditingTitle,
+          ),
+        ),
+        _animatedToolbarButton(
+          IndentButton(
+            focusNode: _focusNode,
+            controller: _controller,
+            readOnly: _note.readOnly,
+            isEditingTitle: _isEditingTitle,
+          ),
+        ),
+        _animatedToolbarButton(
+          TextSizeButton(
+            focusNode: _focusNode,
+            controller: _controller,
+            readOnly: _note.readOnly,
+            isEditingTitle: _isEditingTitle,
           ),
         ),
       ],
+    );
+  }
+
+  /// Wraps a toolbar button with animation for show/hide when editing title
+  Widget _animatedToolbarButton(Widget child) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 150),
+        opacity: _isEditingTitle ? 0.0 : 1.0,
+        child: _isEditingTitle ? const SizedBox.shrink() : child,
+      ),
     );
   }
 
@@ -930,9 +950,30 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   }
 
   void _saveNote({bool clearPasswordAfterSave = false}) async {
+    // Update note title from title controller
+    final title = _titleController.text;
+    _note.title = title;
+
+    // Create a combined delta with title as first line (h1) + content
+    final contentDelta = _controller.document.toDelta().toJson();
+    final combinedDeltaJson = <Map<String, dynamic>>[];
+
+    // Add title as h1 if not empty
+    if (title.isNotEmpty) {
+      combinedDeltaJson.add({'insert': title});
+      combinedDeltaJson.add({
+        'insert': '\\n',
+        'attributes': {'header': 1},
+      });
+    }
+
+    // Add content delta operations
+    combinedDeltaJson.addAll(List<Map<String, dynamic>>.from(contentDelta));
+
     // If deleteIfUnchanged is set and content hasn't meaningfully changed, delete instead of save
     if (widget.deleteIfUnchanged && _initialPlainText != null) {
-      final currentPlainText = _controller.document.toPlainText().trim();
+      final combinedDoc = documentFromJsonSafe(combinedDeltaJson);
+      final currentPlainText = combinedDoc.toPlainText().trim();
       if (currentPlainText == _initialPlainText) {
         try {
           await _note.delete();
@@ -943,9 +984,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       }
     }
 
-    final plainText = _controller.document.toPlainText().trim();
+    final contentPlainText = _controller.document.toPlainText().trim();
+    final isEmpty = title.isEmpty && contentPlainText.isEmpty;
 
-    if (_note.isEmpty && plainText.isEmpty) {
+    if (_note.isEmpty && isEmpty) {
       try {
         await _note.delete();
       } catch (e) {
@@ -956,7 +998,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
 
     final oldContent = _note.content;
-    final newContent = json.encode(_controller.document.toDelta().toJson());
+    final newContent = json.encode(combinedDeltaJson);
 
     if (oldContent == newContent) {
       // Even if content unchanged, clear password if requested
@@ -967,6 +1009,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
 
     try {
+      // Get plain text from combined document
+      final combinedDoc = documentFromJsonSafe(combinedDeltaJson);
+      final plainText = combinedDoc.toPlainText().trim();
       await _note.setContent(newContent, plainText);
       // Clear password after successful save if setting is enabled
       if (clearPasswordAfterSave && _note.locked) {
@@ -1290,25 +1335,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _changeTimer?.cancel();
     _changeTimer = Timer(Duration(seconds: 1), _saveNote);
 
-    // Skip checkbox/title processing if we're applying checkbox cascade/bubble changes
+    // Skip checkbox processing if we're applying checkbox cascade/bubble changes
     if (_isApplyingCheckboxChanges) return;
-
-    final lines = _controller.document.toPlainText().split('\n');
-    final newTitle = lines.isNotEmpty ? lines.first : null;
-
-    if (newTitle != _title) {
-      if (newTitle == null || newTitle.isEmpty) {
-        _controller.formatText(0, 0, Attribute.clone(Attribute.h1, null));
-      } else {
-        _controller.formatText(0, newTitle.length, Attribute.h1);
-        // Strip any inline formatting from the title
-        _stripTitleFormatting();
-      }
-      _note.title = newTitle ?? '';
-      setState(() {
-        _title = newTitle ?? '';
-      });
-    }
 
     // Handle nested checkbox cascade/bubble logic
     // Fire-and-forget with error handling
