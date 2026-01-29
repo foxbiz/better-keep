@@ -382,7 +382,7 @@ class _SettingsState extends State<Settings> {
               'Advanced Settings',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text('Developer and recovery options'),
+            subtitle: Text('Developer'),
           ),
           ListTile(
             leading: const Icon(Icons.analytics),
@@ -390,14 +390,6 @@ class _SettingsState extends State<Settings> {
             subtitle: const Text('View database and sync statistics'),
             onTap: () {
               showPage(context, const NerdStatsPage());
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.restore),
-            title: const Text('Recover Old Notes'),
-            subtitle: const Text('Restore notes from a previous account'),
-            onTap: () {
-              _showRecoverOldNotesDialog();
             },
           ),
         ],
@@ -542,41 +534,6 @@ class _SettingsState extends State<Settings> {
               ],
             );
           },
-        );
-      },
-    );
-  }
-
-  void _showRecoverOldNotesDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Recover Old Notes'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'If you previously started fresh without a recovery key, '
-                'your old notes may still be recoverable if you remember your recovery passphrase.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'This feature is coming soon.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
         );
       },
     );

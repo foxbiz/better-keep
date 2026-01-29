@@ -320,32 +320,7 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
                   duration: const Duration(milliseconds: 200),
                   switchInCurve: Curves.easeInOut,
                   switchOutCurve: Curves.easeInOut,
-                  child: isSyncing
-                      ? RotationTransition(
-                          key: const ValueKey('syncing'),
-                          turns: _rotationController,
-                          child: Icon(Icons.sync, size: 16, color: accentColor),
-                        )
-                      : hasFailed
-                      ? Icon(
-                          Icons.error_outline,
-                          key: const ValueKey('failed'),
-                          size: 16,
-                          color: accentColor,
-                        )
-                      : messageType == _MessageType.success
-                      ? Icon(
-                          Icons.check_circle_outline,
-                          key: const ValueKey('success'),
-                          size: 16,
-                          color: accentColor,
-                        )
-                      : Icon(
-                          Icons.sync,
-                          key: const ValueKey('default'),
-                          size: 16,
-                          color: accentColor,
-                        ),
+                  child: _buildStateIcon(accentColor, messageType),
                 ),
                 const SizedBox(width: 10),
                 // Animated text switcher
@@ -413,6 +388,33 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
     }
     // This case shouldn't be reached since widget won't show without content
     return "";
+  }
+
+  /// Builds the icon for the current sync state with a unique key.
+  /// Uses a single conditional to ensure only one icon is built per state.
+  Widget _buildStateIcon(Color accentColor, _MessageType messageType) {
+    // Determine the current state key - only one can be active at a time
+    final String stateKey;
+    final Widget icon;
+
+    if (isSyncing) {
+      stateKey = 'syncing';
+      icon = RotationTransition(
+        turns: _rotationController,
+        child: Icon(Icons.sync, size: 16, color: accentColor),
+      );
+    } else if (hasFailed) {
+      stateKey = 'failed';
+      icon = Icon(Icons.error_outline, size: 16, color: accentColor);
+    } else if (messageType == _MessageType.success) {
+      stateKey = 'success';
+      icon = Icon(Icons.check_circle_outline, size: 16, color: accentColor);
+    } else {
+      stateKey = 'default';
+      icon = Icon(Icons.sync, size: 16, color: accentColor);
+    }
+
+    return KeyedSubtree(key: ValueKey(stateKey), child: icon);
   }
 
   bool get hasFailed => failedCount > 0 && !isSyncing;

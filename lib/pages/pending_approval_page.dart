@@ -312,7 +312,6 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
             ),
           ],
           const SizedBox(height: 24),
-          // Recovery option - show if recovery key exists
           if (_hasRecoveryKey) ...[
             TextButton.icon(
               onPressed: _recoverWithPassphrase,
