@@ -731,7 +731,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       onPop: () => setState(() {}),
                       scrollController: _carouselScrollController,
                     ),
-                    // Title TextField
                     Padding(
                       padding: const EdgeInsets.only(
                         top: 16,
@@ -740,7 +739,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       ),
                       child: Focus(
                         onKeyEvent: (node, event) {
-                          // Intercept Enter key to move text after cursor to content
                           if (event is KeyDownEvent &&
                               event.logicalKey == LogicalKeyboardKey.enter) {
                             _handleTitleEnterPressed();
@@ -935,15 +933,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
             if (!_note.trashed && !_note.readOnly)
               _buildLinkPreview(backgroundColor, foregroundColor),
             if (!_note.trashed && !_note.readOnly)
-              AnimatedSlide(
-                offset: _showAttachmentFab ? const Offset(0, 1) : Offset.zero,
+              AnimatedSize(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
-                child: AnimatedOpacity(
-                  opacity: _showAttachmentFab ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: _buildToolbar(),
-                ),
+                child: _showAttachmentFab
+                    ? const SizedBox.shrink()
+                    : _buildToolbar(),
               ),
           ],
         ),
