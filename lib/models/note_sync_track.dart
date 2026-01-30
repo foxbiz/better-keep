@@ -1,5 +1,6 @@
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:sqflite/sqflite.dart';
 
 enum SyncAction { upload, delete }
@@ -165,6 +166,9 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
   }
 
   Future<void> delete() async {
+    AppLogger.log(
+      "[NOTE_SYNC] Deleting sync track for note $localId, action $action",
+    );
     if (id == null) {
       return;
     }

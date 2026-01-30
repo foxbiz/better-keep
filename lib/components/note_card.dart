@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:better_keep/components/animated_icon.dart';
 import 'package:better_keep/components/note_image_grid.dart';
+import 'package:better_keep/dialogs/delete_dialog.dart';
 import 'package:better_keep/dialogs/unlock_note_dialog.dart';
 import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
@@ -58,6 +59,15 @@ class _NoteCardState extends State<NoteCard>
   String? _lastContent;
   Reminder? _lastReminder;
   int _lastMaxChars = 500;
+
+  /// Returns true if the note content contains a decryption_failed error
+  /// This happens when E2EE decryption fails and the note cannot be recovered
+  bool get _hasDecryptionError {
+    final content = widget.note.content;
+    if (content == null || content.isEmpty) return false;
+    return content.contains('"error"') &&
+        content.contains('"decryption_failed"');
+  }
 
   /// Returns max chars based on screen width (1000 for bigger screens, 500 for smaller)
   int _getMaxChars(BuildContext context) {
@@ -302,6 +312,22 @@ class _NoteCardState extends State<NoteCard>
   Future<void> _handleTap() async {
     if (_selectionMode) {
       _toggleSelection();
+      return;
+    }
+
+    // Handle decryption-failed notes - prompt for permanent deletion
+    if (_hasDecryptionError) {
+      final confirmed = await showDeleteDialog(
+        context,
+        title: 'Encrypted Note',
+        message:
+            'This note could not be decrypted. The encryption keys are missing or invalid, and the note cannot be recovered.',
+        isPermanent: true,
+      );
+      if (confirmed == true && mounted) {
+        await widget.note.delete();
+        snackbar('Note deleted permanently');
+      }
       return;
     }
 
@@ -652,7 +678,10 @@ class _NoteCardState extends State<NoteCard>
                   Padding(
                     padding: EdgeInsets.only(
                       top: 8.0,
-                      bottom: (note.title != null && note.title!.trim().isNotEmpty) ? 8.0 : 0,
+                      bottom:
+                          (note.title != null && note.title!.trim().isNotEmpty)
+                          ? 8.0
+                          : 0,
                     ),
                     child: Text(
                       "${weekDaysShort[time.weekday - 1]} ${time.day}/${time.month}/${time.year}",
@@ -720,7 +749,39 @@ class _NoteCardState extends State<NoteCard>
               ),
               SizedBox(height: 10),
             ],
-            if (note.locked)
+            if (_hasDecryptionError)
+              Container(
+                padding: EdgeInsets.all(10.0),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8.0),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.errorContainer.withValues(alpha: 0.7),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 18.0,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    SizedBox(width: 8.0),
+                    Flexible(
+                      child: Text(
+                        "Decryption failed",
+                        softWrap: true,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (note.locked)
               Container(
                 padding: EdgeInsets.all(8.0),
                 decoration: BoxDecoration(

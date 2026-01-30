@@ -840,6 +840,8 @@ class LabelSyncService {
       label = await Label.findById(existingSyncTrack.localId);
     }
 
+    label ??= await Label.findByName(remoteData['name'] as String);
+
     if (label == null) {
       // Create new label - let SQLite auto-generate the ID
       label = Label(
