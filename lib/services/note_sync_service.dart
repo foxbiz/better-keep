@@ -1505,7 +1505,6 @@ class NoteSyncService {
 
       _addSyncingIncoming(localId);
       try {
-        // Update status to in progress
         await _syncCache.updateSync(
           localId,
           pendingSync.copyWith(status: PendingRemoteSyncStatus.inProgress),
@@ -1621,41 +1620,36 @@ class NoteSyncService {
     // Decrypt E2EE data if encrypted
     final updatedNoteData = await _decryptNoteData(remoteData);
 
-    // Double-check decryption succeeded for encrypted notes
-    if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
-      // Decryption failed - still contains encrypted data
-      AppLogger.log(
-        "[SYNC] PROCESS: Note $localId FAILED - decryption failed (E2EE status: ${e2ee.status.value}, isReady: ${e2ee.isReady})",
-      );
-      return false;
-    }
-
     final note =
         await Note.findById(updatedNoteData['local_id'] as int) ??
         Note(id: updatedNoteData['local_id'] as int);
 
-    // Download attachments - if any fail, don't sync this note
-    // Use updatedNoteData (decrypted) instead of remoteData for attachments
-    // so that E2EE-encrypted sketch strokes are properly decrypted
-    final attachmentData = updatedNoteData['attachments'];
-    final attachments = await _downloadAttachments(attachmentData, note);
-    if (attachments == null) {
-      // Attachment download failed - log and skip this note
-      final attachmentCount = (attachmentData is List)
-          ? attachmentData.length
-          : 0;
+    if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
+      updatedNoteData['title'] = "Encrypted Note";
+      updatedNoteData['attachments'] = updatedNoteData['e2ee_attachments'];
+      updatedNoteData['content'] = "[{ \"error\": \"decryption_failed\" }]";
       AppLogger.log(
-        "[SYNC] PROCESS: Note ${note.id} FAILED - attachment download failed ($attachmentCount attachments)",
+        "[SYNC] PROCESS: Note $localId - decryption failed, setting error content",
       );
-      _markSyncFailed(note.id!);
-      return false;
-    }
+    } else {
+      final attachmentData = updatedNoteData['attachments'];
+      final attachments = await _downloadAttachments(attachmentData, note);
+      if (attachments == null) {
+        // Attachment download failed - log and skip this note
+        final attachmentCount = (attachmentData is List)
+            ? attachmentData.length
+            : 0;
+        AppLogger.log(
+          "[SYNC] PROCESS: Note ${note.id} FAILED - attachment download failed ($attachmentCount attachments)",
+        );
+        _markSyncFailed(note.id!);
+        return false;
+      }
 
-    updatedNoteData['attachments'] = attachments;
+      updatedNoteData['attachments'] = attachments;
+    }
     await note.updateFromJson(updatedNoteData);
 
-    // Create or update sync track to link local note with remote document
-    // This ensures we can properly sync deletes and updates later
     var syncTrack = await NoteSyncTrack.getByLocalId(localId);
     if (syncTrack == null) {
       syncTrack = NoteSyncTrack(
@@ -1666,10 +1660,6 @@ class NoteSyncService {
       );
       await syncTrack.save();
     } else {
-      // Update existing sync track with remote ID and mark as synced
-      // This is important: when we receive a remote update, any pending local
-      // changes are superseded, so we must mark as synced to prevent blocking
-      // future remote updates
       syncTrack.remoteId ??= remoteDocId;
       syncTrack.status = SyncStatus.synced;
       syncTrack.action = SyncAction.upload;

@@ -50,6 +50,13 @@ class Label extends BaseModel<Label> {
     return Label.fromJson(result.first);
   }
 
+  static Future<Label?> findByName(String name) async {
+    final db = AppState.db;
+    final result = await db.query(model, where: "name = ?", whereArgs: [name]);
+    if (result.isEmpty) return null;
+    return Label.fromJson(result.first);
+  }
+
   /// Add missing labels and remove duplicates.
   static Future<void> fixLabels() async {
     final db = AppState.db;
