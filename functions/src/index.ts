@@ -28,6 +28,7 @@ import sendDeletionReminders from "./exports/sendDeletionReminders";
 import sendEmailVerificationOtp from "./exports/sendEmailVerificationOtp";
 import sendPasswordResetOtp from "./exports/sendPasswordResetOtp";
 import sendStartFreshOtp from "./exports/sendStartFreshOtp";
+import setEmulatorTestClaims from "./exports/setEmulatorTestClaims";
 import startFreshWithOtp from "./exports/startFreshWithOtp";
 import updatePublicStats from "./exports/updatePublicStats";
 import verifyAccountLinkOtp from "./exports/verifyAccountLinkOtp";
@@ -76,4 +77,5 @@ export {
 	checkExpiredTrials,
 	getPublicStats,
 	updatePublicStats,
+	setEmulatorTestClaims,
 };

@@ -7,6 +7,7 @@ import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
@@ -497,30 +498,7 @@ class AuthService {
       }
 
       if (userCredential.user != null) {
-        try {
-          await _ensureUserExists(
-            userCredential.user!,
-            onStatusChange,
-            'google',
-          );
-          // Initialize E2EE after successful login
-          onStatusChange?.call("Initializing encryption...");
-          await E2EEService.instance.initialize();
-          // Initialize device approval notifications
-          DeviceApprovalNotificationService().init();
-          // Start listening for token revocation
-          _startTokenRevocationListener(userCredential.user!.uid);
-          // Cache the token auth time for revocation detection
-          final idTokenResult = await userCredential.user!.getIdTokenResult();
-          _cachedTokenAuthTime = idTokenResult.authTime;
-          // Clear sign-in progress flag on success
-          if (canUseE2EEStorage) {
-            await E2EESecureStorage.instance.setSignInProgress(false);
-          }
-        } catch (e) {
-          await signOut();
-          rethrow;
-        }
+        await _completeSignIn(userCredential.user!, onStatusChange, 'google');
       }
 
       return userCredential;
@@ -1130,6 +1108,53 @@ class AuthService {
     }
   }
 
+  /// Sets Pro claims in emulator mode for testing.
+  /// In emulator mode, the beforeUserSignedIn blocking function doesn't trigger,
+  /// so we need to manually set Pro claims via a Cloud Function.
+  static Future<void> _setEmulatorProClaims(
+    User user,
+    Function(String)? onStatusChange,
+  ) async {
+    if (!FirebaseEmulatorConfig.isUsingEmulators) return;
+
+    AppLogger.log("[SIGN_IN] Emulator mode detected, setting Pro claims...");
+    onStatusChange?.call("Setting up emulator test claims...");
+
+    try {
+      AppLogger.log("[SIGN_IN] Calling setEmulatorTestClaims function...");
+      final functions = FirebaseFunctions.instance;
+      final result = await functions
+          .httpsCallable('setEmulatorTestClaims')
+          .call();
+      AppLogger.log("[SIGN_IN] setEmulatorTestClaims result: ${result.data}");
+
+      // Wait for claims to propagate in the emulator
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Force token refresh to get the new claims
+      await user.getIdToken(true);
+
+      // Verify claims were set
+      final tokenResult = await user.getIdTokenResult(true);
+      final plan = tokenResult.claims?['plan'];
+      AppLogger.log("[SIGN_IN] Token claims after refresh: plan=$plan");
+
+      if (plan != 'pro') {
+        // Try one more time after a longer delay
+        AppLogger.log("[SIGN_IN] Claims not propagated, waiting longer...");
+        await Future.delayed(const Duration(seconds: 1));
+        await user.getIdToken(true);
+      }
+    } catch (e, stackTrace) {
+      // Log but don't fail sign-in if claims setup fails
+      AppLogger.error(
+        "[SIGN_IN] Failed to set emulator test claims",
+        e,
+        stackTrace,
+      );
+    }
+  }
+
   /// Common sign-in completion logic
   static Future<void> _completeSignIn(
     User user,
@@ -1146,6 +1171,9 @@ class AuthService {
       if (kIsWeb) {
         await Future.delayed(const Duration(milliseconds: 500));
       }
+
+      // Set Pro claims in emulator mode for testing
+      await _setEmulatorProClaims(user, onStatusChange);
 
       await _ensureUserExists(user, onStatusChange, provider);
       // Load Firestore linked providers into cache

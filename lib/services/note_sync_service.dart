@@ -568,6 +568,7 @@ class NoteSyncService {
     DateTime? lastSynced = AppState.lastSynced;
     final bool isFirstSync = lastSynced == null;
     Query<Map<String, dynamic>> query = _notesCollection;
+
     if (lastSynced != null) {
       query = query.where(
         'updated_at',

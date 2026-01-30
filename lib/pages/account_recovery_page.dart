@@ -176,7 +176,6 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
           const SizedBox(height: 32),
 
           if (_hasRecoveryKey) ...[
-            // Recovery option
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -424,14 +423,15 @@ class _StartFreshConfirmationPageState
     try {
       AppLogger.log('StartFresh: User confirmed, verifying OTP');
 
-      // Call Firebase function with OTP to clear devices server-side
+      // Call Firebase function with OTP
       final functions = FirebaseFunctions.instance;
       final startFreshCallable = functions.httpsCallable('startFreshWithOtp');
+
       await startFreshCallable.call({'otp': otp});
 
       AppLogger.log('StartFresh: Server-side reset complete');
 
-      // Now clear local data and set up as first device
+      // Complete start fresh locally
       await E2EEService.instance.startFresh();
 
       if (mounted) {
