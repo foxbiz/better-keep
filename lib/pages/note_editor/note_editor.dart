@@ -72,7 +72,8 @@ class NoteEditor extends StatefulWidget {
   State<NoteEditor> createState() => _NoteEditorState();
 }
 
-class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
+class _NoteEditorState extends State<NoteEditor>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   static final Map<String, Metadata> _metadataCache = {};
   static final Map<String, MemoryImage> _base64ImageCache = {};
   static const int _maxCacheSize = 10;
@@ -520,13 +521,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   void didChangeMetrics() {
     super.didChangeMetrics();
     // Check keyboard visibility based on view insets
-    final bottomInset = WidgetsBinding
-        .instance
-        .platformDispatcher
-        .views
-        .first
-        .viewInsets
-        .bottom;
+    // Guard against empty views on Windows during minimize/display changes
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return;
+    final bottomInset = views.first.viewInsets.bottom;
     final keyboardVisible = bottomInset > 0;
     if (_isKeyboardVisible != keyboardVisible) {
       setState(() {

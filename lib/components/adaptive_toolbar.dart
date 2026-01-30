@@ -9,18 +9,21 @@ class AdaptiveToolbar extends StatefulWidget {
   final ScrollController? scrollController;
   final bool hideToggle;
 
-  static double get iconSize => switch (WidgetsBinding
-      .instance
-      .platformDispatcher
-      .views
-      .first
-      .display
-      .size
-      .width) {
-    < 400 => 16.0,
-    < 600 => 18.0,
-    _ => 20.0,
-  };
+  static double get iconSize {
+    // Guard against Windows platform view issues during certain lifecycle states
+    try {
+      final views = WidgetsBinding.instance.platformDispatcher.views;
+      if (views.isEmpty) return 20.0;
+      final width = views.first.display.size.width;
+      return switch (width) {
+        < 400 => 16.0,
+        < 600 => 18.0,
+        _ => 20.0,
+      };
+    } catch (_) {
+      return 20.0; // Default fallback on Windows display access errors
+    }
+  }
 
   const AdaptiveToolbar({
     required super.key,
