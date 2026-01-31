@@ -17,6 +17,7 @@ import 'package:better_keep/pages/note_editor/toolbar/align_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/attach_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/checklist_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/indent_button.dart';
+import 'package:better_keep/pages/note_editor/toolbar/line_spacing_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/link_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/redo_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/style_button.dart';
@@ -644,8 +645,9 @@ class _NoteEditorState extends State<NoteEditor>
 
   Widget? _buildAppBarTitle(Color foregroundColor) {
     final hasCheckboxes = _note.hasCheckboxes;
+    final screenWidth = MediaQuery.of(context).size.width;
 
-    if (!hasCheckboxes) return null;
+    if (!hasCheckboxes || screenWidth < 400) return null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -866,7 +868,7 @@ class _NoteEditorState extends State<NoteEditor>
                           ),
                           decoration: InputDecoration(
                             isDense: true,
-                            contentPadding: EdgeInsets.only(bottom: 0),
+                            contentPadding: EdgeInsets.only(bottom: 8),
                             border: InputBorder.none,
                             hintText: context.l10n.titleYourThought,
                             hintStyle: TextStyle(
@@ -1302,6 +1304,11 @@ class _NoteEditorState extends State<NoteEditor>
           readOnly: _note.readOnly,
         ),
         TextSizeButton(
+          focusNode: _focusNode,
+          controller: _controller,
+          readOnly: _note.readOnly,
+        ),
+        LineSpacingButton(
           focusNode: _focusNode,
           controller: _controller,
           readOnly: _note.readOnly,

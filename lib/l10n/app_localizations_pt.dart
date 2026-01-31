@@ -2387,6 +2387,24 @@ class AppLocalizationsPt extends AppLocalizations {
   String get textSizeHuge => 'Enorme';
 
   @override
+  String get lineSpacing => 'Espaçamento';
+
+  @override
+  String get lineSpacingTight => 'Compacto';
+
+  @override
+  String get lineSpacingNormal => 'Normal';
+
+  @override
+  String get lineSpacingRelaxed => 'Amplo';
+
+  @override
+  String get lineSpacingDouble => 'Duplo';
+
+  @override
+  String get lineSpacingRemove => 'Remover Espaçamento';
+
+  @override
   String get startWriting => 'Comece a escrever...';
 
   @override

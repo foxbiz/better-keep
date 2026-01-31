@@ -2448,6 +2448,24 @@
   "textSizeHuge": "Huge",
   "@textSizeHuge": {"description": "Huge text size option"},
   
+  "lineSpacing": "Line Spacing",
+  "@lineSpacing": {"description": "Line spacing tooltip"},
+  
+  "lineSpacingTight": "Tight",
+  "@lineSpacingTight": {"description": "Tight line spacing option"},
+  
+  "lineSpacingNormal": "Normal",
+  "@lineSpacingNormal": {"description": "Normal line spacing option"},
+  
+  "lineSpacingRelaxed": "Relaxed",
+  "@lineSpacingRelaxed": {"description": "Relaxed line spacing option"},
+  
+  "lineSpacingDouble": "Double",
+  "@lineSpacingDouble": {"description": "Double line spacing option"},
+  
+  "lineSpacingRemove": "Remove Spacing",
+  "@lineSpacingRemove": {"description": "Remove line spacing option"},
+  
   "startWriting": "Start writing...",
   "@startWriting": {"description": "Note editor placeholder text"},
   

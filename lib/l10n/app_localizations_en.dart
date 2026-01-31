@@ -2356,6 +2356,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get textSizeHuge => 'Huge';
 
   @override
+  String get lineSpacing => 'Line Spacing';
+
+  @override
+  String get lineSpacingTight => 'Tight';
+
+  @override
+  String get lineSpacingNormal => 'Normal';
+
+  @override
+  String get lineSpacingRelaxed => 'Relaxed';
+
+  @override
+  String get lineSpacingDouble => 'Double';
+
+  @override
+  String get lineSpacingRemove => 'Remove Spacing';
+
+  @override
   String get startWriting => 'Start writing...';
 
   @override

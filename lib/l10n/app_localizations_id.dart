@@ -2356,6 +2356,24 @@ class AppLocalizationsId extends AppLocalizations {
   String get textSizeHuge => 'Sangat Besar';
 
   @override
+  String get lineSpacing => 'Spasi Baris';
+
+  @override
+  String get lineSpacingTight => 'Rapat';
+
+  @override
+  String get lineSpacingNormal => 'Normal';
+
+  @override
+  String get lineSpacingRelaxed => 'Longgar';
+
+  @override
+  String get lineSpacingDouble => 'Ganda';
+
+  @override
+  String get lineSpacingRemove => 'Hapus Spasi';
+
+  @override
   String get startWriting => 'Mulai menulis...';
 
   @override
