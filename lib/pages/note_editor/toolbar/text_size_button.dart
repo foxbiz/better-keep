@@ -1,19 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 
 /// Text size options with their corresponding font sizes
 enum TextSizeOption {
-  tiny(12, 'Tiny'),
-  small(14, 'Small'),
-  normal(16, 'Normal'),
-  big(20, 'Big'),
-  huge(24, 'Huge');
+  tiny(12),
+  small(14),
+  normal(16),
+  big(20),
+  huge(24);
 
   final double fontSize;
-  final String label;
 
-  const TextSizeOption(this.fontSize, this.label);
+  const TextSizeOption(this.fontSize);
+
+  String getLabel(BuildContext context) {
+    return switch (this) {
+      TextSizeOption.tiny => context.l10n.textSizeTiny,
+      TextSizeOption.small => context.l10n.textSizeSmall,
+      TextSizeOption.normal => context.l10n.textSizeNormal,
+      TextSizeOption.big => context.l10n.textSizeBig,
+      TextSizeOption.huge => context.l10n.textSizeHuge,
+    };
+  }
 }
 
 class TextSizeButton extends StatefulWidget {
@@ -123,7 +133,7 @@ class _TextSizeButtonState extends State<TextSizeButton> {
           .map(
             (option) => AdaptiveMenuItem(
               icon: Icons.format_size,
-              label: option.label,
+              label: option.getLabel(context),
               isSelected:
                   _currentSize == option ||
                   (option == TextSizeOption.normal && _currentSize == null),
@@ -133,17 +143,17 @@ class _TextSizeButtonState extends State<TextSizeButton> {
           .toList(),
       child: IconButton(
         onPressed: _controller.isDisabled ? null : _controller.toggle,
-        icon: _buildIconWithIndicator(),
-        tooltip: 'Text Size',
+        icon: _buildIconWithIndicator(context),
+        tooltip: context.l10n.textSize,
       ),
     );
   }
 
-  Widget _buildIconWithIndicator() {
+  Widget _buildIconWithIndicator(BuildContext context) {
     // Show current size abbreviation if not normal
     final sizeLabel =
         _currentSize != null && _currentSize != TextSizeOption.normal
-        ? _currentSize!.label[0] // First letter: T, S, B, H
+        ? _currentSize!.getLabel(context)[0] // First letter: T, S, B, H
         : null;
 
     return Row(

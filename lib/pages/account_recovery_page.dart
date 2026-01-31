@@ -6,6 +6,7 @@ import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -51,8 +52,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
     final success = await showRecoverWithPassphraseDialog(context);
     if (success == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Recovery successful! Welcome back.'),
+        SnackBar(
+          content: Text(context.l10n.recoverySuccessfulWelcomeBack),
           backgroundColor: Colors.green,
         ),
       );
@@ -74,10 +75,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Approval request sent! Approve from another device.',
-            ),
+          SnackBar(
+            content: Text(context.l10n.approvalRequestSent),
             backgroundColor: Colors.blue,
           ),
         );
@@ -138,7 +137,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Checking account status...',
+              context.l10n.checkingAccountStatus,
               style: TextStyle(
                 fontSize: 16,
                 color: colorScheme.onSurface.withValues(alpha: 0.7),
@@ -156,8 +155,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
         children: [
           Text(
             _hasRecoveryKey
-                ? 'Recover Your Account'
-                : 'Account Recovery Required',
+                ? context.l10n.recoverYourAccount
+                : context.l10n.accountRecoveryRequired,
             style: Theme.of(
               context,
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -166,8 +165,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
           const SizedBox(height: 16),
           Text(
             _hasRecoveryKey
-                ? 'No active devices found. Use your recovery passphrase to restore access to your encrypted notes.'
-                : 'No active devices found and no recovery key is set up. You can start fresh with a new account, but your previous notes cannot be recovered.',
+                ? context.l10n.noActiveDevicesRecoveryKey
+                : context.l10n.noActiveDevicesNoRecoveryKey,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
@@ -181,7 +180,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
               child: ElevatedButton.icon(
                 onPressed: _recoverWithPassphrase,
                 icon: const Icon(Icons.key),
-                label: const Text('Recover with Passphrase'),
+                label: Text(context.l10n.recoverWithPassphrase),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
@@ -194,7 +193,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
               child: OutlinedButton.icon(
                 onPressed: _startFresh,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Start Fresh Instead'),
+                label: Text(context.l10n.startFreshInstead),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
@@ -217,7 +216,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Your previous notes are encrypted and cannot be recovered without a recovery key.',
+                      context.l10n.previousNotesEncryptedWarning,
                       style: TextStyle(color: colorScheme.error),
                     ),
                   ),
@@ -231,7 +230,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
               child: ElevatedButton.icon(
                 onPressed: _startFresh,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Start Fresh'),
+                label: Text(context.l10n.startFresh),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: colorScheme.error,
@@ -263,13 +262,13 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
 
           // Request approval option
           Text(
-            'Not your main device?',
+            context.l10n.notYourMainDevice,
             style: Theme.of(context).textTheme.titleMedium,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            'If you have another device with access to your notes, you can request approval from that device.',
+            context.l10n.anotherDeviceApprovalHint,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
@@ -292,8 +291,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
                   : const Icon(Icons.devices),
               label: Text(
                 _isRequestingApproval
-                    ? 'Requesting...'
-                    : 'Request Approval from Another Device',
+                    ? context.l10n.requesting
+                    : context.l10n.requestApprovalFromAnotherDevice,
               ),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -311,7 +310,9 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.logout),
-            label: Text(_isSigningOut ? 'Signing out...' : 'Sign Out'),
+            label: Text(
+              _isSigningOut ? context.l10n.signingOut : context.l10n.signOut,
+            ),
           ),
         ],
       ),
@@ -341,11 +342,11 @@ class _StartFreshConfirmationPageState
     // Show loading dialog with timeout and cancel support
     final loadingResult = await showLoadingDialog<Map<String, dynamic>>(
       context: context,
-      config: const LoadingDialogConfig(
-        message: 'Sending verification code...',
-        showCancelAfter: Duration(seconds: 5),
-        timeout: Duration(seconds: 30),
-        timeoutMessage: 'Taking too long. You can cancel and try again.',
+      config: LoadingDialogConfig(
+        message: context.l10n.sendingVerificationCode,
+        showCancelAfter: const Duration(seconds: 5),
+        timeout: const Duration(seconds: 30),
+        timeoutMessage: context.l10n.takingTooLongTryAgain,
       ),
       operation: () async {
         final sendOtpCallable = functions.httpsCallable('sendStartFreshOtp');
@@ -360,8 +361,8 @@ class _StartFreshConfirmationPageState
     if (loadingResult.cancelled || loadingResult.timedOut) {
       if (loadingResult.timedOut) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request timed out. Please try again.'),
+          SnackBar(
+            content: Text(context.l10n.requestTimedOut),
             backgroundColor: Colors.orange,
           ),
         );
@@ -373,7 +374,7 @@ class _StartFreshConfirmationPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            loadingResult.error ?? 'Failed to send verification code',
+            loadingResult.error ?? context.l10n.failedToSendVerificationCode,
           ),
           backgroundColor: Colors.red,
         ),
@@ -388,11 +389,11 @@ class _StartFreshConfirmationPageState
     final result = await showOtpDialog(
       context,
       OtpDialogConfig(
-        title: 'Verify Your Identity',
-        maskedEmail: maskedEmail ?? 'your email',
+        title: context.l10n.verifyYourIdentity,
+        maskedEmail: maskedEmail ?? context.l10n.yourEmail,
         icon: Icons.refresh,
         isDestructive: true,
-        verifyButtonLabel: 'Continue',
+        verifyButtonLabel: context.l10n.continueLabel,
         // No verifyFunctionName - OTP is verified atomically with startFreshWithOtp
       ),
     );
@@ -403,8 +404,8 @@ class _StartFreshConfirmationPageState
   Future<void> _confirmAndStartFresh() async {
     if (!_confirmed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please confirm that you understand the consequences'),
+        SnackBar(
+          content: Text(context.l10n.pleaseConfirmConsequences),
           backgroundColor: Colors.orange,
         ),
       );
@@ -437,8 +438,8 @@ class _StartFreshConfirmationPageState
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account reset successfully. Welcome!'),
+          SnackBar(
+            content: Text(context.l10n.accountResetSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
@@ -448,7 +449,7 @@ class _StartFreshConfirmationPageState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.message ?? 'Failed to reset account'),
+            content: Text(e.message ?? context.l10n.failedToResetAccount),
             backgroundColor: Colors.red,
           ),
         );
@@ -458,7 +459,7 @@ class _StartFreshConfirmationPageState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to reset account: $e'),
+            content: Text(context.l10n.failedToResetAccountError(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -481,7 +482,7 @@ class _StartFreshConfirmationPageState
           Icon(Icons.warning_amber, size: 80, color: colorScheme.error),
           const SizedBox(height: 24),
           Text(
-            'Start Fresh?',
+            context.l10n.startFreshQuestion,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
               color: colorScheme.error,
@@ -490,17 +491,23 @@ class _StartFreshConfirmationPageState
           ),
           const SizedBox(height: 16),
           Text(
-            'This action will:',
+            context.l10n.thisActionWill,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
-          _buildConsequenceItem(context, 'Remove all device authorizations'),
-          _buildConsequenceItem(context, 'Make your old notes unrecoverable'),
-          _buildConsequenceItem(context, 'Create a new encryption key'),
-          _buildConsequenceItem(context, 'Start with a blank account'),
+          _buildConsequenceItem(
+            context,
+            context.l10n.removeAllDeviceAuthorizations,
+          ),
+          _buildConsequenceItem(
+            context,
+            context.l10n.makeOldNotesUnrecoverable,
+          ),
+          _buildConsequenceItem(context, context.l10n.createNewEncryptionKey),
+          _buildConsequenceItem(context, context.l10n.startWithBlankAccount),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
@@ -521,7 +528,7 @@ class _StartFreshConfirmationPageState
                 ),
                 Expanded(
                   child: Text(
-                    'I understand that my old notes will be permanently inaccessible',
+                    context.l10n.iUnderstandOldNotesInaccessible,
                     style: TextStyle(
                       color: colorScheme.error,
                       fontWeight: FontWeight.w500,
@@ -540,7 +547,7 @@ class _StartFreshConfirmationPageState
               child: ElevatedButton.icon(
                 onPressed: _confirmAndStartFresh,
                 icon: const Icon(Icons.delete_forever),
-                label: const Text('Start Fresh'),
+                label: Text(context.l10n.startFresh),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: colorScheme.error,
@@ -556,7 +563,7 @@ class _StartFreshConfirmationPageState
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text('Cancel'),
+                child: Text(context.l10n.cancel),
               ),
             ),
           ],

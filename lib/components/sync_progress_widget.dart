@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// A floating widget that shows sync progress at the bottom of the screen.
@@ -297,7 +298,7 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
       ),
     };
 
-    final statusText = _buildStatusText();
+    final statusText = _buildStatusText(context);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
@@ -376,9 +377,9 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
     );
   }
 
-  String _buildStatusText() {
+  String _buildStatusText(BuildContext context) {
     if (hasFailed && statusMessage.isEmpty) {
-      return "$failedCount failed";
+      return context.l10n.syncFailedCount(failedCount);
     }
     if (hasProgress) {
       return "$syncedCount/$totalCount";

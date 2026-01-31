@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/note.dart';
@@ -66,12 +67,12 @@ class _UnlockNoteDialogState extends State<UnlockNoteDialog> {
 
   Future<void> _unlock() async {
     if (_isLocked) {
-      setState(() => _error = 'Too many attempts. Wait $_lockSeconds seconds.');
+      setState(() => _error = context.l10n.tooManyAttemptsWait(_lockSeconds));
       return;
     }
 
     if (_pinController.text.isEmpty) {
-      setState(() => _error = 'Please enter the PIN');
+      setState(() => _error = context.l10n.pleaseEnterPin);
       return;
     }
 
@@ -84,31 +85,30 @@ class _UnlockNoteDialogState extends State<UnlockNoteDialog> {
       _attempts++;
       if (_attempts >= _maxAttempts) {
         _startLockTimer();
-        setState(
-          () => _error = 'Too many attempts. Wait $_lockSeconds seconds.',
-        );
+        setState(() => _error = context.l10n.tooManyAttemptsWait(_lockSeconds));
       } else {
         final remaining = _maxAttempts - _attempts;
-        setState(() => _error = '${e.message}. $remaining attempts remaining.');
+        setState(
+          () => _error = context.l10n.attemptsRemaining(e.message, remaining),
+        );
       }
     } catch (e) {
       AppLogger.error("[UnlockNoteDialog] Failed to unlock note: $e");
       _attempts++;
       if (_attempts >= _maxAttempts) {
         _startLockTimer();
-        setState(
-          () => _error = 'Too many attempts. Wait $_lockSeconds seconds.',
-        );
+        setState(() => _error = context.l10n.tooManyAttemptsWait(_lockSeconds));
       } else {
-        setState(() => _error = 'Failed to unlock note');
+        setState(() => _error = context.l10n.failedToUnlockNote);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('Unlock Note'),
+      title: Text(l10n.unlockNote),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -119,8 +119,8 @@ class _UnlockNoteDialogState extends State<UnlockNoteDialog> {
               obscureText: _obscurePin,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'PIN',
-                hintText: 'Enter PIN',
+                labelText: l10n.pin,
+                hintText: l10n.enterPin,
                 errorText: _error,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
@@ -143,11 +143,13 @@ class _UnlockNoteDialogState extends State<UnlockNoteDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         ElevatedButton(
           onPressed: _isLocked ? null : _unlock,
-          child: Text(_isLocked ? 'Locked ($_lockSeconds s)' : 'Unlock'),
+          child: Text(
+            _isLocked ? l10n.lockedSeconds(_lockSeconds) : l10n.unlock,
+          ),
         ),
       ],
     );

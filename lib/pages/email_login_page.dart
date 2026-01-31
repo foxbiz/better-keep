@@ -2,6 +2,7 @@ import 'package:better_keep/config.dart';
 import 'package:better_keep/pages/password_reset_page.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -60,21 +61,21 @@ class _EmailLoginPageState extends State<EmailLoginPage>
 
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your email';
+      return context.l10n.pleaseEnterYourEmail;
     }
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     if (!emailRegex.hasMatch(value)) {
-      return 'Please enter a valid email';
+      return context.l10n.pleaseEnterAValidEmail;
     }
     return null;
   }
 
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your password';
+      return context.l10n.pleaseEnterYourPassword;
     }
     if (_isSignUp && value.length < 6) {
-      return 'Password must be at least 6 characters';
+      return context.l10n.passwordMustBeAtLeast6Characters;
     }
     return null;
   }
@@ -82,10 +83,10 @@ class _EmailLoginPageState extends State<EmailLoginPage>
   String? _validateConfirmPassword(String? value) {
     if (!_isSignUp) return null;
     if (value == null || value.isEmpty) {
-      return 'Please confirm your password';
+      return context.l10n.pleaseConfirmYourPassword;
     }
     if (value != _passwordController.text) {
-      return 'Passwords do not match';
+      return context.l10n.passwordsDoNotMatch;
     }
     return null;
   }
@@ -95,7 +96,9 @@ class _EmailLoginPageState extends State<EmailLoginPage>
 
     setState(() {
       _isLoading = true;
-      _statusMessage = _isSignUp ? "Creating account..." : "Signing in...";
+      _statusMessage = _isSignUp
+          ? context.l10n.creatingAccount
+          : context.l10n.signingIn;
     });
 
     try {
@@ -280,7 +283,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
                   child: IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.arrow_back),
-                    tooltip: 'Back',
+                    tooltip: context.l10n.back,
                   ),
                 ),
               ),
@@ -355,7 +358,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
           ),
           const SizedBox(height: 28),
           Text(
-            _isSignUp ? 'Create Account' : 'Welcome Back',
+            _isSignUp ? context.l10n.createAccount : context.l10n.welcomeBack,
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
@@ -366,7 +369,9 @@ class _EmailLoginPageState extends State<EmailLoginPage>
           ),
           const SizedBox(height: 8),
           Text(
-            _isSignUp ? 'Sign up with your email' : 'Sign in to continue',
+            _isSignUp
+                ? context.l10n.signUpWithYourEmail
+                : context.l10n.signInToContinue,
             style: TextStyle(
               fontSize: 15,
               color: colorScheme.onSurface.withValues(alpha: 0.6),
@@ -382,8 +387,8 @@ class _EmailLoginPageState extends State<EmailLoginPage>
             textInputAction: TextInputAction.next,
             validator: _validateEmail,
             decoration: InputDecoration(
-              labelText: 'Email',
-              hintText: 'you@example.com',
+              labelText: context.l10n.email,
+              hintText: context.l10n.emailHint,
               prefixIcon: Icon(
                 Icons.email_outlined,
                 color: colorScheme.primary.withValues(alpha: 0.7),
@@ -424,7 +429,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
             validator: _validatePassword,
             onFieldSubmitted: _isSignUp ? null : (_) => _handleSubmit(),
             decoration: InputDecoration(
-              labelText: 'Password',
+              labelText: context.l10n.password,
               prefixIcon: Icon(
                 Icons.lock_outline,
                 color: colorScheme.primary.withValues(alpha: 0.7),
@@ -477,7 +482,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
                         validator: _validateConfirmPassword,
                         onFieldSubmitted: (_) => _handleSubmit(),
                         decoration: InputDecoration(
-                          labelText: 'Confirm Password',
+                          labelText: context.l10n.confirmPassword,
                           prefixIcon: Icon(
                             Icons.lock_outline,
                             color: colorScheme.primary.withValues(alpha: 0.7),
@@ -546,7 +551,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
                   ),
                 ),
                 child: Text(
-                  'Forgot Password?',
+                  context.l10n.forgotPassword,
                   style: TextStyle(
                     color: colorScheme.primary,
                     fontWeight: FontWeight.w500,
@@ -584,7 +589,9 @@ class _EmailLoginPageState extends State<EmailLoginPage>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Text(
-                    _isSignUp ? 'Create Account' : 'Sign In',
+                    _isSignUp
+                        ? context.l10n.createAccount
+                        : context.l10n.signIn,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 16,
@@ -606,8 +613,8 @@ class _EmailLoginPageState extends State<EmailLoginPage>
             children: [
               Text(
                 _isSignUp
-                    ? 'Already have an account?'
-                    : "Don't have an account?",
+                    ? context.l10n.alreadyHaveAnAccount
+                    : context.l10n.dontHaveAnAccount,
                 style: TextStyle(
                   color: colorScheme.onSurface.withValues(alpha: 0.6),
                   fontSize: 14,
@@ -624,7 +631,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
                 child: Text(
-                  _isSignUp ? 'Sign In' : 'Sign Up',
+                  _isSignUp ? context.l10n.signIn : context.l10n.signUp,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: colorScheme.primary,

@@ -1,4 +1,5 @@
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 
@@ -37,7 +38,7 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
       if (value.toLowerCase().contains('password') ||
           value.toLowerCase().contains('123456') ||
           value.toLowerCase().contains('qwerty')) {
-        warning = 'This passphrase is too common and easy to guess';
+        warning = context.l10n.passphraseTooCommon;
       } else {
         // Check for mix of character types
         final hasUppercase = value.contains(RegExp(r'[A-Z]'));
@@ -52,8 +53,7 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
         ].where((x) => x).length;
 
         if (typesCount < 2) {
-          warning =
-              'Consider adding uppercase, lowercase, numbers, or symbols for a stronger passphrase';
+          warning = context.l10n.passphraseStrengthAdvice;
         }
       }
     }
@@ -89,7 +89,9 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save recovery key: $e')),
+          SnackBar(
+            content: Text(context.l10n.failedSaveRecoveryKey(e.toString())),
+          ),
         );
         setState(() => _isLoading = false);
       }
@@ -101,7 +103,9 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.isUpdate ? 'Update Recovery Key' : 'Set Up Recovery Key',
+          widget.isUpdate
+              ? context.l10n.updateRecoveryKey
+              : context.l10n.setupRecoveryKey,
         ),
       ),
       body: SingleChildScrollView(
@@ -122,8 +126,7 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Create a recovery passphrase that can restore access to your '
-                    'notes if you lose all your devices.',
+                    context.l10n.recoveryPassphraseDescription,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -148,8 +151,7 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Store this passphrase securely. Without it, you cannot '
-                            'recover your notes if you lose all devices.',
+                            context.l10n.recoveryPassphraseWarning,
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
@@ -165,8 +167,8 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                     obscureText: _obscurePassphrase,
                     autofocus: true,
                     decoration: InputDecoration(
-                      labelText: 'Recovery Passphrase',
-                      hintText: 'Enter a strong passphrase',
+                      labelText: context.l10n.recoveryPassphrase,
+                      hintText: context.l10n.enterAStrongPassphrase,
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
@@ -182,10 +184,10 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter a passphrase';
+                        return context.l10n.pleaseEnterPassphrase;
                       }
                       if (value.length < 6) {
-                        return 'Passphrase must be at least 6 characters';
+                        return context.l10n.passphraseMinLength;
                       }
                       return null;
                     },
@@ -221,8 +223,8 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                     controller: _confirmController,
                     obscureText: _obscureConfirm,
                     decoration: InputDecoration(
-                      labelText: 'Confirm Passphrase',
-                      hintText: 'Re-enter your passphrase',
+                      labelText: context.l10n.confirmPassphrase,
+                      hintText: context.l10n.reenterPassphrase,
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
@@ -237,7 +239,7 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                     ),
                     validator: (value) {
                       if (value != _passphraseController.text) {
-                        return 'Passphrases do not match';
+                        return context.l10n.passphrasesDoNotMatch;
                       }
                       return null;
                     },
@@ -245,11 +247,11 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _hintController,
-                    decoration: const InputDecoration(
-                      labelText: 'Hint (Optional)',
-                      hintText: 'A hint to help you remember',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.lightbulb_outline),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.hintOptional,
+                      hintText: context.l10n.hintToRemember,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lightbulb_outline),
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -265,7 +267,11 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                             ),
                           )
                         : const Icon(Icons.save),
-                    label: Text(_isLoading ? 'Saving...' : 'Save Recovery Key'),
+                    label: Text(
+                      _isLoading
+                          ? context.l10n.saving
+                          : context.l10n.saveRecoveryKey,
+                    ),
                   ),
                 ],
               ),

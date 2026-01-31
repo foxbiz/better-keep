@@ -22,6 +22,7 @@ import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -142,12 +143,12 @@ class _UserPageState extends State<UserPage> {
             IconButton(
               onPressed: _handleRefresh,
               icon: const Icon(Icons.refresh),
-              tooltip: 'Refresh',
+              tooltip: context.l10n.refresh,
             ),
           TextButton.icon(
             onPressed: () => _handleSignOut(context),
             icon: const Icon(Icons.logout),
-            label: const Text("Sign Out"),
+            label: Text(context.l10n.signOut),
           ),
           const SizedBox(width: 8),
         ],
@@ -193,19 +194,19 @@ class _UserPageState extends State<UserPage> {
                             _buildStatItem(
                               context,
                               _totalNotes.toString(),
-                              "Notes",
+                              context.l10n.notes_,
                               Icons.note_outlined,
                             ),
                             _buildStatItem(
                               context,
                               _upcomingReminders.toString(),
-                              "Reminders",
+                              context.l10n.reminders,
                               Icons.alarm_outlined,
                             ),
                             _buildStatItem(
                               context,
                               _totalMedia.toString(),
-                              "Media",
+                              context.l10n.media,
                               Icons.image_outlined,
                             ),
                           ],
@@ -269,9 +270,9 @@ class _UserPageState extends State<UserPage> {
     if (mounted) {
       setState(() {}); // Force rebuild to update avatar and linked accounts
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('All up to date'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(context.l10n.allUpToDate),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -302,9 +303,12 @@ class _UserPageState extends State<UserPage> {
             ),
             child: const Icon(Icons.sync_problem, color: Colors.red, size: 48),
           ),
-          title: const Text(
-            "⚠️ UNSYNCED NOTES",
-            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          title: Text(
+            "⚠️ ${context.l10n.dataLossWarning}",
+            style: const TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -322,7 +326,7 @@ class _UserPageState extends State<UserPage> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        "$pendingSyncCount note${pendingSyncCount == 1 ? '' : 's'} not synced",
+                        context.l10n.notesNotSynced(pendingSyncCount),
                         style: const TextStyle(
                           color: Colors.red,
                           fontWeight: FontWeight.w600,
@@ -333,22 +337,18 @@ class _UserPageState extends State<UserPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                "You have notes that haven't been synced to the cloud yet. "
-                "If you sign out now, these notes will be LOST FOREVER.\n\n"
-                "Consider waiting for sync to complete or exporting your data first.",
-              ),
+              Text(context.l10n.unsyncedNotesWarning),
             ],
           ),
           actions: [
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text("Cancel"),
+              child: Text(context.l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text("Sign Out Anyway"),
+              child: Text(context.l10n.signOutAnyway),
             ),
           ],
         ),
@@ -380,9 +380,12 @@ class _UserPageState extends State<UserPage> {
               size: 48,
             ),
           ),
-          title: const Text(
-            "⚠️ DATA LOSS WARNING",
-            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          title: Text(
+            "⚠️ ${context.l10n.dataLossWarning}",
+            style: const TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -394,14 +397,14 @@ class _UserPageState extends State<UserPage> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.key_off, color: Colors.red),
-                    SizedBox(width: 12),
+                    const Icon(Icons.key_off, color: Colors.red),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        "No recovery key set up",
-                        style: TextStyle(
+                        context.l10n.noRecoveryKeySet,
+                        style: const TextStyle(
                           color: Colors.red,
                           fontWeight: FontWeight.w600,
                         ),
@@ -411,22 +414,18 @@ class _UserPageState extends State<UserPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                "If you sign out and lose access to all your approved devices, "
-                "you will PERMANENTLY lose access to ALL your encrypted notes.\n\n"
-                "This action cannot be undone.",
-              ),
+              Text(context.l10n.signOutNoRecoveryKeyWarning),
             ],
           ),
           actions: [
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text("Cancel"),
+              child: Text(context.l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text("Sign Out Anyway"),
+              child: Text(context.l10n.signOutAnyway),
             ),
           ],
         ),
@@ -446,23 +445,20 @@ class _UserPageState extends State<UserPage> {
             ),
             child: const Icon(Icons.logout, color: Colors.orange, size: 32),
           ),
-          title: const Text(
-            "Sign Out",
-            style: TextStyle(fontWeight: FontWeight.bold),
+          title: Text(
+            context.l10n.signOut,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          content: const Text(
-            "Are you sure you want to sign out?\n\n"
-            "You will need to sign in again to access your notes.",
-          ),
+          content: Text(context.l10n.signOutConfirmation),
           actions: [
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text("Cancel"),
+              child: Text(context.l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-              child: const Text("Sign Out"),
+              child: Text(context.l10n.signOut),
             ),
           ],
         ),
@@ -487,7 +483,7 @@ class _UserPageState extends State<UserPage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error signing out: $e'),
+            content: Text(context.l10n.errorSigningOut(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -532,16 +528,14 @@ class _UserPageState extends State<UserPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        count == 1
-                            ? "1 Device Waiting for Approval"
-                            : "$count Devices Waiting for Approval",
+                        context.l10n.nDevicesWaitingForApproval(count),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: Colors.orange.shade800,
                         ),
                       ),
                       Text(
-                        "Review and approve to grant access",
+                        context.l10n.reviewAndApprove,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -631,12 +625,12 @@ class _UserPageState extends State<UserPage> {
           else ...[
             TextButton(
               onPressed: () => _approveDevice(request.deviceId),
-              child: const Text("Approve"),
+              child: Text(context.l10n.approve),
             ),
             IconButton(
               icon: Icon(Icons.close, color: theme.colorScheme.error, size: 20),
               onPressed: () => _revokeDevice(request.deviceId),
-              tooltip: "Deny",
+              tooltip: context.l10n.deny,
               visualDensity: VisualDensity.compact,
             ),
           ],
@@ -678,16 +672,14 @@ class _UserPageState extends State<UserPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        count == 1
-                            ? "1 Share Access Request"
-                            : "$count Share Access Requests",
+                        context.l10n.nShareAccessRequests(count),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: theme.colorScheme.primary,
                         ),
                       ),
                       Text(
-                        "Someone wants to view your shared note",
+                        context.l10n.someoneWantsToView,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -777,12 +769,12 @@ class _UserPageState extends State<UserPage> {
           else ...[
             TextButton(
               onPressed: () => _approveShareRequest(request),
-              child: const Text("Approve"),
+              child: Text(context.l10n.approve),
             ),
             IconButton(
               icon: Icon(Icons.close, color: theme.colorScheme.error, size: 20),
               onPressed: () => _denyShareRequest(request),
-              tooltip: "Deny",
+              tooltip: context.l10n.deny,
               visualDensity: VisualDensity.compact,
             ),
           ],
@@ -798,13 +790,13 @@ class _UserPageState extends State<UserPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Access approved')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.accessApproved)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to approve: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.failedToApprove(e.toString()))),
+        );
       }
     } finally {
       if (mounted) setState(() => _processingShareRequests.remove(request.id));
@@ -818,13 +810,13 @@ class _UserPageState extends State<UserPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Access denied')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.accessDenied)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to deny: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.failedToDeny(e.toString()))),
+        );
       }
     } finally {
       if (mounted) setState(() => _processingShareRequests.remove(request.id));
@@ -874,15 +866,17 @@ class _UserPageState extends State<UserPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Subscription',
+                            context.l10n.subscription,
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           Text(
                             status.isTrialSubscription
-                                ? 'Trial'
-                                : '${plan.displayName} Plan',
+                                ? context.l10n.trial
+                                : context.l10n.plan(
+                                    plan.localizedDisplayName(context.l10n),
+                                  ),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -916,7 +910,7 @@ class _UserPageState extends State<UserPage> {
                           child: FilledButton.icon(
                             onPressed: () => _handleSubscribe(context),
                             icon: const Icon(Icons.star),
-                            label: const Text('Upgrade to Pro'),
+                            label: Text(context.l10n.upgradeToPro),
                           ),
                         ),
                       ],
@@ -940,7 +934,7 @@ class _UserPageState extends State<UserPage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Subscription Cancelled',
+                            context.l10n.subscriptionCancelled,
                             style: theme.textTheme.titleSmall?.copyWith(
                               color: theme.colorScheme.onTertiaryContainer,
                               fontWeight: FontWeight.bold,
@@ -948,8 +942,9 @@ class _UserPageState extends State<UserPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Your Pro access will end on ${_formatDate(status.expiresAt)}. '
-                            'You can subscribe again after it expires.',
+                            context.l10n.subscriptionCancelledInfo(
+                              _formatDate(status.expiresAt),
+                            ),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onTertiaryContainer,
                             ),
@@ -968,7 +963,7 @@ class _UserPageState extends State<UserPage> {
                               ? null
                               : () => _handleDebugDeleteSubscription(context),
                           icon: const Icon(Icons.bug_report, size: 16),
-                          label: const Text('DEBUG: Delete Subscription'),
+                          label: Text(context.l10n.debugDeleteSubscription),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.orange,
                           ),
@@ -995,10 +990,10 @@ class _UserPageState extends State<UserPage> {
                             : const Icon(Icons.cancel_outlined),
                         label: Text(
                           _isSubscriptionActionLoading
-                              ? 'Cancelling...'
+                              ? context.l10n.cancellingSubscription
                               : status.isRazorpaySubscription
-                              ? 'Cancel Subscription'
-                              : 'Manage Subscription',
+                              ? context.l10n.cancelSubscription
+                              : context.l10n.manageSubscription,
                         ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: theme.colorScheme.error,
@@ -1015,7 +1010,7 @@ class _UserPageState extends State<UserPage> {
                               ? null
                               : () => _handleDebugDeleteSubscription(context),
                           icon: const Icon(Icons.bug_report, size: 16),
-                          label: const Text('DEBUG: Delete Subscription'),
+                          label: Text(context.l10n.debugDeleteSubscription),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.orange,
                           ),
@@ -1026,7 +1021,7 @@ class _UserPageState extends State<UserPage> {
                 ] else ...[
                   // Upgrade prompt for free users
                   Text(
-                    'Upgrade to Pro for unlimited locked notes, cloud sync, and more.',
+                    context.l10n.upgradeToProDescription,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -1038,7 +1033,7 @@ class _UserPageState extends State<UserPage> {
                         child: FilledButton.icon(
                           onPressed: () => _handleSubscribe(context),
                           icon: const Icon(Icons.star),
-                          label: const Text('Upgrade to Pro'),
+                          label: Text(context.l10n.upgradeToPro),
                         ),
                       ),
                     ],
@@ -1078,7 +1073,7 @@ class _UserPageState extends State<UserPage> {
           textColor = theme.colorScheme.onPrimaryContainer;
           break;
       }
-      label = plan.displayName.toUpperCase();
+      label = plan.localizedDisplayName(context.l10n).toUpperCase();
     }
 
     return Container(
@@ -1106,17 +1101,17 @@ class _UserPageState extends State<UserPage> {
 
     String billingText;
     if (status.isTrialSubscription) {
-      billingText = 'Free Trial';
+      billingText = context.l10n.freeTrial;
     } else {
       switch (status.billingPeriod) {
         case BillingPeriod.monthly:
-          billingText = 'Monthly subscription';
+          billingText = context.l10n.monthlySubscription;
           break;
         case BillingPeriod.yearly:
-          billingText = 'Yearly subscription';
+          billingText = context.l10n.yearlySubscription;
           break;
         case null:
-          billingText = 'Subscription';
+          billingText = context.l10n.subscription;
           break;
       }
     }
@@ -1153,7 +1148,7 @@ class _UserPageState extends State<UserPage> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Free Trial Active',
+                      context.l10n.freeTrialActive,
                       style: theme.textTheme.titleSmall?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -1164,7 +1159,10 @@ class _UserPageState extends State<UserPage> {
                 if (status.expiresAt != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Expires ${_formatDate(status.expiresAt!)} (${status.daysUntilExpiration} days left)',
+                    context.l10n.expiresOnDaysLeft(
+                      _formatDate(status.expiresAt!),
+                      status.daysUntilExpiration,
+                    ),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -1172,7 +1170,7 @@ class _UserPageState extends State<UserPage> {
                 ],
                 const SizedBox(height: 8),
                 Text(
-                  'Enjoy all Pro features during your trial!',
+                  context.l10n.enjoyProFeatures,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -1183,13 +1181,18 @@ class _UserPageState extends State<UserPage> {
           ),
           const SizedBox(height: 12),
         ] else ...[
-          _buildDetailRow(context, Icons.payment, 'Billing', billingText),
+          _buildDetailRow(
+            context,
+            Icons.payment,
+            context.l10n.billing,
+            billingText,
+          ),
           if (status.expiresAt != null) ...[
             const SizedBox(height: 8),
             _buildDetailRow(
               context,
               status.willAutoRenew ? Icons.autorenew : Icons.event,
-              status.willAutoRenew ? 'Renews' : 'Expires',
+              status.willAutoRenew ? context.l10n.renews : context.l10n.expires,
               _formatDate(status.expiresAt!),
             ),
           ],
@@ -1209,7 +1212,7 @@ class _UserPageState extends State<UserPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Your subscription is in a grace period. Please update your payment method.',
+                    context.l10n.subscriptionInGracePeriod,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.orange,
                     ),
@@ -1282,7 +1285,9 @@ class _UserPageState extends State<UserPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'You already have an active ${status.plan.displayName} subscription!',
+            context.l10n.alreadyHaveSubscription(
+              status.plan.localizedDisplayName(context.l10n),
+            ),
           ),
           backgroundColor: Colors.green,
         ),
@@ -1319,7 +1324,7 @@ class _UserPageState extends State<UserPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('Upgrade Now?')),
+                Expanded(child: Text(context.l10n.upgradeNowQuestion)),
               ],
             ),
             content: Column(
@@ -1327,12 +1332,12 @@ class _UserPageState extends State<UserPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'You still have $expiryText on your free trial.',
+                  context.l10n.trialTimeLeft(expiryText),
                   style: theme.textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'If you subscribe now, your trial will end immediately and billing will start right away.',
+                  context.l10n.subscribeNowTrialEnds,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -1343,11 +1348,11 @@ class _UserPageState extends State<UserPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Continue Trial'),
+                child: Text(context.l10n.continueTrial),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Upgrade Now'),
+                child: Text(context.l10n.upgradeNow),
               ),
             ],
           );
@@ -1370,23 +1375,19 @@ class _UserPageState extends State<UserPage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Cancel Subscription'),
-          content: const Text(
-            'Are you sure you want to cancel your subscription?\n\n'
-            'Your subscription will remain active until the end of the current billing period. '
-            'After that, you will lose access to Pro features.',
-          ),
+          title: Text(context.l10n.cancelSubscription),
+          content: Text(context.l10n.cancelSubscriptionConfirmation),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Keep Subscription'),
+              child: Text(context.l10n.keepSubscription),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error,
               ),
-              child: const Text('Cancel Subscription'),
+              child: Text(context.l10n.cancelSubscription),
             ),
           ],
         ),
@@ -1420,26 +1421,23 @@ class _UserPageState extends State<UserPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.bug_report, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('DEBUG: Delete Subscription'),
+            const Icon(Icons.bug_report, color: Colors.orange),
+            const SizedBox(width: 8),
+            Text(context.l10n.debugDeleteSubscription),
           ],
         ),
-        content: const Text(
-          'This will immediately delete your subscription from the database.\n\n'
-          'This is for TESTING ONLY and will not cancel the actual Razorpay subscription.',
-        ),
+        content: Text(context.l10n.debugDeleteSubscriptionWarning),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text('Delete'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -1458,8 +1456,8 @@ class _UserPageState extends State<UserPage> {
         SnackBar(
           content: Text(
             success
-                ? 'DEBUG: Subscription deleted successfully'
-                : 'DEBUG: Failed to delete subscription',
+                ? context.l10n.debugSubscriptionDeleted
+                : context.l10n.debugSubscriptionDeleteFailed,
           ),
           backgroundColor: success ? Colors.green : Colors.red,
           behavior: SnackBarBehavior.floating,
@@ -1550,13 +1548,13 @@ class _UserPageState extends State<UserPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Connected Accounts',
+                        context.l10n.connectedAccounts,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        'Sign in with any linked account',
+                        context.l10n.signInWithAnyLinked,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -1584,7 +1582,7 @@ class _UserPageState extends State<UserPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Linking requires authentication with each platform to verify ownership.',
+                      context.l10n.linkingRequiresAuth,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.blue.shade700,
                       ),
@@ -1656,7 +1654,7 @@ class _UserPageState extends State<UserPage> {
                 ),
                 if (isLinked)
                   Text(
-                    'Connected',
+                    context.l10n.connected,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.green,
                     ),
@@ -1670,13 +1668,13 @@ class _UserPageState extends State<UserPage> {
             // Check if this is the primary provider (original sign-up method)
             if (provider.id == AuthService.getPrimaryProviderId())
               Tooltip(
-                message: 'Cannot unlink the original sign-in method',
+                message: context.l10n.cannotUnlinkPrimary,
                 child: TextButton(
                   onPressed: null,
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
-                  child: const Text('Primary'),
+                  child: Text(context.l10n.primary),
                 ),
               )
             // All other linked providers can be unlinked
@@ -1687,7 +1685,7 @@ class _UserPageState extends State<UserPage> {
                   foregroundColor: Colors.red,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                 ),
-                child: const Text('Unlink'),
+                child: Text(context.l10n.unlink),
               ),
           ] else if (provider.onLink != null)
             FilledButton.tonal(
@@ -1695,7 +1693,7 @@ class _UserPageState extends State<UserPage> {
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
-              child: const Text('Link'),
+              child: Text(context.l10n.link),
             ),
         ],
       ),
@@ -1714,7 +1712,7 @@ class _UserPageState extends State<UserPage> {
     };
     final providerId = providerIds[providerName.toLowerCase()];
     if (providerId == null) {
-      snackbar('Unknown provider: $providerName', Colors.red);
+      snackbar(context.l10n.unknownProviderError(providerName), Colors.red);
       return;
     }
 
@@ -1724,11 +1722,11 @@ class _UserPageState extends State<UserPage> {
 
       final loadingResult = await showLoadingDialog<Map<String, dynamic>>(
         context: context,
-        config: const LoadingDialogConfig(
-          message: 'Sending verification code...',
-          showCancelAfter: Duration(seconds: 5),
-          timeout: Duration(seconds: 30),
-          timeoutMessage: 'Taking too long. You can cancel and try again.',
+        config: LoadingDialogConfig(
+          message: context.l10n.sendingVerificationCode,
+          showCancelAfter: const Duration(seconds: 5),
+          timeout: const Duration(seconds: 30),
+          timeoutMessage: context.l10n.takingTooLong,
         ),
         operation: () async {
           final sendOtpCallable = functions.httpsCallable(
@@ -1748,12 +1746,12 @@ class _UserPageState extends State<UserPage> {
         return;
       }
       if (loadingResult.timedOut) {
-        snackbar('Request timed out. Please try again.', Colors.orange);
+        snackbar(context.l10n.requestTimedOut, Colors.orange);
         return;
       }
       if (!loadingResult.success) {
         snackbar(
-          loadingResult.error ?? 'Failed to send verification code',
+          loadingResult.error ?? context.l10n.failedSendCode,
           Colors.red,
         );
         return;
@@ -1766,10 +1764,10 @@ class _UserPageState extends State<UserPage> {
       final otpResult = await showOtpDialog(
         context,
         OtpDialogConfig(
-          title: 'Verify Account Link',
+          title: context.l10n.verifyAccountLink,
           maskedEmail: maskedEmail,
           icon: Icons.link,
-          verifyButtonLabel: 'Verify & Link',
+          verifyButtonLabel: context.l10n.verifyAndLink,
           verifyFunctionName: 'verifyAccountLinkOtp',
           verifyFunctionParams: {'provider': providerId},
         ),
@@ -1788,16 +1786,16 @@ class _UserPageState extends State<UserPage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
+        builder: (context) => Center(
           child: Card(
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Linking account...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(context.l10n.linkingAccount),
                 ],
               ),
             ),
@@ -1829,7 +1827,10 @@ class _UserPageState extends State<UserPage> {
       if (mounted) {
         await _fetchE2EEInfo(); // Refresh user data including linked providers
         setState(() {});
-        snackbar('Successfully linked $providerName account', Colors.green);
+        snackbar(
+          context.l10n.successfullyLinkedProvider(providerName),
+          Colors.green,
+        );
       }
     } on FirebaseFunctionsException catch (e) {
       // Dismiss any dialogs
@@ -1837,26 +1838,26 @@ class _UserPageState extends State<UserPage> {
         Navigator.of(context).pop();
       }
 
-      String errorMessage = 'Failed to link account';
+      String errorMessage = context.l10n.failedLinkAccount;
 
       switch (e.code) {
         case 'unauthenticated':
-          errorMessage = 'Please sign in again and try.';
+          errorMessage = context.l10n.pleaseSignInAgain;
           break;
         case 'failed-precondition':
-          errorMessage = 'No email associated with your account.';
+          errorMessage = context.l10n.noEmailAssociated;
           break;
         case 'already-exists':
-          errorMessage = '$providerName is already linked to your account.';
+          errorMessage = context.l10n.providerAlreadyLinked(providerName);
           break;
         case 'resource-exhausted':
-          errorMessage = e.message ?? 'Please wait before requesting again.';
+          errorMessage = e.message ?? context.l10n.pleaseWaitBeforeRequesting;
           break;
         case 'deadline-exceeded':
-          errorMessage = 'Session expired. Please try again.';
+          errorMessage = context.l10n.sessionExpired_;
           break;
         default:
-          errorMessage = e.message ?? 'Failed to link account';
+          errorMessage = e.message ?? context.l10n.failedLinkAccount;
       }
 
       if (mounted) snackbar(errorMessage, Colors.red);
@@ -1866,21 +1867,18 @@ class _UserPageState extends State<UserPage> {
         Navigator.of(context).pop();
       }
 
-      String errorMessage = 'Failed to link account';
+      String errorMessage = context.l10n.failedLinkAccount;
       final errorStr = e.toString();
 
       if (errorStr.contains('credential-already-in-use')) {
-        errorMessage =
-            'This $providerName account is already linked to another user.';
+        errorMessage = context.l10n.providerLinkedToAnother(providerName);
       } else if (errorStr.contains('provider-already-linked')) {
-        errorMessage = '$providerName is already linked to your account.';
+        errorMessage = context.l10n.providerAlreadyLinked(providerName);
       } else if (errorStr.contains('email-already-in-use')) {
-        errorMessage =
-            'An account with this email already exists. '
-            'Sign in with that account first, then link from there.';
+        errorMessage = context.l10n.emailAlreadyInUse;
       } else if (errorStr.contains('cancelled') ||
           errorStr.contains('canceled')) {
-        errorMessage = 'Linking was cancelled.';
+        errorMessage = context.l10n.linkingCancelled;
       } else if (e is Exception) {
         final msg = errorStr.replaceFirst('Exception: ', '');
         if (msg.length < 100) errorMessage = msg;
@@ -1906,20 +1904,17 @@ class _UserPageState extends State<UserPage> {
             ),
             child: const Icon(Icons.link_off, color: Colors.red, size: 32),
           ),
-          title: Text('Unlink ${provider.name}?'),
-          content: const Text(
-            'You will no longer be able to sign in with this account. '
-            'Make sure you have another way to access your account.',
-          ),
+          title: Text(context.l10n.unlinkProviderQuestion(provider.name)),
+          content: Text(context.l10n.unlinkProviderWarning),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              child: Text(context.l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Unlink'),
+              child: Text(context.l10n.unlink),
             ),
           ],
         ),
@@ -1931,14 +1926,17 @@ class _UserPageState extends State<UserPage> {
 
       if (mounted) {
         setState(() {});
-        snackbar('Unlinked ${provider.name}', Colors.green);
+        snackbar(
+          context.l10n.unlinkedSuccessfully(provider.name),
+          Colors.green,
+        );
       }
     } catch (e) {
-      String errorMessage = 'Failed to unlink account';
+      String errorMessage = context.l10n.failedUnlinkAccount;
       final errorStr = e.toString();
 
       if (errorStr.contains('Cannot unlink')) {
-        errorMessage = 'Cannot unlink the only sign-in method.';
+        errorMessage = context.l10n.cannotUnlinkOnlyMethod;
       } else if (e is Exception) {
         final msg = errorStr.replaceFirst('Exception: ', '');
         if (msg.length < 100) errorMessage = msg;
@@ -2073,7 +2071,7 @@ class _UserPageState extends State<UserPage> {
                 leading: const Icon(Icons.vpn_key),
                 title: Row(
                   children: [
-                    const Text("Recovery Key"),
+                    Text(context.l10n.recoveryKey),
                     if (!_hasRecoveryKey) ...[
                       const SizedBox(width: 8),
                       Container(
@@ -2086,7 +2084,7 @@ class _UserPageState extends State<UserPage> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          "Important",
+                          context.l10n.important,
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: Theme.of(
@@ -2099,7 +2097,7 @@ class _UserPageState extends State<UserPage> {
                     ],
                   ],
                 ),
-                subtitle: const Text("Manage your recovery passphrase"),
+                subtitle: Text(context.l10n.manageRecoveryPassphrase),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _manageRecoveryKey,
               ),
@@ -2112,7 +2110,7 @@ class _UserPageState extends State<UserPage> {
                 child: ElevatedButton.icon(
                   onPressed: _setupE2EE,
                   icon: const Icon(Icons.lock),
-                  label: const Text("Enable End-to-End Encryption"),
+                  label: Text(context.l10n.enableE2EE),
                 ),
               ),
             ],
@@ -2120,7 +2118,7 @@ class _UserPageState extends State<UserPage> {
             if (status == E2EEStatus.pendingApproval) ...[
               const SizedBox(height: 12),
               Text(
-                "Open Better Keep on an already-authorized device to approve this device.",
+                context.l10n.approveOnOtherDevice,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -2182,7 +2180,7 @@ class _UserPageState extends State<UserPage> {
                 const Icon(Icons.devices, size: 24),
                 const SizedBox(width: 12),
                 Text(
-                  "Your Devices",
+                  context.l10n.yourDevices,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -2230,7 +2228,7 @@ class _UserPageState extends State<UserPage> {
                     ),
                     TextButton(
                       onPressed: _fetchE2EEInfo,
-                      child: const Text('Retry'),
+                      child: Text(context.l10n.retry),
                     ),
                   ],
                 ),
@@ -2245,7 +2243,7 @@ class _UserPageState extends State<UserPage> {
               // Pending devices (show approval buttons) - only on primary device
               if (pendingDevices.isNotEmpty && _isFirstDevice) ...[
                 Text(
-                  "Pending Approval",
+                  context.l10n.pendingApprovalSection,
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: Colors.orange,
                   ),
@@ -2261,7 +2259,7 @@ class _UserPageState extends State<UserPage> {
               // Approved devices
               if (approvedDevices.isNotEmpty) ...[
                 Text(
-                  "Authorized Devices",
+                  context.l10n.authorizedDevices,
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -2426,7 +2424,7 @@ class _UserPageState extends State<UserPage> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          "This device",
+                          context.l10n.thisDevice,
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.onPrimary,
                             fontSize: 10,
@@ -2460,12 +2458,12 @@ class _UserPageState extends State<UserPage> {
                 IconButton(
                   icon: const Icon(Icons.check_circle, color: Colors.green),
                   onPressed: () => _approveDevice(device.id),
-                  tooltip: "Approve",
+                  tooltip: context.l10n.approve,
                 ),
                 IconButton(
                   icon: const Icon(Icons.cancel, color: Colors.red),
                   onPressed: () => _revokeDevice(device.id),
-                  tooltip: "Deny",
+                  tooltip: context.l10n.deny,
                 ),
               ],
             )
@@ -2473,7 +2471,7 @@ class _UserPageState extends State<UserPage> {
             IconButton(
               icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
               onPressed: () => _confirmRevokeDevice(device),
-              tooltip: "Remove device",
+              tooltip: context.l10n.removeDevice,
             ),
         ],
       ),
@@ -2525,21 +2523,16 @@ class _UserPageState extends State<UserPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Enable End-to-End Encryption"),
-        content: const Text(
-          "This will encrypt all your notes and attachments. "
-          "Only devices you authorize will be able to read them.\n\n"
-          "Make sure to set up a recovery key after enabling E2EE, "
-          "or you may lose access to your notes if you lose all your devices.",
-        ),
+        title: Text(context.l10n.enableE2EE),
+        content: Text(context.l10n.enableE2EEConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
+            child: Text(context.l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Enable E2EE"),
+            child: Text(context.l10n.enableE2EE_),
           ),
         ],
       ),
@@ -2558,15 +2551,15 @@ class _UserPageState extends State<UserPage> {
           final recoverySetup = await showSetupRecoveryKeyPage(context);
           if (recoverySetup == true) {
             scaffoldMessenger.showSnackBar(
-              const SnackBar(content: Text('Recovery key saved successfully!')),
+              SnackBar(
+                content: Text(context.l10n.recoveryKeySavedSuccessfully),
+              ),
             );
           } else {
             // User skipped - show warning
             scaffoldMessenger.showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Warning: Without a recovery key, you may lose access to your notes if you lose all devices.',
-                ),
+              SnackBar(
+                content: Text(context.l10n.noRecoveryKeyWarning),
                 duration: Duration(seconds: 5),
               ),
             );
@@ -2574,9 +2567,11 @@ class _UserPageState extends State<UserPage> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("Failed to enable E2EE: $e")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.failedEnableE2EE(e.toString())),
+            ),
+          );
         }
       }
       if (mounted) setState(() => _isLoading = false);
@@ -2594,10 +2589,8 @@ class _UserPageState extends State<UserPage> {
       final action = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Recovery Key'),
-          content: const Text(
-            'You have a recovery key set up. What would you like to do?',
-          ),
+          title: Text(context.l10n.recoveryKey),
+          content: Text(context.l10n.recoveryKeySetUp),
           actions: [
             Wrap(
               alignment: WrapAlignment.center,
@@ -2605,12 +2598,12 @@ class _UserPageState extends State<UserPage> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, 'remove'),
                   child: Text(
-                    'Remove',
+                    context.l10n.remove,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                     ),
@@ -2618,7 +2611,7 @@ class _UserPageState extends State<UserPage> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, 'update'),
-                  child: const Text('Update'),
+                  child: Text(context.l10n.update),
                 ),
               ],
             ),
@@ -2631,7 +2624,7 @@ class _UserPageState extends State<UserPage> {
         final updated = await showUpdateRecoveryKeyDialog(context);
         if (updated == true && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Recovery key updated!')),
+            SnackBar(content: Text(context.l10n.recoveryKeyUpdated)),
           );
         }
       } else if (action == 'remove' && mounted) {
@@ -2639,9 +2632,9 @@ class _UserPageState extends State<UserPage> {
         final removed = await showRemoveRecoveryKeyDialog(context);
         if (removed == true && mounted) {
           setState(() => _hasRecoveryKey = false);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Recovery key removed')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.recoveryKeyRemoved)),
+          );
         }
       }
     } else {
@@ -2651,7 +2644,7 @@ class _UserPageState extends State<UserPage> {
         setState(() => _hasRecoveryKey = true);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Recovery key saved!')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.recoveryKeySaved)));
       }
     }
   }
@@ -2666,13 +2659,15 @@ class _UserPageState extends State<UserPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Device approved")));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.deviceApproved_)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed to approve device: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.failedApproveDevice(e.toString())),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _processingDeviceIds.remove(deviceId));
@@ -2691,9 +2686,11 @@ class _UserPageState extends State<UserPage> {
       _successfulDeletionCount++;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed to remove device: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.failedRemoveDevice(e.toString())),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -2707,8 +2704,8 @@ class _UserPageState extends State<UserPage> {
         await _fetchE2EEInfo();
         if (_successfulDeletionCount > 0) {
           final message = _successfulDeletionCount == 1
-              ? "Device removed"
-              : "$_successfulDeletionCount devices removed";
+              ? context.l10n.deviceRemoved
+              : context.l10n.nDevicesRemoved(_successfulDeletionCount);
           scaffoldMessenger.showSnackBar(SnackBar(content: Text(message)));
         }
         // Reset counters
@@ -2721,15 +2718,12 @@ class _UserPageState extends State<UserPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Remove Device"),
-        content: Text(
-          'Are you sure you want to remove "${device.name}"?\n\n'
-          "This device will no longer have access to your notes.",
-        ),
+        title: Text(context.l10n.removeDevice_),
+        content: Text(context.l10n.removeDeviceConfirmation(device.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
+            child: Text(context.l10n.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -2737,7 +2731,7 @@ class _UserPageState extends State<UserPage> {
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Remove"),
+            child: Text(context.l10n.remove),
           ),
         ],
       ),
@@ -2813,7 +2807,7 @@ class _UserPageState extends State<UserPage> {
         setState(() {
           _isLoadingDevices = false;
           _devicesError = isNetworkError
-              ? 'No internet connection. Please check your network and try again.'
+              ? context.l10n.noInternetConnection
               : null; // Silently ignore other errors (E2EE not set up)
         });
       }
@@ -2843,7 +2837,7 @@ class _UserPageState extends State<UserPage> {
                 Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  "Danger Zone",
+                  context.l10n.dangerZone,
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: Colors.red,
                     fontWeight: FontWeight.bold,
@@ -2853,8 +2847,7 @@ class _UserPageState extends State<UserPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              "Permanently delete your account and all associated data. "
-              "This action will be completed after a 30-day grace period.",
+              context.l10n.dangerZoneDescription,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -2865,7 +2858,7 @@ class _UserPageState extends State<UserPage> {
               child: OutlinedButton.icon(
                 onPressed: _scheduleAccountDeletion,
                 icon: const Icon(Icons.delete_forever, color: Colors.red),
-                label: const Text("Delete My Account"),
+                label: Text(context.l10n.deleteMyAccount),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.red,
                   side: const BorderSide(color: Colors.red),
@@ -2904,7 +2897,7 @@ class _UserPageState extends State<UserPage> {
       barrierDismissible: false,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text("Exporting Data"),
+          title: Text(context.l10n.exportingData),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2948,7 +2941,7 @@ class _UserPageState extends State<UserPage> {
                 if (progress >= 1.0) {
                   return TextButton(
                     onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text("Done"),
+                    child: Text(context.l10n.done),
                   );
                 }
                 return TextButton(
@@ -2956,7 +2949,7 @@ class _UserPageState extends State<UserPage> {
                     cancelled = true;
                     Navigator.pop(dialogContext);
                   },
-                  child: const Text("Cancel"),
+                  child: Text(context.l10n.cancel),
                 );
               },
             ),
@@ -2974,7 +2967,11 @@ class _UserPageState extends State<UserPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(cancelled ? "Export cancelled" : "Export failed"),
+            content: Text(
+              cancelled
+                  ? context.l10n.exportCancelled
+                  : context.l10n.exportFailed,
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -2986,20 +2983,16 @@ class _UserPageState extends State<UserPage> {
       final shareExport = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text("Export Complete"),
-          content: Text(
-            "Your data has been exported successfully.\n\n"
-            "File saved to:\n$exportPath\n\n"
-            "Would you like to share the export file?",
-          ),
+          title: Text(context.l10n.exportComplete),
+          content: Text(context.l10n.exportCompleteMessage(exportPath!)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text("Close"),
+              child: Text(context.l10n.close),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text("Share"),
+              child: Text(context.l10n.share),
             ),
           ],
         ),
@@ -3021,11 +3014,11 @@ class _UserPageState extends State<UserPage> {
     // Show loading dialog with timeout and cancel support
     final loadingResult = await showLoadingDialog<Map<String, dynamic>>(
       context: context,
-      config: const LoadingDialogConfig(
-        message: 'Sending verification code...',
+      config: LoadingDialogConfig(
+        message: context.l10n.sendingVerificationCode,
         showCancelAfter: Duration(seconds: 5),
         timeout: Duration(seconds: 30),
-        timeoutMessage: 'Taking too long. You can cancel and try again.',
+        timeoutMessage: context.l10n.takingTooLong,
       ),
       operation: () async {
         final sendOtpCallable = functions.httpsCallable('sendDeletionOtp');
@@ -3040,8 +3033,8 @@ class _UserPageState extends State<UserPage> {
     if (loadingResult.cancelled || loadingResult.timedOut) {
       if (loadingResult.timedOut) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request timed out. Please try again.'),
+          SnackBar(
+            content: Text(context.l10n.requestTimedOut),
             backgroundColor: Colors.orange,
           ),
         );
@@ -3052,9 +3045,7 @@ class _UserPageState extends State<UserPage> {
     if (!loadingResult.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            loadingResult.error ?? 'Failed to send verification code',
-          ),
+          content: Text(loadingResult.error ?? context.l10n.failedSendCode),
           backgroundColor: Colors.red,
         ),
       );
@@ -3070,11 +3061,11 @@ class _UserPageState extends State<UserPage> {
     final result = await showOtpDialog(
       context,
       OtpDialogConfig(
-        title: 'Verify Your Identity',
+        title: context.l10n.verifyYourIdentity,
         maskedEmail: maskedEmail ?? 'your email',
         icon: Icons.delete_forever,
         isDestructive: true,
-        verifyButtonLabel: 'Continue',
+        verifyButtonLabel: context.l10n.continue_,
         // No verifyFunctionName - we just want to collect the OTP
       ),
     );
@@ -3102,7 +3093,7 @@ class _UserPageState extends State<UserPage> {
             ),
           ),
           title: Text(
-            "Delete Your Account?",
+            context.l10n.deleteYourAccount,
             style: theme.textTheme.headlineSmall?.copyWith(
               color: Colors.red.shade700,
               fontWeight: FontWeight.bold,
@@ -3130,7 +3121,7 @@ class _UserPageState extends State<UserPage> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          "This action is irreversible",
+                          context.l10n.actionIrreversible,
                           style: TextStyle(
                             color: Colors.red.shade700,
                             fontWeight: FontWeight.bold,
@@ -3140,19 +3131,19 @@ class _UserPageState extends State<UserPage> {
                     ),
                     const SizedBox(height: 12),
                     _buildWarningItem(
-                      "All your notes will be permanently deleted",
+                      context.l10n.allNotesDeleted,
                       Colors.red.shade700,
                     ),
                     _buildWarningItem(
-                      "All attachments and media will be removed",
+                      context.l10n.allAttachmentsRemoved,
                       Colors.red.shade700,
                     ),
                     _buildWarningItem(
-                      "You will be logged out from all devices",
+                      context.l10n.loggedOutAllDevices,
                       Colors.red.shade700,
                     ),
                     _buildWarningItem(
-                      "Your account cannot be recovered",
+                      context.l10n.accountCannotBeRecovered,
                       Colors.red.shade700,
                     ),
                   ],
@@ -3175,7 +3166,7 @@ class _UserPageState extends State<UserPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        "30-day grace period: Sign back in to cancel deletion.",
+                        context.l10n.gracePeriodInfo,
                         style: theme.textTheme.bodySmall,
                       ),
                     ),
@@ -3184,7 +3175,7 @@ class _UserPageState extends State<UserPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                "You will receive a verification code via email.",
+                context.l10n.verificationCodeViaEmail,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -3195,7 +3186,7 @@ class _UserPageState extends State<UserPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text("Keep My Account"),
+              child: Text(context.l10n.keepMyAccount),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
@@ -3203,7 +3194,7 @@ class _UserPageState extends State<UserPage> {
                 backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
               ),
-              child: const Text("Delete Account"),
+              child: Text(context.l10n.deleteAccount),
             ),
           ],
         );
@@ -3225,7 +3216,7 @@ class _UserPageState extends State<UserPage> {
 
       final user = AuthService.currentUser;
       if (user == null) {
-        throw Exception("User not signed in");
+        throw Exception(context.l10n.userNotSignedIn);
       }
 
       // Call Cloud Function to schedule deletion with OTP for atomic verification
@@ -3238,7 +3229,7 @@ class _UserPageState extends State<UserPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        String errorMessage = "Failed to schedule deletion";
+        String errorMessage = context.l10n.failedScheduleDeletion;
         if (e is FirebaseFunctionsException) {
           errorMessage = e.message ?? errorMessage;
         }
@@ -3265,17 +3256,17 @@ class _UserPageState extends State<UserPage> {
             color: Colors.green.shade600,
             size: 48,
           ),
-          title: const Text("Deletion Scheduled"),
+          title: Text(context.l10n.deletionScheduled),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                "Your account will be deleted on $deleteDate.",
+                context.l10n.accountWillBeDeletedOn(deleteDate),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              const Text(
-                "Would you like to export your data before signing out?",
+              Text(
+                context.l10n.exportBeforeSignOut,
                 textAlign: TextAlign.center,
               ),
             ],
@@ -3283,12 +3274,12 @@ class _UserPageState extends State<UserPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, 'skip'),
-              child: const Text("Skip"),
+              child: Text(context.l10n.skip),
             ),
             FilledButton.icon(
               onPressed: () => Navigator.pop(context, 'export'),
               icon: const Icon(Icons.download),
-              label: const Text("Export Data"),
+              label: Text(context.l10n.exportData),
             ),
           ],
         );
@@ -3310,10 +3301,7 @@ class _UserPageState extends State<UserPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            "Account deletion scheduled for $deleteDate. "
-            "Sign in again to cancel.",
-          ),
+          content: Text(context.l10n.deletionScheduledMessage(deleteDate)),
           duration: const Duration(seconds: 6),
         ),
       );

@@ -10,6 +10,7 @@ import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
@@ -226,15 +227,21 @@ class NotesState extends State<Notes> {
 
   (IconData, String) _getEmptyStateContent() {
     if (widget.searchMode) {
-      return (Icons.search_off, 'No matching notes');
+      return (Icons.search_off, context.l10n.noMatchingNotes);
     }
     return switch (AppState.showNotes) {
-      NoteType.all => (Icons.note_outlined, 'No notes yet'),
-      NoteType.archived => (Icons.archive_outlined, 'No archived notes'),
-      NoteType.trashed => (Icons.delete_outline, 'Trash is empty'),
-      NoteType.pinned => (Icons.push_pin_outlined, 'No pinned notes'),
-      NoteType.locked => (Icons.lock_outline, 'No locked notes'),
-      NoteType.reminder => (Icons.notifications_none, 'No reminders set'),
+      NoteType.all => (Icons.note_outlined, context.l10n.noNotesYet),
+      NoteType.archived => (
+        Icons.archive_outlined,
+        context.l10n.noArchivedNotes,
+      ),
+      NoteType.trashed => (Icons.delete_outline, context.l10n.trashIsEmpty),
+      NoteType.pinned => (Icons.push_pin_outlined, context.l10n.noPinnedNotes),
+      NoteType.locked => (Icons.lock_outline, context.l10n.noLockedNotes),
+      NoteType.reminder => (
+        Icons.notifications_none,
+        context.l10n.noRemindersSet,
+      ),
     };
   }
 
@@ -447,7 +454,7 @@ class NotesState extends State<Notes> {
                 onPressed: () {
                   showPage(context, NoteEditor());
                 },
-                child: const Text('Create your first note'),
+                child: Text(context.l10n.createYourFirstNote),
               ),
             ],
           ],
@@ -609,15 +616,15 @@ class NotesState extends State<Notes> {
           const SizedBox(height: 16),
           Text(
             AppState.notesViewMode == NoteViewMode.folderLabels
-                ? 'No labels yet'
-                : 'No colored notes yet',
+                ? context.l10n.noLabelsYet
+                : context.l10n.noColoredNotesYet,
             style: const TextStyle(fontSize: 18, color: Colors.grey),
           ),
           const SizedBox(height: 8),
           Text(
             AppState.notesViewMode == NoteViewMode.folderLabels
-                ? 'Add labels to your notes to organize them into folders'
-                : 'Add colors to your notes to organize them into folders',
+                ? context.l10n.addLabelsToOrganize
+                : context.l10n.addColorsToOrganize,
             style: const TextStyle(fontSize: 14, color: Colors.grey),
             textAlign: TextAlign.center,
           ),

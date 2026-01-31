@@ -1,4 +1,5 @@
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 class FolderLocation {
@@ -113,13 +114,13 @@ class FolderBreadcrumb extends StatelessWidget {
             ),
           ),
           // Current folder indicator
-          _buildCurrentFolder(theme),
+          _buildCurrentFolder(context, theme),
         ],
       ],
     );
   }
 
-  Widget _buildCurrentFolder(ThemeData theme) {
+  Widget _buildCurrentFolder(BuildContext context, ThemeData theme) {
     if (location == null) {
       return const SizedBox.shrink();
     }
@@ -131,7 +132,7 @@ class FolderBreadcrumb extends StatelessWidget {
           Icon(Icons.push_pin, size: 18, color: theme.colorScheme.onSurface),
           const SizedBox(width: 4),
           Text(
-            'Pinned',
+            context.l10n.pinnedNotes,
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w600,
             ),

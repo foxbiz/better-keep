@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -85,13 +86,13 @@ class HelpPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Help')),
+      appBar: AppBar(title: Text(context.l10n.help)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'Frequently Asked Questions',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Text(
+            context.l10n.frequentlyAskedQuestions,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           ..._faqs.map((faq) => _buildFaqItem(context, faq)),
@@ -135,19 +136,17 @@ class HelpPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Need More Help?',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        Text(
+          context.l10n.needMoreHelp,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        const Text(
-          'If you have any questions or need assistance, feel free to reach out to us.',
-        ),
+        Text(context.l10n.needMoreHelpDescription),
         const SizedBox(height: 16),
         Card(
           child: ListTile(
             leading: const Icon(Icons.email),
-            title: const Text('Contact Us'),
+            title: Text(context.l10n.contactUs),
             subtitle: const Text('contact@betterkeep.app'),
             onTap: () async {
               final uri = Uri(

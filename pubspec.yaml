@@ -81,6 +81,7 @@ msix_config:
   store: true
 
 flutter:
+  generate: true
   uses-material-design: true
   assets:
     - assets/

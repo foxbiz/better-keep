@@ -5,6 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/file_utils.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -166,7 +167,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Audio Recording'),
+        title: Text(context.l10n.audioRecording),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -174,10 +175,10 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
             children: [
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  hintText: 'Enter a title for this recording',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.title,
+                  hintText: context.l10n.enterRecordingTitle,
+                  border: const OutlineInputBorder(),
                 ),
                 textCapitalization: TextCapitalization.sentences,
               ),
@@ -185,7 +186,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
                   widget.recording.transcript!.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text(
-                  'Transcript',
+                  context.l10n.transcript,
                   style: Theme.of(
                     context,
                   ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -210,7 +211,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
               ],
               const SizedBox(height: 16),
               Text(
-                'Duration: ${_formatDuration(_duration)}',
+                '${context.l10n.duration}: ${_formatDuration(_duration)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -219,7 +220,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () {
@@ -236,7 +237,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
               }
               Navigator.of(context).pop();
             },
-            child: const Text('Save'),
+            child: Text(context.l10n.save),
           ),
         ],
       ),
@@ -247,14 +248,12 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Recording'),
-        content: const Text(
-          'Are you sure you want to delete this audio recording?',
-        ),
+        title: Text(context.l10n.deleteRecording),
+        content: Text(context.l10n.deleteRecordingConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () {
@@ -262,7 +261,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
               widget.onDelete();
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -344,7 +343,7 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
                       // Title
                       Expanded(
                         child: Text(
-                          hasTitle ? title : 'Audio Recording',
+                          hasTitle ? title : context.l10n.audioRecording,
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(fontWeight: FontWeight.w500),
                           maxLines: 1,

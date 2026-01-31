@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 
 class RedoButton extends StatefulWidget {
   final QuillController controller;
@@ -43,6 +44,7 @@ class _RedoButtonState extends State<RedoButton> {
   Widget build(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.redo),
+      tooltip: context.l10n.redo,
       onPressed: canRedo && !widget.readOnly ? widget.controller.redo : null,
     );
   }

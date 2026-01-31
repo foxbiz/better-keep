@@ -1,4 +1,5 @@
 import 'package:better_keep/services/reminder_permission_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/week_days.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/reminder.dart';
@@ -12,9 +13,7 @@ Future<Reminder?> reminder(BuildContext context) async {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Notification and alarm permissions are required for reminders',
-          ),
+          content: Text(context.l10n.notificationPermissionsRequired),
           backgroundColor: Colors.orange,
         ),
       );
@@ -50,7 +49,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Set Reminder'),
+      title: Text(context.l10n.setReminder),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -58,7 +57,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Repeat'),
+              Text(context.l10n.repeat),
               Switch(
                 value: _isRepeatMode,
                 onChanged: (value) {
@@ -105,7 +104,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
             ),
           SizedBox(height: 8),
           DropdownButton<String>(
-            hint: Text("Time"),
+            hint: Text(context.l10n.time),
             isExpanded: true,
             value: _selectedTimeOption,
             onChanged: _selectTime,
@@ -116,7 +115,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, null),
-          child: Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         TextButton(
           onPressed: _time == null
@@ -134,7 +133,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
                     Reminder.build(effectiveDate, _time!, effectiveRepeat),
                   );
                 },
-          child: Text('OK'),
+          child: Text(context.l10n.ok),
         ),
       ],
     );

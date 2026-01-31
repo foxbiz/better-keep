@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 
 class UndoButton extends StatefulWidget {
   final QuillController controller;
@@ -42,6 +43,7 @@ class _UndoButtonState extends State<UndoButton> {
   Widget build(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.undo),
+      tooltip: context.l10n.undo,
       onPressed: canUndo && !widget.readOnly ? widget.controller.undo : null,
     );
   }

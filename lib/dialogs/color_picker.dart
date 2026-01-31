@@ -1,4 +1,5 @@
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart' as fcp;
 
@@ -74,9 +75,9 @@ class _AppColorPickerDialogState extends State<AppColorPickerDialog> {
               ),
               const SizedBox(height: 16),
               if (recentColors.isNotEmpty) ...[
-                const Text(
-                  'Recent',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                Text(
+                  context.l10n.recent,
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -112,9 +113,9 @@ class _AppColorPickerDialogState extends State<AppColorPickerDialog> {
                 ),
                 const SizedBox(height: 16),
               ],
-              const Text(
-                'Custom',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+              Text(
+                context.l10n.custom,
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 8),
               fcp.ColorPicker(
@@ -136,11 +137,11 @@ class _AppColorPickerDialogState extends State<AppColorPickerDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: Text(context.l10n.cancel),
                   ),
                   ElevatedButton(
                     onPressed: () => widget.onColorSelected(_tempColor),
-                    child: const Text('Select'),
+                    child: Text(context.l10n.select),
                   ),
                 ],
               ),

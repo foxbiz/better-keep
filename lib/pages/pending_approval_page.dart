@@ -8,6 +8,7 @@ import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// Page shown when a device is pending approval or has been revoked.
@@ -97,9 +98,9 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
   Future<void> _recoverWithPassphrase() async {
     final success = await showRecoverWithPassphraseDialog(context);
     if (success == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Recovery successful! Access restored.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.recoverySuccessful)));
     }
   }
 
@@ -141,12 +142,12 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
         if (status == E2EEStatus.ready) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('Device approved!')));
+          ).showSnackBar(SnackBar(content: Text(context.l10n.deviceApproved)));
         } else if (status == E2EEStatus.revoked) {
           // Don't show snackbar for revoked - UI already shows revoked state
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Still waiting for approval...')),
+            SnackBar(content: Text(context.l10n.waitingForApproval)),
           );
         }
       }
@@ -188,16 +189,14 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
       _deviceManager.clearRevokedFlag();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Re-approval request sent. Waiting for approval...'),
-          ),
+          SnackBar(content: Text(context.l10n.reapprovalRequestSent)),
         );
         setState(() {});
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to request re-approval: $e')),
+          SnackBar(content: Text(context.l10n.failedReapproval(e.toString()))),
         );
       }
     } finally {
@@ -218,7 +217,9 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            isRevoked ? 'Device Revoked' : 'Waiting for Approval',
+            isRevoked
+                ? context.l10n.deviceRevoked
+                : context.l10n.waitingForApprovalTitle,
             style: Theme.of(
               context,
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -227,7 +228,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
           const SizedBox(height: 16),
           if (isRevoked)
             Text(
-              'This device has been revoked and can no longer access your notes. Please sign in again from an approved device to re-authorize.',
+              context.l10n.deviceRevokedDescription,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -248,7 +249,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
             const SizedBox(height: 24),
             if (_masterDeviceName != null) ...[
               Text(
-                'Please approve from:',
+                context.l10n.pleaseApproveFrom,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -280,7 +281,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
               ),
             ] else
               Text(
-                'Waiting for approval from another device...',
+                context.l10n.waitingForApprovalFromDevice,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -298,9 +299,9 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Remember this device'),
+                      Text(context.l10n.rememberThisDevice),
                       Text(
-                        'If unchecked, this device will be removed when you sign out',
+                        context.l10n.deviceRemovedOnSignOut,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -316,7 +317,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
             TextButton.icon(
               onPressed: _recoverWithPassphrase,
               icon: const Icon(Icons.key),
-              label: const Text('Recover with Passphrase'),
+              label: Text(context.l10n.recoverWithPassphrase),
             ),
             const SizedBox(height: 8),
           ],
@@ -330,7 +331,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
               );
             },
             icon: const Icon(Icons.restart_alt),
-            label: const Text('Start Fresh'),
+            label: Text(context.l10n.startFresh),
           ),
           const SizedBox(height: 8),
           if (isRevoked) ...[
@@ -341,7 +342,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
               ElevatedButton.icon(
                 onPressed: _requestReapproval,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Request Re-approval'),
+                label: Text(context.l10n.requestReapproval),
               ),
             const SizedBox(height: 16),
           ] else ...[
@@ -355,7 +356,11 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.refresh),
-              label: Text(_isCheckingStatus ? 'Checking...' : 'Check Status'),
+              label: Text(
+                _isCheckingStatus
+                    ? context.l10n.checkingStatus
+                    : context.l10n.checkStatus,
+              ),
             ),
             const SizedBox(height: 16),
           ],
@@ -370,8 +375,10 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                 : Icon(isRevoked ? Icons.logout : Icons.cancel),
             label: Text(
               _isCancellingRequest
-                  ? 'Please wait...'
-                  : (isRevoked ? 'Sign Out' : 'Cancel Request'),
+                  ? context.l10n.pleaseWait
+                  : (isRevoked
+                        ? context.l10n.signOut
+                        : context.l10n.cancelRequest),
             ),
           ),
         ],

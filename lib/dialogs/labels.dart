@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/dialogs/prompt.dart';
 import 'package:better_keep/dialogs/delete_dialog.dart';
@@ -16,7 +17,7 @@ Future<List<String>?> labels(
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: Text("Labels"),
+        title: Text(context.l10n.labels),
         content: Labels(
           selectedLabels: initiallySelected,
           mode: mode,
@@ -29,7 +30,7 @@ Future<List<String>?> labels(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, selectedLabels),
-            child: Text('OK'),
+            child: Text(context.l10n.ok),
           ),
         ],
       );
@@ -157,7 +158,7 @@ class _LabelsState extends State<Labels> {
               ),
               SizedBox(height: 12),
               Text(
-                'No labels yet',
+                context.l10n.noLabelsYet,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
@@ -166,7 +167,7 @@ class _LabelsState extends State<Labels> {
               ),
               SizedBox(height: 4),
               Text(
-                'Create a label above to organize your notes',
+                context.l10n.createLabelToOrganize,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
@@ -227,8 +228,8 @@ class _LabelsState extends State<Labels> {
           : () async {
               final newName = await prompt(
                 context,
-                title: "Edit ${label.name}",
-                placeholder: 'Enter new name',
+                title: context.l10n.editLabelName(label.name),
+                placeholder: context.l10n.enterNewName,
                 currentText: label.name,
               );
               if (newName == null || newName.isEmpty) {
@@ -245,9 +246,8 @@ class _LabelsState extends State<Labels> {
               onPressed: () async {
                 var confirmation = await showDeleteDialog(
                   context,
-                  title: "Delete Label",
-                  message:
-                      "Are you sure you want to delete this label (${label.name})?",
+                  title: context.l10n.deleteLabel,
+                  message: context.l10n.deleteLabelConfirmation(label.name),
                 );
                 if (confirmation == true) {
                   label.delete();
@@ -267,7 +267,7 @@ class _LabelsState extends State<Labels> {
               controller: _newLabelController,
               focusNode: _newLabelFocusNode,
               decoration: InputDecoration(
-                hintText: 'New label name',
+                hintText: context.l10n.newLabelName,
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -284,7 +284,7 @@ class _LabelsState extends State<Labels> {
           IconButton(
             icon: Icon(Icons.add),
             onPressed: _addLabelFromInput,
-            tooltip: 'Add label',
+            tooltip: context.l10n.addLabel,
           ),
         ],
       ),

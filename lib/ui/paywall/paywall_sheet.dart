@@ -1,5 +1,6 @@
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// Shows the paywall as a full-screen page.
@@ -99,7 +100,7 @@ class PaywallSheet extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Upgrade to Pro',
+                context.l10n.upgradeToPro,
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -109,7 +110,7 @@ class PaywallSheet extends StatelessWidget {
 
               // Feature-specific or custom message
               Text(
-                _getMessage(),
+                _getMessage(context),
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -137,7 +138,7 @@ class PaywallSheet extends StatelessWidget {
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: Text(
-                  'Maybe later',
+                  context.l10n.maybeLater,
                   style: TextStyle(color: theme.colorScheme.outline),
                 ),
               ),
@@ -148,14 +149,16 @@ class PaywallSheet extends StatelessWidget {
     );
   }
 
-  String _getMessage() {
+  String _getMessage(BuildContext context) {
     if (customMessage != null) return customMessage!;
 
     if (feature != null) {
-      return '${EntitlementGuard.getFeatureDescription(feature!)} is a Pro feature.';
+      return context.l10n.featureIsProFeature(
+        EntitlementGuard.getFeatureDescription(feature!, context.l10n),
+      );
     }
 
-    return 'Unlock all features and support development.';
+    return context.l10n.unlockAllFeatures;
   }
 }
 
@@ -763,7 +766,9 @@ class _PaywallPageState extends State<PaywallPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'You already have an active ${status.plan.displayName} subscription!',
+            context.l10n.alreadyHaveSubscription(
+              status.plan.localizedDisplayName(context.l10n),
+            ),
           ),
           backgroundColor: Colors.green,
         ),
@@ -953,7 +958,7 @@ class _PaywallPageState extends State<PaywallPage> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Unlock the Full Experience',
+                      context.l10n.unlockTheFullExperience,
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -961,7 +966,7 @@ class _PaywallPageState extends State<PaywallPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _getMessage(),
+                      _getMessage(context),
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -1102,14 +1107,16 @@ class _PaywallPageState extends State<PaywallPage> {
     );
   }
 
-  String _getMessage() {
+  String _getMessage(BuildContext context) {
     if (widget.customMessage != null) return widget.customMessage!;
 
     if (widget.feature != null) {
-      return '${EntitlementGuard.getFeatureDescription(widget.feature!)} is a Pro feature.';
+      return context.l10n.featureIsProFeature(
+        EntitlementGuard.getFeatureDescription(widget.feature!, context.l10n),
+      );
     }
 
-    return 'Unlock all features and support development.';
+    return context.l10n.unlockAllFeatures;
   }
 
   Future<void> _handleSubscribe() async {

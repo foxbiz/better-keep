@@ -1,3 +1,5 @@
+import 'package:better_keep/l10n/app_localizations.dart';
+
 /// User subscription plans for Better Keep Notes
 ///
 /// This is the single source of truth for all plan definitions.
@@ -10,13 +12,23 @@ enum UserPlan {
   /// Pro tier - full cloud sync and premium features
   pro;
 
-  /// Display name for UI
+  /// Display name for UI (non-localized, for internal use)
   String get displayName {
     switch (this) {
       case UserPlan.free:
         return 'Free';
       case UserPlan.pro:
         return 'Pro';
+    }
+  }
+
+  /// Localized display name for UI
+  String localizedDisplayName(AppLocalizations l10n) {
+    switch (this) {
+      case UserPlan.free:
+        return l10n.planFree;
+      case UserPlan.pro:
+        return l10n.planPro;
     }
   }
 

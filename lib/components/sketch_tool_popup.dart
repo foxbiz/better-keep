@@ -3,6 +3,7 @@ import 'package:better_keep/dialogs/color_picker.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/custom_icons.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 
@@ -155,7 +156,7 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
           Padding(
             padding: const EdgeInsets.only(bottom: 4, left: 4),
             child: Text(
-              'Tool',
+              context.l10n.sketchTool,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -175,7 +176,7 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
         Padding(
           padding: const EdgeInsets.only(bottom: 4, left: 4),
           child: Text(
-            'Size',
+            context.l10n.sketchSize,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -195,7 +196,7 @@ class _SketchToolPopupState extends State<SketchToolPopup> {
           Padding(
             padding: const EdgeInsets.only(bottom: 4, left: 4),
             child: Text(
-              'Color',
+              context.l10n.sketchColor,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

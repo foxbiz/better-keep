@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -212,9 +213,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
     } catch (e) {
       // Recording failed - user should be notified
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to start recording')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.failedToStartRecording)),
+        );
       }
     }
   }
@@ -371,9 +372,10 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
     final textColor =
         Theme.of(context).textTheme.bodyLarge?.color ??
         Theme.of(context).hintColor;
+    final l10n = context.l10n;
 
     return AlertDialog(
-      title: const Text('Record Audio'),
+      title: Text(l10n.recordAudio),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -383,8 +385,8 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Column(
                   children: [
-                    const Text(
-                      'Microphone permission is required to record audio.',
+                    Text(
+                      l10n.microphonePermissionRequired,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
@@ -398,15 +400,15 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                             setState(() => _permissionDenied = false);
                             _initRecorder();
                           },
-                          child: const Text('Retry'),
+                          child: Text(l10n.retry),
                         ),
                         OutlinedButton(
                           onPressed: openAppSettings,
-                          child: const Text('Open Settings'),
+                          child: Text(l10n.openSettings),
                         ),
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Close'),
+                          child: Text(l10n.close),
                         ),
                       ],
                     ),
@@ -427,7 +429,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
               onPressed: _permissionDenied
                   ? null
                   : (_isRecording ? _stopRecording : _startRecording),
-              child: Text(_isRecording ? 'Stop recording' : 'Start recording'),
+              child: Text(
+                _isRecording ? l10n.stopRecording : l10n.startRecording,
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -462,8 +466,8 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                           const SizedBox(width: 4),
                           Text(
                             _speechError
-                                ? 'Transcription unavailable'
-                                : 'Live transcription',
+                                ? l10n.transcriptionUnavailable
+                                : l10n.liveTranscription,
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: Theme.of(context).colorScheme.outline,
@@ -475,8 +479,8 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                       Text(
                         _displayTranscription.isEmpty
                             ? (_speechError
-                                  ? 'Recording will continue without transcription'
-                                  : 'Listening...')
+                                  ? l10n.recordingContinuesWithoutTranscription
+                                  : l10n.listening)
                             : _displayTranscription,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontStyle: _displayTranscription.isEmpty
@@ -497,9 +501,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
             // Before recording: show options
             else if (_path == null) ...[
               Text(
-                _permissionDenied
-                    ? 'Allow microphone access to start recording.'
-                    : 'Tap start to begin recording.',
+                _permissionDenied ? l10n.allowMicAccess : l10n.tapStartToRecord,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (_speechAvailable) ...[
@@ -509,8 +511,8 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                   onChanged: (value) {
                     setState(() => _enableTranscription = value ?? true);
                   },
-                  title: const Text('Live transcription'),
-                  subtitle: const Text('Transcribe while recording'),
+                  title: Text(l10n.liveTranscription),
+                  subtitle: Text(l10n.transcribeWhileRecording),
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                   dense: true,
@@ -527,10 +529,10 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                 TextField(
                   controller: _transcriptionController,
                   maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Transcription',
-                    border: OutlineInputBorder(),
-                    hintText: 'Edit transcription if needed',
+                  decoration: InputDecoration(
+                    labelText: l10n.transcription,
+                    border: const OutlineInputBorder(),
+                    hintText: l10n.editTranscriptionHint,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -539,7 +541,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                   onChanged: (value) {
                     setState(() => _addTranscriptionToNote = value ?? true);
                   },
-                  title: const Text('Add transcription to note'),
+                  title: Text(l10n.addTranscriptionToNote),
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                   dense: true,
@@ -563,7 +565,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'No speech detected during recording.',
+                          l10n.noSpeechDetected,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.outline,
                             fontSize: 13,
@@ -580,8 +582,8 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
-                  labelText: 'Title (optional)',
-                  hintText: 'Enter a title for this recording',
+                  labelText: l10n.titleOptional,
+                  hintText: l10n.enterTitleForRecording,
                   border: const OutlineInputBorder(),
                   suffixIcon: _titleController.text.isNotEmpty
                       ? IconButton(
@@ -607,7 +609,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
               await fs.delete(_path!);
             }
           },
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         TextButton(
           onPressed: (_path != null && !_isRecording)
@@ -628,7 +630,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                   );
                 }
               : null,
-          child: const Text('Okay'),
+          child: Text(l10n.okay),
         ),
       ],
     );

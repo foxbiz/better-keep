@@ -1,4 +1,5 @@
 import 'package:better_keep/services/app_install_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
@@ -140,7 +141,7 @@ class _OpenInAppBannerState extends State<OpenInAppBanner>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Better Keep',
+                        context.l10n.appTitle,
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.bold,
@@ -148,8 +149,8 @@ class _OpenInAppBannerState extends State<OpenInAppBanner>
                       ),
                       Text(
                         isAndroid
-                            ? 'Open in the app for the best experience'
-                            : 'Use the app for a better experience',
+                            ? context.l10n.openInAppForBestExperience
+                            : context.l10n.useAppForBetterExperience,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer
                               .withValues(alpha: 0.8),
@@ -169,7 +170,7 @@ class _OpenInAppBannerState extends State<OpenInAppBanner>
                       vertical: 8,
                     ),
                   ),
-                  child: const Text('Open'),
+                  child: Text(context.l10n.open),
                 ),
                 // Close button
                 IconButton(
@@ -179,7 +180,7 @@ class _OpenInAppBannerState extends State<OpenInAppBanner>
                     size: 20,
                   ),
                   onPressed: _onDismiss,
-                  tooltip: 'Dismiss',
+                  tooltip: context.l10n.dismiss,
                   visualDensity: VisualDensity.compact,
                 ),
               ],

@@ -1,4 +1,5 @@
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -36,7 +37,7 @@ Future<PasteResult> showPasteOptions(BuildContext context) async {
   if (!context.mounted) return PasteCancelled();
 
   if (clipboardData?.text == null || clipboardData!.text!.isEmpty) {
-    snackbar('Clipboard is empty', Colors.orange);
+    snackbar(context.l10n.clipboardEmpty, Colors.orange);
     return PasteCancelled();
   }
 
@@ -57,12 +58,12 @@ Future<PasteResult> _showPasteDialog(
   final result = await showDialog<PasteResult>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Paste as'),
+      title: Text(context.l10n.pasteAs),
       content: _PasteOptionsContent(clipboardText: clipboardText),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, PasteCancelled()),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
       ],
     ),
@@ -86,7 +87,7 @@ Future<PasteResult> _showPasteBottomSheet(
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
-                'Paste as',
+                context.l10n.pasteAs,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -111,16 +112,16 @@ class _PasteOptionsContent extends StatelessWidget {
       children: [
         ListTile(
           leading: const Icon(Icons.text_format),
-          title: const Text('Formatted text'),
-          subtitle: const Text('Preview and insert as formatted content'),
+          title: Text(context.l10n.formattedText),
+          subtitle: Text(context.l10n.previewAndInsertFormatted),
           onTap: () {
             Navigator.pop(context, PasteFormattedPreview(clipboardText));
           },
         ),
         ListTile(
           leading: const Icon(Icons.text_snippet),
-          title: const Text('Plain text'),
-          subtitle: const Text('Insert as plain text without formatting'),
+          title: Text(context.l10n.plainText),
+          subtitle: Text(context.l10n.insertAsPlainText),
           onTap: () {
             Navigator.pop(context, PastePlainText(clipboardText));
           },

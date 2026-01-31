@@ -20,6 +20,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/image_compressor.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
@@ -162,17 +163,15 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
         if (info.isIOS) {
           icon = Icons.apple;
-          title = 'iOS App Coming Soon!';
-          message =
-              'Our iOS app is being reviewed by Apple. In the meantime, you can install Better Keep as a web app for quick access.\n\nTap Share → Add to Home Screen in Safari.';
-          actionLabel = 'Got it';
+          title = context.l10n.iosAppComingSoonTitle;
+          message = context.l10n.iosAppComingSoonMessage;
+          actionLabel = context.l10n.gotIt;
           onAction = () => Navigator.pop(context);
         } else if (info.isAndroid) {
           icon = Icons.android;
-          title = 'Get the Android App';
-          message =
-              'Better Keep is available on Google Play! Get the native app for the best experience with notifications, widgets, and more.';
-          actionLabel = 'Open Play Store';
+          title = context.l10n.getTheAndroidApp;
+          message = context.l10n.androidAppAvailable;
+          actionLabel = context.l10n.openPlayStore;
           onAction = () {
             Navigator.pop(context);
             launchUrl(
@@ -182,10 +181,9 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           };
         } else if (info.isWindows) {
           icon = Icons.desktop_windows;
-          title = 'Get the Windows App';
-          message =
-              'Better Keep is available on Microsoft Store! Get the native app for the best experience with system integration and offline access.';
-          actionLabel = 'Open Microsoft Store';
+          title = context.l10n.getTheWindowsApp;
+          message = context.l10n.windowsAppAvailable;
+          actionLabel = context.l10n.openMicrosoftStore;
           onAction = () {
             Navigator.pop(context);
             launchUrl(
@@ -195,10 +193,9 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           };
         } else if (info.canInstallPWA) {
           icon = Icons.install_desktop;
-          title = 'Install Better Keep';
-          message =
-              'Install Better Keep for quick access from your home screen and offline support!';
-          actionLabel = 'Install';
+          title = context.l10n.installBetterKeep;
+          message = context.l10n.installForQuickAccess;
+          actionLabel = context.l10n.install;
           onAction = () async {
             Navigator.pop(context);
             await AppInstallService.instance.triggerPWAInstall();
@@ -224,7 +221,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                 AppInstallService.instance.markPromptDismissed();
                 Navigator.pop(context);
               },
-              child: const Text('Not now'),
+              child: Text(context.l10n.notNow),
             ),
             FilledButton(onPressed: onAction, child: Text(actionLabel)),
           ],
@@ -277,8 +274,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           final result = await showSetupRecoveryKeyPage(context);
           if (result == true && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Recovery key saved successfully!'),
+              SnackBar(
+                content: Text(context.l10n.recoveryKeySavedSuccessfully),
                 backgroundColor: Colors.green,
               ),
             );
@@ -292,15 +289,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                   color: Colors.orange,
                   size: 48,
                 ),
-                title: const Text('No Recovery Key'),
-                content: const Text(
-                  'Without a recovery key, you will permanently lose access to all your encrypted notes if you lose all your devices.\n\n'
-                  'Consider setting up a recovery key later in Settings.',
-                ),
+                title: Text(context.l10n.noRecoveryKey),
+                content: Text(context.l10n.noRecoveryKeyWarning),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('I understand'),
+                    child: Text(context.l10n.iUnderstand),
                   ),
                 ],
               ),
@@ -563,15 +557,15 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     }
 
     if (AppState.showNotes == NoteType.archived) {
-      return Text("Archive");
+      return Text(context.l10n.archive);
     }
 
     if (AppState.showNotes == NoteType.trashed) {
-      return Text("Trash");
+      return Text(context.l10n.trash);
     }
 
     if (AppState.showNotes == NoteType.reminder) {
-      return Text("Reminders");
+      return Text(context.l10n.reminders);
     }
 
     return Text(appLabel);
@@ -603,15 +597,14 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           IconButton(
             onPressed: _notesKey.currentState?.refresh,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: context.l10n.refresh,
           ),
         IconButton(
           onPressed: () async {
             final confirmation = await showDeleteDialog(
               context,
-              title: "Delete Forever",
-              message:
-                  "Do you really want to delete all notes in the trash forever, this can't be undone.",
+              title: context.l10n.deleteForever,
+              message: context.l10n.deleteAllTrashForever,
             );
 
             if (confirmation != true) {
@@ -634,7 +627,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         IconButton(
           onPressed: _notesKey.currentState?.refresh,
           icon: const Icon(Icons.refresh),
-          tooltip: 'Refresh',
+          tooltip: context.l10n.refresh,
         ),
       Container(
         margin: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -669,9 +662,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           onPressed: () async {
             final confirmation = await showDeleteDialog(
               context,
-              title: "Delete Forever",
-              message:
-                  "Do you really want to delete ${AppState.selectedNotes.length} notes forever, this can't be undone.",
+              title: context.l10n.deleteForever,
+              message: context.l10n.deleteSelectedNotesForever(
+                AppState.selectedNotes.length,
+              ),
             );
 
             if (confirmation != true) {
@@ -699,7 +693,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
               showShareNoteDialog(context, note);
             },
             icon: const Icon(Icons.share),
-            tooltip: 'Share',
+            tooltip: context.l10n.share,
           ),
         IconButton(
           onPressed: () {
@@ -758,7 +752,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     BorderSide focusedBorderSide = BorderSide.none;
 
     if (_searchMode || _isBigScreen) {
-      hintText = 'Search';
+      hintText = context.l10n.search;
     } else {
       hintText = appLabel;
     }
@@ -886,17 +880,17 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       items: [
         BubbleMenuItem(
           icon: Icons.image,
-          label: 'Image',
+          label: context.l10n.image,
           onTap: () => _createImageNote(),
         ),
         BubbleMenuItem(
           icon: Icons.mic,
-          label: 'Audio',
+          label: context.l10n.audio,
           onTap: () => _createAudioNote(),
         ),
         BubbleMenuItem(
           icon: Icons.draw,
-          label: 'Sketch',
+          label: context.l10n.sketch,
           onTap: () => showPage(
             context,
             SketchPage(
@@ -909,7 +903,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         ),
         BubbleMenuItem(
           icon: Icons.check_box_outlined,
-          label: 'Todo',
+          label: context.l10n.todo,
           onTap: () => _createTodoNote(),
         ),
       ],
@@ -962,7 +956,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           title = words.take(5).join(' ') + (words.length > 5 ? '...' : '');
         }
       }
-      title ??= 'Audio Note';
+      title ??= context.l10n.audioNote;
 
       // Create content with title and transcription as blockquote
       final contentJson = _createNoteContentWithTranscription(
@@ -1047,7 +1041,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
             children: [
               ListTile(
                 leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
+                title: Text(context.l10n.camera),
                 onTap: () {
                   Navigator.pop(ctx);
                   _pickImageAndCreateNote(ImageSource.camera);
@@ -1055,7 +1049,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
               ),
               ListTile(
                 leading: const Icon(Icons.image),
-                title: const Text('Gallery'),
+                title: Text(context.l10n.gallery),
                 onTap: () {
                   Navigator.pop(ctx);
                   _pickImageAndCreateNote(ImageSource.gallery);
@@ -1092,7 +1086,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const PopScope(
+        builder: (dialogContext) => PopScope(
           canPop: false,
           child: Center(
             child: Card(
@@ -1103,7 +1097,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('Processing image...'),
+                    Text(dialogContext.l10n.processingImage),
                   ],
                 ),
               ),
@@ -1155,7 +1149,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       if (mounted && Navigator.canPop(context)) {
         Navigator.pop(context);
       }
-      snackbar('Failed to create image note', Colors.red);
+      snackbar(context.l10n.failedToCreateImageNote, Colors.red);
     }
   }
 

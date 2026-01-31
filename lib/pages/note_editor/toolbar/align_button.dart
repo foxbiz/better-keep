@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 
 class AlignButton extends StatefulWidget {
   final bool readOnly;
@@ -101,19 +102,19 @@ class _AlignButtonState extends State<AlignButton> {
       items: (context) => [
         AdaptiveMenuItem(
           icon: Icons.format_align_left,
-          label: 'Left',
+          label: context.l10n.alignLeft,
           isSelected: _currentAlignment == Attribute.leftAlignment,
           onTap: () => _applyAlignment(Attribute.leftAlignment),
         ),
         AdaptiveMenuItem(
           icon: Icons.format_align_center,
-          label: 'Center',
+          label: context.l10n.alignCenter,
           isSelected: _currentAlignment == Attribute.centerAlignment,
           onTap: () => _applyAlignment(Attribute.centerAlignment),
         ),
         AdaptiveMenuItem(
           icon: Icons.format_align_right,
-          label: 'Right',
+          label: context.l10n.alignRight,
           isSelected: _currentAlignment == Attribute.rightAlignment,
           onTap: () => _applyAlignment(Attribute.rightAlignment),
         ),
@@ -121,7 +122,7 @@ class _AlignButtonState extends State<AlignButton> {
       child: IconButton(
         onPressed: _controller.isDisabled ? null : _controller.toggle,
         icon: _buildIconWithIndicator(Icon(_getAlignIcon())),
-        tooltip: 'Align',
+        tooltip: context.l10n.align,
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 enum PromptType { text, password, number, email, url }
@@ -103,7 +104,9 @@ class _PromptState extends State<Prompt> {
               onSubmitted: (_) => _submit(),
               controller: confirmController,
               decoration: InputDecoration(
-                hintText: 'Confirm ${widget.placeholder}',
+                hintText: context.l10n.confirmPlaceholder(
+                  widget.placeholder ?? '',
+                ),
               ),
               textInputAction: TextInputAction.done,
             ),
@@ -115,9 +118,9 @@ class _PromptState extends State<Prompt> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, null),
-          child: Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: Text('OK')),
+        TextButton(onPressed: _submit, child: Text(context.l10n.ok)),
       ],
     );
   }
@@ -125,7 +128,7 @@ class _PromptState extends State<Prompt> {
   void _submit() {
     if (widget.confirm && inputController.text != confirmController.text) {
       setState(() {
-        hasError = "Not matched";
+        hasError = context.l10n.notMatched;
       });
       return;
     }

@@ -1,4 +1,5 @@
 import 'package:better_keep/services/monetization/monetization.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// A banner widget shown to free users encouraging upgrade.
@@ -64,14 +65,14 @@ class UpgradeBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _getTitle(),
+                    _getTitle(context),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _getSubtitle(),
+                    _getSubtitle(context),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -85,7 +86,7 @@ class UpgradeBanner extends StatelessWidget {
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
-              child: const Text('Upgrade'),
+              child: Text(context.l10n.upgrade),
             ),
           ],
         ),
@@ -93,23 +94,25 @@ class UpgradeBanner extends StatelessWidget {
     );
   }
 
-  String _getTitle() {
+  String _getTitle(BuildContext context) {
     if (feature != null) {
-      return 'Unlock ${EntitlementGuard.getFeatureDescription(feature!)}';
+      return context.l10n.unlockFeature(
+        EntitlementGuard.getFeatureDescription(feature!, context.l10n),
+      );
     }
-    return 'Upgrade to Pro';
+    return context.l10n.upgradeToPro;
   }
 
-  String _getSubtitle() {
+  String _getSubtitle(BuildContext context) {
     if (feature != null) {
       switch (feature!) {
         case GatedFeature.lockNote:
-          return 'Protect unlimited notes with PIN locks';
+          return context.l10n.protectUnlimitedNotesWithPin;
         case GatedFeature.realtimeCloudSync:
-          return 'Sync across all your devices securely';
+          return context.l10n.syncAcrossDevicesSecurely;
       }
     }
-    return 'Unlimited locked notes and real-time cloud sync';
+    return context.l10n.unlimitedLockedNotesAndSync;
   }
 }
 
@@ -260,10 +263,17 @@ class FeatureListTile extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${gatedFeature != null ? EntitlementGuard.getFeatureDescription(gatedFeature!) : 'This feature'} requires Pro',
+          gatedFeature != null
+              ? context.l10n.featureRequiresPro(
+                  EntitlementGuard.getFeatureDescription(
+                    gatedFeature!,
+                    context.l10n,
+                  ),
+                )
+              : context.l10n.thisFeatureRequiresPro,
         ),
         action: SnackBarAction(
-          label: 'Upgrade',
+          label: context.l10n.upgrade,
           onPressed: () {
             // Show paywall - caller should handle this
           },

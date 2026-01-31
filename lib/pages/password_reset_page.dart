@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_keep/components/otp_input_field.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -72,15 +73,15 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
   String? _getPasswordWarning() {
     if (_password.isEmpty) return null;
     if (_password.length < 6) {
-      return 'Password is quite short. Consider using at least 6 characters.';
+      return context.l10n.passwordShortWarning;
     }
     if (_password.length < 8) {
-      return 'Consider using a longer password for better security.';
+      return context.l10n.passwordLongerAdvice;
     }
     final hasLetter = RegExp(r'[a-zA-Z]').hasMatch(_password);
     final hasNumber = RegExp(r'[0-9]').hasMatch(_password);
     if (!hasLetter || !hasNumber) {
-      return 'Consider adding both letters and numbers for stronger security.';
+      return context.l10n.passwordMixAdvice;
     }
     return null;
   }
@@ -89,14 +90,14 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
   Future<void> _sendOtp() async {
     if (_email.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter your email address';
+        _errorMessage = context.l10n.pleaseEnterEmailAddress;
       });
       return;
     }
 
     if (!_isValidEmail(_email)) {
       setState(() {
-        _errorMessage = 'Please enter a valid email address';
+        _errorMessage = context.l10n.pleaseEnterValidEmail;
       });
       return;
     }
@@ -130,7 +131,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       AppLogger.error('Error sending password reset OTP: $e');
       if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to send verification code. Please try again.';
+          _errorMessage = context.l10n.failedSendVerificationCode;
         });
       }
     } finally {
@@ -162,7 +163,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
   Future<void> _verifyOtpAndProceed() async {
     if (_otp.length != 6) {
       setState(() {
-        _errorMessage = 'Please enter the complete 6-digit code';
+        _errorMessage = context.l10n.pleaseEnterCompleteCode;
       });
       return;
     }
@@ -195,7 +196,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       AppLogger.error('Error verifying OTP: $e');
       if (mounted) {
         setState(() {
-          _errorMessage = 'Verification failed. Please try again.';
+          _errorMessage = context.l10n.verificationFailed;
         });
       }
     } finally {
@@ -210,14 +211,14 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
     // Validate password match
     if (_password != _confirmPassword) {
       setState(() {
-        _errorMessage = 'Passwords do not match';
+        _errorMessage = context.l10n.passwordsDoNotMatch;
       });
       return;
     }
 
     if (_password.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter a new password';
+        _errorMessage = context.l10n.pleaseEnterNewPassword;
       });
       return;
     }
@@ -238,7 +239,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Password reset successfully! Please sign in.'),
+            content: Text(context.l10n.passwordResetSuccess),
             backgroundColor: Colors.green.shade700,
             duration: const Duration(seconds: 4),
           ),
@@ -271,7 +272,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       AppLogger.error('Error resetting password: $e');
       if (mounted) {
         setState(() {
-          _errorMessage = 'Password reset failed. Please try again.';
+          _errorMessage = context.l10n.passwordResetFailed;
         });
       }
     } finally {
@@ -333,7 +334,6 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         child: SafeArea(
           child: Column(
             children: [
-              // Back button
               Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
@@ -341,7 +341,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
                   child: IconButton(
                     onPressed: _goBack,
                     icon: const Icon(Icons.arrow_back),
-                    tooltip: 'Back',
+                    tooltip: context.l10n.back,
                   ),
                 ),
               ),
@@ -396,7 +396,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
         // Title
         Text(
-          'Reset Password',
+          context.l10n.resetPassword,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: colorScheme.onSurface,
@@ -407,7 +407,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
         // Description
         Text(
-          'Enter your email address and we\'ll send you a verification code to reset your password.',
+          context.l10n.resetPasswordDescription,
           style: Theme.of(
             context,
           ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
@@ -424,8 +424,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
           autofocus: true,
           onSubmitted: (_) => _sendOtp(),
           decoration: InputDecoration(
-            labelText: 'Email',
-            hintText: 'Enter your email address',
+            labelText: context.l10n.email,
+            hintText: context.l10n.enterEmailAddress,
             prefixIcon: const Icon(Icons.email_outlined),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -454,7 +454,11 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
                     ),
                   )
                 : const Icon(Icons.send),
-            label: Text(_isLoading ? 'Sending...' : 'Send Verification Code'),
+            label: Text(
+              _isLoading
+                  ? context.l10n.sending
+                  : context.l10n.sendVerificationCode,
+            ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: colorScheme.error,
@@ -488,7 +492,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
         // Title
         Text(
-          'Enter Verification Code',
+          context.l10n.enterVerificationCode,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: colorScheme.onSurface,
@@ -498,6 +502,13 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         const SizedBox(height: 12),
 
         // Description
+        Text(
+          context.l10n.enterCodeSentTo,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+          textAlign: TextAlign.center,
+        ),
         Text(
           'Enter the 6-digit code sent to:',
           style: Theme.of(
@@ -562,7 +573,9 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
                     ),
                   )
                 : const Icon(Icons.arrow_forward),
-            label: Text(_isLoading ? 'Verifying...' : 'Continue'),
+            label: Text(
+              _isLoading ? context.l10n.verifying : context.l10n.continue_,
+            ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: colorScheme.error,
@@ -584,8 +597,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
               : const Icon(Icons.refresh),
           label: Text(
             _resendCountdown > 0
-                ? 'Resend code in ${_resendCountdown}s'
-                : 'Resend code',
+                ? context.l10n.resendCodeIn(_resendCountdown)
+                : context.l10n.resendCode,
           ),
         ),
 
@@ -593,7 +606,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
         // Expires in note
         Text(
-          'Code expires in 10 minutes',
+          context.l10n.codeExpiresIn,
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
@@ -625,7 +638,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
         // Title
         Text(
-          'Create New Password',
+          context.l10n.createNewPassword,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: colorScheme.onSurface,
@@ -636,7 +649,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
         // Description
         Text(
-          'Enter a new password for your account.',
+          context.l10n.enterNewPasswordDescription,
           style: Theme.of(
             context,
           ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
@@ -653,8 +666,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
           textInputAction: TextInputAction.next,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            labelText: 'New Password',
-            hintText: 'Enter new password',
+            labelText: context.l10n.newPassword,
+            hintText: context.l10n.enterNewPasswordHint,
             prefixIcon: const Icon(Icons.lock_outline),
             suffixIcon: IconButton(
               onPressed: () =>
@@ -710,8 +723,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
           onSubmitted: (_) => _resetPassword(),
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            labelText: 'Confirm Password',
-            hintText: 'Re-enter new password',
+            labelText: context.l10n.confirmPassword,
+            hintText: context.l10n.reenterNewPasswordHint,
             prefixIcon: const Icon(Icons.lock_outline),
             suffixIcon: IconButton(
               onPressed: () => setState(
@@ -726,7 +739,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             errorText:
                 _confirmPassword.isNotEmpty && _password != _confirmPassword
-                ? 'Passwords do not match'
+                ? context.l10n.passwordsDoNotMatch
                 : null,
           ),
         ),
@@ -758,7 +771,9 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
                   )
                 : const Icon(Icons.check),
             label: Text(
-              _isLoading ? 'Resetting Password...' : 'Reset Password',
+              _isLoading
+                  ? context.l10n.resettingPassword
+                  : context.l10n.resetPassword,
             ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
