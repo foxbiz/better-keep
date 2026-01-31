@@ -41,23 +41,20 @@ class Reminder {
     return DateTime(now.year, now.month, now.day).toIso8601String();
   }
 
-  static String _formatTimeOfDay(TimeOfDay time) {
-    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
-    return '$hour:$minute $period';
+  static String formatTimeOfDay(BuildContext context, TimeOfDay time) {
+    return time.format(context);
   }
 
-  static String get morningValue {
-    return _formatTimeOfDay(AppState.morningTime);
+  static String getMorningValue(BuildContext context) {
+    return formatTimeOfDay(context, AppState.morningTime);
   }
 
-  static String get afternoonValue {
-    return _formatTimeOfDay(AppState.afternoonTime);
+  static String getAfternoonValue(BuildContext context) {
+    return formatTimeOfDay(context, AppState.afternoonTime);
   }
 
-  static String get eveningValue {
-    return _formatTimeOfDay(AppState.eveningTime);
+  static String getEveningValue(BuildContext context) {
+    return formatTimeOfDay(context, AppState.eveningTime);
   }
 
   static List<String> dateOptions = [
@@ -85,15 +82,15 @@ class Reminder {
     repeatYearly,
   ];
 
-  static String getValueOf(String option) {
+  static String getValueOf(BuildContext context, String option) {
     return switch (option) {
       today => todayValue,
       tomorrow => tomorrowValue,
       nextWeek => nextWeekValue,
       nextMonth => nextMonthValue,
-      morning => morningValue,
-      afternoon => afternoonValue,
-      evening => eveningValue,
+      morning => getMorningValue(context),
+      afternoon => getAfternoonValue(context),
+      evening => getEveningValue(context),
       _ => '',
     };
   }
@@ -111,11 +108,16 @@ class Reminder {
       int hour = int.parse(hmParts[0]);
       final int minute = int.parse(hmParts[1]);
 
-      if (timeParts[1] == 'PM' && hour != 12) {
-        hour += 12;
-      } else if (timeParts[1] == 'AM' && hour == 12) {
-        hour = 0;
+      // Handle 12-hour format (with AM/PM)
+      if (timeParts.length > 1) {
+        final period = timeParts[1].toUpperCase();
+        if (period == 'PM' && hour != 12) {
+          hour += 12;
+        } else if (period == 'AM' && hour == 12) {
+          hour = 0;
+        }
       }
+      // For 24-hour format, hour is already correct
 
       date = DateTime(date.year, date.month, date.day, hour, minute);
     }
