@@ -151,9 +151,7 @@ class _LineSpacingButtonState extends State<LineSpacingButton> {
 
   Widget _buildIconWithIndicator(BuildContext context) {
     // Show current spacing indicator if not default
-    final spacingLabel = _currentSpacing != null
-        ? _currentSpacing!.getLabel(context)[0] // First letter: T, N, R, D
-        : null;
+    final spacingLabel = _currentSpacing?.getLabel(context).characters.first;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
