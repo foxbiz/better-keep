@@ -227,7 +227,11 @@ class _DatetimePickerState extends State<DatetimePicker> {
       if (selectedTime != null) {
         setState(() {
           _selectedTimeOption = option;
-          _time = selectedTime.format(context);
+          // Always format time in 12-hour format with AM/PM to ensure consistent parsing
+          final hour = selectedTime.hourOfPeriod == 0 ? 12 : selectedTime.hourOfPeriod;
+          final minute = selectedTime.minute.toString().padLeft(2, '0');
+          final period = selectedTime.period == DayPeriod.am ? 'AM' : 'PM';
+          _time = '$hour:$minute $period';
         });
       }
       return;
