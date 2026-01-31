@@ -36,6 +36,7 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/components/note_attachments_carousel.dart';
 import 'package:better_keep/components/note_audio_player.dart';
@@ -49,6 +50,7 @@ import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
@@ -76,9 +78,7 @@ class NoteEditor extends StatefulWidget {
 class _NoteEditorState extends State<NoteEditor>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   static final Map<String, Metadata> _metadataCache = {};
-  static final Map<String, MemoryImage> _base64ImageCache = {};
   static const int _maxCacheSize = 10;
-  static const int _maxImageCacheSize = 50;
 
   StreamSubscription? _changesSubscription;
   String? _linkUrl;
@@ -90,6 +90,7 @@ class _NoteEditorState extends State<NoteEditor>
   final ScrollController _carouselScrollController = ScrollController();
   final ScrollController _toolbarScrollController = ScrollController();
   final Map<String, GlobalKey> _audioPlayerKeys = {};
+  final GlobalKey<EditorState> _editorKey = GlobalKey<EditorState>();
   late final Note _note;
   late FocusNode _focusNode;
   late FocusNode _titleFocusNode;
@@ -108,6 +109,8 @@ class _NoteEditorState extends State<NoteEditor>
   final Set<int> _bubbleUpdatedOffsets = {};
   // Track whether to show the attachment FAB (delayed to prevent gesture interruption)
   bool _showAttachmentFab = true;
+  // Timers for scroll-to-caret (cancelled on dispose or new scroll request)
+  final List<Timer> _scrollTimers = [];
 
   /// Handles keyboard events to block formatting shortcuts when editing title
   /// and to handle Backspace at start of content to move focus to title
@@ -298,7 +301,101 @@ class _NoteEditorState extends State<NoteEditor>
       setState(() {
         _showAttachmentFab = false;
       });
+
+      // Scroll to caret after toolbar animation completes
+      _scrollToCaretAfterKeyboard();
     }
+  }
+
+  /// Scrolls the editor to ensure the caret is visible above the toolbar
+  void _scrollToCaret() {
+    if (!mounted || !_focusNode.hasFocus) return;
+
+    final editorState = _editorKey.currentState;
+    if (editorState == null) return;
+
+    final selection = _controller.selection;
+    if (!selection.isValid || !selection.isCollapsed) return;
+
+    try {
+      final renderEditor = editorState.renderEditor;
+      final caretRect = renderEditor.getLocalRectForCaret(
+        TextPosition(offset: selection.baseOffset),
+      );
+
+      // Convert caret position to global coordinates
+      final caretGlobal = renderEditor.localToGlobal(caretRect.bottomLeft);
+
+      // Get screen height and keyboard insets directly
+      final views = WidgetsBinding.instance.platformDispatcher.views;
+      if (views.isEmpty) return;
+      final view = views.first;
+      final screenHeight = view.physicalSize.height / view.devicePixelRatio;
+      final keyboardHeight = view.viewInsets.bottom / view.devicePixelRatio;
+
+      // Get the scroll view's position on screen
+      if (!_quillScrollController.hasClients) return;
+      final scrollPosition = _quillScrollController.position;
+
+      // Toolbar height estimate (toolbar + safe area + link preview + margin)
+      const toolbarHeight = 96.0;
+
+      // Calculate where the visible bottom edge is (above keyboard and toolbar)
+      final visibleBottom = screenHeight - keyboardHeight - toolbarHeight;
+
+      // Only scroll if caret is below visible area
+      if (caretGlobal.dy > visibleBottom) {
+        final scrollAmount = caretGlobal.dy - visibleBottom;
+        final targetScroll = scrollPosition.pixels + scrollAmount;
+        _quillScrollController.animateTo(
+          targetScroll.clamp(0.0, scrollPosition.maxScrollExtent),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    } catch (e) {
+      // Silently handle if render editor not ready
+    }
+  }
+
+  /// Scrolls to caret with keyboard-aware timing
+  void _scrollToCaretAfterKeyboard() {
+    if (!mounted || !_focusNode.hasFocus) return;
+
+    // Cancel any pending scroll timers to prevent conflicts
+    for (final timer in _scrollTimers) {
+      timer.cancel();
+    }
+    _scrollTimers.clear();
+
+    // First scroll immediately after layout settles
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_focusNode.hasFocus) return;
+      _scrollToCaret();
+    });
+
+    // Second scroll during keyboard animation (~250ms)
+    _scrollTimers.add(
+      Timer(const Duration(milliseconds: 250), () {
+        if (!mounted || !_focusNode.hasFocus) return;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_focusNode.hasFocus) return;
+          _scrollToCaret();
+        });
+      }),
+    );
+
+    // Third scroll after keyboard animation fully completes (~500ms)
+    // Some devices have slower keyboard animations
+    _scrollTimers.add(
+      Timer(const Duration(milliseconds: 500), () {
+        if (!mounted || !_focusNode.hasFocus) return;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_focusNode.hasFocus) return;
+          _scrollToCaret();
+        });
+      }),
+    );
   }
 
   void _onNoteChanged(dynamic _) {
@@ -489,6 +586,11 @@ class _NoteEditorState extends State<NoteEditor>
     WidgetsBinding.instance.removeObserver(this);
     _changeTimer?.cancel();
     _changesSubscription?.cancel();
+    // Cancel pending scroll timers
+    for (final timer in _scrollTimers) {
+      timer.cancel();
+    }
+    _scrollTimers.clear();
     // Clear checkbox tracking state
     _bubbleUpdatedOffsets.clear();
     _checkboxService.invalidateCache();
@@ -528,9 +630,15 @@ class _NoteEditorState extends State<NoteEditor>
     final bottomInset = views.first.viewInsets.bottom;
     final keyboardVisible = bottomInset > 0;
     if (_isKeyboardVisible != keyboardVisible) {
+      final wasHidden = !_isKeyboardVisible;
       setState(() {
         _isKeyboardVisible = keyboardVisible;
       });
+
+      // Keyboard just appeared while editor has focus - scroll to caret
+      if (keyboardVisible && wasHidden && _focusNode.hasFocus) {
+        _scrollToCaretAfterKeyboard();
+      }
     }
   }
 
@@ -731,11 +839,7 @@ class _NoteEditorState extends State<NoteEditor>
                       scrollController: _carouselScrollController,
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(
-                        top: 16,
-                        left: 16,
-                        right: 16,
-                      ),
+                      padding: const EdgeInsets.only(left: 16, right: 16),
                       child: Focus(
                         onKeyEvent: (node, event) {
                           if (event is KeyDownEvent &&
@@ -761,6 +865,8 @@ class _NoteEditorState extends State<NoteEditor>
                             color: foregroundColor,
                           ),
                           decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.only(bottom: 0),
                             border: InputBorder.none,
                             hintText: context.l10n.titleYourThought,
                             hintStyle: TextStyle(
@@ -790,9 +896,11 @@ class _NoteEditorState extends State<NoteEditor>
                           focusNode: _focusNode,
                           controller: _controller,
                           config: QuillEditorConfig(
+                            editorKey: _editorKey,
                             checkBoxReadOnly: _note.trashed,
                             scrollable: false,
                             padding: EdgeInsets.only(
+                              top: 0,
                               bottom: 32,
                               left: 16,
                               right: 16,
@@ -813,91 +921,13 @@ class _NoteEditorState extends State<NoteEditor>
                             embedBuilders: kIsWeb
                                 ? FlutterQuillEmbeds.editorWebBuilders()
                                 : FlutterQuillEmbeds.editorBuilders(
-                                    imageEmbedConfig: QuillEditorImageEmbedConfig(
-                                      imageProviderBuilder: (context, imageUrl) {
-                                        if (imageUrl.startsWith('http://') ||
-                                            imageUrl.startsWith('https://')) {
-                                          return NetworkImage(imageUrl);
-                                        } else if (imageUrl.startsWith(
-                                          'data:image/',
-                                        )) {
-                                          // Check cache first
-                                          if (_base64ImageCache.containsKey(
-                                            imageUrl,
-                                          )) {
-                                            return _base64ImageCache[imageUrl];
-                                          }
-                                          // Handle base64 data URLs
-                                          try {
-                                            final regex = RegExp(
-                                              r'^data:image/[^;]+;base64,(.+)$',
-                                            );
-                                            final match = regex.firstMatch(
-                                              imageUrl,
-                                            );
-                                            if (match != null) {
-                                              final base64Data = match.group(
-                                                1,
-                                              )!;
-                                              final bytes = base64Decode(
-                                                base64Data,
-                                              );
-                                              final image = MemoryImage(bytes);
-                                              // Cache with size limit
-                                              if (_base64ImageCache.length >=
-                                                  _maxImageCacheSize) {
-                                                _base64ImageCache.remove(
-                                                  _base64ImageCache.keys.first,
-                                                );
-                                              }
-                                              _base64ImageCache[imageUrl] =
-                                                  image;
-                                              return image;
-                                            }
-                                          } catch (e) {
-                                            AppLogger.error(
-                                              '[NoteEditor] Failed to decode data URL',
-                                              e,
-                                            );
-                                          }
-                                        }
-                                        // Fallback: try as file path
-                                        return null;
-                                      },
-                                      imageErrorWidgetBuilder:
-                                          (context, error, stackTrace) {
-                                            return Container(
-                                              padding: const EdgeInsets.all(8),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey.withAlpha(
-                                                  50,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.broken_image_outlined,
-                                                    size: 16,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  SizedBox(width: 4),
-                                                  Text(
-                                                    context
-                                                        .l10n
-                                                        .imageFailedToLoad,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                    ),
+                                    imageEmbedConfig:
+                                        QuillEditorImageEmbedConfig(
+                                          imageProviderBuilder:
+                                              buildQuillImageProvider,
+                                          imageErrorWidgetBuilder:
+                                              buildQuillImageErrorWidget,
+                                        ),
                                   ),
                             customLinkPrefixes: const ['audio://'],
                             linkActionPickerDelegate: _audioLinkActionPicker,
