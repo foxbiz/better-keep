@@ -1,5 +1,6 @@
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 class Labels extends StatefulWidget {
@@ -95,7 +96,7 @@ class _LabelsState extends State<Labels> {
                             size: 18,
                             color: colorScheme.onSurfaceVariant,
                           ),
-                          label: Text('Clear'),
+                          label: Text(context.l10n.clear),
                           onPressed: _clearSelection,
                           backgroundColor: colorScheme.surfaceContainerHighest,
                           side: BorderSide.none,

@@ -1,24 +1,28 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 Future<bool?> showDeleteDialog(
   BuildContext context, {
-  String title = 'Delete?',
-  String message = 'This action cannot be undone.',
+  String? title,
+  String? message,
   bool isPermanent = false,
 }) {
   return showDialog<bool>(
     context: context,
     builder: (context) {
+      final l10n = context.l10n;
+      final displayTitle = title ?? l10n.deleteQuestion;
+      final displayMessage = message ?? l10n.actionCannotBeUndone;
       return AlertDialog(
         icon: isPermanent
             ? const Icon(Icons.delete_forever, color: Colors.red, size: 40)
             : null,
-        title: Text(title),
+        title: Text(displayTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message),
+            Text(displayMessage),
             if (isPermanent) ...[
               const SizedBox(height: 12),
               Container(
@@ -28,14 +32,14 @@ Future<bool?> showDeleteDialog(
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.warning, color: Colors.red, size: 20),
-                    SizedBox(width: 8),
+                    const Icon(Icons.warning, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'This will permanently delete all data and cannot be recovered.',
-                        style: TextStyle(color: Colors.red, fontSize: 13),
+                        l10n.permanentDeleteWarning,
+                        style: const TextStyle(color: Colors.red, fontSize: 13),
                       ),
                     ),
                   ],
@@ -47,12 +51,12 @@ Future<bool?> showDeleteDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              isPermanent ? 'Delete Forever' : 'Delete',
+              isPermanent ? l10n.deleteForever : l10n.delete,
               style: const TextStyle(color: Colors.red),
             ),
           ),

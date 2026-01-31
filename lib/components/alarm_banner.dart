@@ -3,6 +3,7 @@ import 'package:alarm/alarm.dart';
 import 'package:alarm/utils/alarm_set.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// Service to manage ringing alarms globally
@@ -161,7 +162,7 @@ class _AlarmBannerItem extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 minimumSize: const Size(0, 36),
               ),
-              child: const Text('Done'),
+              child: Text(context.l10n.done),
             ),
           const SizedBox(width: 8),
           FilledButton.tonal(
@@ -189,9 +190,9 @@ class _AlarmBannerItem extends StatelessWidget {
     await RingingAlarmService().stopAlarmAndMarkDone(alarm.id);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Note marked as done'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(context.l10n.noteMarkedAsDone),
+          duration: const Duration(seconds: 2),
         ),
       );
     }

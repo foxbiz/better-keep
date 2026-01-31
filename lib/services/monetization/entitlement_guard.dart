@@ -1,3 +1,4 @@
+import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/services/monetization/entitlements.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/user_plan.dart';
@@ -78,13 +79,15 @@ class EntitlementGuard {
   // ==================== FEATURE CHECKS ====================
 
   /// Check if user can lock a note (respects limit)
-  static EntitlementResult canLockNote(int currentLockedNotes) {
+  static EntitlementResult canLockNote(
+    int currentLockedNotes,
+    AppLocalizations l10n,
+  ) {
     if (!_entitlements.hasReachedLockedNotesLimit(currentLockedNotes)) {
       return EntitlementResult.success;
     }
     return EntitlementResult.denied(
-      reason:
-          'You\'ve reached the limit of ${_entitlements.maxLockedNotes} locked notes',
+      reason: l10n.lockedNotesLimitReached(_entitlements.maxLockedNotes),
       feature: GatedFeature.lockNote,
       currentUsage: currentLockedNotes,
       maxAllowed: _entitlements.maxLockedNotes,
@@ -92,12 +95,12 @@ class EntitlementGuard {
   }
 
   /// Check if real-time cloud sync is allowed
-  static EntitlementResult canUseRealtimeCloudSync() {
+  static EntitlementResult canUseRealtimeCloudSync(AppLocalizations l10n) {
     if (_entitlements.realtimeCloudSync) {
       return EntitlementResult.success;
     }
     return EntitlementResult.denied(
-      reason: 'Real-time cloud sync requires a Pro subscription',
+      reason: l10n.realtimeCloudSyncRequiresPro,
       feature: GatedFeature.realtimeCloudSync,
     );
   }
@@ -115,12 +118,15 @@ class EntitlementGuard {
   }
 
   /// Get a user-friendly description of a feature
-  static String getFeatureDescription(GatedFeature feature) {
+  static String getFeatureDescription(
+    GatedFeature feature,
+    AppLocalizations l10n,
+  ) {
     switch (feature) {
       case GatedFeature.lockNote:
-        return 'Unlimited locked notes';
+        return l10n.unlimitedLockedNotes;
       case GatedFeature.realtimeCloudSync:
-        return 'Real-time cloud sync';
+        return l10n.realtimeCloudSync;
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:better_keep/dialogs/color_picker.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
@@ -59,7 +60,8 @@ class _TextColorButtonState extends State<TextColorButton> {
     final isDisabled = widget.readOnly;
     return IconButton(
       isSelected: enabled,
-      icon: Icon(Icons.text_format),
+      icon: const Icon(Icons.text_format),
+      tooltip: context.l10n.textColor,
       onPressed: isDisabled
           ? null
           : () async {
@@ -72,7 +74,7 @@ class _TextColorButtonState extends State<TextColorButton> {
                   widget.focusNode.unfocus();
                   final color = await colorPicker(
                     context,
-                    "Pick Text Color",
+                    context.l10n.pickTextColor,
                     widget.color,
                   );
                   widget.focusNode.requestFocus();

@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// Result from the link dialog
@@ -86,7 +87,7 @@ class _LinkDialogState extends State<_LinkDialog> {
     // Text is required if adding a new link (not removing)
     if (effectiveUrl != null && text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter display text')),
+        SnackBar(content: Text(context.l10n.pleaseEnterDisplayText)),
       );
       _textFocus.requestFocus();
       return;
@@ -105,7 +106,9 @@ class _LinkDialogState extends State<_LinkDialog> {
     final theme = Theme.of(context);
 
     return AlertDialog(
-      title: Text(widget.isEditingExisting ? 'Edit Link' : 'Add Link'),
+      title: Text(
+        widget.isEditingExisting ? context.l10n.editLink : context.l10n.addLink,
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -115,10 +118,10 @@ class _LinkDialogState extends State<_LinkDialog> {
               controller: _textController,
               focusNode: _textFocus,
               autofocus: widget.initialText?.isEmpty ?? true,
-              decoration: const InputDecoration(
-                labelText: 'Display Text',
-                hintText: 'Enter the text to display',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.displayText,
+                hintText: context.l10n.enterDisplayText,
+                border: const OutlineInputBorder(),
               ),
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => _urlFocus.requestFocus(),
@@ -128,10 +131,10 @@ class _LinkDialogState extends State<_LinkDialog> {
               controller: _urlController,
               focusNode: _urlFocus,
               autofocus: widget.initialText?.isNotEmpty ?? false,
-              decoration: const InputDecoration(
-                labelText: 'URL',
-                hintText: 'https://example.com',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.url,
+                hintText: context.l10n.urlHint,
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.done,
@@ -145,18 +148,20 @@ class _LinkDialogState extends State<_LinkDialog> {
           TextButton(
             onPressed: _removeLink,
             child: Text(
-              'Remove Link',
+              context.l10n.removeLink,
               style: TextStyle(color: theme.colorScheme.error),
             ),
           ),
         const Spacer(),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         FilledButton(
           onPressed: _submit,
-          child: Text(widget.isEditingExisting ? 'Update' : 'Add'),
+          child: Text(
+            widget.isEditingExisting ? context.l10n.update : context.l10n.add,
+          ),
         ),
       ],
     );

@@ -36,6 +36,7 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/components/note_attachments_carousel.dart';
 import 'package:better_keep/components/note_audio_player.dart';
 import 'package:better_keep/dialogs/color_picker.dart';
@@ -618,17 +619,17 @@ class _NoteEditorState extends State<NoteEditor>
                 items: [
                   BubbleMenuItem(
                     icon: Icons.image,
-                    label: 'Image',
+                    label: context.l10n.image,
                     onTap: _showImageSourceDialog,
                   ),
                   BubbleMenuItem(
                     icon: Icons.mic,
-                    label: 'Audio',
+                    label: context.l10n.audio,
                     onTap: _handleAudioAttachment,
                   ),
                   BubbleMenuItem(
                     icon: Icons.draw,
-                    label: 'Sketch',
+                    label: context.l10n.sketch,
                     onTap: _handleSketchAttachment,
                   ),
                 ],
@@ -654,7 +655,7 @@ class _NoteEditorState extends State<NoteEditor>
                       }
                     },
                     icon: Icon(Icons.restore_from_trash),
-                    tooltip: 'Restore',
+                    tooltip: context.l10n.restore,
                   ),
                 ]
               : [
@@ -677,7 +678,7 @@ class _NoteEditorState extends State<NoteEditor>
                                       : Icons.notifications_active))
                           : Icons.notifications_none,
                     ),
-                    tooltip: 'Reminder',
+                    tooltip: context.l10n.reminder,
                   ),
                   IconButton(
                     color: foregroundColor,
@@ -711,7 +712,7 @@ class _NoteEditorState extends State<NoteEditor>
                           ? Icons.label
                           : Icons.label_outline,
                     ),
-                    tooltip: 'Labels',
+                    tooltip: context.l10n.labels,
                   ),
                   PopupMenuButton(itemBuilder: _buildPopupMenu),
                 ],
@@ -761,7 +762,7 @@ class _NoteEditorState extends State<NoteEditor>
                           ),
                           decoration: InputDecoration(
                             border: InputBorder.none,
-                            hintText: 'Title your thought',
+                            hintText: context.l10n.titleYourThought,
                             hintStyle: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.w600,
@@ -800,7 +801,7 @@ class _NoteEditorState extends State<NoteEditor>
                             showCursor: !_note.readOnly && !_note.trashed,
                             enableInteractiveSelection: true,
                             enableSelectionToolbar: true,
-                            placeholder: 'Start writing...',
+                            placeholder: context.l10n.startWriting,
                             onKeyPressed: _handleKeyPressed,
                             customLeadingBlockBuilder:
                                 customLeadingBlockBuilder,
@@ -884,7 +885,9 @@ class _NoteEditorState extends State<NoteEditor>
                                                   ),
                                                   SizedBox(width: 4),
                                                   Text(
-                                                    'Image failed to load',
+                                                    context
+                                                        .l10n
+                                                        .imageFailedToLoad,
                                                     style: TextStyle(
                                                       fontSize: 12,
                                                       color: Colors.grey,
@@ -951,7 +954,7 @@ class _NoteEditorState extends State<NoteEditor>
   bool _checkAttachmentLimit() {
     if (_note.attachments.length >= maxAttachmentsPerNote) {
       snackbar(
-        'Maximum $maxAttachmentsPerNote attachments per note reached',
+        context.l10n.maxAttachmentsReached(maxAttachmentsPerNote),
         Colors.orange,
       );
       return true;
@@ -1045,7 +1048,7 @@ class _NoteEditorState extends State<NoteEditor>
             children: [
               ListTile(
                 leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
+                title: Text(context.l10n.camera),
                 onTap: () {
                   Navigator.pop(context);
                   _pickImage(ImageSource.camera);
@@ -1053,7 +1056,7 @@ class _NoteEditorState extends State<NoteEditor>
               ),
               ListTile(
                 leading: const Icon(Icons.image),
-                title: const Text('Gallery'),
+                title: Text(context.l10n.gallery),
                 onTap: () {
                   Navigator.pop(context);
                   _pickImage(ImageSource.gallery);
@@ -1088,7 +1091,7 @@ class _NoteEditorState extends State<NoteEditor>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const PopScope(
+        builder: (context) => PopScope(
           canPop: false,
           child: Center(
             child: Card(
@@ -1099,7 +1102,7 @@ class _NoteEditorState extends State<NoteEditor>
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('Processing image...'),
+                    Text(context.l10n.processingImage),
                   ],
                 ),
               ),
@@ -1220,7 +1223,7 @@ class _NoteEditorState extends State<NoteEditor>
                 ? IconButton(
                     icon: const Icon(Icons.keyboard_hide),
                     onPressed: () => _focusNode.unfocus(),
-                    tooltip: 'Hide keyboard',
+                    tooltip: context.l10n.hideKeyboard,
                   )
                 : const SizedBox.shrink(),
           ),
@@ -1329,7 +1332,7 @@ class _NoteEditorState extends State<NoteEditor>
         await _note.delete();
       } catch (e) {
         AppLogger.error('Error saving note', e);
-        snackbar("Error saving note", Colors.red);
+        snackbar(context.l10n.errorSavingNote, Colors.red);
       }
       return;
     }
@@ -1356,7 +1359,7 @@ class _NoteEditorState extends State<NoteEditor>
       }
     } catch (e) {
       AppLogger.error('Error saving note', e);
-      snackbar("Error saving note", Colors.red);
+      snackbar(context.l10n.errorSavingNote, Colors.red);
     }
   }
 
@@ -1366,7 +1369,11 @@ class _NoteEditorState extends State<NoteEditor>
       color: iconColor,
       onPressed: () async {
         _focusNode.unfocus();
-        final color = await colorPicker(context, "Pick Note Color", noteColor);
+        final color = await colorPicker(
+          context,
+          context.l10n.pickNoteColor,
+          noteColor,
+        );
         _focusNode.requestFocus();
         if (color == null) return;
         _note.color = color;
@@ -1580,7 +1587,8 @@ class _NoteEditorState extends State<NoteEditor>
                           children: [
                             if (isAudioLink) ...[
                               Text(
-                                audioRecording?.title ?? 'Audio Recording',
+                                audioRecording?.title ??
+                                    context.l10n.audioRecording,
                                 style: TextStyle(
                                   color: foregroundColor,
                                   fontWeight: FontWeight.bold,
@@ -1850,9 +1858,9 @@ class _NoteEditorState extends State<NoteEditor>
       case PastePlainText(:final text):
         try {
           insertPlainTextIntoController(_controller, text);
-          snackbar('Pasted as plain text', Colors.green);
+          snackbar(context.l10n.pastedAsPlainText, Colors.green);
         } catch (e) {
-          snackbar('Failed to paste: $e', Colors.red);
+          snackbar(context.l10n.failedToPaste(e.toString()), Colors.red);
         }
         break;
 
@@ -1861,7 +1869,7 @@ class _NoteEditorState extends State<NoteEditor>
         final document = await navigator.push<Document>(
           MaterialPageRoute(
             builder: (context) => ContentPreviewPage(
-              title: 'Pasted Content',
+              title: context.l10n.pastedContent,
               content: markdownText,
               isMarkdown: true,
               insertMode: true,
@@ -1874,9 +1882,12 @@ class _NoteEditorState extends State<NoteEditor>
         if (document != null) {
           try {
             insertDocumentIntoController(_controller, document);
-            snackbar('Content inserted', Colors.green);
+            snackbar(context.l10n.contentInserted, Colors.green);
           } catch (e) {
-            snackbar('Failed to insert content: $e', Colors.red);
+            snackbar(
+              context.l10n.failedToInsertContent(e.toString()),
+              Colors.red,
+            );
           }
         }
         break;
@@ -1897,7 +1908,7 @@ class _NoteEditorState extends State<NoteEditor>
             _note.save();
             setState(() {});
           },
-          title: Text('Archive'),
+          title: Text(context.l10n.archive),
         ),
       ),
       PopupMenuItem(
@@ -1911,7 +1922,7 @@ class _NoteEditorState extends State<NoteEditor>
             _note.save();
             setState(() {});
           },
-          title: Text('Read Only'),
+          title: Text(context.l10n.readOnly),
         ),
       ),
       PopupMenuItem(
@@ -1924,7 +1935,10 @@ class _NoteEditorState extends State<NoteEditor>
             if (checked == true) {
               // Check entitlement before allowing new lock
               final lockedNotes = await Note.get(NoteType.locked);
-              final check = EntitlementGuard.canLockNote(lockedNotes.length);
+              final check = EntitlementGuard.canLockNote(
+                lockedNotes.length,
+                context.l10n,
+              );
 
               if (!check.allowed) {
                 // Show paywall when limit reached
@@ -1939,7 +1953,7 @@ class _NoteEditorState extends State<NoteEditor>
               }
 
               if (!context.mounted) {
-                snackbar("Action cancelled", Colors.red);
+                snackbar(context.l10n.actionCancelled, Colors.red);
                 return;
               }
 
@@ -1953,11 +1967,14 @@ class _NoteEditorState extends State<NoteEditor>
               try {
                 await _note.lock(password);
                 if (mounted) {
-                  snackbar('Note locked', Colors.green);
+                  snackbar(context.l10n.noteLocked, Colors.green);
                 }
               } catch (e) {
                 if (mounted) {
-                  snackbar('Failed to lock note: $e', Colors.red);
+                  snackbar(
+                    context.l10n.failedToLockNote(e.toString()),
+                    Colors.red,
+                  );
                 }
               }
             } else {
@@ -1970,42 +1987,54 @@ class _NoteEditorState extends State<NoteEditor>
               try {
                 await _note.removeLock(password);
                 if (mounted) {
-                  snackbar('Lock removed', Colors.green);
+                  snackbar(context.l10n.lockRemoved, Colors.green);
                 }
               } catch (e) {
                 if (mounted) {
-                  snackbar('Failed to remove lock: $e', Colors.red);
+                  snackbar(
+                    context.l10n.failedToRemoveLock(e.toString()),
+                    Colors.red,
+                  );
                 }
               }
             }
             setState(() {});
           },
-          title: Text('Locked'),
+          title: Text(context.l10n.locked),
         ),
       ),
       PopupMenuDivider(),
       PopupMenuItem(
         height: 20,
         onTap: () => showExportOptions(context, _note, _controller),
-        child: ListTile(leading: Icon(Icons.save_alt), title: Text('Save as')),
+        child: ListTile(
+          leading: Icon(Icons.save_alt),
+          title: Text(context.l10n.saveAs),
+        ),
       ),
       PopupMenuItem(
         height: 20,
         onTap: () => showCopyOptions(context, _note, _controller),
         child: ListTile(
           leading: Icon(Icons.content_copy),
-          title: Text('Copy as'),
+          title: Text(context.l10n.copyAs),
         ),
       ),
       PopupMenuItem(
         height: 20,
         onTap: () => _handlePasteAs(context),
-        child: ListTile(leading: Icon(Icons.paste), title: Text('Paste as')),
+        child: ListTile(
+          leading: Icon(Icons.paste),
+          title: Text(context.l10n.pasteAs),
+        ),
       ),
       PopupMenuItem(
         height: 20,
         onTap: () => showShareNoteDialog(context, _note),
-        child: ListTile(leading: Icon(Icons.share), title: Text('Share')),
+        child: ListTile(
+          leading: Icon(Icons.share),
+          title: Text(context.l10n.share),
+        ),
       ),
       PopupMenuItem(
         height: 20,
@@ -2033,7 +2062,9 @@ class _NoteEditorState extends State<NoteEditor>
                   } catch (e) {
                     if (mounted) {
                       snackbar(
-                        'Note duplicated but failed to lock: $e',
+                        context.l10n.noteDuplicatedButFailedToLock(
+                          e.toString(),
+                        ),
                         Colors.orange,
                       );
                     }
@@ -2041,14 +2072,14 @@ class _NoteEditorState extends State<NoteEditor>
                   }
                 }
                 if (mounted) {
-                  snackbar('Note duplicated', Colors.green);
+                  snackbar(context.l10n.noteDuplicated, Colors.green);
                 }
               }
             : null,
         child: ListTile(
           enabled: isSaved,
           leading: Icon(Icons.copy),
-          title: Text('Duplicate'),
+          title: Text(context.l10n.duplicate),
         ),
       ),
       PopupMenuItem(
@@ -2056,7 +2087,7 @@ class _NoteEditorState extends State<NoteEditor>
         child: ListTile(
           enabled: isSaved,
           leading: Icon(Icons.delete),
-          title: Text('Delete'),
+          title: Text(context.l10n.delete),
         ),
         onTap: () {
           Navigator.of(context).pop();

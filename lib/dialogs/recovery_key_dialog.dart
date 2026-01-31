@@ -4,6 +4,7 @@ import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 
@@ -52,9 +53,7 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
       AppLogger.error('Create recovery key failed', e, stack);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Something went wrong. Please try again.'),
-          ),
+          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
         );
       }
     } finally {
@@ -66,7 +65,9 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        widget.isUpdate ? 'Update Recovery Key' : 'Set Up Recovery Key',
+        widget.isUpdate
+            ? context.l10n.updateRecoveryKey
+            : context.l10n.setupRecoveryKey,
       ),
       content: SingleChildScrollView(
         child: Form(
@@ -76,8 +77,7 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Create a recovery passphrase that can restore access to your '
-                'notes if you lose all your devices.',
+                context.l10n.recoveryPassphraseDescription,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -101,8 +101,7 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Store this passphrase securely. Without it, you cannot '
-                        'recover your notes if you lose all devices.',
+                        context.l10n.recoveryPassphraseWarning,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.error,
                         ),
@@ -117,8 +116,8 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
                 obscureText: _obscurePassphrase,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'Recovery Passphrase',
-                  hintText: 'Enter a strong passphrase',
+                  labelText: context.l10n.recoveryPassphrase,
+                  hintText: context.l10n.enterAStrongPassphrase,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -133,10 +132,10 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter a passphrase';
+                    return context.l10n.pleaseEnterPassphrase;
                   }
                   if (value.length < 6) {
-                    return 'Passphrase must be at least 6 characters';
+                    return context.l10n.passphraseMinLength;
                   }
                   return null;
                 },
@@ -146,8 +145,8 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
                 controller: _confirmController,
                 obscureText: _obscureConfirm,
                 decoration: InputDecoration(
-                  labelText: 'Confirm Passphrase',
-                  hintText: 'Re-enter your passphrase',
+                  labelText: context.l10n.confirmPassphrase,
+                  hintText: context.l10n.reenterPassphrase,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -159,7 +158,7 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
                 ),
                 validator: (value) {
                   if (value != _passphraseController.text) {
-                    return 'Passphrases do not match';
+                    return context.l10n.passphrasesDoNotMatch;
                   }
                   return null;
                 },
@@ -167,10 +166,10 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _hintController,
-                decoration: const InputDecoration(
-                  labelText: 'Hint (Optional)',
-                  hintText: 'A hint to help you remember',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.hintOptional,
+                  hintText: context.l10n.hintToRemember,
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ],
@@ -184,14 +183,14 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
             onPressed: _isLoading
                 ? null
                 : () => Navigator.of(context).pop(false),
-            child: const Text('Skip'),
+            child: Text(context.l10n.skip),
           )
         else
           TextButton(
             onPressed: _isLoading
                 ? null
                 : () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
         ElevatedButton(
           onPressed: _isLoading ? null : _save,
@@ -201,7 +200,7 @@ class _SetupRecoveryKeyDialogState extends State<SetupRecoveryKeyDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Save'),
+              : Text(context.l10n.save),
         ),
       ],
     );
@@ -254,14 +253,14 @@ class _RecoverWithPassphraseDialogState
 
   Future<void> _recover() async {
     if (_passphraseController.text.isEmpty) {
-      setState(() => _error = 'Please enter your recovery passphrase');
+      setState(() => _error = context.l10n.pleaseEnterRecoveryPassphrase);
       return;
     }
 
     setState(() {
       _isLoading = true;
       _error = null;
-      _statusMessage = 'Verifying passphrase...';
+      _statusMessage = context.l10n.verifyingPassphrase;
     });
 
     try {
@@ -283,7 +282,7 @@ class _RecoverWithPassphraseDialogState
       if (success) {
         // If user wants to set this device as primary, revoke other devices
         if (_setAsPrimaryDevice) {
-          _updateStatus('Setting as primary device...');
+          _updateStatus(context.l10n.settingAsPrimaryDevice);
           try {
             await DeviceManager.instance.setCurrentDeviceAsPrimary();
           } catch (e, stack) {
@@ -296,7 +295,7 @@ class _RecoverWithPassphraseDialogState
           }
         }
 
-        _updateStatus('Finalizing...');
+        _updateStatus(context.l10n.finalizing);
         // Cache the device status as approved
         await E2EESecureStorage.instance.cacheDeviceStatus('approved');
 
@@ -308,33 +307,23 @@ class _RecoverWithPassphraseDialogState
           Navigator.of(context).pop(true);
         }
       } else {
-        setState(() => _error = 'Incorrect passphrase. Please try again.');
+        setState(() => _error = context.l10n.incorrectPassphrase);
       }
     } on TimeoutException catch (e) {
       AppLogger.error('Recovery dialog: Recovery timed out', e);
       if (mounted) {
-        setState(
-          () => _error = e.message ?? 'Recovery timed out. Please try again.',
-        );
+        setState(() => _error = context.l10n.recoveryTimedOut);
       }
     } on UnsupportedError catch (e) {
       // Argon2id recovery attempted on web
       AppLogger.error('Recovery dialog: Unsupported on this platform', e);
       if (mounted) {
-        setState(
-          () => _error =
-              'This recovery key was created on a mobile or desktop app and '
-              'cannot be used in the browser. Please use the mobile or desktop app to recover.',
-        );
+        setState(() => _error = context.l10n.recoveryKeyMobileOnly);
       }
     } catch (e, stack) {
       AppLogger.error('Recovery dialog: Recovery failed', e, stack);
       if (mounted) {
-        setState(
-          () => _error =
-              'Something went wrong. Please check your '
-              'connection and try again.',
-        );
+        setState(() => _error = context.l10n.somethingWentWrongCheckConnection);
       }
     } finally {
       if (mounted) {
@@ -353,7 +342,7 @@ class _RecoverWithPassphraseDialogState
     return AlertDialog(
       title: Row(
         children: [
-          const Text('Recover'),
+          Text(context.l10n.recover),
           const SizedBox(width: 6),
           MenuAnchor(
             builder: (context, controller, child) {
@@ -379,7 +368,7 @@ class _RecoverWithPassphraseDialogState
                 padding: const EdgeInsets.all(12),
                 constraints: const BoxConstraints(maxWidth: 250),
                 child: Text(
-                  'Recover your encryption keys using your recovery passphrase',
+                  context.l10n.recoverInfoTooltip,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -469,7 +458,7 @@ class _RecoverWithPassphraseDialogState
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Hint: $_hint',
+                          context.l10n.hintLabel(_hint!),
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: colorScheme.primary),
                         ),
@@ -482,8 +471,8 @@ class _RecoverWithPassphraseDialogState
                 obscureText: _obscurePassphrase,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'Recovery Passphrase',
-                  hintText: 'Enter your passphrase',
+                  labelText: context.l10n.recoveryPassphrase,
+                  hintText: context.l10n.enterYourPassphrase,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -527,7 +516,7 @@ class _RecoverWithPassphraseDialogState
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Set as primary device',
+                          context.l10n.setAsPrimaryDevice,
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
                                 color: _setAsPrimaryDevice
@@ -547,7 +536,7 @@ class _RecoverWithPassphraseDialogState
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         FilledButton(
           onPressed: _isLoading ? null : _recover,
@@ -560,7 +549,7 @@ class _RecoverWithPassphraseDialogState
                     color: Colors.white,
                   ),
                 )
-              : const Text('Recover'),
+              : Text(context.l10n.recover),
         ),
       ],
     );
@@ -642,9 +631,9 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
       if (mounted) {
         setState(() {
           if (e.toString().contains('incorrect')) {
-            _error = 'Current passphrase is incorrect';
+            _error = context.l10n.currentPassphraseIncorrect;
           } else {
-            _error = 'Something went wrong. Please try again.';
+            _error = context.l10n.somethingWentWrongTryAgain;
           }
         });
       }
@@ -656,7 +645,7 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Update Recovery Key'),
+      title: Text(context.l10n.updateRecoveryKey),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -698,8 +687,8 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
                 obscureText: _obscureCurrent,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'Current Passphrase',
-                  hintText: 'Enter your current passphrase',
+                  labelText: context.l10n.currentPassphrase,
+                  hintText: context.l10n.enterCurrentPassphrase,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -711,7 +700,7 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter your current passphrase';
+                    return context.l10n.pleaseEnterCurrentPassphrase;
                   }
                   return null;
                 },
@@ -723,8 +712,8 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
                 controller: _newPassphraseController,
                 obscureText: _obscureNew,
                 decoration: InputDecoration(
-                  labelText: 'New Passphrase',
-                  hintText: 'Enter a strong passphrase',
+                  labelText: context.l10n.newPassphrase,
+                  hintText: context.l10n.enterStrongPassphrase,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -735,10 +724,10 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter a new passphrase';
+                    return context.l10n.pleaseEnterNewPassphrase;
                   }
                   if (value.length < 6) {
-                    return 'Passphrase must be at least 6 characters';
+                    return context.l10n.passphraseMinLength;
                   }
                   return null;
                 },
@@ -748,8 +737,8 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
                 controller: _confirmController,
                 obscureText: _obscureConfirm,
                 decoration: InputDecoration(
-                  labelText: 'Confirm New Passphrase',
-                  hintText: 'Re-enter your new passphrase',
+                  labelText: context.l10n.confirmNewPassphrase,
+                  hintText: context.l10n.reenterNewPassphrase,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -761,7 +750,7 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
                 ),
                 validator: (value) {
                   if (value != _newPassphraseController.text) {
-                    return 'Passphrases do not match';
+                    return context.l10n.passphrasesDoNotMatch;
                   }
                   return null;
                 },
@@ -769,10 +758,10 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _hintController,
-                decoration: const InputDecoration(
-                  labelText: 'Hint (Optional)',
-                  hintText: 'A hint to help you remember',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.hintOptional,
+                  hintText: context.l10n.hintToRemember,
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ],
@@ -782,7 +771,7 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _save,
@@ -792,7 +781,7 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Update'),
+              : Text(context.l10n.update),
         ),
       ],
     );
@@ -831,7 +820,7 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
 
   Future<void> _remove() async {
     if (_passphraseController.text.isEmpty) {
-      setState(() => _error = 'Please enter your passphrase');
+      setState(() => _error = context.l10n.pleaseEnterPassphrase);
       return;
     }
 
@@ -854,9 +843,9 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
         setState(() {
           _isLoading = false;
           if (e.toString().contains('incorrect')) {
-            _error = 'Passphrase is incorrect';
+            _error = context.l10n.passphraseIncorrect;
           } else {
-            _error = 'Something went wrong. Please try again.';
+            _error = context.l10n.somethingWentWrongTryAgain;
           }
         });
       }
@@ -866,7 +855,7 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Remove Recovery Key'),
+      title: Text(context.l10n.removeRecoveryKey),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -888,8 +877,7 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Warning: Without a recovery key, you cannot recover your '
-                      'notes if you lose all your devices!',
+                      context.l10n.removeRecoveryKeyWarning,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.error,
                       ),
@@ -900,7 +888,7 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Enter your current passphrase to confirm removal:',
+              context.l10n.enterPassphraseToConfirmRemoval,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -944,8 +932,8 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
               obscureText: _obscurePassphrase,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'Current Passphrase',
-                hintText: 'Enter your passphrase',
+                labelText: context.l10n.currentPassphrase,
+                hintText: context.l10n.enterYourPassphrase,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -965,7 +953,7 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _remove,
@@ -979,7 +967,7 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Remove'),
+              : Text(context.l10n.remove),
         ),
       ],
     );

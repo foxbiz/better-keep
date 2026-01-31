@@ -19,6 +19,7 @@ import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/utils/week_days.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -319,14 +320,13 @@ class _NoteCardState extends State<NoteCard>
     if (_hasDecryptionError) {
       final confirmed = await showDeleteDialog(
         context,
-        title: 'Encrypted Note',
-        message:
-            'This note could not be decrypted. The encryption keys are missing or invalid, and the note cannot be recovered.',
+        title: context.l10n.encryptedNote,
+        message: context.l10n.encryptedNoteCannotBeDecrypted,
         isPermanent: true,
       );
       if (confirmed == true && mounted) {
         await widget.note.delete();
-        snackbar('Note deleted permanently');
+        snackbar(context.l10n.noteDeletedPermanently);
       }
       return;
     }
@@ -375,14 +375,14 @@ class _NoteCardState extends State<NoteCard>
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            const Expanded(child: Text('Note JSON')),
+            Expanded(child: Text(context.l10n.noteJson)),
             IconButton(
               icon: const Icon(Icons.copy),
-              tooltip: 'Copy to clipboard',
+              tooltip: context.l10n.copyToClipboard,
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: noteJson));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Copied to clipboard')),
+                  SnackBar(content: Text(context.l10n.copiedToClipboard)),
                 );
               },
             ),
@@ -400,7 +400,7 @@ class _NoteCardState extends State<NoteCard>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            child: Text(context.l10n.close),
           ),
         ],
       ),
@@ -652,7 +652,7 @@ class _NoteCardState extends State<NoteCard>
                         Icon(Icons.push_pin, size: 14.0, color: secondaryColor),
                       if (_isSyncFailed)
                         Tooltip(
-                          message: 'Sync failed',
+                          message: context.l10n.syncFailed,
                           child: Icon(
                             Icons.sync_problem,
                             size: 14.0,
@@ -769,7 +769,7 @@ class _NoteCardState extends State<NoteCard>
                     SizedBox(width: 8.0),
                     Flexible(
                       child: Text(
-                        "Decryption failed",
+                        context.l10n.decryptionFailed,
                         softWrap: true,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -802,7 +802,7 @@ class _NoteCardState extends State<NoteCard>
                     SizedBox(width: 4.0),
                     Flexible(
                       child: Text(
-                        "This note is locked",
+                        context.l10n.thisNoteIsLocked,
                         softWrap: true,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: foregroundColor),
@@ -934,7 +934,7 @@ class _NoteCardState extends State<NoteCard>
                     SizedBox(width: 4),
                     Flexible(
                       child: Text(
-                        recording.title ?? "Audio",
+                        recording.title ?? context.l10n.audio,
                         style: TextStyle(fontSize: 12, color: foregroundColor),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

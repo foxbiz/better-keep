@@ -1,4 +1,5 @@
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 class ViewModeToggle extends StatefulWidget {
@@ -49,24 +50,32 @@ class _ViewModeToggleState extends State<ViewModeToggle> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select View'),
+        title: Text(context.l10n.selectView),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildViewModeOption(NoteViewMode.grid, Icons.grid_view, 'Grid'),
+            _buildViewModeOption(
+              NoteViewMode.grid,
+              Icons.grid_view,
+              context.l10n.viewModeGrid,
+            ),
             const Divider(),
-            _buildViewModeOption(NoteViewMode.list, Icons.list, 'List'),
+            _buildViewModeOption(
+              NoteViewMode.list,
+              Icons.list,
+              context.l10n.viewModeList,
+            ),
             const Divider(),
             _buildViewModeOption(
               NoteViewMode.folderLabels,
               Icons.label,
-              'Labels',
+              context.l10n.labels,
             ),
             const Divider(),
             _buildViewModeOption(
               NoteViewMode.folderColors,
               Icons.color_lens,
-              'Colors',
+              context.l10n.viewModeColors,
             ),
           ],
         ),

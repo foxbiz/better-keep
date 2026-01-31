@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/otp_input_field.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -82,7 +83,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
       AppLogger.error('Error sending email verification OTP: $e');
       if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to send verification code. Please try again.';
+          _errorMessage = context.l10n.failedSendVerificationCode;
         });
       }
     } finally {
@@ -113,7 +114,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     final otp = _otpValue;
     if (otp.length != 6) {
       setState(() {
-        _errorMessage = 'Please enter the complete 6-digit code';
+        _errorMessage = context.l10n.pleaseEnterCompleteCode;
       });
       return;
     }
@@ -132,7 +133,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Email verified successfully!'),
+              content: Text(context.l10n.emailVerifiedSuccessfully),
               backgroundColor: Colors.green.shade700,
             ),
           );
@@ -153,7 +154,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
       AppLogger.error('Error verifying email OTP: $e');
       if (mounted) {
         setState(() {
-          _errorMessage = 'Verification failed. Please try again.';
+          _errorMessage = context.l10n.verificationFailed;
         });
       }
     } finally {
@@ -192,7 +193,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
           children: [
             // Title
             Text(
-              'Verify Your Email',
+              context.l10n.verifyYourEmail,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: colorScheme.onSurface,
@@ -204,8 +205,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
             // Description
             Text(
               _otpSent
-                  ? 'Enter the 6-digit code sent to:'
-                  : 'Sending verification code to:',
+                  ? context.l10n.enterCodeSentTo
+                  : context.l10n.sendingVerificationCode,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -235,7 +236,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
               Text(
-                'Sending verification code...',
+                context.l10n.sendingVerificationCode,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -263,7 +264,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                   child: FilledButton.icon(
                     onPressed: _otpValue.length == 6 ? _verifyOtp : null,
                     icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Verify'),
+                    label: Text(context.l10n.verify),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
@@ -312,8 +313,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                     : const Icon(Icons.refresh),
                 label: Text(
                   _resendCountdown > 0
-                      ? 'Resend code in ${_resendCountdown}s'
-                      : 'Resend code',
+                      ? context.l10n.resendCodeIn(_resendCountdown)
+                      : context.l10n.resendCode,
                 ),
               ),
 
@@ -323,7 +324,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
             TextButton.icon(
               onPressed: _signOut,
               icon: const Icon(Icons.logout),
-              label: const Text('Use a different account'),
+              label: Text(context.l10n.useDifferentAccount),
               style: TextButton.styleFrom(
                 foregroundColor: colorScheme.onSurfaceVariant,
               ),

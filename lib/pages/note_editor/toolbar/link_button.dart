@@ -1,4 +1,5 @@
 import 'package:better_keep/dialogs/link_dialog.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
@@ -43,7 +44,8 @@ class _LinkButtonState extends State<LinkButton> {
 
     return IconButton(
       isSelected: isLink,
-      icon: Icon(Icons.link),
+      icon: const Icon(Icons.link),
+      tooltip: context.l10n.link,
       onPressed: enabled ? _handleLinkPress : null,
     );
   }

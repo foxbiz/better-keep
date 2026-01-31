@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:better_keep/l10n/app_localizations.dart';
 
 class App extends StatefulWidget {
   const App({super.key});
@@ -36,12 +37,15 @@ class App extends StatefulWidget {
 class _AppState extends State<App> with WidgetsBindingObserver {
   late ThemeData themeData;
   late final void Function(dynamic) _themeListener;
+  late final void Function(dynamic) _localeListener;
+  Locale? _locale;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     themeData = AppState.theme;
+    _locale = AppState.locale;
 
     // Update web theme colors on initial load
     if (kIsWeb) {
@@ -60,6 +64,13 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     };
     AppState.subscribe("theme", _themeListener);
 
+    _localeListener = (value) {
+      setState(() {
+        _locale = value as Locale?;
+      });
+    };
+    AppState.subscribe("locale", _localeListener);
+
     // Set navigator key for Razorpay dialogs on desktop
     if (isDesktop) {
       razorpay_platform.setNavigatorKey(AppState.navigatorKey);
@@ -70,6 +81,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     AppState.unsubscribe("theme", _themeListener);
+    AppState.unsubscribe("locale", _localeListener);
     super.dispose();
   }
 
@@ -104,14 +116,21 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       navigatorKey: AppState.navigatorKey,
       scaffoldMessengerKey: AppState.scaffoldMessengerKey,
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         FlutterQuillLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('en', ''), // English, no country code
+        Locale('en'),
+        Locale('ja'),
+        Locale('ko'),
+        Locale('id'),
+        Locale('pt', 'BR'),
+        Locale('zh'),
       ],
+      locale: _locale,
       title: 'Better Keep',
       theme: themeData,
       builder: (context, child) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// Configuration for the loading dialog
@@ -210,7 +211,7 @@ class _LoadingDialogContentState extends State<_LoadingDialogContent> {
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: widget.onCancel,
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
               ],
             ],

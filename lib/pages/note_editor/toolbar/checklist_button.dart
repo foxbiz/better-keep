@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 
 class CheckListButton extends StatefulWidget {
   final QuillController controller;
@@ -61,7 +62,8 @@ class _CheckListButtonState extends State<CheckListButton> {
   Widget build(BuildContext context) {
     return IconButton(
       isSelected: enabled && !widget.readOnly,
-      icon: Icon(Icons.check_box_outlined),
+      icon: const Icon(Icons.check_box_outlined),
+      tooltip: context.l10n.checklist,
       onPressed: widget.readOnly
           ? null
           : () async {

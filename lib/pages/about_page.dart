@@ -1,4 +1,5 @@
 import 'package:better_keep/components/logo.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -31,7 +32,7 @@ class _AboutPageState extends State<AboutPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('About')),
+      appBar: AppBar(title: Text(context.l10n.about)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -42,13 +43,16 @@ class _AboutPageState extends State<AboutPage> {
               children: [
                 LogoImage(size: 80),
                 const SizedBox(height: 16),
-                const Text(
-                  'Better Keep',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                Text(
+                  context.l10n.appTitle,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Version $_version ($_buildNumber)',
+                  context.l10n.version(_version, _buildNumber),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
@@ -64,7 +68,10 @@ class _AboutPageState extends State<AboutPage> {
           Center(
             child: Column(
               children: [
-                const Text('Developed by', style: TextStyle(fontSize: 14)),
+                Text(
+                  context.l10n.developedBy,
+                  style: const TextStyle(fontSize: 14),
+                ),
                 const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -120,13 +127,16 @@ class _AboutPageState extends State<AboutPage> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Open Source',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                Text(
+                  context.l10n.openSource,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Better Keep is open source! View the code,\ncontribute, or report issues on GitHub.',
+                  context.l10n.openSourceDescription,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).textTheme.bodySmall?.color,
@@ -146,7 +156,7 @@ class _AboutPageState extends State<AboutPage> {
                     }
                   },
                   icon: const Icon(Icons.open_in_new),
-                  label: const Text('View on GitHub'),
+                  label: Text(context.l10n.viewOnGithub),
                 ),
               ],
             ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:better_keep/components/logo.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/labels.dart';
 import 'package:better_keep/models/note.dart';
@@ -76,37 +77,35 @@ class _SidebarState extends State<Sidebar> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.apple, size: 28),
             SizedBox(width: 12),
-            Text('Install Better Keep'),
+            Text(context.l10n.installBetterKeep),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '📱 iOS App Coming Soon!',
+              context.l10n.iosAppComingSoon,
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             SizedBox(height: 12),
-            Text(
-              'Our iOS app is being reviewed. In the meantime, you can install the web app:',
-            ),
+            Text(context.l10n.iosAppBeingReviewed),
             SizedBox(height: 16),
-            Text('1. Tap the Share button in Safari'),
+            Text(context.l10n.iosInstallStep1),
             SizedBox(height: 8),
-            Text('2. Scroll down and tap "Add to Home Screen"'),
+            Text(context.l10n.iosInstallStep2),
             SizedBox(height: 8),
-            Text('3. Tap "Add" to install'),
+            Text(context.l10n.iosInstallStep3),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Got it'),
+            child: Text(context.l10n.gotIt),
           ),
         ],
       ),
@@ -126,36 +125,48 @@ class _SidebarState extends State<Sidebar> {
               padding: EdgeInsets.zero,
               children: <Widget>[
                 if (!_isBigScreen) Logo(),
-                _buildTile(Icons.note, 'Notes', () {
+                _buildTile(Icons.note, context.l10n.notes, () {
                   if (!_isBigScreen) Navigator.pop(context);
                   AppState.showNotes = NoteType.all;
                 }, AppState.showNotes == NoteType.all),
-                _buildTile(Icons.label, 'Labels', () {
+                _buildTile(Icons.label, context.l10n.labels, () {
                   labels(context);
                 }),
-                _buildTile(Icons.archive, 'Archive', () {
-                  if (!_isBigScreen) Navigator.pop(context);
-                  AppState.showNotes = NoteType.archived;
-                }, AppState.showNotes == NoteType.archived),
-                _buildTile(Icons.alarm, 'Reminders', () {
-                  if (!_isBigScreen) Navigator.pop(context);
-                  AppState.showNotes = NoteType.reminder;
-                }, AppState.showNotes == NoteType.reminder),
-                _buildTile(Icons.delete, 'Trash', () {
-                  if (!_isBigScreen) Navigator.pop(context);
-                  AppState.showNotes = NoteType.trashed;
-                }, AppState.showNotes == NoteType.trashed),
-                _buildTile(Icons.settings, 'Settings', () {
+                _buildTile(
+                  Icons.archive,
+                  context.l10n.archive,
+                  () {
+                    if (!_isBigScreen) Navigator.pop(context);
+                    AppState.showNotes = NoteType.archived;
+                  },
+                  AppState.showNotes == NoteType.archived,
+                ),
+                _buildTile(
+                  Icons.alarm,
+                  context.l10n.reminders,
+                  () {
+                    if (!_isBigScreen) Navigator.pop(context);
+                    AppState.showNotes = NoteType.reminder;
+                  },
+                  AppState.showNotes == NoteType.reminder,
+                ),
+                _buildTile(
+                  Icons.delete,
+                  context.l10n.trash,
+                  () {
+                    if (!_isBigScreen) Navigator.pop(context);
+                    AppState.showNotes = NoteType.trashed;
+                  },
+                  AppState.showNotes == NoteType.trashed,
+                ),
+                _buildTile(Icons.settings, context.l10n.settings, () {
                   if (!_isBigScreen) Navigator.pop(context);
                   showPage(context, const Settings());
                 }),
                 if (!kIsWeb && Platform.isAndroid)
-                  _buildTile(Icons.share, 'Share App', () {
+                  _buildTile(Icons.share, context.l10n.shareApp, () {
                     SharePlus.instance.share(
-                      ShareParams(
-                        text:
-                            'Check out Better Keep Notes - a secure note-taking app!\nhttps://play.google.com/store/apps/details?id=io.foxbiz.better_keep',
-                      ),
+                      ShareParams(text: context.l10n.shareAppMessage),
                     );
                   }),
               ],
@@ -168,10 +179,14 @@ class _SidebarState extends State<Sidebar> {
               if (status.effectivePlan != UserPlan.free) {
                 return const SizedBox.shrink();
               }
-              return _buildTile(Icons.workspace_premium, 'Upgrade to Pro', () {
-                if (!_isBigScreen) Navigator.pop(context);
-                showPaywall(context);
-              });
+              return _buildTile(
+                Icons.workspace_premium,
+                context.l10n.upgradeToPro,
+                () {
+                  if (!_isBigScreen) Navigator.pop(context);
+                  showPaywall(context);
+                },
+              );
             },
           ),
         ],
@@ -188,22 +203,22 @@ class _SidebarState extends State<Sidebar> {
 
     if (info.isIOS) {
       icon = Icons.install_mobile;
-      label = 'Install App';
+      label = context.l10n.installApp;
     } else if (info.isAndroid) {
       icon = Icons.android;
-      label = 'Get Android App';
+      label = context.l10n.getAndroidApp;
     } else if (info.isWindows) {
       icon = Icons.desktop_windows;
-      label = 'Get Windows App';
+      label = context.l10n.getWindowsApp;
     } else if (info.isMacOS) {
       icon = Icons.laptop_mac;
-      label = 'Install App';
+      label = context.l10n.installApp;
     } else if (info.canInstallPWA) {
       icon = Icons.install_desktop;
-      label = 'Install App';
+      label = context.l10n.installApp;
     } else {
       icon = Icons.download;
-      label = 'Install App';
+      label = context.l10n.installApp;
     }
 
     return _buildTile(icon, label, _handleInstallTap);

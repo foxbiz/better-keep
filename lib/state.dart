@@ -50,6 +50,7 @@ final _defaultState = {
   "notes_view_mode": NoteViewMode.grid,
   "current_folder": null,
   "toolbar_grid_modes": <String, bool>{},
+  "locale": null,
 };
 
 class AppState {
@@ -269,6 +270,13 @@ class AppState {
     );
 
     _state["current_folder"] = prefsInstance.getString("current_folder");
+
+    // Load locale preference
+    final localeString = prefsInstance.getString("locale");
+    if (localeString != null) {
+      final parts = localeString.split('_');
+      _state["locale"] = Locale(parts[0], parts.length > 1 ? parts[1] : null);
+    }
   }
 
   static Object? get(String key) {
@@ -671,6 +679,24 @@ class AppState {
     _persistToPrefs(
       (p) async => p.setString("toolbar_grid_modes", jsonEncode(modes)),
     );
+  }
+
+  /// Get the current locale preference (null means follow system)
+  static Locale? get locale {
+    return _state["locale"] as Locale?;
+  }
+
+  /// Set the locale preference (null to follow system)
+  static set locale(Locale? value) {
+    set("locale", value);
+    if (value == null) {
+      _persistToPrefs((p) async => p.remove("locale"));
+    } else {
+      final localeString = value.countryCode != null
+          ? '${value.languageCode}_${value.countryCode}'
+          : value.languageCode;
+      _persistToPrefs((p) async => p.setString("locale", localeString));
+    }
   }
 
   static void subscribe(String key, void Function(dynamic) callback) {

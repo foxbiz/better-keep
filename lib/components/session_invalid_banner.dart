@@ -1,5 +1,6 @@
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// A banner that shows when the user's session is invalid.
@@ -31,23 +32,20 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
           ),
           child: const Icon(Icons.logout, color: Colors.orange, size: 32),
         ),
-        title: const Text(
-          'Sign Out',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          navContext.l10n.signOut,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        content: const Text(
-          'Are you sure you want to sign out?\n\n'
-          'You will need to sign in again to access your notes.',
-        ),
+        content: Text(navContext.l10n.signOutConfirmationWithNote),
         actions: [
           OutlinedButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(navContext.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text('Sign Out'),
+            child: Text(navContext.l10n.signOut),
           ),
         ],
       ),
@@ -87,7 +85,7 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Session Problem',
+                          context.l10n.sessionProblem,
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -96,7 +94,7 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Sync is disabled. Please sign out and sign in again.',
+                          context.l10n.syncDisabledPleaseSignOut,
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 12,
@@ -116,7 +114,7 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
                         vertical: 8,
                       ),
                     ),
-                    child: const Text('Sign Out'),
+                    child: Text(context.l10n.signOut),
                   ),
                   const SizedBox(width: 4),
                   IconButton(

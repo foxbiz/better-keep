@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:better_keep/pages/email_login_page.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -146,7 +147,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _handleSignIn(String provider) async {
     setState(() {
       _isLoading = true;
-      _statusMessage = "Starting sign in...";
+      _statusMessage = context.l10n.startingSignIn;
     });
     try {
       dynamic credential;
@@ -189,9 +190,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
       if (credential == null) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text("Sign in cancelled")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.signInCancelledMessage)),
+          );
         }
       }
     } catch (e) {
@@ -385,7 +386,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             });
           },
           icon: const Icon(Icons.close),
-          label: const Text('Cancel Sign In'),
+          label: Text(context.l10n.cancelSignIn),
           style: TextButton.styleFrom(
             foregroundColor: Theme.of(
               context,
@@ -428,7 +429,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             child: Column(
               children: [
                 Text(
-                  "Better Keep",
+                  context.l10n.appTitle,
                   style: TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
@@ -438,7 +439,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Your notes, secured and synced",
+                  context.l10n.yourNoteSecuredAndSynced,
                   style: TextStyle(
                     fontSize: 16,
                     color: colorScheme.onSurface.withValues(alpha: 0.6),
@@ -480,25 +481,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       children: [
         _buildFeatureIcon(
           icon: Icons.lock_outline,
-          title: 'End-to-End Encryption',
-          description:
-              'Your notes are encrypted on your device before syncing. Only you can read them — not even we can access your data.',
+          title: context.l10n.endToEndEncryptionFeature,
+          description: context.l10n.endToEndEncryptionDescription,
           gradient: [Colors.green.shade400, Colors.teal.shade600],
         ),
         const SizedBox(width: 20),
         _buildFeatureIcon(
           icon: Icons.sync_outlined,
-          title: 'Seamless Sync',
-          description:
-              'Access your notes on any device. Changes sync instantly and securely across all your devices.',
+          title: context.l10n.seamlessSync,
+          description: context.l10n.seamlessSyncDescription,
           gradient: [Colors.blue.shade400, Colors.indigo.shade600],
         ),
         const SizedBox(width: 20),
         _buildFeatureIcon(
           icon: Icons.palette_outlined,
-          title: 'Rich Formatting',
-          description:
-              'Express yourself with rich text, checklists, images, drawings, and voice notes. Your notes, your way.',
+          title: context.l10n.richFormatting,
+          description: context.l10n.richFormattingDescription,
           gradient: [Colors.purple.shade400, Colors.deepPurple.shade600],
         ),
       ],
@@ -672,7 +670,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       backgroundColor: gradient[0].withValues(alpha: 0.15),
                     ),
                     child: Text(
-                      'Got it',
+                      context.l10n.gotIt,
                       style: TextStyle(
                         color: gradient[1],
                         fontWeight: FontWeight.w600,
@@ -705,7 +703,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             // Primary Google sign-in button
             Semantics(
               button: true,
-              label: 'Sign in with Google',
+              label: context.l10n.signInWithGoogle,
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -747,9 +745,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                           semanticLabel: 'Google',
                         ),
                         const SizedBox(width: 16),
-                        const Text(
-                          "Continue with Google",
-                          style: TextStyle(
+                        Text(
+                          context.l10n.continueWithGoogle,
+                          style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
@@ -775,7 +773,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'or',
+                    context.l10n.or,
                     style: TextStyle(
                       fontSize: 13,
                       color: colorScheme.onSurface.withValues(alpha: 0.5),
@@ -799,7 +797,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 _buildSocialButton(
                   icon: CustomIcons.facebook,
                   color: const Color(0xFF1877F2),
-                  tooltip: 'Sign in with Facebook',
+                  tooltip: context.l10n.signInWithFacebook,
                   onTap: () => _handleSignIn('facebook'),
                   compact: isCompact,
                 ),
@@ -807,7 +805,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 _buildSocialButton(
                   icon: CustomIcons.github,
                   color: isDark ? Colors.white : Colors.black87,
-                  tooltip: 'Sign in with GitHub',
+                  tooltip: context.l10n.signInWithGithub,
                   onTap: () => _handleSignIn('github'),
                   compact: isCompact,
                 ),
@@ -824,7 +822,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 _buildSocialButton(
                   icon: Icons.email_outlined,
                   color: colorScheme.primary,
-                  tooltip: 'Sign in with Email',
+                  tooltip: context.l10n.signInWithEmail,
                   onTap: _navigateToEmailLogin,
                   compact: isCompact,
                 ),
@@ -832,7 +830,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 24),
             Text(
-              'Choose your preferred sign-in method',
+              context.l10n.chooseSignInMethod,
               style: TextStyle(
                 fontSize: 14,
                 color: colorScheme.onSurface.withValues(alpha: 0.5),

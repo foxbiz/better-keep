@@ -1,4 +1,5 @@
 import 'package:better_keep/components/otp_input_field.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
@@ -130,7 +131,7 @@ class _OtpDialogState extends State<_OtpDialog> {
   Future<void> _verifyOtp() async {
     final otp = _otpController.text.trim();
     if (otp.isEmpty || otp.length != 6) {
-      setState(() => _errorText = 'Please enter a 6-digit code');
+      setState(() => _errorText = context.l10n.pleaseEnterSixDigitCode);
       return;
     }
 
@@ -179,7 +180,7 @@ class _OtpDialogState extends State<_OtpDialog> {
     } catch (e) {
       setState(() {
         _isVerifying = false;
-        _errorText = 'Verification failed. Please try again.';
+        _errorText = context.l10n.verificationFailedTryAgain;
       });
     }
   }
@@ -209,7 +210,7 @@ class _OtpDialogState extends State<_OtpDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'We sent a verification code to:',
+            context.l10n.sentVerificationCodeTo,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -242,7 +243,7 @@ class _OtpDialogState extends State<_OtpDialog> {
               ),
               const SizedBox(width: 4),
               Text(
-                'Code expires in ${config.expiresInMinutes} minutes',
+                context.l10n.codeExpiresInMinutes(config.expiresInMinutes),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -256,7 +257,7 @@ class _OtpDialogState extends State<_OtpDialog> {
           onPressed: _isVerifying
               ? null
               : () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         FilledButton(
           onPressed: _isVerifying ? null : _verifyOtp,

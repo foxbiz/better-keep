@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// Dialog for setting a PIN to lock a note.
@@ -32,8 +33,9 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final l10n = context.l10n;
     return AlertDialog(
-      title: const Text('Lock Note'),
+      title: Text(l10n.lockNote),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -59,7 +61,7 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'If you forget this PIN, there is no way to recover the note.',
+                        l10n.pinForgotWarning,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.error,
                           fontWeight: FontWeight.w500,
@@ -76,8 +78,8 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
                 autofocus: true,
                 keyboardType: TextInputType.visiblePassword,
                 decoration: InputDecoration(
-                  labelText: 'PIN',
-                  hintText: 'Enter PIN',
+                  labelText: l10n.pin,
+                  hintText: l10n.enterPin,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -88,14 +90,14 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter a PIN';
+                    return l10n.pleaseEnterAPin;
                   }
                   if (value.length < 4) {
-                    return 'PIN must be at least 4 characters';
+                    return l10n.pinMinLength;
                   }
                   // Warn about weak PINs (all same digit or sequential)
                   if (RegExp(r'^(.)\1+$').hasMatch(value)) {
-                    return 'PIN is too weak (all same characters)';
+                    return l10n.pinTooWeak;
                   }
                   if ([
                     '1234',
@@ -111,7 +113,7 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
                     '9999',
                     '4321',
                   ].contains(value)) {
-                    return 'PIN is too common';
+                    return l10n.pinTooCommon;
                   }
                   return null;
                 },
@@ -122,8 +124,8 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
                 obscureText: _obscureConfirm,
                 keyboardType: TextInputType.visiblePassword,
                 decoration: InputDecoration(
-                  labelText: 'Confirm PIN',
-                  hintText: 'Re-enter PIN',
+                  labelText: l10n.confirmPin,
+                  hintText: l10n.reenterPin,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -135,7 +137,7 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
                 ),
                 validator: (value) {
                   if (value != _pinController.text) {
-                    return 'PINs do not match';
+                    return l10n.pinsDoNotMatch;
                   }
                   return null;
                 },
@@ -148,9 +150,9 @@ class _LockNoteDialogState extends State<LockNoteDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
-        ElevatedButton(onPressed: _save, child: const Text('Lock')),
+        ElevatedButton(onPressed: _save, child: Text(l10n.lock)),
       ],
     );
   }

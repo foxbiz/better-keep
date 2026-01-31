@@ -1,10 +1,12 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/pages/about_page.dart';
 import 'package:better_keep/pages/help_page.dart';
 import 'package:better_keep/pages/settings/nerd_stats_page.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/themes/theme_registry.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
@@ -28,6 +30,7 @@ class _SettingsState extends State<Settings> {
   TimeOfDay _morningTime = AppState.morningTime;
   TimeOfDay _afternoonTime = AppState.afternoonTime;
   TimeOfDay _eveningTime = AppState.eveningTime;
+  Locale? _locale = AppState.locale;
   final AudioPlayer _audioPlayer = AudioPlayer();
   final bool _alarmSupported =
       !kIsWeb &&
@@ -69,6 +72,7 @@ class _SettingsState extends State<Settings> {
       "forget_locked_note_password",
       _forgetLockedNotePasswordListener,
     );
+    AppState.subscribe("locale", _localeListener);
   }
 
   @override
@@ -86,6 +90,7 @@ class _SettingsState extends State<Settings> {
       "forget_locked_note_password",
       _forgetLockedNotePasswordListener,
     );
+    AppState.unsubscribe("locale", _localeListener);
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -150,6 +155,69 @@ class _SettingsState extends State<Settings> {
     });
   }
 
+  void _localeListener(dynamic value) {
+    setState(() {
+      _locale = value as Locale?;
+    });
+  }
+
+  String _getLanguageName(Locale? locale) {
+    if (locale == null) {
+      final l10n = AppLocalizations.of(context);
+      return l10n?.systemDefault ?? 'System default';
+    }
+    switch (locale.languageCode) {
+      case 'en':
+        return 'English';
+      case 'ja':
+        return '日本語 (Japanese)';
+      case 'ko':
+        return '한국어 (Korean)';
+      case 'id':
+        return 'Bahasa Indonesia';
+      case 'pt':
+        return 'Português (Brazil)';
+      case 'zh':
+        return '中文 (Chinese)';
+      default:
+        return locale.languageCode;
+    }
+  }
+
+  void _showLanguagePicker() {
+    final supportedLocales = [
+      null, // System default
+      const Locale('en'),
+      const Locale('ja'),
+      const Locale('ko'),
+      const Locale('id'),
+      const Locale('pt', 'BR'),
+      const Locale('zh'),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return ListView(
+          shrinkWrap: true,
+          children: supportedLocales.map((locale) {
+            final isSelected = _locale?.languageCode == locale?.languageCode;
+            return ListTile(
+              leading: isSelected
+                  ? const Icon(Icons.check)
+                  : const SizedBox(width: 24),
+              title: Text(_getLanguageName(locale)),
+              onTap: () {
+                AppState.locale = locale;
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
   String _formatTime(TimeOfDay time) {
     final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
     final minute = time.minute.toString().padLeft(2, '0');
@@ -177,18 +245,21 @@ class _SettingsState extends State<Settings> {
     final isDarkMode = ThemeRegistry.isDarkTheme(_themeId);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(context.l10n.settings)),
       body: ListView(
         children: [
           // Theme Settings Section
-          const ListTile(
-            title: Text('Theme', style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('Customize app appearance'),
+          ListTile(
+            title: Text(
+              context.l10n.theme,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(context.l10n.customizeAppearance),
           ),
           SwitchListTile(
             secondary: const Icon(Icons.brightness_auto),
-            title: const Text('Follow System Theme'),
-            subtitle: const Text('Automatically switch between light and dark'),
+            title: Text(context.l10n.followSystemTheme),
+            subtitle: Text(context.l10n.autoSwitchLightDark),
             value: _followSystemTheme,
             onChanged: (value) {
               AppState.followSystemTheme = value;
@@ -197,7 +268,7 @@ class _SettingsState extends State<Settings> {
           // Dark mode toggle - disabled when following system theme
           SwitchListTile(
             secondary: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
-            title: const Text('Dark Mode'),
+            title: Text(context.l10n.darkMode),
             value: isDarkMode,
             onChanged: _followSystemTheme
                 ? null
@@ -212,7 +283,9 @@ class _SettingsState extends State<Settings> {
           // Theme selector - disabled when following system theme
           ListTile(
             leading: const Icon(Icons.palette_outlined),
-            title: Text(isDarkMode ? 'Dark Theme' : 'Light Theme'),
+            title: Text(
+              isDarkMode ? context.l10n.darkTheme : context.l10n.lightTheme,
+            ),
             subtitle: Text(
               ThemeRegistry.getThemeName(
                 isDarkMode ? _darkThemeId : _lightThemeId,
@@ -226,11 +299,21 @@ class _SettingsState extends State<Settings> {
           ),
           const Divider(),
 
+          // Language Settings Section
+          ListTile(
+            leading: const Icon(Icons.language),
+            title: Text(context.l10n.language),
+            subtitle: Text(_getLanguageName(_locale)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _showLanguagePicker,
+          ),
+          const Divider(),
+
           // General Settings
           SwitchListTile(
             secondary: const Icon(Icons.sync),
-            title: const Text('Show Sync Progress'),
-            subtitle: const Text('Display sync status indicator'),
+            title: Text(context.l10n.showSyncProgress),
+            subtitle: Text(context.l10n.displaySyncStatus),
             value: _showSyncProgress,
             onChanged: (value) {
               AppState.showSyncProgress = value;
@@ -239,7 +322,7 @@ class _SettingsState extends State<Settings> {
           if (_alarmSupported) ...[
             ListTile(
               leading: const Icon(Icons.alarm),
-              title: const Text('Alarm Sound'),
+              title: Text(context.l10n.alarmSound),
               subtitle: Text(path.basenameWithoutExtension(_alarmSound)),
               onTap: _showSoundPicker,
             ),
@@ -247,34 +330,35 @@ class _SettingsState extends State<Settings> {
           const Divider(),
 
           // Time Settings Section
-          const ListTile(
+          ListTile(
             title: Text(
-              'Reminder Time Settings',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              context.l10n.reminderTimeSettings,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text('Set default times for reminders'),
+            subtitle: Text(context.l10n.setDefaultTimes),
           ),
           ListTile(
             leading: const Icon(Icons.wb_sunny_outlined),
-            title: const Text('Morning'),
+            title: Text(context.l10n.morning),
             subtitle: Text(_formatTime(_morningTime)),
-            onTap: () => _pickTime('Morning', _morningTime, (time) {
+            onTap: () => _pickTime(context.l10n.morning, _morningTime, (time) {
               AppState.morningTime = time;
             }),
           ),
           ListTile(
             leading: const Icon(Icons.wb_sunny),
-            title: const Text('Afternoon'),
+            title: Text(context.l10n.afternoon),
             subtitle: Text(_formatTime(_afternoonTime)),
-            onTap: () => _pickTime('Afternoon', _afternoonTime, (time) {
-              AppState.afternoonTime = time;
-            }),
+            onTap: () =>
+                _pickTime(context.l10n.afternoon, _afternoonTime, (time) {
+                  AppState.afternoonTime = time;
+                }),
           ),
           ListTile(
             leading: const Icon(Icons.nights_stay_outlined),
-            title: const Text('Evening'),
+            title: Text(context.l10n.evening),
             subtitle: Text(_formatTime(_eveningTime)),
-            onTap: () => _pickTime('Evening', _eveningTime, (time) {
+            onTap: () => _pickTime(context.l10n.evening, _eveningTime, (time) {
               AppState.eveningTime = time;
             }),
           ),
@@ -282,24 +366,24 @@ class _SettingsState extends State<Settings> {
 
           // Local Data Protection Section
           if (_localEncryptionAvailable) ...[
-            const ListTile(
+            ListTile(
               title: Text(
-                'Local Data Protection',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                context.l10n.localDataProtection,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: Text('Encrypt data stored on this device'),
+              subtitle: Text(context.l10n.encryptDataOnDevice),
             ),
             SwitchListTile(
               secondary: const Icon(Icons.article_outlined),
-              title: const Text('Encrypt Note Content'),
-              subtitle: const Text('Encrypt notes in local database'),
+              title: Text(context.l10n.encryptNoteContent),
+              subtitle: Text(context.l10n.encryptNotesInDatabase),
               value: _notesEncryptionEnabled,
               onChanged: _toggleNotesEncryption,
             ),
             SwitchListTile(
               secondary: const Icon(Icons.image_outlined),
-              title: const Text('Encrypt Attachments'),
-              subtitle: const Text('Encrypt images, sketches, and files'),
+              title: Text(context.l10n.encryptAttachments),
+              subtitle: Text(context.l10n.encryptImagesSketchesFiles),
               value: _filesEncryptionEnabled,
               onChanged: _toggleFilesEncryption,
             ),
@@ -322,8 +406,7 @@ class _SettingsState extends State<Settings> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Local encryption protects your data if your device is compromised. '
-                        'Uses AES-256-GCM encryption.',
+                        context.l10n.localEncryptionInfo,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -337,19 +420,17 @@ class _SettingsState extends State<Settings> {
           ],
 
           // Locked Notes Section
-          const ListTile(
+          ListTile(
             title: Text(
-              'Locked Notes',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              context.l10n.lockedNotes,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text('Privacy settings for locked notes'),
+            subtitle: Text(context.l10n.privacyLockedNotes),
           ),
           SwitchListTile(
             secondary: const Icon(Icons.lock_clock),
-            title: const Text('Forget Password on Close'),
-            subtitle: const Text(
-              'Require re-entering PIN when reopening a locked note',
-            ),
+            title: Text(context.l10n.forgetPasswordOnClose),
+            subtitle: Text(context.l10n.requireReenterPin),
             value: _forgetLockedNotePassword,
             onChanged: (value) {
               AppState.forgetLockedNotePassword = value;
@@ -360,16 +441,16 @@ class _SettingsState extends State<Settings> {
           // About & Help Section
           ListTile(
             leading: const Icon(Icons.help_outline),
-            title: const Text('Help'),
-            subtitle: const Text('FAQ and contact support'),
+            title: Text(context.l10n.help),
+            subtitle: Text(context.l10n.faqAndSupport),
             onTap: () {
               showPage(context, const HelpPage());
             },
           ),
           ListTile(
             leading: const Icon(Icons.info_outline),
-            title: const Text('About'),
-            subtitle: const Text('App info and credits'),
+            title: Text(context.l10n.about),
+            subtitle: Text(context.l10n.appInfoCredits),
             onTap: () {
               showPage(context, const AboutPage());
             },
@@ -377,17 +458,17 @@ class _SettingsState extends State<Settings> {
           const Divider(),
 
           // Advanced Settings Section
-          const ListTile(
+          ListTile(
             title: Text(
-              'Advanced Settings',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              context.l10n.advancedSettings,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text('Developer'),
+            subtitle: Text(context.l10n.developer),
           ),
           ListTile(
             leading: const Icon(Icons.analytics),
-            title: const Text('Nerd Stats'),
-            subtitle: const Text('View database and sync statistics'),
+            title: Text(context.l10n.nerdStats),
+            subtitle: Text(context.l10n.viewDatabaseStats),
             onTap: () {
               showPage(context, const NerdStatsPage());
             },
@@ -423,7 +504,11 @@ class _SettingsState extends State<Settings> {
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error playing sound: $e')),
+                        SnackBar(
+                          content: Text(
+                            context.l10n.errorPlayingSound(e.toString()),
+                          ),
+                        ),
                       );
                     }
                   }
@@ -466,7 +551,9 @@ class _SettingsState extends State<Settings> {
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Text(
-                    isDark ? 'Select Dark Theme' : 'Select Light Theme',
+                    isDark
+                        ? context.l10n.selectDarkTheme
+                        : context.l10n.selectLightTheme,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -564,10 +651,10 @@ class _SettingsState extends State<Settings> {
 
       if (enabled) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Encrypting existing notes...'),
+          SnackBar(
+            content: Text(context.l10n.encryptingNotes),
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
 
@@ -579,8 +666,8 @@ class _SettingsState extends State<Settings> {
               SnackBar(
                 content: Text(
                   migratedCount > 0
-                      ? 'Note encryption enabled. $migratedCount notes encrypted.'
-                      : 'Note encryption enabled.',
+                      ? context.l10n.noteEncryptionEnabled(migratedCount)
+                      : context.l10n.noteEncryptionEnabledSimple,
                 ),
                 behavior: SnackBarBehavior.floating,
                 backgroundColor: Colors.green,
@@ -591,7 +678,7 @@ class _SettingsState extends State<Settings> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Error encrypting notes: $e'),
+                content: Text(context.l10n.errorEncryptingNotes(e.toString())),
                 behavior: SnackBarBehavior.floating,
                 backgroundColor: Colors.orange,
               ),
@@ -600,8 +687,8 @@ class _SettingsState extends State<Settings> {
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Note encryption disabled.'),
+          SnackBar(
+            content: Text(context.l10n.noteEncryptionDisabled),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -620,8 +707,8 @@ class _SettingsState extends State<Settings> {
         SnackBar(
           content: Text(
             enabled
-                ? 'File encryption enabled. New attachments will be encrypted.'
-                : 'File encryption disabled.',
+                ? context.l10n.fileEncryptionEnabled
+                : context.l10n.fileEncryptionDisabled,
           ),
           behavior: SnackBarBehavior.floating,
           backgroundColor: enabled ? Colors.green : null,

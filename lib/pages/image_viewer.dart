@@ -1,5 +1,6 @@
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/dialogs/delete_dialog.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/note.dart';
@@ -47,12 +48,12 @@ class _ImageViewerState extends State<ImageViewer> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: _onScribble,
-            tooltip: 'Scribble',
+            tooltip: context.l10n.scribble,
           ),
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: _onDelete,
-            tooltip: 'Delete',
+            tooltip: context.l10n.delete,
           ),
         ],
       ),
@@ -79,8 +80,8 @@ class _ImageViewerState extends State<ImageViewer> {
   void _onDelete() async {
     final confirm = await showDeleteDialog(
       context,
-      title: 'Delete Image',
-      message: 'Are you sure you want to delete this image?',
+      title: context.l10n.deleteImage,
+      message: context.l10n.deleteImageConfirmation,
     );
 
     if (confirm == true && mounted) {

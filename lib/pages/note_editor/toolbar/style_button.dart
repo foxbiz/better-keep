@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 
 const iconMap = {
   "bold": Icons.format_bold,
@@ -98,11 +99,41 @@ class _StyleButtonState extends State<StyleButton> {
     super.dispose();
   }
 
+  String _getTooltip(BuildContext context) {
+    final key = widget.attribute.key;
+    final value = widget.attribute.value;
+    if (Attribute.list.key == key) {
+      if (value == 'bullet') {
+        return context.l10n.bulletList;
+      } else {
+        return context.l10n.numberedList;
+      }
+    } else if (Attribute.align.key == key) {
+      return switch (value) {
+        'center' => context.l10n.alignCenter,
+        'right' => context.l10n.alignRight,
+        'left' => context.l10n.alignLeft,
+        _ => '',
+      };
+    } else {
+      return switch (key) {
+        'bold' => context.l10n.bold,
+        'italic' => context.l10n.italic,
+        'underline' => context.l10n.underline,
+        'strike' => context.l10n.strikethrough,
+        'code' => context.l10n.codeBlock,
+        'blockquote' => context.l10n.quote,
+        _ => '',
+      };
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return IconButton(
       isSelected: enabled,
       icon: Icon(_getIcon()),
+      tooltip: _getTooltip(context),
       onPressed: widget.readOnly
           ? null
           : () async {

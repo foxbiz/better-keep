@@ -1,4 +1,5 @@
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:path/path.dart' as path;
@@ -65,20 +66,24 @@ class _AttachButtonState extends State<AttachButton> {
       items: (context) => [
         AdaptiveMenuItem(
           icon: Icons.image,
-          label: 'Image',
+          label: context.l10n.image,
           onTap: _showImageSourceDialog,
         ),
-        AdaptiveMenuItem(icon: Icons.mic, label: 'Audio', onTap: _handleAudio),
+        AdaptiveMenuItem(
+          icon: Icons.mic,
+          label: context.l10n.audio,
+          onTap: _handleAudio,
+        ),
         AdaptiveMenuItem(
           icon: Icons.draw,
-          label: 'Sketch',
+          label: context.l10n.sketch,
           onTap: _handleSketch,
         ),
       ],
       child: IconButton(
         onPressed: _controller.isDisabled ? null : _controller.toggle,
         icon: _buildIconWithIndicator(const Icon(Icons.attach_file)),
-        tooltip: 'Attach',
+        tooltip: context.l10n.attach,
       ),
     );
   }

@@ -12,6 +12,7 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/ui/custom_icons.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/image_compressor.dart';
@@ -379,7 +380,7 @@ class _SketchPageState extends State<SketchPage>
       if (_pendingSaveState != null) {
         _executePendingSave(_pendingSaveState!).catchError((e) {
           if (mounted) {
-            snackbar('Error saving sketch: $e', Colors.red);
+            snackbar(context.l10n.errorSavingSketch(e.toString()), Colors.red);
           }
         });
         _pendingSaveState = null;
@@ -894,7 +895,7 @@ class _SketchPageState extends State<SketchPage>
                       icon: const Icon(Icons.color_lens),
                       color: _foregroundColor,
                       onPressed: () => _pickColor(true),
-                      tooltip: 'Paper Color',
+                      tooltip: context.l10n.paperColor,
                     ),
                   if (!_isImageBasedSketch)
                     PopupMenuButton<PagePattern>(
@@ -902,7 +903,7 @@ class _SketchPageState extends State<SketchPage>
                         _sketchData.pagePattern.icon,
                         color: _foregroundColor,
                       ),
-                      tooltip: 'Page Pattern',
+                      tooltip: context.l10n.pagePattern,
                       onSelected: (pattern) {
                         setState(() {
                           _sketchData.pagePattern = pattern;
@@ -945,7 +946,7 @@ class _SketchPageState extends State<SketchPage>
                   // Overflow menu for save and delete actions
                   PopupMenuButton<String>(
                     icon: Icon(Icons.more_vert, color: _foregroundColor),
-                    tooltip: 'More options',
+                    tooltip: context.l10n.moreOptions,
                     onSelected: (value) {
                       switch (value) {
                         case 'save':
@@ -969,7 +970,7 @@ class _SketchPageState extends State<SketchPage>
                                 ).colorScheme.onSurfaceVariant,
                               ),
                               const SizedBox(width: 12),
-                              const Text('Save to Gallery'),
+                              Text(context.l10n.saveToGallery),
                             ],
                           ),
                         ),
@@ -985,7 +986,7 @@ class _SketchPageState extends State<SketchPage>
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                'Delete',
+                                context.l10n.delete,
                                 style: TextStyle(
                                   color: Theme.of(context).colorScheme.error,
                                 ),
@@ -1420,7 +1421,7 @@ class _SketchPageState extends State<SketchPage>
       mouseCursor: SystemMouseCursors.click,
       isSelected: _isMoveMode,
       icon: const Icon(Icons.open_with_rounded),
-      tooltip: 'Move',
+      tooltip: context.l10n.move,
       onPressed: () {
         setState(() {
           _isMoveMode = !_isMoveMode;
@@ -1515,7 +1516,7 @@ class _SketchPageState extends State<SketchPage>
           SizedBox(height: 300, child: _buildPagesGrid(context, close)),
       child: IconButton(
         onPressed: _pagesPopupController.toggle,
-        tooltip: 'View all pages',
+        tooltip: context.l10n.viewAllPages,
         icon: Badge(
           label: Text(
             '${_currentSketchIndex + 1}/$_totalSketches',
@@ -1649,7 +1650,7 @@ class _SketchPageState extends State<SketchPage>
               ),
               const SizedBox(height: 4),
               Text(
-                'New',
+                context.l10n.newLabel,
                 style: TextStyle(
                   color: _foregroundColor.withValues(alpha: 0.5),
                   fontSize: 11,
@@ -2184,7 +2185,7 @@ class _SketchPageState extends State<SketchPage>
       }
       _isDirty = false;
     } catch (e) {
-      snackbar("Error saving sketch $e", Colors.red);
+      snackbar(context.l10n.errorSavingSketch(e.toString()), Colors.red);
       AppLogger.error('Error saving sketch', e);
     }
   }
@@ -2192,7 +2193,7 @@ class _SketchPageState extends State<SketchPage>
   void _pickColor(bool isBackground, {void Function(Color)? onUpdate}) async {
     final color = await colorPicker(
       context,
-      isBackground ? 'Pick Paper Color' : 'Pick Pen Color',
+      isBackground ? context.l10n.pickPaperColor : context.l10n.pickPenColor,
       isBackground ? _paperColor : _selectedColor,
     );
 
@@ -2273,20 +2274,24 @@ class _SketchPageState extends State<SketchPage>
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(kIsWeb ? 'Sketch downloaded' : 'Saved to Gallery'),
+              content: Text(
+                kIsWeb
+                    ? context.l10n.sketchDownloaded
+                    : context.l10n.savedToGallery,
+              ),
             ),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to save sketch')),
+            SnackBar(content: Text(context.l10n.failedToSaveSketch)),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving sketch: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.errorSavingSketch(e.toString()))),
+        );
       }
     }
   }

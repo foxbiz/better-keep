@@ -5,6 +5,7 @@ import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/export_data_service.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/note_share_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -23,9 +24,10 @@ class _ShareTypePickerDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     return AlertDialog(
-      title: const Text('Share Note'),
+      title: Text(l10n.shareNote),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -43,7 +45,7 @@ class _ShareTypePickerDialog extends StatelessWidget {
                 Text(
                   note.title?.isNotEmpty == true
                       ? note.title!
-                      : 'Untitled Note',
+                      : l10n.untitledNote,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -69,22 +71,22 @@ class _ShareTypePickerDialog extends StatelessWidget {
           // Share options
           _ShareOptionTile(
             icon: Icons.text_snippet_outlined,
-            title: 'Share as Text',
-            subtitle: 'Plain text content',
+            title: l10n.shareAsText,
+            subtitle: l10n.plainTextContent,
             onTap: () => Navigator.of(context).pop(_ShareType.text),
           ),
           const SizedBox(height: 8),
           _ShareOptionTile(
             icon: Icons.code,
-            title: 'Share as Markdown',
-            subtitle: 'Formatted with markdown syntax',
+            title: l10n.shareAsMarkdown,
+            subtitle: l10n.formattedWithMarkdown,
             onTap: () => Navigator.of(context).pop(_ShareType.markdown),
           ),
           const SizedBox(height: 8),
           _ShareOptionTile(
             icon: Icons.link,
-            title: 'Create Secure Link',
-            subtitle: 'Encrypted link with access approval',
+            title: l10n.createSecureLink,
+            subtitle: l10n.encryptedLinkWithApproval,
             onTap: () => Navigator.of(context).pop(_ShareType.link),
             isPrimary: true,
           ),
@@ -93,7 +95,7 @@ class _ShareTypePickerDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
       ],
     );
@@ -240,14 +242,15 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     String title;
     if (_shareResult != null) {
-      title = 'Link Created';
+      title = l10n.linkCreated;
     } else if (_existingShares.isNotEmpty) {
-      title = 'Active Links (${_existingShares.length})';
+      title = l10n.activeLinks(_existingShares.length);
     } else {
-      title = 'Secure Link';
+      title = l10n.secureLink;
     }
 
     return ConstrainedBox(
@@ -274,7 +277,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(_shareResult != null),
-            child: Text(_shareResult != null ? 'Done' : 'Cancel'),
+            child: Text(_shareResult != null ? l10n.done : l10n.cancel),
           ),
         ],
       ),
@@ -301,7 +304,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
               });
             },
             icon: const Icon(Icons.add_link, size: 18),
-            label: const Text('Create New Link'),
+            label: Text(context.l10n.createNewLink),
           ),
         ),
       ],
@@ -384,7 +387,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                tooltip: 'Revoke link',
+                tooltip: context.l10n.revokeLink,
               ),
             ],
           ),
@@ -398,7 +401,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
                   child: OutlinedButton.icon(
                     onPressed: () => _copyUrl(url),
                     icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('Copy'),
+                    label: Text(context.l10n.copy),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       visualDensity: VisualDensity.compact,
@@ -410,7 +413,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
                   child: FilledButton.icon(
                     onPressed: () => _shareUrl(url),
                     icon: const Icon(Icons.share, size: 16),
-                    label: const Text('Share'),
+                    label: Text(context.l10n.share),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       visualDensity: VisualDensity.compact,
@@ -422,7 +425,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
           ] else ...[
             const SizedBox(height: 4),
             Text(
-              'Link not available (created on another device)',
+              context.l10n.linkNotAvailable,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.error,
                 fontStyle: FontStyle.italic,
@@ -435,24 +438,23 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
   }
 
   Future<void> _revokeShare(ShareLink share) async {
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Revoke Link?'),
-        content: const Text(
-          'This will permanently disable this share link. Anyone with the link will no longer be able to access the note.',
-        ),
+        title: Text(l10n.revokeLinkQuestion),
+        content: Text(l10n.revokeLinkWarning),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Revoke'),
+            child: Text(l10n.revoke),
           ),
         ],
       ),
@@ -469,13 +471,13 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('Link revoked')));
+          ).showSnackBar(SnackBar(content: Text(l10n.linkRevoked)));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Failed to revoke: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.failedToRevoke(e.toString()))),
+          );
         }
       }
     }
@@ -484,9 +486,9 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
   void _copyUrl(String url) {
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Link copied to clipboard'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(context.l10n.linkCopied),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -495,19 +497,22 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
     SharePlus.instance.share(
       ShareParams(
         text: url,
-        title: 'Shared Note: ${widget.note.title ?? 'Untitled'}',
+        title: context.l10n.sharedNote(
+          widget.note.title ?? context.l10n.untitledNote,
+        ),
       ),
     );
   }
 
   Widget _buildLinkOptions(ThemeData theme) {
+    final l10n = context.l10n;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Expires after
         Text(
-          'Link expires after',
+          l10n.linkExpiresAfter,
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w600,
           ),
@@ -534,7 +539,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
 
         // Options
         Text(
-          'Options',
+          l10n.options,
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w600,
           ),
@@ -544,9 +549,9 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
         // Include attachments
         if (widget.note.attachments.isNotEmpty)
           CheckboxListTile(
-            title: const Text('Include attachments'),
+            title: Text(l10n.includeAttachments),
             subtitle: Text(
-              '${widget.note.attachments.length} attachment(s)',
+              l10n.nAttachments(widget.note.attachments.length),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -605,7 +610,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
                     ),
                   )
                 : const Icon(Icons.link),
-            label: Text(_isCreatingLink ? 'Creating...' : 'Create Link'),
+            label: Text(_isCreatingLink ? l10n.creating : l10n.createLink),
           ),
         ),
 
@@ -625,7 +630,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'End-to-end encrypted. You\'ll approve each access request.',
+                  l10n.e2eeApprovalInfo,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -639,6 +644,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
   }
 
   Widget _buildShareLinkSuccess(ThemeData theme) {
+    final l10n = context.l10n;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -653,14 +659,14 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Link Created!',
+          l10n.linkCreatedSuccess,
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 4),
         Text(
-          'Expires in ${_selectedDuration.label}',
+          l10n.expiresIn(_selectedDuration.label),
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -703,7 +709,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
               child: OutlinedButton.icon(
                 onPressed: _copyLink,
                 icon: const Icon(Icons.copy, size: 18),
-                label: const Text('Copy'),
+                label: Text(l10n.copy),
               ),
             ),
             const SizedBox(width: 8),
@@ -711,7 +717,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
               child: FilledButton.icon(
                 onPressed: _shareLink,
                 icon: const Icon(Icons.share, size: 18),
-                label: const Text('Share'),
+                label: Text(l10n.share),
               ),
             ),
           ],
@@ -737,7 +743,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'You\'ll get a notification when someone requests access.',
+                  l10n.accessNotification,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSecondaryContainer,
                   ),
@@ -796,7 +802,7 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
       Clipboard.setData(ClipboardData(text: _shareResult!.shareUrl));
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Link copied to clipboard')));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.linkCopied)));
     }
   }
 
@@ -805,7 +811,9 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
       await SharePlus.instance.share(
         ShareParams(
           text: _shareResult!.shareUrl,
-          title: 'Shared Note: ${widget.note.title ?? "Note"}',
+          title: context.l10n.sharedNote(
+            widget.note.title ?? context.l10n.untitledNote,
+          ),
         ),
       );
     }
@@ -817,8 +825,8 @@ Future<void> showShareNoteDialog(BuildContext context, Note note) async {
   // Check if the note is locked
   if (note.locked && !note.unlocked) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Please unlock the note first to share it'),
+      SnackBar(
+        content: Text(context.l10n.pleaseUnlockNoteFirst),
         backgroundColor: Colors.orange,
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/note_export_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
@@ -41,12 +42,12 @@ void _showExportDialog(
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('Save as'),
+      title: Text(context.l10n.saveAs),
       content: _SaveOptionsContent(note: note, controller: controller),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
       ],
     ),
@@ -61,12 +62,12 @@ void _showCopyDialog(
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('Copy as'),
+      title: Text(context.l10n.copyAs),
       content: _CopyOptionsContent(note: note, controller: controller),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
       ],
     ),
@@ -90,7 +91,7 @@ void _showExportBottomSheet(
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
-                'Save as',
+                context.l10n.saveAs,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -119,7 +120,7 @@ void _showCopyBottomSheet(
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
-                'Copy as',
+                context.l10n.copyAs,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -140,29 +141,30 @@ class _SaveOptionsContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final service = NoteExportService();
+    final l10n = context.l10n;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         ListTile(
-          leading: Icon(Icons.description),
-          title: Text('Markdown (.md)'),
+          leading: const Icon(Icons.description),
+          title: Text(l10n.markdownFile),
           onTap: () {
             Navigator.pop(context);
             service.saveAs(note, controller, ExportFormat.markdown);
           },
         ),
         ListTile(
-          leading: Icon(Icons.code),
-          title: Text('HTML (.html)'),
+          leading: const Icon(Icons.code),
+          title: Text(l10n.htmlFile),
           onTap: () {
             Navigator.pop(context);
             service.saveAs(note, controller, ExportFormat.html);
           },
         ),
         ListTile(
-          leading: Icon(Icons.text_snippet),
-          title: Text('Plain Text (.txt)'),
+          leading: const Icon(Icons.text_snippet),
+          title: Text(l10n.plainTextFile),
           onTap: () {
             Navigator.pop(context);
             service.saveAs(note, controller, ExportFormat.text);
@@ -182,29 +184,30 @@ class _CopyOptionsContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final service = NoteExportService();
+    final l10n = context.l10n;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         ListTile(
-          leading: Icon(Icons.description),
-          title: Text('Markdown'),
+          leading: const Icon(Icons.description),
+          title: Text(l10n.markdown),
           onTap: () {
             Navigator.pop(context);
             service.copyAs(note, controller, ExportFormat.markdown);
           },
         ),
         ListTile(
-          leading: Icon(Icons.code),
-          title: Text('HTML'),
+          leading: const Icon(Icons.code),
+          title: Text(l10n.html),
           onTap: () {
             Navigator.pop(context);
             service.copyAs(note, controller, ExportFormat.html);
           },
         ),
         ListTile(
-          leading: Icon(Icons.text_snippet),
-          title: Text('Plain Text'),
+          leading: const Icon(Icons.text_snippet),
+          title: Text(l10n.plainText),
           onTap: () {
             Navigator.pop(context);
             service.copyAs(note, controller, ExportFormat.text);

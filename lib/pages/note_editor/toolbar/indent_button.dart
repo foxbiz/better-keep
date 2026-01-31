@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 
 class IndentButton extends StatefulWidget {
   final bool readOnly;
@@ -62,19 +63,19 @@ class _IndentButtonState extends State<IndentButton> {
       items: (context) => [
         AdaptiveMenuItem(
           icon: Icons.format_indent_increase,
-          label: 'Indent',
+          label: context.l10n.increaseIndent,
           onTap: _indent,
         ),
         AdaptiveMenuItem(
           icon: Icons.format_indent_decrease,
-          label: 'Outdent',
+          label: context.l10n.decreaseIndent,
           onTap: _outdent,
         ),
       ],
       child: IconButton(
         onPressed: _controller.isDisabled ? null : _controller.toggle,
         icon: _buildIconWithIndicator(const Icon(Icons.format_indent_increase)),
-        tooltip: 'Indent',
+        tooltip: context.l10n.indent,
       ),
     );
   }

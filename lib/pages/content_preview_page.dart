@@ -3,6 +3,7 @@ import 'package:better_keep/services/markdown_import_service.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/markdown_converter.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:flutter/material.dart';
@@ -109,7 +110,9 @@ class _ContentPreviewPageState extends State<ContentPreviewPage> {
           else
             IconButton(
               icon: Icon(widget.insertMode ? Icons.check : Icons.add),
-              tooltip: widget.insertMode ? 'Insert' : 'Import as Note',
+              tooltip: widget.insertMode
+                  ? context.l10n.insertTooltip
+                  : context.l10n.importAsNoteTooltip,
               onPressed: widget.insertMode ? _confirmInsert : _importAsNote,
             ),
         ],
@@ -186,7 +189,7 @@ class _ContentPreviewPageState extends State<ContentPreviewPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      _showError('Failed to import: $e');
+      _showError(context.l10n.failedToImport(e.toString()));
       setState(() => _isProcessing = false);
     }
   }
