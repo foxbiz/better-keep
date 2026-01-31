@@ -147,7 +147,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
     Widget displayValue = SizedBox.shrink();
 
     if (option != Reminder.custom) {
-      String timeValue = Reminder.getValueOf(option);
+      String timeValue = Reminder.getValueOf(context, option);
       if (timeValue.isNotEmpty) {
         displayValue = Text(
           timeValue,
