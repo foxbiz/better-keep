@@ -4276,6 +4276,42 @@ abstract class AppLocalizations {
   /// **'Huge'**
   String get textSizeHuge;
 
+  /// Line spacing tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Line Spacing'**
+  String get lineSpacing;
+
+  /// Tight line spacing option
+  ///
+  /// In en, this message translates to:
+  /// **'Tight'**
+  String get lineSpacingTight;
+
+  /// Normal line spacing option
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get lineSpacingNormal;
+
+  /// Relaxed line spacing option
+  ///
+  /// In en, this message translates to:
+  /// **'Relaxed'**
+  String get lineSpacingRelaxed;
+
+  /// Double line spacing option
+  ///
+  /// In en, this message translates to:
+  /// **'Double'**
+  String get lineSpacingDouble;
+
+  /// Remove line spacing option
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Spacing'**
+  String get lineSpacingRemove;
+
   /// Note editor placeholder text
   ///
   /// In en, this message translates to:

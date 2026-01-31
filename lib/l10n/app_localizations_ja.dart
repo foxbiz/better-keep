@@ -2303,6 +2303,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get textSizeHuge => '特大';
 
   @override
+  String get lineSpacing => '行間';
+
+  @override
+  String get lineSpacingTight => '狭い';
+
+  @override
+  String get lineSpacingNormal => '標準';
+
+  @override
+  String get lineSpacingRelaxed => '広め';
+
+  @override
+  String get lineSpacingDouble => '2倍';
+
+  @override
+  String get lineSpacingRemove => '行間を解除';
+
+  @override
   String get startWriting => '書き始める...';
 
   @override

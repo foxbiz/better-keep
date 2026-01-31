@@ -2271,6 +2271,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get textSizeHuge => '超大';
 
   @override
+  String get lineSpacing => '行距';
+
+  @override
+  String get lineSpacingTight => '紧凑';
+
+  @override
+  String get lineSpacingNormal => '正常';
+
+  @override
+  String get lineSpacingRelaxed => '宽松';
+
+  @override
+  String get lineSpacingDouble => '双倍';
+
+  @override
+  String get lineSpacingRemove => '移除行距';
+
+  @override
   String get startWriting => '开始书写...';
 
   @override

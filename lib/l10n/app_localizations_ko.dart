@@ -2301,6 +2301,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get textSizeHuge => '아주 크게';
 
   @override
+  String get lineSpacing => '줄 간격';
+
+  @override
+  String get lineSpacingTight => '좁게';
+
+  @override
+  String get lineSpacingNormal => '보통';
+
+  @override
+  String get lineSpacingRelaxed => '넓게';
+
+  @override
+  String get lineSpacingDouble => '2배';
+
+  @override
+  String get lineSpacingRemove => '간격 제거';
+
+  @override
   String get startWriting => '작성을 시작하세요...';
 
   @override
