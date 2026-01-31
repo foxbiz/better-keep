@@ -236,9 +236,9 @@ class _DatetimePickerState extends State<DatetimePicker> {
     setState(() {
       _selectedTimeOption = option;
       _time = switch (option) {
-        Reminder.morning => Reminder.morningValue,
-        Reminder.afternoon => Reminder.afternoonValue,
-        Reminder.evening => Reminder.eveningValue,
+        Reminder.morning => Reminder.getMorningValue(context),
+        Reminder.afternoon => Reminder.getAfternoonValue(context),
+        Reminder.evening => Reminder.getEveningValue(context),
         Reminder.allDay => "All Day",
         _ => _time,
       };
@@ -251,7 +251,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
 
     if (option != Reminder.custom) {
       if (Reminder.dateOptions.contains(option)) {
-        value = Reminder.getValueOf(option);
+        value = Reminder.getValueOf(context, option);
 
         DateTime date = DateTime.parse(value);
 
@@ -276,7 +276,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
           ],
         );
       } else if (Reminder.timeOptions.contains(option)) {
-        value = Reminder.getValueOf(option);
+        value = Reminder.getValueOf(context, option);
 
         displayValue = Text(
           value,
