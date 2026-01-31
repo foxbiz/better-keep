@@ -110,7 +110,7 @@ class Reminder {
 
       // Handle 12-hour format (with AM/PM)
       if (timeParts.length > 1) {
-        final period = timeParts[1];
+        final period = timeParts[1].toUpperCase();
         if (period == 'PM' && hour != 12) {
           hour += 12;
         } else if (period == 'AM' && hour == 12) {
