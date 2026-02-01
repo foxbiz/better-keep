@@ -23,6 +23,9 @@ Better Keep is my take on the notes app I always wanted Google Keep to be. It ke
 - **Secure notes**: lock individual notes with a PIN; content is encrypted before hitting disk.
 - **End-to-end encryption**: notes and attachments are encrypted on your device before syncing. The server never sees your plaintext data.
 - **Organize faster**: labels, quick filtering, instant search, and a masonry layout that keeps pinned notes up front.
+- **Smart views & folders**: switch between grid, list, and folder views. Organize notes hierarchically by labels or colors with breadcrumb navigation.
+- **AI audio transcription**: record voice memos and get automatic transcription using on-device Whisper AI. Your audio stays private while being converted to searchable text.
+- **Share to app**: receive shared text and files from other apps to quickly capture content.
 - **Stay tidy**: archive or trash in bulk, restore when needed, or delete forever with one tap.
 - **Full sync**: notes, attachments, and labels sync across devices with live updates.
 - **Sketch with images**: the sketch page now supports adding images for annotation.
@@ -31,8 +34,6 @@ Better Keep is my take on the notes app I always wanted Google Keep to be. It ke
 ## Platforms
 
 Available on **Android**, **iOS**, **macOS**, **Windows**, and **Web**.
-
-> **Note:** Linux support is currently unavailable as Firebase does not officially support Linux desktop yet. We'll add Linux builds when Firebase adds support.
 
 ## Under the hood (developer notes)
 
@@ -273,6 +274,10 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
 - [x] Fix alarm notifications on iOS.
 - [x] Optimize sketch saving (reduce file size by lowering precision).
 - [x] Revenue model implementation.
+- [x] Smart views & folders (grid, list, folder views with hierarchical organization).
+- [x] AI audio transcription using on-device Whisper.
+- [x] Share to app (receive shared content from other apps).
+- [x] Adaptive toolbar with responsive icon sizing.
 - [ ] Calendar-grade reminders and recurring nudges.
 - [ ] Widgets and quick actions on mobile/desktop.
 - [ ] Theme editor (custom colors).
