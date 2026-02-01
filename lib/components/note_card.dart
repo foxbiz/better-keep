@@ -325,8 +325,9 @@ class _NoteCardState extends State<NoteCard>
         isPermanent: true,
       );
       if (confirmed == true && mounted) {
+        final l10n = context.l10n;
         await widget.note.delete();
-        snackbar(context.l10n.noteDeletedPermanently);
+        snackbar(l10n.noteDeletedPermanently);
       }
       return;
     }

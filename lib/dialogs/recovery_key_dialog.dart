@@ -257,10 +257,11 @@ class _RecoverWithPassphraseDialogState
       return;
     }
 
+    final l10n = context.l10n;
     setState(() {
       _isLoading = true;
       _error = null;
-      _statusMessage = context.l10n.verifyingPassphrase;
+      _statusMessage = l10n.verifyingPassphrase;
     });
 
     try {
@@ -282,7 +283,7 @@ class _RecoverWithPassphraseDialogState
       if (success) {
         // If user wants to set this device as primary, revoke other devices
         if (_setAsPrimaryDevice) {
-          _updateStatus(context.l10n.settingAsPrimaryDevice);
+          _updateStatus(l10n.settingAsPrimaryDevice);
           try {
             await DeviceManager.instance.setCurrentDeviceAsPrimary();
           } catch (e, stack) {
@@ -295,7 +296,7 @@ class _RecoverWithPassphraseDialogState
           }
         }
 
-        _updateStatus(context.l10n.finalizing);
+        _updateStatus(l10n.finalizing);
         // Cache the device status as approved
         await E2EESecureStorage.instance.cacheDeviceStatus('approved');
 
@@ -307,12 +308,14 @@ class _RecoverWithPassphraseDialogState
           Navigator.of(context).pop(true);
         }
       } else {
-        setState(() => _error = context.l10n.incorrectPassphrase);
+        if (mounted) {
+          setState(() => _error = l10n.incorrectPassphrase);
+        }
       }
     } on TimeoutException catch (e) {
       AppLogger.error('Recovery dialog: Recovery timed out', e);
       if (mounted) {
-        setState(() => _error = context.l10n.recoveryTimedOut);
+        setState(() => _error = l10n.recoveryTimedOut);
       }
     } on UnsupportedError catch (e) {
       // Argon2id recovery attempted on web

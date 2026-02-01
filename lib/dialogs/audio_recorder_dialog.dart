@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/whisper/whisper_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -39,12 +40,26 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
   // Audio recording
   late final AudioRecorder _audioRecorder;
 
-  // Live transcription
+  // Live transcription (Web fallback)
   final SpeechToText _speechToText = SpeechToText();
   bool _speechAvailable = false;
   String _liveTranscription = '';
   String _finalTranscription = '';
   bool _speechError = false;
+
+  // Whisper transcription (for native platforms)
+  final WhisperService _whisperService = WhisperService.instance;
+  bool _whisperAvailable = false;
+  bool _whisperModelReady = false;
+  bool _isTranscribing = false;
+  bool _isDownloadingModel = false; // Separate flag for model download
+  double _downloadProgress = 0.0; // Download progress 0.0 to 1.0
+  bool _useWhisper = false;
+  bool _isPolishing =
+      false; // Show "polishing" indicator during Whisper after live preview
+  double _transcriptionProgress = 0.0; // Estimated progress 0.0 to 1.0
+  Timer? _progressTimer; // Timer for simulating progress
+  bool _isCancelled = false; // Flag to cancel background work on dispose
 
   // Controllers
   final TextEditingController _titleController = TextEditingController();
@@ -70,14 +85,16 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
     WidgetsBinding.instance.addObserver(this);
     _audioRecorder = AudioRecorder();
     _initRecorder();
-    _initSpeechToText();
+    _initTranscription();
   }
 
   @override
   void dispose() {
+    _isCancelled = true; // Signal background tasks to stop
     WidgetsBinding.instance.removeObserver(this);
     _amplitudeSub?.cancel();
     _speechRestartTimer?.cancel();
+    _progressTimer?.cancel();
     _timer?.cancel();
     _audioRecorder.dispose();
     _speechToText.stop();
@@ -116,9 +133,11 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
 
   Future<void> _initSpeechToText() async {
     // Skip speech-to-text on macOS/Linux - plugin crashes due to TCC permission issues
+    // Skip on Android - microphone conflict with audio recording causes beeps/failures
     if (!kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.linux)) {
+            defaultTargetPlatform == TargetPlatform.linux ||
+            defaultTargetPlatform == TargetPlatform.android)) {
       _speechAvailable = false;
       return;
     }
@@ -134,8 +153,31 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
     if (mounted) setState(() {});
   }
 
+  /// Initialize transcription - prefer Whisper on native, fallback to speech_to_text
+  Future<void> _initTranscription() async {
+    // On Web, transcription is disabled for privacy
+    if (kIsWeb) {
+      _whisperAvailable = false;
+      _speechAvailable = false;
+      _enableTranscription = false;
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // Check if Whisper is available on this platform
+    _whisperAvailable = _whisperService.isAvailable;
+    if (_whisperAvailable) {
+      _whisperModelReady = await _whisperService.isModelDownloaded();
+      _useWhisper = _whisperModelReady;
+    }
+
+    // Initialize speech_to_text as fallback for live transcription
+    await _initSpeechToText();
+
+    if (mounted) setState(() {});
+  }
+
   void _onSpeechError(SpeechRecognitionError error) {
-    // Don't show error for temporary issues - speech will restart
     if (error.permanent && mounted) {
       setState(() {
         _speechError = true;
@@ -144,8 +186,12 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
   }
 
   void _onSpeechStatus(String status) {
-    // If speech stops but we're still recording, try to restart it
-    if (status == 'notListening' && _isRecording && _enableTranscription) {
+    final hybridMode = _whisperModelReady && _speechAvailable;
+    if (status == 'notListening' &&
+        _isRecording &&
+        _enableTranscription &&
+        _speechAvailable &&
+        (hybridMode || !_useWhisper)) {
       _scheduleRestartSpeech();
     }
   }
@@ -164,14 +210,18 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
       if (await _audioRecorder.hasPermission()) {
         final fs = await fileSystem();
         final audioDir = await fs.documentDir;
+
+        // Use WAV format when Whisper will be used for transcription
+        // WAV is required for Whisper but may have playback issues on some devices
+        // On Android, we still use WAV since Whisper is the only transcription option
+        final useWavFormat = _whisperModelReady && _enableTranscription;
+        final extension = useWavFormat ? 'wav' : 'm4a';
         final audioPath = path.join(
           audioDir,
           'audio',
-          'recording_${DateTime.now().millisecondsSinceEpoch}.m4a',
+          'recording_${DateTime.now().millisecondsSinceEpoch}.$extension',
         );
 
-        // Ensure the audio directory exists before recording
-        // The native Android MediaCodecEncoder requires the directory to exist
         await fs.createDirectory(path.dirname(audioPath));
 
         // Reset transcription state
@@ -180,10 +230,22 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
         _speechError = false;
         _transcriptionController.clear();
 
-        // Start audio file recording FIRST (most important)
-        await _audioRecorder.start(const RecordConfig(), path: audioPath);
+        // Configure recording format based on transcription method
+        RecordConfig config;
+        if (useWavFormat) {
+          // Whisper requires 16kHz WAV
+          config = const RecordConfig(
+            encoder: AudioEncoder.wav,
+            sampleRate: 16000,
+            numChannels: 1,
+          );
+        } else {
+          config = const RecordConfig();
+        }
 
-        // Start amplitude monitoring for waveform
+        await _audioRecorder.start(config, path: audioPath);
+
+        // Start amplitude monitoring
         _amplitudeSub?.cancel();
         _amplitudeSub = _audioRecorder
             .onAmplitudeChanged(const Duration(milliseconds: 80))
@@ -203,15 +265,16 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
 
         _startTimer();
 
-        // Start live transcription in parallel (non-blocking, can fail)
-        if (_enableTranscription && _speechAvailable) {
-          // Small delay to let audio recorder settle
+        // Start live transcription - hybrid mode (Whisper + speech) or speech-only
+        final hybridMode = _whisperModelReady && _speechAvailable;
+        if (_enableTranscription &&
+            (hybridMode || !_useWhisper) &&
+            _speechAvailable) {
           await Future.delayed(const Duration(milliseconds: 200));
           _startSpeechRecognition();
         }
       }
     } catch (e) {
-      // Recording failed - user should be notified
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.failedToStartRecording)),
@@ -229,7 +292,6 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
           if (mounted && _isRecording) {
             setState(() {
               _liveTranscription = result.recognizedWords;
-              // When result is final, append to final transcription
               if (result.finalResult && result.recognizedWords.isNotEmpty) {
                 if (_finalTranscription.isNotEmpty) {
                   _finalTranscription += ' ';
@@ -240,16 +302,15 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
             });
           }
         },
-        listenFor: const Duration(seconds: 30), // Max listen time
-        pauseFor: const Duration(seconds: 3), // Pause detection
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
         listenOptions: SpeechListenOptions(
           partialResults: true,
-          cancelOnError: false, // Don't stop on error
+          cancelOnError: false,
           listenMode: ListenMode.dictation,
         ),
       );
     } catch (e) {
-      // Don't affect recording - just note that transcription failed
       if (mounted) {
         setState(() {
           _speechError = true;
@@ -259,16 +320,18 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
   }
 
   Future<void> _stopRecording() async {
-    // Stop UI updates first
     _timer?.cancel();
     _speechRestartTimer?.cancel();
     _amplitudeSub?.cancel();
 
-    // Stop speech recognition
-    try {
-      await _speechToText.stop();
-    } catch (_) {
-      // Ignore speech stop errors - doesn't affect recording
+    // Stop speech recognition if active (hybrid or speech-only)
+    final hybridMode = _whisperModelReady && _speechAvailable;
+    if (hybridMode || !_useWhisper) {
+      try {
+        await _speechToText.stop();
+      } catch (e) {
+        debugPrint('Failed to stop speech recognition: $e');
+      }
     }
 
     setState(() {
@@ -281,51 +344,173 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
       if (mounted && recordedPath != null) {
         String finalPath = recordedPath;
 
-        // On web, the record package returns a blob URL.
-        // We need to fetch the blob data and save it to OPFS.
+        // On web, fetch blob and save to OPFS
         if (kIsWeb && recordedPath.startsWith('blob:')) {
           try {
-            // Fetch the blob data from the URL
             final response = await http.get(Uri.parse(recordedPath));
             if (response.statusCode == 200) {
               final Uint8List audioBytes = response.bodyBytes;
-
-              // Generate a path in OPFS
               final fs = await fileSystem();
               final opfsPath = path.join(
                 await fs.documentDir,
                 '${Uuid().v4()}.m4a',
               );
-
-              // Save to OPFS
               await fs.writeBytes(opfsPath, audioBytes);
               finalPath = opfsPath;
             }
           } catch (e) {
-            // If blob fetching fails, keep the blob URL as fallback
             debugPrint('Failed to save audio to OPFS: $e');
           }
         }
 
-        // Combine final transcription with any remaining live transcription
-        String fullTranscription = _finalTranscription;
-        if (_liveTranscription.isNotEmpty) {
-          if (fullTranscription.isNotEmpty) {
-            fullTranscription += ' ';
-          }
-          fullTranscription += _liveTranscription;
-        }
-
         setState(() {
           _path = finalPath;
-          _transcriptionController.text = fullTranscription.trim();
         });
 
-        // Auto-fill title from transcription
+        // Combine live transcription parts
+        String liveResult = _finalTranscription;
+        if (_liveTranscription.isNotEmpty) {
+          if (liveResult.isNotEmpty) liveResult += ' ';
+          liveResult += _liveTranscription;
+        }
+
+        // In hybrid mode: show live preview immediately, then run Whisper
+        if (hybridMode && _enableTranscription) {
+          // Show live transcription as immediate preview
+          _transcriptionController.text = liveResult.trim();
+          // Run Whisper for high-quality final result
+          await _transcribeWithWhisper(finalPath, showPolishing: true);
+        } else if (_useWhisper && _enableTranscription && _whisperModelReady) {
+          // Whisper-only mode (no live preview available)
+          await _transcribeWithWhisper(finalPath);
+        } else {
+          // speech_to_text only
+          _transcriptionController.text = liveResult.trim();
+        }
+
         _updateTitleFromTranscription();
       }
-    } catch (_) {
-      // Recording stop failed - file may still be saved
+    } catch (e) {
+      debugPrint('Failed to stop recording: $e');
+    }
+  }
+
+  Future<void> _transcribeWithWhisper(
+    String audioPath, {
+    bool showPolishing = false,
+  }) async {
+    // Early exit if dialog was closed
+    if (_isCancelled) return;
+
+    setState(() {
+      _isTranscribing = true;
+      _isPolishing = showPolishing;
+      _transcriptionProgress = 0.0;
+    });
+
+    // Start estimated progress based on audio duration
+    // Whisper tiny model ~= 5-10 seconds per minute of audio
+    final estimatedSeconds = (_recordDuration * 0.15).clamp(3.0, 60.0);
+    _startProgressTimer(estimatedSeconds);
+
+    try {
+      final transcription = await _whisperService.transcribe(audioPath);
+      _progressTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _isTranscribing = false;
+          _isPolishing = false;
+          _transcriptionProgress = 1.0;
+          if (transcription != null && transcription.isNotEmpty) {
+            _transcriptionController.text = transcription;
+          } else if (showPolishing) {
+            // Whisper returned empty in hybrid mode - clear preview
+            _transcriptionController.clear();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Whisper transcription failed: $e');
+      _progressTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _isTranscribing = false;
+          _isPolishing = false;
+          _transcriptionProgress = 0.0;
+          // Clear the live preview if Whisper fails (per user preference)
+          if (showPolishing) {
+            _transcriptionController.clear();
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.transcriptionFailed),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Start a timer that simulates progress based on estimated transcription time
+  void _startProgressTimer(double estimatedSeconds) {
+    _progressTimer?.cancel();
+    const updateInterval = Duration(milliseconds: 100);
+    final totalUpdates = (estimatedSeconds * 10)
+        .toInt(); // 10 updates per second
+    var currentUpdate = 0;
+
+    _progressTimer = Timer.periodic(updateInterval, (timer) {
+      currentUpdate++;
+      if (mounted && _isTranscribing) {
+        setState(() {
+          // Cap at 95% so it doesn't look stuck at 100%
+          _transcriptionProgress = ((currentUpdate / totalUpdates) * 0.95)
+              .clamp(0.0, 0.95);
+        });
+      }
+      if (currentUpdate >= totalUpdates) {
+        timer.cancel();
+      }
+    });
+  }
+
+  Future<void> _initializeWhisperModel() async {
+    setState(() {
+      _isDownloadingModel = true;
+      _downloadProgress = 0.0;
+    });
+
+    // Download the model - this will also initialize it
+    final modelPath = await _whisperService.downloadModel(
+      onProgress: (received, total) {
+        if (mounted && total > 0) {
+          setState(() {
+            _downloadProgress = received / total;
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      setState(() {
+        _isDownloadingModel = false;
+        _whisperModelReady = modelPath != null;
+        if (modelPath != null) {
+          _useWhisper = true;
+        }
+      });
+
+      if (modelPath != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.modelDownloadComplete)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.modelDownloadFailed)),
+        );
+      }
     }
   }
 
@@ -356,7 +541,6 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
   }
 
   String get _displayTranscription {
-    // Show live transcription during recording
     String display = _finalTranscription;
     if (_liveTranscription.isNotEmpty) {
       if (display.isNotEmpty) {
@@ -366,6 +550,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
     }
     return display;
   }
+
+  bool get _transcriptionAvailable =>
+      (_useWhisper && _whisperModelReady) || _speechAvailable;
 
   @override
   Widget build(BuildContext context) {
@@ -426,7 +613,8 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
               Icon(Icons.mic, size: 48, color: textColor),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: _permissionDenied
+              onPressed:
+                  _permissionDenied || _isTranscribing || _isDownloadingModel
                   ? null
                   : (_isRecording ? _stopRecording : _startRecording),
               child: Text(
@@ -435,10 +623,12 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
             ),
             const SizedBox(height: 16),
 
-            // During recording: show live transcription
-            if (_isRecording) ...[
-              // Show live transcription during recording
-              if (_enableTranscription) ...[
+            // During recording: show live transcription (hybrid or speech-only)
+            // Requires _speechAvailable to actually show live transcription UI
+            if (_isRecording &&
+                _speechAvailable &&
+                ((_whisperModelReady && _useWhisper) || !_useWhisper)) ...[
+              if (_enableTranscription && _speechAvailable) ...[
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
@@ -455,11 +645,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                       Row(
                         children: [
                           Icon(
-                            _speechAvailable && !_speechError
-                                ? Icons.mic
-                                : Icons.mic_off,
+                            !_speechError ? Icons.mic : Icons.mic_off,
                             size: 14,
-                            color: _speechAvailable && !_speechError
+                            color: !_speechError
                                 ? Theme.of(context).colorScheme.primary
                                 : Theme.of(context).colorScheme.error,
                           ),
@@ -498,57 +686,46 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                 ),
               ],
             ]
+            // During recording with Whisper-only (no speech_to_text available)
+            else if (_isRecording && _useWhisper && !_speechAvailable) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.auto_awesome,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l10n.whisperTranscriptionActive,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ]
             // Before recording: show options
             else if (_path == null) ...[
               Text(
                 _permissionDenied ? l10n.allowMicAccess : l10n.tapStartToRecord,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              if (_speechAvailable) ...[
+
+              // Web: Transcription disabled for privacy
+              if (kIsWeb) ...[
                 const SizedBox(height: 12),
-                CheckboxListTile(
-                  value: _enableTranscription,
-                  onChanged: (value) {
-                    setState(() => _enableTranscription = value ?? true);
-                  },
-                  title: Text(l10n.liveTranscription),
-                  subtitle: Text(l10n.transcribeWhileRecording),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                ),
-              ],
-            ],
-
-            // After recording: show transcription result
-            if (!_isRecording && _path != null) ...[
-              const SizedBox(height: 16),
-
-              // Transcription result (editable)
-              if (_transcriptionController.text.isNotEmpty) ...[
-                TextField(
-                  controller: _transcriptionController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    labelText: l10n.transcription,
-                    border: const OutlineInputBorder(),
-                    hintText: l10n.editTranscriptionHint,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  value: _addTranscriptionToNote,
-                  onChanged: (value) {
-                    setState(() => _addTranscriptionToNote = value ?? true);
-                  },
-                  title: Text(l10n.addTranscriptionToNote),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                ),
-                const SizedBox(height: 8),
-              ] else if (_enableTranscription && _speechAvailable) ...[
-                // No transcription captured
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -565,7 +742,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          l10n.noSpeechDetected,
+                          l10n.transcriptionDisabledWebPrivacy,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.outline,
                             fontSize: 13,
@@ -575,27 +752,247 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                     ],
                   ),
                 ),
+              ]
+              // Native: Whisper options
+              else if (_whisperAvailable) ...[
                 const SizedBox(height: 12),
-              ],
 
-              // Title input
-              TextField(
-                controller: _titleController,
-                decoration: InputDecoration(
-                  labelText: l10n.titleOptional,
-                  hintText: l10n.enterTitleForRecording,
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _titleController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            setState(() => _titleController.clear());
-                          },
-                        )
-                      : null,
+                if (!_whisperModelReady) ...[
+                  // Model download prompt
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.download_outlined,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                l10n.whisperModelRequired,
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.whisperModelDescription,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.outline,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_isDownloadingModel)
+                          Column(
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                child: LinearProgressIndicator(
+                                  value: _downloadProgress > 0
+                                      ? _downloadProgress
+                                      : null,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${(_downloadProgress * 100).toInt()}%',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.outline,
+                                    ),
+                              ),
+                            ],
+                          )
+                        else
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.tonal(
+                                onPressed: _initializeWhisperModel,
+                                child: Text(l10n.downloadModel),
+                              ),
+                              if (_speechAvailable)
+                                TextButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _useWhisper = false;
+                                      _enableTranscription = true;
+                                    });
+                                  },
+                                  child: Text(l10n.useFallback),
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  // Model ready - show transcription toggle
+                  CheckboxListTile(
+                    value: _enableTranscription,
+                    onChanged: (value) {
+                      setState(() => _enableTranscription = value ?? true);
+                    },
+                    title: Text(l10n.liveTranscription),
+                    subtitle: Text(l10n.whisperTranscriptionActive),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                  ),
+                ],
+              ]
+              // Fallback to speech_to_text
+              else if (_speechAvailable) ...[
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: _enableTranscription,
+                  onChanged: (value) {
+                    setState(() => _enableTranscription = value ?? true);
+                  },
+                  title: Text(l10n.liveTranscription),
+                  subtitle: Text(l10n.transcribeWhileRecording),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
                 ),
-                textCapitalization: TextCapitalization.sentences,
-              ),
+              ],
+            ],
+
+            // After recording: show transcription result or transcribing indicator
+            if (!_isRecording && _path != null) ...[
+              const SizedBox(height: 16),
+
+              // Transcribing with Whisper
+              if (_isTranscribing) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: LinearProgressIndicator(
+                          value: _transcriptionProgress > 0
+                              ? _transcriptionProgress
+                              : null, // Indeterminate if 0
+                          minHeight: 6,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _isPolishing
+                            ? l10n.polishingTranscription
+                            : l10n.transcribingAudio,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      if (_transcriptionProgress > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${(_transcriptionProgress * 100).toInt()}%',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ] else ...[
+                // Transcription result (editable)
+                if (_transcriptionController.text.isNotEmpty) ...[
+                  TextField(
+                    controller: _transcriptionController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: l10n.transcription,
+                      border: const OutlineInputBorder(),
+                      hintText: l10n.editTranscriptionHint,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    value: _addTranscriptionToNote,
+                    onChanged: (value) {
+                      setState(() => _addTranscriptionToNote = value ?? true);
+                    },
+                    title: Text(l10n.addTranscriptionToNote),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                  ),
+                  const SizedBox(height: 8),
+                ] else if (_enableTranscription && _transcriptionAvailable) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: Theme.of(context).colorScheme.outline,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l10n.noSpeechDetected,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.outline,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Title input
+                TextField(
+                  controller: _titleController,
+                  decoration: InputDecoration(
+                    labelText: l10n.titleOptional,
+                    hintText: l10n.enterTitleForRecording,
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _titleController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() => _titleController.clear());
+                            },
+                          )
+                        : null,
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+              ],
             ],
           ],
         ),
@@ -612,7 +1009,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
           child: Text(l10n.cancel),
         ),
         TextButton(
-          onPressed: (_path != null && !_isRecording)
+          onPressed: (_path != null && !_isRecording && !_isTranscribing)
               ? () {
                   final title = _titleController.text.trim();
                   String? transcription;
@@ -669,16 +1066,12 @@ class _AudioWaveformLinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final midY = size.height / 2;
 
-    // Convert dB to linear amplitude (0.0 to 1.0)
-    // amplitudeDb typically ranges from -120 (silence) to 0 (max)
     final linear = math.pow(10, amplitudeDb / 20.0).toDouble();
     final normAmp = linear.clamp(0.0, 1.0);
 
-    // Calculate the vertical displacement based on amplitude
     final maxDisplacement = size.height / 2 - 4;
     final displacement = normAmp * maxDisplacement;
 
-    // Draw the main horizontal line with rounded ends
     final linePaint = Paint()
       ..color = color.withAlpha(80)
       ..strokeWidth = 3
@@ -687,25 +1080,21 @@ class _AudioWaveformLinePainter extends CustomPainter {
 
     canvas.drawLine(Offset(0, midY), Offset(size.width, midY), linePaint);
 
-    // Draw center waveform indicator that reacts to voice
     final wavePaint = Paint()
       ..color = color
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
-    // Draw multiple vertical lines representing waveform
     final segmentCount = 15;
     final segmentWidth = size.width / (segmentCount + 1);
 
     for (int i = 1; i <= segmentCount; i++) {
       final x = i * segmentWidth;
-      // Create a wave pattern - center segments are taller
       final distanceFromCenter = (i - (segmentCount + 1) / 2).abs();
       final centerFactor = 1 - (distanceFromCenter / (segmentCount / 2));
       final segmentHeight =
-          displacement * centerFactor * 0.8 +
-          (normAmp > 0.05 ? 2 : 0); // Minimum visible height when there's sound
+          displacement * centerFactor * 0.8 + (normAmp > 0.05 ? 2 : 0);
 
       canvas.drawLine(
         Offset(x, midY - segmentHeight),

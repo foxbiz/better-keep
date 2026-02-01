@@ -4,6 +4,7 @@ import 'package:better_keep/pages/about_page.dart';
 import 'package:better_keep/pages/help_page.dart';
 import 'package:better_keep/pages/settings/nerd_stats_page.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
+import 'package:better_keep/services/whisper/whisper.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -462,6 +463,8 @@ class _SettingsState extends State<Settings> {
             ),
             subtitle: Text(context.l10n.developer),
           ),
+          // Speech Recognition Model
+          if (!kIsWeb) ...[_WhisperModelTile()],
           ListTile(
             leading: const Icon(Icons.analytics),
             title: Text(context.l10n.nerdStats),
@@ -667,7 +670,6 @@ class _SettingsState extends State<Settings> {
                       : context.l10n.noteEncryptionEnabledSimple,
                 ),
                 behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.green,
               ),
             );
           }
@@ -708,9 +710,158 @@ class _SettingsState extends State<Settings> {
                 : context.l10n.fileEncryptionDisabled,
           ),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: enabled ? Colors.green : null,
         ),
       );
     }
+  }
+}
+
+/// Widget for managing Whisper model in settings
+class _WhisperModelTile extends StatefulWidget {
+  @override
+  State<_WhisperModelTile> createState() => _WhisperModelTileState();
+}
+
+class _WhisperModelTileState extends State<_WhisperModelTile> {
+  final WhisperModelService _modelService = WhisperModelService.instance;
+  bool _isDownloaded = false;
+  bool _isDownloading = false;
+  double _downloadProgress = 0;
+  int _modelSize = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkModelStatus();
+  }
+
+  Future<void> _checkModelStatus() async {
+    final downloaded = await _modelService.isModelDownloaded();
+    final size = await _modelService.getDownloadedModelSize();
+    if (mounted) {
+      setState(() {
+        _isDownloaded = downloaded;
+        _modelSize = size;
+      });
+    }
+  }
+
+  Future<void> _downloadModel() async {
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0;
+    });
+
+    final path = await _modelService.downloadModel(
+      onProgress: (received, total) {
+        if (mounted) {
+          setState(() {
+            _downloadProgress = total > 0 ? received / total : 0;
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      setState(() {
+        _isDownloading = false;
+        _isDownloaded = path != null;
+      });
+
+      await _checkModelStatus();
+
+      if (mounted) {
+        final colorScheme = Theme.of(context).colorScheme;
+        final l10n = context.l10n;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              path != null
+                  ? l10n.modelDownloadComplete
+                  : l10n.modelDownloadFailed,
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: path != null ? null : colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteModel() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.l10n.deleteQuestion),
+        content: Text(context.l10n.deleteWhisperModelConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.l10n.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _modelService.deleteModel();
+      await _checkModelStatus();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.whisperModelDeleted),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
+    return ListTile(
+      leading: const Icon(Icons.record_voice_over),
+      title: Text(l10n.speechRecognitionModel),
+      subtitle: _isDownloading
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                LinearProgressIndicator(value: _downloadProgress),
+                const SizedBox(height: 4),
+                Text('${(_downloadProgress * 100).toInt()}%'),
+              ],
+            )
+          : Text(
+              _isDownloaded
+                  ? l10n.whisperModelDownloaded(_formatBytes(_modelSize))
+                  : l10n.whisperModelNotDownloaded,
+            ),
+      trailing: _isDownloading
+          ? null
+          : _isDownloaded
+          ? IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _deleteModel,
+              tooltip: l10n.deleteModel,
+            )
+          : FilledButton.tonal(
+              onPressed: _downloadModel,
+              child: Text(l10n.download),
+            ),
+    );
   }
 }

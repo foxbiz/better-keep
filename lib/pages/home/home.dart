@@ -21,6 +21,7 @@ import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/audio_content_utils.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
@@ -958,10 +959,13 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       }
       title ??= context.l10n.audioNote;
 
-      // Create content with title and transcription as blockquote
-      final contentJson = _createNoteContentWithTranscription(
-        title,
-        result.transcription,
+      // Create content with title and transcription with audio link
+      final audioTitle = result.title ?? 'Audio Recording';
+      final contentJson = createAudioNoteContentJson(
+        title: title,
+        transcription: result.transcription,
+        audioTitle: audioTitle,
+        recordingIndex: 0, // First recording in new note
       );
 
       final note = _createNewNote(title: title, content: contentJson);
@@ -970,7 +974,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       note.addRecording(
         NoteRecording(
           src: result.path,
-          title: result.title ?? 'Audio Recording',
+          title: audioTitle,
           length: result.length,
           transcript: result.transcription,
         ),
@@ -982,31 +986,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         showPage(context, NoteEditor(note: note));
       }
     }
-  }
-
-  /// Create note content JSON with title and optional transcription blockquote
-  String _createNoteContentWithTranscription(
-    String title,
-    String? transcription,
-  ) {
-    final List<Map<String, dynamic>> delta = [
-      {'insert': title},
-      {
-        'insert': '\n',
-        'attributes': {'header': 1},
-      },
-    ];
-
-    if (transcription != null && transcription.isNotEmpty) {
-      delta.add({'insert': transcription});
-      delta.add({
-        'insert': '\n',
-        'attributes': {'blockquote': true},
-      });
-    }
-
-    delta.add({'insert': '\n'});
-    return json.encode(delta);
   }
 
   /// Create a new image note
@@ -1146,10 +1125,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       }
     } catch (e) {
       // Dismiss loading dialog on error
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
+      if (mounted) {
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+        snackbar(context.l10n.failedToCreateImageNote, Colors.red);
       }
-      snackbar(context.l10n.failedToCreateImageNote, Colors.red);
     }
   }
 

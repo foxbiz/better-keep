@@ -1087,6 +1087,30 @@ class AppLocalizationsPt extends AppLocalizations {
   String get advancedSettings => 'Configurações avançadas';
 
   @override
+  String get speechRecognitionModel => 'Modelo de Reconhecimento de Voz';
+
+  @override
+  String whisperModelDownloaded(String size) {
+    return 'Baixado ($size)';
+  }
+
+  @override
+  String get whisperModelNotDownloaded => 'Não baixado - toque para baixar';
+
+  @override
+  String get deleteWhisperModelConfirm =>
+      'Excluir o modelo de reconhecimento de voz? Você pode baixá-lo novamente depois.';
+
+  @override
+  String get whisperModelDeleted => 'Modelo de reconhecimento de voz excluído';
+
+  @override
+  String get deleteModel => 'Excluir Modelo';
+
+  @override
+  String get download => 'Baixar';
+
+  @override
   String get viewDatabaseStats =>
       'Ver estatísticas do banco de dados e sincronização';
 
@@ -2148,6 +2172,44 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get failedToStartRecording => 'Falha ao iniciar gravação';
+
+  @override
+  String get transcriptionDisabledWebPrivacy =>
+      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+
+  @override
+  String get whisperModelRequired =>
+      'Modelo de reconhecimento de voz necessário';
+
+  @override
+  String get whisperModelDescription =>
+      'Baixe um pequeno modelo de IA (~31 MB) para conversão de voz em texto no dispositivo. Seu áudio nunca sai do dispositivo.';
+
+  @override
+  String get downloadModel => 'Download Model';
+
+  @override
+  String get useFallback => 'Usar padrão do dispositivo';
+
+  @override
+  String get whisperTranscriptionActive =>
+      'Transcrição por IA no dispositivo (privada)';
+
+  @override
+  String get modelDownloadComplete => 'Modelo de voz baixado com sucesso';
+
+  @override
+  String get modelDownloadFailed => 'Falha ao baixar modelo de voz';
+
+  @override
+  String get transcribingAudio => 'Transcrevendo áudio...';
+
+  @override
+  String get polishingTranscription => 'Polindo transcrição...';
+
+  @override
+  String get transcriptionFailed =>
+      'Falha na transcrição. Por favor, tente novamente.';
 
   @override
   String get deleteQuestion => 'Excluir?';

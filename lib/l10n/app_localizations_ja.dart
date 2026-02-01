@@ -1071,6 +1071,29 @@ class AppLocalizationsJa extends AppLocalizations {
   String get advancedSettings => '詳細設定';
 
   @override
+  String get speechRecognitionModel => '音声認識モデル';
+
+  @override
+  String whisperModelDownloaded(String size) {
+    return 'ダウンロード済み ($size)';
+  }
+
+  @override
+  String get whisperModelNotDownloaded => '未ダウンロード - タップしてダウンロード';
+
+  @override
+  String get deleteWhisperModelConfirm => '音声認識モデルを削除しますか？後で再ダウンロードできます。';
+
+  @override
+  String get whisperModelDeleted => '音声認識モデルを削除しました';
+
+  @override
+  String get deleteModel => 'モデルを削除';
+
+  @override
+  String get download => 'ダウンロード';
+
+  @override
   String get viewDatabaseStats => 'データベースと同期の統計を表示';
 
   @override
@@ -2077,6 +2100,41 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedToStartRecording => '録音の開始に失敗しました';
+
+  @override
+  String get transcriptionDisabledWebPrivacy =>
+      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+
+  @override
+  String get whisperModelRequired => '音声認識モデルが必要です';
+
+  @override
+  String get whisperModelDescription =>
+      'デバイス上で音声をテキストに変換する小さなAIモデル（約31 MB）をダウンロードします。音声データはデバイス外に送信されません。';
+
+  @override
+  String get downloadModel => 'Download Model';
+
+  @override
+  String get useFallback => 'デバイスのデフォルトを使用';
+
+  @override
+  String get whisperTranscriptionActive => 'デバイス上のAI文字起こし（プライベート）';
+
+  @override
+  String get modelDownloadComplete => '音声モデルのダウンロードが完了しました';
+
+  @override
+  String get modelDownloadFailed => '音声モデルのダウンロードに失敗しました';
+
+  @override
+  String get transcribingAudio => '音声を文字起こし中...';
+
+  @override
+  String get polishingTranscription => '文字起こしを仕上げ中...';
+
+  @override
+  String get transcriptionFailed => '文字起こしに失敗しました。もう一度お試しください。';
 
   @override
   String get deleteQuestion => '削除しますか？';

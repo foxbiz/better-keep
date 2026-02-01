@@ -1070,6 +1070,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get advancedSettings => '高级设置';
 
   @override
+  String get speechRecognitionModel => '语音识别模型';
+
+  @override
+  String whisperModelDownloaded(String size) {
+    return '已下载 ($size)';
+  }
+
+  @override
+  String get whisperModelNotDownloaded => '未下载 - 点击下载';
+
+  @override
+  String get deleteWhisperModelConfirm => '删除语音识别模型？您可以稍后重新下载。';
+
+  @override
+  String get whisperModelDeleted => '语音识别模型已删除';
+
+  @override
+  String get deleteModel => '删除模型';
+
+  @override
+  String get download => '下载';
+
+  @override
   String get viewDatabaseStats => '查看数据库和同步统计';
 
   @override
@@ -2023,7 +2046,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tapStartToRecord => '点击开始按钮开始录制。';
 
   @override
-  String get transcribeWhileRecording => '录制时转录';
+  String get transcribeWhileRecording => '录音时转录';
 
   @override
   String get transcription => '转录';
@@ -2048,6 +2071,41 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get failedToStartRecording => '开始录制失败';
+
+  @override
+  String get transcriptionDisabledWebPrivacy =>
+      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+
+  @override
+  String get whisperModelRequired => '需要语音识别模型';
+
+  @override
+  String get whisperModelDescription =>
+      '下载一个小型 AI 模型（约 31 MB）用于设备端语音转文字。您的音频不会离开设备。';
+
+  @override
+  String get downloadModel => 'Download Model';
+
+  @override
+  String get useFallback => '使用设备默认';
+
+  @override
+  String get whisperTranscriptionActive => '设备端 AI 转录（私密）';
+
+  @override
+  String get modelDownloadComplete => '语音模型下载成功';
+
+  @override
+  String get modelDownloadFailed => '语音模型下载失败';
+
+  @override
+  String get transcribingAudio => '正在转录音频...';
+
+  @override
+  String get polishingTranscription => '正在润色转录...';
+
+  @override
+  String get transcriptionFailed => '转录失败，请重试。';
 
   @override
   String get deleteQuestion => '删除？';

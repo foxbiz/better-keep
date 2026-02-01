@@ -1821,20 +1821,24 @@ class _UserPageState extends State<UserPage> {
       }
 
       // Dismiss loading dialog
-      if (mounted) Navigator.of(context).pop();
-
-      // Refresh UI to show new linked provider
       if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+
         await _fetchE2EEInfo(); // Refresh user data including linked providers
-        setState(() {});
-        snackbar(
-          context.l10n.successfullyLinkedProvider(providerName),
-          Colors.green,
-        );
+        if (mounted) {
+          setState(() {});
+          snackbar(
+            context.l10n.successfullyLinkedProvider(providerName),
+            Colors.green,
+          );
+        }
       }
     } on FirebaseFunctionsException catch (e) {
-      // Dismiss any dialogs
-      if (mounted && Navigator.of(context).canPop()) {
+      if (!mounted) return;
+
+      if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
 
@@ -1862,8 +1866,9 @@ class _UserPageState extends State<UserPage> {
 
       if (mounted) snackbar(errorMessage, Colors.red);
     } catch (e) {
-      // Dismiss loading dialog if showing
-      if (mounted && Navigator.of(context).canPop()) {
+      if (!mounted) return;
+
+      if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
 
@@ -1932,17 +1937,16 @@ class _UserPageState extends State<UserPage> {
         );
       }
     } catch (e) {
-      String errorMessage = context.l10n.failedUnlinkAccount;
-      final errorStr = e.toString();
-
-      if (errorStr.contains('Cannot unlink')) {
-        errorMessage = context.l10n.cannotUnlinkOnlyMethod;
-      } else if (e is Exception) {
-        final msg = errorStr.replaceFirst('Exception: ', '');
-        if (msg.length < 100) errorMessage = msg;
-      }
-
       if (mounted) {
+        String errorMessage = context.l10n.failedUnlinkAccount;
+        final errorStr = e.toString();
+
+        if (errorStr.contains('Cannot unlink')) {
+          errorMessage = context.l10n.cannotUnlinkOnlyMethod;
+        } else if (e is Exception) {
+          final msg = errorStr.replaceFirst('Exception: ', '');
+          if (msg.length < 100) errorMessage = msg;
+        }
         snackbar(errorMessage, Colors.red);
       }
     }
@@ -2549,13 +2553,13 @@ class _UserPageState extends State<UserPage> {
           setState(() => _isLoading = false);
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           final recoverySetup = await showSetupRecoveryKeyPage(context);
-          if (recoverySetup == true) {
+          if (recoverySetup == true && mounted) {
             scaffoldMessenger.showSnackBar(
               SnackBar(
                 content: Text(context.l10n.recoveryKeySavedSuccessfully),
               ),
             );
-          } else {
+          } else if (mounted) {
             // User skipped - show warning
             scaffoldMessenger.showSnackBar(
               SnackBar(
@@ -2702,7 +2706,7 @@ class _UserPageState extends State<UserPage> {
       if (_pendingDeletionCount == 0 && mounted) {
         final scaffoldMessenger = ScaffoldMessenger.of(context);
         await _fetchE2EEInfo();
-        if (_successfulDeletionCount > 0) {
+        if (_successfulDeletionCount > 0 && mounted) {
           final message = _successfulDeletionCount == 1
               ? context.l10n.deviceRemoved
               : context.l10n.nDevicesRemoved(_successfulDeletionCount);

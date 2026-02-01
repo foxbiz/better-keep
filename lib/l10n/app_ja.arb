@@ -830,5 +830,22 @@
   "confirmSignOut": "サインアウトしますか？",
   "unsyncedChanges": "同期されていない変更が失われます。",
   "deleteConfirmation": "本当に削除しますか？",
-  "permanentAction": "この操作は元に戻せません。"
+  "permanentAction": "この操作は元に戻せません。",
+  "speechRecognitionModel": "音声認識モデル",
+  "whisperModelDownloaded": "ダウンロード済み ({size})",
+  "whisperModelNotDownloaded": "未ダウンロード - タップしてダウンロード",
+  "deleteWhisperModelConfirm": "音声認識モデルを削除しますか？後で再ダウンロードできます。",
+  "whisperModelDeleted": "音声認識モデルを削除しました",
+  "deleteModel": "モデルを削除",
+  "download": "ダウンロード",
+  "transcribeWhileRecording": "録音中に文字起こし",
+  "whisperModelRequired": "音声認識モデルが必要です",
+  "whisperModelDescription": "デバイス上で音声をテキストに変換する小さなAIモデル（約31 MB）をダウンロードします。音声データはデバイス外に送信されません。",
+  "useFallback": "デバイスのデフォルトを使用",
+  "whisperTranscriptionActive": "デバイス上のAI文字起こし（プライベート）",
+  "modelDownloadComplete": "音声モデルのダウンロードが完了しました",
+  "modelDownloadFailed": "音声モデルのダウンロードに失敗しました",
+  "transcribingAudio": "音声を文字起こし中...",
+  "polishingTranscription": "文字起こしを仕上げ中...",
+  "transcriptionFailed": "文字起こしに失敗しました。もう一度お試しください。"
 }

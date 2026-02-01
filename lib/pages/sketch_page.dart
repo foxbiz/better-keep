@@ -2185,7 +2185,9 @@ class _SketchPageState extends State<SketchPage>
       }
       _isDirty = false;
     } catch (e) {
-      snackbar(context.l10n.errorSavingSketch(e.toString()), Colors.red);
+      if (mounted) {
+        snackbar(context.l10n.errorSavingSketch(e.toString()), Colors.red);
+      }
       AppLogger.error('Error saving sketch', e);
     }
   }

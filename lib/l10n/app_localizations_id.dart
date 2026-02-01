@@ -1079,6 +1079,31 @@ class AppLocalizationsId extends AppLocalizations {
   String get advancedSettings => 'Pengaturan Lanjutan';
 
   @override
+  String get speechRecognitionModel => 'Model Pengenalan Suara';
+
+  @override
+  String whisperModelDownloaded(String size) {
+    return 'Terunduh ($size)';
+  }
+
+  @override
+  String get whisperModelNotDownloaded =>
+      'Belum terunduh - ketuk untuk mengunduh';
+
+  @override
+  String get deleteWhisperModelConfirm =>
+      'Hapus model pengenalan suara? Anda dapat mengunduhnya lagi nanti.';
+
+  @override
+  String get whisperModelDeleted => 'Model pengenalan suara dihapus';
+
+  @override
+  String get deleteModel => 'Hapus Model';
+
+  @override
+  String get download => 'Unduh';
+
+  @override
   String get viewDatabaseStats => 'Lihat statistik database dan sinkronisasi';
 
   @override
@@ -2093,7 +2118,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get tapStartToRecord => 'Ketuk mulai untuk memulai perekaman.';
 
   @override
-  String get transcribeWhileRecording => 'Transkripsikan saat merekam';
+  String get transcribeWhileRecording => 'Transkripsi saat merekam';
 
   @override
   String get transcription => 'Transkripsi';
@@ -2119,6 +2144,42 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedToStartRecording => 'Gagal memulai perekaman';
+
+  @override
+  String get transcriptionDisabledWebPrivacy =>
+      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+
+  @override
+  String get whisperModelRequired => 'Diperlukan model pengenalan suara';
+
+  @override
+  String get whisperModelDescription =>
+      'Unduh model AI kecil (~31 MB) untuk konversi suara-ke-teks di perangkat. Audio Anda tidak pernah meninggalkan perangkat.';
+
+  @override
+  String get downloadModel => 'Download Model';
+
+  @override
+  String get useFallback => 'Gunakan default perangkat';
+
+  @override
+  String get whisperTranscriptionActive =>
+      'Transkripsi AI di perangkat (privat)';
+
+  @override
+  String get modelDownloadComplete => 'Model suara berhasil diunduh';
+
+  @override
+  String get modelDownloadFailed => 'Gagal mengunduh model suara';
+
+  @override
+  String get transcribingAudio => 'Mentranskrip audio...';
+
+  @override
+  String get polishingTranscription => 'Memoles transkripsi...';
+
+  @override
+  String get transcriptionFailed => 'Transkripsi gagal. Silakan coba lagi.';
 
   @override
   String get deleteQuestion => 'Hapus?';

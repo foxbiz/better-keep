@@ -828,5 +828,22 @@
   "syncAcrossDevicesSecurely": "Sincronize em todos os seus dispositivos com segurança",
   "unlimitedLockedNotesAndSync": "Notas bloqueadas ilimitadas e sincronização em tempo real na nuvem",
   "unlockTheFullExperience": "Desbloqueie a experiência completa",
-  "maybeLater": "Talvez depois"
+  "maybeLater": "Talvez depois",
+  "speechRecognitionModel": "Modelo de Reconhecimento de Voz",
+  "whisperModelDownloaded": "Baixado ({size})",
+  "whisperModelNotDownloaded": "Não baixado - toque para baixar",
+  "deleteWhisperModelConfirm": "Excluir o modelo de reconhecimento de voz? Você pode baixá-lo novamente depois.",
+  "whisperModelDeleted": "Modelo de reconhecimento de voz excluído",
+  "deleteModel": "Excluir Modelo",
+  "download": "Baixar",
+  "transcribeWhileRecording": "Transcrever durante a gravação",
+  "whisperModelRequired": "Modelo de reconhecimento de voz necessário",
+  "whisperModelDescription": "Baixe um pequeno modelo de IA (~31 MB) para conversão de voz em texto no dispositivo. Seu áudio nunca sai do dispositivo.",
+  "useFallback": "Usar padrão do dispositivo",
+  "whisperTranscriptionActive": "Transcrição por IA no dispositivo (privada)",
+  "modelDownloadComplete": "Modelo de voz baixado com sucesso",
+  "modelDownloadFailed": "Falha ao baixar modelo de voz",
+  "transcribingAudio": "Transcrevendo áudio...",
+  "polishingTranscription": "Polindo transcrição...",
+  "transcriptionFailed": "Falha na transcrição. Por favor, tente novamente."
 }
