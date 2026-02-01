@@ -49,7 +49,7 @@ class WhisperService {
 
   /// Whether the service is available on this platform
   bool get isAvailable =>
-      !kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS);
+      Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
   /// Whether a download is in progress
   bool _isDownloading = false;
