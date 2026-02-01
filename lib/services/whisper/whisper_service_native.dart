@@ -6,44 +6,12 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
-/// Whisper model sizes available for download
-enum WhisperModelSize { tiny, base, small, medium, largeV1, largeV2 }
+export 'whisper_types.dart';
 
-extension WhisperModelSizeExtension on WhisperModelSize {
-  String get displayName {
-    switch (this) {
-      case WhisperModelSize.tiny:
-        return 'Tiny (~75 MB)';
-      case WhisperModelSize.base:
-        return 'Base (~142 MB)';
-      case WhisperModelSize.small:
-        return 'Small (~466 MB)';
-      case WhisperModelSize.medium:
-        return 'Medium (~1.5 GB)';
-      case WhisperModelSize.largeV1:
-        return 'Large V1 (~3 GB)';
-      case WhisperModelSize.largeV2:
-        return 'Large V2 (~3 GB)';
-    }
-  }
+import 'whisper_types.dart';
 
-  String get fileName {
-    switch (this) {
-      case WhisperModelSize.tiny:
-        return 'ggml-tiny.bin';
-      case WhisperModelSize.base:
-        return 'ggml-base.bin';
-      case WhisperModelSize.small:
-        return 'ggml-small.bin';
-      case WhisperModelSize.medium:
-        return 'ggml-medium.bin';
-      case WhisperModelSize.largeV1:
-        return 'ggml-large-v1.bin';
-      case WhisperModelSize.largeV2:
-        return 'ggml-large-v2.bin';
-    }
-  }
-
+/// Native-only extension for WhisperModel mapping
+extension WhisperModelSizeNativeExtension on WhisperModelSize {
   WhisperModel get whisperModel {
     switch (this) {
       case WhisperModelSize.tiny:
@@ -58,23 +26,6 @@ extension WhisperModelSizeExtension on WhisperModelSize {
         return WhisperModel.largeV1;
       case WhisperModelSize.largeV2:
         return WhisperModel.largeV2;
-    }
-  }
-
-  int get approximateSizeBytes {
-    switch (this) {
-      case WhisperModelSize.tiny:
-        return 75 * 1024 * 1024; // 75 MB
-      case WhisperModelSize.base:
-        return 142 * 1024 * 1024; // 142 MB
-      case WhisperModelSize.small:
-        return 466 * 1024 * 1024; // 466 MB
-      case WhisperModelSize.medium:
-        return 1536 * 1024 * 1024; // 1.5 GB
-      case WhisperModelSize.largeV1:
-        return 3072 * 1024 * 1024; // 3 GB
-      case WhisperModelSize.largeV2:
-        return 3072 * 1024 * 1024; // 3 GB
     }
   }
 }
@@ -111,7 +62,7 @@ class WhisperService {
     modelSize ??= _currentModelSize;
     final modelPath = await _getModelPath(modelSize);
     final file = File(modelPath);
-    return file.existsSync();
+    return file.exists();
   }
 
   /// Get the path where whisper_flutter_new stores models.
@@ -144,8 +95,8 @@ class WhisperService {
     modelSize ??= _currentModelSize;
     final modelPath = await _getModelPath(modelSize);
     final file = File(modelPath);
-    if (file.existsSync()) {
-      return file.lengthSync();
+    if (await file.exists()) {
+      return file.length();
     }
     return 0;
   }
@@ -221,7 +172,7 @@ class WhisperService {
     modelSize ??= _currentModelSize;
     final modelPath = await _getModelPath(modelSize);
     final file = File(modelPath);
-    if (file.existsSync()) {
+    if (await file.exists()) {
       await file.delete();
     }
 
@@ -249,7 +200,7 @@ class WhisperService {
       final modelFile = File(modelPath);
 
       // Check if already downloaded
-      if (modelFile.existsSync()) {
+      if (await modelFile.exists()) {
         _isDownloading = false;
         // Initialize whisper with the existing model
         await initialize(modelSize);
@@ -289,7 +240,7 @@ class WhisperService {
         } catch (e) {
           await sink.close();
           // Clean up partial file on download failure
-          if (modelFile.existsSync()) {
+          if (await modelFile.exists()) {
             try {
               await modelFile.delete();
             } catch (_) {}
