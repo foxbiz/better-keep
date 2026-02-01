@@ -119,11 +119,37 @@ class _NoteEditorState extends State<NoteEditor>
     // Only intercept key down events
     if (event is! KeyDownEvent) return null;
 
-    // Handle Backspace at start of content - move focus to title
+    // Handle Backspace at start of content
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
       final selection = _controller.selection;
       if (selection.start == 0 && selection.end == 0) {
-        // Cursor is at position 0, move focus to title at end
+        final document = _controller.document;
+        final docLength = document.length;
+
+        // Check if document is empty (only contains the trailing newline)
+        if (docLength <= 1) {
+          // Document is empty, move focus to title at end
+          _titleFocusNode.requestFocus();
+          _titleController.selection = TextSelection.collapsed(
+            offset: _titleController.text.length,
+          );
+          return KeyEventResult.handled;
+        }
+
+        // Check if first line is empty (starts with newline)
+        final plainText = document.toPlainText();
+        final firstChar = plainText.isNotEmpty ? plainText[0] : '';
+        if (firstChar == '\n') {
+          // First line is empty, delete it and stay in editor
+          _controller.replaceText(0, 1, '', null);
+          _controller.updateSelection(
+            const TextSelection.collapsed(offset: 0),
+            ChangeSource.local,
+          );
+          return KeyEventResult.handled;
+        }
+
+        // First line has content, move focus to title at end
         _titleFocusNode.requestFocus();
         _titleController.selection = TextSelection.collapsed(
           offset: _titleController.text.length,
@@ -154,35 +180,8 @@ class _NoteEditorState extends State<NoteEditor>
   }
 
   /// Handles Enter key pressed in title field.
-  /// Splits the title at cursor position: keeps text before cursor as title,
-  /// moves text after cursor to the beginning of Quill content.
+  /// Moves focus to the Quill content editor at the start.
   void _handleTitleEnterPressed() {
-    final cursorPos = _titleController.selection.baseOffset;
-    final titleText = _titleController.text;
-
-    // If cursor position is invalid or at the end, just move focus
-    if (cursorPos < 0 || cursorPos >= titleText.length) {
-      _focusNode.requestFocus();
-      _controller.updateSelection(
-        const TextSelection.collapsed(offset: 0),
-        ChangeSource.local,
-      );
-      return;
-    }
-
-    // Split title at cursor position
-    final keepInTitle = titleText.substring(0, cursorPos);
-    final moveToContent = titleText.substring(cursorPos);
-
-    // Update title to only keep text before cursor
-    _titleController.text = keepInTitle;
-
-    // Insert moved text at the beginning of Quill content
-    if (moveToContent.isNotEmpty) {
-      _controller.document.insert(0, moveToContent);
-    }
-
-    // Move focus to content and position cursor at the start (before inserted text)
     _focusNode.requestFocus();
     _controller.updateSelection(
       const TextSelection.collapsed(offset: 0),
@@ -844,10 +843,12 @@ class _NoteEditorState extends State<NoteEditor>
                       padding: const EdgeInsets.only(left: 16, right: 16),
                       child: Focus(
                         onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent &&
-                              event.logicalKey == LogicalKeyboardKey.enter) {
-                            _handleTitleEnterPressed();
-                            return KeyEventResult.handled;
+                          if (event is KeyDownEvent) {
+                            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                                event.logicalKey == LogicalKeyboardKey.tab) {
+                              _handleTitleEnterPressed();
+                              return KeyEventResult.handled;
+                            }
                           }
                           return KeyEventResult.ignored;
                         },
