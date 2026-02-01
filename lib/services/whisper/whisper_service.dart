@@ -238,7 +238,7 @@ class WhisperService {
     WhisperModelSize? modelSize,
     void Function(int received, int total)? onProgress,
   }) async {
-    if (!isAvailable) return null;
+    if (!isAvailable || _isDownloading) return null;
 
     modelSize ??= _currentModelSize;
     _currentModelSize = modelSize;
