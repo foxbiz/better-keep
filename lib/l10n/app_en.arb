@@ -1133,6 +1133,35 @@
   "advancedSettings": "Advanced Settings",
   "@advancedSettings": {"description": "Advanced settings section title"},
   
+  "speechRecognitionModel": "Speech Recognition Model",
+  "@speechRecognitionModel": {"description": "Speech recognition model settings title"},
+  
+  "whisperModelDownloaded": "Downloaded ({size})",
+  "@whisperModelDownloaded": {
+    "description": "Whisper model downloaded with size",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "31.2 MB"
+      }
+    }
+  },
+  
+  "whisperModelNotDownloaded": "Not downloaded - tap to download",
+  "@whisperModelNotDownloaded": {"description": "Whisper model not downloaded"},
+  
+  "deleteWhisperModelConfirm": "Delete the speech recognition model? You can re-download it later.",
+  "@deleteWhisperModelConfirm": {"description": "Delete whisper model confirmation"},
+  
+  "whisperModelDeleted": "Speech recognition model deleted",
+  "@whisperModelDeleted": {"description": "Whisper model deleted message"},
+  
+  "deleteModel": "Delete Model",
+  "@deleteModel": {"description": "Delete model button tooltip"},
+  
+  "download": "Download",
+  "@download": {"description": "Download button text"},
+  
   "viewDatabaseStats": "View database and sync statistics",
   "@viewDatabaseStats": {"description": "Nerd stats subtitle"},
   
@@ -2211,6 +2240,36 @@
   
   "failedToStartRecording": "Failed to start recording",
   "@failedToStartRecording": {"description": "Failed to start recording error"},
+  
+  "transcriptionDisabledWebPrivacy": "Voice transcription is disabled on web for privacy. Your audio stays on your device.",
+  "@transcriptionDisabledWebPrivacy": {"description": "Transcription disabled on web for privacy"},
+  
+  "whisperModelRequired": "Speech recognition model required",
+  "@whisperModelRequired": {"description": "Whisper model required title"},
+  
+  "whisperModelDescription": "Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.",
+  "@whisperModelDescription": {"description": "Whisper model description"},
+  
+  "downloadModel": "Download Model",
+  "@downloadModel": {"description": "Download model button"},
+  
+  "useFallback": "Use device default",
+  "@useFallback": {"description": "Use fallback speech-to-text button"},
+  
+  "whisperTranscriptionActive": "On-device AI transcription (private)",
+  "@whisperTranscriptionActive": {"description": "Whisper transcription active subtitle"},
+  
+  "modelDownloadComplete": "Speech model downloaded successfully",
+  "@modelDownloadComplete": {"description": "Model download complete message"},
+  
+  "modelDownloadFailed": "Failed to download speech model",
+  "@modelDownloadFailed": {"description": "Model download failed message"},
+  
+  "transcribingAudio": "Transcribing audio...",
+  "@transcribingAudio": {"description": "Transcribing audio loading message"},
+  
+  "polishingTranscription": "Polishing transcription...",
+  "@polishingTranscription": {"description": "Message shown while Whisper refines the live transcription"},
   
   "deleteQuestion": "Delete?",
   "@deleteQuestion": {"description": "Delete question dialog title"},

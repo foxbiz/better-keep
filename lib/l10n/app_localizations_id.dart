@@ -1079,6 +1079,30 @@ class AppLocalizationsId extends AppLocalizations {
   String get advancedSettings => 'Pengaturan Lanjutan';
 
   @override
+  String get speechRecognitionModel => 'Speech Recognition Model';
+
+  @override
+  String whisperModelDownloaded(String size) {
+    return 'Downloaded ($size)';
+  }
+
+  @override
+  String get whisperModelNotDownloaded => 'Not downloaded - tap to download';
+
+  @override
+  String get deleteWhisperModelConfirm =>
+      'Delete the speech recognition model? You can re-download it later.';
+
+  @override
+  String get whisperModelDeleted => 'Speech recognition model deleted';
+
+  @override
+  String get deleteModel => 'Delete Model';
+
+  @override
+  String get download => 'Download';
+
+  @override
   String get viewDatabaseStats => 'Lihat statistik database dan sinkronisasi';
 
   @override
@@ -2119,6 +2143,39 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedToStartRecording => 'Gagal memulai perekaman';
+
+  @override
+  String get transcriptionDisabledWebPrivacy =>
+      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+
+  @override
+  String get whisperModelRequired => 'Speech recognition model required';
+
+  @override
+  String get whisperModelDescription =>
+      'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.';
+
+  @override
+  String get downloadModel => 'Download Model';
+
+  @override
+  String get useFallback => 'Use device default';
+
+  @override
+  String get whisperTranscriptionActive =>
+      'On-device AI transcription (private)';
+
+  @override
+  String get modelDownloadComplete => 'Speech model downloaded successfully';
+
+  @override
+  String get modelDownloadFailed => 'Failed to download speech model';
+
+  @override
+  String get transcribingAudio => 'Transcribing audio...';
+
+  @override
+  String get polishingTranscription => 'Polishing transcription...';
 
   @override
   String get deleteQuestion => 'Hapus?';

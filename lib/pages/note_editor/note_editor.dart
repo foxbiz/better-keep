@@ -434,13 +434,13 @@ class _NoteEditorState extends State<NoteEditor>
     final audioTitle = recording.title ?? 'Audio Recording';
     final audioTag = '#$audioTitle';
 
-    // Insert: newline + audio tag + newline + transcript text
+    // Insert: newline + audio tag + newline + transcript text + newline (for spacing)
     // Both tag and transcript will be inside the blockquote
-    final insertText = '\n$audioTag\n$text';
+    final insertText = '\n$audioTag\n$text\n';
     document.insert(length - 1, insertText);
 
     // Calculate positions for formatting
-    final audioTagStart = length + 1; // After the two newlines
+    final audioTagStart = length; // After the first newline
     final audioTagLength = audioTag.length;
     final transcriptStart =
         audioTagStart + audioTagLength + 1; // After audio tag and newline

@@ -2116,6 +2116,48 @@ abstract class AppLocalizations {
   /// **'Advanced Settings'**
   String get advancedSettings;
 
+  /// Speech recognition model settings title
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Recognition Model'**
+  String get speechRecognitionModel;
+
+  /// Whisper model downloaded with size
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded ({size})'**
+  String whisperModelDownloaded(String size);
+
+  /// Whisper model not downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Not downloaded - tap to download'**
+  String get whisperModelNotDownloaded;
+
+  /// Delete whisper model confirmation
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the speech recognition model? You can re-download it later.'**
+  String get deleteWhisperModelConfirm;
+
+  /// Whisper model deleted message
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition model deleted'**
+  String get whisperModelDeleted;
+
+  /// Delete model button tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Model'**
+  String get deleteModel;
+
+  /// Download button text
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get download;
+
   /// Nerd stats subtitle
   ///
   /// In en, this message translates to:
@@ -3873,6 +3915,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to start recording'**
   String get failedToStartRecording;
+
+  /// Transcription disabled on web for privacy
+  ///
+  /// In en, this message translates to:
+  /// **'Voice transcription is disabled on web for privacy. Your audio stays on your device.'**
+  String get transcriptionDisabledWebPrivacy;
+
+  /// Whisper model required title
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition model required'**
+  String get whisperModelRequired;
+
+  /// Whisper model description
+  ///
+  /// In en, this message translates to:
+  /// **'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.'**
+  String get whisperModelDescription;
+
+  /// Download model button
+  ///
+  /// In en, this message translates to:
+  /// **'Download Model'**
+  String get downloadModel;
+
+  /// Use fallback speech-to-text button
+  ///
+  /// In en, this message translates to:
+  /// **'Use device default'**
+  String get useFallback;
+
+  /// Whisper transcription active subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'On-device AI transcription (private)'**
+  String get whisperTranscriptionActive;
+
+  /// Model download complete message
+  ///
+  /// In en, this message translates to:
+  /// **'Speech model downloaded successfully'**
+  String get modelDownloadComplete;
+
+  /// Model download failed message
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download speech model'**
+  String get modelDownloadFailed;
+
+  /// Transcribing audio loading message
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing audio...'**
+  String get transcribingAudio;
+
+  /// Message shown while Whisper refines the live transcription
+  ///
+  /// In en, this message translates to:
+  /// **'Polishing transcription...'**
+  String get polishingTranscription;
 
   /// Delete question dialog title
   ///

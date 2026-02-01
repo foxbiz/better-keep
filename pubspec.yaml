@@ -44,6 +44,7 @@ dependencies:
   sqflite_common_ffi_web: ^1.1.0
   firebase_app_check: ^0.4.1+2
   speech_to_text: ^7.3.0
+  whisper_flutter_new: ^1.0.1
   cryptography: ^2.7.0
   cryptography_flutter: ^2.3.2
   hashlib: ^2.2.0
