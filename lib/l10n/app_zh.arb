@@ -829,5 +829,22 @@
   "syncAcrossDevicesSecurely": "在所有设备间安全同步",
   "unlimitedLockedNotesAndSync": "无限锁定笔记和实时云同步",
   "unlockTheFullExperience": "解锁完整体验",
-  "maybeLater": "以后再说"
+  "maybeLater": "以后再说",
+  "speechRecognitionModel": "语音识别模型",
+  "whisperModelDownloaded": "已下载 ({size})",
+  "whisperModelNotDownloaded": "未下载 - 点击下载",
+  "deleteWhisperModelConfirm": "删除语音识别模型？您可以稍后重新下载。",
+  "whisperModelDeleted": "语音识别模型已删除",
+  "deleteModel": "删除模型",
+  "download": "下载",
+  "transcribeWhileRecording": "录音时转录",
+  "whisperModelRequired": "需要语音识别模型",
+  "whisperModelDescription": "下载一个小型 AI 模型（约 31 MB）用于设备端语音转文字。您的音频不会离开设备。",
+  "useFallback": "使用设备默认",
+  "whisperTranscriptionActive": "设备端 AI 转录（私密）",
+  "modelDownloadComplete": "语音模型下载成功",
+  "modelDownloadFailed": "语音模型下载失败",
+  "transcribingAudio": "正在转录音频...",
+  "polishingTranscription": "正在润色转录...",
+  "transcriptionFailed": "转录失败，请重试。"
 }

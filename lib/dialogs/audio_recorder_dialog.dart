@@ -442,6 +442,13 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
             _transcriptionController.clear();
           }
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.transcriptionFailed),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     }
   }

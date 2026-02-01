@@ -114,12 +114,21 @@ class WhisperService {
     return file.existsSync();
   }
 
-  /// Get the path where whisper_flutter_new stores models
-  /// This must match the package's internal storage location
+  /// Get the path where whisper_flutter_new stores models.
+  ///
+  /// **IMPORTANT**: This method relies on knowledge of the `whisper_flutter_new`
+  /// package's internal storage location. This is a known limitation - the package
+  /// does not expose a public API to query the model path.
+  ///
+  /// If the package changes its internal storage location in a future version,
+  /// this code will need to be updated. Consider:
+  /// 1. Contributing to the package to expose a getModelPath() method
+  /// 2. Storing models in an app-managed directory if the package supports custom paths
+  ///
+  /// Current behavior (as of whisper_flutter_new v1.0.1):
+  /// - Android: getApplicationSupportDirectory()
+  /// - iOS/macOS: getLibraryDirectory()
   Future<String> _getModelPath(WhisperModelSize modelSize) async {
-    // whisper_flutter_new uses different directories per platform:
-    // - Android: getApplicationSupportDirectory()
-    // - iOS/macOS: getLibraryDirectory()
     final Directory modelDir;
     if (Platform.isAndroid) {
       modelDir = await getApplicationSupportDirectory();

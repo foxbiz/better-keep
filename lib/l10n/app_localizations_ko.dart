@@ -1071,28 +1071,28 @@ class AppLocalizationsKo extends AppLocalizations {
   String get advancedSettings => '고급 설정';
 
   @override
-  String get speechRecognitionModel => 'Speech Recognition Model';
+  String get speechRecognitionModel => '음성 인식 모델';
 
   @override
   String whisperModelDownloaded(String size) {
-    return 'Downloaded ($size)';
+    return '다운로드됨 ($size)';
   }
 
   @override
-  String get whisperModelNotDownloaded => 'Not downloaded - tap to download';
+  String get whisperModelNotDownloaded => '다운로드되지 않음 - 탭하여 다운로드';
 
   @override
   String get deleteWhisperModelConfirm =>
-      'Delete the speech recognition model? You can re-download it later.';
+      '음성 인식 모델을 삭제하시겠습니까? 나중에 다시 다운로드할 수 있습니다.';
 
   @override
-  String get whisperModelDeleted => 'Speech recognition model deleted';
+  String get whisperModelDeleted => '음성 인식 모델이 삭제되었습니다';
 
   @override
-  String get deleteModel => 'Delete Model';
+  String get deleteModel => '모델 삭제';
 
   @override
-  String get download => 'Download';
+  String get download => '다운로드';
 
   @override
   String get viewDatabaseStats => '데이터베이스 및 동기화 통계 보기';
@@ -2105,33 +2105,35 @@ class AppLocalizationsKo extends AppLocalizations {
       'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
 
   @override
-  String get whisperModelRequired => 'Speech recognition model required';
+  String get whisperModelRequired => '음성 인식 모델이 필요합니다';
 
   @override
   String get whisperModelDescription =>
-      'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.';
+      '기기 내 음성-텍스트 변환을 위한 작은 AI 모델(~31MB)을 다운로드합니다. 오디오는 기기 밖으로 전송되지 않습니다.';
 
   @override
   String get downloadModel => 'Download Model';
 
   @override
-  String get useFallback => 'Use device default';
+  String get useFallback => '기기 기본값 사용';
 
   @override
-  String get whisperTranscriptionActive =>
-      'On-device AI transcription (private)';
+  String get whisperTranscriptionActive => '기기 내 AI 텍스트 변환 (비공개)';
 
   @override
-  String get modelDownloadComplete => 'Speech model downloaded successfully';
+  String get modelDownloadComplete => '음성 모델이 성공적으로 다운로드되었습니다';
 
   @override
-  String get modelDownloadFailed => 'Failed to download speech model';
+  String get modelDownloadFailed => '음성 모델 다운로드 실패';
 
   @override
-  String get transcribingAudio => 'Transcribing audio...';
+  String get transcribingAudio => '오디오 텍스트 변환 중...';
 
   @override
-  String get polishingTranscription => 'Polishing transcription...';
+  String get polishingTranscription => '텍스트 변환 다듬는 중...';
+
+  @override
+  String get transcriptionFailed => '텍스트 변환 실패. 다시 시도해 주세요.';
 
   @override
   String get deleteQuestion => '삭제하시겠습니까?';

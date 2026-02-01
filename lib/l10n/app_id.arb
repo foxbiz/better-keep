@@ -828,5 +828,22 @@
   "syncAcrossDevicesSecurely": "Sinkronisasi di semua perangkat Anda dengan aman",
   "unlimitedLockedNotesAndSync": "Catatan terkunci tanpa batas dan sinkronisasi cloud real-time",
   "unlockTheFullExperience": "Buka Pengalaman Lengkap",
-  "maybeLater": "Mungkin nanti"
+  "maybeLater": "Mungkin nanti",
+  "speechRecognitionModel": "Model Pengenalan Suara",
+  "whisperModelDownloaded": "Terunduh ({size})",
+  "whisperModelNotDownloaded": "Belum terunduh - ketuk untuk mengunduh",
+  "deleteWhisperModelConfirm": "Hapus model pengenalan suara? Anda dapat mengunduhnya lagi nanti.",
+  "whisperModelDeleted": "Model pengenalan suara dihapus",
+  "deleteModel": "Hapus Model",
+  "download": "Unduh",
+  "transcribeWhileRecording": "Transkripsi saat merekam",
+  "whisperModelRequired": "Diperlukan model pengenalan suara",
+  "whisperModelDescription": "Unduh model AI kecil (~31 MB) untuk konversi suara-ke-teks di perangkat. Audio Anda tidak pernah meninggalkan perangkat.",
+  "useFallback": "Gunakan default perangkat",
+  "whisperTranscriptionActive": "Transkripsi AI di perangkat (privat)",
+  "modelDownloadComplete": "Model suara berhasil diunduh",
+  "modelDownloadFailed": "Gagal mengunduh model suara",
+  "transcribingAudio": "Mentranskrip audio...",
+  "polishingTranscription": "Memoles transkripsi...",
+  "transcriptionFailed": "Transkripsi gagal. Silakan coba lagi."
 }

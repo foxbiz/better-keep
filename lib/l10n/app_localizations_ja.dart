@@ -1071,28 +1071,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get advancedSettings => '詳細設定';
 
   @override
-  String get speechRecognitionModel => 'Speech Recognition Model';
+  String get speechRecognitionModel => '音声認識モデル';
 
   @override
   String whisperModelDownloaded(String size) {
-    return 'Downloaded ($size)';
+    return 'ダウンロード済み ($size)';
   }
 
   @override
-  String get whisperModelNotDownloaded => 'Not downloaded - tap to download';
+  String get whisperModelNotDownloaded => '未ダウンロード - タップしてダウンロード';
 
   @override
-  String get deleteWhisperModelConfirm =>
-      'Delete the speech recognition model? You can re-download it later.';
+  String get deleteWhisperModelConfirm => '音声認識モデルを削除しますか？後で再ダウンロードできます。';
 
   @override
-  String get whisperModelDeleted => 'Speech recognition model deleted';
+  String get whisperModelDeleted => '音声認識モデルを削除しました';
 
   @override
-  String get deleteModel => 'Delete Model';
+  String get deleteModel => 'モデルを削除';
 
   @override
-  String get download => 'Download';
+  String get download => 'ダウンロード';
 
   @override
   String get viewDatabaseStats => 'データベースと同期の統計を表示';
@@ -2107,33 +2106,35 @@ class AppLocalizationsJa extends AppLocalizations {
       'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
 
   @override
-  String get whisperModelRequired => 'Speech recognition model required';
+  String get whisperModelRequired => '音声認識モデルが必要です';
 
   @override
   String get whisperModelDescription =>
-      'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.';
+      'デバイス上で音声をテキストに変換する小さなAIモデル（約31 MB）をダウンロードします。音声データはデバイス外に送信されません。';
 
   @override
   String get downloadModel => 'Download Model';
 
   @override
-  String get useFallback => 'Use device default';
+  String get useFallback => 'デバイスのデフォルトを使用';
 
   @override
-  String get whisperTranscriptionActive =>
-      'On-device AI transcription (private)';
+  String get whisperTranscriptionActive => 'デバイス上のAI文字起こし（プライベート）';
 
   @override
-  String get modelDownloadComplete => 'Speech model downloaded successfully';
+  String get modelDownloadComplete => '音声モデルのダウンロードが完了しました';
 
   @override
-  String get modelDownloadFailed => 'Failed to download speech model';
+  String get modelDownloadFailed => '音声モデルのダウンロードに失敗しました';
 
   @override
-  String get transcribingAudio => 'Transcribing audio...';
+  String get transcribingAudio => '音声を文字起こし中...';
 
   @override
-  String get polishingTranscription => 'Polishing transcription...';
+  String get polishingTranscription => '文字起こしを仕上げ中...';
+
+  @override
+  String get transcriptionFailed => '文字起こしに失敗しました。もう一度お試しください。';
 
   @override
   String get deleteQuestion => '削除しますか？';

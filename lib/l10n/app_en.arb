@@ -2271,6 +2271,9 @@
   "polishingTranscription": "Polishing transcription...",
   "@polishingTranscription": {"description": "Message shown while Whisper refines the live transcription"},
   
+  "transcriptionFailed": "Transcription failed. Please try again.",
+  "@transcriptionFailed": {"description": "Transcription failed error message"},
+  
   "deleteQuestion": "Delete?",
   "@deleteQuestion": {"description": "Delete question dialog title"},
   

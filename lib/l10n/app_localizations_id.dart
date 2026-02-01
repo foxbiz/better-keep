@@ -1079,28 +1079,29 @@ class AppLocalizationsId extends AppLocalizations {
   String get advancedSettings => 'Pengaturan Lanjutan';
 
   @override
-  String get speechRecognitionModel => 'Speech Recognition Model';
+  String get speechRecognitionModel => 'Model Pengenalan Suara';
 
   @override
   String whisperModelDownloaded(String size) {
-    return 'Downloaded ($size)';
+    return 'Terunduh ($size)';
   }
 
   @override
-  String get whisperModelNotDownloaded => 'Not downloaded - tap to download';
+  String get whisperModelNotDownloaded =>
+      'Belum terunduh - ketuk untuk mengunduh';
 
   @override
   String get deleteWhisperModelConfirm =>
-      'Delete the speech recognition model? You can re-download it later.';
+      'Hapus model pengenalan suara? Anda dapat mengunduhnya lagi nanti.';
 
   @override
-  String get whisperModelDeleted => 'Speech recognition model deleted';
+  String get whisperModelDeleted => 'Model pengenalan suara dihapus';
 
   @override
-  String get deleteModel => 'Delete Model';
+  String get deleteModel => 'Hapus Model';
 
   @override
-  String get download => 'Download';
+  String get download => 'Unduh';
 
   @override
   String get viewDatabaseStats => 'Lihat statistik database dan sinkronisasi';
@@ -2117,7 +2118,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get tapStartToRecord => 'Ketuk mulai untuk memulai perekaman.';
 
   @override
-  String get transcribeWhileRecording => 'Transkripsikan saat merekam';
+  String get transcribeWhileRecording => 'Transkripsi saat merekam';
 
   @override
   String get transcription => 'Transkripsi';
@@ -2149,33 +2150,36 @@ class AppLocalizationsId extends AppLocalizations {
       'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
 
   @override
-  String get whisperModelRequired => 'Speech recognition model required';
+  String get whisperModelRequired => 'Diperlukan model pengenalan suara';
 
   @override
   String get whisperModelDescription =>
-      'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.';
+      'Unduh model AI kecil (~31 MB) untuk konversi suara-ke-teks di perangkat. Audio Anda tidak pernah meninggalkan perangkat.';
 
   @override
   String get downloadModel => 'Download Model';
 
   @override
-  String get useFallback => 'Use device default';
+  String get useFallback => 'Gunakan default perangkat';
 
   @override
   String get whisperTranscriptionActive =>
-      'On-device AI transcription (private)';
+      'Transkripsi AI di perangkat (privat)';
 
   @override
-  String get modelDownloadComplete => 'Speech model downloaded successfully';
+  String get modelDownloadComplete => 'Model suara berhasil diunduh';
 
   @override
-  String get modelDownloadFailed => 'Failed to download speech model';
+  String get modelDownloadFailed => 'Gagal mengunduh model suara';
 
   @override
-  String get transcribingAudio => 'Transcribing audio...';
+  String get transcribingAudio => 'Mentranskrip audio...';
 
   @override
-  String get polishingTranscription => 'Polishing transcription...';
+  String get polishingTranscription => 'Memoles transkripsi...';
+
+  @override
+  String get transcriptionFailed => 'Transkripsi gagal. Silakan coba lagi.';
 
   @override
   String get deleteQuestion => 'Hapus?';

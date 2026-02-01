@@ -1125,10 +1125,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       }
     } catch (e) {
       // Dismiss loading dialog on error
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
+      if (mounted) {
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+        snackbar(context.l10n.failedToCreateImageNote, Colors.red);
       }
-      snackbar(context.l10n.failedToCreateImageNote, Colors.red);
     }
   }
 

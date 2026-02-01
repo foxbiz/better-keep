@@ -670,7 +670,6 @@ class _SettingsState extends State<Settings> {
                       : context.l10n.noteEncryptionEnabledSimple,
                 ),
                 behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.green,
               ),
             );
           }
@@ -711,7 +710,6 @@ class _SettingsState extends State<Settings> {
                 : context.l10n.fileEncryptionDisabled,
           ),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: enabled ? Colors.green : null,
         ),
       );
     }
@@ -772,17 +770,21 @@ class _WhisperModelTileState extends State<_WhisperModelTile> {
 
       await _checkModelStatus();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            path != null
-                ? context.l10n.modelDownloadComplete
-                : context.l10n.modelDownloadFailed,
+      if (mounted) {
+        final colorScheme = Theme.of(context).colorScheme;
+        final l10n = context.l10n;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              path != null
+                  ? l10n.modelDownloadComplete
+                  : l10n.modelDownloadFailed,
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: path != null ? null : colorScheme.error,
           ),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: path != null ? Colors.green : Colors.red,
-        ),
-      );
+        );
+      }
     }
   }
 

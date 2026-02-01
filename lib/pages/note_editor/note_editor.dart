@@ -1369,7 +1369,9 @@ class _NoteEditorState extends State<NoteEditor>
         await _note.delete();
       } catch (e) {
         AppLogger.error('Error saving note', e);
-        snackbar(context.l10n.errorSavingNote, Colors.red);
+        if (mounted) {
+          snackbar(context.l10n.errorSavingNote, Colors.red);
+        }
       }
       return;
     }
@@ -1396,7 +1398,9 @@ class _NoteEditorState extends State<NoteEditor>
       }
     } catch (e) {
       AppLogger.error('Error saving note', e);
-      snackbar(context.l10n.errorSavingNote, Colors.red);
+      if (mounted) {
+        snackbar(context.l10n.errorSavingNote, Colors.red);
+      }
     }
   }
 
@@ -1885,7 +1889,7 @@ class _NoteEditorState extends State<NoteEditor>
 
     final result = await showPasteOptions(context);
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     switch (result) {
       case PasteCancelled():
@@ -1914,7 +1918,7 @@ class _NoteEditorState extends State<NoteEditor>
           ),
         );
 
-        if (!mounted) return;
+        if (!context.mounted) return;
 
         if (document != null) {
           try {
@@ -1972,20 +1976,20 @@ class _NoteEditorState extends State<NoteEditor>
             if (checked == true) {
               // Check entitlement before allowing new lock
               final lockedNotes = await Note.get(NoteType.locked);
+
+              if (!context.mounted) return;
+
               final check = EntitlementGuard.canLockNote(
                 lockedNotes.length,
                 context.l10n,
               );
 
               if (!check.allowed) {
-                // Show paywall when limit reached
-                if (context.mounted) {
-                  showPaywall(
-                    context,
-                    feature: GatedFeature.lockNote,
-                    customMessage: check.denialReason,
-                  );
-                }
+                showPaywall(
+                  context,
+                  feature: GatedFeature.lockNote,
+                  customMessage: check.denialReason,
+                );
                 return;
               }
 
@@ -2003,11 +2007,11 @@ class _NoteEditorState extends State<NoteEditor>
 
               try {
                 await _note.lock(password);
-                if (mounted) {
+                if (context.mounted) {
                   snackbar(context.l10n.noteLocked, Colors.green);
                 }
               } catch (e) {
-                if (mounted) {
+                if (context.mounted) {
                   snackbar(
                     context.l10n.failedToLockNote(e.toString()),
                     Colors.red,
@@ -2023,11 +2027,11 @@ class _NoteEditorState extends State<NoteEditor>
               }
               try {
                 await _note.removeLock(password);
-                if (mounted) {
+                if (context.mounted) {
                   snackbar(context.l10n.lockRemoved, Colors.green);
                 }
               } catch (e) {
-                if (mounted) {
+                if (context.mounted) {
                   snackbar(
                     context.l10n.failedToRemoveLock(e.toString()),
                     Colors.red,
@@ -2097,7 +2101,7 @@ class _NoteEditorState extends State<NoteEditor>
                   try {
                     await duplicatedNote.lock(_note.password!);
                   } catch (e) {
-                    if (mounted) {
+                    if (context.mounted) {
                       snackbar(
                         context.l10n.noteDuplicatedButFailedToLock(
                           e.toString(),
@@ -2108,7 +2112,7 @@ class _NoteEditorState extends State<NoteEditor>
                     return;
                   }
                 }
-                if (mounted) {
+                if (context.mounted) {
                   snackbar(context.l10n.noteDuplicated, Colors.green);
                 }
               }

@@ -2180,6 +2180,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get polishingTranscription => 'Polishing transcription...';
 
   @override
+  String get transcriptionFailed => 'Transcription failed. Please try again.';
+
+  @override
   String get deleteQuestion => 'Delete?';
 
   @override

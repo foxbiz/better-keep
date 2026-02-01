@@ -3976,6 +3976,12 @@ abstract class AppLocalizations {
   /// **'Polishing transcription...'**
   String get polishingTranscription;
 
+  /// Transcription failed error message
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription failed. Please try again.'**
+  String get transcriptionFailed;
+
   /// Delete question dialog title
   ///
   /// In en, this message translates to:

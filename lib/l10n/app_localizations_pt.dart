@@ -1087,28 +1087,28 @@ class AppLocalizationsPt extends AppLocalizations {
   String get advancedSettings => 'Configurações avançadas';
 
   @override
-  String get speechRecognitionModel => 'Speech Recognition Model';
+  String get speechRecognitionModel => 'Modelo de Reconhecimento de Voz';
 
   @override
   String whisperModelDownloaded(String size) {
-    return 'Downloaded ($size)';
+    return 'Baixado ($size)';
   }
 
   @override
-  String get whisperModelNotDownloaded => 'Not downloaded - tap to download';
+  String get whisperModelNotDownloaded => 'Não baixado - toque para baixar';
 
   @override
   String get deleteWhisperModelConfirm =>
-      'Delete the speech recognition model? You can re-download it later.';
+      'Excluir o modelo de reconhecimento de voz? Você pode baixá-lo novamente depois.';
 
   @override
-  String get whisperModelDeleted => 'Speech recognition model deleted';
+  String get whisperModelDeleted => 'Modelo de reconhecimento de voz excluído';
 
   @override
-  String get deleteModel => 'Delete Model';
+  String get deleteModel => 'Excluir Modelo';
 
   @override
-  String get download => 'Download';
+  String get download => 'Baixar';
 
   @override
   String get viewDatabaseStats =>
@@ -2178,33 +2178,38 @@ class AppLocalizationsPt extends AppLocalizations {
       'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
 
   @override
-  String get whisperModelRequired => 'Speech recognition model required';
+  String get whisperModelRequired =>
+      'Modelo de reconhecimento de voz necessário';
 
   @override
   String get whisperModelDescription =>
-      'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.';
+      'Baixe um pequeno modelo de IA (~31 MB) para conversão de voz em texto no dispositivo. Seu áudio nunca sai do dispositivo.';
 
   @override
   String get downloadModel => 'Download Model';
 
   @override
-  String get useFallback => 'Use device default';
+  String get useFallback => 'Usar padrão do dispositivo';
 
   @override
   String get whisperTranscriptionActive =>
-      'On-device AI transcription (private)';
+      'Transcrição por IA no dispositivo (privada)';
 
   @override
-  String get modelDownloadComplete => 'Speech model downloaded successfully';
+  String get modelDownloadComplete => 'Modelo de voz baixado com sucesso';
 
   @override
-  String get modelDownloadFailed => 'Failed to download speech model';
+  String get modelDownloadFailed => 'Falha ao baixar modelo de voz';
 
   @override
-  String get transcribingAudio => 'Transcribing audio...';
+  String get transcribingAudio => 'Transcrevendo áudio...';
 
   @override
-  String get polishingTranscription => 'Polishing transcription...';
+  String get polishingTranscription => 'Polindo transcrição...';
+
+  @override
+  String get transcriptionFailed =>
+      'Falha na transcrição. Por favor, tente novamente.';
 
   @override
   String get deleteQuestion => 'Excluir?';
