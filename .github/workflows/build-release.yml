@@ -39,6 +39,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Accept Android SDK licenses
+        run: yes | flutter doctor --android-licenses || true
+
       - name: Decode Keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks
