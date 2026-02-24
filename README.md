@@ -257,6 +257,7 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
     ```bash
     flutterfire configure
     ```
+
     - Select your Firebase project (or create a new one).
     - Select the platforms you want to support (Android, iOS, Web, macOS, Windows).
     - This will generate `lib/firebase_options.dart`.
