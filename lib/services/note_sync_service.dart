@@ -1095,6 +1095,9 @@ class NoteSyncService {
         }
 
         noteData['local_id'] = note.id;
+        AppLogger.log(
+          "Uploading attachments for note ${sync.localId} (has ${note.attachments.length} attachments)",
+        );
         final attachmentsData = await _uploadAttachments(
           note.attachments,
           note,
@@ -1627,21 +1630,37 @@ class NoteSyncService {
 
     if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
       updatedNoteData['title'] = "Encrypted Note";
-      updatedNoteData['attachments'] = updatedNoteData['e2ee_attachments'];
+      // Preserve existing attachments on decryption failure — the 'attachments'
+      // key in remoteData contains unencrypted attachment metadata (URLs, types)
+      // which is safe to use even when note content can't be decrypted.
+      // Don't overwrite with null — let updateFromJson skip the field.
+      updatedNoteData.remove('attachments');
       updatedNoteData['content'] = "[{ \"error\": \"decryption_failed\" }]";
       AppLogger.log(
         "[SYNC] PROCESS: Note $localId - decryption failed, setting error content",
       );
     } else {
-      final attachmentData = updatedNoteData['attachments'];
+      // Normalize attachments to List<dynamic> — Firestore may return a JSON string
+      var rawAttachments = updatedNoteData['attachments'];
+      if (rawAttachments is String) {
+        try {
+          rawAttachments = json.decode(rawAttachments) as List;
+        } catch (e) {
+          AppLogger.log(
+            "[SYNC] PROCESS: Note $localId - failed to parse attachments JSON string: $e",
+          );
+          rawAttachments = <dynamic>[];
+        }
+      }
+      final attachmentData = (rawAttachments as List<dynamic>?) ?? <dynamic>[];
+      AppLogger.log(
+        "Attachments found in remote data for note $localId: ${attachmentData.length}",
+      );
       final attachments = await _downloadAttachments(attachmentData, note);
       if (attachments == null) {
         // Attachment download failed - log and skip this note
-        final attachmentCount = (attachmentData is List)
-            ? attachmentData.length
-            : 0;
         AppLogger.log(
-          "[SYNC] PROCESS: Note ${note.id} FAILED - attachment download failed ($attachmentCount attachments)",
+          "[SYNC] PROCESS: Note ${note.id} FAILED - attachment download failed (${attachmentData.length} attachments)",
         );
         _markSyncFailed(note.id!);
         return false;
@@ -1724,6 +1743,9 @@ class NoteSyncService {
     List<NoteAttachment> attachments = [];
 
     for (final data in attachmentData) {
+      AppLogger.log(
+        "Processing attachment for note ${note.id}: ${data['id']} (${data['type']})",
+      );
       final attachment = NoteAttachment.fromJson(data as Map<String, dynamic>);
       final result = await _downloadAttachment(attachment, note);
 
@@ -1753,8 +1775,7 @@ class NoteSyncService {
   }
 
   /// Result of uploading attachments - contains data and success status
-  /// Returns null if any required upload failed (audio/sketch upload failure)
-  /// Images are intentionally skipped (not synced to save storage)
+  /// Returns null if any required upload failed (attachment upload failure)
   Future<List<dynamic>?> _uploadAttachments(
     List<NoteAttachment> attachments,
     Note note,
@@ -1763,14 +1784,6 @@ class NoteSyncService {
     bool hasFailure = false;
 
     for (final attachment in attachments) {
-      // Skip image attachments entirely - they're not synced to save storage
-      if (attachment.type == AttachmentType.image) {
-        AppLogger.log(
-          "Skipping image attachment for note ${note.id} - images not synced",
-        );
-        continue;
-      }
-
       // Skip sketch attachments without strokes (nothing to sync)
       if (attachment.type == AttachmentType.sketch) {
         final sketch = attachment.sketch!;
@@ -1883,15 +1896,22 @@ class NoteSyncService {
       return attachmentJson;
     }
 
-    // For images: do NOT upload (can be regenerated from content if needed)
-    // For audio: upload as before
+    // Upload image attachment
     if (attachment.type == AttachmentType.image) {
-      // Skip image uploads - they cost storage and can be re-embedded if needed
-      // The image src will remain local, and won't sync
-      AppLogger.log(
-        "Skipping image attachment upload for note ${note.id} - images not synced",
-      );
-      return null; // Don't include images in synced attachments
+      final src = attachment.image?.src;
+      if (src != null && src.isNotEmpty && !src.startsWith('http')) {
+        final remoteUrl = await _uploadFile(src, note, 'main');
+        final data = attachmentJson['data'] as Map<String, dynamic>;
+        if (remoteUrl != null) {
+          data['src'] = remoteUrl;
+        } else {
+          AppLogger.log(
+            "Failed to upload image for note ${note.id}, aborting sync",
+          );
+          return null;
+        }
+      }
+      return attachmentJson;
     }
 
     // Handle audio attachments - upload as before
@@ -1945,8 +1965,10 @@ class NoteSyncService {
         final base64Data = src.substring(commaIndex + 1);
         var bytes = Uint8List.fromList(base64Decode(base64Data));
 
-        String extension = 'jpg';
-        final regex = RegExp(r'image\/([a-zA-Z0-9+]+);base64');
+        String extension = 'bin';
+        final regex = RegExp(
+          r'(?:image|audio|application)\/([a-zA-Z0-9+]+);base64',
+        );
         final match = regex.firstMatch(src);
         if (match != null && match.groupCount >= 1) {
           extension = match.group(1)!;
@@ -2004,20 +2026,23 @@ class NoteSyncService {
           _markSyncFailed(note.id!);
           return null;
         }
+      } else {
+        AppLogger.log(
+          "[SYNC] UPLOAD: Local file not found: $src for note ${note.id}",
+        );
+        return null;
       }
     }
 
-    if (remoteUrl != null) {
-      if (sync == null) {
-        final newSync = FileSyncTrack(
-          localPath: src,
-          remotePath: remoteUrl,
-          noteId: note.id!,
-        );
-        await newSync.save();
-      } else {
-        await sync.setRemotePath(remoteUrl);
-      }
+    if (sync == null) {
+      final newSync = FileSyncTrack(
+        localPath: src,
+        remotePath: remoteUrl,
+        noteId: note.id!,
+      );
+      await newSync.save();
+    } else {
+      await sync.setRemotePath(remoteUrl);
     }
 
     return remoteUrl;
@@ -2123,7 +2148,7 @@ class NoteSyncService {
       return DownloadResult.success;
     }
 
-    // Handle image attachments - no longer synced, but support download for legacy
+    // Handle image attachments
     if (attachment.type == AttachmentType.image) {
       final src = attachment.image?.src;
       if (src != null && src.isNotEmpty && src.startsWith('http')) {
@@ -2177,17 +2202,30 @@ class NoteSyncService {
     // If we have a sync record, check if the local file actually exists and is valid
     if (sync != null) {
       if (await fs.exists(sync.localPath)) {
-        // Validate the file isn't corrupted (e.g., encrypted bytes saved by mistake)
-        final bytes = await fs.readBytes(sync.localPath);
-        if (FileEncryption.looksEncrypted(bytes)) {
-          // File appears encrypted - it was saved incorrectly, re-download
-          await sync.delete();
-          await fs.delete(sync.localPath);
+        // Validate the file isn't corrupted (e.g., E2EE encrypted bytes saved by mistake)
+        // Use readEncryptedBytes to strip local data encryption first,
+        // then check if the underlying bytes are E2EE-encrypted
+        try {
+          final bytes = await readEncryptedBytes(sync.localPath);
+          if (FileEncryption.looksEncrypted(bytes)) {
+            // File appears E2EE-encrypted - it was saved incorrectly, re-download
+            await sync.delete();
+            await fs.delete(sync.localPath);
+            AppLogger.log(
+              "Local file appears E2EE-encrypted, will re-download: ${sync.localPath}",
+            );
+          } else {
+            return FileDownloadResult(DownloadResult.success, sync.localPath);
+          }
+        } catch (e) {
+          // If we can't read the file, re-download it
           AppLogger.log(
-            "Local file appears encrypted, will re-download: ${sync.localPath}",
+            "Failed to read local file, will re-download: ${sync.localPath}",
           );
-        } else {
-          return FileDownloadResult(DownloadResult.success, sync.localPath);
+          await sync.delete();
+          try {
+            await fs.delete(sync.localPath);
+          } catch (_) {}
         }
       } else {
         // File was deleted, remove the stale sync record and re-download
@@ -2337,7 +2375,10 @@ class NoteSyncService {
     final result = <Map<String, dynamic>>[];
     for (final att in attachmentList) {
       if (att is! Map<String, dynamic>) {
-        result.add(att as Map<String, dynamic>);
+        // Skip malformed entries instead of force-casting
+        AppLogger.log(
+          "[SYNC] Skipping malformed attachment entry during encryption",
+        );
         continue;
       }
 
@@ -2467,7 +2508,10 @@ class NoteSyncService {
     final result = <Map<String, dynamic>>[];
     for (final att in attachmentList) {
       if (att is! Map<String, dynamic>) {
-        result.add(att as Map<String, dynamic>);
+        // Skip malformed entries instead of force-casting
+        AppLogger.log(
+          "[SYNC] Skipping malformed attachment entry during decryption",
+        );
         continue;
       }
 
@@ -2550,7 +2594,6 @@ class NoteSyncService {
         return null;
       }
 
-      final fs = await fileSystem();
       final remoteUrl = sync.remotePath!;
 
       AppLogger.log("Attempting to redownload file from $remoteUrl");
@@ -2591,7 +2634,7 @@ class NoteSyncService {
           }
         }
 
-        await fs.writeBytes(localPath, bytes);
+        await writeEncryptedBytes(localPath, bytes);
         AppLogger.log("Successfully redownloaded file to $localPath");
 
         return localPath;

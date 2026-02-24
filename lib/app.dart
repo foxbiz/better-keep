@@ -113,6 +113,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     AppLogger.log('[App] Building App widget');
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       navigatorKey: AppState.navigatorKey,
       scaffoldMessengerKey: AppState.scaffoldMessengerKey,
       localizationsDelegates: const [

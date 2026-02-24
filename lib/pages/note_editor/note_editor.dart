@@ -115,9 +115,9 @@ class _NoteEditorState extends State<NoteEditor>
 
   /// Handles keyboard events to block formatting shortcuts when editing title
   /// and to handle Backspace at start of content to move focus to title
-  KeyEventResult? _handleKeyPressed(KeyEvent event, Node? node) {
+  KeyEventResult _handleKeyPressed(FocusNode node, KeyEvent event) {
     // Only intercept key down events
-    if (event is! KeyDownEvent) return null;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     // Handle Backspace at start of content
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
@@ -159,7 +159,7 @@ class _NoteEditorState extends State<NoteEditor>
     }
 
     // Check if we're editing the title
-    if (!_titleFocusNode.hasFocus) return null;
+    if (!_titleFocusNode.hasFocus) return KeyEventResult.ignored;
 
     // Check for formatting shortcuts (Cmd/Ctrl + B, I, U)
     final isMetaPressed =
@@ -176,7 +176,7 @@ class _NoteEditorState extends State<NoteEditor>
       }
     }
 
-    return null;
+    return KeyEventResult.ignored;
   }
 
   /// Handles Enter key pressed in title field.
@@ -894,49 +894,51 @@ class _NoteEditorState extends State<NoteEditor>
                       ),
                       child: DefaultTextStyle(
                         style: TextStyle(color: foregroundColor),
-                        child: QuillEditor.basic(
-                          scrollController: _quillScrollController,
-                          focusNode: _focusNode,
-                          controller: _controller,
-                          config: QuillEditorConfig(
-                            editorKey: _editorKey,
-                            checkBoxReadOnly: _note.trashed,
-                            scrollable: false,
-                            padding: EdgeInsets.only(
-                              top: 0,
-                              bottom: 32,
-                              left: 16,
-                              right: 16,
+                        child: Focus(
+                          onKeyEvent: _handleKeyPressed,
+                          child: QuillEditor.basic(
+                            scrollController: _quillScrollController,
+                            focusNode: _focusNode,
+                            controller: _controller,
+                            config: QuillEditorConfig(
+                              editorKey: _editorKey,
+                              checkBoxReadOnly: _note.trashed,
+                              scrollable: false,
+                              padding: EdgeInsets.only(
+                                top: 0,
+                                bottom: 32,
+                                left: 16,
+                                right: 16,
+                              ),
+                              readOnlyMouseCursor: SystemMouseCursors.alias,
+                              showCursor: !_note.readOnly && !_note.trashed,
+                              enableInteractiveSelection: true,
+                              enableSelectionToolbar: true,
+                              placeholder: context.l10n.startWriting,
+                              customLeadingBlockBuilder:
+                                  customLeadingBlockBuilder,
+                              customStyles: buildQuillStyles(
+                                foregroundColor: foregroundColor,
+                                backgroundColor: backgroundColor,
+                                placeholderColor: placeholderColor,
+                              ),
+                              embedBuilders: kIsWeb
+                                  ? FlutterQuillEmbeds.editorWebBuilders()
+                                  : FlutterQuillEmbeds.editorBuilders(
+                                      imageEmbedConfig:
+                                          QuillEditorImageEmbedConfig(
+                                            imageProviderBuilder:
+                                                buildQuillImageProvider,
+                                            imageErrorWidgetBuilder:
+                                                buildQuillImageErrorWidget,
+                                          ),
+                                    ),
+                              customLinkPrefixes: const ['audio://'],
+                              linkActionPickerDelegate: _audioLinkActionPicker,
+                              onLaunchUrl: (url) {
+                                return;
+                              },
                             ),
-                            readOnlyMouseCursor: SystemMouseCursors.alias,
-                            showCursor: !_note.readOnly && !_note.trashed,
-                            enableInteractiveSelection: true,
-                            enableSelectionToolbar: true,
-                            placeholder: context.l10n.startWriting,
-                            onKeyPressed: _handleKeyPressed,
-                            customLeadingBlockBuilder:
-                                customLeadingBlockBuilder,
-                            customStyles: buildQuillStyles(
-                              foregroundColor: foregroundColor,
-                              backgroundColor: backgroundColor,
-                              placeholderColor: placeholderColor,
-                            ),
-                            embedBuilders: kIsWeb
-                                ? FlutterQuillEmbeds.editorWebBuilders()
-                                : FlutterQuillEmbeds.editorBuilders(
-                                    imageEmbedConfig:
-                                        QuillEditorImageEmbedConfig(
-                                          imageProviderBuilder:
-                                              buildQuillImageProvider,
-                                          imageErrorWidgetBuilder:
-                                              buildQuillImageErrorWidget,
-                                        ),
-                                  ),
-                            customLinkPrefixes: const ['audio://'],
-                            linkActionPickerDelegate: _audioLinkActionPicker,
-                            onLaunchUrl: (url) {
-                              return;
-                            },
                           ),
                         ),
                       ),

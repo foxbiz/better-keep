@@ -276,6 +276,7 @@ class _BetterKeepState extends State<BetterKeep> {
   Widget build(BuildContext context) {
     if (dbError.isNotEmpty) {
       return MaterialApp(
+        debugShowCheckedModeBanner: false,
         home: Scaffold(
           body: Center(
             child: Padding(
@@ -324,6 +325,7 @@ class _BetterKeepState extends State<BetterKeep> {
     // In debug mode, show Firebase selection screen if not configured
     if (kDebugMode && !_firebaseConfigured) {
       return MaterialApp(
+        debugShowCheckedModeBanner: false,
         theme: AppState.theme,
         home: _FirebaseSelectionScreen(
           onSelected: (useEmulators) async {
@@ -342,6 +344,7 @@ class _BetterKeepState extends State<BetterKeep> {
 
     if (db == null) {
       return MaterialApp(
+        debugShowCheckedModeBanner: false,
         theme: AppState.theme,
         home: AuthScaffold(
           child: Column(
