@@ -1,0 +1,3006 @@
+{
+  "@@locale": "tr",
+  "@@last_modified": "2026-01-31",
+  
+  "appTitle": "Better Keep",
+  "@appTitle": {"description": "The name of the application"},
+  
+  "cancel": "İptal",
+  "@cancel": {"description": "Cancel button text"},
+  
+  "ok": "Tamam",
+  "@ok": {"description": "OK button text"},
+  
+  "save": "Kaydet",
+  "@save": {"description": "Save button text"},
+  
+  "delete": "Sil",
+  "@delete": {"description": "Delete button text"},
+  
+  "close": "Kapat",
+  "@close": {"description": "Close button text"},
+  
+  "retry": "Yeniden Dene",
+  "@retry": {"description": "Retry button text"},
+  
+  "done": "Bitti",
+  "@done": {"description": "Done button text"},
+  
+  "remove": "Kaldır",
+  "@remove": {"description": "Remove button text"},
+  
+  "open": "Aç",
+  "@open": {"description": "Open button text"},
+  
+  "select": "Seç",
+  "@select": {"description": "Select button text"},
+  
+  "verify": "Doğrula",
+  "@verify": {"description": "Verify button text"},
+  
+  "link": "Bağla",
+  "@link": {"description": "Link button text"},
+  
+  "unlink": "Bağlantıyı Kaldır",
+  "@unlink": {"description": "Unlink button text"},
+  
+  "approve": "Onayla",
+  "@approve": {"description": "Approve button text"},
+  
+  "deny": "Reddet",
+  "@deny": {"description": "Deny button text"},
+  
+  "primary": "Birincil",
+  "@primary": {"description": "Primary label"},
+  
+  "signOut": "Çıkış Yap",
+  "@signOut": {"description": "Sign out button text"},
+  
+  "signOutAnyway": "Yine de Çıkış Yap",
+  "@signOutAnyway": {"description": "Sign out anyway button text"},
+  
+  "continueOffline": "Çevrimdışı Devam Et",
+  "@continueOffline": {"description": "Continue offline button text"},
+  
+  "cancelSignIn": "Girişi İptal Et",
+  "@cancelSignIn": {"description": "Cancel sign in button text"},
+  
+  "signInCancelled": "Giriş iptal edildi",
+  "@signInCancelled": {"description": "Sign in cancelled message"},
+  
+  "signInWithFacebook": "Facebook ile Giriş Yap",
+  "@signInWithFacebook": {"description": "Facebook sign in tooltip"},
+  
+  "signInWithGithub": "GitHub ile Giriş Yap",
+  "@signInWithGithub": {"description": "GitHub sign in tooltip"},
+  
+  "signInWithEmail": "E-posta ile Giriş Yap",
+  "@signInWithEmail": {"description": "Email sign in tooltip"},
+  
+  "about": "Hakkında",
+  "@about": {"description": "About page title"},
+  
+  "help": "Yardım",
+  "@help": {"description": "Help page title"},
+  
+  "settings": "Ayarlar",
+  "@settings": {"description": "Settings page title"},
+  
+  "labels": "Etiketler",
+  "@labels": {"description": "Labels dialog title"},
+  
+  "addLink": "Bağlantı Ekle",
+  "@addLink": {"description": "Add link dialog title"},
+  
+  "editLink": "Bağlantıyı Düzenle",
+  "@editLink": {"description": "Edit link dialog title"},
+  
+  "setReminder": "Hatırlatıcı Ayarla",
+  "@setReminder": {"description": "Set reminder dialog title"},
+  
+  "displayText": "Görüntülenecek Metin",
+  "@displayText": {"description": "Display text field label"},
+  
+  "enterDisplayText": "Görüntülenecek metni girin",
+  "@enterDisplayText": {"description": "Display text field hint"},
+  
+  "pleaseEnterDisplayText": "Lütfen görüntülenecek metni girin",
+  "@pleaseEnterDisplayText": {"description": "Display text validation error"},
+  
+  "url": "URL",
+  "@url": {"description": "URL field label"},
+  
+  "urlHint": "https://ornek.com",
+  "@urlHint": {"description": "URL field hint"},
+  
+  "titleYourThought": "Notunuza başlık ekleyin",
+  "@titleYourThought": {"description": "Note title hint text"},
+  
+  "email": "E-posta",
+  "@email": {"description": "Email field label"},
+  
+  "emailHint": "mailadresiniz@ornek.com",
+  "@emailHint": {"description": "Email field hint"},
+  
+  "enterEmailAddress": "E-posta adresinizi girin",
+  "@enterEmailAddress": {"description": "Email field hint for password reset"},
+  
+  "password": "Parola",
+  "@password": {"description": "Password field label"},
+  
+  "confirmPassword": "Parolayı Onayla",
+  "@confirmPassword": {"description": "Confirm password field label"},
+  
+  "newPassword": "Yeni Parola",
+  "@newPassword": {"description": "New password field label"},
+  
+  "enterNewPassword": "Yeni parola girin",
+  "@enterNewPassword": {"description": "New password field hint"},
+  
+  "reenterNewPassword": "Yeni parolayı tekrar girin",
+  "@reenterNewPassword": {"description": "Confirm password field hint"},
+  
+  "currentPassphrase": "Mevcut İfade",
+  "@currentPassphrase": {"description": "Current passphrase field label"},
+  
+  "enterYourPassphrase": "İfadenizi girin",
+  "@enterYourPassphrase": {"description": "Passphrase field hint"},
+  
+  "enterCurrentPassphrase": "Mevcut ifadenizi girin",
+  "@enterCurrentPassphrase": {"description": "Current passphrase field hint"},
+  
+  "recoveryPassphrase": "Kurtarma İfadesi",
+  "@recoveryPassphrase": {"description": "Recovery passphrase field label"},
+  
+  "enterStrongPassphrase": "Güçlü bir ifade girin",
+  "@enterStrongPassphrase": {"description": "Strong passphrase hint"},
+  
+  "confirmPassphrase": "İfadeyi Onayla",
+  "@confirmPassphrase": {"description": "Confirm passphrase field label"},
+  
+  "reenterPassphrase": "İfadenizi tekrar girin",
+  "@reenterPassphrase": {"description": "Confirm passphrase hint"},
+  
+  "newPassphrase": "Yeni İfade",
+  "@newPassphrase": {"description": "New passphrase field label"},
+  
+  "confirmNewPassphrase": "Yeni İfadeyi Onayla",
+  "@confirmNewPassphrase": {"description": "Confirm new passphrase field label"},
+  
+  "reenterNewPassphrase": "Yeni ifadenizi tekrar girin",
+  "@reenterNewPassphrase": {"description": "Confirm new passphrase hint"},
+  
+  "hintOptional": "İpucu (İsteğe Bağlı)",
+  "@hintOptional": {"description": "Optional hint field label"},
+  
+  "hintToRemember": "Hatırlamanıza yardımcı olacak bir ipucu",
+  "@hintToRemember": {"description": "Hint field hint text"},
+  
+  "pin": "PIN",
+  "@pin": {"description": "PIN field label"},
+  
+  "enterPin": "PIN girin",
+  "@enterPin": {"description": "PIN field hint"},
+  
+  "newLabelName": "Yeni etiket adı",
+  "@newLabelName": {"description": "New label name hint"},
+  
+  "addLabel": "Etiket ekle",
+  "@addLabel": {"description": "Add label tooltip"},
+  
+  "searchLogs": "Günlüklerde ara...",
+  "@searchLogs": {"description": "Search logs hint text"},
+  
+  "audioRecording": "Ses Kaydı",
+  "@audioRecording": {"description": "Audio recording dialog title"},
+  
+  "deleteRecording": "Kaydı Sil",
+  "@deleteRecording": {"description": "Delete recording dialog title"},
+  
+  "title": "Başlık",
+  "@title": {"description": "Title field label"},
+  
+  "enterRecordingTitle": "Bu kayıt için bir başlık girin",
+  "@enterRecordingTitle": {"description": "Recording title hint"},
+  
+  "theme": "Tema",
+  "@theme": {"description": "Theme settings section title"},
+  
+  "customizeAppearance": "Uygulama görünümünü özelleştir",
+  "@customizeAppearance": {"description": "Theme settings subtitle"},
+  
+  "followSystemTheme": "Sistem Temasına Göre",
+  "@followSystemTheme": {"description": "Follow system theme toggle label"},
+  
+  "autoSwitchLightDark": "Açık ve karanlık mod arasında otomatik geçiş yap",
+  "@autoSwitchLightDark": {"description": "Follow system theme toggle subtitle"},
+  
+  "darkMode": "Karanlık Mod",
+  "@darkMode": {"description": "Dark mode toggle label"},
+  
+  "darkTheme": "Karanlık Tema",
+  "@darkTheme": {"description": "Dark theme label"},
+  
+  "lightTheme": "Aydınlık Tema",
+  "@lightTheme": {"description": "Light theme label"},
+  
+  "language": "Dil",
+  "@language": {"description": "Language setting label"},
+  
+  "systemDefault": "Sistem varsayılanı",
+  "@systemDefault": {"description": "System default language option"},
+  
+  "showSyncProgress": "Eşitleme İlerlemesini Göster",
+  "@showSyncProgress": {"description": "Show sync progress toggle label"},
+  
+  "displaySyncStatus": "Eşitleme durumu göstergesini görüntüle",
+  "@displaySyncStatus": {"description": "Show sync progress toggle subtitle"},
+  
+  "alarmSound": "Alarm Sesi",
+  "@alarmSound": {"description": "Alarm sound setting label"},
+  
+  "reminderTimeSettings": "Hatırlatıcı Zaman Ayarları",
+  "@reminderTimeSettings": {"description": "Reminder time settings section title"},
+  
+  "setDefaultTimes": "Hatırlatıcılar için varsayılan zamanları ayarla",
+  "@setDefaultTimes": {"description": "Reminder time settings subtitle"},
+  
+  "morning": "Sabah",
+  "@morning": {"description": "Morning time label"},
+  
+  "afternoon": "Öğleden Sonra",
+  "@afternoon": {"description": "Afternoon time label"},
+  
+  "evening": "Akşam",
+  "@evening": {"description": "Evening time label"},
+  
+  "localDataProtection": "Yerel Veri Koruması",
+  "@localDataProtection": {"description": "Local data protection section title"},
+  
+  "encryptDeviceData": "Bu cihazda depolanan verileri şifrele",
+  "@encryptDeviceData": {"description": "Local data protection subtitle"},
+  
+  "encryptNotes": "Notları şifrele",
+  "@encryptNotes": {"description": "Encrypt notes toggle label"},
+  
+  "encryptFiles": "Dosyaları şifrele",
+  "@encryptFiles": {"description": "Encrypt files toggle label"},
+  
+  "lockedNotesSecurity": "Kilitli Notlar Güvenliği",
+  "@lockedNotesSecurity": {"description": "Locked notes section title"},
+  
+  "privacyLockedNotes": "Kilitli notlar için gizlilik ayarları",
+  "@privacyLockedNotes": {"description": "Locked notes section subtitle"},
+  
+  "forgetPasswordOnClose": "Kapatıldığında parolayı unut",
+  "@forgetPasswordOnClose": {"description": "Forget password toggle label"},
+  
+  "requirePasswordAgain": "Uygulama her açıldığında parola iste",
+  "@requirePasswordAgain": {"description": "Forget password toggle subtitle"},
+  
+  "nerdStats": "Detaylı İstatistikler",
+  "@nerdStats": {"description": "Nerd stats page title"},
+  
+  "developer": "Geliştirici",
+  "@developer": {"description": "Developer section subtitle"},
+  
+  "contactUs": "Bize Ulaşın",
+  "@contactUs": {"description": "Contact us title"},
+  
+  "developedBy": "Geliştiren:",
+  "@developedBy": {"description": "Developed by label"},
+  
+  "viewOnGithub": "GitHub'da görüntüle",
+  "@viewOnGithub": {"description": "View on GitHub button label"},
+  
+  "archive": "Arşivle",
+  "@archive": {"description": "Archive action"},
+  
+  "unarchive": "Arşivden Çıkar",
+  "@unarchive": {"description": "Unarchive action"},
+  
+  "readOnly": "Salt Okunur",
+  "@readOnly": {"description": "Read only mode label"},
+  
+  "locked": "Kilitli",
+  "@locked": {"description": "Locked note label"},
+  
+  "saveAs": "Farklı kaydet",
+  "@saveAs": {"description": "Save as menu item"},
+  
+  "copyAs": "Farklı kopyala",
+  "@copyAs": {"description": "Copy as menu item"},
+  
+  "pasteAs": "Farklı yapıştır",
+  "@pasteAs": {"description": "Paste as menu item"},
+  
+  "share": "Paylaş",
+  "@share": {"description": "Share action"},
+  
+  "duplicate": "Çoğalt",
+  "@duplicate": {"description": "Duplicate action"},
+  
+  "markdown": "Markdown",
+  "@markdown": {"description": "Markdown format label"},
+  
+  "markdownFile": "Markdown (.md)",
+  "@markdownFile": {"description": "Markdown file format"},
+  
+  "html": "HTML",
+  "@html": {"description": "HTML format label"},
+  
+  "htmlFile": "HTML (.html)",
+  "@htmlFile": {"description": "HTML file format"},
+  
+  "plainText": "Düz Metin",
+  "@plainText": {"description": "Plain text format label"},
+  
+  "plainTextFile": "Düz Metin (.txt)",
+  "@plainTextFile": {"description": "Plain text file format"},
+  
+  "restore": "Geri Yükle",
+  "@restore": {"description": "Restore action tooltip"},
+  
+  "reminder": "Hatırlatıcı",
+  "@reminder": {"description": "Reminder action tooltip"},
+  
+  "hideKeyboard": "Klavyeyi gizle",
+  "@hideKeyboard": {"description": "Hide keyboard tooltip"},
+  
+  "refresh": "Yenile",
+  "@refresh": {"description": "Refresh tooltip"},
+  
+  "dismiss": "Kapat",
+  "@dismiss": {"description": "Dismiss tooltip"},
+  
+  "back": "Geri",
+  "@back": {"description": "Back tooltip"},
+  
+  "copyToClipboard": "Panoya kopyala",
+  "@copyToClipboard": {"description": "Copy to clipboard tooltip"},
+  
+  "copiedToClipboard": "Panoya kopyalandı",
+  "@copiedToClipboard": {"description": "Copied to clipboard snackbar message"},
+  
+  "scribble": "Karalama",
+  "@scribble": {"description": "Scribble tooltip"},
+  
+  "revokeLink": "Bağlantıyı iptal et",
+  "@revokeLink": {"description": "Revoke link tooltip"},
+  
+  "expandToolbar": "Araç çubuğunu genişlet",
+  "@expandToolbar": {"description": "Expand toolbar tooltip"},
+  
+  "collapseToolbar": "Araç çubuğunu daralt",
+  "@collapseToolbar": {"description": "Collapse toolbar tooltip"},
+  
+  "align": "Hizala",
+  "@align": {"description": "Align tooltip"},
+  
+  "textSize": "Metin Boyutu",
+  "@textSize": {"description": "Text size tooltip"},
+  
+  "indent": "Girinti",
+  "@indent": {"description": "Indent tooltip"},
+  
+  "attach": "Ekle",
+  "@attach": {"description": "Attach tooltip"},
+  
+  "paperColor": "Kağıt Rengi",
+  "@paperColor": {"description": "Paper color tooltip"},
+  
+  "pagePattern": "Sayfa Deseni",
+  "@pagePattern": {"description": "Page pattern tooltip"},
+  
+  "moreOptions": "Daha fazla seçenek",
+  "@moreOptions": {"description": "More options tooltip"},
+  
+  "move": "Taşı",
+  "@move": {"description": "Move tooltip"},
+  
+  "viewAllPages": "Tüm sayfaları görüntüle",
+  "@viewAllPages": {"description": "View all pages tooltip"},
+  
+  "insert": "Ekle",
+  "@insert": {"description": "Insert tooltip"},
+  
+  "importAsNote": "Not Olarak İçe Aktar",
+  "@importAsNote": {"description": "Import as note tooltip"},
+  
+  "removeDevice": "Cihazı kaldır",
+  "@removeDevice": {"description": "Remove device tooltip"},
+  
+  "noteJson": "Not JSON'u",
+  "@noteJson": {"description": "Note JSON dialog title"},
+  
+  "passwordResetSuccess": "Parola başarıyla sıfırlandı! Lütfen giriş yapın.",
+  "@passwordResetSuccess": {"description": "Password reset success message"},
+  
+  "emailVerifiedSuccess": "E-posta başarıyla doğrulandı!",
+  "@emailVerifiedSuccess": {"description": "Email verified success message"},
+  
+  "useDifferentAccount": "Farklı bir hesap kullan",
+  "@useDifferentAccount": {"description": "Use different account button label"},
+  
+  "recoverySuccessful": "Kurtarma başarılı! Erişim sağlandı.",
+  "@recoverySuccessful": {"description": "Recovery successful message"},
+  
+  "deviceApproved": "Cihaz onaylandı!",
+  "@deviceApproved": {"description": "Device approved message"},
+  
+  "waitingForApproval": "Hala onay bekleniyor...",
+  "@waitingForApproval": {"description": "Waiting for approval message"},
+  
+  "reapprovalRequestSent": "Yeniden onay isteği gönderildi. Onay bekleniyor...",
+  "@reapprovalRequestSent": {"description": "Re-approval request sent message"},
+  
+  "failedReapproval": "Yeniden onay istenemedi: {error}",
+  "@failedReapproval": {
+    "description": "Failed to request re-approval message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "rememberDevice": "Bu cihazı hatırla",
+  "@rememberDevice": {"description": "Remember device checkbox label"},
+  
+  "recoverWithPassphrase": "İfade ile Kurtar",
+  "@recoverWithPassphrase": {"description": "Recover with passphrase button label"},
+  
+  "startFresh": "Temiz Bir Başlangıç Yap",
+  "@startFresh": {"description": "Start fresh button label"},
+  
+  "startFreshInstead": "Bunun Yerine Temiz Bir Başlangıç Yap",
+  "@startFreshInstead": {"description": "Start fresh instead button label"},
+  
+  "requestReapproval": "Yeniden Onay İste",
+  "@requestReapproval": {"description": "Request re-approval button label"},
+  
+  "accessApproved": "Erişim onaylandı",
+  "@accessApproved": {"description": "Access approved message"},
+  
+  "failedToApprove": "Onaylanamadı: {error}",
+  "@failedToApprove": {
+    "description": "Failed to approve message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "accessDenied": "Erişim reddedildi",
+  "@accessDenied": {"description": "Access denied message"},
+  
+  "failedToDeny": "Reddedilemedi: {error}",
+  "@failedToDeny": {
+    "description": "Failed to deny message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "allUpToDate": "Her şey güncel",
+  "@allUpToDate": {"description": "All up to date message"},
+  
+  "upgradeNow": "Şimdi Yükselt",
+  "@upgradeNow": {"description": "Upgrade now button label"},
+  
+  "upgradeToPro": "Pro'ya Yükselt",
+  "@upgradeToPro": {"description": "Upgrade to pro button label"},
+  
+  "continueTrial": "Denemeye Devam Et",
+  "@continueTrial": {"description": "Continue trial button label"},
+  
+  "cancelSubscription": "Aboneliği İptal Et",
+  "@cancelSubscription": {"description": "Cancel subscription dialog title/button"},
+  
+  "keepSubscription": "Aboneliği Koru",
+  "@keepSubscription": {"description": "Keep subscription button label"},
+  
+  "linkingAccount": "Hesap bağlanıyor...",
+  "@linkingAccount": {"description": "Linking account message"},
+  
+  "unlinkProvider": "{provider} bağlantısı kaldırılsın mı?",
+  "@unlinkProvider": {
+    "description": "Unlink provider dialog title",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "unlinkedProvider": "{provider} bağlantısı kaldırıldı",
+  "@unlinkedProvider": {
+    "description": "Unlinked provider message",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "successfullyLinked": "{provider} hesabı başarıyla bağlandı",
+  "@successfullyLinked": {
+    "description": "Successfully linked provider message",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "unknownProvider": "Bilinmeyen sağlayıcı: {provider}",
+  "@unknownProvider": {
+    "description": "Unknown provider error",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "recoveryKey": "Kurtarma Anahtarı",
+  "@recoveryKey": {"description": "Recovery key title"},
+  
+  "manageRecoveryPassphrase": "Kurtarma ifadenizi yönetin",
+  "@manageRecoveryPassphrase": {"description": "Recovery key subtitle"},
+  
+  "enableE2EE": "Uçtan Uca Şifrelemeyi Etkinleştir",
+  "@enableE2EE": {"description": "Enable E2EE button label"},
+  
+  "failedSaveRecoveryKey": "Kurtarma Anahtarı kaydedilemedi: {error}",
+  "@failedSaveRecoveryKey": {
+    "description": "Failed to save recovery key error",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "recoverySuccessWelcome": "Kurtarma başarılı! Tekrar hoş geldiniz.",
+  "@recoverySuccessWelcome": {"description": "Recovery success welcome message"},
+  
+  "requestTimedOut": "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.",
+  "@requestTimedOut": {"description": "Request timed out message"},
+  
+  "confirmConsequences": "Lütfen sonuçları anladığınızı onaylayın",
+  "@confirmConsequences": {"description": "Confirm consequences message"},
+  
+  "accountResetSuccess": "Hesap başarıyla sıfırlandı. Hoş geldiniz!",
+  "@accountResetSuccess": {"description": "Account reset success message"},
+  
+  "failedResetAccount": "Hesap sıfırlanamadı: {error}",
+  "@failedResetAccount": {
+    "description": "Failed to reset account error",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "errorSigningOut": "Çıkış yapılırken hata oluştu: {error}",
+  "@errorSigningOut": {
+    "description": "Error signing out message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "errorPlayingSound": "Ses çalınırken hata oluştu: {error}",
+  "@errorPlayingSound": {
+    "description": "Error playing sound message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "checkNestedItems": "İç içe geçmiş öğeler işaretlensin mi?",
+  "@checkNestedItems": {"description": "Check nested items dialog title"},
+  
+  "uncheckNestedItems": "İç içe geçmiş öğelerin işareti kaldırılsın mı?",
+  "@uncheckNestedItems": {"description": "Uncheck nested items dialog title"},
+  
+  "yes": "Evet",
+  "@yes": {"description": "Yes button text"},
+  
+  "no": "Hayır",
+  "@no": {"description": "No button text"},
+  
+  "clipboardEmpty": "Pano boş",
+  "@clipboardEmpty": {"description": "Clipboard empty message"},
+  
+  "noteDeletedPermanently": "Not kalıcı olarak silindi",
+  "@noteDeletedPermanently": {"description": "Note deleted permanently message"},
+  
+  "reminderRemoved": "Hatırlatıcı kaldırıldı",
+  "@reminderRemoved": {"description": "Reminder removed message"},
+  
+  "reminderCompleted": "Hatırlatıcı tamamlandı",
+  "@reminderCompleted": {"description": "Reminder completed message"},
+  
+  "reminderSet": "Hatırlatıcı ayarlandı",
+  "@reminderSet": {"description": "Reminder set message"},
+  
+  "failedCreateImageNote": "Resim notu oluşturulamadı",
+  "@failedCreateImageNote": {"description": "Failed to create image note message"},
+  
+  "errorSavingSketch": "Çizim kaydedilirken hata oluştu, önizleme yok",
+  "@errorSavingSketch": {"description": "Error saving sketch message"},
+  
+  "errorSavingSketchWithError": "Çizim kaydedilirken hata oluştu: {error}",
+  "@errorSavingSketchWithError": {
+    "description": "Error saving sketch with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "failedSaveNote": "Not kaydedilemedi",
+  "@failedSaveNote": {"description": "Failed to save note message"},
+  
+  "failedSave": "Kaydedilemedi: {error}",
+  "@failedSave": {
+    "description": "Failed to save with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "copiedAs": "{format} olarak kopyalandı",
+  "@copiedAs": {
+    "description": "Copied as format message",
+    "placeholders": {
+      "format": {"type": "String"}
+    }
+  },
+  
+  "failedCopy": "Kopyalanamadı: {error}",
+  "@failedCopy": {
+    "description": "Failed to copy with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "pastedAsPlainText": "Düz metin olarak yapıştırıldı",
+  "@pastedAsPlainText": {"description": "Pasted as plain text message"},
+  
+  "failedPaste": "Yapıştırılamadı: {error}",
+  "@failedPaste": {
+    "description": "Failed to paste with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "contentInserted": "İçerik eklendi",
+  "@contentInserted": {"description": "Content inserted message"},
+  
+  "failedInsertContent": "İçerik eklenemedi: {error}",
+  "@failedInsertContent": {
+    "description": "Failed to insert content with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "actionCancelled": "İşlem iptal edildi",
+  "@actionCancelled": {"description": "Action cancelled message"},
+  
+  "noteLocked": "Not kilitlendi",
+  "@noteLocked": {"description": "Note locked message"},
+  
+  "failedLockNote": "Not kilitlenemedi: {error}",
+  "@failedLockNote": {
+    "description": "Failed to lock note with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "lockRemoved": "Kilit kaldırıldı",
+  "@lockRemoved": {"description": "Lock removed message"},
+  
+  "failedRemoveLock": "Kilit kaldırılamadı: {error}",
+  "@failedRemoveLock": {
+    "description": "Failed to remove lock with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "noteDuplicated": "Not çoğaltıldı",
+  "@noteDuplicated": {"description": "Note duplicated message"},
+  
+  "errorSavingNote": "Not kaydedilirken hata oluştu",
+  "@errorSavingNote": {"description": "Error saving note message"},
+  
+  "contentShared": "İçerik paylaşıldı",
+  "@contentShared": {"description": "Content shared message"},
+  
+  "failedShare": "Paylaşılamadı",
+  "@failedShare": {"description": "Failed to share message"},
+  
+  "notes": "Notlar",
+  "@notes": {"description": "Notes label"},
+  
+  "allNotes": "Tüm Notlar",
+  "@allNotes": {"description": "All notes filter"},
+  
+  "archivedNotes": "Arşivlenmiş",
+  "@archivedNotes": {"description": "Archived notes filter"},
+  
+  "deletedNotes": "Silinmiş",
+  "@deletedNotes": {"description": "Deleted notes filter"},
+  
+  "pinnedNotes": "Sabitlenmiş",
+  "@pinnedNotes": {"description": "Pinned notes section"},
+  
+  "otherNotes": "Diğerleri",
+  "@otherNotes": {"description": "Other notes section"},
+  
+  "noNotes": "Henüz not yok",
+  "@noNotes": {"description": "Empty state message"},
+  
+  "noArchivedNotes": "Arşivlenmiş not yok",
+  "@noArchivedNotes": {"description": "Empty archived state message"},
+  
+  "noDeletedNotes": "Silinmiş not yok",
+  "@noDeletedNotes": {"description": "Empty deleted state message"},
+  
+  "searchNotes": "Notlarda ara",
+  "@searchNotes": {"description": "Search notes hint"},
+  
+  "nSelectedNotes": "{count, plural, =1{1 not seçildi} other{{count} not seçildi}}",
+  "@nSelectedNotes": {
+    "description": "Number of notes selected",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "deleteNote": "Notu Sil",
+  "@deleteNote": {"description": "Delete note dialog title"},
+  
+  "deleteNotes": "Notları Sil",
+  "@deleteNotes": {"description": "Delete notes dialog title"},
+  
+  "moveToTrash": "Çöp kutusuna taşı",
+  "@moveToTrash": {"description": "Move to trash action"},
+  
+  "deletePermanently": "Kalıcı olarak sil",
+  "@deletePermanently": {"description": "Delete permanently action"},
+  
+  "pinNote": "Sabitle",
+  "@pinNote": {"description": "Pin note action"},
+  
+  "unpinNote": "Sabitlemeyi kaldır",
+  "@unpinNote": {"description": "Unpin note action"},
+  
+  "newNote": "Yeni Not",
+  "@newNote": {"description": "New note button"},
+  
+  "newSketch": "Yeni Çizim",
+  "@newSketch": {"description": "New sketch button"},
+  
+  "newFolder": "Yeni Klasör",
+  "@newFolder": {"description": "New folder option"},
+  
+  "renameFolder": "Klasörü Yeniden Adlandır",
+  "@renameFolder": {"description": "Rename folder option"},
+  
+  "deleteFolder": "Klasörü Sil",
+  "@deleteFolder": {"description": "Delete folder option"},
+  
+  "folderName": "Klasör adı",
+  "@folderName": {"description": "Folder name field hint"},
+  
+  "camera": "Kamera",
+  "@camera": {"description": "Camera option"},
+  
+  "gallery": "Galeri",
+  "@gallery": {"description": "Gallery option"},
+  
+  "audioRecorder": "Ses Kaydedici",
+  "@audioRecorder": {"description": "Audio recorder option"},
+  
+  "importFile": "Dosya İçe Aktar",
+  "@importFile": {"description": "Import file option"},
+  
+  "language": "Dil",
+  "@language": {"description": "Language setting label"},
+  
+  "systemDefault": "Sistem Varsayılanı",
+  "@systemDefault": {"description": "System default language option"},
+  
+  "selectLanguage": "Dil Seç",
+  "@selectLanguage": {"description": "Select language dialog title"},
+  
+  "english": "İngilizce",
+  "@english": {"description": "English language name"},
+  
+  "japanese": "日本語",
+  "@japanese": {"description": "Japanese language name"},
+  
+  "korean": "한국어",
+  "@korean": {"description": "Korean language name"},
+  
+  "indonesian": "Bahasa Indonesia",
+  "@indonesian": {"description": "Indonesian language name"},
+  
+  "portugueseBrazil": "Português (Brasil)",
+  "@portugueseBrazil": {"description": "Brazilian Portuguese language name"},
+  
+  "chinese": "中文",
+  "@chinese": {"description": "Chinese language name"},
+  
+  "today": "Bugün",
+  "@today": {"description": "Today label"},
+  
+  "tomorrow": "Yarın",
+  "@tomorrow": {"description": "Tomorrow label"},
+  
+  "nextWeek": "Gelecek hafta",
+  "@nextWeek": {"description": "Next week label"},
+  
+  "pickDateTime": "Tarih ve saat seç",
+  "@pickDateTime": {"description": "Pick date and time option"},
+  
+  "time": "Saat",
+  "@time": {"description": "Time label"},
+  
+  "date": "Tarih",
+  "@date": {"description": "Date label"},
+  
+  "repeat": "Tekrarla",
+  "@repeat": {"description": "Repeat label"},
+  
+  "never": "Asla",
+  "@never": {"description": "Never repeat option"},
+  
+  "daily": "Günlük",
+  "@daily": {"description": "Daily repeat option"},
+  
+  "weekly": "Haftalık",
+  "@weekly": {"description": "Weekly repeat option"},
+  
+  "monthly": "Aylık",
+  "@monthly": {"description": "Monthly repeat option"},
+  
+  "yearly": "Yıllık",
+  "@yearly": {"description": "Yearly repeat option"},
+  
+  "snooze": "Ertele",
+  "@snooze": {"description": "Snooze button"},
+  
+  "fiveMinutes": "5 dakika",
+  "@fiveMinutes": {"description": "5 minutes option"},
+  
+  "tenMinutes": "10 dakika",
+  "@tenMinutes": {"description": "10 minutes option"},
+  
+  "thirtyMinutes": "30 dakika",
+  "@thirtyMinutes": {"description": "30 minutes option"},
+  
+  "oneHour": "1 saat",
+  "@oneHour": {"description": "1 hour option"},
+  
+  "gridView": "Izgara görünümü",
+  "@gridView": {"description": "Grid view option"},
+  
+  "listView": "Liste görünümü",
+  "@listView": {"description": "List view option"},
+  
+  "galleryView": "Galeri görünümü",
+  "@galleryView": {"description": "Gallery view option"},
+  
+  "undo": "Geri al",
+  "@undo": {"description": "Undo tooltip"},
+  
+  "redo": "Yinele",
+  "@redo": {"description": "Redo tooltip"},
+  
+  "bold": "Kalın",
+  "@bold": {"description": "Bold tooltip"},
+  
+  "italic": "İtalik",
+  "@italic": {"description": "Italic tooltip"},
+  
+  "underline": "Altı çizili",
+  "@underline": {"description": "Underline tooltip"},
+  
+  "strikethrough": "Üstü çizili",
+  "@strikethrough": {"description": "Strikethrough tooltip"},
+  
+  "bulletList": "Madde işaretli liste",
+  "@bulletList": {"description": "Bullet list tooltip"},
+  
+  "numberedList": "Numaralı liste",
+  "@numberedList": {"description": "Numbered list tooltip"},
+  
+  "checklist": "Kontrol listesi",
+  "@checklist": {"description": "Checklist tooltip"},
+  
+  "quote": "Alıntı",
+  "@quote": {"description": "Quote tooltip"},
+  
+  "codeBlock": "Kod bloğu",
+  "@codeBlock": {"description": "Code block tooltip"},
+  
+  "textColor": "Metin rengi",
+  "@textColor": {"description": "Text color tooltip"},
+  
+  "highlightColor": "Vurgu rengi",
+  "@highlightColor": {"description": "Highlight color tooltip"},
+  
+  "alignLeft": "Sola hizala",
+  "@alignLeft": {"description": "Align left option"},
+  
+  "alignCenter": "Ortala",
+  "@alignCenter": {"description": "Align center option"},
+  
+  "alignRight": "Sağa hizala",
+  "@alignRight": {"description": "Align right option"},
+  
+  "alignJustify": "İki yana yasla",
+  "@alignJustify": {"description": "Justify option"},
+  
+  "increaseIndent": "Girintiyi artır",
+  "@increaseIndent": {"description": "Increase indent option"},
+  
+  "decreaseIndent": "Girintiyi azalt",
+  "@decreaseIndent": {"description": "Decrease indent option"},
+  
+  "heading1": "Başlık 1",
+  "@heading1": {"description": "Heading 1 option"},
+  
+  "heading2": "Başlık 2",
+  "@heading2": {"description": "Heading 2 option"},
+  
+  "heading3": "Başlık 3",
+  "@heading3": {"description": "Heading 3 option"},
+  
+  "normalText": "Normal metin",
+  "@normalText": {"description": "Normal text option"},
+  
+  "pen": "Tükenmez Kalem",
+  "@pen": {"description": "Pen tool"},
+  
+  "pencil": "Kurşun Kalem",
+  "@pencil": {"description": "Pencil tool"},
+  
+  "brush": "Fırça",
+  "@brush": {"description": "Brush tool"},
+  
+  "highlighter": "Vurgulayıcı",
+  "@highlighter": {"description": "Highlighter tool"},
+  
+  "eraser": "Silgi",
+  "@eraser": {"description": "Eraser tool"},
+  
+  "lasso": "Kement",
+  "@lasso": {"description": "Lasso tool"},
+  
+  "addPage": "Sayfa ekle",
+  "@addPage": {"description": "Add page button"},
+  
+  "deletePage": "Sayfayı sil",
+  "@deletePage": {"description": "Delete page button"},
+  
+  "page": "Sayfa",
+  "@page": {"description": "Page label"},
+  
+  "pageNumber": "Sayfa {number}",
+  "@pageNumber": {
+    "description": "Page number label",
+    "placeholders": {
+      "number": {"type": "int"}
+    }
+  },
+  
+  "connectedAccounts": "Bağlı Hesaplar",
+  "@connectedAccounts": {"description": "Connected accounts section title"},
+  
+  "subscription": "Abonelik",
+  "@subscription": {"description": "Subscription section title"},
+  
+  "free": "Ücretsiz",
+  "@free": {"description": "Free plan label"},
+  
+  "pro": "Pro",
+  "@pro": {"description": "Pro plan label"},
+  
+  "trial": "Deneme",
+  "@trial": {"description": "Trial label"},
+  
+  "trialEndsIn": "Deneme süresinin bitmesine {days} gün kaldı",
+  "@trialEndsIn": {
+    "description": "Trial ends message",
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  
+  "devices": "Cihazlar",
+  "@devices": {"description": "Devices section title"},
+  
+  "thisDevice": "Bu cihaz",
+  "@thisDevice": {"description": "This device label"},
+  
+  "lastActive": "Son etkinlik: {time}",
+  "@lastActive": {
+    "description": "Last active time",
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  
+  "pendingApproval": "Onay bekliyor",
+  "@pendingApproval": {"description": "Pending approval label"},
+  
+  "security": "Güvenlik",
+  "@security": {"description": "Security section title"},
+  
+  "endToEndEncryption": "Uçtan Uca Şifreleme",
+  "@endToEndEncryption": {"description": "E2EE section title"},
+  
+  "e2eeEnabled": "Etkin",
+  "@e2eeEnabled": {"description": "E2EE enabled status"},
+  
+  "e2eeDisabled": "Etkin değil",
+  "@e2eeDisabled": {"description": "E2EE disabled status"},
+  
+  "setupRecoveryKey": "Kurtarma Anahtarını Ayarla",
+  "@setupRecoveryKey": {"description": "Setup recovery key page title"},
+  
+  "changeRecoveryKey": "Kurtarma Anahtarını Değiştir",
+  "@changeRecoveryKey": {"description": "Change recovery key dialog title"},
+  
+  "verifyRecoveryKey": "Kurtarma Anahtarını Doğrula",
+  "@verifyRecoveryKey": {"description": "Verify recovery key dialog title"},
+  
+  "error": "Hata",
+  "@error": {"description": "Error label"},
+  
+  "errorWithMessage": "Hata: {message}",
+  "@errorWithMessage": {
+    "description": "Error with message",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  
+  "loading": "Yükleniyor...",
+  "@loading": {"description": "Loading message"},
+  
+  "syncing": "Eşitleniyor...",
+  "@syncing": {"description": "Syncing message"},
+  
+  "syncComplete": "Eşitleme tamamlandı",
+  "@syncComplete": {"description": "Sync complete message"},
+  
+  "syncFailed": "Eşitleme başarısız",
+  "@syncFailed": {"description": "Sync failed message"},
+  
+  "offline": "Çevrimdışı",
+  "@offline": {"description": "Offline status"},
+  
+  "online": "Çevrimiçi",
+  "@online": {"description": "Online status"},
+  
+  "getApp": "Uygulamayı Edin",
+  "@getApp": {"description": "Get the app dialog title"},
+  
+  "installApp": "Uygulamayı Yükle",
+  "@installApp": {"description": "Install app button"},
+  
+  "notNow": "Şimdi değil",
+  "@notNow": {"description": "Not now button"},
+  
+  "sessionExpired": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
+  "@sessionExpired": {"description": "Session expired message"},
+  
+  "confirmSignOut": "Çıkış yapmak istediğinizden emin misiniz?",
+  "@confirmSignOut": {"description": "Confirm sign out message"},
+  
+  "unsyncedChanges": "Eşitlenmemiş değişiklikleriniz var, bunlar kaybolacak.",
+  "@unsyncedChanges": {"description": "Unsynced changes warning"},
+  
+  "deleteConfirmation": "Bunu silmek istediğinizden emin misiniz?",
+  "@deleteConfirmation": {"description": "Delete confirmation message"},
+  
+  "permanentAction": "Bu işlem geri alınamaz.",
+  "@permanentAction": {"description": "Permanent action warning"},
+  
+  "encryptNoteContent": "Not İçeriğini Şifrele",
+  "@encryptNoteContent": {"description": "Encrypt note content toggle title"},
+  
+  "encryptNotesInDatabase": "Yerel veritabanındaki notları şifrele",
+  "@encryptNotesInDatabase": {"description": "Encrypt note content toggle subtitle"},
+  
+  "encryptAttachments": "Ekleri Şifrele",
+  "@encryptAttachments": {"description": "Encrypt attachments toggle title"},
+  
+  "encryptImagesSketchesFiles": "Resimleri, çizimleri ve dosyaları şifrele",
+  "@encryptImagesSketchesFiles": {"description": "Encrypt attachments toggle subtitle"},
+  
+  "localEncryptionInfo": "Yerel şifreleme, cihazınız tehlikeye girerse verilerinizi korur. AES-256-GCM şifreleme yöntemini kullanır.",
+  "@localEncryptionInfo": {"description": "Local encryption info text"},
+  
+  "lockedNotes": "Kilitli Notlar",
+  "@lockedNotes": {"description": "Locked notes section title"},
+  
+  "requireReenterPin": "Kilitli bir not yeniden açıldığında PIN'in tekrar girilmesini iste",
+  "@requireReenterPin": {"description": "Forget password on close subtitle"},
+  
+  "faqAndSupport": "SSS ve destek ile iletişime geç",
+  "@faqAndSupport": {"description": "Help subtitle"},
+  
+  "appInfoCredits": "Uygulama bilgileri ve katkıda bulunanlar",
+  "@appInfoCredits": {"description": "About subtitle"},
+  
+  "advancedSettings": "Gelişmiş Ayarlar",
+  "@advancedSettings": {"description": "Advanced settings section title"},
+  
+  "speechRecognitionModel": "Ses Tanıma Modeli",
+  "@speechRecognitionModel": {"description": "Speech recognition model settings title"},
+  
+  "whisperModelDownloaded": "İndirildi ({size})",
+  "@whisperModelDownloaded": {
+    "description": "Whisper model downloaded with size",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "31.2 MB"
+      }
+    }
+  },
+  
+  "whisperModelNotDownloaded": "İndirilmedi - indirmek için dokunun",
+  "@whisperModelNotDownloaded": {"description": "Whisper model not downloaded"},
+  
+  "deleteWhisperModelConfirm": "Ses tanıma modeli silinsin mi? Daha sonra tekrar indirebilirsiniz.",
+  "@deleteWhisperModelConfirm": {"description": "Delete whisper model confirmation"},
+  
+  "whisperModelDeleted": "Ses tanıma modeli silindi",
+  "@whisperModelDeleted": {"description": "Whisper model deleted message"},
+  
+  "deleteModel": "Modeli Sil",
+  "@deleteModel": {"description": "Delete model button tooltip"},
+  
+  "download": "İndir",
+  "@download": {"description": "Download button text"},
+  
+  "viewDatabaseStats": "Veritabanı ve eşitleme istatistiklerini görüntüle",
+  "@viewDatabaseStats": {"description": "Nerd stats subtitle"},
+  
+  "selectDarkTheme": "Karanlık Tema Seç",
+  "@selectDarkTheme": {"description": "Select dark theme dialog title"},
+  
+  "selectLightTheme": "Aydınlık Tema Seç",
+  "@selectLightTheme": {"description": "Select light theme dialog title"},
+  
+  "encryptingNotes": "Mevcut notlar şifreleniyor...",
+  "@encryptingNotes": {"description": "Encrypting notes progress message"},
+  
+  "noteEncryptionEnabled": "Not şifreleme etkinleştirildi. {count} not şifrelendi.",
+  "@noteEncryptionEnabled": {
+    "description": "Note encryption enabled success message with count",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  
+  "noteEncryptionEnabledSimple": "Not şifreleme etkinleştirildi.",
+  "@noteEncryptionEnabledSimple": {"description": "Note encryption enabled success message without count"},
+  
+  "errorEncryptingNotes": "Notlar şifrelenirken hata oluştu: {error}",
+  "@errorEncryptingNotes": {
+    "description": "Error encrypting notes message",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Unknown error"
+      }
+    }
+  },
+  
+  "noteEncryptionDisabled": "Not şifreleme devre dışı bırakıldı.",
+  "@noteEncryptionDisabled": {"description": "Note encryption disabled message"},
+  
+  "fileEncryptionEnabled": "Dosya şifreleme etkinleştirildi. Yeni ekler şifrelenecek.",
+  "@fileEncryptionEnabled": {"description": "File encryption enabled message"},
+  
+  "fileEncryptionDisabled": "Dosya şifreleme devre dışı bırakıldı.",
+  "@fileEncryptionDisabled": {"description": "File encryption disabled message"},
+  
+  "encryptDataOnDevice": "Bu cihazda depolanan verileri şifrele",
+  "@encryptDataOnDevice": {"description": "Local data protection subtitle alternative"},
+  
+  "signInCancelledMessage": "Giriş iptal edildi",
+  "@signInCancelledMessage": {"description": "Sign in cancelled snackbar message"},
+  
+  "startingSignIn": "Giriş başlatılıyor...",
+  "@startingSignIn": {"description": "Starting sign in status message"},
+  
+  "continueWithGoogle": "Google ile Devam Et",
+  "@continueWithGoogle": {"description": "Continue with Google button text"},
+  
+  "chooseSignInMethod": "Tercih ettiğiniz giriş yöntemini seçin",
+  "@chooseSignInMethod": {"description": "Sign in method hint text"},
+  
+  "yourNoteSecuredAndSynced": "Notlarınız güvende ve senkronize",
+  "@yourNoteSecuredAndSynced": {"description": "Login page tagline"},
+  
+  "endToEndEncryptionFeature": "Uçtan Uca Şifreleme",
+  "@endToEndEncryptionFeature": {"description": "E2EE feature title on login page"},
+  
+  "endToEndEncryptionDescription": "Notlarınız eşitlenmeden önce cihazınızda şifrelenir. Onları sadece siz okuyabilirsiniz; biz bile verilerinize erişemeyiz.",
+  "@endToEndEncryptionDescription": {"description": "E2EE feature description on login page"},
+  
+  "seamlessSync": "Kusursuz Eşitleme",
+  "@seamlessSync": {"description": "Sync feature title on login page"},
+  
+  "seamlessSyncDescription": "Notlarınıza herhangi bir cihazdan erişin. Değişiklikler tüm cihazlarınız arasında anında ve güvenli bir şekilde eşitlenir.",
+  "@seamlessSyncDescription": {"description": "Sync feature description on login page"},
+  
+  "richFormatting": "Zengin Biçimlendirme",
+  "@richFormatting": {"description": "Rich formatting feature title on login page"},
+  
+  "richFormattingDescription": "Zengin metin, kontrol listeleri, resimler, çizimler ve sesli notlarla kendinizi ifade edin. Notlarınız, sizin tarzınız.",
+  "@richFormattingDescription": {"description": "Rich formatting feature description on login page"},
+  
+  "gotIt": "Anladım",
+  "@gotIt": {"description": "Got it button text"},
+  
+  "or": "veya",
+  "@or": {"description": "Or divider text"},
+  
+  "signInWithGoogle": "Google ile Giriş Yap",
+  "@signInWithGoogle": {"description": "Sign in with Google tooltip"},
+  
+  "resetPassword": "Parolayı Sıfırla",
+  "@resetPassword": {"description": "Reset password page title"},
+  
+  "resetPasswordDescription": "E-posta adresinizi girin, size parolanızı sıfırlamanız için bir doğrulama kodu göndereceğiz.",
+  "@resetPasswordDescription": {"description": "Reset password description"},
+  
+  "sendVerificationCode": "Doğrulama Kodu Gönder",
+  "@sendVerificationCode": {"description": "Send verification code button text"},
+  
+  "sending": "Gönderiliyor...",
+  "@sending": {"description": "Sending status text"},
+  
+  "enterVerificationCode": "Doğrulama Kodunu Girin",
+  "@enterVerificationCode": {"description": "Enter verification code title"},
+  
+  "enterCodeSentTo": "Şu adrese gönderilen 6 haneli kodu girin:",
+  "@enterCodeSentTo": {"description": "Enter code description"},
+  
+  "pleaseEnterCompleteCode": "Lütfen 6 haneli kodu eksiksiz girin",
+  "@pleaseEnterCompleteCode": {"description": "Validation error for incomplete OTP"},
+  
+  "verifying": "Doğrulanıyor...",
+  "@verifying": {"description": "Verifying status text"},
+  
+  "continue_": "Devam Et",
+  "@continue_": {"description": "Continue button text"},
+  
+  "resendCode": "Kodu yeniden gönder",
+  "@resendCode": {"description": "Resend code button text"},
+  
+  "resendCodeIn": "Kodu yeniden gönder ({seconds}s)",
+  "@resendCodeIn": {
+    "description": "Resend code countdown text",
+    "placeholders": {
+      "seconds": {"type": "int"}
+    }
+  },
+  
+  "codeExpiresIn": "Kodun süresi 10 dakika içinde dolacak",
+  "@codeExpiresIn": {"description": "Code expiration note"},
+  
+  "createNewPassword": "Yeni Parola Oluştur",
+  "@createNewPassword": {"description": "Create new password title"},
+  
+  "enterNewPasswordDescription": "Hesabınız için yeni bir parola girin.",
+  "@enterNewPasswordDescription": {"description": "Enter new password description"},
+  
+  "enterNewPasswordHint": "Yeni parola girin",
+  "@enterNewPasswordHint": {"description": "New password field hint"},
+  
+  "reenterNewPasswordHint": "Yeni parolayı tekrar girin",
+  "@reenterNewPasswordHint": {"description": "Confirm new password field hint"},
+  
+  "resettingPassword": "Parola Sıfırlanıyor...",
+  "@resettingPassword": {"description": "Resetting password status"},
+  
+  "passwordsDoNotMatch": "Parolalar eşleşmiyor",
+  "@passwordsDoNotMatch": {"description": "Passwords do not match error"},
+  
+  "pleaseEnterNewPassword": "Lütfen yeni bir parola girin",
+  "@pleaseEnterNewPassword": {"description": "Please enter new password validation error"},
+  
+  "pleaseEnterEmailAddress": "Lütfen e-posta adresinizi girin",
+  "@pleaseEnterEmailAddress": {"description": "Email address validation error"},
+  
+  "pleaseEnterValidEmail": "Lütfen geçerli bir e-posta adresi girin",
+  "@pleaseEnterValidEmail": {"description": "Valid email validation error"},
+  
+  "failedSendVerificationCode": "Doğrulama kodu gönderilemedi. Lütfen tekrar deneyin.",
+  "@failedSendVerificationCode": {"description": "Failed to send verification code error"},
+  
+  "invalidVerificationCode": "Geçersiz doğrulama kodu",
+  "@invalidVerificationCode": {"description": "Invalid verification code error"},
+  
+  "verificationFailed": "Doğrulama başarısız oldu. Lütfen tekrar deneyin.",
+  "@verificationFailed": {"description": "Verification failed error"},
+  
+  "passwordResetFailed": "Parola sıfırlama başarısız oldu. Lütfen tekrar deneyin.",
+  "@passwordResetFailed": {"description": "Password reset failed error"},
+  
+  "verifyYourEmail": "E-postanızı Doğrulayın",
+  "@verifyYourEmail": {"description": "Verify your email title"},
+  
+  "sendingVerificationCode": "Doğrulama kodu gönderiliyor...",
+  "@sendingVerificationCode": {"description": "Sending verification code status"},
+  
+  "emailVerifiedSuccessfully": "E-posta başarıyla doğrulandı!",
+  "@emailVerifiedSuccessfully": {"description": "Email verified success message"},
+  
+  "deviceRevoked": "Cihaz İptal Edildi",
+  "@deviceRevoked": {"description": "Device revoked title"},
+  
+  "waitingForApprovalTitle": "Onay Bekleniyor",
+  "@waitingForApprovalTitle": {"description": "Waiting for approval title"},
+  
+  "deviceRevokedDescription": "Bu cihaz iptal edildi ve artık notlarınıza erişemiyor. Yeniden yetkilendirmek için lütfen onaylı bir cihazdan tekrar giriş yapın.",
+  "@deviceRevokedDescription": {"description": "Device revoked description"},
+  
+  "pleaseApproveFrom": "Lütfen şuradan onaylayın:",
+  "@pleaseApproveFrom": {"description": "Please approve from text"},
+  
+  "waitingForApprovalFromDevice": "Başka bir cihazdan onay bekleniyor...",
+  "@waitingForApprovalFromDevice": {"description": "Waiting for approval from another device text"},
+  
+  "rememberThisDevice": "Bu cihazı hatırla",
+  "@rememberThisDevice": {"description": "Remember this device checkbox label"},
+  
+  "deviceRemovedOnSignOut": "İşareti kaldırılırsa, çıkış yaptığınızda bu cihaz kaldırılacaktır",
+  "@deviceRemovedOnSignOut": {"description": "Device removed on sign out description"},
+  
+  "checkingStatus": "Kontrol ediliyor...",
+  "@checkingStatus": {"description": "Checking status text"},
+  
+  "checkStatus": "Durumu Kontrol Et",
+  "@checkStatus": {"description": "Check status button text"},
+  
+  "cancelRequest": "İsteği İptal Et",
+  "@cancelRequest": {"description": "Cancel request button text"},
+  
+  "pleaseWait": "Lütfen bekleyin...",
+  "@pleaseWait": {"description": "Please wait text"},
+  
+  "updateRecoveryKey": "Kurtarma Anahtarını Güncelle",
+  "@updateRecoveryKey": {"description": "Update recovery key page title"},
+  
+  "recoveryPassphraseDescription": "Tüm cihazlarınızı kaybetmeniz durumunda notlarınıza erişimi geri yükleyebilecek bir kurtarma ifadesi oluşturun.",
+  "@recoveryPassphraseDescription": {"description": "Recovery passphrase description"},
+  
+  "recoveryPassphraseWarning": "Bu kurtarma ifadesini güvenli bir şekilde saklayın. Bu olmadan, tüm cihazlarınızı kaybetmeniz durumunda notlarınızı kurtaramazsınız.",
+  "@recoveryPassphraseWarning": {"description": "Recovery passphrase warning"},
+  
+  "enterAStrongPassphrase": "Güçlü bir ifade girin",
+  "@enterAStrongPassphrase": {"description": "Strong passphrase hint"},
+  
+  "pleaseEnterPassphrase": "Lütfen bir ifade girin",
+  "@pleaseEnterPassphrase": {"description": "Please enter passphrase validation error"},
+  
+  "passphraseMinLength": "İfade en az 6 karakter olmalıdır",
+  "@passphraseMinLength": {"description": "Passphrase minimum length error"},
+  
+  "passphrasesDoNotMatch": "İfadeler eşleşmiyor",
+  "@passphrasesDoNotMatch": {"description": "Passphrases do not match error"},
+  
+  "passphraseTooCommon": "Bu ifade çok yaygın ve tahmin edilmesi kolay",
+  "@passphraseTooCommon": {"description": "Passphrase too common warning"},
+  
+  "passphraseStrengthAdvice": "Daha güçlü bir ifade için büyük harf, küçük harf, sayı veya semboller eklemeyi düşünün",
+  "@passphraseStrengthAdvice": {"description": "Passphrase strength advice"},
+  
+  "saving": "Kaydediliyor...",
+  "@saving": {"description": "Saving status text"},
+  
+  "saveRecoveryKey": "Kurtarma Anahtarını Kaydet",
+  "@saveRecoveryKey": {"description": "Save recovery key button text"},
+  
+  "passwordShortWarning": "Parola oldukça kısa. En az 6 karakter kullanmayı düşünün.",
+  "@passwordShortWarning": {"description": "Password short warning"},
+  
+  "passwordLongerAdvice": "Daha iyi güvenlik için daha uzun bir parola kullanmayı düşünün.",
+  "@passwordLongerAdvice": {"description": "Password longer advice"},
+  
+  "passwordMixAdvice": "Daha güçlü bir güvenlik için hem harf hem de sayı eklemeyi düşünün.",
+  "@passwordMixAdvice": {"description": "Password mix advice"},
+  
+  "version": "Sürüm {version} ({buildNumber})",
+  "@version": {
+    "description": "App version display",
+    "placeholders": {
+      "version": {"type": "String"},
+      "buildNumber": {"type": "String"}
+    }
+  },
+  
+  "openSource": "Açık Kaynak",
+  "@openSource": {"description": "Open source section title"},
+  
+  "openSourceDescription": "Better Keep açık kaynaktır! Kodu görüntüleyin,\nkatkıda bulunun veya GitHub'da sorun bildirin.",
+  "@openSourceDescription": {"description": "Open source description"},
+  
+  "frequentlyAskedQuestions": "Sıkça Sorulan Sorular",
+  "@frequentlyAskedQuestions": {"description": "FAQ section title"},
+  
+  "needMoreHelp": "Daha Fazla Yardıma mı İhtiyacınız Var?",
+  "@needMoreHelp": {"description": "Need more help section title"},
+  
+  "needMoreHelpDescription": "Herhangi bir sorunuz varsa veya yardıma ihtiyacınız olursa, bize ulaşmaktan çekinmeyin.",
+  "@needMoreHelpDescription": {"description": "Need more help description"},
+  
+  "deleteImage": "Resmi Sil",
+  "@deleteImage": {"description": "Delete image dialog title"},
+  
+  "deleteImageConfirmation": "Bu resmi silmek istediğinizden emin misiniz?",
+  "@deleteImageConfirmation": {"description": "Delete image confirmation message"},
+  
+  "importAsNoteTooltip": "Not Olarak İçe Aktar",
+  "@importAsNoteTooltip": {"description": "Import as note tooltip"},
+  
+  "insertTooltip": "Ekle",
+  "@insertTooltip": {"description": "Insert tooltip"},
+  
+  "failedToImport": "İçe aktarılamadı: {error}",
+  "@failedToImport": {
+    "description": "Failed to import error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "notes_": "Notlar",
+  "@notes_": {"description": "Notes stat label"},
+  
+  "reminders": "Hatırlatıcılar",
+  "@reminders": {"description": "Reminders stat label"},
+  
+  "media": "Medya",
+  "@media": {"description": "Media stat label"},
+  
+  "plan": "{planName} Planı",
+  "@plan": {
+    "description": "Plan name display",
+    "placeholders": {
+      "planName": {"type": "String"}
+    }
+  },
+  
+  "freeTrialActive": "Ücretsiz Deneme Aktif",
+  "@freeTrialActive": {"description": "Free trial active label"},
+  
+  "expiresOnDaysLeft": "{date} tarihinde sona eriyor ({days} gün kaldı)",
+  "@expiresOnDaysLeft": {
+    "description": "Expiration message with days left",
+    "placeholders": {
+      "date": {"type": "String"},
+      "days": {"type": "int"}
+    }
+  },
+  
+  "enjoyProFeatures": "Deneme süreniz boyunca tüm Pro özelliklerinin keyfini çıkarın!",
+  "@enjoyProFeatures": {"description": "Trial features message"},
+  
+  "billing": "Faturalandırma",
+  "@billing": {"description": "Billing label"},
+  
+  "renews": "Yenilenme tarihi:",
+  "@renews": {"description": "Renews label"},
+  
+  "expires": "Bitiş tarihi:",
+  "@expires": {"description": "Expires label"},
+  
+  "monthlySubscription": "Aylık abonelik",
+  "@monthlySubscription": {"description": "Monthly subscription label"},
+  
+  "yearlySubscription": "Yıllık abonelik",
+  "@yearlySubscription": {"description": "Yearly subscription label"},
+  
+  "freeTrial": "Ücretsiz Deneme",
+  "@freeTrial": {"description": "Free trial label"},
+  
+  "subscriptionInGracePeriod": "Aboneliğiniz ek sürede. Lütfen ödeme yönteminizi güncelleyin.",
+  "@subscriptionInGracePeriod": {"description": "Subscription grace period warning"},
+  
+  "subscriptionCancelledInfo": "Pro erişiminiz {date} tarihinde sona erecektir. Süresi dolduktan sonra tekrar abone olabilirsiniz.",
+  "@subscriptionCancelledInfo": {
+    "description": "Subscription cancelled info message",
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  
+  "subscriptionCancelled": "Abonelik İptal Edildi",
+  "@subscriptionCancelled": {"description": "Subscription cancelled title"},
+  
+  "upgradeToProDescription": "Sınırsız kilitli notlar, bulut eşitleme ve daha fazlası için Pro'ya yükseltin.",
+  "@upgradeToProDescription": {"description": "Upgrade to pro description"},
+  
+  "cancellingSubscription": "İptal ediliyor...",
+  "@cancellingSubscription": {"description": "Cancelling subscription status"},
+  
+  "manageSubscription": "Aboneliği Yönet",
+  "@manageSubscription": {"description": "Manage subscription button"},
+  
+  "cancelSubscriptionConfirmation": "Aboneliğinizi iptal etmek istediğinizden emin misiniz?\n\nAboneliğiniz, mevcut fatura döneminin sonuna kadar aktif kalacaktır. Bundan sonra Pro özelliklerine erişiminizi kaybedeceksiniz.",
+  "@cancelSubscriptionConfirmation": {"description": "Cancel subscription confirmation message"},
+  
+  "signInWithAnyLinked": "Bağlı herhangi bir hesapla giriş yapın",
+  "@signInWithAnyLinked": {"description": "Connected accounts subtitle"},
+  
+  "linkingRequiresAuth": "Bağlama işlemi, sahipliği doğrulamak için her platformda kimlik doğrulama gerektirir.",
+  "@linkingRequiresAuth": {"description": "Linking authentication notice"},
+  
+  "connected": "Bağlandı",
+  "@connected": {"description": "Connected status"},
+  
+  "cannotUnlinkPrimary": "Orijinal giriş yönteminin bağlantısı kaldırılamaz",
+  "@cannotUnlinkPrimary": {"description": "Cannot unlink primary tooltip"},
+  
+  "sendingVerificationCode": "Doğrulama kodu gönderiliyor...",
+  "@sendingVerificationCode": {"description": "Sending verification code status"},
+  
+  "verifyAccountLink": "Hesap Bağlantısını Doğrula",
+  "@verifyAccountLink": {"description": "Verify account link dialog title"},
+  
+  "verifyAndLink": "Doğrula ve Bağla",
+  "@verifyAndLink": {"description": "Verify and link button"},
+  
+  "yourNotesAreProtected": "Notlarınız güvende",
+  "@yourNotesAreProtected": {"description": "E2EE ready status"},
+  
+  "waitingForDeviceApproval": "Cihaz onayı bekleniyor",
+  "@waitingForDeviceApproval": {"description": "E2EE pending approval status"},
+  
+  "protectionNotEnabled": "Koruma etkin değil",
+  "@protectionNotEnabled": {"description": "E2EE not set up status"},
+  
+  "somethingWentWrong": "Bir şeyler ters gitti",
+  "@somethingWentWrong": {"description": "E2EE error status"},
+  
+  "deviceAccessRemoved": "Cihaz erişimi kaldırıldı",
+  "@deviceAccessRemoved": {"description": "E2EE revoked status"},
+  
+  "gettingReady": "Hazırlanıyor...",
+  "@gettingReady": {"description": "E2EE initializing status"},
+  
+  "notesAndAttachmentsEncrypted": "Notlarınız ve ekleriniz şifrelendi",
+  "@notesAndAttachmentsEncrypted": {"description": "E2EE encryption info"},
+  
+  "encryption": "Şifreleme",
+  "@encryption": {"description": "Encryption label"},
+  
+  "keyExchange": "Anahtar Değişimi",
+  "@keyExchange": {"description": "Key exchange label"},
+  
+  "keySize": "Anahtar Boyutu",
+  "@keySize": {"description": "Key size label"},
+  
+  "nDevicesAuthorized": "{count} cihaz yetkilendirildi",
+  "@nDevicesAuthorized": {
+    "description": "Number of authorized devices",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "important": "Önemli",
+  "@important": {"description": "Important label"},
+  
+  "approveOnOtherDevice": "Bu cihazı onaylamak için halihazırda yetkilendirilmiş bir cihazda Better Keep'i açın.",
+  "@approveOnOtherDevice": {"description": "Pending approval instruction"},
+  
+  "yourDevices": "Cihazlarınız",
+  "@yourDevices": {"description": "Your devices section title"},
+  
+  "pendingApprovalSection": "Onay Bekleyenler",
+  "@pendingApprovalSection": {"description": "Pending approval section title"},
+  
+  "authorizedDevices": "Yetkili Cihazlar",
+  "@authorizedDevices": {"description": "Authorized devices section title"},
+  
+  "noInternetConnection": "İnternet bağlantısı yok. Lütfen ağınızı kontrol edip tekrar deneyin.",
+  "@noInternetConnection": {"description": "No internet connection error"},
+  
+  "dangerZone": "Tehlikeli Bölge",
+  "@dangerZone": {"description": "Danger zone section title"},
+  
+  "dangerZoneDescription": "Hesabınızı ve ilişkili tüm verileri kalıcı olarak silin. Bu işlem 30 günlük bir ek sürenin ardından tamamlanacaktır.",
+  "@dangerZoneDescription": {"description": "Danger zone description"},
+  
+  "deleteMyAccount": "Hesabımı Sil",
+  "@deleteMyAccount": {"description": "Delete my account button"},
+  
+  "unsyncedNotesWarning": "Henüz buluta eşitlenmemiş notlarınız var. Şimdi çıkış yaparsanız, bu notlar SONSUZA KADAR KAYBOLACAKTIR.\n\nEşitlemenin tamamlanmasını beklemeyi veya önce verilerinizi dışa aktarmayı düşünün.",
+  "@unsyncedNotesWarning": {"description": "Unsynced notes warning message"},
+  
+  "notesNotSynced": "{count, plural, =1{1 not eşitlenmedi} other{{count} not eşitlenmedi}}",
+  "@notesNotSynced": {
+    "description": "Number of notes not synced",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "dataLossWarning": "VERİ KAYBI UYARISI",
+  "@dataLossWarning": {"description": "Data loss warning title"},
+  
+  "noRecoveryKeySet": "Kurtarma Anahtarı ayarlanmamış",
+  "@noRecoveryKeySet": {"description": "No recovery key set up warning"},
+  
+  "signOutNoRecoveryKeyWarning": "Eğer çıkış yaparsanız ve onaylı tüm cihazlarınıza erişimi kaybederseniz, tüm şifrelenmiş notlarınıza erişimi KALICI olarak kaybedersiniz.\n\nBu işlem geri alınamaz.",
+  "@signOutNoRecoveryKeyWarning": {"description": "Sign out without recovery key warning"},
+  
+  "signOutConfirmation": "Çıkış yapmak istediğinizden emin misiniz?\n\nNotlarınıza erişmek için tekrar giriş yapmanız gerekecek.",
+  "@signOutConfirmation": {"description": "Sign out confirmation message"},
+  
+  "nDevicesWaitingForApproval": "{count, plural, =1{1 Cihaz Onay Bekliyor} other{{count} Cihaz Onay Bekliyor}}",
+  "@nDevicesWaitingForApproval": {
+    "description": "Number of devices waiting for approval",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "reviewAndApprove": "Erişim vermek için inceleyin ve onaylayın",
+  "@reviewAndApprove": {"description": "Review and approve subtitle"},
+  
+  "nShareAccessRequests": "{count, plural, =1{1 Paylaşım Erişim İsteği} other{{count} Paylaşım Erişim İsteği}}",
+  "@nShareAccessRequests": {
+    "description": "Number of share access requests",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "someoneWantsToView": "Birisi paylaştığınız notu görüntülemek istiyor",
+  "@someoneWantsToView": {"description": "Share request subtitle"},
+  
+  "deviceApproved_": "Cihaz onaylandı",
+  "@deviceApproved_": {"description": "Device approved snackbar message"},
+  
+  "failedApproveDevice": "Cihaz onaylanamadı: {error}",
+  "@failedApproveDevice": {
+    "description": "Failed to approve device error",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "deviceRemoved": "Cihaz kaldırıldı",
+  "@deviceRemoved": {"description": "Device removed message"},
+  
+  "nDevicesRemoved": "{count} cihaz kaldırıldı",
+  "@nDevicesRemoved": {
+    "description": "Number of devices removed",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "failedRemoveDevice": "Cihaz kaldırılamadı: {error}",
+  "@failedRemoveDevice": {
+    "description": "Failed to remove device error",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "removeDevice_": "Cihazı Kaldır",
+  "@removeDevice_": {"description": "Remove device dialog title"},
+  
+  "removeDeviceConfirmation": "\"{deviceName}\" cihazını kaldırmak istediğinizden emin misiniz?\n\nBu cihaz artık notlarınıza erişemeyecek.",
+  "@removeDeviceConfirmation": {
+    "description": "Remove device confirmation message",
+    "placeholders": {
+      "deviceName": {"type": "String"}
+    }
+  },
+  
+  "enableE2EEConfirmation": "Bu, tüm notlarınızı ve eklerinizi şifreleyecektir. Yalnızca yetkilendirdiğiniz cihazlar bunları okuyabilecektir.\n\nE2EE'yi etkinleştirdikten sonra bir Kurtarma Anahtarı ayarladığınızdan emin olun, aksi takdirde tüm cihazlarınızı kaybederseniz notlarınıza erişimi kaybedebilirsiniz.",
+  "@enableE2EEConfirmation": {"description": "Enable E2EE confirmation message"},
+  
+  "enableE2EE_": "E2EE'yi Etkinleştir",
+  "@enableE2EE_": {"description": "Enable E2EE button text"},
+  
+  "failedEnableE2EE": "E2EE etkinleştirilemedi: {error}",
+  "@failedEnableE2EE": {
+    "description": "Failed to enable E2EE error",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "recoveryKeySavedSuccessfully": "Kurtarma Anahtarı başarıyla kaydedildi!",
+  "@recoveryKeySavedSuccessfully": {"description": "Recovery key saved message"},
+  
+  "noRecoveryKeyWarning": "Uyarı: Bir Kurtarma Anahtarı olmadan, tüm cihazları kaybederseniz notlarınıza erişimi kaybedebilirsiniz.",
+  "@noRecoveryKeyWarning": {"description": "No recovery key warning message"},
+  
+  "recoveryKeySetUp": "Ayarlanmış bir Kurtarma Anahtarınız var. Ne yapmak istersiniz?",
+  "@recoveryKeySetUp": {"description": "Recovery key options message"},
+  
+  "update": "Güncelle",
+  "@update": {"description": "Update button"},
+  
+  "recoveryKeyUpdated": "Kurtarma Anahtarı güncellendi!",
+  "@recoveryKeyUpdated": {"description": "Recovery key updated message"},
+  
+  "recoveryKeyRemoved": "Kurtarma Anahtarı kaldırıldı",
+  "@recoveryKeyRemoved": {"description": "Recovery key removed message"},
+  
+  "recoveryKeySaved": "Kurtarma Anahtarı kaydedildi!",
+  "@recoveryKeySaved": {"description": "Recovery key saved message"},
+  
+  "upgradeNowQuestion": "Şimdi Yükseltilsin mi?",
+  "@upgradeNowQuestion": {"description": "Upgrade now dialog title"},
+  
+  "trialTimeLeft": "Ücretsiz denemenizin bitmesine hala {timeLeft} var.",
+  "@trialTimeLeft": {
+    "description": "Trial time remaining message",
+    "placeholders": {
+      "timeLeft": {"type": "String"}
+    }
+  },
+  
+  "subscribeNowTrialEnds": "Şimdi abone olursanız, deneme süreniz hemen sona erecek ve faturalandırma hemen başlayacaktır.",
+  "@subscribeNowTrialEnds": {"description": "Subscribe now trial ends message"},
+  
+  "alreadyHaveSubscription": "Zaten aktif bir {planName} aboneliğiniz var!",
+  "@alreadyHaveSubscription": {
+    "description": "Already have subscription message",
+    "placeholders": {
+      "planName": {"type": "String"}
+    }
+  },
+  
+  "unlinkProviderQuestion": "{provider} bağlantısı kaldırılsın mı?",
+  "@unlinkProviderQuestion": {
+    "description": "Unlink provider dialog title",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "unlinkProviderWarning": "Artık bu hesapla giriş yapamayacaksınız. Hesabınıza erişmek için başka bir yolunuz olduğundan emin olun.",
+  "@unlinkProviderWarning": {"description": "Unlink provider warning message"},
+  
+  "unlinkedSuccessfully": "{provider} bağlantısı kaldırıldı",
+  "@unlinkedSuccessfully": {
+    "description": "Unlinked provider successfully message",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "failedUnlinkAccount": "Hesap bağlantısı kaldırılamadı",
+  "@failedUnlinkAccount": {"description": "Failed to unlink account error"},
+  
+  "cannotUnlinkOnlyMethod": "Tek giriş yönteminin bağlantısı kaldırılamaz.",
+  "@cannotUnlinkOnlyMethod": {"description": "Cannot unlink only method error"},
+  
+  "unknownProviderError": "Bilinmeyen sağlayıcı: {provider}",
+  "@unknownProviderError": {
+    "description": "Unknown provider error",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "takingTooLong": "İşlem çok uzun sürüyor. İptal edip tekrar deneyebilirsiniz.",
+  "@takingTooLong": {"description": "Taking too long message"},
+  
+  "failedSendCode": "Doğrulama kodu gönderilemedi",
+  "@failedSendCode": {"description": "Failed to send verification code error"},
+  
+  "pleaseTryAgain": "Lütfen tekrar deneyin.",
+  "@pleaseTryAgain": {"description": "Please try again message"},
+  
+  "pleaseSignInAgain": "Lütfen tekrar giriş yapıp deneyin.",
+  "@pleaseSignInAgain": {"description": "Please sign in again message"},
+  
+  "noEmailAssociated": "Hesabınızla ilişkilendirilmiş e-posta yok.",
+  "@noEmailAssociated": {"description": "No email associated error"},
+  
+  "providerAlreadyLinked": "{provider} hesabınıza zaten bağlı.",
+  "@providerAlreadyLinked": {
+    "description": "Provider already linked error",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "pleaseWaitBeforeRequesting": "Tekrar istekte bulunmadan önce lütfen bekleyin.",
+  "@pleaseWaitBeforeRequesting": {"description": "Rate limit message"},
+  
+  "sessionExpired_": "Oturum süresi doldu. Lütfen tekrar deneyin.",
+  "@sessionExpired_": {"description": "Session expired message"},
+  
+  "failedLinkAccount": "Hesap bağlanamadı",
+  "@failedLinkAccount": {"description": "Failed to link account error"},
+  
+  "providerLinkedToAnother": "Bu {provider} hesabı zaten başka bir kullanıcıya bağlı.",
+  "@providerLinkedToAnother": {
+    "description": "Provider linked to another user error",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "emailAlreadyInUse": "Bu e-postaya sahip bir hesap zaten var. Önce o hesapla giriş yapın, ardından oradan bağlantı kurun.",
+  "@emailAlreadyInUse": {"description": "Email already in use error"},
+  
+  "linkingCancelled": "Bağlantı işlemi iptal edildi.",
+  "@linkingCancelled": {"description": "Linking cancelled message"},
+  
+  "successfullyLinkedProvider": "{provider} hesabı başarıyla bağlandı",
+  "@successfullyLinkedProvider": {
+    "description": "Successfully linked provider message",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  
+  "deleteYourAccount": "Hesabınız Silinsin mi?",
+  "@deleteYourAccount": {"description": "Delete account dialog title"},
+  
+  "actionIrreversible": "Bu işlem geri alınamaz",
+  "@actionIrreversible": {"description": "Action irreversible warning"},
+  
+  "allNotesDeleted": "Tüm notlarınız kalıcı olarak silinecektir",
+  "@allNotesDeleted": {"description": "All notes deleted warning"},
+  
+  "allAttachmentsRemoved": "Tüm ekler ve medya kaldırılacaktır",
+  "@allAttachmentsRemoved": {"description": "All attachments removed warning"},
+  
+  "loggedOutAllDevices": "Tüm cihazlardan çıkış yapacaksınız",
+  "@loggedOutAllDevices": {"description": "Logged out all devices warning"},
+  
+  "accountCannotBeRecovered": "Hesabınız kurtarılamaz",
+  "@accountCannotBeRecovered": {"description": "Account cannot be recovered warning"},
+  
+  "gracePeriodInfo": "30 günlük ek süre: Silme işlemini iptal etmek için tekrar giriş yapın.",
+  "@gracePeriodInfo": {"description": "Grace period info message"},
+  
+  "verificationCodeViaEmail": "E-posta yoluyla bir doğrulama kodu alacaksınız.",
+  "@verificationCodeViaEmail": {"description": "Verification code via email message"},
+  
+  "keepMyAccount": "Hesabımı Koru",
+  "@keepMyAccount": {"description": "Keep my account button"},
+  
+  "deleteAccount": "Hesabı Sil",
+  "@deleteAccount": {"description": "Delete account button"},
+  
+  "verifyYourIdentity": "Kimliğinizi Doğrulayın",
+  "@verifyYourIdentity": {"description": "Verify identity dialog title"},
+  
+  "userNotSignedIn": "Kullanıcı giriş yapmamış",
+  "@userNotSignedIn": {"description": "User not signed in error"},
+  
+  "failedScheduleDeletion": "Silme işlemi planlanamadı",
+  "@failedScheduleDeletion": {"description": "Failed to schedule deletion error"},
+  
+  "deletionScheduled": "Silme İşlemi Planlandı",
+  "@deletionScheduled": {"description": "Deletion scheduled dialog title"},
+  
+  "accountWillBeDeletedOn": "Hesabınız {date} tarihinde silinecek.",
+  "@accountWillBeDeletedOn": {
+    "description": "Account deletion date message",
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  
+  "exportBeforeSignOut": "Çıkış yapmadan önce verilerinizi dışa aktarmak ister misiniz?",
+  "@exportBeforeSignOut": {"description": "Export before sign out message"},
+  
+  "skip": "Geç",
+  "@skip": {"description": "Skip button"},
+  
+  "exportData": "Verileri Dışa Aktar",
+  "@exportData": {"description": "Export data button"},
+  
+  "exportingData": "Veriler Dışa Aktarılıyor",
+  "@exportingData": {"description": "Exporting data dialog title"},
+  
+  "exportCancelled": "Dışa aktarma iptal edildi",
+  "@exportCancelled": {"description": "Export cancelled message"},
+  
+  "exportFailed": "Dışa aktarma başarısız",
+  "@exportFailed": {"description": "Export failed message"},
+  
+  "exportComplete": "Dışa Aktarma Tamamlandı",
+  "@exportComplete": {"description": "Export complete dialog title"},
+  
+  "exportCompleteMessage": "Verileriniz başarıyla dışa aktarıldı.\n\nDosya şuraya kaydedildi:\n{path}\n\nDışa aktarılan dosyayı paylaşmak ister misiniz?",
+  "@exportCompleteMessage": {
+    "description": "Export complete message",
+    "placeholders": {
+      "path": {"type": "String"}
+    }
+  },
+  
+  "deletionScheduledMessage": "Hesap silme işlemi {date} için planlandı. İptal etmek için tekrar giriş yapın.",
+  "@deletionScheduledMessage": {
+    "description": "Deletion scheduled snackbar message",
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  
+  "iphoneIpad": "iPhone/iPad",
+  "@iphoneIpad": {"description": "iPhone/iPad platform name"},
+  
+  "webBrowser": "Web Tarayıcısı",
+  "@webBrowser": {"description": "Web browser platform name"},
+  
+  "debugDeleteSubscription": "DEBUG: Aboneliği Sil",
+  "@debugDeleteSubscription": {"description": "Debug delete subscription button"},
+  
+  "debugDeleteSubscriptionWarning": "Bu işlem aboneliğinizi veritabanından hemen silecektir.\n\nBu YALNIZCA TEST AMAÇLIDIR ve asıl Razorpay aboneliğini iptal etmez.",
+  "@debugDeleteSubscriptionWarning": {"description": "Debug delete subscription warning"},
+  
+  "debugSubscriptionDeleted": "DEBUG: Abonelik başarıyla silindi",
+  "@debugSubscriptionDeleted": {"description": "Debug subscription deleted message"},
+  
+  "debugSubscriptionDeleteFailed": "DEBUG: Abonelik silinemedi",
+  "@debugSubscriptionDeleteFailed": {"description": "Debug subscription delete failed message"},
+  
+  "removeLink": "Bağlantıyı Kaldır",
+  "@removeLink": {"description": "Remove link button text"},
+  
+  "add": "Ekle",
+  "@add": {"description": "Add button text"},
+  
+  "recent": "En Son",
+  "@recent": {"description": "Recent section label"},
+  
+  "custom": "Özel",
+  "@custom": {"description": "Custom option label"},
+  
+  "noLabelsYet": "Henüz etiket yok",
+  "@noLabelsYet": {"description": "Empty labels state title"},
+  
+  "createLabelToOrganize": "Notlarınızı düzenlemek için yukarıdan bir etiket oluşturun",
+  "@createLabelToOrganize": {"description": "Empty labels state description"},
+  
+  "editLabelName": "{labelName} öğesini düzenle",
+  "@editLabelName": {
+    "description": "Edit label dialog title",
+    "placeholders": {
+      "labelName": {"type": "String"}
+    }
+  },
+  
+  "enterNewName": "Yeni ad girin",
+  "@enterNewName": {"description": "Edit label placeholder"},
+  
+  "deleteLabel": "Etiketi Sil",
+  "@deleteLabel": {"description": "Delete label dialog title"},
+  
+  "deleteLabelConfirmation": "Bu etiketi ({labelName}) silmek istediğinizden emin misiniz?",
+  "@deleteLabelConfirmation": {
+    "description": "Delete label confirmation message",
+    "placeholders": {
+      "labelName": {"type": "String"}
+    }
+  },
+  
+  "pasteAs": "Farklı yapıştır",
+  "@pasteAs": {"description": "Paste as dialog title"},
+  
+  "formattedText": "Biçimlendirilmiş metin",
+  "@formattedText": {"description": "Formatted text paste option"},
+  
+  "previewAndInsertFormatted": "Biçimlendirilmiş içerik olarak önizle ve ekle",
+  "@previewAndInsertFormatted": {"description": "Formatted text paste option subtitle"},
+  
+  "insertAsPlainText": "Biçimlendirme olmadan düz metin olarak ekle",
+  "@insertAsPlainText": {"description": "Plain text paste option subtitle"},
+  
+  "prompt": "İstem",
+  "@prompt": {"description": "Prompt dialog default title"},
+  
+  "notMatched": "Eşleşmedi",
+  "@notMatched": {"description": "Confirm field not matched error"},
+  
+  "confirmPlaceholder": "{placeholder} onayla",
+  "@confirmPlaceholder": {
+    "description": "Confirm field placeholder",
+    "placeholders": {
+      "placeholder": {"type": "String"}
+    }
+  },
+  
+  "notificationPermissionsRequired": "Hatırlatıcılar için bildirim ve alarm izinleri gereklidir",
+  "@notificationPermissionsRequired": {"description": "Notification permissions required message"},
+  
+  "checkAll": "Tümünü İşaretle",
+  "@checkAll": {"description": "Check all button text"},
+  
+  "uncheckAll": "Tüm İşaretleri Kaldır",
+  "@uncheckAll": {"description": "Uncheck all button text"},
+  
+  "checkNestedItemsCount": "Bu, iç içe geçmiş {count} {count, plural, =1{öğeyi} other{öğeyi}} işaretleyecektir.",
+  "@checkNestedItemsCount": {
+    "description": "Check nested items confirmation message",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "uncheckNestedItemsCount": "Bu, iç içe geçmiş {count} {count, plural, =1{öğenin} other{öğenin}} işaretini kaldıracaktır.",
+  "@uncheckNestedItemsCount": {
+    "description": "Uncheck nested items confirmation message",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "somethingWentWrongTryAgain": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+  "@somethingWentWrongTryAgain": {"description": "Generic error message with try again"},
+  
+  "verifyingPassphrase": "İfade doğrulanıyor...",
+  "@verifyingPassphrase": {"description": "Verifying passphrase status message"},
+  
+  "settingAsPrimaryDevice": "Birincil cihaz olarak ayarlanıyor...",
+  "@settingAsPrimaryDevice": {"description": "Setting as primary device status message"},
+  
+  "finalizing": "Sonuçlandırılıyor...",
+  "@finalizing": {"description": "Finalizing status message"},
+  
+  "incorrectPassphrase": "Hatalı ifade. Lütfen tekrar deneyin.",
+  "@incorrectPassphrase": {"description": "Incorrect passphrase error message"},
+  
+  "recoveryTimedOut": "Kurtarma zaman aşımına uğradı. Lütfen bağlantınızı kontrol edip tekrar deneyin.",
+  "@recoveryTimedOut": {"description": "Recovery timed out error message"},
+  
+  "recoveryKeyMobileOnly": "Bu Kurtarma Anahtarı bir mobil veya masaüstü uygulamasında oluşturuldu ve tarayıcıda kullanılamaz. Lütfen kurtarmak için mobil veya masaüstü uygulamasını kullanın.",
+  "@recoveryKeyMobileOnly": {"description": "Recovery key mobile only error message"},
+  
+  "somethingWentWrongCheckConnection": "Bir şeyler ters gitti. Lütfen bağlantınızı kontrol edip tekrar deneyin.",
+  "@somethingWentWrongCheckConnection": {"description": "Generic error message with connection check"},
+  
+  "recover": "Kurtar",
+  "@recover": {"description": "Recover button text"},
+  
+  "recoverInfoTooltip": "Kurtarma ifadenizi kullanarak şifreleme anahtarlarınızı kurtarın",
+  "@recoverInfoTooltip": {"description": "Recover info tooltip"},
+  
+  "hintLabel": "İpucu: {hint}",
+  "@hintLabel": {
+    "description": "Hint label with value",
+    "placeholders": {
+      "hint": {"type": "String"}
+    }
+  },
+  
+  "setAsPrimaryDevice": "Birincil cihaz olarak ayarla",
+  "@setAsPrimaryDevice": {"description": "Set as primary device toggle label"},
+  
+  "pleaseEnterRecoveryPassphrase": "Lütfen kurtarma ifadenizi girin",
+  "@pleaseEnterRecoveryPassphrase": {"description": "Please enter recovery passphrase error"},
+  
+  "currentPassphraseIncorrect": "Mevcut ifade yanlış",
+  "@currentPassphraseIncorrect": {"description": "Current passphrase incorrect error"},
+  
+  "pleaseEnterCurrentPassphrase": "Lütfen mevcut ifadenizi girin",
+  "@pleaseEnterCurrentPassphrase": {"description": "Please enter current passphrase error"},
+  
+  "pleaseEnterNewPassphrase": "Lütfen yeni bir ifade girin",
+  "@pleaseEnterNewPassphrase": {"description": "Please enter new passphrase error"},
+  
+  "removeRecoveryKey": "Kurtarma Anahtarını Kaldır",
+  "@removeRecoveryKey": {"description": "Remove recovery key dialog title"},
+  
+  "removeRecoveryKeyWarning": "Uyarı: Bir Kurtarma Anahtarı olmadan, tüm cihazlarınızı kaybederseniz notlarınızı kurtaramazsınız!",
+  "@removeRecoveryKeyWarning": {"description": "Remove recovery key warning"},
+  
+  "enterPassphraseToConfirmRemoval": "Kaldırma işlemini onaylamak için mevcut ifadenizi girin:",
+  "@enterPassphraseToConfirmRemoval": {"description": "Enter passphrase to confirm removal message"},
+  
+  "passphraseIncorrect": "İfade yanlış",
+  "@passphraseIncorrect": {"description": "Passphrase incorrect error"},
+  
+  "unlockNote": "Notun Kilidini Aç",
+  "@unlockNote": {"description": "Unlock note dialog title"},
+  
+  "pleaseEnterPin": "Lütfen PIN'i girin",
+  "@pleaseEnterPin": {"description": "Please enter PIN validation error"},
+  
+  "tooManyAttemptsWait": "Çok fazla deneme yapıldı. {seconds} saniye bekleyin.",
+  "@tooManyAttemptsWait": {
+    "description": "Too many attempts wait message",
+    "placeholders": {
+      "seconds": {"type": "int"}
+    }
+  },
+  
+  "attemptsRemaining": "{message}. {remaining} deneme hakkı kaldı.",
+  "@attemptsRemaining": {
+    "description": "Attempts remaining error message",
+    "placeholders": {
+      "message": {"type": "String"},
+      "remaining": {"type": "int"}
+    }
+  },
+  
+  "failedToUnlockNote": "Notun kilidi açılamadı",
+  "@failedToUnlockNote": {"description": "Failed to unlock note error"},
+  
+  "lockedSeconds": "Kilitli ({seconds} sn)",
+  "@lockedSeconds": {
+    "description": "Locked with countdown",
+    "placeholders": {
+      "seconds": {"type": "int"}
+    }
+  },
+  
+  "unlock": "Kilidi Aç",
+  "@unlock": {"description": "Unlock button text"},
+  
+  "lockNote": "Notu Kilitle",
+  "@lockNote": {"description": "Lock note dialog title"},
+  
+  "pinForgotWarning": "Bu PIN'i unutursanız, notu kurtarmanın bir yolu yoktur.",
+  "@pinForgotWarning": {"description": "PIN forgot warning message"},
+  
+  "pleaseEnterAPin": "Lütfen bir PIN girin",
+  "@pleaseEnterAPin": {"description": "Please enter PIN validation error"},
+  
+  "pinMinLength": "PIN en az 4 karakter uzunluğunda olmalıdır",
+  "@pinMinLength": {"description": "PIN minimum length error"},
+  
+  "pinTooWeak": "PIN çok zayıf (tümü aynı karakterler)",
+  "@pinTooWeak": {"description": "PIN too weak error"},
+  
+  "pinTooCommon": "PIN çok yaygın",
+  "@pinTooCommon": {"description": "PIN too common error"},
+  
+  "confirmPin": "PIN'i Onayla",
+  "@confirmPin": {"description": "Confirm PIN field label"},
+  
+  "reenterPin": "PIN'i tekrar girin",
+  "@reenterPin": {"description": "Re-enter PIN field hint"},
+  
+  "pinsDoNotMatch": "PIN'ler eşleşmiyor",
+  "@pinsDoNotMatch": {"description": "PINs do not match error"},
+  
+  "lock": "Kilitle",
+  "@lock": {"description": "Lock button text"},
+  
+  "recordAudio": "Ses Kaydet",
+  "@recordAudio": {"description": "Record audio dialog title"},
+  
+  "microphonePermissionRequired": "Ses kaydetmek için mikrofon izni gereklidir.",
+  "@microphonePermissionRequired": {"description": "Microphone permission required message"},
+  
+  "openSettings": "Ayarları Aç",
+  "@openSettings": {"description": "Open settings button text"},
+  
+  "stopRecording": "Kaydı durdur",
+  "@stopRecording": {"description": "Stop recording button text"},
+  
+  "startRecording": "Kaydı başlat",
+  "@startRecording": {"description": "Start recording button text"},
+  
+  "transcriptionUnavailable": "Metne dönüştürme kullanılamıyor",
+  "@transcriptionUnavailable": {"description": "Transcription unavailable label"},
+  
+  "liveTranscription": "Canlı metne dönüştürme",
+  "@liveTranscription": {"description": "Live transcription label"},
+  
+  "recordingContinuesWithoutTranscription": "Kayıt metne dönüştürme olmadan devam edecek",
+  "@recordingContinuesWithoutTranscription": {"description": "Recording continues without transcription message"},
+  
+  "listening": "Dinleniyor...",
+  "@listening": {"description": "Listening status"},
+  
+  "allowMicAccess": "Kayda başlamak için mikrofon erişimine izin verin.",
+  "@allowMicAccess": {"description": "Allow microphone access message"},
+  
+  "tapStartToRecord": "Kayda başlamak için başlat düğmesine dokunun.",
+  "@tapStartToRecord": {"description": "Tap start to record message"},
+  
+  "transcribeWhileRecording": "Kaydederken metne dönüştür",
+  "@transcribeWhileRecording": {"description": "Transcribe while recording subtitle"},
+  
+  "transcription": "Metne Dönüştürme",
+  "@transcription": {"description": "Transcription field label"},
+  
+  "editTranscriptionHint": "Gerekirse metni düzenleyin",
+  "@editTranscriptionHint": {"description": "Edit transcription hint"},
+  
+  "addTranscriptionToNote": "Metni nota ekle",
+  "@addTranscriptionToNote": {"description": "Add transcription to note checkbox"},
+  
+  "noSpeechDetected": "Kayıt sırasında konuşma algılanmadı.",
+  "@noSpeechDetected": {"description": "No speech detected message"},
+  
+  "titleOptional": "Başlık (isteğe bağlı)",
+  "@titleOptional": {"description": "Title optional field label"},
+  
+  "enterTitleForRecording": "Bu kayıt için bir başlık girin",
+  "@enterTitleForRecording": {"description": "Enter title for recording hint"},
+  
+  "okay": "Tamam",
+  "@okay": {"description": "Okay button text"},
+  
+  "failedToStartRecording": "Kayıt başlatılamadı",
+  "@failedToStartRecording": {"description": "Failed to start recording error"},
+  
+  "transcriptionDisabledWebPrivacy": "Gizlilik nedeniyle web'de sesin metne dönüştürülmesi devre dışı bırakılmıştır. Sesiniz cihazınızda kalır.",
+  "@transcriptionDisabledWebPrivacy": {"description": "Transcription disabled on web for privacy"},
+  
+  "whisperModelRequired": "Ses tanıma modeli gereklidir",
+  "@whisperModelRequired": {"description": "Whisper model required title"},
+  
+  "whisperModelDescription": "Cihaz üzerinde sesten metne dönüştürme için küçük bir AI modeli (~31 MB) indirin. Sesiniz asla cihazınızı terk etmez.",
+  "@whisperModelDescription": {"description": "Whisper model description"},
+  
+  "downloadModel": "Modeli İndir",
+  "@downloadModel": {"description": "Download model button"},
+  
+  "useFallback": "Cihaz varsayılanını kullan",
+  "@useFallback": {"description": "Use fallback speech-to-text button"},
+  
+  "whisperTranscriptionActive": "Cihaz içi AI transkripsiyonu (gizli)",
+  "@whisperTranscriptionActive": {"description": "Whisper transcription active subtitle"},
+  
+  "modelDownloadComplete": "Ses modeli başarıyla indirildi",
+  "@modelDownloadComplete": {"description": "Model download complete message"},
+  
+  "modelDownloadFailed": "Ses modeli indirilemedi",
+  "@modelDownloadFailed": {"description": "Model download failed message"},
+  
+  "transcribingAudio": "Ses metne dönüştürülüyor...",
+  "@transcribingAudio": {"description": "Transcribing audio loading message"},
+  
+  "polishingTranscription": "Metin düzeltiliyor...",
+  "@polishingTranscription": {"description": "Message shown while Whisper refines the live transcription"},
+  
+  "transcriptionFailed": "Metne dönüştürme başarısız oldu. Lütfen tekrar deneyin.",
+  "@transcriptionFailed": {"description": "Transcription failed error message"},
+  
+  "deleteQuestion": "Silinsin mi?",
+  "@deleteQuestion": {"description": "Delete question dialog title"},
+  
+  "actionCannotBeUndone": "Bu işlem geri alınamaz.",
+  "@actionCannotBeUndone": {"description": "Action cannot be undone warning"},
+  
+  "permanentDeleteWarning": "Bu, tüm verileri kalıcı olarak silecektir ve kurtarılamaz.",
+  "@permanentDeleteWarning": {"description": "Permanent delete warning"},
+  
+  "deleteForever": "Sonsuza Dek Sil",
+  "@deleteForever": {"description": "Delete forever button text"},
+  
+  "sentVerificationCodeTo": "Şu adrese bir doğrulama kodu gönderdik:",
+  "@sentVerificationCodeTo": {"description": "Sent verification code message"},
+  
+  "pleaseEnterSixDigitCode": "Lütfen 6 haneli bir kod girin",
+  "@pleaseEnterSixDigitCode": {"description": "Please enter 6-digit code validation"},
+  
+  "codeExpiresInMinutes": "Kodun süresi {minutes} dakika içinde dolacak",
+  "@codeExpiresInMinutes": {
+    "description": "Code expires in minutes message",
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  
+  "verificationFailedTryAgain": "Doğrulama başarısız oldu. Lütfen tekrar deneyin.",
+  "@verificationFailedTryAgain": {"description": "Verification failed try again error"},
+  
+  "shareNote": "Notu Paylaş",
+  "@shareNote": {"description": "Share note dialog title"},
+  
+  "untitledNote": "Başlıksız Not",
+  "@untitledNote": {"description": "Untitled note placeholder"},
+  
+  "shareAsText": "Metin Olarak Paylaş",
+  "@shareAsText": {"description": "Share as text option title"},
+  
+  "plainTextContent": "Düz metin içeriği",
+  "@plainTextContent": {"description": "Share as text option subtitle"},
+  
+  "shareAsMarkdown": "Markdown Olarak Paylaş",
+  "@shareAsMarkdown": {"description": "Share as markdown option title"},
+  
+  "formattedWithMarkdown": "Markdown sözdizimi ile biçimlendirilmiş",
+  "@formattedWithMarkdown": {"description": "Share as markdown option subtitle"},
+  
+  "createSecureLink": "Güvenli Bağlantı Oluştur",
+  "@createSecureLink": {"description": "Create secure link option title"},
+  
+  "encryptedLinkWithApproval": "Erişim onayı ile şifrelenmiş bağlantı",
+  "@encryptedLinkWithApproval": {"description": "Create secure link option subtitle"},
+  
+  "linkCreated": "Bağlantı Oluşturuldu",
+  "@linkCreated": {"description": "Link created dialog title"},
+  
+  "activeLinks": "Aktif Bağlantılar ({count})",
+  "@activeLinks": {
+    "description": "Active links dialog title with count",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "secureLink": "Güvenli Bağlantı",
+  "@secureLink": {"description": "Secure link dialog title"},
+  
+  "createNewLink": "Yeni Bağlantı Oluştur",
+  "@createNewLink": {"description": "Create new link button text"},
+  
+  "revokeLink_": "Bağlantıyı iptal et",
+  "@revokeLink_": {"description": "Revoke link tooltip"},
+  
+  "copy": "Kopyala",
+  "@copy": {"description": "Copy button text"},
+  
+  "linkNotAvailable": "Bağlantı kullanılamıyor (başka bir cihazda oluşturulmuş)",
+  "@linkNotAvailable": {"description": "Link not available message"},
+  
+  "revokeLinkQuestion": "Bağlantı İptal Edilsin mi?",
+  "@revokeLinkQuestion": {"description": "Revoke link dialog title"},
+  
+  "revokeLinkWarning": "Bu işlem, paylaşım bağlantısını kalıcı olarak devre dışı bırakacaktır. Bağlantıya sahip olan hiç kimse artık nota erişemeyecektir.",
+  "@revokeLinkWarning": {"description": "Revoke link warning message"},
+  
+  "revoke": "İptal Et",
+  "@revoke": {"description": "Revoke button text"},
+  
+  "linkRevoked": "Bağlantı iptal edildi",
+  "@linkRevoked": {"description": "Link revoked snackbar message"},
+  
+  "failedToRevoke": "İptal edilemedi: {error}",
+  "@failedToRevoke": {
+    "description": "Failed to revoke error",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "linkCopied": "Bağlantı panoya kopyalandı",
+  "@linkCopied": {"description": "Link copied snackbar message"},
+  
+  "linkExpiresAfter": "Bağlantı şu süreden sonra sona erer:",
+  "@linkExpiresAfter": {"description": "Link expires after label"},
+  
+  "options": "Seçenekler",
+  "@options": {"description": "Options label"},
+  
+  "includeAttachments": "Ekleri dahil et",
+  "@includeAttachments": {"description": "Include attachments checkbox label"},
+  
+  "nAttachments": "{count} ek",
+  "@nAttachments": {
+    "description": "Number of attachments",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "createLink": "Bağlantı Oluştur",
+  "@createLink": {"description": "Create link button text"},
+  
+  "creating": "Oluşturuluyor...",
+  "@creating": {"description": "Creating status text"},
+  
+  "e2eeApprovalInfo": "Uçtan uca şifrelenmiş. Her erişim isteğini siz onaylayacaksınız.",
+  "@e2eeApprovalInfo": {"description": "E2EE approval info message"},
+  
+  "linkCreatedSuccess": "Bağlantı Oluşturuldu!",
+  "@linkCreatedSuccess": {"description": "Link created success message"},
+  
+  "expiresIn": "{duration} içinde sona eriyor",
+  "@expiresIn": {
+    "description": "Expires in duration message",
+    "placeholders": {
+      "duration": {"type": "String"}
+    }
+  },
+  
+  "accessNotification": "Biri erişim istediğinde bir bildirim alacaksınız.",
+  "@accessNotification": {"description": "Access notification info"},
+  
+  "pleaseUnlockNoteFirst": "Paylaşmak için lütfen önce notun kilidini açın",
+  "@pleaseUnlockNoteFirst": {"description": "Please unlock note first message"},
+  
+  "sharedNote": "Paylaşılan Not: {title}",
+  "@sharedNote": {
+    "description": "Shared note title",
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  
+  "sessionProblem": "Oturum Problemi",
+  "@sessionProblem": {"description": "Session problem banner title"},
+  
+  "syncDisabledPleaseSignOut": "Eşitleme devre dışı. Lütfen çıkış yapıp tekrar giriş yapın.",
+  "@syncDisabledPleaseSignOut": {"description": "Session invalid banner message"},
+  
+  "signOutConfirmationWithNote": "Çıkış yapmak istediğinizden emin misiniz?\n\nNotlarınıza erişmek için tekrar giriş yapmanız gerekecek.",
+  "@signOutConfirmationWithNote": {"description": "Sign out confirmation message with note access info"},
+  
+  "sketchTool": "Araç",
+  "@sketchTool": {"description": "Sketch tool section label"},
+  
+  "sketchSize": "Boyut",
+  "@sketchSize": {"description": "Sketch size section label"},
+  
+  "sketchColor": "Renk",
+  "@sketchColor": {"description": "Sketch color section label"},
+  
+  "transcript": "Metin",
+  "@transcript": {"description": "Transcript section title"},
+  
+  "duration": "Süre",
+  "@duration": {"description": "Duration label"},
+  
+  "deleteRecordingConfirmation": "Bu ses kaydını silmek istediğinizden emin misiniz?",
+  "@deleteRecordingConfirmation": {"description": "Delete recording confirmation message"},
+  
+  "encryptedNote": "Şifrelenmiş Not",
+  "@encryptedNote": {"description": "Encrypted note dialog title"},
+  
+  "encryptedNoteCannotBeDecrypted": "Bu notun şifresi çözülemedi. Şifreleme anahtarları eksik veya geçersiz bu yüzden not kurtarılamıyor.",
+  "@encryptedNoteCannotBeDecrypted": {"description": "Encrypted note cannot be decrypted message"},
+  
+  "decryptionFailed": "Şifre çözme başarısız oldu",
+  "@decryptionFailed": {"description": "Decryption failed label"},
+  
+  "thisNoteIsLocked": "Bu not kilitli",
+  "@thisNoteIsLocked": {"description": "Locked note label"},
+  
+  "audio": "Ses",
+  "@audio": {"description": "Audio fallback label"},
+  
+  "syncFailedCount": "{count, plural, =1{1 başarısız} other{{count} başarısız}}",
+  "@syncFailedCount": {
+    "description": "Number of sync failures",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "openInAppForBestExperience": "En iyi deneyim için uygulamada açın",
+  "@openInAppForBestExperience": {"description": "Open in app banner message for Android"},
+  
+  "useAppForBetterExperience": "Daha iyi bir deneyim için uygulamayı kullanın",
+  "@useAppForBetterExperience": {"description": "Use app banner message for iOS/other"},
+  
+  "noteMarkedAsDone": "Not tamamlandı olarak işaretlendi",
+  "@noteMarkedAsDone": {"description": "Note marked as done snackbar message"},
+  
+  "pickTextColor": "Metin Rengi Seç",
+  "@pickTextColor": {"description": "Text color picker dialog title"},
+  
+  "image": "Resim",
+  "@image": {"description": "Image attachment option"},
+  
+  "sketch": "Çizim",
+  "@sketch": {"description": "Sketch attachment option"},
+  
+  "textSizeTiny": "Çok Küçük",
+  "@textSizeTiny": {"description": "Tiny text size option"},
+  
+  "textSizeSmall": "Küçük",
+  "@textSizeSmall": {"description": "Small text size option"},
+  
+  "textSizeNormal": "Normal",
+  "@textSizeNormal": {"description": "Normal text size option"},
+  
+  "textSizeBig": "Büyük",
+  "@textSizeBig": {"description": "Big text size option"},
+  
+  "textSizeHuge": "Çok Büyük",
+  "@textSizeHuge": {"description": "Huge text size option"},
+  
+  "lineSpacing": "Satır Aralığı",
+  "@lineSpacing": {"description": "Line spacing tooltip"},
+  
+  "lineSpacingTight": "Sıkı",
+  "@lineSpacingTight": {"description": "Tight line spacing option"},
+  
+  "lineSpacingNormal": "Normal",
+  "@lineSpacingNormal": {"description": "Normal line spacing option"},
+  
+  "lineSpacingRelaxed": "Geniş",
+  "@lineSpacingRelaxed": {"description": "Relaxed line spacing option"},
+  
+  "lineSpacingDouble": "Çift",
+  "@lineSpacingDouble": {"description": "Double line spacing option"},
+  
+  "lineSpacingRemove": "Aralığı Kaldır",
+  "@lineSpacingRemove": {"description": "Remove line spacing option"},
+  
+  "startWriting": "Yazmaya başla...",
+  "@startWriting": {"description": "Note editor placeholder text"},
+  
+  "imageFailedToLoad": "Resim yüklenemedi",
+  "@imageFailedToLoad": {"description": "Error message when image fails to load"},
+  
+  "maxAttachmentsReached": "Not başına maksimum {count} ek sınırına ulaşıldı",
+  "@maxAttachmentsReached": {
+    "description": "Warning when max attachments limit reached",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "processingImage": "Resim işleniyor...",
+  "@processingImage": {"description": "Loading text while processing image"},
+  
+  "pickNoteColor": "Not Rengi Seç",
+  "@pickNoteColor": {"description": "Note color picker dialog title"},
+  
+  "failedToPaste": "Yapıştırılamadı: {error}",
+  "@failedToPaste": {
+    "description": "Error when paste fails",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "failedToInsertContent": "İçerik eklenemedi: {error}",
+  "@failedToInsertContent": {
+    "description": "Error when inserting content fails",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "failedToLockNote": "Not kilitlenemedi: {error}",
+  "@failedToLockNote": {
+    "description": "Error when locking note fails",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "failedToRemoveLock": "Kilit kaldırılamadı: {error}",
+  "@failedToRemoveLock": {
+    "description": "Error when removing lock fails",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "noteDuplicatedButFailedToLock": "Not çoğaltıldı ancak kilitlenemedi: {error}",
+  "@noteDuplicatedButFailedToLock": {
+    "description": "Warning when note is duplicated but locking failed",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "pastedContent": "Yapıştırılan İçerik",
+  "@pastedContent": {"description": "Title for pasted content preview page"},
+  
+  "trash": "Çöp Kutusu",
+  "@trash": {"description": "Trash navigation item"},
+  
+  "reminders": "Hatırlatıcılar",
+  "@reminders": {"description": "Reminders navigation item"},
+  
+  "shareApp": "Uygulamayı Paylaş",
+  "@shareApp": {"description": "Share app menu item"},
+  
+  "shareAppMessage": "Güvenli bir not alma uygulaması olan Better Keep Notes'a göz atın!\nhttps://play.google.com/store/apps/details?id=io.foxbiz.better_keep",
+  "@shareAppMessage": {"description": "Share app message text"},
+  
+  "installBetterKeep": "Better Keep'i Yükle",
+  "@installBetterKeep": {"description": "Install Better Keep dialog title"},
+  
+  "iosAppComingSoon": "📱 iOS Uygulaması Yakında!",
+  "@iosAppComingSoon": {"description": "iOS app coming soon heading"},
+  
+  "iosAppBeingReviewed": "iOS uygulamamız inceleme aşamasında. Bu arada web uygulamasını yükleyebilirsiniz:",
+  "@iosAppBeingReviewed": {"description": "iOS app being reviewed message"},
+  
+  "iosInstallStep1": "1. Safari'de Paylaş düğmesine dokunun",
+  "@iosInstallStep1": {"description": "iOS install step 1"},
+  
+  "iosInstallStep2": "2. Aşağı kaydırın ve \"Ana Ekrana Ekle\"ye dokunun",
+  "@iosInstallStep2": {"description": "iOS install step 2"},
+  
+  "iosInstallStep3": "3. Yüklemek için \"Ekle\"ye dokunun",
+  "@iosInstallStep3": {"description": "iOS install step 3"},
+  
+  "gotIt": "Anladım",
+  "@gotIt": {"description": "Got it button text"},
+  
+  "installApp": "Uygulamayı Yükle",
+  "@installApp": {"description": "Install app button label"},
+  
+  "getAndroidApp": "Android Uygulamasını Edin",
+  "@getAndroidApp": {"description": "Get Android app button label"},
+  
+  "getWindowsApp": "Windows Uygulamasını Edin",
+  "@getWindowsApp": {"description": "Get Windows app button label"},
+  
+  "selectView": "Görünüm Seç",
+  "@selectView": {"description": "Select view dialog title"},
+  
+  "viewModeGrid": "Izgara",
+  "@viewModeGrid": {"description": "Grid view mode option"},
+  
+  "viewModeList": "Liste",
+  "@viewModeList": {"description": "List view mode option"},
+  
+  "viewModeColors": "Renkler",
+  "@viewModeColors": {"description": "Colors view mode option"},
+  
+  "clear": "Temizle",
+  "@clear": {"description": "Clear button/chip label"},
+  
+  "noMatchingNotes": "Eşleşen not yok",
+  "@noMatchingNotes": {"description": "No matching notes empty state"},
+  
+  "noNotesYet": "Henüz not yok",
+  "@noNotesYet": {"description": "No notes yet empty state"},
+  
+  "trashIsEmpty": "Çöp kutusu boş",
+  "@trashIsEmpty": {"description": "Trash is empty empty state"},
+  
+  "noPinnedNotes": "Sabitlenmiş not yok",
+  "@noPinnedNotes": {"description": "No pinned notes empty state"},
+  
+  "noLockedNotes": "Kilitli not yok",
+  "@noLockedNotes": {"description": "No locked notes empty state"},
+  
+  "noRemindersSet": "Hatırlatıcı ayarlanmadı",
+  "@noRemindersSet": {"description": "No reminders set empty state"},
+  
+  "createYourFirstNote": "İlk notunuzu oluşturun",
+  "@createYourFirstNote": {"description": "Create your first note button"},
+  
+  "noLabelsYet": "Henüz etiket yok",
+  "@noLabelsYet": {"description": "No labels yet empty state"},
+  
+  "noColoredNotesYet": "Henüz renkli not yok",
+  "@noColoredNotesYet": {"description": "No colored notes yet empty state"},
+  
+  "addLabelsToOrganize": "Notlarınızı klasörler halinde düzenlemek için etiketler ekleyin",
+  "@addLabelsToOrganize": {"description": "Add labels hint message"},
+  
+  "addColorsToOrganize": "Notlarınızı klasörler halinde düzenlemek için renkler ekleyin",
+  "@addColorsToOrganize": {"description": "Add colors hint message"},
+  
+  "iosAppComingSoonTitle": "iOS Uygulaması Yakında!",
+  "@iosAppComingSoonTitle": {"description": "iOS app coming soon dialog title"},
+  
+  "iosAppComingSoonMessage": "iOS uygulamamız Apple tarafından inceleniyor. Bu arada, hızlı erişim için Better Keep'i bir web uygulaması olarak yükleyebilirsiniz.\n\nSafari'de Paylaş → Ana Ekrana Ekle'ye dokunun.",
+  "@iosAppComingSoonMessage": {"description": "iOS app coming soon dialog message"},
+  
+  "getTheAndroidApp": "Android Uygulamasını Edin",
+  "@getTheAndroidApp": {"description": "Get the Android app dialog title"},
+  
+  "androidAppAvailable": "Better Keep, Google Play'de! Bildirimler, widget'lar ve daha fazlasıyla en iyi deneyim için yerel uygulamayı edinin.",
+  "@androidAppAvailable": {"description": "Android app available message"},
+  
+  "openPlayStore": "Play Store'u Aç",
+  "@openPlayStore": {"description": "Open Play Store button"},
+  
+  "getTheWindowsApp": "Windows Uygulamasını Edin",
+  "@getTheWindowsApp": {"description": "Get the Windows app dialog title"},
+  
+  "windowsAppAvailable": "Better Keep, Microsoft Store'da! Sistem entegrasyonu ve çevrimdışı erişim ile en iyi deneyim için yerel uygulamayı edinin.",
+  "@windowsAppAvailable": {"description": "Windows app available message"},
+  
+  "openMicrosoftStore": "Microsoft Store'u Aç",
+  "@openMicrosoftStore": {"description": "Open Microsoft Store button"},
+  
+  "installForQuickAccess": "Ana ekranınızdan hızlı erişim ve çevrimdışı destek için Better Keep'i yükleyin!",
+  "@installForQuickAccess": {"description": "Install for quick access message"},
+  
+  "install": "Yükle",
+  "@install": {"description": "Install button label"},
+  
+  "notNow": "Şimdi değil",
+  "@notNow": {"description": "Not now button label"},
+  
+  "recoveryKeySavedSuccessfully": "Kurtarma Anahtarı başarıyla kaydedildi!",
+  "@recoveryKeySavedSuccessfully": {"description": "Recovery key saved success message"},
+  
+  "noRecoveryKey": "Kurtarma Anahtarı Yok",
+  "@noRecoveryKey": {"description": "No recovery key dialog title"},
+  
+  "noRecoveryKeyWarning": "Bir Kurtarma Anahtarı olmadan, tüm cihazlarınızı kaybederseniz şifrelenmiş tüm notlarınıza erişiminizi kalıcı olarak kaybedersiniz.\n\nDaha sonra Ayarlar'dan bir Kurtarma Anahtarı ayarlamayı düşünebilirsiniz.",
+  "@noRecoveryKeyWarning": {"description": "No recovery key warning message"},
+  
+  "iUnderstand": "Anlıyorum",
+  "@iUnderstand": {"description": "I understand button label"},
+  
+  "deleteForever": "Sonsuza Dek Sil",
+  "@deleteForever": {"description": "Delete forever dialog title"},
+  
+  "deleteAllTrashForever": "Çöp kutusundaki tüm notları gerçekten sonsuza dek silmek istiyor musunuz? Bu işlem geri alınamaz.",
+  "@deleteAllTrashForever": {"description": "Delete all trash confirmation message"},
+  
+  "deleteSelectedNotesForever": "{count, plural, =1{Bu notu gerçekten kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz.} other{{count} notu gerçekten kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz.}}",
+  "@deleteSelectedNotesForever": {
+    "description": "Delete selected notes confirmation message",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "search": "Ara",
+  "@search": {"description": "Search hint text"},
+  
+  "todo": "Yapılacaklar",
+  "@todo": {"description": "Todo bubble menu item"},
+  
+  "audioNote": "Sesli Not",
+  "@audioNote": {"description": "Audio note default title"},
+  
+  "failedToCreateImageNote": "Resim notu oluşturulamadı",
+  "@failedToCreateImageNote": {"description": "Failed to create image note error message"},
+  
+  "pleaseEnterYourEmail": "Lütfen e-posta adresinizi girin",
+  "@pleaseEnterYourEmail": {"description": "Email validation error message"},
+  
+  "pleaseEnterAValidEmail": "Lütfen geçerli bir e-posta adresi girin",
+  "@pleaseEnterAValidEmail": {"description": "Email format validation error message"},
+  
+  "pleaseEnterYourPassword": "Lütfen parolanızı girin",
+  "@pleaseEnterYourPassword": {"description": "Password validation error message"},
+  
+  "passwordMustBeAtLeast6Characters": "Parola en az 6 karakter uzunluğunda olmalıdır",
+  "@passwordMustBeAtLeast6Characters": {"description": "Password length validation error message"},
+  
+  "pleaseConfirmYourPassword": "Lütfen parolanızı onaylayın",
+  "@pleaseConfirmYourPassword": {"description": "Confirm password validation error message"},
+  
+  "passwordsDoNotMatch": "Parolalar eşleşmiyor",
+  "@passwordsDoNotMatch": {"description": "Password mismatch error message"},
+  
+  "creatingAccount": "Hesap oluşturuluyor...",
+  "@creatingAccount": {"description": "Creating account status message"},
+  
+  "signingIn": "Giriş yapılıyor...",
+  "@signingIn": {"description": "Signing in status message"},
+  
+  "createAccount": "Hesap Oluştur",
+  "@createAccount": {"description": "Create account button text"},
+  
+  "welcomeBack": "Tekrar Hoş Geldiniz",
+  "@welcomeBack": {"description": "Welcome back heading text"},
+  
+  "signUpWithYourEmail": "E-postanızla kaydolun",
+  "@signUpWithYourEmail": {"description": "Sign up subtitle text"},
+  
+  "signInToContinue": "Devam etmek için giriş yapın",
+  "@signInToContinue": {"description": "Sign in subtitle text"},
+  
+  "forgotPassword": "Parolamı Unuttum?",
+  "@forgotPassword": {"description": "Forgot password link text"},
+  
+  "signIn": "Giriş Yap",
+  "@signIn": {"description": "Sign in button text"},
+  
+  "signUp": "Kaydol",
+  "@signUp": {"description": "Sign up button text"},
+  
+  "alreadyHaveAnAccount": "Zaten bir hesabınız var mı?",
+  "@alreadyHaveAnAccount": {"description": "Already have an account prompt"},
+  
+  "dontHaveAnAccount": "Hesabınız yok mu?",
+  "@dontHaveAnAccount": {"description": "Don't have an account prompt"},
+  
+  "recoverySuccessfulWelcomeBack": "Kurtarma başarılı! Tekrar hoş geldiniz.",
+  "@recoverySuccessfulWelcomeBack": {"description": "Recovery successful message"},
+  
+  "approvalRequestSent": "Onay isteği gönderildi! Başka bir cihazdan onaylayın.",
+  "@approvalRequestSent": {"description": "Approval request sent message"},
+  
+  "checkingAccountStatus": "Hesap durumu kontrol ediliyor...",
+  "@checkingAccountStatus": {"description": "Checking account status message"},
+  
+  "recoverYourAccount": "Hesabınızı Kurtarın",
+  "@recoverYourAccount": {"description": "Recover your account heading"},
+  
+  "accountRecoveryRequired": "Hesap Kurtarma Gerekli",
+  "@accountRecoveryRequired": {"description": "Account recovery required heading"},
+  
+  "noActiveDevicesRecoveryKey": "Aktif cihaz bulunamadı. Şifrelenmiş notlarınıza erişimi geri yüklemek için kurtarma ifadenizi kullanın.",
+  "@noActiveDevicesRecoveryKey": {"description": "No active devices with recovery key message"},
+  
+  "noActiveDevicesNoRecoveryKey": "Aktif cihaz bulunamadı ve Kurtarma Anahtarı ayarlanmamış. Yeni bir hesapla baştan başlayabilirsiniz, ancak önceki notlarınız kurtarılamaz.",
+  "@noActiveDevicesNoRecoveryKey": {"description": "No active devices without recovery key message"},
+  
+  "previousNotesEncryptedWarning": "Önceki notlarınız şifrelenmiştir ve Kurtarma Anahtarı olmadan kurtarılamaz.",
+  "@previousNotesEncryptedWarning": {"description": "Previous notes encrypted warning message"},
+  
+  "notYourMainDevice": "Ana cihazınız değil mi?",
+  "@notYourMainDevice": {"description": "Not your main device question"},
+  
+  "anotherDeviceApprovalHint": "Notlarınıza erişimi olan başka bir cihazınız varsa, o cihazdan onay isteyebilirsiniz.",
+  "@anotherDeviceApprovalHint": {"description": "Another device approval hint message"},
+  
+  "requesting": "İsteniyor...",
+  "@requesting": {"description": "Requesting status message"},
+  
+  "requestApprovalFromAnotherDevice": "Başka Bir Cihazdan Onay İste",
+  "@requestApprovalFromAnotherDevice": {"description": "Request approval from another device button text"},
+  
+  "signingOut": "Çıkış yapılıyor...",
+  "@signingOut": {"description": "Signing out status message"},
+  
+  "sendingVerificationCode": "Doğrulama kodu gönderiliyor...",
+  "@sendingVerificationCode": {"description": "Sending verification code message"},
+  
+  "takingTooLongTryAgain": "Çok uzun sürüyor. İptal edip tekrar deneyebilirsiniz.",
+  "@takingTooLongTryAgain": {"description": "Taking too long timeout message"},
+  
+  "requestTimedOut": "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.",
+  "@requestTimedOut": {"description": "Request timed out message"},
+  
+  "failedToSendVerificationCode": "Doğrulama kodu gönderilemedi",
+  "@failedToSendVerificationCode": {"description": "Failed to send verification code error message"},
+  
+  "verifyYourIdentity": "Kimliğinizi Doğrulayın",
+  "@verifyYourIdentity": {"description": "Verify your identity dialog title"},
+  
+  "yourEmail": "e-postanız",
+  "@yourEmail": {"description": "Your email fallback text"},
+  
+  "continueLabel": "Devam Et",
+  "@continueLabel": {"description": "Continue button label"},
+  
+  "pleaseConfirmConsequences": "Lütfen sonuçları anladığınızı onaylayın",
+  "@pleaseConfirmConsequences": {"description": "Please confirm consequences message"},
+  
+  "accountResetSuccessfully": "Hesap başarıyla sıfırlandı. Hoş geldiniz!",
+  "@accountResetSuccessfully": {"description": "Account reset successfully message"},
+  
+  "failedToResetAccount": "Hesap sıfırlanamadı",
+  "@failedToResetAccount": {"description": "Failed to reset account error message"},
+  
+  "failedToResetAccountError": "Hesap sıfırlanamadı: {error}",
+  "@failedToResetAccountError": {
+    "description": "Failed to reset account with error message",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "startFreshQuestion": "Temiz Bir Başlangıç Yapılsın mı?",
+  "@startFreshQuestion": {"description": "Start fresh confirmation title"},
+  
+  "thisActionWill": "Bu işlem şunları yapacaktır:",
+  "@thisActionWill": {"description": "This action will heading"},
+  
+  "removeAllDeviceAuthorizations": "Tüm cihaz yetkilendirmelerini kaldıracak",
+  "@removeAllDeviceAuthorizations": {"description": "Remove all device authorizations consequence"},
+  
+  "makeOldNotesUnrecoverable": "Eski notlarınızı kurtarılamaz hale getirecek",
+  "@makeOldNotesUnrecoverable": {"description": "Make old notes unrecoverable consequence"},
+  
+  "createNewEncryptionKey": "Yeni bir şifreleme anahtarı oluşturacak",
+  "@createNewEncryptionKey": {"description": "Create new encryption key consequence"},
+  
+  "startWithBlankAccount": "Boş bir hesapla başlayacak",
+  "@startWithBlankAccount": {"description": "Start with blank account consequence"},
+  
+  "iUnderstandOldNotesInaccessible": "Eski notlarımın kalıcı olarak erişilemez olacağını anlıyorum",
+  "@iUnderstandOldNotesInaccessible": {"description": "I understand old notes inaccessible checkbox text"},
+  
+  "saveToGallery": "Galeriye Kaydet",
+  "@saveToGallery": {"description": "Save to gallery menu item"},
+  
+  "newLabel": "Yeni",
+  "@newLabel": {"description": "New label for add page button"},
+  
+  "pickPaperColor": "Kağıt Rengi Seç",
+  "@pickPaperColor": {"description": "Pick paper color dialog title"},
+  
+  "pickPenColor": "Kalem Rengi Seç",
+  "@pickPenColor": {"description": "Pick pen color dialog title"},
+  
+  "savedToGallery": "Galeriye Kaydedildi",
+  "@savedToGallery": {"description": "Saved to gallery success message"},
+  
+  "sketchDownloaded": "Çizim indirildi",
+  "@sketchDownloaded": {"description": "Sketch downloaded success message for web"},
+  
+  "failedToSaveSketch": "Çizim kaydedilemedi",
+  "@failedToSaveSketch": {"description": "Failed to save sketch error message"},
+  
+  "errorSavingSketch": "Çizim kaydedilirken hata oluştu: {error}",
+  "@errorSavingSketch": {
+    "description": "Error saving sketch with details",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "planFree": "Ücretsiz",
+  "@planFree": {"description": "Free plan name for display"},
+  
+  "planPro": "Pro",
+  "@planPro": {"description": "Pro plan name for display"},
+  
+  "lockedNotesLimitReached": "{count} adet kilitli not sınırına ulaştınız",
+  "@lockedNotesLimitReached": {
+    "description": "Error message when user has reached the locked notes limit",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  
+  "realtimeCloudSyncRequiresPro": "Gerçek zamanlı bulut eşitlemesi, Pro aboneliği gerektirir",
+  "@realtimeCloudSyncRequiresPro": {"description": "Error message when free user tries to use real-time cloud sync"},
+  
+  "unlimitedLockedNotes": "Sınırsız kilitli notlar",
+  "@unlimitedLockedNotes": {"description": "Description of unlimited locked notes feature"},
+  
+  "realtimeCloudSync": "Gerçek zamanlı bulut eşitlemesi",
+  "@realtimeCloudSync": {"description": "Description of real-time cloud sync feature"},
+  
+  "upgrade": "Yükselt",
+  "@upgrade": {"description": "Upgrade button text"},
+  
+  "upgradeToPro": "Pro'ya Yükselt",
+  "@upgradeToPro": {"description": "Upgrade to Pro heading/button text"},
+  
+  "unlockFeature": "{feature} kilidini aç",
+  "@unlockFeature": {
+    "description": "Unlock a specific feature message",
+    "placeholders": {
+      "feature": {"type": "String"}
+    }
+  },
+  
+  "featureRequiresPro": "{feature} özelliği Pro gerektirir",
+  "@featureRequiresPro": {
+    "description": "Message indicating a feature requires Pro subscription",
+    "placeholders": {
+      "feature": {"type": "String"}
+    }
+  },
+  
+  "thisFeatureRequiresPro": "Bu özellik Pro aboneliği gerektirir",
+  "@thisFeatureRequiresPro": {"description": "Generic message that a feature requires Pro"},
+  
+  "featureIsProFeature": "{feature} bir Pro özelliğidir.",
+  "@featureIsProFeature": {
+    "description": "Message indicating a feature is a Pro feature",
+    "placeholders": {
+      "feature": {"type": "String"}
+    }
+  },
+  
+  "unlockAllFeatures": "Tüm özelliklerin kilidini açın ve geliştirmeyi destekleyin.",
+  "@unlockAllFeatures": {"description": "Message encouraging upgrade to unlock all features"},
+  
+  "protectUnlimitedNotesWithPin": "Sınırsız notu PIN kilitleriyle koruyun",
+  "@protectUnlimitedNotesWithPin": {"description": "Description of unlimited PIN locks feature"},
+  
+  "syncAcrossDevicesSecurely": "Tüm cihazlarınız arasında güvenli bir şekilde eşitleyin",
+  "@syncAcrossDevicesSecurely": {"description": "Description of secure sync feature"},
+  
+  "unlimitedLockedNotesAndSync": "Sınırsız kilitli notlar ve gerçek zamanlı bulut eşitlemesi",
+  "@unlimitedLockedNotesAndSync": {"description": "Combined description of Pro features"},
+  
+  "unlockTheFullExperience": "Tam Deneyimin Kilidini Açın",
+  "@unlockTheFullExperience": {"description": "Paywall heading to unlock full experience"},
+  
+  "maybeLater": "Belki daha sonra",
+  "@maybeLater": {"description": "Dismiss/skip button text for paywall"}
+}
