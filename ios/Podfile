@@ -47,6 +47,14 @@ post_install do |installer|
         'PERMISSION_MICROPHONE=1',
         'PERMISSION_NOTIFICATIONS=1'
       ]
+
+      # Fix: sqlite3 ships as a prebuilt xcframework without companion dSYMs.
+      # Setting DEBUG_INFORMATION_FORMAT to 'dwarf' (instead of 'dwarf-with-dsym')
+      # prevents Xcode from expecting a dSYM for it, eliminating the
+      # "Upload Symbols Failed" warning for sqlite3arm64ios.framework.
+      if target.name == 'sqlite3'
+        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
+      end
     end
   end
 end
