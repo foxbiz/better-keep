@@ -47,6 +47,12 @@ subprojects {
                     sourceCompatibility = JavaVersion.VERSION_17
                     targetCompatibility = JavaVersion.VERSION_17
                 }
+                // whisper_flutter_new pins NDK r27, which requires explicit opt-in for 16 KB ELF
+                // alignment. Override to NDK r28, which compiles 16 KB-aligned by default.
+                // See: https://developer.android.com/guide/practices/page-sizes
+                if (project.name == "whisper_flutter_new") {
+                    ndkVersion = "28.2.13676358"
+                }
             }
         }
     }
