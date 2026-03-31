@@ -15,6 +15,11 @@ flutter pub get
 # Download iOS engine artifacts required by the Podfile post-install hook
 flutter precache --ios
 
+# Symlink flutter and dart into /usr/local/bin so xcodebuild Run Script build phases
+# can find them (PATH exports in scripts don't survive into xcodebuild's environment)
+ln -sf "$HOME/flutter/bin/flutter" /usr/local/bin/flutter
+ln -sf "$HOME/flutter/bin/dart" /usr/local/bin/dart
+
 # Unset any proxy settings that would prevent CocoaPods from reaching GitHub
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 git config --global --unset http.proxy || true
