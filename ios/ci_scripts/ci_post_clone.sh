@@ -12,5 +12,8 @@ cd "$CI_PRIMARY_REPOSITORY_PATH"
 # Generate Generated.xcconfig and fetch pub dependencies
 flutter pub get
 
+# Download iOS engine artifacts required by the Podfile post-install hook
+flutter precache --ios
+
 # Install CocoaPods dependencies (generates all xcfilelist files)
 cd ios && pod install
