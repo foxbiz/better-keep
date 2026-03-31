@@ -16,6 +16,18 @@ flutter --version
 # CI_PRIMARY_REPOSITORY_PATH is set by Xcode Cloud to the repo root
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 
+# Write GoogleService-Info.plist from the base64-encoded Xcode Cloud secret.
+# Set this up: in App Store Connect > Xcode Cloud > Workflow > Environment, add a
+# secret env var named GOOGLE_SERVICE_INFO_PLIST whose value is the output of:
+#   base64 -i ios/Runner/GoogleService-Info.plist | tr -d '\n'
+if [ -n "$GOOGLE_SERVICE_INFO_PLIST" ]; then
+  echo "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$CI_PRIMARY_REPOSITORY_PATH/ios/Runner/GoogleService-Info.plist"
+  echo "--- GoogleService-Info.plist written ---"
+else
+  echo "ERROR: GOOGLE_SERVICE_INFO_PLIST env var not set — xcodebuild will fail"
+  exit 1
+fi
+
 # Generate Generated.xcconfig and fetch pub dependencies
 flutter pub get
 
