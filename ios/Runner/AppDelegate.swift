@@ -5,13 +5,11 @@ import UserNotifications
 import alarm
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    
     // Set up notification center delegate for alarm notifications
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
@@ -29,14 +27,11 @@ import alarm
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
-  
-  // Schedule background sync when app enters background
-  override func applicationDidEnterBackground(_ application: UIApplication) {
-    if #available(iOS 13.0, *) {
-      scheduleBackgroundSync()
-    }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
-  
+
   @available(iOS 13.0, *)
   func scheduleBackgroundSync() {
     let request = BGProcessingTaskRequest(identifier: Bundle.main.bundleIdentifier! + ".sync")
