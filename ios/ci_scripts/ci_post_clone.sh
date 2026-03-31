@@ -1,16 +1,26 @@
 #!/bin/sh
 set -e
 
+# Ensure both CI scripts are executable (guards against core.fileMode=false stripping the +x bit on checkout)
+chmod +x "$CI_PRIMARY_REPOSITORY_PATH/ios/ci_scripts/ci_post_clone.sh"
+chmod +x "$CI_PRIMARY_REPOSITORY_PATH/ios/ci_scripts/ci_pre_xcodebuild.sh"
+
 # Clone Flutter latest stable directly into $HOME (avoids Homebrew permission issues on Xcode Cloud)
 git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$HOME/flutter"
 
 export PATH="$HOME/flutter/bin:$PATH"
+
+echo "--- Flutter version ---"
+flutter --version
 
 # CI_PRIMARY_REPOSITORY_PATH is set by Xcode Cloud to the repo root
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 
 # Generate Generated.xcconfig and fetch pub dependencies
 flutter pub get
+
+echo "--- Generated.xcconfig FLUTTER_ROOT ---"
+grep FLUTTER_ROOT ios/Flutter/Generated.xcconfig
 
 # Download iOS engine artifacts required by the Podfile post-install hook
 flutter precache --ios
