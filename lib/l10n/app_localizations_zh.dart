@@ -2123,9 +2123,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sentVerificationCodeTo => '我们已发送验证码到：';
 
   @override
-  String get pleaseEnterSixDigitCode => '请输入 6 位验证码';
-
-  @override
   String codeExpiresInMinutes(int minutes) {
     return '验证码 $minutes 分钟后过期';
   }

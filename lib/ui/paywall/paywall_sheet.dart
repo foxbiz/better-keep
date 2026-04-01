@@ -592,10 +592,22 @@ class _PricingOptionsState extends State<_PricingOptions> {
     if (!context.mounted) return;
 
     if (result.isSuccess) {
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message), backgroundColor: Colors.green),
-      );
+      // Only pop if this route is still the current (topmost) route.
+      // PaywallPage._onSubscriptionChange may have already popped this route
+      // during the purchaseSubscription() await — popping again would remove
+      // the page underneath, causing a black screen.
+      final route = ModalRoute.of(context);
+      if (route != null && route.isCurrent) {
+        Navigator.pop(context, true);
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } else if (result.isPending) {
       ScaffoldMessenger.of(
         context,
@@ -723,6 +735,7 @@ class _PaywallPageState extends State<PaywallPage> {
   bool _yearlySelected = true;
   bool _isLoading = false;
   bool _isLoadingProducts = false;
+  bool _hasPopped = false;
 
   String? get _monthlyPrice =>
       SubscriptionService.instance.getDisplayPriceSafe(yearly: false);
@@ -762,7 +775,8 @@ class _PaywallPageState extends State<PaywallPage> {
     final status = PlanService.instance.status;
     // If user has active paid subscription (non-trial), close paywall
     if (status.isActive && status.plan.isPaid && !status.isTrialSubscription) {
-      // Show snackbar before popping to ensure context is still valid
+      if (_hasPopped) return;
+      _hasPopped = true;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -816,13 +830,14 @@ class _PaywallPageState extends State<PaywallPage> {
   }
 
   void _onSubscriptionChange() {
+    if (_hasPopped) return;
     final status = PlanService.instance.status;
     // Only auto-close for paid subscriptions (not trial)
     if (mounted &&
         status.isActive &&
         status.plan.isPaid &&
         !status.isTrialSubscription) {
-      // Show snackbar before popping to ensure context is still valid
+      _hasPopped = true;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Welcome to Better Keep Pro!'),

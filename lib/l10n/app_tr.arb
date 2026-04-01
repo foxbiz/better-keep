@@ -2289,9 +2289,6 @@
   "sentVerificationCodeTo": "Şu adrese bir doğrulama kodu gönderdik:",
   "@sentVerificationCodeTo": {"description": "Sent verification code message"},
   
-  "pleaseEnterSixDigitCode": "Lütfen 6 haneli bir kod girin",
-  "@pleaseEnterSixDigitCode": {"description": "Please enter 6-digit code validation"},
-  
   "codeExpiresInMinutes": "Kodun süresi {minutes} dakika içinde dolacak",
   "@codeExpiresInMinutes": {
     "description": "Code expires in minutes message",

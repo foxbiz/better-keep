@@ -54,6 +54,8 @@ void main() async {
     AppState.init(prefs: prefsInstance),
     // Initialize Firebase
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+    // Detect physical vs emulator Android so the correct emulator host is used
+    FirebaseEmulatorConfig.initDeviceInfo(),
   ]);
 
   // In release mode, no emulator configuration needed
@@ -84,19 +86,8 @@ void main() async {
 
   // For logged-in users, pre-load E2EE cached status before runApp
   // This allows returning approved users to skip the loading screen
-  // If not a returning approved user, start E2EE initialization immediately
-  // to avoid race condition where UI shows loading but init hasn't started
   if (AuthService.currentUser != null) {
-    final isReturningApprovedUser = await E2EEService.instance
-        .preloadCachedStatus();
-    if (!isReturningApprovedUser) {
-      AppLogger.log(
-        '[Main] Not a returning approved user, starting E2EE init before runApp',
-      );
-      // Don't await - let it run in background while UI renders
-      // The _E2EELoadingWidget will show progress and handle retries if needed
-      E2EEService.instance.initialize();
-    }
+    await E2EEService.instance.preloadCachedStatus();
   }
 
   AppLogger.log('[Main] Starting runApp');
@@ -107,14 +98,14 @@ void main() async {
 /// This is safe to run after runApp since AppCheck is only needed for
 /// authenticated Firebase operations.
 void _activateAppCheckInBackground() {
+  if (!kReleaseMode) {
+    AppLogger.log('[Main] Skipping FirebaseAppCheck activation in debug mode');
+    return;
+  }
+
   if (kIsWeb || Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
-    // Use debug provider in debug/profile mode, production providers in release
-    final androidProvider = kReleaseMode
-        ? AndroidPlayIntegrityProvider()
-        : AndroidDebugProvider();
-    final appleProvider = kReleaseMode
-        ? AppleAppAttestProvider()
-        : AppleDebugProvider();
+    final androidProvider = AndroidPlayIntegrityProvider();
+    final appleProvider = AppleAppAttestProvider();
 
     FirebaseAppCheck.instance
         .activate(
@@ -183,26 +174,10 @@ class _BetterKeepState extends State<BetterKeep> {
 
       // Initialize E2EE for already logged-in users, then start sync
       if (AuthService.currentUser != null) {
-        try {
-          await E2EEService.instance.initialize();
-          // Initialize device approval notifications
-          try {
-            await DeviceApprovalNotificationService().init();
-          } catch (e) {
-            AppLogger.error(
-              '[Main] DeviceApprovalNotificationService init error',
-              e,
-            );
-          }
-          AllDayReminderNotificationService().init();
-          NoteSyncService().init();
-          LabelSyncService().init();
-        } catch (e) {
-          AppLogger.error('[Main] E2EE initialization error', e);
-          AllDayReminderNotificationService().init();
-          NoteSyncService().init();
-          LabelSyncService().init();
-        }
+        AllDayReminderNotificationService().init();
+        NoteSyncService().init();
+        LabelSyncService().init();
+        unawaited(_initializeSignedInServices());
       } else {
         AllDayReminderNotificationService().init();
       }
@@ -212,6 +187,20 @@ class _BetterKeepState extends State<BetterKeep> {
   Future<void> _showActiveAllDayReminders() async {
     final notes = await Note.get(NoteType.all);
     await AllDayReminderNotificationService().showActiveAllDayReminders(notes);
+  }
+
+  Future<void> _initializeSignedInServices() async {
+    try {
+      await E2EEService.instance.initialize();
+    } catch (e) {
+      AppLogger.error('[Main] E2EE initialization error', e);
+    }
+
+    try {
+      await DeviceApprovalNotificationService().init();
+    } catch (e) {
+      AppLogger.error('[Main] DeviceApprovalNotificationService init error', e);
+    }
   }
 
   /// Initialize deep link handling for OAuth callback

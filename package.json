@@ -3,7 +3,7 @@
 	"version": "1.0.57",
 	"description": "Better Keep Notes - Build Scripts",
 	"scripts": {
-		"firebase-emulators": "export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && firebase emulators:start",
+		"firebase-emulators": "firebase emulators:start",
 		"build:functions": "cd functions && npm install && npm run build",
 		"build:windows": "flutter build windows --release --dart-define-from-file=.env && dart run msix:create --build-windows=false",
 		"build:macos": "flutter build macos --release --dart-define-from-file=.env",

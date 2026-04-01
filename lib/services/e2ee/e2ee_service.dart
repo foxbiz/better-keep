@@ -668,15 +668,41 @@ class E2EEService {
       _deviceManager.wasRevoked.removeListener(_onRevokedChanged);
       _listenersRegistered = false;
     }
-    // Delete the current device from Firestore before signing out
-    await _deviceManager.deleteCurrentDevice();
-    // Clear cached UMK
-    await _deviceManager.clearUMK();
-    // Cancel all Firestore subscriptions in DeviceManager to prevent permission errors after sign-out
-    await _deviceManager.dispose();
-    // Clear RecoveryKeyService Firestore cache
+
+    try {
+      await _deviceManager.deleteCurrentDevice().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {
+          AppLogger.log('E2EE: Timeout deleting current device during dispose');
+        },
+      );
+    } catch (e) {
+      AppLogger.error('E2EE: Error deleting current device during dispose', e);
+    }
+
+    try {
+      await _deviceManager.clearUMK();
+    } catch (e) {
+      AppLogger.error('E2EE: Error clearing UMK during dispose', e);
+    }
+
+    try {
+      await _deviceManager.dispose();
+    } catch (e) {
+      AppLogger.error('E2EE: Error disposing device manager', e);
+    }
+
     RecoveryKeyService.instance.clearFirestoreCache();
-    await _secureStorage.clearAll();
+
+    try {
+      await _secureStorage.clearAll();
+    } catch (e) {
+      AppLogger.error('E2EE: Error clearing secure storage during dispose', e);
+    }
+
+    statusMessage.value = '';
+    isVerifyingInBackground.value = false;
+    backgroundVerificationMessage.value = '';
     status.value = E2EEStatus.notInitialized;
     // Reset initialization guard to allow re-init for new user
     resetInitialization();

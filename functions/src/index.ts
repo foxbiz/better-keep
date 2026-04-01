@@ -1,3 +1,4 @@
+import appStoreWebhook from "./exports/appStoreWebhook";
 import cancelRazorpaySubscription from "./exports/cancelRazorpaySubscription";
 import cancelScheduledDeletion from "./exports/cancelScheduledDeletion";
 import checkExistingSubscription from "./exports/checkExistingSubscription";
@@ -64,6 +65,7 @@ export {
 	verifyPurchase,
 	checkExistingSubscription,
 	restoreSubscription,
+	appStoreWebhook,
 	playStoreWebhook,
 	checkExpiredSubscriptions,
 	createRazorpaySubscription,

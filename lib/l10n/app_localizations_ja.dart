@@ -2152,9 +2152,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sentVerificationCodeTo => '確認コードを送信しました:';
 
   @override
-  String get pleaseEnterSixDigitCode => '6桁のコードを入力してください';
-
-  @override
   String codeExpiresInMinutes(int minutes) {
     return 'コードは$minutes分で期限切れになります';
   }

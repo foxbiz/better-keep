@@ -637,7 +637,6 @@
   "permanentDeleteWarning": "모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.",
   "deleteForever": "영구 삭제",
   "sentVerificationCodeTo": "인증 코드를 전송했습니다:",
-  "pleaseEnterSixDigitCode": "6자리 코드를 입력하세요",
   "codeExpiresInMinutes": "코드는 {minutes}분 후 만료됩니다",
   "verificationFailedTryAgain": "인증 실패. 다시 시도하세요.",
   "shareNote": "노트 공유",

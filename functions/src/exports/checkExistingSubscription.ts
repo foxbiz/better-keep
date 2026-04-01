@@ -2,16 +2,26 @@ import type * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { ANDROID_PACKAGE_NAME, db, googlePlayCredentials } from "../config";
+import {
+	ANDROID_PACKAGE_NAME,
+	IOS_PRODUCT_IDS,
+	appStoreSharedSecret,
+	db,
+	googlePlayCredentials,
+} from "../config";
 import type { CheckSubscriptionRequest } from "../types";
-import { getPlayDeveloperApi } from "../utils";
+import {
+	getPlayDeveloperApi,
+	setSubscriptionClaims,
+	verifyAppStorePurchase,
+} from "../utils";
 
 /**
  * Check if user already has an active subscription before making a new purchase.
  * Also attempts to recover/restore any existing subscription.
  */
 export default onCall(
-	{ secrets: [googlePlayCredentials] },
+	{ secrets: [googlePlayCredentials, appStoreSharedSecret] },
 	async (request: CallableRequest<CheckSubscriptionRequest>) => {
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be signed in");
@@ -92,14 +102,14 @@ export default onCall(
 										hasSubscription: false,
 										message: "Subscription has been cancelled or expired",
 									};
-								} else {
-									// Just update the status (e.g., paused, pending)
-									await userSubRef.update({
-										willAutoRenew: false,
-										subscriptionState,
-										updatedAt: FieldValue.serverTimestamp(),
-									});
 								}
+
+								// Just update the status (e.g., paused, pending)
+								await userSubRef.update({
+									willAutoRenew: false,
+									subscriptionState,
+									updatedAt: FieldValue.serverTimestamp(),
+								});
 							}
 
 							return {
@@ -116,6 +126,39 @@ export default onCall(
 							};
 						} catch (verifyError) {
 							console.warn("Failed to verify with Google Play:", verifyError);
+							// Fall back to local data
+						}
+					}
+
+					if (subData.source === "app_store") {
+						try {
+							const subRef = db
+								.collection("subscriptions")
+								.doc(`ios_${subData.purchaseToken}`);
+							const subSnap = await subRef.get();
+							const receiptData = subSnap.data()?.receiptData as
+								| string
+								| undefined;
+
+							if (receiptData) {
+								const verified = await verifyAppStorePurchase(
+									userId,
+									(subData.productId as string | undefined) ||
+										IOS_PRODUCT_IDS.monthly,
+									receiptData,
+								);
+
+								if (!verified.valid) {
+									await userSubRef.delete();
+									await setSubscriptionClaims(userId, "free", null);
+									return {
+										hasSubscription: false,
+										message: "Subscription has been cancelled or expired",
+									};
+								}
+							}
+						} catch (verifyError) {
+							console.warn("Failed to verify with App Store:", verifyError);
 							// Fall back to local data
 						}
 					}
@@ -163,11 +206,23 @@ export default onCall(
 					await userSubRef.set({
 						plan: "pro",
 						billingPeriod:
-							subData.basePlanId === "pro-yearly" ? "yearly" : "monthly",
+							subData.source === "app_store"
+								? subData.billingPeriod ||
+									(subData.productId === IOS_PRODUCT_IDS.yearly
+										? "yearly"
+										: "monthly")
+								: subData.basePlanId === "pro-yearly"
+									? "yearly"
+									: "monthly",
 						expiresAt: subData.expiresAt,
 						willAutoRenew:
-							subData.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
-						purchaseToken: subData.purchaseToken,
+							subData.source === "app_store"
+								? (subData.willAutoRenew ?? true)
+								: subData.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
+						purchaseToken:
+							subData.source === "app_store"
+								? subData.originalTransactionId || subData.purchaseToken
+								: subData.purchaseToken,
 						source: subData.source,
 						basePlanId: subData.basePlanId,
 						restoredAt: FieldValue.serverTimestamp(),
@@ -180,10 +235,19 @@ export default onCall(
 						subscription: {
 							plan: "pro",
 							billingPeriod:
-								subData.basePlanId === "pro-yearly" ? "yearly" : "monthly",
+								subData.source === "app_store"
+									? subData.billingPeriod ||
+										(subData.productId === IOS_PRODUCT_IDS.yearly
+											? "yearly"
+											: "monthly")
+									: subData.basePlanId === "pro-yearly"
+										? "yearly"
+										: "monthly",
 							expiresAt: latestExpiry.toISOString(),
 							willAutoRenew:
-								subData.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
+								subData.source === "app_store"
+									? (subData.willAutoRenew ?? true)
+									: subData.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
 							source: subData.source,
 						},
 					};

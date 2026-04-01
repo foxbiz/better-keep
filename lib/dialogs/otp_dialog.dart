@@ -131,7 +131,7 @@ class _OtpDialogState extends State<_OtpDialog> {
   Future<void> _verifyOtp() async {
     final otp = _otpController.text.trim();
     if (otp.isEmpty || otp.length != 6) {
-      setState(() => _errorText = context.l10n.pleaseEnterSixDigitCode);
+      setState(() => _errorText = context.l10n.pleaseEnterCompleteCode);
       return;
     }
 

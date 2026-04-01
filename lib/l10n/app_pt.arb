@@ -637,7 +637,6 @@
   "permanentDeleteWarning": "Isso excluirá permanentemente todos os dados e não pode ser recuperado.",
   "deleteForever": "Excluir para sempre",
   "sentVerificationCodeTo": "Enviamos um código de verificação para:",
-  "pleaseEnterSixDigitCode": "Por favor, digite um código de 6 dígitos",
   "codeExpiresInMinutes": "O código expira em {minutes} minutos",
   "verificationFailedTryAgain": "Verificação falhou. Por favor, tente novamente.",
   "shareNote": "Compartilhar nota",

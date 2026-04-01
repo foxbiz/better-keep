@@ -2289,9 +2289,6 @@
   "sentVerificationCodeTo": "We sent a verification code to:",
   "@sentVerificationCodeTo": {"description": "Sent verification code message"},
   
-  "pleaseEnterSixDigitCode": "Please enter a 6-digit code",
-  "@pleaseEnterSixDigitCode": {"description": "Please enter 6-digit code validation"},
-  
   "codeExpiresInMinutes": "Code expires in {minutes} minutes",
   "@codeExpiresInMinutes": {
     "description": "Code expires in minutes message",

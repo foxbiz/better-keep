@@ -471,7 +471,6 @@
   "permanentDeleteWarning": "すべてのデータが完全に削除され、復元できません。",
   "deleteForever": "完全に削除",
   "sentVerificationCodeTo": "確認コードを送信しました:",
-  "pleaseEnterSixDigitCode": "6桁のコードを入力してください",
   "codeExpiresInMinutes": "コードは{minutes}分で期限切れになります",
   "verificationFailedTryAgain": "確認に失敗しました。もう一度お試しください。",
   "shareNote": "ノートを共有",

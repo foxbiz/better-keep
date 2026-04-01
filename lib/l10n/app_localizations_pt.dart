@@ -2229,10 +2229,6 @@ class AppLocalizationsPt extends AppLocalizations {
       'Enviamos um código de verificação para:';
 
   @override
-  String get pleaseEnterSixDigitCode =>
-      'Por favor, digite um código de 6 dígitos';
-
-  @override
   String codeExpiresInMinutes(int minutes) {
     return 'O código expira em $minutes minutos';
   }
