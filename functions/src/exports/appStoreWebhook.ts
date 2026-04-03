@@ -1,26 +1,10 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { verifyAppleJws } from "../appleJwsVerify";
 import { db } from "../config";
 import { setSubscriptionClaims } from "../utils";
 
 type JwtPayload = Record<string, unknown>;
-
-function decodeBase64Url(value: string): string {
-	const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-	const padding = normalized.length % 4;
-	const padded =
-		padding === 0 ? normalized : normalized + "=".repeat(4 - padding);
-	return Buffer.from(padded, "base64").toString("utf8");
-}
-
-function parseJwtPayload(jwt: string): JwtPayload {
-	const parts = jwt.split(".");
-	if (parts.length < 2) {
-		throw new Error("Invalid JWT format");
-	}
-	const payloadJson = decodeBase64Url(parts[1]);
-	return JSON.parse(payloadJson) as JwtPayload;
-}
 
 function getString(payload: JwtPayload, key: string): string | null {
 	const value = payload[key];
@@ -143,8 +127,7 @@ export default onRequest(async (req, res) => {
 			return;
 		}
 
-		// Note: payload is decoded but signature is not cryptographically verified yet.
-		const payload = parseJwtPayload(signedPayload);
+		const payload = await verifyAppleJws(signedPayload);
 		const notificationType = getString(payload, "notificationType");
 		const subtype = getString(payload, "subtype");
 		const notificationUUID = getString(payload, "notificationUUID");
@@ -199,9 +182,9 @@ export default onRequest(async (req, res) => {
 			return;
 		}
 
-		const transactionPayload = parseJwtPayload(signedTransactionInfo);
+		const transactionPayload = await verifyAppleJws(signedTransactionInfo);
 		const renewalPayload = signedRenewalInfo
-			? parseJwtPayload(signedRenewalInfo)
+			? await verifyAppleJws(signedRenewalInfo)
 			: null;
 
 		const originalTransactionId = getString(
@@ -372,6 +355,17 @@ export default onRequest(async (req, res) => {
 		console.log("=== App Store Webhook Processed Successfully ===");
 		res.status(200).send("OK");
 	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		if (
+			errorMessage.includes("certificate") ||
+			errorMessage.includes("x5c") ||
+			errorMessage.includes("signature") ||
+			errorMessage.includes("JWS")
+		) {
+			console.error("JWS signature verification failed:", errorMessage);
+			res.status(403).send("Signature verification failed");
+			return;
+		}
 		console.error("Error processing App Store webhook:", error);
 		res.status(500).send("Internal error");
 	}
