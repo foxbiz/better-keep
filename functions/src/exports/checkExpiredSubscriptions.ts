@@ -1,7 +1,11 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { auth, db, emailPassword } from "../config";
-import { getEmailTransporter, sendEmail } from "../utils";
+import {
+	getEmailTransporter,
+	sendEmail,
+	setSubscriptionClaims,
+} from "../utils";
 
 /**
  * Scheduled function to check for expired subscriptions and notify users
@@ -37,6 +41,7 @@ export default onSchedule(
 				const subData = doc.data();
 				const userId = subData.userId;
 				const expiresAt = subData.expiresAt?.toDate();
+				const source = subData.source;
 
 				if (!userId || !expiresAt) continue;
 
@@ -49,6 +54,10 @@ export default onSchedule(
 						const transporter = getEmailTransporter(emailPassword.value());
 						const senderEmail = process.env.EMAIL_FROM;
 						const senderName = process.env.EMAIL_NAME;
+						const manageUrl =
+							source === "app_store"
+								? "https://apps.apple.com/account/subscriptions"
+								: "https://play.google.com/store/account/subscriptions";
 
 						await sendEmail(transporter, {
 							from: `"${senderName}" <${senderEmail}>`,
@@ -71,7 +80,7 @@ export default onSchedule(
                       To continue enjoying unlimited locked notes and cloud sync, make sure your subscription auto-renews or resubscribe.
                     </p>
                     <div style="margin: 24px 0;">
-                      <a href="https://play.google.com/store/account/subscriptions" style="display: inline-block; background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+							<a href="${manageUrl}" style="display: inline-block; background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
                         Manage Subscription
                       </a>
                     </div>
@@ -109,10 +118,7 @@ export default onSchedule(
 			const expiredSubsSnapshot = await db
 				.collection("subscriptions")
 				.where("expiresAt", "<", now)
-				.where("subscriptionState", "in", [
-					"SUBSCRIPTION_STATE_ACTIVE",
-					"SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
-				])
+				.where("source", "in", ["play_store", "app_store"])
 				.get();
 
 			console.log(
@@ -122,6 +128,19 @@ export default onSchedule(
 			for (const doc of expiredSubsSnapshot.docs) {
 				const subData = doc.data();
 				const userId = subData.userId;
+				const source = subData.source;
+				const subscriptionState = subData.subscriptionState as
+					| string
+					| undefined;
+
+				const shouldExpire =
+					source === "app_store" ||
+					subscriptionState === "SUBSCRIPTION_STATE_ACTIVE" ||
+					subscriptionState === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD";
+
+				if (!shouldExpire) {
+					continue;
+				}
 
 				try {
 					// Update subscription state
@@ -137,6 +156,8 @@ export default onSchedule(
 						.collection("subscription")
 						.doc("status")
 						.delete();
+
+					await setSubscriptionClaims(userId, "free", null);
 
 					console.log(`Removed expired subscription for user ${userId}`);
 				} catch (updateError) {

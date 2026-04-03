@@ -10,6 +10,7 @@ import 'app_localizations_id.dart';
 import 'app_localizations_ja.dart';
 import 'app_localizations_ko.dart';
 import 'app_localizations_pt.dart';
+import 'app_localizations_tr.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -103,6 +104,7 @@ abstract class AppLocalizations {
     Locale('ja'),
     Locale('ko'),
     Locale('pt'),
+    Locale('tr'),
     Locale('zh'),
   ];
 
@@ -4012,12 +4014,6 @@ abstract class AppLocalizations {
   /// **'We sent a verification code to:'**
   String get sentVerificationCodeTo;
 
-  /// Please enter 6-digit code validation
-  ///
-  /// In en, this message translates to:
-  /// **'Please enter a 6-digit code'**
-  String get pleaseEnterSixDigitCode;
-
   /// Code expires in minutes message
   ///
   /// In en, this message translates to:
@@ -5175,6 +5171,7 @@ class _AppLocalizationsDelegate
     'ja',
     'ko',
     'pt',
+    'tr',
     'zh',
   ].contains(locale.languageCode);
 
@@ -5195,6 +5192,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsKo();
     case 'pt':
       return AppLocalizationsPt();
+    case 'tr':
+      return AppLocalizationsTr();
     case 'zh':
       return AppLocalizationsZh();
   }

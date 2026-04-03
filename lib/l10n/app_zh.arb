@@ -637,7 +637,6 @@
   "permanentDeleteWarning": "这将永久删除所有数据且无法恢复。",
   "deleteForever": "永久删除",
   "sentVerificationCodeTo": "我们已发送验证码到：",
-  "pleaseEnterSixDigitCode": "请输入 6 位验证码",
   "codeExpiresInMinutes": "验证码 {minutes} 分钟后过期",
   "verificationFailedTryAgain": "验证失败。请重试。",
   "shareNote": "分享笔记",

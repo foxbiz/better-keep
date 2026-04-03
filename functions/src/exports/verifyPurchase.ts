@@ -1,10 +1,16 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { auth, emailPassword, googlePlayCredentials } from "../config";
+import {
+	appStoreSharedSecret,
+	auth,
+	emailPassword,
+	googlePlayCredentials,
+} from "../config";
 import type { VerifyPurchaseRequest } from "../types";
 import {
 	getEmailTransporter,
 	sendEmail,
+	verifyAppStorePurchase,
 	verifyGooglePlayPurchase,
 } from "../utils";
 
@@ -18,7 +24,7 @@ import {
  * - Prevents fraud by server-side verification
  */
 export default onCall(
-	{ secrets: [googlePlayCredentials, emailPassword] },
+	{ secrets: [googlePlayCredentials, appStoreSharedSecret, emailPassword] },
 	async (request: CallableRequest<VerifyPurchaseRequest>) => {
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be signed in");
@@ -26,13 +32,18 @@ export default onCall(
 
 		const userId = request.auth.uid;
 		const { productId, purchaseToken, source } = request.data;
+		const verifyTraceId =
+			typeof request.data.verifyTraceId === "string" &&
+			request.data.verifyTraceId.trim().length > 0
+				? request.data.verifyTraceId.trim()
+				: "no-trace";
 
 		if (!productId || !purchaseToken || !source) {
 			throw new HttpsError("invalid-argument", "Missing required fields");
 		}
 
 		console.log(
-			`Verifying purchase for user ${userId}: ${productId} (${source})`,
+			`[${verifyTraceId}] Verifying purchase for user ${userId}: ${productId} (${source})`,
 		);
 
 		try {
@@ -45,13 +56,15 @@ export default onCall(
 					purchaseToken,
 				);
 			} else if (source === "app_store") {
-				// TODO: Implement App Store verification
-				throw new HttpsError(
-					"unimplemented",
-					"App Store verification not yet implemented",
-				);
+				result = await verifyAppStorePurchase(userId, productId, purchaseToken);
 			} else {
 				throw new HttpsError("invalid-argument", "Invalid source");
+			}
+
+			if (!result.valid) {
+				console.warn(
+					`[${verifyTraceId}] Purchase verification failed for user ${userId} (${source}): ${result.message}`,
+				);
 			}
 
 			// Send welcome email if verification was successful
@@ -61,7 +74,10 @@ export default onCall(
 
 			return result;
 		} catch (error) {
-			console.error(`Error verifying purchase for ${userId}:`, error);
+			console.error(
+				`[${verifyTraceId}] Error verifying purchase for ${userId}:`,
+				error,
+			);
 
 			if (error instanceof HttpsError) {
 				throw error;

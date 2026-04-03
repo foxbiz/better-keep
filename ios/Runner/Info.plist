@@ -85,6 +85,13 @@
 	<true/>
 	<key>ITSEncryptionExportComplianceCode</key>
 	<string>17e1930e-c65d-4bdf-8430-18400acbd296</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

@@ -2151,9 +2151,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get sentVerificationCodeTo => '인증 코드를 전송했습니다:';
 
   @override
-  String get pleaseEnterSixDigitCode => '6자리 코드를 입력하세요';
-
-  @override
   String codeExpiresInMinutes(int minutes) {
     return '코드는 $minutes분 후 만료됩니다';
   }

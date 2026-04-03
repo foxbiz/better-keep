@@ -5,12 +5,14 @@ import { google } from "googleapis";
 import * as nodemailer from "nodemailer";
 import {
 	ANDROID_PACKAGE_NAME,
+	IOS_PRODUCT_IDS,
+	SUBSCRIPTION_PLANS,
+	appStoreSharedSecret,
 	auth,
 	db,
 	emailPassword,
 	googlePlayCredentials,
 	isEmulator,
-	SUBSCRIPTION_PLANS,
 } from "./config";
 
 /**
@@ -77,7 +79,7 @@ export function getEmailTransporter(password: string) {
 
 	return nodemailer.createTransport({
 		host: host,
-		port: parseInt(port, 10),
+		port: Number.parseInt(port, 10),
 		secure: process.env.EMAIL_SECURE !== "false", // default true for port 465
 		auth: {
 			user: process.env.EMAIL_USER,
@@ -419,7 +421,8 @@ export async function sendRazorpaySubscriptionEmail(
 			case "expired":
 				subject = "Your Better Keep Notes Pro subscription has expired";
 				heading = "Subscription Expired";
-				message = `Your Pro subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain access to Pro features.`;
+				message =
+					"Your Pro subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain access to Pro features.";
 				ctaText = "Resubscribe to Pro";
 				ctaUrl = "https://betterkeep.app";
 				break;
@@ -509,4 +512,220 @@ export async function razorpayRequest(
 	}
 
 	return response.json();
+}
+
+/**
+ * Verify an App Store subscription purchase using the receipt validation API.
+ * Handles sandbox/production routing automatically.
+ */
+export async function verifyAppStorePurchase(
+	userId: string,
+	productId: string,
+	receiptData: string,
+): Promise<{ valid: boolean; message: string; subscription?: object }> {
+	const sharedSecret = appStoreSharedSecret.value();
+	if (!sharedSecret) {
+		throw new HttpsError(
+			"failed-precondition",
+			"APP_STORE_SHARED_SECRET is not configured on the server",
+		);
+	}
+
+	console.log(
+		`App Store verify start: user=${userId}, product=${productId}, receiptLen=${receiptData.length}`,
+	);
+
+	const rawReceiptData = receiptData.trim();
+	if (!rawReceiptData) {
+		throw new HttpsError("invalid-argument", "receiptData is empty");
+	}
+
+	let receiptPayload = rawReceiptData;
+	try {
+		const parsed = JSON.parse(rawReceiptData) as Record<string, unknown>;
+
+		// Some clients mistakenly send transaction metadata JSON instead of base64 receipt.
+		if (
+			typeof parsed.transactionId === "string" ||
+			typeof parsed.originalTransactionId === "string"
+		) {
+			throw new HttpsError(
+				"invalid-argument",
+				"Invalid App Store payload: send the base64 app receipt, not transaction JSON",
+			);
+		}
+
+		// Accept wrapped payloads for compatibility.
+		if (typeof parsed["receipt-data"] === "string") {
+			receiptPayload = parsed["receipt-data"];
+		} else if (typeof parsed.receiptData === "string") {
+			receiptPayload = parsed.receiptData;
+		}
+	} catch (error) {
+		if (error instanceof HttpsError) {
+			throw error;
+		}
+		// Not JSON is fine - valid clients usually send raw base64 receipt text.
+	}
+
+	async function callVerifyReceipt(
+		url: string,
+	): Promise<Record<string, unknown>> {
+		const response = await fetch(url, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				"receipt-data": receiptPayload,
+				password: sharedSecret,
+				"exclude-old-transactions": true,
+			}),
+		});
+
+		if (!response.ok) {
+			throw new Error(`Apple API HTTP error: ${response.status}`);
+		}
+		return response.json() as Promise<Record<string, unknown>>;
+	}
+
+	let appleResponse = await callVerifyReceipt(
+		"https://buy.itunes.apple.com/verifyReceipt",
+	);
+
+	let status = appleResponse.status as number;
+	if (status === 21007) {
+		appleResponse = await callVerifyReceipt(
+			"https://sandbox.itunes.apple.com/verifyReceipt",
+		);
+		status = appleResponse.status as number;
+	}
+
+	if (status !== 0) {
+		return {
+			valid: false,
+			message: `Receipt validation failed (status: ${status})`,
+		};
+	}
+
+	const knownProductIds = Object.values(IOS_PRODUCT_IDS) as string[];
+	const latestReceiptInfo =
+		(appleResponse.latest_receipt_info as Array<Record<string, string>>) || [];
+	const receiptRoot =
+		(appleResponse.receipt as Record<string, unknown> | undefined) || {};
+	const inAppReceipts =
+		(receiptRoot.in_app as Array<Record<string, string>> | undefined) || [];
+	const receiptEntries =
+		latestReceiptInfo.length > 0 ? latestReceiptInfo : inAppReceipts;
+	const now = Date.now();
+
+	const activeReceipts = receiptEntries.filter((r) => {
+		const expiresMs = Number.parseInt(r.expires_date_ms || "0", 10);
+		return (
+			knownProductIds.includes(r.product_id) &&
+			!r.cancellation_date_ms &&
+			expiresMs > now
+		);
+	});
+
+	if (activeReceipts.length === 0) {
+		console.warn(
+			`App Store verify: no active receipts. latest_receipt_info=${latestReceiptInfo.length}, in_app=${inAppReceipts.length}`,
+		);
+		return { valid: false, message: "No active subscription found in receipt" };
+	}
+
+	activeReceipts.sort(
+		(a, b) =>
+			Number.parseInt(b.expires_date_ms, 10) -
+			Number.parseInt(a.expires_date_ms, 10),
+	);
+	const latest = activeReceipts[0];
+
+	const originalTransactionId = latest.original_transaction_id;
+	const expiresMs = Number.parseInt(latest.expires_date_ms, 10);
+	const resolvedProductId = latest.product_id;
+	if (
+		!originalTransactionId ||
+		!resolvedProductId ||
+		!Number.isFinite(expiresMs)
+	) {
+		return {
+			valid: false,
+			message: "Receipt payload missing required subscription fields",
+		};
+	}
+	const billingPeriod =
+		resolvedProductId === IOS_PRODUCT_IDS.yearly ? "yearly" : "monthly";
+	const expiresAt = Timestamp.fromMillis(expiresMs);
+
+	const existingRef = db
+		.collection("subscriptions")
+		.doc(`ios_${originalTransactionId}`);
+	const existingSnap = await existingRef.get();
+
+	if (existingSnap.exists) {
+		const existingData = existingSnap.data();
+		if (existingData?.userId && existingData.userId !== userId) {
+			console.warn(
+				`App Store subscription ${originalTransactionId} already linked to ` +
+					`user ${existingData.userId}, attempted by ${userId}`,
+			);
+			throw new HttpsError(
+				"already-exists",
+				"This subscription is already linked to another account. " +
+					"Please contact support at support@betterkeep.app if you believe this is an error.",
+			);
+		}
+	}
+
+	await existingRef.set(
+		{
+			userId,
+			productId: resolvedProductId,
+			purchaseToken: originalTransactionId,
+			originalTransactionId,
+			billingPeriod,
+			source: "app_store",
+			subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
+			willAutoRenew: true,
+			receiptData: receiptPayload,
+			expiresAt,
+			createdAt: FieldValue.serverTimestamp(),
+			updatedAt: FieldValue.serverTimestamp(),
+		},
+		{ merge: true },
+	);
+
+	await db
+		.collection("users")
+		.doc(userId)
+		.collection("subscription")
+		.doc("status")
+		.set({
+			plan: "pro",
+			billingPeriod,
+			expiresAt,
+			willAutoRenew: true,
+			subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
+			purchaseToken: originalTransactionId,
+			productId: resolvedProductId,
+			source: "app_store",
+			verifiedAt: FieldValue.serverTimestamp(),
+			updatedAt: FieldValue.serverTimestamp(),
+		});
+
+	await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
+
+	console.log(
+		`App Store: verified subscription for user ${userId}, product: ${resolvedProductId}`,
+	);
+
+	return {
+		valid: true,
+		message: "Subscription verified and activated",
+		subscription: {
+			plan: "pro",
+			billingPeriod,
+			expiresAt: new Date(expiresMs).toISOString(),
+		},
+	};
 }

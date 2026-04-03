@@ -15,8 +15,11 @@ export const db = getFirestore(app, databaseId);
 export const auth = admin.auth();
 export const storage = admin.storage();
 export const emailPassword = defineSecret("EMAIL_PASSWORD");
+
 // Google Play API credentials (service account JSON as base64 or JSON string)
 export const googlePlayCredentials = defineSecret("GOOGLE_PLAY_CREDENTIALS");
+// App Store shared secret for receipt verification (from App Store Connect)
+export const appStoreSharedSecret = defineSecret("APP_STORE_SHARED_SECRET");
 
 // Razorpay API credentials
 export const razorpayKeyId = defineSecret("RAZORPAY_KEY_ID");
@@ -108,6 +111,12 @@ export const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {
 		periodDays: 365,
 	},
 };
+
+// iOS product IDs (App Store Connect)
+export const IOS_PRODUCT_IDS = {
+	monthly: "pro_monthly",
+	yearly: "pro_yearly",
+} as const;
 
 // Trial configuration (can be controlled via environment variables)
 export const TRIAL_ENABLED = process.env.TRIAL_ENABLED === "true";

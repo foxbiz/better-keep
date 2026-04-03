@@ -637,7 +637,6 @@
   "permanentDeleteWarning": "Ini akan menghapus semua data secara permanen dan tidak dapat dipulihkan.",
   "deleteForever": "Hapus Selamanya",
   "sentVerificationCodeTo": "Kami mengirim kode verifikasi ke:",
-  "pleaseEnterSixDigitCode": "Silakan masukkan kode 6 digit",
   "codeExpiresInMinutes": "Kode kedaluwarsa dalam {minutes} menit",
   "verificationFailedTryAgain": "Verifikasi gagal. Silakan coba lagi.",
   "shareNote": "Bagikan Catatan",

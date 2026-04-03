@@ -2198,9 +2198,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get sentVerificationCodeTo => 'Kami mengirim kode verifikasi ke:';
 
   @override
-  String get pleaseEnterSixDigitCode => 'Silakan masukkan kode 6 digit';
-
-  @override
   String codeExpiresInMinutes(int minutes) {
     return 'Kode kedaluwarsa dalam $minutes menit';
   }

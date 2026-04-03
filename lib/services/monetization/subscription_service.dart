@@ -1,20 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
-import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/country_detection_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
-import 'package:better_keep/services/monetization/subscription_status.dart';
-import 'package:better_keep/services/monetization/user_plan.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Supported currencies for Razorpay payments
@@ -29,14 +28,22 @@ enum RazorpayCurrency {
 
 /// Product IDs for in-app purchases
 class ProductIds {
-  /// Subscription product ID (same for both plans)
+  /// Subscription product ID for Android (single product with base plans)
   static const String proSubscription = 'better_keep_pro';
 
-  /// Base plan IDs (used with the subscription product)
+  /// Base plan IDs for Android (used with the subscription product)
   static const String basePlanMonthly = 'pro-monthly';
   static const String basePlanYearly = 'pro-yearly';
 
-  static const List<String> subscriptions = [proSubscription];
+  /// iOS product IDs (separate products per billing period)
+  static const String proMonthlyIos = 'pro_monthly';
+  static const String proYearlyIos = 'pro_yearly';
+
+  static const List<String> subscriptions = [
+    proSubscription,
+    proMonthlyIos,
+    proYearlyIos,
+  ];
   static const List<String> all = [...subscriptions];
 }
 
@@ -420,13 +427,23 @@ Expected IDs: ${ProductIds.all}
               'SubscriptionService: Subscription linked to another account',
             );
           } else {
-            _lastPurchaseError = verifyResult.error;
+            if (purchase.status == PurchaseStatus.restored) {
+              // Don't set _lastPurchaseError for restored purchases that fail
+              // verification — a failed restore just means "no active subscription
+              // to restore", not an error the user needs to see.
+              AppLogger.log(
+                'SubscriptionService: Restored purchase verification failed - ${verifyResult.error}',
+              );
+            } else {
+              _lastPurchaseError = verifyResult.error;
+            }
           }
 
           // Complete the purchase
           if (purchase.pendingCompletePurchase) {
             await _iap.completePurchase(purchase);
           }
+
           isLoading.value = false;
           break;
 
@@ -466,6 +483,19 @@ Expected IDs: ${ProductIds.all}
           break;
       }
     }
+
+    // Signal restore completer after ALL purchases in this batch have been
+    // fully processed (verified + completePurchase called). This prevents
+    // the race where buyNonConsumable is called while a second restored
+    // purchase still has a pending transaction.
+    if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+      final hadRestored = purchaseDetailsList.any(
+        (p) => p.status == PurchaseStatus.restored,
+      );
+      if (hadRestored) {
+        _restoreCompleter!.complete(_restoredSubscriptionFound);
+      }
+    }
   }
 
   /// Convert technical error messages to user-friendly messages
@@ -493,7 +523,9 @@ Expected IDs: ${ProductIds.all}
     }
 
     if (errorLower.contains('already owned') ||
-        errorLower.contains('already purchased')) {
+        errorLower.contains('already purchased') ||
+        errorLower.contains('duplicate_product') ||
+        errorLower.contains('pending transaction')) {
       return 'You already have this subscription. Try restoring purchases.';
     }
 
@@ -509,6 +541,20 @@ Expected IDs: ${ProductIds.all}
 
     // Default user-friendly message
     return 'Purchase failed. Please try again or contact support.';
+  }
+
+  /// Convert a purchase exception (thrown by buyNonConsumable) to a user-friendly message
+  String _getFriendlyPurchaseException(Object e) {
+    final message = e.toString();
+    final messageLower = message.toLowerCase();
+
+    if (messageLower.contains('storekit_duplicate_product') ||
+        messageLower.contains('pending transaction') ||
+        messageLower.contains('duplicate')) {
+      return 'You have a pending purchase for this subscription. Please wait a moment and try again.';
+    }
+
+    return _getFriendlyErrorMessage(message);
   }
 
   /// Check for pending purchases that may not have been processed
@@ -527,8 +573,13 @@ Expected IDs: ${ProductIds.all}
     }
   }
 
-  /// Restore purchases and wait for completion
-  /// Returns true if an active subscription was restored
+  /// Restore purchases and wait for completion.
+  /// Returns true if an active subscription was verified and restored.
+  ///
+  /// The completer is signaled by [_handlePurchaseUpdates] once a restored
+  /// purchase finishes server-side verification (success or failure). A 15-second
+  /// timeout fires if no restored purchases arrive from the store (e.g. user has
+  /// no prior purchases on this account).
   Future<bool> restoreAndWaitForPurchases() async {
     if (!_iapAvailable) return false;
 
@@ -541,16 +592,14 @@ Expected IDs: ${ProductIds.all}
       // Start the restore
       await _iap.restorePurchases();
 
-      // Wait for a short time to allow purchase updates to come through
-      // The purchase stream will set _restoredSubscriptionFound if a subscription is found
-      await Future.delayed(const Duration(seconds: 3));
+      // Wait for _handlePurchaseUpdates to signal the completer after
+      // verifying the restored purchase(s). Timeout fires when the store
+      // delivers no restorable purchases (user has no prior purchases).
+      final result = await _restoreCompleter!.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => _restoredSubscriptionFound,
+      );
 
-      // Complete the completer if not already done
-      if (!_restoreCompleter!.isCompleted) {
-        _restoreCompleter!.complete(_restoredSubscriptionFound);
-      }
-
-      final result = await _restoreCompleter!.future;
       AppLogger.log(
         'SubscriptionService: Restore completed, subscription found: $result',
       );
@@ -571,18 +620,96 @@ Expected IDs: ${ProductIds.all}
   /// 2. Ensures the subscription isn't linked to another account
   /// 3. Links the subscription to this user's account
   Future<VerifyPurchaseResult> _verifyPurchase(PurchaseDetails purchase) async {
+    final verifyTraceId = _newVerifyTraceId();
     try {
       final user = AuthService.currentUser;
       if (user == null) {
         return VerifyPurchaseResult(valid: false, error: 'User not signed in');
       }
 
+      final serverVerificationData =
+          purchase.verificationData.serverVerificationData;
+      final localVerificationData =
+          purchase.verificationData.localVerificationData;
+
+      if (!kIsWeb && Platform.isIOS) {
+        AppLogger.log(
+          'SubscriptionService: [$verifyTraceId] iOS verification payload lengths - '
+          'local: ${localVerificationData.length}, '
+          'server: ${serverVerificationData.length}',
+        );
+      }
+
+      // With StoreKit 2 (iOS 15+), both localVerificationData and
+      // serverVerificationData contain JWS transaction tokens — NOT the legacy
+      // app receipt that Apple's verifyReceipt endpoint requires. We must
+      // explicitly fetch the real app receipt from Bundle.main.appStoreReceiptURL
+      // via InAppPurchaseStoreKitPlatformAddition.refreshPurchaseVerificationData().
+      String verificationToken;
+
+      if (!kIsWeb && Platform.isIOS) {
+        try {
+          final iosPlatformAddition = _iap
+              .getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
+          final freshReceipt = await iosPlatformAddition
+              .refreshPurchaseVerificationData();
+
+          if (freshReceipt != null &&
+              freshReceipt.serverVerificationData.isNotEmpty) {
+            verificationToken = freshReceipt.serverVerificationData;
+            AppLogger.log(
+              'SubscriptionService: [$verifyTraceId] iOS using refreshed app receipt '
+              '(length: ${verificationToken.length})',
+            );
+          } else {
+            // Fallback to purchase verification data if refresh returns null
+            verificationToken = serverVerificationData.isNotEmpty
+                ? serverVerificationData
+                : localVerificationData;
+            AppLogger.log(
+              'SubscriptionService: [$verifyTraceId] iOS receipt refresh returned null, '
+              'falling back to purchase data (length: ${verificationToken.length})',
+            );
+          }
+        } catch (e) {
+          // If refresh fails, fall back to purchase verification data
+          verificationToken = serverVerificationData.isNotEmpty
+              ? serverVerificationData
+              : localVerificationData;
+          AppLogger.log(
+            'SubscriptionService: [$verifyTraceId] iOS receipt refresh failed ($e), '
+            'falling back to purchase data (length: ${verificationToken.length})',
+          );
+        }
+      } else {
+        verificationToken = serverVerificationData;
+      }
+
+      if (!kIsWeb && Platform.isIOS) {
+        if (verificationToken.trim().isEmpty) {
+          return VerifyPurchaseResult(
+            valid: false,
+            error:
+                'Unable to validate App Store purchase right now. Please tap Restore Purchases and try again.',
+          );
+        }
+
+        if (_isTransactionJsonPayload(verificationToken)) {
+          return VerifyPurchaseResult(
+            valid: false,
+            error:
+                'Unable to validate this purchase payload yet. Please tap Restore Purchases and try again.',
+          );
+        }
+      }
+
       // Call Cloud Function to verify receipt
       final functions = FirebaseFunctions.instance;
       final result = await functions.httpsCallable('verifyPurchase').call({
         'productId': purchase.productID,
-        'purchaseToken': purchase.verificationData.serverVerificationData,
+        'purchaseToken': verificationToken,
         'source': Platform.isIOS ? 'app_store' : 'play_store',
+        'verifyTraceId': verifyTraceId,
       });
 
       // Convert from Map<Object?, Object?> to Map<String, dynamic>
@@ -602,7 +729,10 @@ Expected IDs: ${ProductIds.all}
         );
       }
     } on FirebaseFunctionsException catch (e) {
-      AppLogger.error('SubscriptionService: Verification error', e);
+      AppLogger.error(
+        'SubscriptionService: [$verifyTraceId] Verification error (code: ${e.code}, message: ${e.message})',
+        e,
+      );
 
       // Handle specific error codes
       if (e.code == 'already-exists') {
@@ -615,15 +745,35 @@ Expected IDs: ${ProductIds.all}
         );
       }
 
+      if (e.code == 'invalid-argument' || e.code == 'failed-precondition') {
+        return VerifyPurchaseResult(
+          valid: false,
+          error: e.message ?? 'Purchase verification request is invalid.',
+        );
+      }
+
+      if (e.code == 'internal') {
+        return VerifyPurchaseResult(
+          valid: false,
+          error:
+              e.message ??
+              'Server error while verifying purchase. Please try again shortly.',
+        );
+      }
+
       // For server errors (permission issues, etc.), don't grant access
       // The user can try restoring purchases later once the issue is resolved
       return VerifyPurchaseResult(
         valid: false,
         error:
+            e.message ??
             'Unable to verify purchase. Please try restoring purchases later or contact support.',
       );
     } catch (e) {
-      AppLogger.error('SubscriptionService: Verification error', e);
+      AppLogger.error(
+        'SubscriptionService: [$verifyTraceId] Verification error',
+        e,
+      );
       // In case of verification failure, don't grant access
       // The user should try again or restore purchases later
       return VerifyPurchaseResult(
@@ -633,47 +783,40 @@ Expected IDs: ${ProductIds.all}
     }
   }
 
+  bool _isTransactionJsonPayload(String payload) {
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) {
+        return false;
+      }
+
+      final hasTransactionId = decoded['transactionId'] is String;
+      final hasOriginalTransactionId =
+          decoded['originalTransactionId'] is String;
+      return hasTransactionId || hasOriginalTransactionId;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _newVerifyTraceId() {
+    final random = Random.secure()
+        .nextInt(1 << 20)
+        .toRadixString(16)
+        .padLeft(5, '0');
+    return '${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}-$random';
+  }
+
   /// Deliver the purchase (update user subscription)
   Future<void> _deliverPurchase(PurchaseDetails purchase) async {
     try {
-      final user = AuthService.currentUser;
-      if (user == null) return;
-
-      UserPlan plan;
-      BillingPeriod billingPeriod;
-      DateTime expiresAt;
-
-      // Handle Pro subscription (same product ID, different base plans)
-      if (purchase.productID == ProductIds.proSubscription) {
-        plan = UserPlan.pro;
-        // Determine billing period from purchase details or default to monthly
-        // Note: For Google Play, base plan info may be in purchase.verificationData
-        // For now, we'll rely on backend webhook to set the correct period
-        billingPeriod = BillingPeriod.monthly;
-        expiresAt = DateTime.now().add(const Duration(days: 30));
-      } else {
+      // Verify step already updates Firestore server-side with canonical
+      // subscription data. Avoid overwriting it on the client with guessed values.
+      if (purchase.productID != ProductIds.proSubscription &&
+          purchase.productID != ProductIds.proMonthlyIos &&
+          purchase.productID != ProductIds.proYearlyIos) {
         return;
       }
-
-      // Update Firestore
-      final db = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
-      );
-      await db
-          .collection('users')
-          .doc(user.uid)
-          .collection('subscription')
-          .doc('status')
-          .set({
-            'plan': plan.toStorageString(),
-            'billingPeriod': billingPeriod.name,
-            'expiresAt': Timestamp.fromDate(expiresAt),
-            'willAutoRenew': true,
-            'purchaseToken': purchase.verificationData.serverVerificationData,
-            'source': Platform.isIOS ? 'app_store' : 'play_store',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
 
       // Refresh local subscription
       await PlanService.instance.refreshSubscription();
@@ -709,7 +852,24 @@ Expected IDs: ${ProductIds.all}
       }
     }
 
-    // Try to get price from loaded products
+    // For iOS: look up separate monthly/yearly products directly
+    if (!kIsWeb && Platform.isIOS) {
+      final iosProductId = yearly
+          ? ProductIds.proYearlyIos
+          : ProductIds.proMonthlyIos;
+      final iosProduct = _products.cast<ProductDetails?>().firstWhere(
+        (p) => p?.id == iosProductId,
+        orElse: () => null,
+      );
+      if (iosProduct == null) {
+        throw ProductNotAvailableException(
+          'iOS product "$iosProductId" not loaded. Please wait or try again.',
+        );
+      }
+      return iosProduct.price;
+    }
+
+    // Try to get price from loaded products (Android)
     final product = _products.cast<ProductDetails?>().firstWhere(
       (p) => p?.id == ProductIds.proSubscription,
       orElse: () => null,
@@ -754,7 +914,7 @@ Expected IDs: ${ProductIds.all}
       );
     }
 
-    // For iOS or fallback, use the default price
+    // Fallback
     return product.price;
   }
 
@@ -776,6 +936,24 @@ Expected IDs: ${ProductIds.all}
       final pricing = razorpayPricing[currency]!;
       final divisor = currency == RazorpayCurrency.inr ? 100.0 : 100.0;
       return (pricing['monthly']! / divisor, pricing['yearly']! / divisor);
+    }
+
+    // For iOS: look up separate monthly/yearly products directly
+    if (!kIsWeb && Platform.isIOS) {
+      final monthlyProduct = _products.cast<ProductDetails?>().firstWhere(
+        (p) => p?.id == ProductIds.proMonthlyIos,
+        orElse: () => null,
+      );
+      final yearlyProduct = _products.cast<ProductDetails?>().firstWhere(
+        (p) => p?.id == ProductIds.proYearlyIos,
+        orElse: () => null,
+      );
+      if (monthlyProduct != null && yearlyProduct != null) {
+        return (monthlyProduct.rawPrice, yearlyProduct.rawPrice);
+      }
+      throw ProductNotAvailableException(
+        'iOS products not loaded. Please wait or try again.',
+      );
     }
 
     final product = _products.cast<ProductDetails?>().firstWhere(
@@ -827,7 +1005,25 @@ Expected IDs: ${ProductIds.all}
       );
     }
 
-    // For iOS or fallback
+    // For iOS: look up separate monthly/yearly products
+    if (Platform.isIOS) {
+      final monthlyProduct = _products.cast<ProductDetails?>().firstWhere(
+        (p) => p?.id == ProductIds.proMonthlyIos,
+        orElse: () => null,
+      );
+      final yearlyProduct = _products.cast<ProductDetails?>().firstWhere(
+        (p) => p?.id == ProductIds.proYearlyIos,
+        orElse: () => null,
+      );
+      if (monthlyProduct != null && yearlyProduct != null) {
+        return (monthlyProduct.rawPrice, yearlyProduct.rawPrice);
+      }
+      throw ProductNotAvailableException(
+        'iOS products not loaded. Please wait or try again.',
+      );
+    }
+
+    // Fallback
     return (product.rawPrice, product.rawPrice);
   }
 
@@ -927,6 +1123,14 @@ Expected IDs: ${ProductIds.all}
       // Continue with purchase if check fails
     } finally {
       isLoading.value = false;
+    }
+
+    // On iOS, use separate product IDs; on Android, use the single product with base plan
+    if (!kIsWeb && Platform.isIOS) {
+      final iosProductId = yearly
+          ? ProductIds.proYearlyIos
+          : ProductIds.proMonthlyIos;
+      return _purchaseWithIAP(iosProductId);
     }
 
     return _purchaseWithIAP(ProductIds.proSubscription, basePlanId: basePlanId);
@@ -1157,7 +1361,30 @@ Expected IDs: ${ProductIds.all}
       // Initiate purchase - use buyNonConsumable for subscriptions on Android/iOS
       // (The in_app_purchase plugin uses buyNonConsumable for subscriptions too)
       AppLogger.log('SubscriptionService: Calling buyNonConsumable...');
-      final success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+
+      // On iOS, a pending restored transaction from a previous restore attempt
+      // may not have been completed yet. Retry once after a short delay if
+      // StoreKit reports a duplicate pending transaction.
+      bool success;
+      try {
+        success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+      } catch (e) {
+        if (!kIsWeb &&
+            Platform.isIOS &&
+            e.toString().contains('storekit_duplicate_product')) {
+          AppLogger.log(
+            'SubscriptionService: Pending transaction detected, waiting for completion...',
+          );
+          // Wait for the pending transaction to be completed by _handlePurchaseUpdates
+          await Future.delayed(const Duration(seconds: 3));
+          AppLogger.log(
+            'SubscriptionService: Retrying buyNonConsumable after delay...',
+          );
+          success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+        } else {
+          rethrow;
+        }
+      }
 
       if (!success) {
         isLoading.value = false;
@@ -1168,7 +1395,11 @@ Expected IDs: ${ProductIds.all}
       return PurchaseResult.pending('Processing purchase...');
     } catch (e) {
       isLoading.value = false;
-      return PurchaseResult.failed('Purchase error: $e');
+      AppLogger.error(
+        'SubscriptionService: Purchase exception for $productId',
+        e,
+      );
+      return PurchaseResult.failed(_getFriendlyPurchaseException(e));
     }
   }
 
@@ -1211,33 +1442,58 @@ Expected IDs: ${ProductIds.all}
 
     // On mobile, redirect to platform subscription management
     if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-      Uri managementUrl;
       if (Platform.isIOS) {
-        managementUrl = Uri.parse(
-          'https://apps.apple.com/account/subscriptions',
-        );
+        // Use StoreKit 2 API which handles sandbox vs production automatically
+        try {
+          const channel = MethodChannel('com.betterkeep/subscriptions');
+          await channel.invokeMethod('showManageSubscriptions');
+          return CancelResult.pending(
+            'Manage your subscription in the App Store',
+          );
+        } catch (e) {
+          // Fallback to URL if native method channel fails
+          AppLogger.log(
+            'StoreKit manage subscriptions failed, falling back to URL: $e',
+          );
+          try {
+            final launched = await launchUrl(
+              Uri.parse('https://apps.apple.com/account/subscriptions'),
+              mode: LaunchMode.externalApplication,
+            );
+            if (!launched) {
+              return CancelResult.failed(
+                'Could not open subscription management',
+              );
+            }
+            return CancelResult.pending(
+              'Manage your subscription in the App Store',
+            );
+          } catch (e2) {
+            return CancelResult.failed(
+              'Error opening subscription management: $e2',
+            );
+          }
+        }
       } else {
         // Android - Google Play subscriptions
-        managementUrl = Uri.parse(
-          'https://play.google.com/store/account/subscriptions',
-        );
-      }
-
-      try {
-        final launched = await launchUrl(
-          managementUrl,
-          mode: LaunchMode.externalApplication,
-        );
-
-        if (!launched) {
-          return CancelResult.failed('Could not open subscription management');
+        try {
+          final launched = await launchUrl(
+            Uri.parse('https://play.google.com/store/account/subscriptions'),
+            mode: LaunchMode.externalApplication,
+          );
+          if (!launched) {
+            return CancelResult.failed(
+              'Could not open subscription management',
+            );
+          }
+          return CancelResult.pending(
+            'Manage your subscription in the Play Store',
+          );
+        } catch (e) {
+          return CancelResult.failed(
+            'Error opening subscription management: $e',
+          );
         }
-
-        return CancelResult.pending(
-          'Manage your subscription in the ${Platform.isIOS ? "App Store" : "Play Store"}',
-        );
-      } catch (e) {
-        return CancelResult.failed('Error opening subscription management: $e');
       }
     }
 

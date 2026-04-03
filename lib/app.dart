@@ -252,11 +252,18 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                             ),
                             const SizedBox(height: 32),
                             ElevatedButton.icon(
-                              onPressed: () {
+                              onPressed: () async {
                                 E2EEService.instance.status.value =
                                     E2EEStatus.notInitialized;
                                 E2EEService.instance.resetInitialization();
-                                E2EEService.instance.initialize();
+                                try {
+                                  await E2EEService.instance.initialize();
+                                } catch (e) {
+                                  AppLogger.error(
+                                    '[Auth] E2EE retry failed from error screen',
+                                    e,
+                                  );
+                                }
                               },
                               icon: const Icon(Icons.refresh),
                               label: const Text('Retry'),
@@ -347,9 +354,9 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
   int _retryCount = 0;
   Timer? _autoRetryTimer;
   Timer? _showOptionsTimer;
-  static const _autoRetryTimeout = Duration(seconds: 10);
-  static const _showOptionsTimeout = Duration(seconds: 15);
-  static const _maxAutoRetries = 3;
+  static const _autoRetryTimeout = Duration(seconds: 5);
+  static const _showOptionsTimeout = Duration(seconds: 6);
+  static const _maxAutoRetries = 1;
 
   @override
   void initState() {
@@ -398,6 +405,31 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
         setState(() => _showTimeoutOptions = true);
       }
     });
+  }
+
+  Future<void> _retryInitialization() async {
+    setState(() => _showTimeoutOptions = false);
+    _retryCount = 0;
+    _showOptionsTimer?.cancel();
+    _showOptionsTimer = null;
+    E2EEService.instance.status.value = E2EEStatus.notInitialized;
+    E2EEService.instance.resetInitialization();
+
+    try {
+      await E2EEService.instance.initialize();
+    } catch (e) {
+      AppLogger.error('[Auth] E2EE retry failed from loading screen', e);
+    }
+
+    _scheduleAutoRetry();
+  }
+
+  Future<void> _signOutSafely() async {
+    try {
+      await AuthService.signOut();
+    } catch (e) {
+      AppLogger.error('[Auth] Sign out failed from loading screen', e);
+    }
   }
 
   @override
@@ -457,32 +489,24 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               OutlinedButton.icon(
-                onPressed: () {
-                  setState(() => _showTimeoutOptions = false);
-                  _retryCount = 0;
-                  _showOptionsTimer?.cancel();
-                  _showOptionsTimer = null;
-                  E2EEService.instance.status.value = E2EEStatus.notInitialized;
-                  E2EEService.instance.resetInitialization();
-                  E2EEService.instance.initialize();
-                  _scheduleAutoRetry();
-                },
+                onPressed: _retryInitialization,
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('Retry'),
               ),
               const SizedBox(width: 16),
               TextButton.icon(
-                onPressed: () async {
-                  try {
-                    await AuthService.signOut();
-                  } catch (e) {
-                    // Error is logged, sign out should still proceed
-                  }
-                },
+                onPressed: _signOutSafely,
                 icon: const Icon(Icons.logout, size: 18),
                 label: const Text('Sign Out'),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () {
+              AuthService.sessionInvalid.value = true;
+            },
+            child: const Text('Continue Offline'),
           ),
         ],
       ],

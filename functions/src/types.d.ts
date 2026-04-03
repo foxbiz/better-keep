@@ -56,9 +56,15 @@ export interface OAuthState {
 }
 
 export interface VerifyPurchaseRequest {
+	/**
+	 * Android: Google Play purchase token.
+	 * iOS: base64 App Store app receipt expected by verifyReceipt endpoint.
+	 */
 	productId: string;
 	purchaseToken: string;
 	source: "play_store" | "app_store";
+	/** Optional client-provided correlation id for end-to-end purchase verification logging. */
+	verifyTraceId?: string;
 }
 
 export interface CheckSubscriptionRequest {

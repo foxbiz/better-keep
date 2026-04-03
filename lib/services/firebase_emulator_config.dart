@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -26,11 +27,27 @@ class FirebaseEmulatorConfig {
   /// Cached SharedPreferences instance
   static SharedPreferences? _prefs;
 
-  /// Emulator host - localhost for most platforms, 10.0.2.2 for Android emulator
+  /// True when running on the Android emulator (not a physical device)
+  static bool _isAndroidEmulator = false;
+
+  /// Detect whether we're running on a physical Android device or the emulator.
+  /// Must be called before [connectToEmulators] on Android.
+  static Future<void> initDeviceInfo() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    final androidInfo = await DeviceInfoPlugin().androidInfo;
+    _isAndroidEmulator = !androidInfo.isPhysicalDevice;
+  }
+
   static String get _host {
-    if (kIsWeb) return 'localhost';
-    if (Platform.isAndroid) return '10.0.2.2';
-    return 'localhost';
+    if (kIsWeb) {
+      return 'localhost';
+    }
+
+    if (Platform.isAndroid && _isAndroidEmulator) {
+      return '10.0.2.2';
+    }
+
+    return '192.168.0.102';
   }
 
   /// Initialize with SharedPreferences instance
@@ -101,29 +118,64 @@ class FirebaseEmulatorConfig {
   /// Actually connects to emulators. Called after user makes their choice.
   static Future<void> connectToEmulators() async {
     debugPrint('Firebase Emulators: Connecting (debug mode)');
-    debugPrint('  Auth: $_host:9099');
+    debugPrint('  Auth:      $_host:9099');
     debugPrint('  Firestore: $_host:8080');
     debugPrint('  Functions: $_host:5001');
-    debugPrint('  Storage: $_host:9199');
+    debugPrint('  Storage:   $_host:9199');
 
+    // Pre-check: verify the emulator host is reachable before SDK calls
     try {
-      // Auth Emulator
-      await FirebaseAuth.instance.useAuthEmulator(_host, 9099);
-
-      // Firestore Emulator
-      FirebaseFirestore.instance.useFirestoreEmulator(_host, 8080);
-
-      // Functions Emulator
-      FirebaseFunctions.instance.useFunctionsEmulator(_host, 5001);
-
-      // Storage Emulator
-      await FirebaseStorage.instance.useStorageEmulator(_host, 9199);
-
-      _useEmulators = true;
-      await _saveChoice(true);
+      final socket = await Socket.connect(
+        _host,
+        9099,
+        timeout: const Duration(seconds: 3),
+      );
+      socket.destroy();
+      debugPrint('Firebase Emulators: Network reachability OK ($_host:9099)');
     } catch (e) {
-      debugPrint('Error configuring Firebase Emulators: $e');
+      debugPrint(
+        'Firebase Emulators: NETWORK UNREACHABLE - cannot reach $_host:9099\n'
+        '  Error: $e\n'
+        '  Check: emulators running? firewall? correct IP?',
+      );
+      // Continue anyway so SDK errors are also surfaced
     }
+
+    // Auth Emulator
+    try {
+      await FirebaseAuth.instance.useAuthEmulator(_host, 9099);
+      debugPrint('Firebase Emulators: Auth connected');
+    } catch (e) {
+      debugPrint('Firebase Emulators: Auth FAILED - $e');
+    }
+
+    // Firestore Emulator
+    try {
+      FirebaseFirestore.instance.useFirestoreEmulator(_host, 8080);
+      debugPrint('Firebase Emulators: Firestore connected');
+    } catch (e) {
+      debugPrint('Firebase Emulators: Firestore FAILED - $e');
+    }
+
+    // Functions Emulator
+    try {
+      FirebaseFunctions.instance.useFunctionsEmulator(_host, 5001);
+      debugPrint('Firebase Emulators: Functions connected');
+    } catch (e) {
+      debugPrint('Firebase Emulators: Functions FAILED - $e');
+    }
+
+    // Storage Emulator
+    try {
+      await FirebaseStorage.instance.useStorageEmulator(_host, 9199);
+      debugPrint('Firebase Emulators: Storage connected');
+    } catch (e) {
+      debugPrint('Firebase Emulators: Storage FAILED - $e');
+    }
+
+    _useEmulators = true;
+    await _saveChoice(true);
+    debugPrint('Firebase Emulators: Setup complete');
   }
 
   /// Called when user selects to use live Firebase (no emulators)

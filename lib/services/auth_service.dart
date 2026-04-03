@@ -476,6 +476,40 @@ class AuthService {
         );
 
         userCredential = await _auth.signInWithCredential(credential);
+      } else if (FirebaseEmulatorConfig.isUsingEmulators) {
+        // Emulator mode: native Google Sign-In always goes to real Google servers
+        // and cannot be intercepted by the emulator. Use a fixed test account instead.
+        onStatusChange?.call("Emulator mode: signing in with test account...");
+        AppLogger.log(
+          '[Auth] Emulator mode: bypassing native Google OAuth, using test account',
+        );
+        const testEmail = 'test.google@emulator.dev';
+        const testPassword = 'EmulatorTest123!';
+        try {
+          userCredential = await _auth.signInWithEmailAndPassword(
+            email: testEmail,
+            password: testPassword,
+          );
+          AppLogger.log(
+            '[Auth] Emulator: signed in with existing test account',
+          );
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'user-not-found' ||
+              e.code == 'invalid-credential' ||
+              e.code == 'INVALID_LOGIN_CREDENTIALS') {
+            AppLogger.log(
+              '[Auth] Emulator: test account not found, creating it...',
+            );
+            userCredential = await _auth.createUserWithEmailAndPassword(
+              email: testEmail,
+              password: testPassword,
+            );
+            AppLogger.log('[Auth] Emulator: test account created');
+          } else {
+            AppLogger.error('[Auth] Emulator test sign-in failed', e);
+            rethrow;
+          }
+        }
       } else {
         // Android/iOS/macOS: Use native google_sign_in
         if (!_googleSignIn.supportsAuthenticate()) {
@@ -1489,7 +1523,12 @@ class AuthService {
 
       // Clean up E2EE state (clears secure storage including device keys)
       try {
-        await E2EEService.instance.dispose();
+        await E2EEService.instance.dispose().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            AppLogger.log('Timeout disposing E2EE service during signout');
+          },
+        );
       } catch (e) {
         AppLogger.error('Error disposing E2EE service: $e');
       }
@@ -1509,7 +1548,12 @@ class AuthService {
           },
         );
         // Disable network to prevent any new operations
-        await firestore.disableNetwork();
+        await firestore.disableNetwork().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            AppLogger.log('Timeout disabling Firestore network during signout');
+          },
+        );
       } catch (e) {
         AppLogger.error('Error waiting for Firestore writes: $e');
       }
@@ -1566,7 +1610,14 @@ class AuthService {
           app: Firebase.app(),
           databaseId: DefaultFirebaseOptions.databaseId,
         );
-        await firestore.enableNetwork();
+        await firestore.enableNetwork().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            AppLogger.log(
+              'Timeout re-enabling Firestore network after signout',
+            );
+          },
+        );
       } catch (e) {
         AppLogger.error('Error re-enabling Firestore network: $e');
       }
@@ -1583,12 +1634,28 @@ class AuthService {
       await initDatabase();
     } catch (e) {
       AppLogger.error('Error signing out', e);
-      // Ensure we at least sign out from Firebase even if cleanup fails
+      // Ensure we at least sign out from Firebase even if cleanup fails.
+      // Once Firebase auth is cleared, the app can recover through the
+      // normal signed-out flow even if some cleanup steps were best-effort.
       try {
         await _auth.signOut();
-      } catch (_) {}
-      // Re-throw so caller can handle it
-      rethrow;
+      } catch (authError) {
+        AppLogger.error(
+          'Error signing out from Firebase after cleanup failure',
+          authError,
+        );
+        rethrow;
+      }
+
+      try {
+        await initDatabase();
+      } catch (dbError) {
+        AppLogger.error(
+          'Error reinitializing database after fallback signout: $dbError',
+        );
+      }
+
+      return;
     }
   }
 
