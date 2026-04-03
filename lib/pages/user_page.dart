@@ -915,10 +915,8 @@ class _UserPageState extends State<UserPage> {
                         ),
                       ],
                     ),
-                  ] else if (status.isCancelledButActive &&
-                      status.isRazorpaySubscription) ...[
+                  ] else if (status.isCancelledButActive) ...[
                     // Cancelled but still in subscription period
-                    // Razorpay doesn't support resuming cancel_at_cycle_end subscriptions
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
@@ -953,6 +951,20 @@ class _UserPageState extends State<UserPage> {
                         ],
                       ),
                     ),
+                    // For App Store / Play Store, show manage subscription button
+                    if (!status.isRazorpaySubscription) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isSubscriptionActionLoading
+                              ? null
+                              : () => _handleCancelSubscription(context),
+                          icon: const Icon(Icons.settings),
+                          label: Text(context.l10n.manageSubscription),
+                        ),
+                      ),
+                    ],
                     // Debug: Delete subscription button (only in debug mode)
                     if (kDebugMode) ...[
                       const SizedBox(height: 8),

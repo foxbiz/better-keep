@@ -18,6 +18,8 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
   final _passphraseController = TextEditingController();
   final _confirmController = TextEditingController();
   final _hintController = TextEditingController();
+  final _confirmFocusNode = FocusNode();
+  final _hintFocusNode = FocusNode();
   bool _isLoading = false;
   bool _obscurePassphrase = true;
   bool _obscureConfirm = true;
@@ -69,6 +71,8 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
     _passphraseController.dispose();
     _confirmController.dispose();
     _hintController.dispose();
+    _confirmFocusNode.dispose();
+    _hintFocusNode.dispose();
     super.dispose();
   }
 
@@ -118,41 +122,39 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 16),
-                  Icon(
-                    Icons.vpn_key_rounded,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                   Text(
                     context.l10n.recoveryPassphraseDescription,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 10),
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
                       ).colorScheme.errorContainer.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
                           Icons.warning_amber_rounded,
                           color: Theme.of(context).colorScheme.error,
-                          size: 24,
+                          size: 18,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             context.l10n.recoveryPassphraseWarning,
-                            style: Theme.of(context).textTheme.bodyMedium
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
                                 ),
@@ -161,11 +163,13 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _passphraseController,
                     obscureText: _obscurePassphrase,
                     autofocus: true,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _confirmFocusNode.requestFocus(),
                     decoration: InputDecoration(
                       labelText: context.l10n.recoveryPassphrase,
                       hintText: context.l10n.enterAStrongPassphrase,
@@ -222,6 +226,9 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                   TextFormField(
                     controller: _confirmController,
                     obscureText: _obscureConfirm,
+                    focusNode: _confirmFocusNode,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _hintFocusNode.requestFocus(),
                     decoration: InputDecoration(
                       labelText: context.l10n.confirmPassphrase,
                       hintText: context.l10n.reenterPassphrase,
@@ -247,6 +254,8 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _hintController,
+                    focusNode: _hintFocusNode,
+                    textInputAction: TextInputAction.done,
                     decoration: InputDecoration(
                       labelText: context.l10n.hintOptional,
                       hintText: context.l10n.hintToRemember,

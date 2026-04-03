@@ -74,6 +74,13 @@ function mapNotificationToState(
 	}
 
 	if (notificationType === "DID_CHANGE_RENEWAL_STATUS") {
+		if (subtype === "AUTO_RENEW_ENABLED") {
+			return {
+				state: "SUBSCRIPTION_STATE_ACTIVE",
+				isActive: true,
+				isTerminal: false,
+			};
+		}
 		return {
 			state: "SUBSCRIPTION_STATE_CANCELED",
 			isActive: false,
@@ -89,16 +96,37 @@ function mapNotificationToState(
 }
 
 export default onRequest(async (req, res) => {
+	// GET request for testing if the webhook URL is reachable
+	if (req.method === "GET") {
+		console.log("App Store webhook GET test hit at", new Date().toISOString());
+		res.status(200).json({
+			status: "ok",
+			message: "App Store webhook endpoint is reachable",
+			timestamp: new Date().toISOString(),
+		});
+		return;
+	}
+
 	if (req.method !== "POST") {
 		res.status(405).send("Method not allowed");
 		return;
 	}
+
+	console.log("=== App Store Webhook Received ===");
+	console.log("Timestamp:", new Date().toISOString());
+	console.log("Headers:", JSON.stringify(req.headers, null, 2));
+	console.log("Raw body type:", typeof req.body);
+	console.log("Raw body keys:", req.body ? Object.keys(req.body) : "null");
 
 	// Optional hardening: if APP_STORE_WEBHOOK_TOKEN is configured, require Bearer auth.
 	const expectedToken = process.env.APP_STORE_WEBHOOK_TOKEN;
 	if (expectedToken) {
 		const authHeader = req.headers.authorization;
 		if (authHeader !== `Bearer ${expectedToken}`) {
+			console.error(
+				"Webhook auth failed - expected token but got:",
+				authHeader,
+			);
 			res.status(403).send("Forbidden");
 			return;
 		}
@@ -107,6 +135,10 @@ export default onRequest(async (req, res) => {
 	try {
 		const signedPayload = req.body?.signedPayload;
 		if (typeof signedPayload !== "string") {
+			console.error(
+				"Invalid payload - signedPayload is not a string:",
+				typeof signedPayload,
+			);
 			res.status(400).send("Invalid payload");
 			return;
 		}
@@ -117,7 +149,17 @@ export default onRequest(async (req, res) => {
 		const subtype = getString(payload, "subtype");
 		const notificationUUID = getString(payload, "notificationUUID");
 
+		console.log("Notification type:", notificationType);
+		console.log("Notification subtype:", subtype);
+		console.log("Notification UUID:", notificationUUID);
+
 		if (!notificationType || !notificationUUID) {
+			console.error(
+				"Missing notification fields - type:",
+				notificationType,
+				"uuid:",
+				notificationUUID,
+			);
 			res.status(400).send("Missing notification fields");
 			return;
 		}
@@ -127,6 +169,7 @@ export default onRequest(async (req, res) => {
 			.doc(notificationUUID);
 		const existingEvent = await dedupeRef.get();
 		if (existingEvent.exists) {
+			console.log("Duplicate event, skipping:", notificationUUID);
 			res.status(200).send("OK");
 			return;
 		}
@@ -142,6 +185,10 @@ export default onRequest(async (req, res) => {
 				: null;
 
 		if (!signedTransactionInfo) {
+			console.log(
+				"No signedTransactionInfo, ignoring event:",
+				notificationType,
+			);
 			await dedupeRef.set({
 				notificationType,
 				subtype,
@@ -166,7 +213,22 @@ export default onRequest(async (req, res) => {
 		const expiresDateMs = getNumber(transactionPayload, "expiresDate");
 		const revocationDateMs = getNumber(transactionPayload, "revocationDate");
 
+		console.log("Transaction details:", {
+			originalTransactionId,
+			transactionId,
+			productId,
+			expiresDateMs,
+			expiresDate: expiresDateMs ? new Date(expiresDateMs).toISOString() : null,
+			revocationDateMs,
+		});
+
 		if (!originalTransactionId || !productId) {
+			console.error(
+				"Missing transaction fields - originalTransactionId:",
+				originalTransactionId,
+				"productId:",
+				productId,
+			);
 			await dedupeRef.set({
 				notificationType,
 				subtype,
@@ -182,6 +244,7 @@ export default onRequest(async (req, res) => {
 		const subSnap = await subscriptionRef.get();
 
 		if (!subSnap.exists) {
+			console.warn("Subscription not found in Firestore:", subscriptionId);
 			await dedupeRef.set({
 				notificationType,
 				subtype,
@@ -196,6 +259,12 @@ export default onRequest(async (req, res) => {
 
 		const subData = subSnap.data();
 		const userId = subData?.userId as string | undefined;
+		console.log(
+			"Found subscription for user:",
+			userId,
+			"subscriptionId:",
+			subscriptionId,
+		);
 		if (!userId) {
 			await dedupeRef.set({
 				notificationType,
@@ -209,6 +278,7 @@ export default onRequest(async (req, res) => {
 		}
 
 		const mapped = mapNotificationToState(notificationType, subtype);
+		console.log("Mapped state:", mapped);
 		const expiresAt =
 			typeof expiresDateMs === "number"
 				? Timestamp.fromMillis(expiresDateMs)
@@ -248,6 +318,11 @@ export default onRequest(async (req, res) => {
 			.doc("status");
 
 		if (mapped.isActive && expiresAt) {
+			console.log(
+				"Updating user subscription to ACTIVE - userId:",
+				userId,
+				"plan: pro",
+			);
 			await userSubRef.set(
 				{
 					plan: "pro",
@@ -267,9 +342,14 @@ export default onRequest(async (req, res) => {
 
 			await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
 		} else if (mapped.isTerminal) {
+			console.log("Terminal state - removing subscription for userId:", userId);
 			await userSubRef.delete();
 			await setSubscriptionClaims(userId, "free", null);
 		} else {
+			console.log(
+				"Non-terminal inactive state - updating status for userId:",
+				userId,
+			);
 			await userSubRef.set(
 				{
 					willAutoRenew,
@@ -289,6 +369,7 @@ export default onRequest(async (req, res) => {
 			status: "processed",
 		});
 
+		console.log("=== App Store Webhook Processed Successfully ===");
 		res.status(200).send("OK");
 	} catch (error) {
 		console.error("Error processing App Store webhook:", error);

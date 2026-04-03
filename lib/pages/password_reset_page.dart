@@ -257,6 +257,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
             errorMessage.contains('Invalid verification') ||
             errorMessage.contains('not found')) {
           setState(() {
+            _isLoading = false;
             _errorMessage = errorMessage;
             _currentStep = _ResetStep.otp;
             _otpController.clear();

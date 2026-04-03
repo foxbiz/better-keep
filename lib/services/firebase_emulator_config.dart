@@ -47,7 +47,7 @@ class FirebaseEmulatorConfig {
       return '10.0.2.2';
     }
 
-    return '192.168.0.105';
+    return '192.168.0.102';
   }
 
   /// Initialize with SharedPreferences instance
@@ -125,8 +125,11 @@ class FirebaseEmulatorConfig {
 
     // Pre-check: verify the emulator host is reachable before SDK calls
     try {
-      final socket = await Socket.connect(_host, 9099,
-          timeout: const Duration(seconds: 3));
+      final socket = await Socket.connect(
+        _host,
+        9099,
+        timeout: const Duration(seconds: 3),
+      );
       socket.destroy();
       debugPrint('Firebase Emulators: Network reachability OK ($_host:9099)');
     } catch (e) {

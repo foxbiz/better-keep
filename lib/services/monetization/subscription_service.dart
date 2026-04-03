@@ -10,6 +10,7 @@ import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
@@ -427,26 +428,20 @@ Expected IDs: ${ProductIds.all}
             );
           } else {
             if (purchase.status == PurchaseStatus.restored) {
+              // Don't set _lastPurchaseError for restored purchases that fail
+              // verification — a failed restore just means "no active subscription
+              // to restore", not an error the user needs to see.
               AppLogger.log(
                 'SubscriptionService: Restored purchase verification failed - ${verifyResult.error}',
               );
+            } else {
+              _lastPurchaseError = verifyResult.error;
             }
-            _lastPurchaseError = verifyResult.error;
           }
 
           // Complete the purchase
           if (purchase.pendingCompletePurchase) {
             await _iap.completePurchase(purchase);
-          }
-
-          // Signal restore completer once this restored purchase has been
-          // fully processed (verification complete, purchase acknowledged).
-          // Guard against being called multiple times if more than one
-          // restored purchase arrives.
-          if (purchase.status == PurchaseStatus.restored &&
-              _restoreCompleter != null &&
-              !_restoreCompleter!.isCompleted) {
-            _restoreCompleter!.complete(_restoredSubscriptionFound);
           }
 
           isLoading.value = false;
@@ -488,6 +483,19 @@ Expected IDs: ${ProductIds.all}
           break;
       }
     }
+
+    // Signal restore completer after ALL purchases in this batch have been
+    // fully processed (verified + completePurchase called). This prevents
+    // the race where buyNonConsumable is called while a second restored
+    // purchase still has a pending transaction.
+    if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+      final hadRestored = purchaseDetailsList.any(
+        (p) => p.status == PurchaseStatus.restored,
+      );
+      if (hadRestored) {
+        _restoreCompleter!.complete(_restoredSubscriptionFound);
+      }
+    }
   }
 
   /// Convert technical error messages to user-friendly messages
@@ -515,7 +523,9 @@ Expected IDs: ${ProductIds.all}
     }
 
     if (errorLower.contains('already owned') ||
-        errorLower.contains('already purchased')) {
+        errorLower.contains('already purchased') ||
+        errorLower.contains('duplicate_product') ||
+        errorLower.contains('pending transaction')) {
       return 'You already have this subscription. Try restoring purchases.';
     }
 
@@ -531,6 +541,20 @@ Expected IDs: ${ProductIds.all}
 
     // Default user-friendly message
     return 'Purchase failed. Please try again or contact support.';
+  }
+
+  /// Convert a purchase exception (thrown by buyNonConsumable) to a user-friendly message
+  String _getFriendlyPurchaseException(Object e) {
+    final message = e.toString();
+    final messageLower = message.toLowerCase();
+
+    if (messageLower.contains('storekit_duplicate_product') ||
+        messageLower.contains('pending transaction') ||
+        messageLower.contains('duplicate')) {
+      return 'You have a pending purchase for this subscription. Please wait a moment and try again.';
+    }
+
+    return _getFriendlyErrorMessage(message);
   }
 
   /// Check for pending purchases that may not have been processed
@@ -1337,7 +1361,30 @@ Expected IDs: ${ProductIds.all}
       // Initiate purchase - use buyNonConsumable for subscriptions on Android/iOS
       // (The in_app_purchase plugin uses buyNonConsumable for subscriptions too)
       AppLogger.log('SubscriptionService: Calling buyNonConsumable...');
-      final success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+
+      // On iOS, a pending restored transaction from a previous restore attempt
+      // may not have been completed yet. Retry once after a short delay if
+      // StoreKit reports a duplicate pending transaction.
+      bool success;
+      try {
+        success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+      } catch (e) {
+        if (!kIsWeb &&
+            Platform.isIOS &&
+            e.toString().contains('storekit_duplicate_product')) {
+          AppLogger.log(
+            'SubscriptionService: Pending transaction detected, waiting for completion...',
+          );
+          // Wait for the pending transaction to be completed by _handlePurchaseUpdates
+          await Future.delayed(const Duration(seconds: 3));
+          AppLogger.log(
+            'SubscriptionService: Retrying buyNonConsumable after delay...',
+          );
+          success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+        } else {
+          rethrow;
+        }
+      }
 
       if (!success) {
         isLoading.value = false;
@@ -1348,7 +1395,11 @@ Expected IDs: ${ProductIds.all}
       return PurchaseResult.pending('Processing purchase...');
     } catch (e) {
       isLoading.value = false;
-      return PurchaseResult.failed('Purchase error: $e');
+      AppLogger.error(
+        'SubscriptionService: Purchase exception for $productId',
+        e,
+      );
+      return PurchaseResult.failed(_getFriendlyPurchaseException(e));
     }
   }
 
@@ -1391,33 +1442,58 @@ Expected IDs: ${ProductIds.all}
 
     // On mobile, redirect to platform subscription management
     if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-      Uri managementUrl;
       if (Platform.isIOS) {
-        managementUrl = Uri.parse(
-          'https://apps.apple.com/account/subscriptions',
-        );
+        // Use StoreKit 2 API which handles sandbox vs production automatically
+        try {
+          const channel = MethodChannel('com.betterkeep/subscriptions');
+          await channel.invokeMethod('showManageSubscriptions');
+          return CancelResult.pending(
+            'Manage your subscription in the App Store',
+          );
+        } catch (e) {
+          // Fallback to URL if native method channel fails
+          AppLogger.log(
+            'StoreKit manage subscriptions failed, falling back to URL: $e',
+          );
+          try {
+            final launched = await launchUrl(
+              Uri.parse('https://apps.apple.com/account/subscriptions'),
+              mode: LaunchMode.externalApplication,
+            );
+            if (!launched) {
+              return CancelResult.failed(
+                'Could not open subscription management',
+              );
+            }
+            return CancelResult.pending(
+              'Manage your subscription in the App Store',
+            );
+          } catch (e2) {
+            return CancelResult.failed(
+              'Error opening subscription management: $e2',
+            );
+          }
+        }
       } else {
         // Android - Google Play subscriptions
-        managementUrl = Uri.parse(
-          'https://play.google.com/store/account/subscriptions',
-        );
-      }
-
-      try {
-        final launched = await launchUrl(
-          managementUrl,
-          mode: LaunchMode.externalApplication,
-        );
-
-        if (!launched) {
-          return CancelResult.failed('Could not open subscription management');
+        try {
+          final launched = await launchUrl(
+            Uri.parse('https://play.google.com/store/account/subscriptions'),
+            mode: LaunchMode.externalApplication,
+          );
+          if (!launched) {
+            return CancelResult.failed(
+              'Could not open subscription management',
+            );
+          }
+          return CancelResult.pending(
+            'Manage your subscription in the Play Store',
+          );
+        } catch (e) {
+          return CancelResult.failed(
+            'Error opening subscription management: $e',
+          );
         }
-
-        return CancelResult.pending(
-          'Manage your subscription in the ${Platform.isIOS ? "App Store" : "Play Store"}',
-        );
-      } catch (e) {
-        return CancelResult.failed('Error opening subscription management: $e');
       }
     }
 
