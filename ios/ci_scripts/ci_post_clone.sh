@@ -5,6 +5,15 @@ set -e
 chmod +x "$CI_PRIMARY_REPOSITORY_PATH/ios/ci_scripts/ci_post_clone.sh"
 chmod +x "$CI_PRIMARY_REPOSITORY_PATH/ios/ci_scripts/ci_pre_xcodebuild.sh"
 
+# --- Proxy cleanup (Xcode Cloud sometimes injects proxy settings) ---
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy NO_PROXY no_proxy
+git config --global --unset-all http.proxy || true
+git config --global --unset-all https.proxy || true
+git config --system --unset-all http.proxy 2>/dev/null || true
+git config --system --unset-all https.proxy 2>/dev/null || true
+git config --global http.proxy ""
+git config --global https.proxy ""
+
 # Clone Flutter latest stable directly into $HOME (avoids Homebrew permission issues on Xcode Cloud)
 git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$HOME/flutter"
 
@@ -43,9 +52,21 @@ ln -sf "$HOME/flutter/bin/flutter" /usr/local/bin/flutter
 ln -sf "$HOME/flutter/bin/dart" /usr/local/bin/dart
 
 # Unset any proxy settings that would prevent CocoaPods from reaching GitHub
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
-git config --global --unset http.proxy || true
-git config --global --unset https.proxy || true
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy NO_PROXY no_proxy
+
+# Force-clear git proxy config at every level (global, system, local)
+git config --global --unset-all http.proxy || true
+git config --global --unset-all https.proxy || true
+git config --global --unset-all http.https://github.com.proxy || true
+git config --system --unset-all http.proxy 2>/dev/null || true
+git config --system --unset-all https.proxy 2>/dev/null || true
+
+# Explicitly set empty proxy so no fallback config can re-enable it
+git config --global http.proxy ""
+git config --global https.proxy ""
+
+echo "--- git proxy config after cleanup ---"
+git config --global --list | grep -i proxy || echo "(none)"
 
 # Install CocoaPods dependencies (generates all xcfilelist files)
 cd ios && pod install
