@@ -2,6 +2,7 @@ import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Shows the paywall as a full-screen page.
 ///
@@ -132,6 +133,10 @@ class PaywallSheet extends StatelessWidget {
 
               // Self-host contact info
               _SelfHostContactInfo(theme: theme),
+              const SizedBox(height: 16),
+
+              // Terms and Privacy links
+              const _LegalLinks(),
               const SizedBox(height: 16),
 
               // Close button
@@ -1111,6 +1116,10 @@ class _PaywallPageState extends State<PaywallPage> {
                       ),
                       textAlign: TextAlign.center,
                     ),
+                    const SizedBox(height: 16),
+
+                    // Terms and Privacy links
+                    const _LegalLinks(),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -1166,5 +1175,47 @@ class _PaywallPageState extends State<PaywallPage> {
         SnackBar(content: Text(result.message), backgroundColor: Colors.red),
       );
     }
+  }
+}
+
+class _LegalLinks extends StatelessWidget {
+  const _LegalLinks();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final linkStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.primary,
+      decoration: TextDecoration.underline,
+    );
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        GestureDetector(
+          onTap: () => launchUrl(
+            Uri.parse('https://betterkeep.app/terms'),
+            mode: LaunchMode.externalApplication,
+          ),
+          child: Text('Terms of Use', style: linkStyle),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            '|',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => launchUrl(
+            Uri.parse('https://betterkeep.app/privacy'),
+            mode: LaunchMode.externalApplication,
+          ),
+          child: Text('Privacy Policy', style: linkStyle),
+        ),
+      ],
+    );
   }
 }

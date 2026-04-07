@@ -101,7 +101,7 @@
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>This app needs to access your Downloads folder to store AI models for transcription.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone to record audio.</string>
+	<string>Better Keep uses your microphone to record audio notes and transcribe them into text using on-device speech recognition.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We need permission to save sketches to your gallery.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

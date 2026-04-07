@@ -23,6 +23,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -544,6 +545,62 @@ class AuthService {
     }
   }
 
+  /// Sign in with Apple
+  static Future<UserCredential?> signInWithApple({
+    Function(String)? onStatusChange,
+  }) async {
+    try {
+      isVerifying.value = true;
+      await _ensureNetworkEnabled();
+
+      final canUseE2EEStorage =
+          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+      if (canUseE2EEStorage) {
+        await E2EESecureStorage.instance.init();
+        await E2EESecureStorage.instance.setSignInProgress(true);
+      }
+
+      onStatusChange?.call("Signing in with Apple...");
+
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+
+      onStatusChange?.call("Logging in...");
+
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        accessToken: appleCredential.authorizationCode,
+      );
+
+      final userCredential = await _auth.signInWithCredential(oauthCredential);
+
+      // Apple only returns the name on first sign-in, so update the profile
+      if (userCredential.user != null && appleCredential.givenName != null) {
+        final displayName =
+            '${appleCredential.givenName ?? ''} ${appleCredential.familyName ?? ''}'
+                .trim();
+        if (displayName.isNotEmpty) {
+          await userCredential.user!.updateDisplayName(displayName);
+        }
+      }
+
+      if (userCredential.user != null) {
+        await _completeSignIn(userCredential.user!, onStatusChange, 'apple');
+      }
+
+      return userCredential;
+    } catch (e, stackTrace) {
+      AppLogger.error('Error signing in with Apple', e, stackTrace);
+      rethrow;
+    } finally {
+      isVerifying.value = false;
+    }
+  }
+
   /// Sign in with Facebook
   static Future<UserCredential?> signInWithFacebook({
     Function(String)? onStatusChange,
@@ -1016,6 +1073,35 @@ class AuthService {
   /// Security: User must authenticate with Twitter, proving ownership
   static Future<void> linkWithTwitter() async {
     await _linkWithWebOAuth(provider: 'twitter');
+  }
+
+  /// Link Apple account to current user
+  /// Security: User must authenticate with Apple, proving ownership
+  static Future<void> linkWithApple() async {
+    final user = currentUser;
+    if (user == null) throw Exception('No user signed in');
+
+    try {
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        accessToken: appleCredential.authorizationCode,
+      );
+
+      await user.linkWithCredential(oauthCredential);
+
+      addLinkedProvider('apple.com');
+      AppLogger.log('Successfully linked Apple account');
+    } catch (e, stackTrace) {
+      AppLogger.error('Error linking Apple account', e, stackTrace);
+      rethrow;
+    }
   }
 
   /// Internal method to link account using custom OAuth flow

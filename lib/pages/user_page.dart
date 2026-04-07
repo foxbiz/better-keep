@@ -1526,6 +1526,15 @@ class _UserPageState extends State<UserPage> {
       //   onLink: () => _linkProvider('twitter'),
       // ),
       _ProviderInfo(
+        id: 'apple.com',
+        name: 'Apple',
+        icon: Icons.apple,
+        color: theme.brightness == Brightness.dark
+            ? Colors.white
+            : Colors.black,
+        onLink: () => _linkProvider('apple'),
+      ),
+      _ProviderInfo(
         id: 'password',
         name: 'Email',
         icon: Icons.email_outlined,
@@ -1720,6 +1729,7 @@ class _UserPageState extends State<UserPage> {
       'google': 'google.com',
       'facebook': 'facebook.com',
       'github': 'github.com',
+      'apple': 'apple.com',
       'twitter': 'twitter.com',
     };
     final providerId = providerIds[providerName.toLowerCase()];
@@ -1826,6 +1836,9 @@ class _UserPageState extends State<UserPage> {
           break;
         case 'github':
           await AuthService.linkWithGitHub();
+          break;
+        case 'apple':
+          await AuthService.linkWithApple();
           break;
         case 'twitter':
           await AuthService.linkWithTwitter();

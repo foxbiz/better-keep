@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:better_keep/pages/email_login_page.dart';
@@ -5,6 +6,7 @@ import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:better_keep/state.dart';
@@ -162,6 +164,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
               AppLogger.log("[AUTH] Google sign-in status: $status");
               setState(() => _statusMessage = status);
+            },
+          );
+          break;
+        case 'apple':
+          credential = await AuthService.signInWithApple(
+            onStatusChange: (status) {
+              if (mounted) setState(() => _statusMessage = status);
             },
           );
           break;
@@ -760,6 +769,58 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               ),
             ),
+            if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) ...[
+              const SizedBox(height: 12),
+              // Apple Sign-In button (equally prominent per App Store guideline 4.8)
+              Semantics(
+                button: true,
+                label: 'Sign in with Apple',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _handleSignIn('apple'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white : Colors.black,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.apple,
+                            size: 24,
+                            color: isDark ? Colors.black : Colors.white,
+                          ),
+                          const SizedBox(width: 16),
+                          Text(
+                            'Continue with Apple',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.black : Colors.white,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             // Divider with "or"
             Row(
