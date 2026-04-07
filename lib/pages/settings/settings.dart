@@ -199,21 +199,24 @@ class _SettingsState extends State<Settings> {
     showModalBottomSheet(
       context: context,
       builder: (context) {
-        return ListView(
-          shrinkWrap: true,
-          children: supportedLocales.map((locale) {
-            final isSelected = _locale?.languageCode == locale?.languageCode;
-            return ListTile(
-              leading: isSelected
-                  ? const Icon(Icons.check)
-                  : const SizedBox(width: 24),
-              title: Text(_getLanguageName(locale)),
-              onTap: () {
-                AppState.locale = locale;
-                Navigator.pop(context);
-              },
-            );
-          }).toList(),
+        return SafeArea(
+          top: false,
+          child: ListView(
+            shrinkWrap: true,
+            children: supportedLocales.map((locale) {
+              final isSelected = _locale?.languageCode == locale?.languageCode;
+              return ListTile(
+                leading: isSelected
+                    ? const Icon(Icons.check)
+                    : const SizedBox(width: 24),
+                title: Text(_getLanguageName(locale)),
+                onTap: () {
+                  AppState.locale = locale;
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
         );
       },
     );
@@ -482,44 +485,47 @@ class _SettingsState extends State<Settings> {
     showModalBottomSheet(
       context: context,
       builder: (context) {
-        return ListView(
-          shrinkWrap: true,
-          children: _sounds.map((sound) {
-            final name = path.basenameWithoutExtension(sound);
-            return ListTile(
-              leading: _alarmSound == sound
-                  ? const Icon(Icons.check)
-                  : const Icon(Icons.music_note),
-              title: Text(name),
-              trailing: IconButton(
-                icon: const Icon(Icons.play_arrow),
-                onPressed: () async {
-                  try {
-                    await _audioPlayer.stop();
-                    // audioplayers prefers using AssetSource directly over temp files
-                    final assetPath = sound.startsWith('assets/')
-                        ? sound.substring('assets/'.length)
-                        : sound;
-                    await _audioPlayer.play(AssetSource(assetPath));
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            context.l10n.errorPlayingSound(e.toString()),
+        return SafeArea(
+          top: false,
+          child: ListView(
+            shrinkWrap: true,
+            children: _sounds.map((sound) {
+              final name = path.basenameWithoutExtension(sound);
+              return ListTile(
+                leading: _alarmSound == sound
+                    ? const Icon(Icons.check)
+                    : const Icon(Icons.music_note),
+                title: Text(name),
+                trailing: IconButton(
+                  icon: const Icon(Icons.play_arrow),
+                  onPressed: () async {
+                    try {
+                      await _audioPlayer.stop();
+                      // audioplayers prefers using AssetSource directly over temp files
+                      final assetPath = sound.startsWith('assets/')
+                          ? sound.substring('assets/'.length)
+                          : sound;
+                      await _audioPlayer.play(AssetSource(assetPath));
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              context.l10n.errorPlayingSound(e.toString()),
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      }
                     }
-                  }
+                  },
+                ),
+                onTap: () {
+                  AppState.alarmSound = sound;
+                  Navigator.pop(context);
                 },
-              ),
-              onTap: () {
-                AppState.alarmSound = sound;
-                Navigator.pop(context);
-              },
-            );
-          }).toList(),
+              );
+            }).toList(),
+          ),
         );
       },
     ).whenComplete(() {
@@ -546,79 +552,82 @@ class _SettingsState extends State<Settings> {
           maxChildSize: 0.8,
           expand: false,
           builder: (context, scrollController) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    isDark
-                        ? context.l10n.selectDarkTheme
-                        : context.l10n.selectLightTheme,
-                    style: Theme.of(context).textTheme.titleLarge,
+            return SafeArea(
+              top: false,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      isDark
+                          ? context.l10n.selectDarkTheme
+                          : context.l10n.selectLightTheme,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    itemCount: themes.length,
-                    itemBuilder: (context, index) {
-                      final themeId = themes.keys.elementAt(index);
-                      final themeName = themeNames[themeId] ?? themeId;
-                      final themeData = themes[themeId]!;
-                      final isSelected = currentThemeId == themeId;
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: themes.length,
+                      itemBuilder: (context, index) {
+                        final themeId = themes.keys.elementAt(index);
+                        final themeName = themeNames[themeId] ?? themeId;
+                        final themeData = themes[themeId]!;
+                        final isSelected = currentThemeId == themeId;
 
-                      return ListTile(
-                        leading: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isSelected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.grey.withValues(alpha: 0.3),
-                              width: isSelected ? 2 : 1,
+                        return ListTile(
+                          leading: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.grey.withValues(alpha: 0.3),
+                                width: isSelected ? 2 : 1,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(7),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      color: themeData.scaffoldBackgroundColor,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Container(
+                                      color: themeData.colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(7),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Container(
-                                    color: themeData.scaffoldBackgroundColor,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Container(
-                                    color: themeData.colorScheme.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        title: Text(themeName),
-                        trailing: isSelected
-                            ? Icon(
-                                Icons.check_circle,
-                                color: Theme.of(context).colorScheme.primary,
-                              )
-                            : null,
-                        onTap: () {
-                          if (isDark) {
-                            AppState.darkThemeId = themeId;
-                          } else {
-                            AppState.lightThemeId = themeId;
-                          }
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
+                          title: Text(themeName),
+                          trailing: isSelected
+                              ? Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
+                              : null,
+                          onTap: () {
+                            if (isDark) {
+                              AppState.darkThemeId = themeId;
+                            } else {
+                              AppState.lightThemeId = themeId;
+                            }
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             );
           },
         );

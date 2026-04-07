@@ -31,6 +31,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
   _ResetStep _currentStep = _ResetStep.email;
   bool _isLoading = false;
+  bool _isResending = false;
   String? _maskedEmail;
   String? _errorMessage;
   Timer? _resendTimer;
@@ -102,8 +103,11 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       return;
     }
 
+    final isResend = _currentStep == _ResetStep.otp;
+
     setState(() {
       _isLoading = true;
+      _isResending = isResend;
       _errorMessage = null;
     });
 
@@ -136,7 +140,10 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _isResending = false;
+        });
       }
     }
   }
@@ -510,13 +517,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
           ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
-        Text(
-          'Enter the 6-digit code sent to:',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
-          textAlign: TextAlign.center,
-        ),
+
         const SizedBox(height: 8),
 
         // Email display
@@ -588,8 +589,10 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
 
         // Resend code button
         TextButton.icon(
-          onPressed: _resendCountdown > 0 || _isLoading ? null : _sendOtp,
-          icon: _isLoading
+          onPressed: _resendCountdown > 0 || _isResending || _isLoading
+              ? null
+              : _sendOtp,
+          icon: _isResending
               ? const SizedBox(
                   width: 16,
                   height: 16,

@@ -23,6 +23,7 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
@@ -112,230 +113,244 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     AppLogger.log('[App] Building App widget');
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      navigatorKey: AppState.navigatorKey,
-      scaffoldMessengerKey: AppState.scaffoldMessengerKey,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        FlutterQuillLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('en'),
-        Locale('ja'),
-        Locale('ko'),
-        Locale('id'),
-        Locale('pt', 'BR'),
-        Locale('zh'),
-      ],
-      locale: _locale,
-      title: 'Better Keep',
-      theme: themeData,
-      builder: (context, child) {
-        // Wrap with banners at the top of the app
-        return Overlay(
-          initialEntries: [
-            OverlayEntry(
-              builder: (context) => Column(
-                children: [
-                  // Show "Open in App" banner on web when native app is installed
-                  const OpenInAppBanner(),
-                  const AlarmBanner(),
-                  const SessionInvalidBanner(),
-                  Expanded(child: child ?? const SizedBox.shrink()),
-                ],
+    final isDark = themeData.brightness == Brightness.dark;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: isDark
+            ? Brightness.light
+            : Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        navigatorKey: AppState.navigatorKey,
+        scaffoldMessengerKey: AppState.scaffoldMessengerKey,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          FlutterQuillLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('en'),
+          Locale('ja'),
+          Locale('ko'),
+          Locale('id'),
+          Locale('pt', 'BR'),
+          Locale('zh'),
+        ],
+        locale: _locale,
+        title: 'Better Keep',
+        theme: themeData,
+        builder: (context, child) {
+          // Wrap with banners at the top of the app
+          return Overlay(
+            initialEntries: [
+              OverlayEntry(
+                builder: (context) => Column(
+                  children: [
+                    // Show "Open in App" banner on web when native app is installed
+                    const OpenInAppBanner(),
+                    const AlarmBanner(),
+                    const SessionInvalidBanner(),
+                    Expanded(child: child ?? const SizedBox.shrink()),
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
-      home: ValueListenableBuilder<bool>(
-        valueListenable: AuthService.sessionInvalid,
-        builder: (context, isSessionInvalid, child) {
-          // If session is invalid, show home with warning banner
-          // This allows user to access local notes even when auth fails
-          if (isSessionInvalid) {
-            AppLogger.log(
-              '[Auth] Session invalid, showing Home with warning banner',
-            );
-            return Home();
-          }
-          return StreamBuilder<User?>(
-            stream: AuthService.userStream,
-            builder: (context, snapshot) {
-              AppLogger.log(
-                '[Auth] ConnectionState: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, user: ${snapshot.data?.email}',
-              );
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                AppLogger.log('[Auth] Showing waiting screen...');
-                return AuthScaffold(child: SizedBox.shrink());
-              }
-              if (snapshot.hasData) {
-                final user = snapshot.data!;
-                AppLogger.log('[Auth] User is logged in: ${user.email}');
-
-                // Check if email verification is required for email/password users
-                // OAuth users (Google, Facebook, etc.) don't need email verification
-                final hasPasswordProvider = user.providerData.any(
-                  (info) => info.providerId == 'password',
-                );
-                final hasOAuthProvider = user.providerData.any(
-                  (info) => info.providerId != 'password',
-                );
-
-                // Only require email verification for pure email/password users
-                // (not for users who also have OAuth providers linked)
-                if (hasPasswordProvider &&
-                    !hasOAuthProvider &&
-                    !user.emailVerified) {
-                  AppLogger.log(
-                    '[Auth] Email not verified, showing EmailVerificationPage',
-                  );
-                  return const EmailVerificationPage();
-                }
-
-                AppLogger.log(
-                  '[Auth] Email verified or OAuth user, checking E2EE status...',
-                );
-                // Check E2EE status for pending approval, revoked, or still initializing
-                return ValueListenableBuilder<E2EEStatus>(
-                  valueListenable: E2EEService.instance.status,
-                  builder: (context, e2eeStatus, child) {
-                    AppLogger.log('[Auth] E2EE status: $e2eeStatus');
-                    if (e2eeStatus == E2EEStatus.pendingApproval ||
-                        e2eeStatus == E2EEStatus.revoked) {
-                      AppLogger.log('[Auth] Showing PendingApprovalPage');
-                      return const PendingApprovalPage();
-                    }
-                    // Show account recovery page when no approved devices exist
-                    if (e2eeStatus == E2EEStatus.needsRecovery) {
-                      AppLogger.log('[Auth] Showing AccountRecoveryPage');
-                      return const AccountRecoveryPage();
-                    }
-                    // Show loading while E2EE is still initializing (no cached status)
-                    // Note: verifyingInBackground goes directly to Home (handled below)
-                    if (e2eeStatus == E2EEStatus.notInitialized) {
-                      AppLogger.log('[Auth] Showing E2EE loading screen');
-                      return AuthScaffold(child: _E2EELoadingWidget());
-                    }
-                    // Handle error state - block access until encryption is available
-                    if (e2eeStatus == E2EEStatus.error) {
-                      return AuthScaffold(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: 64,
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                            const SizedBox(height: 24),
-                            Text(
-                              'Encryption Error',
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Unable to initialize encryption. Your notes cannot be accessed without encryption.',
-                              style: Theme.of(context).textTheme.bodyLarge
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 32),
-                            ElevatedButton.icon(
-                              onPressed: () async {
-                                E2EEService.instance.status.value =
-                                    E2EEStatus.notInitialized;
-                                E2EEService.instance.resetInitialization();
-                                try {
-                                  await E2EEService.instance.initialize();
-                                } catch (e) {
-                                  AppLogger.error(
-                                    '[Auth] E2EE retry failed from error screen',
-                                    e,
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry'),
-                            ),
-                            const SizedBox(height: 16),
-                            TextButton.icon(
-                              onPressed: () async {
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    icon: const Icon(
-                                      Icons.logout,
-                                      color: Colors.orange,
-                                      size: 32,
-                                    ),
-                                    title: const Text('Sign Out'),
-                                    content: const Text(
-                                      'Are you sure you want to sign out?\n\n'
-                                      'You will need to sign in again to access your notes.',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.of(context).pop(false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      FilledButton(
-                                        onPressed: () =>
-                                            Navigator.of(context).pop(true),
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: Colors.orange,
-                                        ),
-                                        child: const Text('Sign Out'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (confirmed == true) {
-                                  try {
-                                    await AuthService.signOut();
-                                  } catch (e) {
-                                    // Error is logged, sign out should still proceed
-                                  }
-                                }
-                              },
-                              icon: const Icon(Icons.logout),
-                              label: const Text('Sign Out'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: () {
-                                // Mark session as invalid to allow access to local notes
-                                AuthService.sessionInvalid.value = true;
-                              },
-                              child: const Text('Continue Offline'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                    // E2EE is ready, verifyingInBackground, or setup complete - show home
-                    // verifyingInBackground allows immediate access while verification happens
-                    AppLogger.log('[Auth] E2EE ready/verifying, showing Home');
-                    return Home();
-                  },
-                );
-              }
-              AppLogger.log('[Auth] No user, showing LoginPage');
-              return const LoginPage();
-            },
+            ],
           );
         },
+        home: ValueListenableBuilder<bool>(
+          valueListenable: AuthService.sessionInvalid,
+          builder: (context, isSessionInvalid, child) {
+            // If session is invalid, show home with warning banner
+            // This allows user to access local notes even when auth fails
+            if (isSessionInvalid) {
+              AppLogger.log(
+                '[Auth] Session invalid, showing Home with warning banner',
+              );
+              return Home();
+            }
+            return StreamBuilder<User?>(
+              stream: AuthService.userStream,
+              builder: (context, snapshot) {
+                AppLogger.log(
+                  '[Auth] ConnectionState: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, user: ${snapshot.data?.email}',
+                );
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  AppLogger.log('[Auth] Showing waiting screen...');
+                  return AuthScaffold(child: SizedBox.shrink());
+                }
+                if (snapshot.hasData) {
+                  final user = snapshot.data!;
+                  AppLogger.log('[Auth] User is logged in: ${user.email}');
+
+                  // Check if email verification is required for email/password users
+                  // OAuth users (Google, Facebook, etc.) don't need email verification
+                  final hasPasswordProvider = user.providerData.any(
+                    (info) => info.providerId == 'password',
+                  );
+                  final hasOAuthProvider = user.providerData.any(
+                    (info) => info.providerId != 'password',
+                  );
+
+                  // Only require email verification for pure email/password users
+                  // (not for users who also have OAuth providers linked)
+                  if (hasPasswordProvider &&
+                      !hasOAuthProvider &&
+                      !user.emailVerified) {
+                    AppLogger.log(
+                      '[Auth] Email not verified, showing EmailVerificationPage',
+                    );
+                    return const EmailVerificationPage();
+                  }
+
+                  AppLogger.log(
+                    '[Auth] Email verified or OAuth user, checking E2EE status...',
+                  );
+                  // Check E2EE status for pending approval, revoked, or still initializing
+                  return ValueListenableBuilder<E2EEStatus>(
+                    valueListenable: E2EEService.instance.status,
+                    builder: (context, e2eeStatus, child) {
+                      AppLogger.log('[Auth] E2EE status: $e2eeStatus');
+                      if (e2eeStatus == E2EEStatus.pendingApproval ||
+                          e2eeStatus == E2EEStatus.revoked) {
+                        AppLogger.log('[Auth] Showing PendingApprovalPage');
+                        return const PendingApprovalPage();
+                      }
+                      // Show account recovery page when no approved devices exist
+                      if (e2eeStatus == E2EEStatus.needsRecovery) {
+                        AppLogger.log('[Auth] Showing AccountRecoveryPage');
+                        return const AccountRecoveryPage();
+                      }
+                      // Show loading while E2EE is still initializing (no cached status)
+                      // Note: verifyingInBackground goes directly to Home (handled below)
+                      if (e2eeStatus == E2EEStatus.notInitialized) {
+                        AppLogger.log('[Auth] Showing E2EE loading screen');
+                        return AuthScaffold(child: _E2EELoadingWidget());
+                      }
+                      // Handle error state - block access until encryption is available
+                      if (e2eeStatus == E2EEStatus.error) {
+                        return AuthScaffold(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(height: 24),
+                              Text(
+                                'Encryption Error',
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Unable to initialize encryption. Your notes cannot be accessed without encryption.',
+                                style: Theme.of(context).textTheme.bodyLarge
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 32),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  E2EEService.instance.status.value =
+                                      E2EEStatus.notInitialized;
+                                  E2EEService.instance.resetInitialization();
+                                  try {
+                                    await E2EEService.instance.initialize();
+                                  } catch (e) {
+                                    AppLogger.error(
+                                      '[Auth] E2EE retry failed from error screen',
+                                      e,
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry'),
+                              ),
+                              const SizedBox(height: 16),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  final confirmed = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      icon: const Icon(
+                                        Icons.logout,
+                                        color: Colors.orange,
+                                        size: 32,
+                                      ),
+                                      title: const Text('Sign Out'),
+                                      content: const Text(
+                                        'Are you sure you want to sign out?\n\n'
+                                        'You will need to sign in again to access your notes.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        FilledButton(
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(true),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: Colors.orange,
+                                          ),
+                                          child: const Text('Sign Out'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirmed == true) {
+                                    try {
+                                      await AuthService.signOut();
+                                    } catch (e) {
+                                      // Error is logged, sign out should still proceed
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.logout),
+                                label: const Text('Sign Out'),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: () {
+                                  // Mark session as invalid to allow access to local notes
+                                  AuthService.sessionInvalid.value = true;
+                                },
+                                child: const Text('Continue Offline'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      // E2EE is ready, verifyingInBackground, or setup complete - show home
+                      // verifyingInBackground allows immediate access while verification happens
+                      AppLogger.log(
+                        '[Auth] E2EE ready/verifying, showing Home',
+                      );
+                      return Home();
+                    },
+                  );
+                }
+                AppLogger.log('[Auth] No user, showing LoginPage');
+                return const LoginPage();
+              },
+            );
+          },
+        ),
       ),
     );
   }
