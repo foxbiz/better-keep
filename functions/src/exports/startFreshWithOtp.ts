@@ -1,7 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { db, storage } from "../config";
+import { REVIEW_ACCOUNT_EMAIL, db, storage } from "../config";
 
 /**
  * Deletes all notes from the user's collection.
@@ -91,63 +91,71 @@ export default onCall(
 
 		try {
 			const userRef = db.collection("users").doc(userId);
-			const otpRef = userRef.collection("otpVerification").doc("startFresh");
-			const otpDoc = await otpRef.get();
 
-			if (!otpDoc.exists) {
-				throw new HttpsError(
-					"not-found",
-					"No verification code found. Please request a new one.",
-				);
-			}
+			if (request.auth.token.email?.toLowerCase() === REVIEW_ACCOUNT_EMAIL) {
+				console.log(`Skipping OTP verification for review account ${userId}`);
+			} else {
+				const otpRef = userRef.collection("otpVerification").doc("startFresh");
+				const otpDoc = await otpRef.get();
 
-			const otpData = otpDoc.data();
-			if (!otpData) {
-				throw new HttpsError(
-					"not-found",
-					"No verification code found. Please request a new one.",
-				);
-			}
+				if (!otpDoc.exists) {
+					throw new HttpsError(
+						"not-found",
+						"No verification code found. Please request a new one.",
+					);
+				}
 
-			const now = Timestamp.now();
+				const otpData = otpDoc.data();
+				if (!otpData) {
+					throw new HttpsError(
+						"not-found",
+						"No verification code found. Please request a new one.",
+					);
+				}
 
-			// Check if OTP expired (10 minutes from creation)
-			if (otpData.expiresAt && otpData.expiresAt.toMillis() < now.toMillis()) {
+				const now = Timestamp.now();
+
+				// Check if OTP expired (10 minutes from creation)
+				if (
+					otpData.expiresAt &&
+					otpData.expiresAt.toMillis() < now.toMillis()
+				) {
+					await otpRef.delete();
+					throw new HttpsError(
+						"deadline-exceeded",
+						"Verification code has expired. Please request a new one.",
+					);
+				}
+
+				// Check attempts (max 5)
+				const attempts = otpData.attempts || 0;
+				if (attempts >= 5) {
+					await otpRef.delete();
+					throw new HttpsError(
+						"resource-exhausted",
+						"Too many attempts. Please request a new code.",
+					);
+				}
+
+				// Verify OTP
+				if (otpData.otp !== providedOtp) {
+					await otpRef.update({
+						attempts: FieldValue.increment(1),
+					});
+
+					const remainingAttempts = 4 - attempts;
+					throw new HttpsError(
+						"permission-denied",
+						`Invalid code. ${remainingAttempts} attempt${
+							remainingAttempts !== 1 ? "s" : ""
+						} remaining.`,
+					);
+				}
+
+				// OTP verified! Clean up immediately
 				await otpRef.delete();
-				throw new HttpsError(
-					"deadline-exceeded",
-					"Verification code has expired. Please request a new one.",
-				);
+				console.log(`Start fresh OTP verified for user ${userId}`);
 			}
-
-			// Check attempts (max 5)
-			const attempts = otpData.attempts || 0;
-			if (attempts >= 5) {
-				await otpRef.delete();
-				throw new HttpsError(
-					"resource-exhausted",
-					"Too many attempts. Please request a new code.",
-				);
-			}
-
-			// Verify OTP
-			if (otpData.otp !== providedOtp) {
-				await otpRef.update({
-					attempts: FieldValue.increment(1),
-				});
-
-				const remainingAttempts = 4 - attempts;
-				throw new HttpsError(
-					"permission-denied",
-					`Invalid code. ${remainingAttempts} attempt${
-						remainingAttempts !== 1 ? "s" : ""
-					} remaining.`,
-				);
-			}
-
-			// OTP verified! Clean up immediately
-			await otpRef.delete();
-			console.log(`Start fresh OTP verified for user ${userId}`);
 
 			// STEP 1: Delete all existing notes
 			const deletedNotesCount = await deleteAllNotes(userRef);
