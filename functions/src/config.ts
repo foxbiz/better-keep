@@ -118,13 +118,16 @@ export const IOS_PRODUCT_IDS = {
 	yearly: "pro_yearly",
 } as const;
 
+// Review account email for app store review testing
+export const REVIEW_ACCOUNT_EMAIL = "review@betterkeep.app";
+
 // Trial configuration (can be controlled via environment variables)
 export const TRIAL_ENABLED = process.env.TRIAL_ENABLED === "true";
-export const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS || "7", 10);
+export const TRIAL_DAYS = Number.parseInt(process.env.TRIAL_DAYS || "7", 10);
 // Debug mode: use minutes instead of days for testing (only in emulator)
 export const DEBUG_TRIAL_MINUTES =
 	isEmulator && process.env.DEBUG_TRIAL_MINUTES
-		? parseInt(process.env.DEBUG_TRIAL_MINUTES, 10)
+		? Number.parseInt(process.env.DEBUG_TRIAL_MINUTES, 10)
 		: null;
 
 /**
