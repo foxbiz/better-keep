@@ -951,17 +951,17 @@ class _UserPageState extends State<UserPage> {
                         ],
                       ),
                     ),
-                    // For App Store / Play Store, show manage subscription button
+                    // For App Store / Play Store, show resubscribe button
                     if (!status.isRazorpaySubscription) ...[
                       const SizedBox(height: 8),
                       SizedBox(
                         width: double.infinity,
-                        child: OutlinedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: _isSubscriptionActionLoading
                               ? null
                               : () => _handleCancelSubscription(context),
-                          icon: const Icon(Icons.settings),
-                          label: Text(context.l10n.manageSubscription),
+                          icon: const Icon(Icons.refresh),
+                          label: Text(context.l10n.renewSubscription),
                         ),
                       ),
                     ],
@@ -1421,6 +1421,13 @@ class _UserPageState extends State<UserPage> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+
+      // After the user returns from the store management page, wait briefly
+      // for the background restore+refresh to update Firestore, then rebuild.
+      if (result.isPending) {
+        await Future.delayed(const Duration(seconds: 3));
+        if (mounted) setState(() {});
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubscriptionActionLoading = false);
@@ -1437,7 +1444,7 @@ class _UserPageState extends State<UserPage> {
           children: [
             const Icon(Icons.bug_report, color: Colors.orange),
             const SizedBox(width: 8),
-            Text(context.l10n.debugDeleteSubscription),
+            Flexible(child: Text(context.l10n.debugDeleteSubscription)),
           ],
         ),
         content: Text(context.l10n.debugDeleteSubscriptionWarning),

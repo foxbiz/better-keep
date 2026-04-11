@@ -1444,6 +1444,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get manageSubscription => 'サブスクリプションを管理';
 
   @override
+  String get renewSubscription => 'サブスクリプションを更新';
+
+  @override
+  String get restoreInfoText =>
+      'サブスクリプションを購入すると、既存のサブスクリプションや過去の購入が自動的に復元されます。';
+
+  @override
   String get cancelSubscriptionConfirmation =>
       'サブスクリプションをキャンセルしてもよろしいですか？\n\nサブスクリプションは現在の請求期間の終了まで有効です。その後、Pro機能にアクセスできなくなります。';
 

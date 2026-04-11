@@ -16,3 +16,5 @@ node_modules/
 *.log
 .secret.local
 .secret.local
+
+key.json

@@ -1534,6 +1534,12 @@
   "manageSubscription": "Manage Subscription",
   "@manageSubscription": {"description": "Manage subscription button"},
   
+  "renewSubscription": "Renew Subscription",
+  "@renewSubscription": {"description": "Renew cancelled subscription button"},
+  
+  "restoreInfoText": "Subscribing will automatically restore any active subscriptions or previous purchases.",
+  "@restoreInfoText": {"description": "Info text explaining automatic restore on paywall"},
+  
   "cancelSubscriptionConfirmation": "Are you sure you want to cancel your subscription?\n\nYour subscription will remain active until the end of the current billing period. After that, you will lose access to Pro features.",
   "@cancelSubscriptionConfirmation": {"description": "Cancel subscription confirmation message"},
   

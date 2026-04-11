@@ -47,7 +47,12 @@ export default onCall(
 		);
 
 		try {
-			let result: { valid: boolean; message: string; subscription?: object };
+			let result: {
+				valid: boolean;
+				sendWelcomeEmail?: boolean;
+				message: string;
+				subscription?: object;
+			};
 
 			if (source === "play_store") {
 				result = await verifyGooglePlayPurchase(
@@ -67,8 +72,8 @@ export default onCall(
 				);
 			}
 
-			// Send welcome email if verification was successful
-			if (result.valid) {
+			// Send welcome email only on first-time purchase (idempotency guard via Firestore flag)
+			if (result.valid && result.sendWelcomeEmail !== false) {
 				await sendSubscriptionWelcomeEmail(userId, result.subscription);
 			}
 

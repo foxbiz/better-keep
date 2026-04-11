@@ -93,51 +93,63 @@ class PaywallSheet extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
-              // Icon and title
-              Icon(
-                Icons.workspace_premium_rounded,
-                size: 48,
-                color: theme.colorScheme.primary,
+              // Compact hero: icon inline with title
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.workspace_premium_rounded,
+                    size: 22,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    context.l10n.upgradeToPro,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                context.l10n.upgradeToPro,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
               // Feature-specific or custom message
               Text(
                 _getMessage(context),
-                style: theme.textTheme.bodyLarge?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 24),
-
-              // Why we charge
-              _WhyWeChargeCard(theme: theme),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
               // Feature comparison
               const _FeatureComparisonCard(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
+              Text(
+                'No ads, no data selling — your subscription funds secure servers & ongoing development.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
 
               // Pricing options
               const _PricingOptions(),
               const SizedBox(height: 16),
 
-              // Self-host contact info
-              _SelfHostContactInfo(theme: theme),
+              // Restore info
+              const _RestoreInfoText(),
               const SizedBox(height: 16),
 
               // Terms and Privacy links
               const _LegalLinks(),
               const SizedBox(height: 16),
+
+              // Self-host contact info
+              _SelfHostContactInfo(theme: theme),
+              const SizedBox(height: 12),
 
               // Close button
               TextButton(
@@ -167,57 +179,6 @@ class PaywallSheet extends StatelessWidget {
   }
 }
 
-class _WhyWeChargeCard extends StatelessWidget {
-  final ThemeData theme;
-
-  const _WhyWeChargeCard({required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.info_outline,
-                size: 18,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Why we charge',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Cloud sync and end-to-end encryption require real servers that cost money to run. '
-            'Your subscription directly funds secure infrastructure and ongoing development. '
-            'No ads, no data selling — just notes.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _FeatureComparisonCard extends StatelessWidget {
   const _FeatureComparisonCard();
@@ -970,37 +931,47 @@ class _PaywallPageState extends State<PaywallPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Icon and title
-                    Icon(
-                      Icons.workspace_premium_rounded,
-                      size: 64,
-                      color: theme.colorScheme.primary,
+                    // Compact hero: icon inline with title
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.workspace_premium_rounded,
+                          size: 26,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            context.l10n.unlockTheFullExperience,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      context.l10n.unlockTheFullExperience,
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       _getMessage(context),
-                      style: theme.textTheme.bodyLarge?.copyWith(
+                      style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 32),
-
-                    // Why we charge
-                    _WhyWeChargeCard(theme: theme),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Feature comparison
                     const _FeatureComparisonCard(),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No ads, no data selling — your subscription funds secure servers & ongoing development.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
 
                     // Pricing section
                     if (_isLoadingProducts) ...[
@@ -1102,9 +1073,9 @@ class _PaywallPageState extends State<PaywallPage> {
                     ],
                     const SizedBox(height: 24),
 
-                    // Self-host contact info
-                    _SelfHostContactInfo(theme: theme),
-                    const SizedBox(height: 32),
+                    // Restore info
+                    const _RestoreInfoText(),
+                    const SizedBox(height: 24),
 
                     // Terms
                     Text(
@@ -1120,6 +1091,10 @@ class _PaywallPageState extends State<PaywallPage> {
 
                     // Terms and Privacy links
                     const _LegalLinks(),
+                    const SizedBox(height: 16),
+
+                    // Self-host contact info
+                    _SelfHostContactInfo(theme: theme),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -1175,6 +1150,22 @@ class _PaywallPageState extends State<PaywallPage> {
         SnackBar(content: Text(result.message), backgroundColor: Colors.red),
       );
     }
+  }
+}
+
+class _RestoreInfoText extends StatelessWidget {
+  const _RestoreInfoText();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      context.l10n.restoreInfoText,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.outline,
+      ),
+      textAlign: TextAlign.center,
+    );
   }
 }
 

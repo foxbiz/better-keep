@@ -1445,6 +1445,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get manageSubscription => '구독 관리';
 
   @override
+  String get renewSubscription => '구독 갱신';
+
+  @override
+  String get restoreInfoText => '구독 시 활성 구독 또는 이전 구매가 자동으로 복원됩니다.';
+
+  @override
   String get cancelSubscriptionConfirmation =>
       '정말 구독을 취소하시겠습니까?\n\n현재 결제 기간이 끝날 때까지 구독이 유지됩니다. 이후 Pro 기능 이용이 불가능합니다.';
 

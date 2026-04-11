@@ -68,6 +68,32 @@ export default onRequest(
 			// 12 = SUBSCRIPTION_REVOKED
 			// 13 = SUBSCRIPTION_EXPIRED
 
+			// Deduplication: Google Pub/Sub guarantees at-least-once delivery.
+			// Use the message ID to skip re-processing of already-handled notifications.
+			// A Firestore transaction makes the check-and-write atomic so two concurrent
+			// retries of the same message cannot both slip through the existence check.
+			const messageId = message.messageId as string | undefined;
+			if (messageId) {
+				const dedupeRef = db
+					.collection("playStoreWebhookEvents")
+					.doc(messageId);
+				let isDuplicate = false;
+				await db.runTransaction(async (t) => {
+					const snap = await t.get(dedupeRef);
+					if (snap.exists) {
+						isDuplicate = true;
+						return;
+					}
+					// Reserve the slot — full details written after processing below.
+					t.set(dedupeRef, { reserved: true });
+				});
+				if (isDuplicate) {
+					console.log("Duplicate Play Store event, skipping:", messageId);
+					res.status(200).send("OK");
+					return;
+				}
+			}
+
 			console.log(
 				`Processing notification type ${notificationType} for token ${purchaseToken}`,
 			);
@@ -202,12 +228,16 @@ export default onRequest(
 				// Clear custom claims - user is now on free plan
 				await setSubscriptionClaims(userId, "free", null);
 
-				// Send notification email
-				await sendSubscriptionNotificationEmail(
-					userId,
-					notificationType,
-					expiresAt?.toDate() || null,
-				);
+				// Skip terminal email if a cancellation email was already sent for this
+				// subscription (type 3 → type 12/13 = two emails otherwise).
+				const alreadySentCancelEmail = subData.cancelEmailSentAt != null;
+				if (!alreadySentCancelEmail) {
+					await sendSubscriptionNotificationEmail(
+						userId,
+						notificationType,
+						expiresAt?.toDate() || null,
+					);
+				}
 			} else {
 				// Non-terminal but not active (e.g., canceled but not yet expired, on hold)
 				const shouldNotify = [3, 5, 6].includes(notificationType);
@@ -218,6 +248,17 @@ export default onRequest(
 						notificationType,
 						expiresAt?.toDate() || null,
 					);
+					// Mark that a cancellation/hold email was sent so we don't send
+					// a duplicate when the terminal expiry notification arrives later.
+					if (notificationType === 3) {
+						await db
+							.collection("subscriptions")
+							.doc(purchaseToken)
+							.set(
+								{ cancelEmailSentAt: FieldValue.serverTimestamp() },
+								{ merge: true },
+							);
+					}
 				}
 
 				// Update status
@@ -234,6 +275,18 @@ export default onRequest(
 			console.log(
 				`Processed notification for user ${userId}: type=${notificationType}, state=${subscriptionState}`,
 			);
+
+			// Update the dedup record with full processing details (doc was created by the
+			// opening transaction; use update() so it stays atomic-safe).
+			if (messageId) {
+				await db.collection("playStoreWebhookEvents").doc(messageId).update({
+					notificationType,
+					purchaseToken,
+					processedAt: FieldValue.serverTimestamp(),
+					reserved: FieldValue.delete(),
+				});
+			}
+
 			res.status(200).send("OK");
 		} catch (error) {
 			console.error("Error processing Play Store webhook:", error);
@@ -268,7 +321,7 @@ async function sendSubscriptionNotificationEmail(
 		let message: string;
 		let actionText: string | null = null;
 		let actionUrl: string | null = null;
-		let extraContent: string = "";
+		let extraContent = "";
 
 		switch (notificationType) {
 			case 3: // SUBSCRIPTION_CANCELED

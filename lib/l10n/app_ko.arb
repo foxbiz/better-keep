@@ -447,6 +447,8 @@
   "upgradeToProDescription": "무제한 잠금 노트, 클라우드 동기화 등을 위해 Pro로 업그레이드하세요.",
   "cancellingSubscription": "취소 중...",
   "manageSubscription": "구독 관리",
+  "renewSubscription": "구독 갱신",
+  "restoreInfoText": "구독 시 활성 구독 또는 이전 구매가 자동으로 복원됩니다.",
   "cancelSubscriptionConfirmation": "정말 구독을 취소하시겠습니까?\n\n현재 결제 기간이 끝날 때까지 구독이 유지됩니다. 이후 Pro 기능 이용이 불가능합니다.",
   "signInWithAnyLinked": "연결된 계정으로 로그인",
   "linkingRequiresAuth": "연결하려면 각 플랫폼에서 소유권 확인을 위한 인증이 필요합니다.",

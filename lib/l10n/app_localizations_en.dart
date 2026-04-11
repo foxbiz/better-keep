@@ -1466,6 +1466,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get manageSubscription => 'Manage Subscription';
 
   @override
+  String get renewSubscription => 'Renew Subscription';
+
+  @override
+  String get restoreInfoText =>
+      'Subscribing will automatically restore any active subscriptions or previous purchases.';
+
+  @override
   String get cancelSubscriptionConfirmation =>
       'Are you sure you want to cancel your subscription?\n\nYour subscription will remain active until the end of the current billing period. After that, you will lose access to Pro features.';
 

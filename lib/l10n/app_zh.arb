@@ -447,6 +447,8 @@
   "upgradeToProDescription": "升级到专业版以获得无限锁定笔记、云同步等功能。",
   "cancellingSubscription": "正在取消...",
   "manageSubscription": "管理订阅",
+  "renewSubscription": "续订",
+  "restoreInfoText": "订阅时将自动恢复任何活跃订阅或之前的购买。",
   "cancelSubscriptionConfirmation": "确定要取消订阅吗？\n\n您的订阅将保持有效直到当前计费周期结束。之后，您将失去对专业版功能的访问权限。",
   "signInWithAnyLinked": "使用任何已链接的账户登录",
   "linkingRequiresAuth": "链接需要对每个平台进行身份验证以验证所有权。",

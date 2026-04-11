@@ -32,7 +32,10 @@ if (!password || password.length < 6) {
 	process.exit(1);
 }
 
-const app = admin.initializeApp();
+const app = admin.initializeApp({
+	projectId: "better-keep-notes",
+	storageBucket: "better-keep-notes.firebasestorage.app",
+});
 
 // Use the named database in production, default in emulator
 const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";

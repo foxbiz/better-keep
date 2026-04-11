@@ -1534,6 +1534,10 @@
   "manageSubscription": "Aboneliği Yönet",
   "@manageSubscription": {"description": "Manage subscription button"},
   
+  "renewSubscription": "Aboneliği Yenile",
+
+  "restoreInfoText": "Abone olduğunuzda, mevcut abonelikleriniz veya önceki satın alımlarınız otomatik olarak geri yüklenir.",
+
   "cancelSubscriptionConfirmation": "Aboneliğinizi iptal etmek istediğinizden emin misiniz?\n\nAboneliğiniz, mevcut fatura döneminin sonuna kadar aktif kalacaktır. Bundan sonra Pro özelliklerine erişiminizi kaybedeceksiniz.",
   "@cancelSubscriptionConfirmation": {"description": "Cancel subscription confirmation message"},
   

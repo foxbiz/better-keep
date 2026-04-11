@@ -50,6 +50,13 @@ class SketchPage extends StatefulWidget {
     this.initialIndex,
   });
 
+  /// Release all cached background images to free native graphics memory.
+  /// We only clear the map reference — we cannot dispose the ui.Image objects
+  /// because a SketchPage may still be painting with them on the current frame.
+  static void clearBackgroundImageCache() {
+    _SketchPageState._backgroundImageCache.clear();
+  }
+
   @override
   State<SketchPage> createState() => _SketchPageState();
 }
@@ -1695,7 +1702,8 @@ class _SketchPageState extends State<SketchPage>
 
     // Add to cache, evict oldest if too large
     if (_backgroundImageCache.length >= _maxImageCacheSize) {
-      _backgroundImageCache.remove(_backgroundImageCache.keys.first);
+      final oldestKey = _backgroundImageCache.keys.first;
+      _backgroundImageCache.remove(oldestKey)?.dispose();
     }
     _backgroundImageCache[bgImage] = frame.image;
 

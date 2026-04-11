@@ -6,6 +6,7 @@ import * as nodemailer from "nodemailer";
 import {
 	ANDROID_PACKAGE_NAME,
 	IOS_PRODUCT_IDS,
+	REVIEW_ACCOUNT_EMAIL,
 	SUBSCRIPTION_PLANS,
 	appStoreSharedSecret,
 	auth,
@@ -213,7 +214,12 @@ export async function verifyGooglePlayPurchase(
 	userId: string,
 	productId: string,
 	purchaseToken: string,
-): Promise<{ valid: boolean; message: string; subscription?: object }> {
+): Promise<{
+	valid: boolean;
+	sendWelcomeEmail?: boolean;
+	message: string;
+	subscription?: object;
+}> {
 	const playApi = await getPlayDeveloperApi(googlePlayCredentials.value());
 
 	// Get subscription details from Google Play
@@ -271,20 +277,27 @@ export async function verifyGooglePlayPurchase(
 		.limit(1)
 		.get();
 
+	let welcomeEmailAlreadySent = false;
 	if (!existingSubscription.empty) {
 		const existingDoc = existingSubscription.docs[0];
 		const existingData = existingDoc.data();
+		welcomeEmailAlreadySent = existingData.welcomeEmailSent === true;
 
 		if (existingData.userId !== userId) {
-			console.warn(
-				`Subscription already linked to user ${existingData.userId}, ` +
-					`attempted by ${userId}`,
-			);
-			throw new HttpsError(
-				"already-exists",
-				"This subscription is already linked to another account. " +
-					"Please contact support at support@betterkeep.app if you believe this is an error.",
-			);
+			// Allow review account to bypass duplicate check
+			const userRecord = await auth.getUser(userId);
+			if (userRecord.email !== REVIEW_ACCOUNT_EMAIL) {
+				console.warn(
+					`Subscription already linked to user ${existingData.userId}, ` +
+						`attempted by ${userId}`,
+				);
+				throw new HttpsError(
+					"already-exists",
+					"This subscription is already linked to another account. " +
+						"Please contact support at support@betterkeep.app if you believe this is an error.",
+				);
+			}
+			console.log(`Bypassing duplicate check for review account ${userId}`);
 		}
 	}
 
@@ -318,6 +331,8 @@ export async function verifyGooglePlayPurchase(
 				startTime: subscription.startTime
 					? Timestamp.fromDate(new Date(subscription.startTime))
 					: null,
+				// Set welcomeEmailSent only on first-time creation to prevent repeat welcome emails
+				...(!welcomeEmailAlreadySent ? { welcomeEmailSent: true } : {}),
 				createdAt: FieldValue.serverTimestamp(),
 				updatedAt: FieldValue.serverTimestamp(),
 			},
@@ -330,17 +345,20 @@ export async function verifyGooglePlayPurchase(
 		.doc(userId)
 		.collection("subscription")
 		.doc("status")
-		.set({
-			plan: "pro",
-			billingPeriod: basePlanId === "pro-yearly" ? "yearly" : "monthly",
-			expiresAt,
-			willAutoRenew: subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
-			purchaseToken,
-			source: "play_store",
-			basePlanId,
-			verifiedAt: FieldValue.serverTimestamp(),
-			updatedAt: FieldValue.serverTimestamp(),
-		});
+		.set(
+			{
+				plan: "pro",
+				billingPeriod: basePlanId === "pro-yearly" ? "yearly" : "monthly",
+				expiresAt,
+				willAutoRenew: subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
+				purchaseToken,
+				source: "play_store",
+				basePlanId,
+				verifiedAt: FieldValue.serverTimestamp(),
+				updatedAt: FieldValue.serverTimestamp(),
+			},
+			{ merge: true },
+		);
 
 	// Set custom claims for server-side subscription enforcement
 	await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
@@ -351,6 +369,7 @@ export async function verifyGooglePlayPurchase(
 
 	return {
 		valid: true,
+		sendWelcomeEmail: !welcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
 		subscription: {
 			plan: "pro",
@@ -522,7 +541,12 @@ export async function verifyAppStorePurchase(
 	userId: string,
 	productId: string,
 	receiptData: string,
-): Promise<{ valid: boolean; message: string; subscription?: object }> {
+): Promise<{
+	valid: boolean;
+	sendWelcomeEmail?: boolean;
+	message: string;
+	subscription?: object;
+}> {
 	const sharedSecret = appStoreSharedSecret.value();
 	if (!sharedSecret) {
 		throw new HttpsError(
@@ -615,6 +639,8 @@ export async function verifyAppStorePurchase(
 		(receiptRoot.in_app as Array<Record<string, string>> | undefined) || [];
 	const receiptEntries =
 		latestReceiptInfo.length > 0 ? latestReceiptInfo : inAppReceipts;
+	const pendingRenewalInfo =
+		(appleResponse.pending_renewal_info as Array<Record<string, string>>) || [];
 	const now = Date.now();
 
 	const activeReceipts = receiptEntries.filter((r) => {
@@ -655,24 +681,53 @@ export async function verifyAppStorePurchase(
 	}
 	const billingPeriod =
 		resolvedProductId === IOS_PRODUCT_IDS.yearly ? "yearly" : "monthly";
+
 	const expiresAt = Timestamp.fromMillis(expiresMs);
+
+	// Determine willAutoRenew from pending_renewal_info
+	// auto_renew_status: "1" = will renew, "0" = won't renew (user cancelled)
+	const renewalInfo =
+		pendingRenewalInfo.find(
+			(r) => r.original_transaction_id === originalTransactionId,
+		) ?? pendingRenewalInfo.find((r) => r.product_id === resolvedProductId);
+	console.log(
+		`App Store pending_renewal_info: ${JSON.stringify(pendingRenewalInfo)}, ` +
+			`matched renewalInfo: ${JSON.stringify(renewalInfo)}`,
+	);
+	// Default to false (cancelled) when renewal info is missing — safer than
+	// assuming active. Use String() to handle both "1"/"0" and numeric 1/0.
+	const willAutoRenew =
+		renewalInfo != null && String(renewalInfo.auto_renew_status) === "1";
+	const subscriptionState = willAutoRenew
+		? "SUBSCRIPTION_STATE_ACTIVE"
+		: "SUBSCRIPTION_STATE_CANCELED";
 
 	const existingRef = db
 		.collection("subscriptions")
 		.doc(`ios_${originalTransactionId}`);
 	const existingSnap = await existingRef.get();
 
+	const appStoreWelcomeEmailAlreadySent =
+		existingSnap.exists && existingSnap.data()?.welcomeEmailSent === true;
+
 	if (existingSnap.exists) {
 		const existingData = existingSnap.data();
 		if (existingData?.userId && existingData.userId !== userId) {
-			console.warn(
-				`App Store subscription ${originalTransactionId} already linked to ` +
-					`user ${existingData.userId}, attempted by ${userId}`,
-			);
-			throw new HttpsError(
-				"already-exists",
-				"This subscription is already linked to another account. " +
-					"Please contact support at support@betterkeep.app if you believe this is an error.",
+			// Allow review account to bypass duplicate check
+			const userRecord = await auth.getUser(userId);
+			if (userRecord.email !== REVIEW_ACCOUNT_EMAIL) {
+				console.warn(
+					`App Store subscription ${originalTransactionId} already linked to ` +
+						`user ${existingData.userId}, attempted by ${userId}`,
+				);
+				throw new HttpsError(
+					"already-exists",
+					"This subscription is already linked to another account. " +
+						"Please contact support at support@betterkeep.app if you believe this is an error.",
+				);
+			}
+			console.log(
+				`Bypassing App Store duplicate check for review account ${userId}`,
 			);
 		}
 	}
@@ -685,10 +740,12 @@ export async function verifyAppStorePurchase(
 			originalTransactionId,
 			billingPeriod,
 			source: "app_store",
-			subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
-			willAutoRenew: true,
+			subscriptionState,
+			willAutoRenew,
 			receiptData: receiptPayload,
 			expiresAt,
+			// Set welcomeEmailSent only on first-time creation to prevent repeat welcome emails
+			...(!appStoreWelcomeEmailAlreadySent ? { welcomeEmailSent: true } : {}),
 			createdAt: FieldValue.serverTimestamp(),
 			updatedAt: FieldValue.serverTimestamp(),
 		},
@@ -700,18 +757,21 @@ export async function verifyAppStorePurchase(
 		.doc(userId)
 		.collection("subscription")
 		.doc("status")
-		.set({
-			plan: "pro",
-			billingPeriod,
-			expiresAt,
-			willAutoRenew: true,
-			subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
-			purchaseToken: originalTransactionId,
-			productId: resolvedProductId,
-			source: "app_store",
-			verifiedAt: FieldValue.serverTimestamp(),
-			updatedAt: FieldValue.serverTimestamp(),
-		});
+		.set(
+			{
+				plan: "pro",
+				billingPeriod,
+				expiresAt,
+				willAutoRenew,
+				subscriptionState,
+				purchaseToken: originalTransactionId,
+				productId: resolvedProductId,
+				source: "app_store",
+				verifiedAt: FieldValue.serverTimestamp(),
+				updatedAt: FieldValue.serverTimestamp(),
+			},
+			{ merge: true },
+		);
 
 	await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
 
@@ -721,6 +781,7 @@ export async function verifyAppStorePurchase(
 
 	return {
 		valid: true,
+		sendWelcomeEmail: !appStoreWelcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
 		subscription: {
 			plan: "pro",

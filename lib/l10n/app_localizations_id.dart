@@ -1471,6 +1471,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get manageSubscription => 'Kelola Langganan';
 
   @override
+  String get renewSubscription => 'Perbarui Langganan';
+
+  @override
+  String get restoreInfoText =>
+      'Berlangganan akan secara otomatis memulihkan langganan aktif atau pembelian sebelumnya.';
+
+  @override
   String get cancelSubscriptionConfirmation =>
       'Apakah Anda yakin ingin membatalkan langganan Anda?\n\nLangganan Anda akan tetap aktif hingga akhir periode penagihan saat ini. Setelah itu, Anda akan kehilangan akses ke fitur Pro.';
 

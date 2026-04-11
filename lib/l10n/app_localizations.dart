@@ -2808,6 +2808,18 @@ abstract class AppLocalizations {
   /// **'Manage Subscription'**
   String get manageSubscription;
 
+  /// Renew cancelled subscription button
+  ///
+  /// In en, this message translates to:
+  /// **'Renew Subscription'**
+  String get renewSubscription;
+
+  /// Info text explaining automatic restore on paywall
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribing will automatically restore any active subscriptions or previous purchases.'**
+  String get restoreInfoText;
+
   /// Cancel subscription confirmation message
   ///
   /// In en, this message translates to:

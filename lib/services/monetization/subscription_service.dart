@@ -137,6 +137,11 @@ class SubscriptionService {
   // Completer for restore purchases flow
   Completer<bool>? _restoreCompleter;
   bool _restoredSubscriptionFound = false;
+  // Track whether we've already verified a restored iOS receipt in this
+  // restore session.  iOS delivers one restored transaction per past purchase
+  // but they all share the same app receipt — verifying more than once is
+  // redundant and causes duplicate emails + unnecessary Cloud Function calls.
+  bool _restoredIosReceiptVerified = false;
 
   /// Get last purchase error message
   String? get lastPurchaseError => _lastPurchaseError;
@@ -410,6 +415,22 @@ Expected IDs: ${ProductIds.all}
 
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
+          // On iOS, all restored transactions share the same app receipt.
+          // Once we've successfully verified one, skip the rest to avoid
+          // redundant Cloud Function calls and duplicate welcome emails.
+          if (purchase.status == PurchaseStatus.restored &&
+              _restoredIosReceiptVerified &&
+              !kIsWeb &&
+              Platform.isIOS) {
+            AppLogger.log(
+              'SubscriptionService: Skipping duplicate iOS restored purchase ${purchase.productID}',
+            );
+            if (purchase.pendingCompletePurchase) {
+              await _iap.completePurchase(purchase);
+            }
+            break;
+          }
+
           // Verify and deliver the purchase
           final verifyResult = await _verifyPurchase(purchase);
 
@@ -419,6 +440,9 @@ Expected IDs: ${ProductIds.all}
             // Mark that we found a restored subscription
             if (purchase.status == PurchaseStatus.restored) {
               _restoredSubscriptionFound = true;
+              if (!kIsWeb && Platform.isIOS) {
+                _restoredIosReceiptVerified = true;
+              }
             }
           } else if (verifyResult.isLinkedToOtherAccount) {
             // Subscription belongs to another account
@@ -583,10 +607,16 @@ Expected IDs: ${ProductIds.all}
   Future<bool> restoreAndWaitForPurchases() async {
     if (!_iapAvailable) return false;
 
+    // If a restore is already in progress, wait for it rather than starting a new one
+    if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+      return _restoreCompleter!.future;
+    }
+
     try {
       AppLogger.log('SubscriptionService: Restoring purchases from store...');
       isLoading.value = true;
       _restoredSubscriptionFound = false;
+      _restoredIosReceiptVerified = false;
       _restoreCompleter = Completer<bool>();
 
       // Start the restore
@@ -1417,12 +1447,20 @@ Expected IDs: ${ProductIds.all}
 
     try {
       isLoading.value = true;
-      await _iap.restorePurchases();
-      // Results will come through the purchase stream
-      return RestoreResult.success('Restoring purchases...');
+      final found = await restoreAndWaitForPurchases();
+
+      if (found) {
+        // Force refresh so the UI reflects the latest state (including
+        // willAutoRenew / cancelled status written by the Cloud Function).
+        await PlanService.instance.refreshSubscription();
+        return RestoreResult.success('Subscription restored successfully');
+      } else {
+        return RestoreResult.failed('No active subscription found to restore');
+      }
     } catch (e) {
-      isLoading.value = false;
       return RestoreResult.failed('Error restoring purchases: $e');
+    } finally {
+      isLoading.value = false;
     }
   }
 
@@ -1447,6 +1485,14 @@ Expected IDs: ${ProductIds.all}
         try {
           const channel = MethodChannel('com.betterkeep/subscriptions');
           await channel.invokeMethod('showManageSubscriptions');
+          // The modal sheet has been dismissed — the user may have cancelled
+          // or re-subscribed.  Restore purchases to get a fresh receipt and
+          // re-verify with the server so willAutoRenew is up-to-date.
+          unawaited(
+            restoreAndWaitForPurchases().then((_) {
+              PlanService.instance.refreshSubscription();
+            }),
+          );
           return CancelResult.pending(
             'Manage your subscription in the App Store',
           );

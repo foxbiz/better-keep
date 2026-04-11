@@ -447,6 +447,8 @@
   "upgradeToProDescription": "Faça upgrade para Pro para notas bloqueadas ilimitadas, sincronização na nuvem e muito mais.",
   "cancellingSubscription": "Cancelando...",
   "manageSubscription": "Gerenciar assinatura",
+  "renewSubscription": "Renovar assinatura",
+  "restoreInfoText": "Ao assinar, quaisquer assinaturas ativas ou compras anteriores serão restauradas automaticamente.",
   "cancelSubscriptionConfirmation": "Tem certeza de que deseja cancelar sua assinatura?\n\nSua assinatura permanecerá ativa até o final do período de faturamento atual. Depois disso, você perderá acesso aos recursos Pro.",
   "signInWithAnyLinked": "Entre com qualquer conta vinculada",
   "linkingRequiresAuth": "Vincular requer autenticação com cada plataforma para verificar propriedade.",

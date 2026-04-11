@@ -308,6 +308,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     AppState.unsubscribe("show_notes", _showNotesListener);
     AppState.unsubscribe("selected_notes", _selectedNotesListener);
     E2EEService.instance.deviceManager.pendingApprovals.removeListener(

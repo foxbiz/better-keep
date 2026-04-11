@@ -1483,6 +1483,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get manageSubscription => 'Gerenciar assinatura';
 
   @override
+  String get renewSubscription => 'Renovar assinatura';
+
+  @override
+  String get restoreInfoText =>
+      'Ao assinar, quaisquer assinaturas ativas ou compras anteriores serão restauradas automaticamente.';
+
+  @override
   String get cancelSubscriptionConfirmation =>
       'Tem certeza de que deseja cancelar sua assinatura?\n\nSua assinatura permanecerá ativa até o final do período de faturamento atual. Depois disso, você perderá acesso aos recursos Pro.';
 

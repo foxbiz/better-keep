@@ -1472,6 +1472,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get manageSubscription => 'Aboneliği Yönet';
 
   @override
+  String get renewSubscription => 'Aboneliği Yenile';
+
+  @override
+  String get restoreInfoText =>
+      'Abone olduğunuzda, mevcut abonelikleriniz veya önceki satın alımlarınız otomatik olarak geri yüklenir.';
+
+  @override
   String get cancelSubscriptionConfirmation =>
       'Aboneliğinizi iptal etmek istediğinizden emin misiniz?\n\nAboneliğiniz, mevcut fatura döneminin sonuna kadar aktif kalacaktır. Bundan sonra Pro özelliklerine erişiminizi kaybedeceksiniz.';
 

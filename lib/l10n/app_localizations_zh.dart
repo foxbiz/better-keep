@@ -1436,6 +1436,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageSubscription => '管理订阅';
 
   @override
+  String get renewSubscription => '续订';
+
+  @override
+  String get restoreInfoText => '订阅时将自动恢复任何活跃订阅或之前的购买。';
+
+  @override
   String get cancelSubscriptionConfirmation =>
       '确定要取消订阅吗？\n\n您的订阅将保持有效直到当前计费周期结束。之后，您将失去对专业版功能的访问权限。';
 

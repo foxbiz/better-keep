@@ -20,6 +20,7 @@ import processScheduledDeletions from "./exports/processScheduledDeletions";
 import razorpayWebhook from "./exports/razorpayWebhook";
 import requestAccountLinkOtp from "./exports/requestAccountLinkOtp";
 import resetPasswordWithOtp from "./exports/resetPasswordWithOtp";
+import resetReviewAccount from "./exports/resetReviewAccount";
 import restoreSubscription from "./exports/restoreSubscription";
 import resumeRazorpaySubscription from "./exports/resumeRazorpaySubscription";
 import revokeSharesOnNoteDelete from "./exports/revokeSharesOnNoteDelete";
@@ -80,4 +81,5 @@ export {
 	getPublicStats,
 	updatePublicStats,
 	setEmulatorTestClaims,
+	resetReviewAccount,
 };

@@ -403,14 +403,22 @@ class _BetterKeepState extends State<BetterKeep> {
 
     // Check if user already made a choice before
     if (FirebaseEmulatorConfig.hasSavedChoice) {
-      await FirebaseEmulatorConfig.applySavedChoice();
-      if (mounted) {
-        setState(() {
-          _firebaseConfigured = true;
-        });
+      try {
+        await FirebaseEmulatorConfig.applySavedChoice();
+        if (mounted) {
+          setState(() {
+            _firebaseConfigured = true;
+          });
+        }
+      } catch (e) {
+        // Saved emulator choice is no longer valid (emulators not running).
+        // Leave _firebaseConfigured = false so the selection screen is shown.
+        AppLogger.log(
+          '[Main] Saved Firebase choice failed, showing selection screen: $e',
+        );
       }
     }
-    // If no saved choice, the selection screen will be shown in build()
+    // If no saved choice (or saved choice failed), the selection screen will be shown in build()
   }
 
   void _startAlarmListeners() {
@@ -459,10 +467,37 @@ class _BetterKeepState extends State<BetterKeep> {
 }
 
 /// Firebase environment selection screen for debug mode
-class _FirebaseSelectionScreen extends StatelessWidget {
+class _FirebaseSelectionScreen extends StatefulWidget {
   final Future<void> Function(bool useEmulators) onSelected;
 
   const _FirebaseSelectionScreen({required this.onSelected});
+
+  @override
+  State<_FirebaseSelectionScreen> createState() =>
+      _FirebaseSelectionScreenState();
+}
+
+class _FirebaseSelectionScreenState extends State<_FirebaseSelectionScreen> {
+  bool _isLoading = false;
+  String? _error;
+
+  Future<void> _handleSelection(bool useEmulators) async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      await widget.onSelected(useEmulators);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -490,30 +525,50 @@ class _FirebaseSelectionScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: _EnvironmentCard(
-                        icon: Icons.cloud,
-                        iconColor: Colors.blue,
-                        title: 'Live',
-                        subtitle: 'Production Firebase',
-                        onTap: () => onSelected(false),
+                if (_isLoading)
+                  const Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Configuring Firebase...'),
+                    ],
+                  )
+                else
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: _EnvironmentCard(
+                          icon: Icons.cloud,
+                          iconColor: Colors.blue,
+                          title: 'Live',
+                          subtitle: 'Production Firebase',
+                          onTap: () => _handleSelection(false),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: _EnvironmentCard(
-                        icon: Icons.computer,
-                        iconColor: Colors.orange,
-                        title: 'Emulator',
-                        subtitle: 'Local development',
-                        onTap: () => onSelected(true),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: _EnvironmentCard(
+                          icon: Icons.computer,
+                          iconColor: Colors.orange,
+                          title: 'Emulator',
+                          subtitle: 'Local development',
+                          onTap: () => _handleSelection(true),
+                        ),
                       ),
+                    ],
+                  ),
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 12,
                     ),
-                  ],
-                ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   'This choice will be remembered.',

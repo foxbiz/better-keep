@@ -110,8 +110,14 @@ export default onCall(
 				`Activated subscription for user ${userId}, expires ${expiryDate.toISOString()}`,
 			);
 
-			// Send welcome email
-			await sendRazorpaySubscriptionEmail(userId, "welcome", expiryDate);
+			// Send welcome email only once (idempotency guard).
+			// Email is sent first; flag is written only after a successful send so a
+			// transient mailer failure doesn't permanently suppress the welcome email.
+			const alreadySentWelcome = paymentData.welcomeEmailSent === true;
+			if (!alreadySentWelcome) {
+				await sendRazorpaySubscriptionEmail(userId, "welcome", expiryDate);
+				await paymentDoc.ref.update({ welcomeEmailSent: true });
+			}
 
 			return { success: true, expiryDate: expiryDate.toISOString() };
 		} catch (error) {

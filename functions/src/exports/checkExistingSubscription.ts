@@ -219,6 +219,7 @@ export default onCall(
 							subData.source === "app_store"
 								? (subData.willAutoRenew ?? true)
 								: subData.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
+						subscriptionState: subData.subscriptionState,
 						purchaseToken:
 							subData.source === "app_store"
 								? subData.originalTransactionId || subData.purchaseToken
@@ -228,6 +229,8 @@ export default onCall(
 						restoredAt: FieldValue.serverTimestamp(),
 						updatedAt: FieldValue.serverTimestamp(),
 					});
+
+					await setSubscriptionClaims(userId, "pro", latestExpiry);
 
 					return {
 						hasSubscription: true,

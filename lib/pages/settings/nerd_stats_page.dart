@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -1651,6 +1652,9 @@ class _AudioPlayerDialogState extends State<_AudioPlayerDialog> {
   Duration _position = Duration.zero;
   bool _isLoading = true;
   String? _error;
+  StreamSubscription? _stateSub;
+  StreamSubscription? _durationSub;
+  StreamSubscription? _positionSub;
 
   @override
   void initState() {
@@ -1661,7 +1665,7 @@ class _AudioPlayerDialogState extends State<_AudioPlayerDialog> {
 
   Future<void> _initPlayer() async {
     try {
-      _player.onPlayerStateChanged.listen((state) {
+      _stateSub = _player.onPlayerStateChanged.listen((state) {
         if (mounted) {
           setState(() {
             _isPlaying = state == PlayerState.playing;
@@ -1669,7 +1673,7 @@ class _AudioPlayerDialogState extends State<_AudioPlayerDialog> {
         }
       });
 
-      _player.onDurationChanged.listen((duration) {
+      _durationSub = _player.onDurationChanged.listen((duration) {
         if (mounted) {
           setState(() {
             _duration = duration;
@@ -1677,7 +1681,7 @@ class _AudioPlayerDialogState extends State<_AudioPlayerDialog> {
         }
       });
 
-      _player.onPositionChanged.listen((position) {
+      _positionSub = _player.onPositionChanged.listen((position) {
         if (mounted) {
           setState(() {
             _position = position;
@@ -1705,6 +1709,9 @@ class _AudioPlayerDialogState extends State<_AudioPlayerDialog> {
 
   @override
   void dispose() {
+    _stateSub?.cancel();
+    _durationSub?.cancel();
+    _positionSub?.cancel();
     _player.dispose();
     super.dispose();
   }

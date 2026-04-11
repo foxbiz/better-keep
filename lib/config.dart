@@ -11,9 +11,9 @@ const defaultAlarmSound = "assets/sounds/2.mp3";
 /// This helps maintain performance and prevents storage bloat.
 const int maxAttachmentsPerNote = 50;
 
-/// Demo account email for Google Play review and testing.
+/// Review account email for app store review and testing.
 /// This account bypasses certain features for easier testing.
-const String demoAccountEmail = 'better.keep.review@gmail.com';
+const String demoAccountEmail = 'review@betterkeep.app';
 
 /// App store URLs
 const String playStoreUrl =

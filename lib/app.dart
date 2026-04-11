@@ -4,13 +4,16 @@ import 'package:better_keep/components/alarm_banner.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
+import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/pages/account_recovery_page.dart';
 import 'package:better_keep/pages/email_verification_page.dart';
 import 'package:better_keep/pages/home/home.dart';
 import 'package:better_keep/pages/login_page.dart';
 import 'package:better_keep/pages/pending_approval_page.dart';
+import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/services/app_install_service.dart';
+import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
@@ -18,6 +21,7 @@ import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_web.dart'
     if (dart.library.io) 'package:better_keep/services/monetization/razorpay_stub.dart'
     as razorpay_platform;
+import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -95,10 +99,27 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // Also validate with backend to catch cancelled subscriptions
       if (AuthService.currentUser != null) {
         PlanService.instance.refreshSubscription(validateWithBackend: true);
+        // On iOS, also restore purchases to pick up subscription changes
+        // made in the App Store management page (cancel / re-subscribe).
+        // restorePurchases sends a fresh receipt to the server which reads
+        // the current auto_renew_status from Apple.
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+          unawaited(SubscriptionService.instance.restoreAndWaitForPurchases());
+        }
       }
       // Check for pending intents (files opened via intent while app was in background)
       IntentHandlerService.instance.checkPendingIntents();
     }
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    super.didHaveMemoryPressure();
+    SketchPage.clearBackgroundImageCache();
+    QuillImageCache.instance.clear();
+    NoteCard.clearImageCache();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
   }
 
   @override

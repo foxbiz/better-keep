@@ -447,6 +447,8 @@
   "upgradeToProDescription": "Upgrade ke Pro untuk catatan terkunci tanpa batas, sinkronisasi cloud, dan lainnya.",
   "cancellingSubscription": "Membatalkan...",
   "manageSubscription": "Kelola Langganan",
+  "renewSubscription": "Perbarui Langganan",
+  "restoreInfoText": "Berlangganan akan secara otomatis memulihkan langganan aktif atau pembelian sebelumnya.",
   "cancelSubscriptionConfirmation": "Apakah Anda yakin ingin membatalkan langganan Anda?\n\nLangganan Anda akan tetap aktif hingga akhir periode penagihan saat ini. Setelah itu, Anda akan kehilangan akses ke fitur Pro.",
   "signInWithAnyLinked": "Masuk dengan akun terhubung mana pun",
   "linkingRequiresAuth": "Menautkan memerlukan autentikasi dengan setiap platform untuk memverifikasi kepemilikan.",

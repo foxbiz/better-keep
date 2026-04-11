@@ -32,6 +32,11 @@ class NoteCard extends StatefulWidget {
 
   const NoteCard({super.key, required this.note, required this.index});
 
+  /// Clear the static base64 image cache to free memory.
+  static void clearImageCache() {
+    _NoteCardState._base64ImageCache.clear();
+  }
+
   @override
   State<NoteCard> createState() => _NoteCardState();
 }
