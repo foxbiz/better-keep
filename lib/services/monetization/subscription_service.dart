@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:better_keep/services/country_detection_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
@@ -13,7 +14,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
-import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Supported currencies for Razorpay payments
@@ -258,7 +258,6 @@ Expected IDs: ${ProductIds.all}
   /// Initialize in-app purchases for mobile
   Future<void> _initInAppPurchase() async {
     _iapAvailable = await _iap.isAvailable();
-
     if (!_iapAvailable) {
       AppLogger.log('SubscriptionService: In-app purchases not available');
       if (Platform.isAndroid) {
@@ -760,8 +759,7 @@ Expected IDs: ${ProductIds.all}
       }
 
       // Call Cloud Function to verify receipt
-      final functions = FirebaseFunctions.instance;
-      final result = await functions.httpsCallable('verifyPurchase').call({
+      final result = await callCloudFunction('verifyPurchase', {
         'productId': purchase.productID,
         'purchaseToken': verificationToken,
         'source': Platform.isIOS ? 'app_store' : 'play_store',
@@ -1141,7 +1139,14 @@ Expected IDs: ${ProductIds.all}
 
     // First, try to restore purchases from the store (Google Play / App Store)
     // This checks if user already has an active subscription in the store
-    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    //
+    // On iOS, SKIP the store-level restore before purchase. The native
+    // StoreKit 2 restorePurchases() call can trigger a native crash in
+    // release builds (different behaviour under -O vs -Onone optimisation).
+    // StoreKit 2 natively prevents duplicate subscriptions, and the
+    // checkExistingSubscription() Cloud Function below provides a backup
+    // duplicate check — so skipping restore here is safe on iOS.
+    if (!kIsWeb && Platform.isAndroid) {
       try {
         AppLogger.log(
           'SubscriptionService: Checking for existing subscription in store...',
@@ -1258,10 +1263,7 @@ Expected IDs: ${ProductIds.all}
     }
 
     try {
-      final functions = FirebaseFunctions.instance;
-      final result = await functions
-          .httpsCallable('checkExistingSubscription')
-          .call({});
+      final result = await callCloudFunction('checkExistingSubscription');
 
       // Convert from Map<Object?, Object?> to Map<String, dynamic>
       final data = Map<String, dynamic>.from(result.data as Map);

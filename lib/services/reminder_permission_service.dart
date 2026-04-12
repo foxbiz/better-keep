@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:better_keep/config.dart';
+import 'package:better_keep/models/note.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -14,6 +17,10 @@ class ReminderPermissionService {
 
   ReminderPermissionService._internal();
 
+  /// Notifier that tracks whether all required permissions are granted.
+  /// UI can listen to this to show/hide permission prompts.
+  final ValueNotifier<bool> permissionGranted = ValueNotifier<bool>(true);
+
   /// Ensures all required permissions for reminders are granted.
   /// Returns true if all permissions are granted, false otherwise.
   /// This should be called before setting a reminder.
@@ -22,13 +29,20 @@ class ReminderPermissionService {
       return true;
     }
 
+    bool result;
     if (Platform.isAndroid) {
-      return await _ensureAndroidPermissions();
+      result = await _ensureAndroidPermissions();
     } else if (Platform.isIOS) {
-      return await _ensureIOSPermissions();
+      result = await _ensureIOSPermissions();
+    } else {
+      result = true;
     }
 
-    return true;
+    if (result) {
+      permissionGranted.value = true;
+    }
+
+    return result;
   }
 
   Future<bool> _ensureAndroidPermissions() async {
@@ -81,5 +95,33 @@ class ReminderPermissionService {
     }
 
     return true;
+  }
+
+  /// Checks current permission status and updates [permissionGranted] notifier.
+  /// This is a read-only check — it does NOT prompt the user.
+  Future<void> checkAndNotify() async {
+    if (!isAlarmSupported) {
+      permissionGranted.value = true;
+      return;
+    }
+    permissionGranted.value = await hasPermissions();
+  }
+
+  /// Reschedules alarms for all notes with active reminders.
+  /// Call after permissions are newly granted to catch alarms that
+  /// silently failed due to missing permissions.
+  Future<void> rescheduleAllAlarms() async {
+    if (!isAlarmSupported) return;
+
+    try {
+      final notes = await Note.get(NoteType.all);
+      for (final note in notes) {
+        if (note.reminder != null && !note.completed) {
+          await note.setAlarm();
+        }
+      }
+    } catch (e) {
+      AppLogger.log("Error rescheduling alarms after permission grant: $e");
+    }
   }
 }

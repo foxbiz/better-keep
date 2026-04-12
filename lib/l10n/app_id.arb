@@ -878,5 +878,9 @@
   "modelDownloadFailed": "Gagal mengunduh model suara",
   "transcribingAudio": "Mentranskrip audio...",
   "polishingTranscription": "Memoles transkripsi...",
-  "transcriptionFailed": "Transkripsi gagal. Silakan coba lagi."
+  "transcriptionFailed": "Transkripsi gagal. Silakan coba lagi.",
+  "notificationsEnabled": "Notifikasi diaktifkan! Pengingat Anda telah diatur.",
+  "enableNotificationsTitle": "Aktifkan Notifikasi",
+  "enableNotificationsForReminders": "Catatan yang disinkronkan memiliki pengingat. Aktifkan notifikasi agar Anda tidak melewatkannya.",
+  "enableNotifications": "Aktifkan"
 }

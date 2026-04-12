@@ -878,5 +878,9 @@
   "modelDownloadFailed": "Falha ao baixar modelo de voz",
   "transcribingAudio": "Transcrevendo áudio...",
   "polishingTranscription": "Polindo transcrição...",
-  "transcriptionFailed": "Falha na transcrição. Por favor, tente novamente."
+  "transcriptionFailed": "Falha na transcrição. Por favor, tente novamente.",
+  "notificationsEnabled": "Notificações ativadas! Seus lembretes foram definidos.",
+  "enableNotificationsTitle": "Ativar Notificações",
+  "enableNotificationsForReminders": "Suas notas sincronizadas têm lembretes. Ative as notificações para não perdê-los.",
+  "enableNotifications": "Ativar"
 }

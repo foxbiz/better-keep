@@ -172,15 +172,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           return Overlay(
             initialEntries: [
               OverlayEntry(
-                builder: (context) => Column(
-                  children: [
-                    // Show "Open in App" banner on web when native app is installed
-                    const OpenInAppBanner(),
-                    const AlarmBanner(),
-                    const SessionInvalidBanner(),
-                    Expanded(child: child ?? const SizedBox.shrink()),
-                  ],
-                ),
+                builder: (context) =>
+                    _BannerLayout(child: child ?? const SizedBox.shrink()),
               ),
             ],
           );
@@ -546,6 +539,55 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Lays out banners above the app content.
+///
+/// When any banner is visible, it already handles the top safe area (status bar).
+/// To avoid double-counting (the app's Scaffold/AppBar also adds safe area padding),
+/// this widget removes the top MediaQuery padding from the app child when a banner
+/// is shown.
+class _BannerLayout extends StatelessWidget {
+  final Widget child;
+
+  const _BannerLayout({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        AuthService.sessionInvalid,
+        SessionInvalidBanner.isDismissed,
+        if (isAlarmSupported) RingingAlarmService().ringingAlarms,
+      ]),
+      builder: (context, _) {
+        final hasSessionBanner =
+            AuthService.sessionInvalid.value &&
+            !SessionInvalidBanner.isDismissed.value;
+        final hasAlarmBanner =
+            isAlarmSupported &&
+            RingingAlarmService().ringingAlarms.value.isNotEmpty;
+        final hasBanner = hasSessionBanner || hasAlarmBanner;
+
+        final appChild = hasBanner
+            ? MediaQuery.removePadding(
+                context: context,
+                removeTop: true,
+                child: child,
+              )
+            : child;
+
+        return Column(
+          children: [
+            const OpenInAppBanner(),
+            const AlarmBanner(),
+            const SessionInvalidBanner(),
+            Expanded(child: appChild),
+          ],
+        );
+      },
     );
   }
 }

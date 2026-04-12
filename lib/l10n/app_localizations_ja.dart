@@ -2531,6 +2531,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trash => 'ゴミ箱';
 
   @override
+  String get notificationsEnabled => '通知が有効になりました！リマインダーが設定されました。';
+
+  @override
   String get shareApp => 'アプリを共有';
 
   @override
@@ -2890,4 +2893,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get maybeLater => '後で';
+
+  @override
+  String get enableNotificationsTitle => '通知を有効にする';
+
+  @override
+  String get enableNotificationsForReminders =>
+      '同期されたノートにリマインダーがあります。通知を有効にして見逃さないようにしましょう。';
+
+  @override
+  String get enableNotifications => '有効にする';
 }

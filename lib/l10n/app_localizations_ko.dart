@@ -2528,6 +2528,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get trash => '휴지통';
 
   @override
+  String get notificationsEnabled => '알림이 활성화되었습니다! 리마인더가 설정되었습니다.';
+
+  @override
   String get shareApp => '앱 공유';
 
   @override
@@ -2888,4 +2891,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get maybeLater => '나중에';
+
+  @override
+  String get enableNotificationsTitle => '알림 활성화';
+
+  @override
+  String get enableNotificationsForReminders =>
+      '동기화된 노트에 리마인더가 있습니다. 알림을 활성화하여 놓치지 마세요.';
+
+  @override
+  String get enableNotifications => '활성화';
 }

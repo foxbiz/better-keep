@@ -23,6 +23,7 @@ import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1736,8 +1737,6 @@ class _UserPageState extends State<UserPage> {
   }
 
   Future<void> _linkProvider(String providerName) async {
-    final functions = FirebaseFunctions.instance;
-
     // Map display name to Firebase provider ID
     final providerIds = {
       'google': 'google.com',
@@ -1765,10 +1764,7 @@ class _UserPageState extends State<UserPage> {
           timeoutMessage: context.l10n.takingTooLong,
         ),
         operation: () async {
-          final sendOtpCallable = functions.httpsCallable(
-            'requestAccountLinkOtp',
-          );
-          final sendResult = await sendOtpCallable.call({
+          final sendResult = await callCloudFunction('requestAccountLinkOtp', {
             'provider': providerId,
           });
           return sendResult.data as Map<String, dynamic>;
@@ -3052,8 +3048,6 @@ class _UserPageState extends State<UserPage> {
   /// Sends OTP to user's email and shows input dialog
   /// Returns the OTP string if entered, null if cancelled
   Future<String?> _getVerificationCode() async {
-    final functions = FirebaseFunctions.instance;
-
     // Show loading dialog with timeout and cancel support
     final loadingResult = await showLoadingDialog<Map<String, dynamic>>(
       context: context,
@@ -3064,8 +3058,7 @@ class _UserPageState extends State<UserPage> {
         timeoutMessage: context.l10n.takingTooLong,
       ),
       operation: () async {
-        final sendOtpCallable = functions.httpsCallable('sendDeletionOtp');
-        final result = await sendOtpCallable.call();
+        final result = await callCloudFunction('sendDeletionOtp');
         return result.data as Map<String, dynamic>;
       },
     );
@@ -3263,9 +3256,9 @@ class _UserPageState extends State<UserPage> {
       }
 
       // Call Cloud Function to schedule deletion with OTP for atomic verification
-      final functions = FirebaseFunctions.instance;
-      final callable = functions.httpsCallable('scheduleAccountDeletion');
-      final result = await callable.call({'otp': otp});
+      final result = await callCloudFunction('scheduleAccountDeletion', {
+        'otp': otp,
+      });
 
       deleteAt = result.data['deleteAt'] as String?;
       setState(() => _isLoading = false);

@@ -2592,6 +2592,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get trash => 'Sampah';
 
   @override
+  String get notificationsEnabled =>
+      'Notifikasi diaktifkan! Pengingat Anda telah diatur.';
+
+  @override
   String get shareApp => 'Bagikan Aplikasi';
 
   @override
@@ -2971,4 +2975,14 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get maybeLater => 'Mungkin nanti';
+
+  @override
+  String get enableNotificationsTitle => 'Aktifkan Notifikasi';
+
+  @override
+  String get enableNotificationsForReminders =>
+      'Catatan yang disinkronkan memiliki pengingat. Aktifkan notifikasi agar Anda tidak melewatkannya.';
+
+  @override
+  String get enableNotifications => 'Aktifkan';
 }

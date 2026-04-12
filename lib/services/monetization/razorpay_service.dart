@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:better_keep/services/auth_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
+import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/services/monetization/user_plan.dart';
@@ -132,73 +130,6 @@ class RazorpayService {
     return serverKeyId;
   }
 
-  /// Check if running on desktop (Windows/Linux) or Android fallback mode
-  /// where we use browser checkout with local callback server
-  bool get _usesLocalServer {
-    if (kIsWeb) return false;
-    return Platform.isWindows || Platform.isLinux || Platform.isAndroid;
-  }
-
-  /// Firebase project ID for constructing Cloud Function URLs
-  String get _projectId {
-    const projectId = String.fromEnvironment(
-      'WEB_PROJECT_ID',
-      defaultValue: 'better-keep-notes',
-    );
-    return projectId;
-  }
-
-  /// Get the Cloud Functions base URL (emulator in debug mode, production otherwise)
-  String get _functionsBaseUrl {
-    if (kDebugMode) {
-      // Use localhost for emulator in debug mode
-      return 'http://localhost:5001/$_projectId/us-central1';
-    }
-    return 'https://us-central1-$_projectId.cloudfunctions.net';
-  }
-
-  /// Call a Firebase Cloud Function via direct HTTP request.
-  /// This is needed for desktop platforms (Windows/Linux) where
-  /// the httpsCallable platform channel doesn't work.
-  Future<Map<String, dynamic>> _callCloudFunction(
-    String functionName, [
-    Map<String, dynamic>? data,
-  ]) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
-    }
-
-    // Get the user's ID token for authentication
-    final idToken = await user.getIdToken();
-
-    // Cloud Function URL - uses emulator or production based on config
-    final url = Uri.parse('$_functionsBaseUrl/$functionName');
-
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $idToken',
-      },
-      body: jsonEncode({'data': data ?? {}}),
-    );
-
-    if (response.statusCode != 200) {
-      AppLogger.error(
-        'RazorpayService: Cloud function error - status: ${response.statusCode}, body: ${response.body}',
-      );
-      throw Exception('Cloud function call failed: ${response.statusCode}');
-    }
-
-    final responseData = jsonDecode(response.body) as Map<String, dynamic>;
-    // Cloud Functions wrap the response in a 'result' key
-    if (responseData.containsKey('result')) {
-      return Map<String, dynamic>.from(responseData['result'] as Map);
-    }
-    return responseData;
-  }
-
   /// Purchase a Pro subscription via Razorpay
   ///
   /// Creates a subscription in Razorpay and opens checkout.
@@ -226,19 +157,11 @@ class RazorpayService {
         'RazorpayService: Creating subscription (yearly: $yearly, currency: $selectedCurrency)',
       );
 
-      final Map<String, dynamic> createData;
-      if (_usesLocalServer) {
-        createData = await _callCloudFunction('createRazorpaySubscription', {
-          'yearly': yearly,
-          'currency': selectedCurrency,
-        });
-      } else {
-        final functions = FirebaseFunctions.instance;
-        final createResult = await functions
-            .httpsCallable('createRazorpaySubscription')
-            .call({'yearly': yearly, 'currency': selectedCurrency});
-        createData = Map<String, dynamic>.from(createResult.data as Map);
-      }
+      final createResult = await callCloudFunction(
+        'createRazorpaySubscription',
+        {'yearly': yearly, 'currency': selectedCurrency},
+      );
+      final createData = Map<String, dynamic>.from(createResult.data as Map);
 
       final subscriptionId = createData['subscriptionId'] as String?;
       if (subscriptionId == null) {
@@ -270,24 +193,13 @@ class RazorpayService {
       AppLogger.log('RazorpayService: Payment successful, verifying...');
 
       // Step 3: Verify payment with backend
-      final Map<String, dynamic> verifyData;
-      if (_usesLocalServer) {
-        verifyData = await _callCloudFunction('verifyRazorpaySubscription', {
-          'paymentId': paymentResult.paymentId,
-          'subscriptionId': paymentResult.subscriptionId,
-          'signature': paymentResult.signature,
-        });
-      } else {
-        final functions = FirebaseFunctions.instance;
-        final verifyResult = await functions
-            .httpsCallable('verifyRazorpaySubscription')
-            .call({
-              'paymentId': paymentResult.paymentId,
-              'subscriptionId': paymentResult.subscriptionId,
-              'signature': paymentResult.signature,
-            });
-        verifyData = Map<String, dynamic>.from(verifyResult.data as Map);
-      }
+      final verifyResult =
+          await callCloudFunction('verifyRazorpaySubscription', {
+            'paymentId': paymentResult.paymentId,
+            'subscriptionId': paymentResult.subscriptionId,
+            'signature': paymentResult.signature,
+          });
+      final verifyData = Map<String, dynamic>.from(verifyResult.data as Map);
 
       if (verifyData['success'] != true) {
         final error = verifyData['error'] as String? ?? 'Verification failed';
@@ -401,17 +313,8 @@ class RazorpayService {
     try {
       isLoading.value = true;
 
-      final Map<String, dynamic> data;
-      if (_usesLocalServer) {
-        // Use direct HTTP call on desktop platforms
-        data = await _callCloudFunction('cancelRazorpaySubscription');
-      } else {
-        final functions = FirebaseFunctions.instance;
-        final result = await functions
-            .httpsCallable('cancelRazorpaySubscription')
-            .call({});
-        data = Map<String, dynamic>.from(result.data as Map);
-      }
+      final result = await callCloudFunction('cancelRazorpaySubscription');
+      final data = Map<String, dynamic>.from(result.data as Map);
 
       if (data['success'] == true) {
         await PlanService.instance.refreshSubscription();
@@ -437,17 +340,8 @@ class RazorpayService {
     try {
       isLoading.value = true;
 
-      final Map<String, dynamic> data;
-      if (_usesLocalServer) {
-        // Use direct HTTP call on desktop platforms
-        data = await _callCloudFunction('resumeRazorpaySubscription');
-      } else {
-        final functions = FirebaseFunctions.instance;
-        final result = await functions
-            .httpsCallable('resumeRazorpaySubscription')
-            .call({});
-        data = Map<String, dynamic>.from(result.data as Map);
-      }
+      final result = await callCloudFunction('resumeRazorpaySubscription');
+      final data = Map<String, dynamic>.from(result.data as Map);
 
       if (data['success'] == true) {
         await PlanService.instance.refreshSubscription();
@@ -482,17 +376,8 @@ class RazorpayService {
     try {
       isLoading.value = true;
 
-      final Map<String, dynamic> data;
-      if (_usesLocalServer) {
-        // Use direct HTTP call on desktop platforms
-        data = await _callCloudFunction('debugDeleteSubscription');
-      } else {
-        final functions = FirebaseFunctions.instance;
-        final result = await functions
-            .httpsCallable('debugDeleteSubscription')
-            .call({});
-        data = Map<String, dynamic>.from(result.data as Map);
-      }
+      final result = await callCloudFunction('debugDeleteSubscription');
+      final data = Map<String, dynamic>.from(result.data as Map);
 
       if (data['success'] == true) {
         await PlanService.instance.refreshSubscription();

@@ -28,6 +28,18 @@ class FileUtils {
       return path.join(cacheDir, path.basename(pathName));
     }
 
+    // Check if it's a path in the Application Support directory
+    // This is where all media files are stored (via getApplicationSupportDirectory)
+    if (pathName.contains('/Library/Application Support/')) {
+      final docDir = await fs.documentDir;
+      final parts = pathName.split('/Library/Application Support/');
+      if (parts.length > 1) {
+        final relativePath = parts[1];
+        return path.join(docDir, relativePath);
+      }
+      return path.join(docDir, path.basename(pathName));
+    }
+
     // Check if it's a path in the Documents directory
     if (pathName.contains('/Documents/')) {
       final docDir = await fs.documentDir;

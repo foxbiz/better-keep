@@ -1,10 +1,14 @@
 import 'package:better_keep/services/reminder_permission_service.dart';
+import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/week_days.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/reminder.dart';
 
-Future<Reminder?> reminder(BuildContext context) async {
+Future<Reminder?> reminder(
+  BuildContext context, {
+  Reminder? initialReminder,
+}) async {
   // Request permissions just-in-time before showing the reminder dialog
   final hasPermission = await ReminderPermissionService().ensurePermissions();
 
@@ -26,25 +30,91 @@ Future<Reminder?> reminder(BuildContext context) async {
   return showDialog<Reminder>(
     context: context,
     builder: (context) {
-      return DatetimePicker();
+      return DatetimePicker(initialReminder: initialReminder);
     },
   );
 }
 
 class DatetimePicker extends StatefulWidget {
-  const DatetimePicker({super.key});
+  const DatetimePicker({super.key, this.initialReminder});
+
+  final Reminder? initialReminder;
 
   @override
   State<DatetimePicker> createState() => _DatetimePickerState();
 }
 
 class _DatetimePickerState extends State<DatetimePicker> {
-  String _date = DateTime.now().toIso8601String(); // Default to today
-  String? _time;
-  String _repeat = Reminder.repeatDaily; // Default repeat is daily
-  String _selectedDateOption = Reminder.today; // Default date option
-  String? _selectedTimeOption;
-  bool _isRepeatMode = false; // Toggle: false = date mode, true = repeat mode
+  late String _date;
+  late String? _time;
+  late String _repeat;
+  late String _selectedDateOption;
+  late String? _selectedTimeOption;
+  late bool _isRepeatMode;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.initialReminder;
+    if (r != null) {
+      _isRepeatMode = r.isRepeating;
+      _repeat = r.isRepeating ? r.repeat : Reminder.repeatDaily;
+      _date = r.dateTime.toIso8601String();
+
+      // Try to match the stored date to a named date option
+      final now = DateTime.now();
+      final reminderDate = DateTime(
+        r.dateTime.year,
+        r.dateTime.month,
+        r.dateTime.day,
+      );
+      final today = DateTime(now.year, now.month, now.day);
+      if (reminderDate == today) {
+        _selectedDateOption = Reminder.today;
+      } else if (reminderDate == today.add(const Duration(days: 1))) {
+        _selectedDateOption = Reminder.tomorrow;
+      } else if (reminderDate == today.add(const Duration(days: 7))) {
+        _selectedDateOption = Reminder.nextWeek;
+      } else if (reminderDate == today.add(const Duration(days: 30))) {
+        _selectedDateOption = Reminder.nextMonth;
+      } else {
+        _selectedDateOption = Reminder.custom;
+      }
+
+      // Try to match the stored time to a named time option
+      if (r.isAllDay) {
+        _selectedTimeOption = Reminder.allDay;
+        _time = 'All Day';
+      } else {
+        final reminderTime = TimeOfDay(
+          hour: r.dateTime.hour,
+          minute: r.dateTime.minute,
+        );
+        final hour = r.dateTime.hour;
+        final minute = r.dateTime.minute.toString().padLeft(2, '0');
+        final period = hour >= 12 ? 'PM' : 'AM';
+        final hour12 = hour % 12 == 0 ? 12 : hour % 12;
+        _time = '$hour12:$minute $period';
+
+        if (reminderTime == AppState.morningTime) {
+          _selectedTimeOption = Reminder.morning;
+        } else if (reminderTime == AppState.afternoonTime) {
+          _selectedTimeOption = Reminder.afternoon;
+        } else if (reminderTime == AppState.eveningTime) {
+          _selectedTimeOption = Reminder.evening;
+        } else {
+          _selectedTimeOption = Reminder.custom;
+        }
+      }
+    } else {
+      _isRepeatMode = false;
+      _repeat = Reminder.repeatDaily;
+      _date = DateTime.now().toIso8601String();
+      _selectedDateOption = Reminder.today;
+      _selectedTimeOption = null;
+      _time = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -228,7 +298,9 @@ class _DatetimePickerState extends State<DatetimePicker> {
         setState(() {
           _selectedTimeOption = option;
           // Always format time in 12-hour format with AM/PM to ensure consistent parsing
-          final hour = selectedTime.hourOfPeriod == 0 ? 12 : selectedTime.hourOfPeriod;
+          final hour = selectedTime.hourOfPeriod == 0
+              ? 12
+              : selectedTime.hourOfPeriod;
           final minute = selectedTime.minute.toString().padLeft(2, '0');
           final period = selectedTime.period == DayPeriod.am ? 'AM' : 'PM';
           _time = '$hour:$minute $period';

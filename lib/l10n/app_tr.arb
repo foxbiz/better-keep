@@ -3107,5 +3107,17 @@
   "@unlockTheFullExperience": {"description": "Paywall heading to unlock full experience"},
   
   "maybeLater": "Belki daha sonra",
-  "@maybeLater": {"description": "Dismiss/skip button text for paywall"}
+  "@maybeLater": {"description": "Dismiss/skip button text for paywall"},
+
+  "notificationsEnabled": "Bildirimler etkinleştirildi! Hatırlatıcılarınız ayarlandı.",
+  "@notificationsEnabled": {"description": "Snackbar message after enabling notification permissions"},
+
+  "enableNotificationsTitle": "Bildirimleri Etkinleştir",
+  "@enableNotificationsTitle": {"description": "Title for the dialog prompting notification permissions after sync restores reminders"},
+
+  "enableNotificationsForReminders": "Senkronize edilen notlarınızda hatırlatıcılar var. Kaçırmamak için bildirimleri etkinleştirin.",
+  "@enableNotificationsForReminders": {"description": "Body text for the notification permission dialog after sync restores reminders"},
+
+  "enableNotifications": "Etkinleştir",
+  "@enableNotifications": {"description": "Button to enable notifications in the reminder permission dialog"}
 }

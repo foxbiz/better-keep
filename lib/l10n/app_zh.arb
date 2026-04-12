@@ -879,5 +879,9 @@
   "modelDownloadFailed": "语音模型下载失败",
   "transcribingAudio": "正在转录音频...",
   "polishingTranscription": "正在润色转录...",
-  "transcriptionFailed": "转录失败，请重试。"
+  "transcriptionFailed": "转录失败，请重试。",
+  "notificationsEnabled": "通知已启用！您的提醒已设置。",
+  "enableNotificationsTitle": "启用通知",
+  "enableNotificationsForReminders": "您同步的笔记包含提醒。启用通知以免错过。",
+  "enableNotifications": "启用"
 }

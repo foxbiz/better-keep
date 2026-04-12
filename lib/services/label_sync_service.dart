@@ -24,6 +24,11 @@ class LabelSyncService {
 
   static final LabelSyncService _instance = LabelSyncService._internal();
 
+  /// Guards against concurrent _patchRemoteLabel calls for the same remoteDocId.
+  /// Prevents duplicates when the real-time listener and _pullRemoteChanges()
+  /// process the same document simultaneously.
+  final Set<String> _patchingDocIds = {};
+
   // Lazy Firestore instance getter to ensure correct databaseId is used
   // This is important because databaseId depends on FirebaseEmulatorConfig.isUsingEmulators
   // which may not be set at singleton creation time
@@ -164,10 +169,13 @@ class LabelSyncService {
           return;
         }
         AppState.lastLabelSynced = null;
+        // Ensure system labels exist immediately on login
+        // (before remote sync which may take time or fail)
+        Label.fixLabels();
         // Only sync if E2EE is ready - otherwise wait for E2EE status change
         if (E2EEService.instance.isReady) {
-          refresh();
           _startRemoteListener();
+          refresh();
         } else {
           AppLogger.log(
             "[LABEL_SYNC] Deferring sync on login - E2EE not ready (status: ${E2EEService.instance.status.value})",
@@ -231,8 +239,8 @@ class LabelSyncService {
       _wasPreviouslyPaid = true;
 
       if (currentUser != null) {
-        refresh();
         _startRemoteListener();
+        refresh();
       }
     }
     // User downgraded or subscription expired
@@ -414,6 +422,8 @@ class LabelSyncService {
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     E2EEService.instance.status.removeListener(_onE2EEStatusChange);
     _initialized = false;
+    // Reset so the ready→ready transition is detected correctly on re-login
+    _lastKnownE2EEStatus = null;
     // Clear cached Firestore instance so a fresh one is created after signout/signin
     _firestoreInstance = null;
   }
@@ -455,7 +465,10 @@ class LabelSyncService {
       statusMessage.value = "Refreshing labels...";
       AppLogger.log("[LABEL_SYNC] Manual refresh started...");
 
-      _startRemoteListener();
+      // Note: _startRemoteListener() is NOT called here.
+      // The listener is managed by init(), _onE2EEStatusChange(), and
+      // _onSubscriptionChange() to avoid racing with _pullRemoteChanges()
+      // — both would process the same remote docs and create duplicate labels.
 
       // Only push local changes if user has Pro subscription
       if (_canPushSync) {
@@ -806,10 +819,10 @@ class LabelSyncService {
       }
     }
 
-    // if there are no labels in the remote collection, at least add system labels
-    if (querySnapshot.docs.isEmpty) {
-      await Label.fixLabels();
-    }
+    // Always run fixLabels() after pulling remote changes to:
+    // - Add missing system labels
+    // - Remove any duplicates that slipped through (safety net)
+    await Label.fixLabels();
 
     // Use max remote timestamp to avoid missing labels created during sync
     if (maxRemoteUpdatedAt != null) {
@@ -839,6 +852,27 @@ class LabelSyncService {
     Map<String, dynamic> remoteData,
     String remoteDocId,
   ) async {
+    // Guard: prevent concurrent processing of the same remote doc.
+    // This happens when the real-time listener and _pullRemoteChanges()
+    // both try to patch the same label simultaneously, causing duplicates.
+    if (_patchingDocIds.contains(remoteDocId)) {
+      AppLogger.log(
+        "[LABEL_SYNC] Skipping _patchRemoteLabel for $remoteDocId — already being processed",
+      );
+      return;
+    }
+    _patchingDocIds.add(remoteDocId);
+    try {
+      await _patchRemoteLabelInner(remoteData, remoteDocId);
+    } finally {
+      _patchingDocIds.remove(remoteDocId);
+    }
+  }
+
+  Future<void> _patchRemoteLabelInner(
+    Map<String, dynamic> remoteData,
+    String remoteDocId,
+  ) async {
     final isDeleted =
         remoteData['deleted'] == true || remoteData['deleted'] == 1;
     if (isDeleted) {
@@ -856,7 +890,15 @@ class LabelSyncService {
       label = await Label.findById(existingSyncTrack.localId);
     }
 
-    label ??= await Label.findByName(remoteData['name'] as String);
+    // Fallback: find by name. If found, also link the sync track so
+    // future syncs won't create a duplicate for this remote doc.
+    if (label == null) {
+      label = await Label.findByName(remoteData['name'] as String);
+      if (label != null && existingSyncTrack == null) {
+        // Link this existing local label to the remote doc
+        existingSyncTrack = await LabelSyncTrack.getByLocalId(label.id!);
+      }
+    }
 
     if (label == null) {
       // Create new label - let SQLite auto-generate the ID

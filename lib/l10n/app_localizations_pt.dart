@@ -2622,6 +2622,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get trash => 'Lixeira';
 
   @override
+  String get notificationsEnabled =>
+      'Notificações ativadas! Seus lembretes foram definidos.';
+
+  @override
   String get shareApp => 'Compartilhar app';
 
   @override
@@ -3003,4 +3007,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get maybeLater => 'Talvez depois';
+
+  @override
+  String get enableNotificationsTitle => 'Ativar Notificações';
+
+  @override
+  String get enableNotificationsForReminders =>
+      'Suas notas sincronizadas têm lembretes. Ative as notificações para não perdê-los.';
+
+  @override
+  String get enableNotifications => 'Ativar';
 }

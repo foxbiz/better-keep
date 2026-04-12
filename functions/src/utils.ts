@@ -668,12 +668,12 @@ async function handleVerifiedJWSTransaction(
 		};
 	}
 
-	// Validate environment (reject sandbox in production, unless running in emulator)
-	if (!isEmulator && transaction.environment === "Sandbox") {
-		return {
-			valid: false,
-			message: "Sandbox transactions are not accepted in production",
-		};
+	// Log sandbox transactions (Apple review and TestFlight always use sandbox)
+	if (transaction.environment === "Sandbox") {
+		console.log(
+			`App Store JWS: accepting Sandbox transaction for user=${userId}, ` +
+				`product=${transaction.productId}, txn=${transaction.transactionId}`,
+		);
 	}
 
 	// Validate product ID

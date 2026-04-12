@@ -90,10 +90,11 @@ class RemoteSyncCacheService {
   /// Start a new sync session - clears existing cache and prepares for new sync
   Future<RemoteSyncCacheMetadata> startNewSync(DateTime? lastSyncedAt) async {
     await clear();
-    _metadata = RemoteSyncCacheMetadata(lastSyncedAt: lastSyncedAt);
+    final metadata = RemoteSyncCacheMetadata(lastSyncedAt: lastSyncedAt);
+    _metadata = metadata;
     await _saveMetadata();
     AppLogger.log("[SYNC] CACHE: Started new sync session");
-    return _metadata!;
+    return metadata;
   }
 
   /// Add a new page of syncs to the cache
@@ -102,6 +103,12 @@ class RemoteSyncCacheService {
     PendingRemoteSyncPage page, {
     DateTime? maxUpdatedAt,
   }) async {
+    if (_metadata == null) {
+      AppLogger.log(
+        "[SYNC] CACHE: addPage called but session was invalidated, skipping",
+      );
+      return;
+    }
     _pages[page.pageIndex] = page;
     _metadata!.totalPages = _pages.length;
     _metadata!.updatedAt = DateTime.now();

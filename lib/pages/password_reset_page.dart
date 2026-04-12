@@ -128,7 +128,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? 'Failed to send verification code';
+          _errorMessage = e.message ?? context.l10n.failedSendVerificationCode;
         });
       }
     } catch (e) {
@@ -194,7 +194,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? 'Invalid verification code';
+          _errorMessage = e.message ?? context.l10n.invalidVerificationCode;
         });
         _otpController.clear();
         _otpFocusNode.requestFocus();

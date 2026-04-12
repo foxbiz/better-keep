@@ -9,13 +9,15 @@ import 'package:flutter/material.dart';
 class SessionInvalidBanner extends StatefulWidget {
   const SessionInvalidBanner({super.key});
 
+  /// Whether the banner has been dismissed by the user.
+  /// Exposed so that layout widgets can track actual banner visibility.
+  static final ValueNotifier<bool> isDismissed = ValueNotifier(false);
+
   @override
   State<SessionInvalidBanner> createState() => _SessionInvalidBannerState();
 }
 
 class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
-  bool _isDismissed = false;
-
   Future<void> _handleSignOut() async {
     // Use the navigator key context since this banner is above the Navigator
     final navContext = AppState.navigatorKey.currentContext;
@@ -58,10 +60,22 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: AuthService.sessionInvalid,
-      builder: (context, isInvalid, child) {
-        if (!isInvalid || _isDismissed) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        AuthService.sessionInvalid,
+        SessionInvalidBanner.isDismissed,
+      ]),
+      builder: (context, child) {
+        final isInvalid = AuthService.sessionInvalid.value;
+        if (!isInvalid || SessionInvalidBanner.isDismissed.value) {
+          // Reset dismissed state when session becomes valid again
+          // so the banner reappears on future session problems.
+          // Use post-frame callback to avoid calling notifyListeners() during build.
+          if (!isInvalid && SessionInvalidBanner.isDismissed.value) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              SessionInvalidBanner.isDismissed.value = false;
+            });
+          }
           return const SizedBox.shrink();
         }
 
@@ -119,9 +133,7 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
                   const SizedBox(width: 4),
                   IconButton(
                     onPressed: () {
-                      setState(() {
-                        _isDismissed = true;
-                      });
+                      SessionInvalidBanner.isDismissed.value = true;
                     },
                     icon: const Icon(Icons.close, color: Colors.white),
                     iconSize: 20,

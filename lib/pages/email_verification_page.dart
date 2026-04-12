@@ -76,7 +76,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? 'Failed to send verification code';
+          _errorMessage = e.message ?? context.l10n.failedSendVerificationCode;
         });
       }
     } catch (e) {
@@ -144,7 +144,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? 'Verification failed';
+          _errorMessage = e.message ?? context.l10n.verificationFailed;
         });
         // Clear OTP field on error
         _otpController.clear();

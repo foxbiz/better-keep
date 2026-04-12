@@ -1301,6 +1301,24 @@ class Note extends BaseModel<Note> {
   }
 
   Future<void> moveToTrash() async {
+    // Cancel alarm/notification before trashing - don't block UI
+    if (id != null && reminder != null && !completed && isAlarmSupported) {
+      final noteId = id!;
+      unawaited(
+        Future(() async {
+          try {
+            final alarmId = await AlarmIdService.getAlarmId(noteId);
+            await Alarm.stop(alarmId);
+            await AllDayReminderNotificationService().cancelNotification(
+              noteId,
+            );
+          } catch (e) {
+            AppLogger.log("Error cancelling alarm on trash: $e");
+          }
+        }),
+      );
+    }
+
     trashed = true;
     archived = false;
     pinned = false;
@@ -1318,6 +1336,24 @@ class Note extends BaseModel<Note> {
     trashed = false;
     readOnly = false;
     await save();
+
+    // Reschedule alarm if the note has an active reminder
+    if (reminder != null && !completed && isAlarmSupported) {
+      unawaited(
+        Future(() async {
+          try {
+            await setAlarm();
+            if (reminder!.isAllDay && isAllDayReminderActive) {
+              await AllDayReminderNotificationService().showAllDayNotification(
+                this,
+              );
+            }
+          } catch (e) {
+            AppLogger.log("Error rescheduling alarm on restore: $e");
+          }
+        }),
+      );
+    }
   }
 
   Future<void> _deleteLocalFiles() async {

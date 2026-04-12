@@ -8,6 +8,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
@@ -337,8 +338,6 @@ class _StartFreshConfirmationPageState
   /// Sends OTP to user's email and shows input dialog.
   /// Returns the OTP string if entered, null if cancelled.
   Future<String?> _getVerificationCode() async {
-    final functions = FirebaseFunctions.instance;
-
     // Show loading dialog with timeout and cancel support
     final loadingResult = await showLoadingDialog<Map<String, dynamic>>(
       context: context,
@@ -349,8 +348,7 @@ class _StartFreshConfirmationPageState
         timeoutMessage: context.l10n.takingTooLongTryAgain,
       ),
       operation: () async {
-        final sendOtpCallable = functions.httpsCallable('sendStartFreshOtp');
-        final result = await sendOtpCallable.call();
+        final result = await callCloudFunction('sendStartFreshOtp');
         return result.data as Map<String, dynamic>;
       },
     );
@@ -425,10 +423,7 @@ class _StartFreshConfirmationPageState
       AppLogger.log('StartFresh: User confirmed, verifying OTP');
 
       // Call Firebase function with OTP
-      final functions = FirebaseFunctions.instance;
-      final startFreshCallable = functions.httpsCallable('startFreshWithOtp');
-
-      await startFreshCallable.call({'otp': otp});
+      await callCloudFunction('startFreshWithOtp', {'otp': otp});
 
       AppLogger.log('StartFresh: Server-side reset complete');
 

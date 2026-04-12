@@ -1,5 +1,6 @@
 import 'package:better_keep/components/otp_input_field.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
@@ -147,15 +148,15 @@ class _OtpDialogState extends State<_OtpDialog> {
     });
 
     try {
-      final functions = FirebaseFunctions.instance;
       final params = <String, dynamic>{'otp': otp};
       if (config.verifyFunctionParams != null) {
         params.addAll(config.verifyFunctionParams!);
       }
 
-      final result = await functions
-          .httpsCallable(config.verifyFunctionName!)
-          .call(params);
+      final result = await callCloudFunction(
+        config.verifyFunctionName!,
+        params,
+      );
 
       if (result.data['success'] == true) {
         if (mounted) {
@@ -169,13 +170,14 @@ class _OtpDialogState extends State<_OtpDialog> {
       } else {
         setState(() {
           _isVerifying = false;
-          _errorText = result.data['message'] ?? 'Verification failed';
+          _errorText =
+              result.data['message'] ?? context.l10n.verificationFailed;
         });
       }
     } on FirebaseFunctionsException catch (e) {
       setState(() {
         _isVerifying = false;
-        _errorText = e.message ?? 'Verification failed';
+        _errorText = e.message ?? context.l10n.verificationFailed;
       });
     } catch (e) {
       setState(() {

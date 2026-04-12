@@ -2704,6 +2704,9 @@
   
   "reminders": "Reminders",
   "@reminders": {"description": "Reminders navigation item"},
+
+  "notificationsEnabled": "Notifications enabled! Your reminders are set.",
+  "@notificationsEnabled": {"description": "Snackbar message after enabling notification permissions"},
   
   "shareApp": "Share App",
   "@shareApp": {"description": "Share app menu item"},
@@ -3110,5 +3113,14 @@
   "@unlockTheFullExperience": {"description": "Paywall heading to unlock full experience"},
   
   "maybeLater": "Maybe later",
-  "@maybeLater": {"description": "Dismiss/skip button text for paywall"}
+  "@maybeLater": {"description": "Dismiss/skip button text for paywall"},
+
+  "enableNotificationsTitle": "Enable Notifications",
+  "@enableNotificationsTitle": {"description": "Title for the dialog prompting notification permissions after sync restores reminders"},
+
+  "enableNotificationsForReminders": "Your synced notes have reminders. Enable notifications so you don't miss them.",
+  "@enableNotificationsForReminders": {"description": "Body text for the notification permission dialog after sync restores reminders"},
+
+  "enableNotifications": "Enable",
+  "@enableNotifications": {"description": "Button to enable notifications in the reminder permission dialog"}
 }

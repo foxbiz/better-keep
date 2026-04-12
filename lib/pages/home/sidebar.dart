@@ -5,10 +5,12 @@ import 'package:better_keep/components/logo.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/labels.dart';
+import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/settings/settings.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
+import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/utils.dart';
@@ -60,6 +62,18 @@ class _SidebarState extends State<Sidebar> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _isBigScreen = MediaQuery.of(context).size.width >= bigScreenWidthThreshold;
+  }
+
+  Future<void> _handleEnableNotifications() async {
+    final service = ReminderPermissionService();
+    final granted = await service.ensurePermissions();
+    await service.checkAndNotify();
+    if (granted) {
+      await service.rescheduleAllAlarms();
+      if (mounted) {
+        snackbar(context.l10n.notificationsEnabled, Colors.green[400]);
+      }
+    }
   }
 
   void _handleInstallTap() {
@@ -128,7 +142,7 @@ class _SidebarState extends State<Sidebar> {
                 _buildTile(Icons.note, context.l10n.notes, () {
                   if (!_isBigScreen) Navigator.pop(context);
                   AppState.showNotes = NoteType.all;
-                }, AppState.showNotes == NoteType.all),
+                }, selected: AppState.showNotes == NoteType.all),
                 _buildTile(Icons.label, context.l10n.labels, () {
                   labels(context);
                 }),
@@ -139,7 +153,7 @@ class _SidebarState extends State<Sidebar> {
                     if (!_isBigScreen) Navigator.pop(context);
                     AppState.showNotes = NoteType.archived;
                   },
-                  AppState.showNotes == NoteType.archived,
+                  selected: AppState.showNotes == NoteType.archived,
                 ),
                 _buildTile(
                   Icons.alarm,
@@ -148,7 +162,7 @@ class _SidebarState extends State<Sidebar> {
                     if (!_isBigScreen) Navigator.pop(context);
                     AppState.showNotes = NoteType.reminder;
                   },
-                  AppState.showNotes == NoteType.reminder,
+                  selected: AppState.showNotes == NoteType.reminder,
                 ),
                 _buildTile(
                   Icons.delete,
@@ -157,7 +171,7 @@ class _SidebarState extends State<Sidebar> {
                     if (!_isBigScreen) Navigator.pop(context);
                     AppState.showNotes = NoteType.trashed;
                   },
-                  AppState.showNotes == NoteType.trashed,
+                  selected: AppState.showNotes == NoteType.trashed,
                 ),
                 _buildTile(Icons.settings, context.l10n.settings, () {
                   if (!_isBigScreen) Navigator.pop(context);
@@ -172,6 +186,20 @@ class _SidebarState extends State<Sidebar> {
               ],
             ),
           ),
+          if (isAlarmSupported)
+            ValueListenableBuilder<bool>(
+              valueListenable:
+                  ReminderPermissionService().permissionGranted,
+              builder: (context, granted, _) {
+                if (granted) return const SizedBox.shrink();
+                return _buildTile(
+                  Icons.notifications_off,
+                  context.l10n.enableNotificationsTitle,
+                  _handleEnableNotifications,
+                  showBadge: true,
+                );
+              },
+            ),
           if (showInstallButton) _buildInstallButton(),
           ValueListenableBuilder<SubscriptionStatus>(
             valueListenable: PlanService.instance.statusNotifier,
@@ -227,9 +255,10 @@ class _SidebarState extends State<Sidebar> {
   Widget _buildTile(
     IconData icon,
     String title,
-    VoidCallback onTap, [
+    VoidCallback onTap, {
     bool selected = false,
-  ]) {
+    bool showBadge = false,
+  }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final listTileTheme = theme.listTileTheme;
@@ -259,7 +288,25 @@ class _SidebarState extends State<Sidebar> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(
               children: [
-                Icon(icon, color: selected ? selectedColor : null),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, color: selected ? selectedColor : null),
+                    if (showBadge)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: widget.shrink ? 0 : 32.0,

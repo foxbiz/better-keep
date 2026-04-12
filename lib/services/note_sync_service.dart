@@ -20,6 +20,7 @@ import 'package:better_keep/services/remote_sync_cache_service.dart';
 import 'package:better_keep/services/sketch_preview_generator.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
+import 'package:better_keep/utils/file_utils.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -205,13 +206,12 @@ class NoteSyncService {
       if (user != null) {
         final isNewUser = _lastKnownUserId != user.uid;
         if (isNewUser) {
-          // On login (new user or different user), clear lastSynced and cache
-          // This ensures we get all notes including deleted ones
+          // On login (new user or different user), clear lastSynced
+          // Cache will be cleared by refresh() → startNewSync() when sync runs
           AppLogger.log(
             "[SYNC] New user login detected (was: $_lastKnownUserId, now: ${user.uid}), clearing sync state",
           );
           AppState.lastSynced = null;
-          await _syncCache.clear();
 
           // Save new user ID
           _lastKnownUserId = user.uid;
@@ -221,8 +221,14 @@ class NoteSyncService {
           // Only refresh if E2EE is ready - otherwise wait for E2EE status change
           // This prevents Firestore connections before E2EE initialization completes
           if (E2EEService.instance.isReady) {
-            refresh(); // Do a full refresh on login
+            // Don't clear cache separately — refresh() handles it via startNewSync()
+            // Calling clear() here races with concurrent sync from E2EE ready handler
+            if (!isSyncing.value) {
+              refresh(); // Do a full refresh on login
+            }
           } else {
+            // E2EE not ready — clear cache now, refresh will run when E2EE becomes ready
+            await _syncCache.clear();
             AppLogger.log(
               "[SYNC] Deferring refresh - E2EE not ready (status: ${E2EEService.instance.status.value})",
             );
@@ -445,10 +451,17 @@ class NoteSyncService {
           waitAttempts++;
         }
 
-        // Clear sync cache to ensure fresh start (important for recovery)
-        await _syncCache.clear();
+        // If sync is still running after waiting, skip — the in-progress sync
+        // already has E2EE ready and will complete correctly
+        if (isSyncing.value) {
+          AppLogger.log(
+            "[SYNC] E2EE ready: Sync still in progress after waiting, skipping redundant sync",
+          );
+          return;
+        }
 
         // Force full sync by clearing lastSynced
+        // Don't clear cache separately — refresh() handles it via startNewSync()
         AppState.lastSynced = null;
 
         // Stop any existing listener before starting fresh
@@ -2201,38 +2214,43 @@ class NoteSyncService {
 
     // If we have a sync record, check if the local file actually exists and is valid
     if (sync != null) {
-      if (await fs.exists(sync.localPath)) {
+      // On iOS, the container UUID changes between runs - fix the stored path
+      final fixedLocalPath = await FileUtils.fixPath(sync.localPath);
+      if (await fs.exists(fixedLocalPath)) {
         // Validate the file isn't corrupted (e.g., E2EE encrypted bytes saved by mistake)
         // Use readEncryptedBytes to strip local data encryption first,
         // then check if the underlying bytes are E2EE-encrypted
         try {
-          final bytes = await readEncryptedBytes(sync.localPath);
+          final bytes = await readEncryptedBytes(fixedLocalPath);
           if (FileEncryption.looksEncrypted(bytes)) {
             // File appears E2EE-encrypted - it was saved incorrectly, re-download
             await sync.delete();
-            await fs.delete(sync.localPath);
+            await fs.delete(fixedLocalPath);
             AppLogger.log(
-              "Local file appears E2EE-encrypted, will re-download: ${sync.localPath}",
+              "Local file appears E2EE-encrypted, will re-download: $fixedLocalPath",
             );
           } else {
-            return FileDownloadResult(DownloadResult.success, sync.localPath);
+            // Update sync record if path changed (iOS container migration)
+            if (fixedLocalPath != sync.localPath) {
+              sync.localPath = fixedLocalPath;
+              await sync.save();
+            }
+            return FileDownloadResult(DownloadResult.success, fixedLocalPath);
           }
         } catch (e) {
           // If we can't read the file, re-download it
           AppLogger.log(
-            "Failed to read local file, will re-download: ${sync.localPath}",
+            "Failed to read local file, will re-download: $fixedLocalPath",
           );
           await sync.delete();
           try {
-            await fs.delete(sync.localPath);
+            await fs.delete(fixedLocalPath);
           } catch (_) {}
         }
       } else {
         // File was deleted, remove the stale sync record and re-download
         await sync.delete();
-        AppLogger.log(
-          "Local file missing, will re-download: ${sync.localPath}",
-        );
+        AppLogger.log("Local file missing, will re-download: $fixedLocalPath");
       }
     }
 
@@ -2586,7 +2604,12 @@ class NoteSyncService {
   /// This is useful for recovering images that fail to load.
   Future<String?> redownloadFile(String localPath) async {
     try {
-      final sync = await FileSyncTrack.getByLocalPath(localPath);
+      // On iOS, the container UUID changes between runs - fix the path
+      final fixedPath = await FileUtils.fixPath(localPath);
+
+      // Try lookup with both original and fixed paths
+      var sync = await FileSyncTrack.getByLocalPath(localPath);
+      sync ??= await FileSyncTrack.getByLocalPath(fixedPath);
       if (sync == null || sync.remotePath == null) {
         AppLogger.log(
           "Cannot redownload file: no sync record found for $localPath",
@@ -2634,10 +2657,16 @@ class NoteSyncService {
           }
         }
 
-        await writeEncryptedBytes(localPath, bytes);
-        AppLogger.log("Successfully redownloaded file to $localPath");
+        await writeEncryptedBytes(fixedPath, bytes);
+        AppLogger.log("Successfully redownloaded file to $fixedPath");
 
-        return localPath;
+        // Update sync record with fixed path if it changed
+        if (fixedPath != sync.localPath) {
+          sync.localPath = fixedPath;
+          await sync.save();
+        }
+
+        return fixedPath;
       } on FirebaseException catch (e) {
         AppLogger.log("Failed to redownload file: ${e.code} ${e.message}");
         if (e.code == 'object-not-found') {

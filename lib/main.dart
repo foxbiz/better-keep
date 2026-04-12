@@ -18,6 +18,7 @@ import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -83,8 +84,11 @@ void main() async {
     '[Main] AuthService initialized, currentUser: ${AuthService.currentUser?.email}',
   );
 
-  // Activate FirebaseAppCheck in the background (not blocking startup)
-  // This runs after runApp so it doesn't delay first frame
+  // TEMPORARILY DISABLED: AppCheck uses AppleAppAttestProvider which only
+  // activates in release mode and is suspected of causing a native crash
+  // when the IAP purchase flow is triggered. AppCheck is NOT enforced on
+  // any backend service (Cloud Functions, Firestore, Storage), so disabling
+  // it has zero security impact. Re-enable after confirming the IAP fix.
   _activateAppCheckInBackground();
 
   // Pre-load user avatar for smooth Hero transitions
@@ -193,6 +197,9 @@ class _BetterKeepState extends State<BetterKeep> {
       _startAlarmListeners();
       // Check for active all-day reminders on app startup
       _showActiveAllDayReminders();
+
+      // Check notification permission status (read-only, no prompt)
+      ReminderPermissionService().checkAndNotify();
 
       // Initialize intent handler for opening/sharing files
       IntentHandlerService.instance.init();

@@ -772,7 +772,10 @@ class _NoteEditorState extends State<NoteEditor>
                   IconButton(
                     color: foregroundColor,
                     onPressed: () async {
-                      final res = await reminder(context);
+                      final res = await reminder(
+                        context,
+                        initialReminder: _note.reminder,
+                      );
                       if (res != null) {
                         await _note.setReminder(res);
                         setState(() {});

@@ -7,6 +7,7 @@ import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
@@ -18,7 +19,6 @@ import 'package:better_keep/services/desktop_auth_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -302,26 +302,38 @@ class AuthService {
       // We have cached user data but currentUser is null.
       // On all native platforms Firebase Auth may restore the session
       // asynchronously (e.g. from iOS Keychain / Android encrypted storage)
-      // even after Firebase.initializeApp() resolves. Wait for the first
+      // even after Firebase.initializeApp() resolves. Wait for a non-null
       // authStateChanges() emission before deciding the session is invalid.
       if (!kIsWeb) {
         final completer = Completer<User?>();
         late StreamSubscription<User?> tempSub;
         tempSub = _auth.authStateChanges().listen((user) {
-          if (!completer.isCompleted) {
+          // Only complete on a non-null user. The stream typically emits
+          // null immediately (meaning "no user yet"), which would resolve
+          // the completer before Keychain restore has a chance to finish.
+          // By ignoring null, we let the timeout handle the "no restore"
+          // case while giving Firebase Auth the full window to restore.
+          if (user != null && !completer.isCompleted) {
             completer.complete(user);
             tempSub.cancel();
           }
         });
 
-        // Give Firebase Auth up to 2 seconds to restore the session.
-        final restoredUser = await completer.future.timeout(
-          const Duration(seconds: 2),
+        // Give Firebase Auth up to 5 seconds to restore the session.
+        // On cold starts (especially iOS), Keychain restore can take longer
+        // than expected. 2s was too aggressive and caused false session
+        // invalidation.
+        var restoredUser = await completer.future.timeout(
+          const Duration(seconds: 5),
           onTimeout: () {
             tempSub.cancel();
             return null;
           },
         );
+
+        // Retry: Firebase may have finished restoring just after timeout.
+        // Check currentUser one more time before giving up.
+        restoredUser ??= _auth.currentUser;
 
         if (restoredUser != null) {
           // Firebase Auth session was restored successfully.
@@ -370,6 +382,17 @@ class AuthService {
           );
           return;
         }
+
+        // Recovery path: if sessionInvalid was set due to a timeout during
+        // init but Firebase Auth restored the session later, clear the flag
+        // so sync resumes normally.
+        if (sessionInvalid.value) {
+          AppLogger.log(
+            "Auth state restored valid user after session was marked invalid — recovering session",
+          );
+          sessionInvalid.value = false;
+        }
+
         // User logged in and listener not running - start it
         _startTokenRevocationListener(user.uid);
         try {
@@ -858,12 +881,9 @@ class AuthService {
   /// Send OTP for password reset
   /// Returns a map with 'success', 'message', and 'maskedEmail'
   static Future<Map<String, dynamic>> sendPasswordResetOtp(String email) async {
-    final functions = FirebaseFunctions.instanceFor(
-      app: Firebase.app(),
-      region: 'us-central1',
-    );
-    final callable = functions.httpsCallable('sendPasswordResetOtp');
-    final result = await callable.call({'email': email});
+    final result = await callCloudFunction('sendPasswordResetOtp', {
+      'email': email,
+    });
     return Map<String, dynamic>.from(result.data as Map);
   }
 
@@ -874,12 +894,7 @@ class AuthService {
     required String otp,
     required String newPassword,
   }) async {
-    final functions = FirebaseFunctions.instanceFor(
-      app: Firebase.app(),
-      region: 'us-central1',
-    );
-    final callable = functions.httpsCallable('resetPasswordWithOtp');
-    final result = await callable.call({
+    final result = await callCloudFunction('resetPasswordWithOtp', {
       'email': email,
       'otp': otp,
       'newPassword': newPassword,
@@ -893,12 +908,10 @@ class AuthService {
     required String email,
     required String otp,
   }) async {
-    final functions = FirebaseFunctions.instanceFor(
-      app: Firebase.app(),
-      region: 'us-central1',
-    );
-    final callable = functions.httpsCallable('verifyPasswordResetOtp');
-    final result = await callable.call({'email': email, 'otp': otp});
+    final result = await callCloudFunction('verifyPasswordResetOtp', {
+      'email': email,
+      'otp': otp,
+    });
     return Map<String, dynamic>.from(result.data as Map);
   }
 
@@ -909,12 +922,7 @@ class AuthService {
   /// Send OTP for email verification
   /// Returns a map with 'success', 'email' (masked), and 'expiresIn'
   static Future<Map<String, dynamic>> sendEmailVerificationOtp() async {
-    final functions = FirebaseFunctions.instanceFor(
-      app: Firebase.app(),
-      region: 'us-central1',
-    );
-    final callable = functions.httpsCallable('sendEmailVerificationOtp');
-    final result = await callable.call();
+    final result = await callCloudFunction('sendEmailVerificationOtp');
     return Map<String, dynamic>.from(result.data as Map);
   }
 
@@ -923,12 +931,9 @@ class AuthService {
   static Future<Map<String, dynamic>> verifyEmailVerificationOtp(
     String otp,
   ) async {
-    final functions = FirebaseFunctions.instanceFor(
-      app: Firebase.app(),
-      region: 'us-central1',
-    );
-    final callable = functions.httpsCallable('verifyEmailVerificationOtp');
-    final result = await callable.call({'otp': otp});
+    final result = await callCloudFunction('verifyEmailVerificationOtp', {
+      'otp': otp,
+    });
     return Map<String, dynamic>.from(result.data as Map);
   }
 
@@ -1277,10 +1282,7 @@ class AuthService {
 
     try {
       AppLogger.log("[SIGN_IN] Calling setEmulatorTestClaims function...");
-      final functions = FirebaseFunctions.instance;
-      final result = await functions
-          .httpsCallable('setEmulatorTestClaims')
-          .call();
+      final result = await callCloudFunction('setEmulatorTestClaims');
       AppLogger.log("[SIGN_IN] setEmulatorTestClaims result: ${result.data}");
 
       // Wait for claims to propagate in the emulator
@@ -1426,11 +1428,7 @@ class AuthService {
             );
             try {
               // Call Cloud Function to cancel deletion (sends email notification)
-              final functions = FirebaseFunctions.instance;
-              final callable = functions.httpsCallable(
-                'cancelScheduledDeletion',
-              );
-              final result = await callable.call();
+              final result = await callCloudFunction('cancelScheduledDeletion');
               AppLogger.log(
                 "[AUTH] Cancelled scheduled deletion via Cloud Function for user: ${user.uid}, result: ${result.data}",
               );
@@ -1564,6 +1562,27 @@ class AuthService {
 
   /// Call this when app resumes from background to check for revocation
   static Future<void> checkTokenRevocationOnResume() async {
+    // Recovery: if session was marked invalid (e.g. due to init timeout)
+    // but Firebase Auth now has a valid user, attempt to recover the session.
+    if (sessionInvalid.value) {
+      final user = _auth.currentUser;
+      if (user != null) {
+        try {
+          final idTokenResult = await user.getIdTokenResult(true);
+          _cachedTokenAuthTime = idTokenResult.authTime;
+          _startTokenRevocationListener(user.uid);
+          AppLogger.log(
+            "Session recovered on resume — Firebase Auth user is valid",
+          );
+          sessionInvalid.value = false;
+          return;
+        } catch (e) {
+          AppLogger.error("Session recovery on resume failed: $e");
+          // Fall through — session remains invalid
+        }
+      }
+    }
+
     if (_currentUserId == null || _cachedTokenAuthTime == null) return;
 
     try {
@@ -1695,10 +1714,13 @@ class AuthService {
         AppLogger.error('Error closing/deleting database: $e');
       }
 
-      // Clear SharedPreferences
+      // Clear SharedPreferences (but preserve has_launched_before to prevent
+      // the fresh-install detection from clearing a valid Keychain session
+      // on the next app start)
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.clear();
+        await prefs.setBool('has_launched_before', true);
       } catch (e) {
         AppLogger.error('Error clearing SharedPreferences: $e');
       }

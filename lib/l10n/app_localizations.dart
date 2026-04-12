@@ -4680,6 +4680,12 @@ abstract class AppLocalizations {
   /// **'Trash'**
   String get trash;
 
+  /// Snackbar message after enabling notification permissions
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications enabled! Your reminders are set.'**
+  String get notificationsEnabled;
+
   /// Share app menu item
   ///
   /// In en, this message translates to:
@@ -5345,6 +5351,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Maybe later'**
   String get maybeLater;
+
+  /// Title for the dialog prompting notification permissions after sync restores reminders
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Notifications'**
+  String get enableNotificationsTitle;
+
+  /// Body text for the notification permission dialog after sync restores reminders
+  ///
+  /// In en, this message translates to:
+  /// **'Your synced notes have reminders. Enable notifications so you don\'t miss them.'**
+  String get enableNotificationsForReminders;
+
+  /// Button to enable notifications in the reminder permission dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get enableNotifications;
 }
 
 class _AppLocalizationsDelegate

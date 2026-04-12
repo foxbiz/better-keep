@@ -2602,6 +2602,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get trash => 'Çöp Kutusu';
 
   @override
+  String get notificationsEnabled =>
+      'Bildirimler etkinleştirildi! Hatırlatıcılarınız ayarlandı.';
+
+  @override
   String get shareApp => 'Uygulamayı Paylaş';
 
   @override
@@ -2983,4 +2987,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get maybeLater => 'Belki daha sonra';
+
+  @override
+  String get enableNotificationsTitle => 'Bildirimleri Etkinleştir';
+
+  @override
+  String get enableNotificationsForReminders =>
+      'Senkronize edilen notlarınızda hatırlatıcılar var. Kaçırmamak için bildirimleri etkinleştirin.';
+
+  @override
+  String get enableNotifications => 'Etkinleştir';
 }

@@ -2591,6 +2591,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trash => 'Trash';
 
   @override
+  String get notificationsEnabled =>
+      'Notifications enabled! Your reminders are set.';
+
+  @override
   String get shareApp => 'Share App';
 
   @override
@@ -2968,4 +2972,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get maybeLater => 'Maybe later';
+
+  @override
+  String get enableNotificationsTitle => 'Enable Notifications';
+
+  @override
+  String get enableNotificationsForReminders =>
+      'Your synced notes have reminders. Enable notifications so you don\'t miss them.';
+
+  @override
+  String get enableNotifications => 'Enable';
 }

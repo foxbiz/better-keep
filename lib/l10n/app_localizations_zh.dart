@@ -2494,6 +2494,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trash => '回收站';
 
   @override
+  String get notificationsEnabled => '通知已启用！您的提醒已设置。';
+
+  @override
   String get shareApp => '分享应用';
 
   @override
@@ -2848,4 +2851,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get maybeLater => '以后再说';
+
+  @override
+  String get enableNotificationsTitle => '启用通知';
+
+  @override
+  String get enableNotificationsForReminders => '您同步的笔记包含提醒。启用通知以免错过。';
+
+  @override
+  String get enableNotifications => '启用';
 }
