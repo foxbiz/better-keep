@@ -1152,6 +1152,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get continueWithGoogle => 'Lanjutkan dengan Google';
 
   @override
+  String get continueWithApple => 'Lanjutkan dengan Apple';
+
+  @override
+  String get signInWithApple => 'Masuk dengan Apple';
+
+  @override
   String get chooseSignInMethod => 'Pilih metode masuk yang Anda inginkan';
 
   @override
@@ -1480,6 +1486,105 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get cancelSubscriptionConfirmation =>
       'Apakah Anda yakin ingin membatalkan langganan Anda?\n\nLangganan Anda akan tetap aktif hingga akhir periode penagihan saat ini. Setelah itu, Anda akan kehilangan akses ke fitur Pro.';
+
+  @override
+  String get subscriptionChangesMayTakeMoment =>
+      'Jika Anda melakukan perubahan, mungkin perlu beberapa saat untuk muncul.';
+
+  @override
+  String get subscriptionRestored => 'Langganan Anda telah dipulihkan!';
+
+  @override
+  String get subscriptionAlreadyActive =>
+      'Anda sudah memiliki langganan aktif.';
+
+  @override
+  String get subscriptionActivated => 'Langganan berhasil diaktifkan!';
+
+  @override
+  String get purchaseCancelled => 'Pembelian dibatalkan.';
+
+  @override
+  String get paymentFailed => 'Pembayaran gagal.';
+
+  @override
+  String get couldNotOpenSubscriptionManagement =>
+      'Tidak dapat membuka manajemen langganan.';
+
+  @override
+  String manageSubscriptionInStore(String store) {
+    return 'Kelola langganan Anda di $store.';
+  }
+
+  @override
+  String get loadingFailedTryAgain => 'Gagal memuat — Coba lagi';
+
+  @override
+  String get reloadPrices => 'Muat ulang harga';
+
+  @override
+  String subscribeWithPrice(String price) {
+    return 'Berlangganan — $price';
+  }
+
+  @override
+  String get noAdsDescription =>
+      'Tanpa iklan, tanpa penjualan data — langganan Anda mendanai server aman & pengembangan berkelanjutan.';
+
+  @override
+  String get detectingLocation => 'Mendeteksi lokasi Anda...';
+
+  @override
+  String get currencyHelpText =>
+      'Gunakan INR untuk kartu India, USD untuk kartu internasional.';
+
+  @override
+  String get selfHostContact =>
+      'Ingin self-host? Hubungi kami di contact@betterkeep.app';
+
+  @override
+  String get welcomeToProMessage => 'Selamat datang di Better Keep Pro!';
+
+  @override
+  String get loadingPrices => 'Memuat harga...';
+
+  @override
+  String get processingSubscription => 'Memproses...';
+
+  @override
+  String get subscriptionAutoRenewTerms =>
+      'Pembayaran akan dikenakan ke akun Anda. Langganan otomatis diperbarui kecuali perpanjangan otomatis dinonaktifkan setidaknya 24 jam sebelum akhir periode saat ini.';
+
+  @override
+  String savePercent(int percent) {
+    return 'Hemat $percent%';
+  }
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Langganan berhasil dibatalkan.';
+
+  @override
+  String get subscriptionResumedSuccessfully =>
+      'Langganan berhasil dilanjutkan.';
+
+  @override
+  String get failedToCancelSubscription => 'Gagal membatalkan langganan.';
+
+  @override
+  String get failedToResumeSubscription => 'Gagal melanjutkan langganan.';
+
+  @override
+  String get featureTableHeader => 'Fitur';
+
+  @override
+  String get unlimited => 'Tidak terbatas';
+
+  @override
+  String get paywallLocalNotes => 'Catatan lokal';
+
+  @override
+  String get lockedNotesFreeLimit => 'Maks 5';
 
   @override
   String get signInWithAnyLinked => 'Masuk dengan akun terhubung mana pun';
@@ -2154,7 +2259,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transcriptionDisabledWebPrivacy =>
-      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+      'Transkripsi suara dinonaktifkan di web untuk privasi. Audio Anda tetap di perangkat.';
 
   @override
   String get whisperModelRequired => 'Diperlukan model pengenalan suara';
@@ -2164,7 +2269,7 @@ class AppLocalizationsId extends AppLocalizations {
       'Unduh model AI kecil (~31 MB) untuk konversi suara-ke-teks di perangkat. Audio Anda tidak pernah meninggalkan perangkat.';
 
   @override
-  String get downloadModel => 'Download Model';
+  String get downloadModel => 'Unduh Model';
 
   @override
   String get useFallback => 'Gunakan default perangkat';

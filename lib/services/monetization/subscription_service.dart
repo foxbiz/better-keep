@@ -184,8 +184,15 @@ Expected IDs: ${ProductIds.all}
 ''';
   }
 
+  bool _initialized = false;
+
   /// Initialize the subscription service
   Future<void> init() async {
+    if (_initialized) {
+      AppLogger.log('SubscriptionService: Already initialized, skipping.');
+      return;
+    }
+    _initialized = true;
     AppLogger.log('SubscriptionService: Initializing...');
 
     if (kIsWeb) {
@@ -402,122 +409,167 @@ Expected IDs: ${ProductIds.all}
   Future<void> _handlePurchaseUpdates(
     List<PurchaseDetails> purchaseDetailsList,
   ) async {
-    for (final purchase in purchaseDetailsList) {
-      AppLogger.log(
-        'SubscriptionService: Purchase update - ${purchase.productID}: ${purchase.status}',
-      );
+    try {
+      for (final purchase in purchaseDetailsList) {
+        AppLogger.log(
+          'SubscriptionService: Purchase update - ${purchase.productID}: ${purchase.status}',
+        );
 
-      switch (purchase.status) {
-        case PurchaseStatus.pending:
-          isLoading.value = true;
-          _lastPurchaseError = null;
-          break;
-
-        case PurchaseStatus.purchased:
-        case PurchaseStatus.restored:
-          // On iOS, all restored transactions share the same app receipt.
-          // Once we've successfully verified one, skip the rest to avoid
-          // redundant Cloud Function calls and duplicate welcome emails.
-          if (purchase.status == PurchaseStatus.restored &&
-              _restoredIosReceiptVerified &&
-              !kIsWeb &&
-              Platform.isIOS) {
-            AppLogger.log(
-              'SubscriptionService: Skipping duplicate iOS restored purchase ${purchase.productID}',
-            );
-            if (purchase.pendingCompletePurchase) {
-              await _iap.completePurchase(purchase);
-            }
-            break;
-          }
-
-          // Verify and deliver the purchase
-          final verifyResult = await _verifyPurchase(purchase);
-
-          if (verifyResult.valid) {
-            await _deliverPurchase(purchase);
+        switch (purchase.status) {
+          case PurchaseStatus.pending:
+            isLoading.value = true;
             _lastPurchaseError = null;
-            // Mark that we found a restored subscription
-            if (purchase.status == PurchaseStatus.restored) {
-              _restoredSubscriptionFound = true;
-              if (!kIsWeb && Platform.isIOS) {
-                _restoredIosReceiptVerified = true;
+            break;
+
+          case PurchaseStatus.purchased:
+          case PurchaseStatus.restored:
+            // On iOS, all restored transactions share the same app receipt.
+            // Once we've successfully verified one, skip the rest to avoid
+            // redundant Cloud Function calls and duplicate welcome emails.
+            if (purchase.status == PurchaseStatus.restored &&
+                _restoredIosReceiptVerified &&
+                !kIsWeb &&
+                Platform.isIOS) {
+              AppLogger.log(
+                'SubscriptionService: Skipping duplicate iOS restored purchase ${purchase.productID}',
+              );
+              if (purchase.pendingCompletePurchase) {
+                try {
+                  await _iap.completePurchase(purchase);
+                } catch (e) {
+                  AppLogger.error(
+                    'SubscriptionService: Error completing duplicate iOS purchase',
+                    e,
+                  );
+                }
+              }
+              break;
+            }
+
+            // On iOS, complete the purchase BEFORE verification.
+            // If _verifyPurchase() triggers a native StoreKit crash (release mode),
+            // the transaction must already be cleared from the queue — otherwise
+            // StoreKit replays it on every app launch, causing a permanent crash loop.
+            if (!kIsWeb && Platform.isIOS && purchase.pendingCompletePurchase) {
+              try {
+                await _iap.completePurchase(purchase);
+              } catch (e) {
+                AppLogger.error(
+                  'SubscriptionService: Error completing iOS purchase before verify',
+                  e,
+                );
               }
             }
-          } else if (verifyResult.isLinkedToOtherAccount) {
-            // Subscription belongs to another account
-            _lastPurchaseError = verifyResult.error;
-            AppLogger.log(
-              'SubscriptionService: Subscription linked to another account',
-            );
-          } else {
-            if (purchase.status == PurchaseStatus.restored) {
-              // Don't set _lastPurchaseError for restored purchases that fail
-              // verification — a failed restore just means "no active subscription
-              // to restore", not an error the user needs to see.
+
+            // Verify and deliver the purchase
+            final verifyResult = await _verifyPurchase(purchase);
+
+            if (verifyResult.valid) {
+              await _deliverPurchase(purchase);
+              _lastPurchaseError = null;
+              // Mark that we found a restored subscription
+              if (purchase.status == PurchaseStatus.restored) {
+                _restoredSubscriptionFound = true;
+                if (!kIsWeb && Platform.isIOS) {
+                  _restoredIosReceiptVerified = true;
+                }
+              }
+            } else if (verifyResult.isLinkedToOtherAccount) {
+              // Subscription belongs to another account
+              _lastPurchaseError = verifyResult.error;
               AppLogger.log(
-                'SubscriptionService: Restored purchase verification failed - ${verifyResult.error}',
+                'SubscriptionService: Subscription linked to another account',
               );
             } else {
-              _lastPurchaseError = verifyResult.error;
+              if (purchase.status == PurchaseStatus.restored) {
+                // Don't set _lastPurchaseError for restored purchases that fail
+                // verification — a failed restore just means "no active subscription
+                // to restore", not an error the user needs to see.
+                AppLogger.log(
+                  'SubscriptionService: Restored purchase verification failed - ${verifyResult.error}',
+                );
+              } else {
+                _lastPurchaseError = verifyResult.error;
+              }
             }
-          }
 
-          // Complete the purchase
-          if (purchase.pendingCompletePurchase) {
-            await _iap.completePurchase(purchase);
-          }
-
-          isLoading.value = false;
-          break;
-
-        case PurchaseStatus.error:
-          // Log the technical error for debugging
-          AppLogger.error(
-            'SubscriptionService: Purchase error for "${purchase.productID}"',
-            purchase.error,
-          );
-          // Set user-friendly error message
-          _lastPurchaseError = _getFriendlyErrorMessage(
-            purchase.error?.message,
-          );
-          if (purchase.pendingCompletePurchase) {
-            try {
+            // Complete the purchase (Android only — iOS already completed above)
+            if (!kIsWeb &&
+                !Platform.isIOS &&
+                purchase.pendingCompletePurchase) {
               await _iap.completePurchase(purchase);
-            } catch (e) {
-              AppLogger.error(
-                'SubscriptionService: Error completing failed purchase',
-                e,
-              );
             }
-          }
-          isLoading.value = false;
-          break;
 
-        case PurchaseStatus.canceled:
-          AppLogger.log(
-            'SubscriptionService: Purchase canceled for "${purchase.productID}"',
-          );
-          _lastPurchaseError = null;
-          if (purchase.productID.isNotEmpty &&
-              purchase.pendingCompletePurchase) {
-            await _iap.completePurchase(purchase);
-          }
-          isLoading.value = false;
-          break;
+            isLoading.value = false;
+            break;
+
+          case PurchaseStatus.error:
+            // Log the technical error for debugging
+            AppLogger.error(
+              'SubscriptionService: Purchase error for "${purchase.productID}"',
+              purchase.error,
+            );
+            // Set user-friendly error message
+            _lastPurchaseError = _getFriendlyErrorMessage(
+              purchase.error?.message,
+            );
+            if (purchase.pendingCompletePurchase) {
+              try {
+                await _iap.completePurchase(purchase);
+              } catch (e) {
+                AppLogger.error(
+                  'SubscriptionService: Error completing failed purchase',
+                  e,
+                );
+              }
+            }
+            isLoading.value = false;
+            break;
+
+          case PurchaseStatus.canceled:
+            AppLogger.log(
+              'SubscriptionService: Purchase canceled for "${purchase.productID}"',
+            );
+            _lastPurchaseError = null;
+            if (purchase.productID.isNotEmpty &&
+                purchase.pendingCompletePurchase) {
+              try {
+                await _iap.completePurchase(purchase);
+              } catch (e) {
+                AppLogger.error(
+                  'SubscriptionService: Error completing canceled purchase',
+                  e,
+                );
+              }
+            }
+            isLoading.value = false;
+            break;
+        }
       }
-    }
 
-    // Signal restore completer after ALL purchases in this batch have been
-    // fully processed (verified + completePurchase called). This prevents
-    // the race where buyNonConsumable is called while a second restored
-    // purchase still has a pending transaction.
-    if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
-      final hadRestored = purchaseDetailsList.any(
-        (p) => p.status == PurchaseStatus.restored,
+      // Signal restore completer after ALL purchases in this batch have been
+      // fully processed (verified + completePurchase called). This prevents
+      // the race where buyNonConsumable is called while a second restored
+      // purchase still has a pending transaction.
+      if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+        final hadRestored = purchaseDetailsList.any(
+          (p) => p.status == PurchaseStatus.restored,
+        );
+        if (hadRestored) {
+          _restoreCompleter!.complete(_restoredSubscriptionFound);
+        }
+      }
+    } catch (e) {
+      // Ensure stream listener exceptions never become unhandled Future
+      // rejections, which would crash the app in release builds.
+      AppLogger.error(
+        'SubscriptionService: Unhandled error in purchase update handler',
+        e,
       );
-      if (hadRestored) {
-        _restoreCompleter!.complete(_restoredSubscriptionFound);
+      isLoading.value = false;
+      // Complete restore completer so purchaseSubscription() is not stuck waiting
+      if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+        _restoreCompleter!.complete(false);
       }
     }
   }
@@ -670,50 +722,14 @@ Expected IDs: ${ProductIds.all}
         );
       }
 
-      // With StoreKit 2 (iOS 15+), both localVerificationData and
-      // serverVerificationData contain JWS transaction tokens — NOT the legacy
-      // app receipt that Apple's verifyReceipt endpoint requires. We must
-      // explicitly fetch the real app receipt from Bundle.main.appStoreReceiptURL
-      // via InAppPurchaseStoreKitPlatformAddition.refreshPurchaseVerificationData().
-      String verificationToken;
-
-      if (!kIsWeb && Platform.isIOS) {
-        try {
-          final iosPlatformAddition = _iap
-              .getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
-          final freshReceipt = await iosPlatformAddition
-              .refreshPurchaseVerificationData();
-
-          if (freshReceipt != null &&
-              freshReceipt.serverVerificationData.isNotEmpty) {
-            verificationToken = freshReceipt.serverVerificationData;
-            AppLogger.log(
-              'SubscriptionService: [$verifyTraceId] iOS using refreshed app receipt '
-              '(length: ${verificationToken.length})',
-            );
-          } else {
-            // Fallback to purchase verification data if refresh returns null
-            verificationToken = serverVerificationData.isNotEmpty
-                ? serverVerificationData
-                : localVerificationData;
-            AppLogger.log(
-              'SubscriptionService: [$verifyTraceId] iOS receipt refresh returned null, '
-              'falling back to purchase data (length: ${verificationToken.length})',
-            );
-          }
-        } catch (e) {
-          // If refresh fails, fall back to purchase verification data
-          verificationToken = serverVerificationData.isNotEmpty
-              ? serverVerificationData
-              : localVerificationData;
-          AppLogger.log(
-            'SubscriptionService: [$verifyTraceId] iOS receipt refresh failed ($e), '
-            'falling back to purchase data (length: ${verificationToken.length})',
-          );
-        }
-      } else {
-        verificationToken = serverVerificationData;
-      }
+      // Use serverVerificationData directly. Do NOT call
+      // refreshPurchaseVerificationData() — it triggers a native StoreKit
+      // SKReceiptRefreshRequest that crashes in release builds with
+      // "freed pointer was not the last allocation" when Apple throttles
+      // the request (SKError 603). The native crash bypasses Dart try/catch.
+      final String verificationToken = serverVerificationData.isNotEmpty
+          ? serverVerificationData
+          : localVerificationData;
 
       if (!kIsWeb && Platform.isIOS) {
         if (verificationToken.trim().isEmpty) {
@@ -731,6 +747,16 @@ Expected IDs: ${ProductIds.all}
                 'Unable to validate this purchase payload yet. Please tap Restore Purchases and try again.',
           );
         }
+      }
+
+      // Log payload format for debugging
+      if (!kIsWeb && Platform.isIOS) {
+        final format = _isJWSPayload(verificationToken)
+            ? 'JWS signed transaction'
+            : 'legacy base64 receipt';
+        AppLogger.log(
+          'SubscriptionService: [$verifyTraceId] iOS payload format: $format',
+        );
       }
 
       // Call Cloud Function to verify receipt
@@ -827,6 +853,15 @@ Expected IDs: ${ProductIds.all}
     } catch (_) {
       return false;
     }
+  }
+
+  /// Check if the payload is a JWS compact serialization (3 dot-separated base64url segments).
+  /// StoreKit 2 provides JWS signed transactions instead of legacy base64 app receipts.
+  bool _isJWSPayload(String payload) {
+    final parts = payload.split('.');
+    if (parts.length != 3) return false;
+    final b64urlRegex = RegExp(r'^[A-Za-z0-9_-]+$');
+    return parts.every((p) => p.isNotEmpty && b64urlRegex.hasMatch(p));
   }
 
   String _newVerifyTraceId() {
@@ -1114,10 +1149,23 @@ Expected IDs: ${ProductIds.all}
         final restored = await restoreAndWaitForPurchases();
 
         if (restored) {
-          AppLogger.log(
-            'SubscriptionService: Active subscription found and restored',
-          );
-          return PurchaseResult.success('Your subscription has been restored!');
+          // Check if the restored subscription is cancelled (auto-renewal off).
+          // A cancelled-but-active subscription should NOT block a new purchase
+          // — the user tapped Subscribe specifically to re-subscribe.
+          final status = PlanService.instance.status;
+          if (status.isCancelledButActive) {
+            AppLogger.log(
+              'SubscriptionService: Restored subscription is cancelled, '
+              'allowing new purchase flow',
+            );
+          } else {
+            AppLogger.log(
+              'SubscriptionService: Active subscription found and restored',
+            );
+            return PurchaseResult.success(
+              'Your subscription has been restored!',
+            );
+          }
         }
       } catch (e) {
         AppLogger.log('SubscriptionService: Error restoring purchases: $e');
@@ -1138,13 +1186,26 @@ Expected IDs: ${ProductIds.all}
       );
 
       if (existingCheck.hasSubscription) {
-        isLoading.value = false;
-        if (existingCheck.restored) {
-          return PurchaseResult.success('Your subscription has been restored!');
+        // After refreshSubscription() above, PlanService has the latest state.
+        // If the subscription is cancelled-but-active, let the user re-subscribe
+        // instead of blocking them.
+        final status = PlanService.instance.status;
+        if (status.isCancelledButActive) {
+          AppLogger.log(
+            'SubscriptionService: checkExistingSubscription found cancelled '
+            'subscription, allowing new purchase flow',
+          );
+        } else {
+          isLoading.value = false;
+          if (existingCheck.restored) {
+            return PurchaseResult.success(
+              'Your subscription has been restored!',
+            );
+          }
+          return PurchaseResult.success(
+            'You already have an active subscription.',
+          );
         }
-        return PurchaseResult.success(
-          'You already have an active subscription.',
-        );
       }
     } catch (e) {
       AppLogger.log(
@@ -1485,16 +1546,14 @@ Expected IDs: ${ProductIds.all}
         try {
           const channel = MethodChannel('com.betterkeep/subscriptions');
           await channel.invokeMethod('showManageSubscriptions');
-          // The modal sheet has been dismissed — the user may have cancelled
-          // or re-subscribed.  Restore purchases to get a fresh receipt and
-          // re-verify with the server so willAutoRenew is up-to-date.
-          unawaited(
-            restoreAndWaitForPurchases().then((_) {
-              PlanService.instance.refreshSubscription();
-            }),
+          // The modal sheet has been dismissed — the user may have cancelled,
+          // re-subscribed, or just browsed.  Refresh the Firestore subscription
+          // status to pick up any webhook-driven updates.
+          await PlanService.instance.refreshSubscription(
+            validateWithBackend: true,
           );
           return CancelResult.pending(
-            'Manage your subscription in the App Store',
+            'If you made changes, they may take a moment to appear.',
           );
         } catch (e) {
           // Fallback to URL if native method channel fails

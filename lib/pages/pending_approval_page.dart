@@ -269,11 +269,15 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                   children: [
                     Icon(Icons.smartphone, color: colorScheme.primary),
                     const SizedBox(width: 8),
-                    Text(
-                      _masterDeviceName!,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.primary,
+                    Flexible(
+                      child: Text(
+                        _masterDeviceName!,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.primary,
+                            ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

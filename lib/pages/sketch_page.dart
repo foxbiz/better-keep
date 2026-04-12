@@ -1220,10 +1220,7 @@ class _SketchPageState extends State<SketchPage>
                               },
                               child: CustomPaint(
                                 painter: SketchPainter(
-                                  strokes: [
-                                    ..._strokes,
-                                    if (_currentStroke != null) _currentStroke!,
-                                  ],
+                                  strokes: [..._strokes, ?_currentStroke],
                                 ),
                                 size: Size.infinite,
                               ),

@@ -97,6 +97,7 @@ export const DEFAULT_CURRENCY: SupportedCurrency = "USD";
 
 // Constants for subscription
 export const ANDROID_PACKAGE_NAME = "io.foxbiz.better_keep";
+export const IOS_BUNDLE_ID = "io.foxbiz.better-keep";
 export const SUBSCRIPTION_PRODUCT_ID = "better_keep_pro";
 
 export const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {

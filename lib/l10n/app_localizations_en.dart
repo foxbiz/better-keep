@@ -1150,6 +1150,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get continueWithGoogle => 'Continue with Google';
 
   @override
+  String get continueWithApple => 'Continue with Apple';
+
+  @override
+  String get signInWithApple => 'Sign in with Apple';
+
+  @override
   String get chooseSignInMethod => 'Choose your preferred sign-in method';
 
   @override
@@ -1475,6 +1481,105 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get cancelSubscriptionConfirmation =>
       'Are you sure you want to cancel your subscription?\n\nYour subscription will remain active until the end of the current billing period. After that, you will lose access to Pro features.';
+
+  @override
+  String get subscriptionChangesMayTakeMoment =>
+      'If you made changes, they may take a moment to appear.';
+
+  @override
+  String get subscriptionRestored => 'Your subscription has been restored!';
+
+  @override
+  String get subscriptionAlreadyActive =>
+      'You already have an active subscription.';
+
+  @override
+  String get subscriptionActivated => 'Subscription activated successfully!';
+
+  @override
+  String get purchaseCancelled => 'Purchase was cancelled.';
+
+  @override
+  String get paymentFailed => 'Payment failed.';
+
+  @override
+  String get couldNotOpenSubscriptionManagement =>
+      'Could not open subscription management.';
+
+  @override
+  String manageSubscriptionInStore(String store) {
+    return 'Manage your subscription in the $store.';
+  }
+
+  @override
+  String get loadingFailedTryAgain => 'Loading failed — Try again';
+
+  @override
+  String get reloadPrices => 'Reload prices';
+
+  @override
+  String subscribeWithPrice(String price) {
+    return 'Subscribe — $price';
+  }
+
+  @override
+  String get noAdsDescription =>
+      'No ads, no data selling — your subscription funds secure servers & ongoing development.';
+
+  @override
+  String get detectingLocation => 'Detecting your location...';
+
+  @override
+  String get currencyHelpText =>
+      'Use INR for Indian cards, USD for international cards.';
+
+  @override
+  String get selfHostContact =>
+      'Want to self-host? Contact us at contact@betterkeep.app';
+
+  @override
+  String get welcomeToProMessage => 'Welcome to Better Keep Pro!';
+
+  @override
+  String get loadingPrices => 'Loading prices...';
+
+  @override
+  String get processingSubscription => 'Processing...';
+
+  @override
+  String get subscriptionAutoRenewTerms =>
+      'Payment will be charged to your account. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.';
+
+  @override
+  String savePercent(int percent) {
+    return 'Save $percent%';
+  }
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Subscription cancelled successfully.';
+
+  @override
+  String get subscriptionResumedSuccessfully =>
+      'Subscription resumed successfully.';
+
+  @override
+  String get failedToCancelSubscription => 'Failed to cancel subscription.';
+
+  @override
+  String get failedToResumeSubscription => 'Failed to resume subscription.';
+
+  @override
+  String get featureTableHeader => 'Feature';
+
+  @override
+  String get unlimited => 'Unlimited';
+
+  @override
+  String get paywallLocalNotes => 'Local notes';
+
+  @override
+  String get lockedNotesFreeLimit => '5 max';
 
   @override
   String get signInWithAnyLinked => 'Sign in with any linked account';

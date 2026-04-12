@@ -6,7 +6,6 @@ import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:better_keep/state.dart';
@@ -710,107 +709,63 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         return Column(
           children: [
             // Primary Google sign-in button
-            Semantics(
-              button: true,
-              label: context.l10n.signInWithGoogle,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _handleSignIn('google'),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isDark
-                            ? [
-                                Colors.deepPurple.shade700,
-                                Colors.deepPurple.shade900,
-                              ]
-                            : [
-                                colorScheme.primary,
-                                colorScheme.primary.withValues(alpha: 0.85),
-                              ],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.deepPurple.withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          CustomIcons.google,
-                          size: 24,
-                          color: Colors.white,
-                          semanticLabel: 'Google',
-                        ),
-                        const SizedBox(width: 16),
-                        Text(
-                          context.l10n.continueWithGoogle,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) ...[
-              const SizedBox(height: 12),
-              // Apple Sign-In button (equally prominent per App Store guideline 4.8)
-              Semantics(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Semantics(
                 button: true,
-                label: 'Sign in with Apple',
+                label: context.l10n.signInWithGoogle,
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: () => _handleSignIn('apple'),
+                    onTap: () => _handleSignIn('google'),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 32,
                         vertical: 16,
                       ),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white : Colors.black,
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? [
+                                  Colors.deepPurple.shade700,
+                                  Colors.deepPurple.shade900,
+                                ]
+                              : [
+                                  colorScheme.primary,
+                                  colorScheme.primary.withValues(alpha: 0.85),
+                                ],
+                        ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
+                            color: Colors.deepPurple.withValues(alpha: 0.4),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
                         ],
                       ),
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.apple,
-                            size: 24,
-                            color: isDark ? Colors.black : Colors.white,
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Icon(
+                              CustomIcons.google,
+                              size: 24,
+                              color: Colors.white,
+                              semanticLabel: 'Google',
+                            ),
                           ),
                           const SizedBox(width: 16),
                           Text(
-                            'Continue with Apple',
-                            style: TextStyle(
+                            context.l10n.continueWithGoogle,
+                            style: const TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.black : Colors.white,
+                              color: Colors.white,
                               letterSpacing: 0.3,
                             ),
                           ),
@@ -820,6 +775,66 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   ),
                 ),
               ),
+            ), // ConstrainedBox (Google)
+            if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) ...[
+              const SizedBox(height: 12),
+              // Apple Sign-In button (equally prominent per App Store guideline 4.8)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Semantics(
+                  button: true,
+                  label: context.l10n.signInWithApple,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _handleSignIn('apple'),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white : Colors.black,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Icon(
+                                Icons.apple,
+                                size: 24,
+                                color: isDark ? Colors.black : Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              context.l10n.continueWithApple,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.black : Colors.white,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ), // ConstrainedBox (Apple)
             ],
             const SizedBox(height: 20),
             // Divider with "or"

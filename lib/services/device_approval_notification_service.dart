@@ -36,14 +36,14 @@ class DeviceApprovalNotificationService {
       '@mipmap/ic_launcher',
     );
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
     const macosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
     const initSettings = InitializationSettings(
@@ -53,7 +53,7 @@ class DeviceApprovalNotificationService {
     );
 
     await _notifications.initialize(
-      initSettings,
+      settings: initSettings,
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
 
@@ -140,10 +140,10 @@ class DeviceApprovalNotificationService {
     final notificationId = request.deviceId.hashCode.abs() % 100000;
 
     await _notifications.show(
-      notificationId,
-      'New Device Approval Request',
-      '${request.deviceName} ($platformName) wants to access your notes',
-      details,
+      id: notificationId,
+      title: 'New Device Approval Request',
+      body: '${request.deviceName} ($platformName) wants to access your notes',
+      notificationDetails: details,
       payload: request.deviceId,
     );
   }
@@ -155,7 +155,7 @@ class DeviceApprovalNotificationService {
   /// Cancel notification for a specific device
   Future<void> cancelNotification(String deviceId) async {
     final notificationId = deviceId.hashCode.abs() % 100000;
-    await _notifications.cancel(notificationId);
+    await _notifications.cancel(id: notificationId);
   }
 
   /// Cancel all device approval notifications

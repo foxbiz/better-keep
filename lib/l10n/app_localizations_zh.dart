@@ -1139,6 +1139,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get continueWithGoogle => '使用 Google 继续';
 
   @override
+  String get continueWithApple => '使用 Apple 继续';
+
+  @override
+  String get signInWithApple => '使用 Apple 登录';
+
+  @override
   String get chooseSignInMethod => '选择您偏好的登录方式';
 
   @override
@@ -1444,6 +1450,97 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get cancelSubscriptionConfirmation =>
       '确定要取消订阅吗？\n\n您的订阅将保持有效直到当前计费周期结束。之后，您将失去对专业版功能的访问权限。';
+
+  @override
+  String get subscriptionChangesMayTakeMoment => '如果您做了更改，可能需要一些时间才能显示。';
+
+  @override
+  String get subscriptionRestored => '您的订阅已恢复！';
+
+  @override
+  String get subscriptionAlreadyActive => '您已有活跃的订阅。';
+
+  @override
+  String get subscriptionActivated => '订阅激活成功！';
+
+  @override
+  String get purchaseCancelled => '购买已取消。';
+
+  @override
+  String get paymentFailed => '支付失败。';
+
+  @override
+  String get couldNotOpenSubscriptionManagement => '无法打开订阅管理。';
+
+  @override
+  String manageSubscriptionInStore(String store) {
+    return '在$store中管理您的订阅。';
+  }
+
+  @override
+  String get loadingFailedTryAgain => '加载失败 — 重试';
+
+  @override
+  String get reloadPrices => '重新加载价格';
+
+  @override
+  String subscribeWithPrice(String price) {
+    return '订阅 — $price';
+  }
+
+  @override
+  String get noAdsDescription => '无广告、不出售数据 — 您的订阅用于资助安全服务器和持续开发。';
+
+  @override
+  String get detectingLocation => '正在检测您的位置...';
+
+  @override
+  String get currencyHelpText => '印度银行卡请使用INR，国际银行卡请使用USD。';
+
+  @override
+  String get selfHostContact => '想要自托管？请联系 contact@betterkeep.app';
+
+  @override
+  String get welcomeToProMessage => '欢迎使用 Better Keep Pro！';
+
+  @override
+  String get loadingPrices => '正在加载价格...';
+
+  @override
+  String get processingSubscription => '处理中...';
+
+  @override
+  String get subscriptionAutoRenewTerms =>
+      '费用将从您的账户扣除。除非在当前周期结束前至少24小时关闭自动续费，否则订阅将自动续费。';
+
+  @override
+  String savePercent(int percent) {
+    return '节省$percent%';
+  }
+
+  @override
+  String get subscriptionCancelledSuccessfully => '订阅已成功取消。';
+
+  @override
+  String get subscriptionResumedSuccessfully => '订阅已成功恢复。';
+
+  @override
+  String get failedToCancelSubscription => '取消订阅失败。';
+
+  @override
+  String get failedToResumeSubscription => '恢复订阅失败。';
+
+  @override
+  String get featureTableHeader => '功能';
+
+  @override
+  String get unlimited => '无限制';
+
+  @override
+  String get paywallLocalNotes => '本地笔记';
+
+  @override
+  String get lockedNotesFreeLimit => '最多5个';
 
   @override
   String get signInWithAnyLinked => '使用任何已链接的账户登录';
@@ -2079,8 +2176,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToStartRecording => '开始录制失败';
 
   @override
-  String get transcriptionDisabledWebPrivacy =>
-      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+  String get transcriptionDisabledWebPrivacy => '出于隐私考虑，网页版已禁用语音转录。您的音频保留在设备上。';
 
   @override
   String get whisperModelRequired => '需要语音识别模型';
@@ -2090,7 +2186,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '下载一个小型 AI 模型（约 31 MB）用于设备端语音转文字。您的音频不会离开设备。';
 
   @override
-  String get downloadModel => 'Download Model';
+  String get downloadModel => '下载模型';
 
   @override
   String get useFallback => '使用设备默认';

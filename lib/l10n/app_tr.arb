@@ -1220,6 +1220,12 @@
   "continueWithGoogle": "Google ile Devam Et",
   "@continueWithGoogle": {"description": "Continue with Google button text"},
   
+  "continueWithApple": "Apple ile Devam Et",
+  "@continueWithApple": {"description": "Continue with Apple button text"},
+  
+  "signInWithApple": "Apple ile Giriş Yap",
+  "@signInWithApple": {"description": "Sign in with Apple tooltip"},
+  
   "chooseSignInMethod": "Tercih ettiğiniz giriş yöntemini seçin",
   "@chooseSignInMethod": {"description": "Sign in method hint text"},
   
@@ -1540,6 +1546,104 @@
 
   "cancelSubscriptionConfirmation": "Aboneliğinizi iptal etmek istediğinizden emin misiniz?\n\nAboneliğiniz, mevcut fatura döneminin sonuna kadar aktif kalacaktır. Bundan sonra Pro özelliklerine erişiminizi kaybedeceksiniz.",
   "@cancelSubscriptionConfirmation": {"description": "Cancel subscription confirmation message"},
+  
+  "subscriptionChangesMayTakeMoment": "Değişiklik yaptıysanız, görünmesi biraz zaman alabilir.",
+  
+  "subscriptionRestored": "Aboneliğiniz geri yüklendi!",
+  "@subscriptionRestored": {"description": "Snackbar message when subscription is restored"},
+  
+  "subscriptionAlreadyActive": "Zaten aktif bir aboneliğiniz var.",
+  "@subscriptionAlreadyActive": {"description": "Snackbar message when user already has active subscription"},
+  
+  "subscriptionActivated": "Abonelik başarıyla etkinleştirildi!",
+  "@subscriptionActivated": {"description": "Snackbar message when subscription is activated"},
+  
+  "purchaseCancelled": "Satın alma iptal edildi.",
+  "@purchaseCancelled": {"description": "Snackbar message when purchase is cancelled by user"},
+  
+  "paymentFailed": "Ödeme başarısız oldu.",
+  "@paymentFailed": {"description": "Snackbar message when payment fails"},
+  
+  "couldNotOpenSubscriptionManagement": "Abonelik yönetimi açılamadı.",
+  "@couldNotOpenSubscriptionManagement": {"description": "Error when unable to open platform subscription management"},
+  
+  "manageSubscriptionInStore": "{store}'da aboneliğinizi yönetin.",
+  "@manageSubscriptionInStore": {
+    "description": "Message shown when redirecting to store subscription management",
+    "placeholders": {
+      "store": {"type": "String"}
+    }
+  },
+  
+  "loadingFailedTryAgain": "Yükleme başarısız — Tekrar deneyin",
+  "@loadingFailedTryAgain": {"description": "Button label when price loading fails"},
+  
+  "reloadPrices": "Fiyatları yeniden yükle",
+  "@reloadPrices": {"description": "Button to reload subscription prices"},
+  
+  "subscribeWithPrice": "Abone ol — {price}",
+  "@subscribeWithPrice": {
+    "description": "Subscribe button label with price",
+    "placeholders": {
+      "price": {"type": "String"}
+    }
+  },
+  
+  "noAdsDescription": "Reklam yok, veri satışı yok — aboneliğiniz güvenli sunucuları ve sürekli geliştirmeyi finanse eder.",
+  "@noAdsDescription": {"description": "Trust message on paywall"},
+  
+  "detectingLocation": "Konumunuz tespit ediliyor...",
+  "@detectingLocation": {"description": "Loading message while detecting user location for currency"},
+  
+  "currencyHelpText": "Hint kartları için INR, uluslararası kartlar için USD kullanın.",
+  "@currencyHelpText": {"description": "Help text for currency selector on paywall"},
+  
+  "selfHostContact": "Kendi sunucunuzu mu kurmak istiyorsunuz? contact@betterkeep.app adresinden bize ulaşın",
+  "@selfHostContact": {"description": "Self-host contact info on paywall"},
+  
+  "welcomeToProMessage": "Better Keep Pro'ya Hoş Geldiniz!",
+  "@welcomeToProMessage": {"description": "Snackbar message shown when user successfully subscribes via subscription listener"},
+  
+  "loadingPrices": "Fiyatlar yükleniyor...",
+  "@loadingPrices": {"description": "Loading text shown while subscription prices are being fetched"},
+  
+  "processingSubscription": "İşleniyor...",
+  "@processingSubscription": {"description": "Button label shown while a subscription purchase is in progress"},
+  
+  "subscriptionAutoRenewTerms": "Ödeme hesabınıza yansıtılacaktır. Mevcut dönem sona ermeden en az 24 saat önce otomatik yenileme kapatılmadığı sürece abonelik otomatik olarak yenilenir.",
+  "@subscriptionAutoRenewTerms": {"description": "Legal auto-renew terms shown on the paywall"},
+  
+  "savePercent": "%{percent} tasarruf edin",
+  "@savePercent": {
+    "description": "Badge on yearly plan button showing savings percentage",
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  
+  "subscriptionCancelledSuccessfully": "Abonelik başarıyla iptal edildi.",
+  "@subscriptionCancelledSuccessfully": {"description": "Snackbar message after subscription is cancelled via Razorpay"},
+  
+  "subscriptionResumedSuccessfully": "Abonelik başarıyla devam ettirildi.",
+  "@subscriptionResumedSuccessfully": {"description": "Snackbar message after a cancelled subscription is resumed"},
+  
+  "failedToCancelSubscription": "Abonelik iptal edilemedi.",
+  "@failedToCancelSubscription": {"description": "Error message when subscription cancellation fails"},
+  
+  "failedToResumeSubscription": "Abonelik devam ettirilemedi.",
+  "@failedToResumeSubscription": {"description": "Error message when subscription resumption fails"},
+  
+  "featureTableHeader": "Özellik",
+  "@featureTableHeader": {"description": "Column header for the feature name column in the paywall comparison table"},
+  
+  "unlimited": "Sınırsız",
+  "@unlimited": {"description": "Unlimited quantity label used in feature comparison table"},
+  
+  "paywallLocalNotes": "Yerel notlar",
+  "@paywallLocalNotes": {"description": "Feature row label for local notes in the paywall comparison table"},
+  
+  "lockedNotesFreeLimit": "Maks. 5",
+  "@lockedNotesFreeLimit": {"description": "Free tier limit for locked notes shown in paywall comparison table"},
   
   "signInWithAnyLinked": "Bağlı herhangi bir hesapla giriş yapın",
   "@signInWithAnyLinked": {"description": "Connected accounts subtitle"},

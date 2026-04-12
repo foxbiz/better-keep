@@ -301,10 +301,10 @@ packages:
     dependency: transitive
     description:
       name: dev_build
-      sha256: "1a8151608658f63b3930f9a9d04a5da741af2ec689ae9520d4fe1dfed3e5f210"
+      sha256: b8f6c8c6e4179bf749652efa2f4fd44f1f07cdab2c4f078b777d9bf2320765cf
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.5"
+    version: "1.1.5+2"
   device_info_plus:
     dependency: "direct main"
     description:
@@ -365,10 +365,10 @@ packages:
     dependency: "direct main"
     description:
       name: file_picker
-      sha256: "57d9a1dd5063f85fa3107fb42d1faffda52fdc948cefd5fe5ea85267a5fc7343"
+      sha256: f13a03000d942e476bc1ff0a736d2e9de711d2f89a95cd4c1d88f861c3348387
       url: "https://pub.dev"
     source: hosted
-    version: "10.3.10"
+    version: "11.0.2"
   file_selector_linux:
     dependency: transitive
     description:
@@ -634,34 +634,34 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_local_notifications
-      sha256: "19ffb0a8bb7407875555e5e98d7343a633bb73707bae6c6a5f37c90014077875"
+      sha256: "0d9035862236fe38250fe1644d7ed3b8254e34a21b2c837c9f539fbb3bba5ef1"
       url: "https://pub.dev"
     source: hosted
-    version: "19.5.0"
+    version: "21.0.0"
   flutter_local_notifications_linux:
     dependency: transitive
     description:
       name: flutter_local_notifications_linux
-      sha256: e3c277b2daab8e36ac5a6820536668d07e83851aeeb79c446e525a70710770a5
+      sha256: e0f25e243c6c44c825bbbc6b2b2e76f7d9222362adcfe9fd780bf01923c840bd
       url: "https://pub.dev"
     source: hosted
-    version: "6.0.0"
+    version: "8.0.0"
   flutter_local_notifications_platform_interface:
     dependency: transitive
     description:
       name: flutter_local_notifications_platform_interface
-      sha256: "277d25d960c15674ce78ca97f57d0bae2ee401c844b6ac80fcd972a9c99d09fe"
+      sha256: e7db3d5b49c2b7ecc68deba4aaaa67a348f92ee0fef34c8e4b4459dbef0d7307
       url: "https://pub.dev"
     source: hosted
-    version: "9.1.0"
+    version: "11.0.0"
   flutter_local_notifications_windows:
     dependency: transitive
     description:
       name: flutter_local_notifications_windows
-      sha256: "8d658f0d367c48bd420e7cf2d26655e2d1130147bca1eea917e576ca76668aaf"
+      sha256: "3a2654ba104fbb52c618ebed9def24ef270228470718c43b3a6afcd5c81bef0c"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.3"
+    version: "3.0.0"
   flutter_localizations:
     dependency: "direct main"
     description: flutter
@@ -921,10 +921,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_android
-      sha256: "9eae0cbd672549dacc18df855c2a23782afe4854ada5190b7d63b30ee0b0d3fd"
+      sha256: "66810af8e99b2657ee98e5c6f02064f69bb63f7a70e343937f70946c5f8c6622"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.13+15"
+    version: "0.8.13+16"
   image_picker_for_web:
     dependency: transitive
     description:
@@ -977,10 +977,10 @@ packages:
     dependency: "direct main"
     description:
       name: in_app_purchase
-      sha256: "50004f9e4392deabc7e2585587c38aed4d08d782869cb31c610b657c9a43207b"
+      sha256: "5cddd7f463f3bddb1d37a72b95066e840d5822d66291331d7f8f05ce32c24b6c"
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.2"
+    version: "3.2.3"
   in_app_purchase_android:
     dependency: "direct main"
     description:
@@ -1001,10 +1001,10 @@ packages:
     dependency: "direct main"
     description:
       name: in_app_purchase_storekit
-      sha256: "6ce1361278cacc0481508989ba419b2c9f46a2b0dc54b3fe54f5ee63c2718fef"
+      sha256: "1d512809edd9f12ff88fce4596a13a18134e2499013f4d6a8894b04699363c93"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.22+1"
+    version: "0.4.8+1"
   intl:
     dependency: "direct main"
     description:
@@ -1013,6 +1013,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.20.2"
+  jni:
+    dependency: transitive
+    description:
+      name: jni
+      sha256: c2230682d5bc2362c1c9e8d3c7f406d9cbba23ab3f2e203a025dd47e0fb2e68f
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
+  jni_flutter:
+    dependency: transitive
+    description:
+      name: jni_flutter
+      sha256: "8b59e590786050b1cd866677dddaf76b1ade5e7bc751abe04b86e84d379d3ba6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   json_annotation:
     dependency: transitive
     description:
@@ -1081,10 +1097,10 @@ packages:
     dependency: transitive
     description:
       name: matcher
-      sha256: "12956d0ad8390bbcc63ca2e1469c0619946ccb52809807067a7020d57e647aa6"
+      sha256: dc0b7dc7651697ea4ff3e69ef44b0407ea32c487a39fff6a4004fa585e901861
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.18"
+    version: "0.12.19"
   material_color_utilities:
     dependency: transitive
     description:
@@ -1185,10 +1201,10 @@ packages:
     dependency: transitive
     description:
       name: path_provider_android
-      sha256: "149441ca6e4f38193b2e004c0ca6376a3d11f51fa5a77552d8bd4d2b0c0912ba"
+      sha256: "69cbd515a62b94d32a7944f086b2f82b4ac40a1d45bebfc00813a430ab2dabcd"
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.23"
+    version: "2.3.1"
   path_provider_foundation:
     dependency: transitive
     description:
@@ -1337,10 +1353,10 @@ packages:
     dependency: transitive
     description:
       name: process_run
-      sha256: "78b1ed8828fb6a98b3a28452ae6d77546b87065c61297f4f79b31064a18afcc3"
+      sha256: "8bdbe7ec335391ad32e5119cdcecaa7f679bc924fc5a5d7e8bc7a8fbd22592a1"
       url: "https://pub.dev"
     source: hosted
-    version: "1.3.1+1"
+    version: "1.3.2"
   pub_semver:
     dependency: transitive
     description:
@@ -1569,26 +1585,26 @@ packages:
     dependency: "direct main"
     description:
       name: sign_in_with_apple
-      sha256: e84a62e17b7e463abf0a64ce826c2cd1f0b72dff07b7b275e32d5302d76fb4c5
+      sha256: "8bd875c8e8748272749eb6d25b896f768e7e9d60988446d543fe85a37a2392b8"
       url: "https://pub.dev"
     source: hosted
-    version: "6.1.4"
+    version: "7.0.1"
   sign_in_with_apple_platform_interface:
     dependency: transitive
     description:
       name: sign_in_with_apple_platform_interface
-      sha256: c2ef2ce6273fce0c61acd7e9ff5be7181e33d7aa2b66508b39418b786cca2119
+      sha256: "981bca52cf3bb9c3ad7ef44aace2d543e5c468bb713fd8dda4275ff76dfa6659"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "2.0.0"
   sign_in_with_apple_web:
     dependency: transitive
     description:
       name: sign_in_with_apple_web
-      sha256: "2f7c38368f49e3f2043bca4b46a4a61aaae568c140a79aa0675dc59ad0ca49bc"
+      sha256: f316400827f52cafcf50d00e1a2e8a0abc534ca1264e856a81c5f06bd5b10fed
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.1"
+    version: "3.0.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -1686,10 +1702,10 @@ packages:
     dependency: transitive
     description:
       name: sqlite3
-      sha256: caa693ad15a587a2b4fde093b728131a1827903872171089dedb16f7665d3a91
+      sha256: "56da3e13ed7d28a66f930aa2b2b29db6736a233f08283326e96321dd812030f5"
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.0"
+    version: "3.3.1"
   stack_trace:
     dependency: transitive
     description:
@@ -1742,18 +1758,18 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "93167629bfc610f71560ab9312acdda4959de4df6fac7492c89ff0d3886f6636"
+      sha256: "8161c84903fd860b26bfdefb7963b3f0b68fee7adea0f59ef805ecca346f0c7a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.9"
+    version: "0.7.10"
   timezone:
     dependency: transitive
     description:
       name: timezone
-      sha256: dd14a3b83cfd7cb19e7888f1cbc20f258b8d71b54c06f79ac585f14093a287d1
+      sha256: "784a5e34d2eb62e1326f24d6f600aaaee452eb8ca8ef2f384a59244e292d158b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.10.1"
+    version: "0.11.0"
   typed_data:
     dependency: transitive
     description:
@@ -1910,10 +1926,10 @@ packages:
     dependency: transitive
     description:
       name: webview_flutter_android
-      sha256: "0f7fcd2c86bf36bdcf94881f7941ce0cbc4f8d104b9fdcd5fcbef90e2199db76"
+      sha256: f560f57d0f529c1dcdaf4edc3a3217b099560622f9f4a10b6bdbb566553c61ea
       url: "https://pub.dev"
     source: hosted
-    version: "4.10.15"
+    version: "4.11.0"
   webview_flutter_platform_interface:
     dependency: transitive
     description:
@@ -1926,10 +1942,10 @@ packages:
     dependency: transitive
     description:
       name: webview_flutter_wkwebview
-      sha256: d7219cfabc6f5fc2032e0fa980ec36d71f308a35a823395af1abc34d9a2ede83
+      sha256: e15d8828e014291324a4d0cf6e272090167f4fa5673ffcf8fe446f4a4cd35861
       url: "https://pub.dev"
     source: hosted
-    version: "3.24.2"
+    version: "3.24.3"
   whisper_flutter_new:
     dependency: "direct main"
     description:

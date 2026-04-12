@@ -374,6 +374,16 @@ class LabelSyncService {
       },
       onError: (error) {
         AppLogger.error('LabelSync: Remote listener error', error);
+        // Auto-restart the listener after a delay on transient errors
+        // (e.g. permission-denied from stale auth token, network blip)
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_initialized && currentUser != null) {
+            AppLogger.log(
+              '[LABEL_SYNC] Restarting remote listener after error',
+            );
+            _startRemoteListener();
+          }
+        });
       },
     );
 
@@ -795,6 +805,12 @@ class LabelSyncService {
         }
       }
     }
+
+    // if there are no labels in the remote collection, at least add system labels
+    if (querySnapshot.docs.isEmpty) {
+      await Label.fixLabels();
+    }
+
     // Use max remote timestamp to avoid missing labels created during sync
     if (maxRemoteUpdatedAt != null) {
       AppState.lastLabelSynced = maxRemoteUpdatedAt;

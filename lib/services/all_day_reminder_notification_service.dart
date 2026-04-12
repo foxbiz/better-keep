@@ -37,13 +37,13 @@ class AllDayReminderNotificationService {
       '@mipmap/ic_launcher',
     );
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
       requestSoundPermission: false, // Silent
     );
     const macosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
       requestSoundPermission: false, // Silent
     );
 
@@ -54,7 +54,7 @@ class AllDayReminderNotificationService {
     );
 
     await _notifications.initialize(
-      initSettings,
+      settings: initSettings,
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
 
@@ -131,10 +131,10 @@ class AllDayReminderNotificationService {
     );
 
     await _notifications.show(
-      notificationId,
-      title,
-      body,
-      details,
+      id: notificationId,
+      title: title,
+      body: body,
+      notificationDetails: details,
       payload: note.id.toString(),
     );
   }
@@ -147,7 +147,7 @@ class AllDayReminderNotificationService {
     }
 
     final notificationId = _getNotificationId(noteId);
-    await _notifications.cancel(notificationId);
+    await _notifications.cancel(id: notificationId);
   }
 
   /// Cancel all all-day reminder notifications

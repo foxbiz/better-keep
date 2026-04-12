@@ -2244,6 +2244,18 @@ abstract class AppLocalizations {
   /// **'Continue with Google'**
   String get continueWithGoogle;
 
+  /// Continue with Apple button text
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with Apple'**
+  String get continueWithApple;
+
+  /// Sign in with Apple tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple'**
+  String get signInWithApple;
+
   /// Sign in method hint text
   ///
   /// In en, this message translates to:
@@ -2825,6 +2837,174 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to cancel your subscription?\n\nYour subscription will remain active until the end of the current billing period. After that, you will lose access to Pro features.'**
   String get cancelSubscriptionConfirmation;
+
+  /// Snackbar message shown after returning from platform subscription management
+  ///
+  /// In en, this message translates to:
+  /// **'If you made changes, they may take a moment to appear.'**
+  String get subscriptionChangesMayTakeMoment;
+
+  /// Snackbar message when subscription is restored
+  ///
+  /// In en, this message translates to:
+  /// **'Your subscription has been restored!'**
+  String get subscriptionRestored;
+
+  /// Snackbar message when user already has active subscription
+  ///
+  /// In en, this message translates to:
+  /// **'You already have an active subscription.'**
+  String get subscriptionAlreadyActive;
+
+  /// Snackbar message when subscription is activated
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription activated successfully!'**
+  String get subscriptionActivated;
+
+  /// Snackbar message when purchase is cancelled by user
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase was cancelled.'**
+  String get purchaseCancelled;
+
+  /// Snackbar message when payment fails
+  ///
+  /// In en, this message translates to:
+  /// **'Payment failed.'**
+  String get paymentFailed;
+
+  /// Error when unable to open platform subscription management
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open subscription management.'**
+  String get couldNotOpenSubscriptionManagement;
+
+  /// Message shown when redirecting to store subscription management
+  ///
+  /// In en, this message translates to:
+  /// **'Manage your subscription in the {store}.'**
+  String manageSubscriptionInStore(String store);
+
+  /// Button label when price loading fails
+  ///
+  /// In en, this message translates to:
+  /// **'Loading failed — Try again'**
+  String get loadingFailedTryAgain;
+
+  /// Button to reload subscription prices
+  ///
+  /// In en, this message translates to:
+  /// **'Reload prices'**
+  String get reloadPrices;
+
+  /// Subscribe button label with price
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe — {price}'**
+  String subscribeWithPrice(String price);
+
+  /// Trust message on paywall
+  ///
+  /// In en, this message translates to:
+  /// **'No ads, no data selling — your subscription funds secure servers & ongoing development.'**
+  String get noAdsDescription;
+
+  /// Loading message while detecting user location for currency
+  ///
+  /// In en, this message translates to:
+  /// **'Detecting your location...'**
+  String get detectingLocation;
+
+  /// Help text for currency selector on paywall
+  ///
+  /// In en, this message translates to:
+  /// **'Use INR for Indian cards, USD for international cards.'**
+  String get currencyHelpText;
+
+  /// Self-host contact info on paywall
+  ///
+  /// In en, this message translates to:
+  /// **'Want to self-host? Contact us at contact@betterkeep.app'**
+  String get selfHostContact;
+
+  /// Snackbar message shown when user successfully subscribes via subscription listener
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Better Keep Pro!'**
+  String get welcomeToProMessage;
+
+  /// Loading text shown while subscription prices are being fetched
+  ///
+  /// In en, this message translates to:
+  /// **'Loading prices...'**
+  String get loadingPrices;
+
+  /// Button label shown while a subscription purchase is in progress
+  ///
+  /// In en, this message translates to:
+  /// **'Processing...'**
+  String get processingSubscription;
+
+  /// Legal auto-renew terms shown on the paywall
+  ///
+  /// In en, this message translates to:
+  /// **'Payment will be charged to your account. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.'**
+  String get subscriptionAutoRenewTerms;
+
+  /// Badge on yearly plan button showing savings percentage
+  ///
+  /// In en, this message translates to:
+  /// **'Save {percent}%'**
+  String savePercent(int percent);
+
+  /// Snackbar message after subscription is cancelled via Razorpay
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription cancelled successfully.'**
+  String get subscriptionCancelledSuccessfully;
+
+  /// Snackbar message after a cancelled subscription is resumed
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription resumed successfully.'**
+  String get subscriptionResumedSuccessfully;
+
+  /// Error message when subscription cancellation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to cancel subscription.'**
+  String get failedToCancelSubscription;
+
+  /// Error message when subscription resumption fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to resume subscription.'**
+  String get failedToResumeSubscription;
+
+  /// Column header for the feature name column in the paywall comparison table
+  ///
+  /// In en, this message translates to:
+  /// **'Feature'**
+  String get featureTableHeader;
+
+  /// Unlimited quantity label used in feature comparison table
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get unlimited;
+
+  /// Feature row label for local notes in the paywall comparison table
+  ///
+  /// In en, this message translates to:
+  /// **'Local notes'**
+  String get paywallLocalNotes;
+
+  /// Free tier limit for locked notes shown in paywall comparison table
+  ///
+  /// In en, this message translates to:
+  /// **'5 max'**
+  String get lockedNotesFreeLimit;
 
   /// Connected accounts subtitle
   ///

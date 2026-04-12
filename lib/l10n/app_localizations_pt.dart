@@ -1160,6 +1160,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get continueWithGoogle => 'Continuar com o Google';
 
   @override
+  String get continueWithApple => 'Continuar com a Apple';
+
+  @override
+  String get signInWithApple => 'Entrar com a Apple';
+
+  @override
   String get chooseSignInMethod => 'Escolha seu método de login preferido';
 
   @override
@@ -1492,6 +1498,104 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get cancelSubscriptionConfirmation =>
       'Tem certeza de que deseja cancelar sua assinatura?\n\nSua assinatura permanecerá ativa até o final do período de faturamento atual. Depois disso, você perderá acesso aos recursos Pro.';
+
+  @override
+  String get subscriptionChangesMayTakeMoment =>
+      'Se você fez alterações, pode levar um momento para aparecer.';
+
+  @override
+  String get subscriptionRestored => 'Sua assinatura foi restaurada!';
+
+  @override
+  String get subscriptionAlreadyActive => 'Você já tem uma assinatura ativa.';
+
+  @override
+  String get subscriptionActivated => 'Assinatura ativada com sucesso!';
+
+  @override
+  String get purchaseCancelled => 'Compra cancelada.';
+
+  @override
+  String get paymentFailed => 'Pagamento falhou.';
+
+  @override
+  String get couldNotOpenSubscriptionManagement =>
+      'Não foi possível abrir o gerenciamento de assinatura.';
+
+  @override
+  String manageSubscriptionInStore(String store) {
+    return 'Gerencie sua assinatura na $store.';
+  }
+
+  @override
+  String get loadingFailedTryAgain => 'Falha ao carregar — Tente novamente';
+
+  @override
+  String get reloadPrices => 'Recarregar preços';
+
+  @override
+  String subscribeWithPrice(String price) {
+    return 'Assinar — $price';
+  }
+
+  @override
+  String get noAdsDescription =>
+      'Sem anúncios, sem venda de dados — sua assinatura financia servidores seguros e desenvolvimento contínuo.';
+
+  @override
+  String get detectingLocation => 'Detectando sua localização...';
+
+  @override
+  String get currencyHelpText =>
+      'Use INR para cartões indianos, USD para cartões internacionais.';
+
+  @override
+  String get selfHostContact =>
+      'Quer hospedar você mesmo? Entre em contato em contact@betterkeep.app';
+
+  @override
+  String get welcomeToProMessage => 'Bem-vindo ao Better Keep Pro!';
+
+  @override
+  String get loadingPrices => 'Carregando preços...';
+
+  @override
+  String get processingSubscription => 'Processando...';
+
+  @override
+  String get subscriptionAutoRenewTerms =>
+      'O pagamento será cobrado na sua conta. A assinatura renova automaticamente, a menos que a renovação automática seja desativada pelo menos 24 horas antes do fim do período atual.';
+
+  @override
+  String savePercent(int percent) {
+    return 'Economize $percent%';
+  }
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Assinatura cancelada com sucesso.';
+
+  @override
+  String get subscriptionResumedSuccessfully =>
+      'Assinatura retomada com sucesso.';
+
+  @override
+  String get failedToCancelSubscription => 'Falha ao cancelar assinatura.';
+
+  @override
+  String get failedToResumeSubscription => 'Falha ao retomar assinatura.';
+
+  @override
+  String get featureTableHeader => 'Recurso';
+
+  @override
+  String get unlimited => 'Ilimitado';
+
+  @override
+  String get paywallLocalNotes => 'Notas locais';
+
+  @override
+  String get lockedNotesFreeLimit => 'Máx. 5';
 
   @override
   String get signInWithAnyLinked => 'Entre com qualquer conta vinculada';
@@ -2182,7 +2286,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transcriptionDisabledWebPrivacy =>
-      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+      'A transcrição de voz está desativada na web por privacidade. Seu áudio fica no seu dispositivo.';
 
   @override
   String get whisperModelRequired =>
@@ -2193,7 +2297,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Baixe um pequeno modelo de IA (~31 MB) para conversão de voz em texto no dispositivo. Seu áudio nunca sai do dispositivo.';
 
   @override
-  String get downloadModel => 'Download Model';
+  String get downloadModel => 'Baixar Modelo';
 
   @override
   String get useFallback => 'Usar padrão do dispositivo';

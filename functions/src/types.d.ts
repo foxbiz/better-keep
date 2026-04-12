@@ -70,3 +70,27 @@ export interface VerifyPurchaseRequest {
 export interface CheckSubscriptionRequest {
 	purchaseToken?: string;
 }
+
+/**
+ * Decoded payload from an App Store StoreKit 2 JWS signed transaction.
+ * @see https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload
+ */
+export interface AppStoreJWSTransactionPayload {
+	transactionId: string;
+	originalTransactionId: string;
+	productId: string;
+	bundleId: string;
+	/** Milliseconds since epoch */
+	expiresDate: number;
+	/** Milliseconds since epoch */
+	signedDate: number;
+	environment: "Sandbox" | "Production";
+	type:
+		| "Auto-Renewable Subscription"
+		| "Non-Consumable"
+		| "Consumable"
+		| "Non-Renewing Subscription";
+	inAppOwnershipType: "PURCHASED" | "FAMILY_SHARED";
+	/** Milliseconds since epoch, present only if revoked */
+	revocationDate?: number;
+}

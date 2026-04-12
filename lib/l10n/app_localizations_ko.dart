@@ -1141,6 +1141,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get continueWithGoogle => 'Google로 계속';
 
   @override
+  String get continueWithApple => 'Apple로 계속';
+
+  @override
+  String get signInWithApple => 'Apple로 로그인';
+
+  @override
   String get chooseSignInMethod => '원하는 로그인 방법을 선택하세요';
 
   @override
@@ -1453,6 +1459,99 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get cancelSubscriptionConfirmation =>
       '정말 구독을 취소하시겠습니까?\n\n현재 결제 기간이 끝날 때까지 구독이 유지됩니다. 이후 Pro 기능 이용이 불가능합니다.';
+
+  @override
+  String get subscriptionChangesMayTakeMoment =>
+      '변경 사항이 반영되는 데 잠시 시간이 걸릴 수 있습니다.';
+
+  @override
+  String get subscriptionRestored => '구독이 복원되었습니다!';
+
+  @override
+  String get subscriptionAlreadyActive => '이미 활성 구독이 있습니다.';
+
+  @override
+  String get subscriptionActivated => '구독이 성공적으로 활성화되었습니다!';
+
+  @override
+  String get purchaseCancelled => '구매가 취소되었습니다.';
+
+  @override
+  String get paymentFailed => '결제에 실패했습니다.';
+
+  @override
+  String get couldNotOpenSubscriptionManagement => '구독 관리를 열 수 없습니다.';
+
+  @override
+  String manageSubscriptionInStore(String store) {
+    return '$store에서 구독을 관리하세요.';
+  }
+
+  @override
+  String get loadingFailedTryAgain => '로딩 실패 — 다시 시도';
+
+  @override
+  String get reloadPrices => '가격 다시 불러오기';
+
+  @override
+  String subscribeWithPrice(String price) {
+    return '구독하기 — $price';
+  }
+
+  @override
+  String get noAdsDescription =>
+      '광고 없음, 데이터 판매 없음 — 구독은 안전한 서버와 지속적인 개발에 사용됩니다.';
+
+  @override
+  String get detectingLocation => '위치를 감지하는 중...';
+
+  @override
+  String get currencyHelpText => '인도 카드는 INR, 해외 카드는 USD를 사용하세요.';
+
+  @override
+  String get selfHostContact => '셀프 호스팅을 원하시나요? contact@betterkeep.app으로 연락하세요';
+
+  @override
+  String get welcomeToProMessage => 'Better Keep Pro에 오신 것을 환영합니다!';
+
+  @override
+  String get loadingPrices => '가격 불러오는 중...';
+
+  @override
+  String get processingSubscription => '처리 중...';
+
+  @override
+  String get subscriptionAutoRenewTerms =>
+      '결제는 귀하의 계정에 청구됩니다. 현재 기간 종료 24시간 전에 자동 갱신을 해제하지 않으면 구독이 자동으로 갱신됩니다.';
+
+  @override
+  String savePercent(int percent) {
+    return '$percent% 절약';
+  }
+
+  @override
+  String get subscriptionCancelledSuccessfully => '구독이 성공적으로 취소되었습니다.';
+
+  @override
+  String get subscriptionResumedSuccessfully => '구독이 성공적으로 재개되었습니다.';
+
+  @override
+  String get failedToCancelSubscription => '구독 취소에 실패했습니다.';
+
+  @override
+  String get failedToResumeSubscription => '구독 재개에 실패했습니다.';
+
+  @override
+  String get featureTableHeader => '기능';
+
+  @override
+  String get unlimited => '무제한';
+
+  @override
+  String get paywallLocalNotes => '로컬 노트';
+
+  @override
+  String get lockedNotesFreeLimit => '최대 5개';
 
   @override
   String get signInWithAnyLinked => '연결된 계정으로 로그인';
@@ -2108,7 +2207,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcriptionDisabledWebPrivacy =>
-      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+      '개인 정보 보호를 위해 웹에서 음성 텍스트 변환이 비활성화되어 있습니다. 오디오는 기기에 남아 있습니다.';
 
   @override
   String get whisperModelRequired => '음성 인식 모델이 필요합니다';
@@ -2118,7 +2217,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '기기 내 음성-텍스트 변환을 위한 작은 AI 모델(~31MB)을 다운로드합니다. 오디오는 기기 밖으로 전송되지 않습니다.';
 
   @override
-  String get downloadModel => 'Download Model';
+  String get downloadModel => '모델 다운로드';
 
   @override
   String get useFallback => '기기 기본값 사용';

@@ -489,7 +489,7 @@ class Note extends BaseModel<Note> {
       }
       // Only set alarm if the reminder is not completed
       if (!completed) {
-        setAlarm();
+        await setAlarm();
       }
     }
 
@@ -1198,13 +1198,28 @@ class Note extends BaseModel<Note> {
       return;
     }
 
+    // Compute the alarm time, advancing past alarms to their next occurrence.
+    // This prevents alarms from firing immediately during post-login sync when
+    // a reminder time (e.g. 6 AM) has already passed for the current day.
+    DateTime alarmDateTime = reminder!.dateTime;
+    if (alarmDateTime.isBefore(DateTime.now())) {
+      if (reminder!.isRepeating) {
+        final next = reminder!.getNextOccurrence();
+        if (next == null) return;
+        alarmDateTime = next.dateTime;
+      } else {
+        // Non-repeating past alarm — nothing to schedule
+        return;
+      }
+    }
+
     final alarmId = await AlarmIdService.getAlarmId(id!);
 
     await Alarm.stop(alarmId);
     await Alarm.set(
       alarmSettings: AlarmSettings(
         id: alarmId,
-        dateTime: reminder!.dateTime,
+        dateTime: alarmDateTime,
         assetAudioPath: AppState.alarmSound,
         loopAudio: true,
         vibrate: true,

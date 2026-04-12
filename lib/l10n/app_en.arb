@@ -1220,6 +1220,12 @@
   "continueWithGoogle": "Continue with Google",
   "@continueWithGoogle": {"description": "Continue with Google button text"},
   
+  "continueWithApple": "Continue with Apple",
+  "@continueWithApple": {"description": "Continue with Apple button text"},
+  
+  "signInWithApple": "Sign in with Apple",
+  "@signInWithApple": {"description": "Sign in with Apple tooltip"},
+  
   "chooseSignInMethod": "Choose your preferred sign-in method",
   "@chooseSignInMethod": {"description": "Sign in method hint text"},
   
@@ -1542,6 +1548,105 @@
   
   "cancelSubscriptionConfirmation": "Are you sure you want to cancel your subscription?\n\nYour subscription will remain active until the end of the current billing period. After that, you will lose access to Pro features.",
   "@cancelSubscriptionConfirmation": {"description": "Cancel subscription confirmation message"},
+  
+  "subscriptionChangesMayTakeMoment": "If you made changes, they may take a moment to appear.",
+  "@subscriptionChangesMayTakeMoment": {"description": "Snackbar message shown after returning from platform subscription management"},
+  
+  "subscriptionRestored": "Your subscription has been restored!",
+  "@subscriptionRestored": {"description": "Snackbar message when subscription is restored"},
+  
+  "subscriptionAlreadyActive": "You already have an active subscription.",
+  "@subscriptionAlreadyActive": {"description": "Snackbar message when user already has active subscription"},
+  
+  "subscriptionActivated": "Subscription activated successfully!",
+  "@subscriptionActivated": {"description": "Snackbar message when subscription is activated"},
+  
+  "purchaseCancelled": "Purchase was cancelled.",
+  "@purchaseCancelled": {"description": "Snackbar message when purchase is cancelled by user"},
+  
+  "paymentFailed": "Payment failed.",
+  "@paymentFailed": {"description": "Snackbar message when payment fails"},
+  
+  "couldNotOpenSubscriptionManagement": "Could not open subscription management.",
+  "@couldNotOpenSubscriptionManagement": {"description": "Error when unable to open platform subscription management"},
+  
+  "manageSubscriptionInStore": "Manage your subscription in the {store}.",
+  "@manageSubscriptionInStore": {
+    "description": "Message shown when redirecting to store subscription management",
+    "placeholders": {
+      "store": {"type": "String"}
+    }
+  },
+  
+  "loadingFailedTryAgain": "Loading failed — Try again",
+  "@loadingFailedTryAgain": {"description": "Button label when price loading fails"},
+  
+  "reloadPrices": "Reload prices",
+  "@reloadPrices": {"description": "Button to reload subscription prices"},
+  
+  "subscribeWithPrice": "Subscribe — {price}",
+  "@subscribeWithPrice": {
+    "description": "Subscribe button label with price",
+    "placeholders": {
+      "price": {"type": "String"}
+    }
+  },
+  
+  "noAdsDescription": "No ads, no data selling — your subscription funds secure servers & ongoing development.",
+  "@noAdsDescription": {"description": "Trust message on paywall"},
+  
+  "detectingLocation": "Detecting your location...",
+  "@detectingLocation": {"description": "Loading message while detecting user location for currency"},
+  
+  "currencyHelpText": "Use INR for Indian cards, USD for international cards.",
+  "@currencyHelpText": {"description": "Help text for currency selector on paywall"},
+  
+  "selfHostContact": "Want to self-host? Contact us at contact@betterkeep.app",
+  "@selfHostContact": {"description": "Self-host contact info on paywall"},
+  
+  "welcomeToProMessage": "Welcome to Better Keep Pro!",
+  "@welcomeToProMessage": {"description": "Snackbar message shown when user successfully subscribes via subscription listener"},
+  
+  "loadingPrices": "Loading prices...",
+  "@loadingPrices": {"description": "Loading text shown while subscription prices are being fetched"},
+  
+  "processingSubscription": "Processing...",
+  "@processingSubscription": {"description": "Button label shown while a subscription purchase is in progress"},
+  
+  "subscriptionAutoRenewTerms": "Payment will be charged to your account. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.",
+  "@subscriptionAutoRenewTerms": {"description": "Legal auto-renew terms shown on the paywall"},
+  
+  "savePercent": "Save {percent}%",
+  "@savePercent": {
+    "description": "Badge on yearly plan button showing savings percentage",
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  
+  "subscriptionCancelledSuccessfully": "Subscription cancelled successfully.",
+  "@subscriptionCancelledSuccessfully": {"description": "Snackbar message after subscription is cancelled via Razorpay"},
+  
+  "subscriptionResumedSuccessfully": "Subscription resumed successfully.",
+  "@subscriptionResumedSuccessfully": {"description": "Snackbar message after a cancelled subscription is resumed"},
+  
+  "failedToCancelSubscription": "Failed to cancel subscription.",
+  "@failedToCancelSubscription": {"description": "Error message when subscription cancellation fails"},
+  
+  "failedToResumeSubscription": "Failed to resume subscription.",
+  "@failedToResumeSubscription": {"description": "Error message when subscription resumption fails"},
+  
+  "featureTableHeader": "Feature",
+  "@featureTableHeader": {"description": "Column header for the feature name column in the paywall comparison table"},
+  
+  "unlimited": "Unlimited",
+  "@unlimited": {"description": "Unlimited quantity label used in feature comparison table"},
+  
+  "paywallLocalNotes": "Local notes",
+  "@paywallLocalNotes": {"description": "Feature row label for local notes in the paywall comparison table"},
+  
+  "lockedNotesFreeLimit": "5 max",
+  "@lockedNotesFreeLimit": {"description": "Free tier limit for locked notes shown in paywall comparison table"},
   
   "signInWithAnyLinked": "Sign in with any linked account",
   "@signInWithAnyLinked": {"description": "Connected accounts subtitle"},

@@ -241,6 +241,24 @@ class AuthService {
 
     // Use provided prefs or load fresh
     final prefsInstance = prefs ?? await SharedPreferences.getInstance();
+
+    // iOS Keychain persists across app uninstalls/reinstalls, so Firebase Auth
+    // may still have a valid session even after a fresh install.
+    // SharedPreferences is cleared on uninstall, so we use it to detect a
+    // fresh install and sign out to clear the stale Keychain token.
+    if (!kIsWeb && Platform.isIOS) {
+      final hasLaunchedBefore =
+          prefsInstance.getBool('has_launched_before') ?? false;
+      if (!hasLaunchedBefore) {
+        await prefsInstance.setBool('has_launched_before', true);
+        if (_auth.currentUser != null) {
+          AppLogger.log(
+            '[AuthService] Fresh install detected on iOS — clearing stale Keychain session.',
+          );
+          await _auth.signOut();
+        }
+      }
+    }
     final email = prefsInstance.getString('user_email');
     final uid = prefsInstance.getString('user_uid');
 
@@ -281,38 +299,55 @@ class AuthService {
         await _validateAndHandleSession(currentUser);
       }
     } else if (uid != null && email != null) {
-      // We have cached user data but currentUser is null
-      // This could mean:
-      // 1. Firebase Auth SDK already invalidated the session (e.g., deleted user)
-      // 2. Hot reload on desktop where Firebase Auth takes time to reinitialize
-      //
-      // On Windows/Linux desktop, give Firebase Auth a moment to reinitialize
-      // before marking the session as invalid
-      if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
-        // Wait briefly for Firebase Auth to potentially reinitialize
-        await Future.delayed(const Duration(milliseconds: 500));
-        final userAfterDelay = _auth.currentUser;
-        if (userAfterDelay != null) {
-          // Firebase Auth reinitialized successfully
+      // We have cached user data but currentUser is null.
+      // On all native platforms Firebase Auth may restore the session
+      // asynchronously (e.g. from iOS Keychain / Android encrypted storage)
+      // even after Firebase.initializeApp() resolves. Wait for the first
+      // authStateChanges() emission before deciding the session is invalid.
+      if (!kIsWeb) {
+        final completer = Completer<User?>();
+        late StreamSubscription<User?> tempSub;
+        tempSub = _auth.authStateChanges().listen((user) {
+          if (!completer.isCompleted) {
+            completer.complete(user);
+            tempSub.cancel();
+          }
+        });
+
+        // Give Firebase Auth up to 2 seconds to restore the session.
+        final restoredUser = await completer.future.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            tempSub.cancel();
+            return null;
+          },
+        );
+
+        if (restoredUser != null) {
+          // Firebase Auth session was restored successfully.
           AppLogger.log(
-            "Firebase Auth reinitialized after delay, user: ${userAfterDelay.uid}",
+            "Firebase Auth session restored for user: ${restoredUser.uid}",
           );
-          _startTokenRevocationListener(userAfterDelay.uid);
+          _startTokenRevocationListener(restoredUser.uid);
           try {
-            final idTokenResult = await userAfterDelay.getIdTokenResult(false);
+            final idTokenResult = await restoredUser.getIdTokenResult(false);
             _cachedTokenAuthTime = idTokenResult.authTime;
           } catch (e) {
-            AppLogger.error("Error getting token after delay: $e");
+            AppLogger.error("Error getting token after session restore: $e");
           }
+          _validateSessionInBackground(restoredUser);
         } else {
-          // Still no user after delay - session is truly invalid
+          // No user after waiting — session is truly invalid.
           AppLogger.log(
-            "No currentUser after delay, marking session as invalid",
+            "No currentUser after waiting, marking session as invalid",
+          );
+          AppLogger.log(
+            "Session invalid: cached user data exists but Firebase currentUser is null",
           );
           sessionInvalid.value = true;
         }
       } else {
-        // On other platforms, mark session as invalid immediately
+        // On web, mark session as invalid immediately (no async restore).
         AppLogger.log(
           "No currentUser but have cached profile (uid: $uid), marking session as invalid",
         );
@@ -1303,17 +1338,14 @@ class AuthService {
       // Initialize E2EE after successful login
       onStatusChange?.call("Initializing encryption...");
       await E2EEService.instance.initialize();
+      // Guard: user may have cancelled/signed-out during the long async ops above
+      if (currentUser == null) return;
       // Initialize device approval notifications
-      DeviceApprovalNotificationService().init();
+      await DeviceApprovalNotificationService().init();
       // Initialize sync services after E2EE is ready
       // This prevents Firestore connections before E2EE initialization completes
       NoteSyncService().init();
       LabelSyncService().init();
-      // Start listening for token revocation
-      _startTokenRevocationListener(user.uid);
-      // Cache the token auth time for revocation detection
-      final idTokenResult = await user.getIdTokenResult();
-      _cachedTokenAuthTime = idTokenResult.authTime;
       // Clear sign-in progress flag on success
       final canUseE2EEStorage =
           !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
@@ -1323,6 +1355,16 @@ class AuthService {
     } catch (e) {
       await signOut();
       rethrow;
+    }
+    // Start token revocation listener and cache auth time outside the main
+    // try/catch so a failure here does NOT trigger signOut() while sync is
+    // already running in the background.
+    _startTokenRevocationListener(user.uid);
+    try {
+      final idTokenResult = await user.getIdTokenResult();
+      _cachedTokenAuthTime = idTokenResult.authTime;
+    } catch (e) {
+      AppLogger.error('Error caching token auth time after sign in', e);
     }
   }
 

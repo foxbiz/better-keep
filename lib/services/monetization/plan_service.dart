@@ -516,5 +516,9 @@ class PlanService {
     _authStateSubscription = null;
     _exactExpiryTimer?.cancel();
     _exactExpiryTimer = null;
+    _subscriptionStatus.value = SubscriptionStatus.free;
+    _entitlements.value = Entitlements.free;
+    _lastBackendValidation = null;
+    _initialized = false;
   }
 }

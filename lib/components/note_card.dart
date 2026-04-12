@@ -122,10 +122,7 @@ class _NoteCardState extends State<NoteCard>
         }
       } else {
         // Embeds (images, etc.) - include as-is, don't count toward char limit
-        newOps.add({
-          'insert': data,
-          if (attributes != null) 'attributes': attributes,
-        });
+        newOps.add({'insert': data, 'attributes': ?attributes});
       }
     }
 

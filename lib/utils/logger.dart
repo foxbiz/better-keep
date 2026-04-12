@@ -43,7 +43,7 @@ class AppLogger {
     final prefix = isError ? '!' : '';
     final logMessage = "$prefix[$timestamp] $message";
 
-    if (kDebugMode) {
+    if (kDebugMode || kProfileMode) {
       debugPrint(logMessage);
     }
 

@@ -1140,6 +1140,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get continueWithGoogle => 'Googleで続行';
 
   @override
+  String get continueWithApple => 'Appleで続行';
+
+  @override
+  String get signInWithApple => 'Appleでサインイン';
+
+  @override
   String get chooseSignInMethod => 'ご希望のサインイン方法を選択してください';
 
   @override
@@ -1453,6 +1459,100 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get cancelSubscriptionConfirmation =>
       'サブスクリプションをキャンセルしてもよろしいですか？\n\nサブスクリプションは現在の請求期間の終了まで有効です。その後、Pro機能にアクセスできなくなります。';
+
+  @override
+  String get subscriptionChangesMayTakeMoment =>
+      '変更を行った場合、反映されるまでしばらくかかることがあります。';
+
+  @override
+  String get subscriptionRestored => 'サブスクリプションが復元されました！';
+
+  @override
+  String get subscriptionAlreadyActive => 'すでにアクティブなサブスクリプションがあります。';
+
+  @override
+  String get subscriptionActivated => 'サブスクリプションが正常に有効化されました！';
+
+  @override
+  String get purchaseCancelled => '購入がキャンセルされました。';
+
+  @override
+  String get paymentFailed => '支払いに失敗しました。';
+
+  @override
+  String get couldNotOpenSubscriptionManagement => 'サブスクリプション管理を開けませんでした。';
+
+  @override
+  String manageSubscriptionInStore(String store) {
+    return '$storeでサブスクリプションを管理してください。';
+  }
+
+  @override
+  String get loadingFailedTryAgain => '読み込みに失敗しました — もう一度お試しください';
+
+  @override
+  String get reloadPrices => '価格を再読み込み';
+
+  @override
+  String subscribeWithPrice(String price) {
+    return '購読する — $price';
+  }
+
+  @override
+  String get noAdsDescription =>
+      '広告なし、データ販売なし — サブスクリプションは安全なサーバーと継続的な開発に充てられます。';
+
+  @override
+  String get detectingLocation => '位置情報を検出中...';
+
+  @override
+  String get currencyHelpText => 'インドのカードにはINR、海外のカードにはUSDをご利用ください。';
+
+  @override
+  String get selfHostContact =>
+      'セルフホストをご希望ですか？ contact@betterkeep.app までご連絡ください';
+
+  @override
+  String get welcomeToProMessage => 'Better Keep Proへようこそ！';
+
+  @override
+  String get loadingPrices => '価格を読み込み中...';
+
+  @override
+  String get processingSubscription => '処理中...';
+
+  @override
+  String get subscriptionAutoRenewTerms =>
+      'お客様のアカウントに料金が請求されます。現在の期間終了の24時間以上前に自動更新をオフにしない限り、サブスクリプションは自動的に更新されます。';
+
+  @override
+  String savePercent(int percent) {
+    return '$percent%節約';
+  }
+
+  @override
+  String get subscriptionCancelledSuccessfully => 'サブスクリプションが正常にキャンセルされました。';
+
+  @override
+  String get subscriptionResumedSuccessfully => 'サブスクリプションが正常に再開されました。';
+
+  @override
+  String get failedToCancelSubscription => 'サブスクリプションのキャンセルに失敗しました。';
+
+  @override
+  String get failedToResumeSubscription => 'サブスクリプションの再開に失敗しました。';
+
+  @override
+  String get featureTableHeader => '機能';
+
+  @override
+  String get unlimited => '無制限';
+
+  @override
+  String get paywallLocalNotes => 'ローカルメモ';
+
+  @override
+  String get lockedNotesFreeLimit => '最大5件';
 
   @override
   String get signInWithAnyLinked => 'リンクされたアカウントでサインイン';
@@ -2110,7 +2210,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcriptionDisabledWebPrivacy =>
-      'Voice transcription is disabled on web for privacy. Your audio stays on your device.';
+      'プライバシー保護のため、ウェブでの音声文字起こしは無効です。音声はデバイス内に保存されます。';
 
   @override
   String get whisperModelRequired => '音声認識モデルが必要です';
@@ -2120,7 +2220,7 @@ class AppLocalizationsJa extends AppLocalizations {
       'デバイス上で音声をテキストに変換する小さなAIモデル（約31 MB）をダウンロードします。音声データはデバイス外に送信されません。';
 
   @override
-  String get downloadModel => 'Download Model';
+  String get downloadModel => 'モデルをダウンロード';
 
   @override
   String get useFallback => 'デバイスのデフォルトを使用';

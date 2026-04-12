@@ -1154,6 +1154,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get continueWithGoogle => 'Google ile Devam Et';
 
   @override
+  String get continueWithApple => 'Apple ile Devam Et';
+
+  @override
+  String get signInWithApple => 'Apple ile Giriş Yap';
+
+  @override
   String get chooseSignInMethod => 'Tercih ettiğiniz giriş yöntemini seçin';
 
   @override
@@ -1481,6 +1487,104 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get cancelSubscriptionConfirmation =>
       'Aboneliğinizi iptal etmek istediğinizden emin misiniz?\n\nAboneliğiniz, mevcut fatura döneminin sonuna kadar aktif kalacaktır. Bundan sonra Pro özelliklerine erişiminizi kaybedeceksiniz.';
+
+  @override
+  String get subscriptionChangesMayTakeMoment =>
+      'Değişiklik yaptıysanız, görünmesi biraz zaman alabilir.';
+
+  @override
+  String get subscriptionRestored => 'Aboneliğiniz geri yüklendi!';
+
+  @override
+  String get subscriptionAlreadyActive => 'Zaten aktif bir aboneliğiniz var.';
+
+  @override
+  String get subscriptionActivated => 'Abonelik başarıyla etkinleştirildi!';
+
+  @override
+  String get purchaseCancelled => 'Satın alma iptal edildi.';
+
+  @override
+  String get paymentFailed => 'Ödeme başarısız oldu.';
+
+  @override
+  String get couldNotOpenSubscriptionManagement =>
+      'Abonelik yönetimi açılamadı.';
+
+  @override
+  String manageSubscriptionInStore(String store) {
+    return '$store\'da aboneliğinizi yönetin.';
+  }
+
+  @override
+  String get loadingFailedTryAgain => 'Yükleme başarısız — Tekrar deneyin';
+
+  @override
+  String get reloadPrices => 'Fiyatları yeniden yükle';
+
+  @override
+  String subscribeWithPrice(String price) {
+    return 'Abone ol — $price';
+  }
+
+  @override
+  String get noAdsDescription =>
+      'Reklam yok, veri satışı yok — aboneliğiniz güvenli sunucuları ve sürekli geliştirmeyi finanse eder.';
+
+  @override
+  String get detectingLocation => 'Konumunuz tespit ediliyor...';
+
+  @override
+  String get currencyHelpText =>
+      'Hint kartları için INR, uluslararası kartlar için USD kullanın.';
+
+  @override
+  String get selfHostContact =>
+      'Kendi sunucunuzu mu kurmak istiyorsunuz? contact@betterkeep.app adresinden bize ulaşın';
+
+  @override
+  String get welcomeToProMessage => 'Better Keep Pro\'ya Hoş Geldiniz!';
+
+  @override
+  String get loadingPrices => 'Fiyatlar yükleniyor...';
+
+  @override
+  String get processingSubscription => 'İşleniyor...';
+
+  @override
+  String get subscriptionAutoRenewTerms =>
+      'Ödeme hesabınıza yansıtılacaktır. Mevcut dönem sona ermeden en az 24 saat önce otomatik yenileme kapatılmadığı sürece abonelik otomatik olarak yenilenir.';
+
+  @override
+  String savePercent(int percent) {
+    return '%$percent tasarruf edin';
+  }
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonelik başarıyla iptal edildi.';
+
+  @override
+  String get subscriptionResumedSuccessfully =>
+      'Abonelik başarıyla devam ettirildi.';
+
+  @override
+  String get failedToCancelSubscription => 'Abonelik iptal edilemedi.';
+
+  @override
+  String get failedToResumeSubscription => 'Abonelik devam ettirilemedi.';
+
+  @override
+  String get featureTableHeader => 'Özellik';
+
+  @override
+  String get unlimited => 'Sınırsız';
+
+  @override
+  String get paywallLocalNotes => 'Yerel notlar';
+
+  @override
+  String get lockedNotesFreeLimit => 'Maks. 5';
 
   @override
   String get signInWithAnyLinked => 'Bağlı herhangi bir hesapla giriş yapın';

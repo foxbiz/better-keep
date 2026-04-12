@@ -862,6 +862,8 @@ class _NoteEditorState extends State<NoteEditor>
                           maxLines: null,
                           keyboardType: TextInputType.text,
                           textInputAction: TextInputAction.next,
+                          onSubmitted: (_) => _handleTitleEnterPressed(),
+                          onEditingComplete: _handleTitleEnterPressed,
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w600,

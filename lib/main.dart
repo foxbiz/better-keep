@@ -102,6 +102,28 @@ void main() async {
   }
 
   AppLogger.log('[Main] Starting runApp');
+
+  // Catch Flutter framework errors (e.g. RenderFlex overflows, widget errors)
+  // and route them to the logger instead of crashing in release builds.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    AppLogger.error(
+      'Flutter framework error',
+      details.exception,
+      details.stack,
+    );
+    // In debug mode still show the red screen / console output as normal
+    if (kDebugMode) {
+      FlutterError.presentError(details);
+    }
+  };
+
+  // Catch uncaught async errors on the platform dispatcher (Dart errors that
+  // escape the Flutter framework, e.g. unhandled Future exceptions).
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.error('Unhandled platform error', error, stack);
+    return true; // mark as handled — prevents app crash
+  };
+
   runApp(BetterKeep());
 }
 
@@ -186,9 +208,9 @@ class _BetterKeepState extends State<BetterKeep> {
       // Initialize E2EE for already logged-in users, then start sync
       if (AuthService.currentUser != null) {
         AllDayReminderNotificationService().init();
+        await _initializeSignedInServices();
         NoteSyncService().init();
         LabelSyncService().init();
-        unawaited(_initializeSignedInServices());
       } else {
         AllDayReminderNotificationService().init();
       }

@@ -1,8 +1,28 @@
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
+import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+/// Map a [PurchaseResult] message to a localized string.
+/// Falls back to the raw service message if no match is found.
+String _localizedPurchaseMessage(BuildContext context, PurchaseResult result) {
+  final msg = result.message;
+  if (msg.contains('restored')) return context.l10n.subscriptionRestored;
+  if (msg.contains('already have'))
+    return context.l10n.subscriptionAlreadyActive;
+  if (msg.contains('activated')) return context.l10n.subscriptionActivated;
+  if (msg.contains('cancelled') || msg.contains('canceled')) {
+    return context.l10n.purchaseCancelled;
+  }
+  if (msg.contains('Payment failed') || msg.contains('payment failed')) {
+    return context.l10n.paymentFailed;
+  }
+  if (result.isFailed) return context.l10n.somethingWentWrongTryAgain;
+  return msg;
+}
 
 /// Shows the paywall as a full-screen page.
 ///
@@ -127,7 +147,7 @@ class PaywallSheet extends StatelessWidget {
               const _FeatureComparisonCard(),
               const SizedBox(height: 8),
               Text(
-                'No ads, no data selling — your subscription funds secure servers & ongoing development.',
+                context.l10n.noAdsDescription,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -179,7 +199,6 @@ class PaywallSheet extends StatelessWidget {
   }
 }
 
-
 class _FeatureComparisonCard extends StatelessWidget {
   const _FeatureComparisonCard();
 
@@ -202,7 +221,7 @@ class _FeatureComparisonCard extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    'Feature',
+                    context.l10n.featureTableHeader,
                     style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -210,14 +229,14 @@ class _FeatureComparisonCard extends StatelessWidget {
                 ),
                 Expanded(
                   child: Text(
-                    'Free',
+                    context.l10n.free,
                     style: theme.textTheme.labelLarge,
                     textAlign: TextAlign.center,
                   ),
                 ),
                 Expanded(
                   child: Text(
-                    'Pro',
+                    context.l10n.pro,
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w600,
@@ -232,12 +251,20 @@ class _FeatureComparisonCard extends StatelessWidget {
 
           // Features
           _FeatureRow(
-            feature: 'Local notes',
-            free: 'Unlimited',
-            pro: 'Unlimited',
+            feature: context.l10n.paywallLocalNotes,
+            free: context.l10n.unlimited,
+            pro: context.l10n.unlimited,
           ),
-          _FeatureRow(feature: 'Locked notes', free: '5 max', pro: 'Unlimited'),
-          _FeatureRow(feature: 'Real-time cloud sync', free: false, pro: true),
+          _FeatureRow(
+            feature: context.l10n.lockedNotes,
+            free: context.l10n.lockedNotesFreeLimit,
+            pro: context.l10n.unlimited,
+          ),
+          _FeatureRow(
+            feature: context.l10n.realtimeCloudSync,
+            free: false,
+            pro: true,
+          ),
         ],
       ),
     );
@@ -385,7 +412,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
             child: FilledButton.icon(
               onPressed: () => _handleSubscribe(context),
               icon: const Icon(Icons.rocket_launch),
-              label: const Text('Loading failed - Try again'),
+              label: Text(context.l10n.loadingFailedTryAgain),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
@@ -394,7 +421,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
           const SizedBox(height: 8),
           TextButton(
             onPressed: _loadProducts,
-            child: const Text('Reload prices'),
+            child: Text(context.l10n.reloadPrices),
           ),
         ],
       );
@@ -418,7 +445,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
             children: [
               Expanded(
                 child: _PeriodButton(
-                  label: 'Monthly',
+                  label: context.l10n.monthly,
                   sublabel: _monthlyPrice!,
                   selected: !_yearlySelected,
                   onTap: () => setState(() => _yearlySelected = false),
@@ -426,9 +453,11 @@ class _PricingOptionsState extends State<_PricingOptions> {
               ),
               Expanded(
                 child: _PeriodButton(
-                  label: 'Yearly',
+                  label: context.l10n.yearly,
                   sublabel: _yearlyPrice!,
-                  badge: _savePercentage > 0 ? 'Save $_savePercentage%' : null,
+                  badge: _savePercentage > 0
+                      ? context.l10n.savePercent(_savePercentage)
+                      : null,
                   selected: _yearlySelected,
                   onTap: () => setState(() => _yearlySelected = true),
                 ),
@@ -445,9 +474,9 @@ class _PricingOptionsState extends State<_PricingOptions> {
             onPressed: () => _handleSubscribe(context),
             icon: const Icon(Icons.rocket_launch),
             label: Text(
-              _yearlySelected
-                  ? 'Subscribe — $_yearlyPrice'
-                  : 'Subscribe — $_monthlyPrice',
+              context.l10n.subscribeWithPrice(
+                _yearlySelected ? _yearlyPrice! : _monthlyPrice!,
+              ),
             ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -478,7 +507,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Detecting your location...',
+                    context.l10n.detectingLocation,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -522,7 +551,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Use INR for Indian cards, USD for international cards',
+                  context.l10n.currencyHelpText,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant.withValues(
                       alpha: 0.7,
@@ -551,9 +580,22 @@ class _PricingOptionsState extends State<_PricingOptions> {
       'PaywallSheet: After setThemeColor, themeColorHex = ${RazorpayService.instance.themeColorHex}',
     );
 
-    final result = await SubscriptionService.instance.purchaseSubscription(
-      yearly: _yearlySelected,
-    );
+    final PurchaseResult result;
+    try {
+      result = await SubscriptionService.instance.purchaseSubscription(
+        yearly: _yearlySelected,
+      );
+    } catch (e) {
+      AppLogger.error('PaywallSheet: Unexpected purchase error', e);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.somethingWentWrongTryAgain),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     if (!context.mounted) return;
 
@@ -569,18 +611,21 @@ class _PricingOptionsState extends State<_PricingOptions> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.message),
+            content: Text(_localizedPurchaseMessage(context, result)),
             backgroundColor: Colors.green,
           ),
         );
       }
     } else if (result.isPending) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_localizedPurchaseMessage(context, result))),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(_localizedPurchaseMessage(context, result)),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -677,7 +722,7 @@ class _SelfHostContactInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      'Want to self-host? Contact us at contact@betterkeep.app',
+      context.l10n.selfHostContact,
       style: theme.textTheme.bodySmall?.copyWith(
         color: theme.colorScheme.outline,
       ),
@@ -805,8 +850,8 @@ class _PaywallPageState extends State<PaywallPage> {
         !status.isTrialSubscription) {
       _hasPopped = true;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Welcome to Better Keep Pro!'),
+        SnackBar(
+          content: Text(context.l10n.welcomeToProMessage),
           backgroundColor: Colors.green,
         ),
       );
@@ -847,7 +892,7 @@ class _PaywallPageState extends State<PaywallPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Detecting your location...',
+                    context.l10n.detectingLocation,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -892,7 +937,7 @@ class _PaywallPageState extends State<PaywallPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Use INR for Indian cards, USD for international cards',
+                  context.l10n.currencyHelpText,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant.withValues(
                       alpha: 0.7,
@@ -915,7 +960,7 @@ class _PaywallPageState extends State<PaywallPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Upgrade to Pro'),
+        title: Text(context.l10n.upgradeToPro),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context, false),
@@ -965,7 +1010,7 @@ class _PaywallPageState extends State<PaywallPage> {
                     const _FeatureComparisonCard(),
                     const SizedBox(height: 8),
                     Text(
-                      'No ads, no data selling — your subscription funds secure servers & ongoing development.',
+                      context.l10n.noAdsDescription,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -980,7 +1025,7 @@ class _PaywallPageState extends State<PaywallPage> {
                       const Center(child: CircularProgressIndicator()),
                       const SizedBox(height: 16),
                       Text(
-                        'Loading prices...',
+                        context.l10n.loadingPrices,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.outline,
                         ),
@@ -1006,7 +1051,7 @@ class _PaywallPageState extends State<PaywallPage> {
                           children: [
                             Expanded(
                               child: _PeriodButton(
-                                label: 'Monthly',
+                                label: context.l10n.monthly,
                                 sublabel: _monthlyPrice!,
                                 selected: !_yearlySelected,
                                 onTap: () =>
@@ -1015,10 +1060,10 @@ class _PaywallPageState extends State<PaywallPage> {
                             ),
                             Expanded(
                               child: _PeriodButton(
-                                label: 'Yearly',
+                                label: context.l10n.yearly,
                                 sublabel: _yearlyPrice!,
                                 badge: _savePercentage > 0
-                                    ? 'Save $_savePercentage%'
+                                    ? context.l10n.savePercent(_savePercentage)
                                     : null,
                                 selected: _yearlySelected,
                                 onTap: () =>
@@ -1047,10 +1092,12 @@ class _PaywallPageState extends State<PaywallPage> {
                               : const Icon(Icons.rocket_launch),
                           label: Text(
                             _isLoading
-                                ? 'Processing...'
-                                : _yearlySelected
-                                ? 'Subscribe — $_yearlyPrice'
-                                : 'Subscribe — $_monthlyPrice',
+                                ? context.l10n.processingSubscription
+                                : context.l10n.subscribeWithPrice(
+                                    _yearlySelected
+                                        ? _yearlyPrice!
+                                        : _monthlyPrice!,
+                                  ),
                             style: const TextStyle(fontSize: 16),
                           ),
                         ),
@@ -1058,7 +1105,7 @@ class _PaywallPageState extends State<PaywallPage> {
                     ] else ...[
                       // Products failed to load
                       Text(
-                        'Unable to load prices. Please check your internet connection.',
+                        context.l10n.somethingWentWrongCheckConnection,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.error,
                         ),
@@ -1068,7 +1115,7 @@ class _PaywallPageState extends State<PaywallPage> {
                       TextButton.icon(
                         onPressed: _loadProducts,
                         icon: const Icon(Icons.refresh),
-                        label: const Text('Reload prices'),
+                        label: Text(context.l10n.reloadPrices),
                       ),
                     ],
                     const SizedBox(height: 24),
@@ -1079,9 +1126,7 @@ class _PaywallPageState extends State<PaywallPage> {
 
                     // Terms
                     Text(
-                      'Payment will be charged to your account. Subscription automatically '
-                      'renews unless auto-renew is turned off at least 24 hours before '
-                      'the end of the current period.',
+                      context.l10n.subscriptionAutoRenewTerms,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.outline,
                       ),
@@ -1130,24 +1175,43 @@ class _PaywallPageState extends State<PaywallPage> {
       'PaywallPage: After setThemeColor, themeColorHex = ${RazorpayService.instance.themeColorHex}',
     );
 
-    final result = await SubscriptionService.instance.purchaseSubscription(
-      yearly: _yearlySelected,
-    );
+    final PurchaseResult result;
+    try {
+      result = await SubscriptionService.instance.purchaseSubscription(
+        yearly: _yearlySelected,
+      );
+    } catch (e) {
+      AppLogger.error('PaywallPage: Unexpected purchase error', e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.somethingWentWrongTryAgain),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
 
     if (result.isSuccess) {
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text(_localizedPurchaseMessage(context, result)),
+          backgroundColor: Colors.green,
+        ),
       );
     } else if (result.isPending) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_localizedPurchaseMessage(context, result))),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(_localizedPurchaseMessage(context, result)),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }

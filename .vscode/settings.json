@@ -44,5 +44,6 @@
 		"quickFix.biome": "explicit",
 		"source.organizeImports.biome": "explicit"
 	},
-	"cmake.sourceDirectory": "/Users/ajitkumar/Documents/Projects/better-keep/linux"
+	"cmake.sourceDirectory": "/Users/ajitkumar/Documents/Projects/better-keep/linux",
+	"cmake.ignoreCMakeListsMissing": true
 }

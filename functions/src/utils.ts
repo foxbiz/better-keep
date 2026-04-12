@@ -2,11 +2,12 @@ import * as crypto from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { google } from "googleapis";
+import * as jose from "jose";
 import * as nodemailer from "nodemailer";
 import {
 	ANDROID_PACKAGE_NAME,
+	IOS_BUNDLE_ID,
 	IOS_PRODUCT_IDS,
-	REVIEW_ACCOUNT_EMAIL,
 	SUBSCRIPTION_PLANS,
 	appStoreSharedSecret,
 	auth,
@@ -15,6 +16,7 @@ import {
 	googlePlayCredentials,
 	isEmulator,
 } from "./config";
+import type { AppStoreJWSTransactionPayload } from "./types";
 
 /**
  * Set custom claims on user's Firebase Auth token for subscription status.
@@ -270,37 +272,6 @@ export async function verifyGooglePlayPurchase(
 		}
 	}
 
-	// Check if this subscription is already linked to another account
-	const existingSubscription = await db
-		.collection("subscriptions")
-		.where("purchaseToken", "==", purchaseToken)
-		.limit(1)
-		.get();
-
-	let welcomeEmailAlreadySent = false;
-	if (!existingSubscription.empty) {
-		const existingDoc = existingSubscription.docs[0];
-		const existingData = existingDoc.data();
-		welcomeEmailAlreadySent = existingData.welcomeEmailSent === true;
-
-		if (existingData.userId !== userId) {
-			// Allow review account to bypass duplicate check
-			const userRecord = await auth.getUser(userId);
-			if (userRecord.email !== REVIEW_ACCOUNT_EMAIL) {
-				console.warn(
-					`Subscription already linked to user ${existingData.userId}, ` +
-						`attempted by ${userId}`,
-				);
-				throw new HttpsError(
-					"already-exists",
-					"This subscription is already linked to another account. " +
-						"Please contact support at support@betterkeep.app if you believe this is an error.",
-				);
-			}
-			console.log(`Bypassing duplicate check for review account ${userId}`);
-		}
-	}
-
 	// Calculate expiry date
 	const expiresAt = expiryTimeMillis
 		? Timestamp.fromMillis(expiryTimeMillis)
@@ -313,31 +284,73 @@ export async function verifyGooglePlayPurchase(
 						1000,
 			);
 
-	// Store subscription in subscriptions collection (for global lookup)
-	await db
-		.collection("subscriptions")
-		.doc(purchaseToken)
-		.set(
-			{
-				userId,
-				productId,
-				purchaseToken,
-				basePlanId,
-				source: "play_store",
-				subscriptionState,
-				expiresAt,
-				linkedToken: subscription.linkedPurchaseToken || null,
-				orderId: subscription.latestOrderId || null,
-				startTime: subscription.startTime
-					? Timestamp.fromDate(new Date(subscription.startTime))
-					: null,
-				// Set welcomeEmailSent only on first-time creation to prevent repeat welcome emails
-				...(!welcomeEmailAlreadySent ? { welcomeEmailSent: true } : {}),
-				createdAt: FieldValue.serverTimestamp(),
-				updatedAt: FieldValue.serverTimestamp(),
-			},
-			{ merge: true },
+	// Atomically read the subscription doc and write the new owner inside a
+	// Firestore transaction to prevent two concurrent verifications from
+	// racing to claim the same subscription.
+	const subscriptionRef = db.collection("subscriptions").doc(purchaseToken);
+	const { oldUserId, welcomeEmailAlreadySent } = await db.runTransaction(
+		async (txn) => {
+			const snap = await txn.get(subscriptionRef);
+			const data = snap.exists ? snap.data() : undefined;
+			const weSent = data?.welcomeEmailSent === true;
+			let prevOwner: string | null = null;
+
+			if (snap.exists && data?.userId && data.userId !== userId) {
+				prevOwner = data.userId as string;
+			}
+
+			txn.set(
+				subscriptionRef,
+				{
+					userId,
+					productId,
+					purchaseToken,
+					basePlanId,
+					source: "play_store",
+					subscriptionState,
+					expiresAt,
+					linkedToken: subscription.linkedPurchaseToken || null,
+					orderId: subscription.latestOrderId || null,
+					startTime: subscription.startTime
+						? Timestamp.fromDate(new Date(subscription.startTime))
+						: null,
+					...(!weSent ? { welcomeEmailSent: true } : {}),
+					...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+					updatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
+			);
+
+			return {
+				oldUserId: prevOwner,
+				welcomeEmailAlreadySent: weSent,
+				isNewDoc: !snap.exists,
+			};
+		},
+	);
+
+	// Transfer: clean up old user outside the transaction (Auth calls are not transactional)
+	if (oldUserId) {
+		console.log(
+			`Transferring subscription from user ${oldUserId} to ${userId}`,
 		);
+		try {
+			await db
+				.collection("users")
+				.doc(oldUserId)
+				.collection("subscription")
+				.doc("status")
+				.delete();
+			await setSubscriptionClaims(oldUserId, "free", null);
+			console.log(`Cleared subscription and claims for old user ${oldUserId}`);
+		} catch (transferError) {
+			console.error(
+				`Error clearing old user ${oldUserId} subscription during transfer:`,
+				transferError,
+			);
+			// Continue — the new user should still get the subscription
+		}
+	}
 
 	// Update user's subscription status
 	await db
@@ -533,8 +546,291 @@ export async function razorpayRequest(
 	return response.json();
 }
 
+// Apple Root CA - G3 (ECC, valid through 2039-04-30)
+// Downloaded from https://www.apple.com/certificateauthority/AppleRootCA-G3.cer
+const APPLE_ROOT_CA_G3_PEM = `-----BEGIN CERTIFICATE-----
+MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwS
+QXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9u
+IEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcN
+MTQwNDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBS
+b290IENBIC0gRzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9y
+aXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49
+AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtf
+TjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517
+IDvYuVTZXpmkOlEKMaNCMEAwHQYDVR0OBBYEFLuw3qFYM4iapIqZ3r6966/ayySr
+MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gA
+MGUCMQCD6cHEFl4aXTQY2e3v9GwOAEZLuN+yRhHFD/3meoyhpmvOwgPUnPWTxnS4
+at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2QfyFMm+YhidDkLF1vLUagM
+6BgD56KyKA==
+-----END CERTIFICATE-----`;
+
 /**
- * Verify an App Store subscription purchase using the receipt validation API.
+ * Check whether a string looks like a JWS compact serialization (3 dot-separated base64url segments).
+ */
+function isJWSToken(payload: string): boolean {
+	const parts = payload.split(".");
+	if (parts.length !== 3) return false;
+	// Each segment must be non-empty and contain only base64url characters
+	const b64urlRegex = /^[A-Za-z0-9_-]+$/;
+	return parts.every((p) => p.length > 0 && b64urlRegex.test(p));
+}
+
+/**
+ * Verify and decode a StoreKit 2 JWS signed transaction from the App Store.
+ *
+ * 1. Decode the JWS header to extract the x5c certificate chain.
+ * 2. Validate the chain: leaf → intermediate → Apple Root CA G3.
+ * 3. Verify the JWS signature using the leaf certificate's public key.
+ * 4. Return the decoded transaction payload.
+ */
+async function verifyAndDecodeAppStoreJWS(
+	jwsToken: string,
+): Promise<AppStoreJWSTransactionPayload> {
+	// 1. Decode the protected header to get the x5c chain
+	const protectedHeader = jose.decodeProtectedHeader(jwsToken);
+	const x5c = protectedHeader.x5c;
+	if (!x5c || x5c.length < 2) {
+		throw new HttpsError(
+			"invalid-argument",
+			"JWS header missing x5c certificate chain",
+		);
+	}
+
+	// 2. Build X509 certificates from the chain
+	const leafCertPem = `-----BEGIN CERTIFICATE-----\n${x5c[0]}\n-----END CERTIFICATE-----`;
+
+	// Validate chain: each certificate should be issued by the next one
+	for (let i = 0; i < x5c.length - 1; i++) {
+		const certPem = `-----BEGIN CERTIFICATE-----\n${x5c[i]}\n-----END CERTIFICATE-----`;
+		const issuerPem = `-----BEGIN CERTIFICATE-----\n${x5c[i + 1]}\n-----END CERTIFICATE-----`;
+		const cert = new crypto.X509Certificate(certPem);
+		const issuer = new crypto.X509Certificate(issuerPem);
+		if (!cert.checkIssued(issuer)) {
+			throw new HttpsError(
+				"invalid-argument",
+				`JWS certificate chain broken at index ${i}`,
+			);
+		}
+	}
+
+	// Validate the root of the chain against the embedded Apple Root CA G3
+	const lastInChainPem = `-----BEGIN CERTIFICATE-----\n${x5c[x5c.length - 1]}\n-----END CERTIFICATE-----`;
+	const lastInChain = new crypto.X509Certificate(lastInChainPem);
+	const appleRootCert = new crypto.X509Certificate(APPLE_ROOT_CA_G3_PEM);
+
+	// The last cert in x5c should either BE the Apple Root CA or be issued by it
+	const lastFingerprint = lastInChain.fingerprint256;
+	const rootFingerprint = appleRootCert.fingerprint256;
+	if (lastFingerprint === rootFingerprint) {
+		// x5c includes the root itself — valid
+	} else if (lastInChain.checkIssued(appleRootCert)) {
+		// x5c ends at an intermediate signed by the root — valid
+	} else {
+		throw new HttpsError(
+			"invalid-argument",
+			"JWS certificate chain does not anchor to Apple Root CA G3",
+		);
+	}
+
+	// 3. Validate algorithm and import the leaf certificate's public key
+	if (protectedHeader.alg !== "ES256") {
+		throw new HttpsError(
+			"invalid-argument",
+			`Unexpected JWS algorithm: ${protectedHeader.alg}`,
+		);
+	}
+	const publicKey = await jose.importX509(leafCertPem, "ES256");
+	const { payload } = await jose.compactVerify(jwsToken, publicKey);
+	const decoded = JSON.parse(
+		new TextDecoder().decode(payload),
+	) as AppStoreJWSTransactionPayload;
+
+	return decoded;
+}
+
+/**
+ * Handle a verified StoreKit 2 JWS transaction: validate fields, write Firestore, set claims.
+ */
+async function handleVerifiedJWSTransaction(
+	userId: string,
+	transaction: AppStoreJWSTransactionPayload,
+): Promise<{
+	valid: boolean;
+	sendWelcomeEmail?: boolean;
+	message: string;
+	subscription?: object;
+}> {
+	// Validate bundle ID
+	if (transaction.bundleId !== IOS_BUNDLE_ID) {
+		return {
+			valid: false,
+			message: `Bundle ID mismatch: expected ${IOS_BUNDLE_ID}, got ${transaction.bundleId}`,
+		};
+	}
+
+	// Validate environment (reject sandbox in production, unless running in emulator)
+	if (!isEmulator && transaction.environment === "Sandbox") {
+		return {
+			valid: false,
+			message: "Sandbox transactions are not accepted in production",
+		};
+	}
+
+	// Validate product ID
+	const knownProductIds = Object.values(IOS_PRODUCT_IDS) as string[];
+	if (!knownProductIds.includes(transaction.productId)) {
+		return {
+			valid: false,
+			message: `Unknown product ID: ${transaction.productId}`,
+		};
+	}
+
+	// Validate expiry
+	const now = Date.now();
+	if (!transaction.expiresDate || transaction.expiresDate <= now) {
+		return {
+			valid: false,
+			message: "Subscription has expired",
+		};
+	}
+
+	const originalTransactionId = transaction.originalTransactionId;
+	const resolvedProductId = transaction.productId;
+	const expiresMs = transaction.expiresDate;
+	const billingPeriod =
+		resolvedProductId === IOS_PRODUCT_IDS.yearly ? "yearly" : "monthly";
+	const expiresAt = Timestamp.fromMillis(expiresMs);
+
+	// Atomically read the subscription doc and write the new owner inside a
+	// Firestore transaction to prevent two concurrent verifications from
+	// racing to claim the same subscription.
+	const existingRef = db
+		.collection("subscriptions")
+		.doc(`ios_${originalTransactionId}`);
+
+	const {
+		oldUserId,
+		welcomeEmailAlreadySent,
+		willAutoRenew,
+		subscriptionState,
+	} = await db.runTransaction(async (txn) => {
+		const snap = await txn.get(existingRef);
+		const data = snap.exists ? snap.data() : undefined;
+
+		// Determine willAutoRenew from webhook state or defaults
+		const revoked = transaction.revocationDate != null;
+		let autoRenew: boolean;
+		if (revoked) {
+			autoRenew = false;
+		} else if (data?.willAutoRenew != null) {
+			autoRenew = data.willAutoRenew as boolean;
+		} else {
+			autoRenew = true; // New subscription, no webhook data yet
+		}
+		const subState = autoRenew
+			? "SUBSCRIPTION_STATE_ACTIVE"
+			: "SUBSCRIPTION_STATE_CANCELED";
+
+		const weSent = data?.welcomeEmailSent === true;
+		let prevOwner: string | null = null;
+
+		if (snap.exists && data?.userId && data.userId !== userId) {
+			prevOwner = data.userId as string;
+		}
+
+		txn.set(
+			existingRef,
+			{
+				userId,
+				productId: resolvedProductId,
+				purchaseToken: originalTransactionId,
+				originalTransactionId,
+				billingPeriod,
+				source: "app_store",
+				subscriptionState: subState,
+				willAutoRenew: autoRenew,
+				expiresAt,
+				jwsTransactionId: transaction.transactionId,
+				...(!weSent ? { welcomeEmailSent: true } : {}),
+				...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+				updatedAt: FieldValue.serverTimestamp(),
+			},
+			{ merge: true },
+		);
+
+		return {
+			oldUserId: prevOwner,
+			welcomeEmailAlreadySent: weSent,
+			willAutoRenew: autoRenew,
+			subscriptionState: subState,
+		};
+	});
+
+	// Transfer: clean up old user outside the transaction (Auth calls are not transactional)
+	if (oldUserId) {
+		console.log(
+			`Transferring App Store subscription ${originalTransactionId} ` +
+				`from user ${oldUserId} to ${userId} (JWS path)`,
+		);
+		try {
+			await db
+				.collection("users")
+				.doc(oldUserId)
+				.collection("subscription")
+				.doc("status")
+				.delete();
+			await setSubscriptionClaims(oldUserId, "free", null);
+			console.log(`Cleared subscription and claims for old user ${oldUserId}`);
+		} catch (transferError) {
+			console.error(
+				`Error clearing old user ${oldUserId} subscription during transfer:`,
+				transferError,
+			);
+		}
+	}
+
+	await db
+		.collection("users")
+		.doc(userId)
+		.collection("subscription")
+		.doc("status")
+		.set(
+			{
+				plan: "pro",
+				billingPeriod,
+				expiresAt,
+				willAutoRenew,
+				subscriptionState,
+				purchaseToken: originalTransactionId,
+				productId: resolvedProductId,
+				source: "app_store",
+				verifiedAt: FieldValue.serverTimestamp(),
+				updatedAt: FieldValue.serverTimestamp(),
+			},
+			{ merge: true },
+		);
+
+	await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
+
+	console.log(
+		`App Store (JWS): verified subscription for user ${userId}, product: ${resolvedProductId}`,
+	);
+
+	return {
+		valid: true,
+		sendWelcomeEmail: !welcomeEmailAlreadySent,
+		message: "Subscription verified and activated",
+		subscription: {
+			plan: "pro",
+			billingPeriod,
+			expiresAt: new Date(expiresMs).toISOString(),
+		},
+	};
+}
+
+/**
+ * Verify an App Store subscription purchase.
+ * Supports both StoreKit 2 JWS signed transactions and legacy base64 app receipts.
  * Handles sandbox/production routing automatically.
  */
 export async function verifyAppStorePurchase(
@@ -547,14 +843,6 @@ export async function verifyAppStorePurchase(
 	message: string;
 	subscription?: object;
 }> {
-	const sharedSecret = appStoreSharedSecret.value();
-	if (!sharedSecret) {
-		throw new HttpsError(
-			"failed-precondition",
-			"APP_STORE_SHARED_SECRET is not configured on the server",
-		);
-	}
-
 	console.log(
 		`App Store verify start: user=${userId}, product=${productId}, receiptLen=${receiptData.length}`,
 	);
@@ -562,6 +850,39 @@ export async function verifyAppStorePurchase(
 	const rawReceiptData = receiptData.trim();
 	if (!rawReceiptData) {
 		throw new HttpsError("invalid-argument", "receiptData is empty");
+	}
+
+	// StoreKit 2 sends a JWS signed transaction instead of a base64 app receipt.
+	// Detect and handle the JWS path first.
+	if (isJWSToken(rawReceiptData)) {
+		console.log(
+			`App Store: detected JWS signed transaction for user=${userId}, verifying...`,
+		);
+		try {
+			const transaction = await verifyAndDecodeAppStoreJWS(rawReceiptData);
+			console.log(
+				`App Store JWS decoded: product=${transaction.productId}, ` +
+					`originalTxn=${transaction.originalTransactionId}, ` +
+					`env=${transaction.environment}, expires=${new Date(transaction.expiresDate).toISOString()}`,
+			);
+			return handleVerifiedJWSTransaction(userId, transaction);
+		} catch (error) {
+			if (error instanceof HttpsError) throw error;
+			console.error("App Store JWS verification failed:", error);
+			return {
+				valid: false,
+				message: `JWS verification failed: ${error instanceof Error ? error.message : String(error)}`,
+			};
+		}
+	}
+
+	// Legacy path: base64 app receipt → Apple /verifyReceipt endpoint
+	const sharedSecret = appStoreSharedSecret.value();
+	if (!sharedSecret) {
+		throw new HttpsError(
+			"failed-precondition",
+			"APP_STORE_SHARED_SECRET is not configured on the server",
+		);
 	}
 
 	let receiptPayload = rawReceiptData;
@@ -702,55 +1023,74 @@ export async function verifyAppStorePurchase(
 		? "SUBSCRIPTION_STATE_ACTIVE"
 		: "SUBSCRIPTION_STATE_CANCELED";
 
+	// Atomically read the subscription doc and write the new owner inside a
+	// Firestore transaction to prevent concurrent verifications from racing.
 	const existingRef = db
 		.collection("subscriptions")
 		.doc(`ios_${originalTransactionId}`);
-	const existingSnap = await existingRef.get();
 
-	const appStoreWelcomeEmailAlreadySent =
-		existingSnap.exists && existingSnap.data()?.welcomeEmailSent === true;
+	const { oldUserId: legacyOldUserId, appStoreWelcomeEmailAlreadySent } =
+		await db.runTransaction(async (txn) => {
+			const snap = await txn.get(existingRef);
+			const data = snap.exists ? snap.data() : undefined;
+			const weSent = snap.exists && data?.welcomeEmailSent === true;
+			let prevOwner: string | null = null;
 
-	if (existingSnap.exists) {
-		const existingData = existingSnap.data();
-		if (existingData?.userId && existingData.userId !== userId) {
-			// Allow review account to bypass duplicate check
-			const userRecord = await auth.getUser(userId);
-			if (userRecord.email !== REVIEW_ACCOUNT_EMAIL) {
-				console.warn(
-					`App Store subscription ${originalTransactionId} already linked to ` +
-						`user ${existingData.userId}, attempted by ${userId}`,
-				);
-				throw new HttpsError(
-					"already-exists",
-					"This subscription is already linked to another account. " +
-						"Please contact support at support@betterkeep.app if you believe this is an error.",
-				);
+			if (snap.exists && data?.userId && data.userId !== userId) {
+				prevOwner = data.userId as string;
 			}
-			console.log(
-				`Bypassing App Store duplicate check for review account ${userId}`,
+
+			txn.set(
+				existingRef,
+				{
+					userId,
+					productId: resolvedProductId,
+					purchaseToken: originalTransactionId,
+					originalTransactionId,
+					billingPeriod,
+					source: "app_store",
+					subscriptionState,
+					willAutoRenew,
+					receiptData: receiptPayload,
+					expiresAt,
+					...(!weSent ? { welcomeEmailSent: true } : {}),
+					...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+					updatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
 			);
+
+			return {
+				oldUserId: prevOwner,
+				appStoreWelcomeEmailAlreadySent: weSent,
+			};
+		});
+
+	// Transfer: clean up old user outside the transaction (Auth calls are not transactional)
+	if (legacyOldUserId) {
+		console.log(
+			`Transferring App Store subscription ${originalTransactionId} ` +
+				`from user ${legacyOldUserId} to ${userId}`,
+		);
+		try {
+			await db
+				.collection("users")
+				.doc(legacyOldUserId)
+				.collection("subscription")
+				.doc("status")
+				.delete();
+			await setSubscriptionClaims(legacyOldUserId, "free", null);
+			console.log(
+				`Cleared subscription and claims for old user ${legacyOldUserId}`,
+			);
+		} catch (transferError) {
+			console.error(
+				`Error clearing old user ${legacyOldUserId} subscription during transfer:`,
+				transferError,
+			);
+			// Continue — the new user should still get the subscription
 		}
 	}
-
-	await existingRef.set(
-		{
-			userId,
-			productId: resolvedProductId,
-			purchaseToken: originalTransactionId,
-			originalTransactionId,
-			billingPeriod,
-			source: "app_store",
-			subscriptionState,
-			willAutoRenew,
-			receiptData: receiptPayload,
-			expiresAt,
-			// Set welcomeEmailSent only on first-time creation to prevent repeat welcome emails
-			...(!appStoreWelcomeEmailAlreadySent ? { welcomeEmailSent: true } : {}),
-			createdAt: FieldValue.serverTimestamp(),
-			updatedAt: FieldValue.serverTimestamp(),
-		},
-		{ merge: true },
-	);
 
 	await db
 		.collection("users")

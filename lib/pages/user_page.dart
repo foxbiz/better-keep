@@ -1203,8 +1203,8 @@ class _UserPageState extends State<UserPage> {
             const SizedBox(height: 8),
             _buildDetailRow(
               context,
-              status.willAutoRenew ? Icons.autorenew : Icons.event,
-              status.willAutoRenew ? context.l10n.renews : context.l10n.expires,
+              Icons.event,
+              context.l10n.expires,
               _formatDate(status.expiresAt!),
             ),
           ],
@@ -1415,18 +1415,25 @@ class _UserPageState extends State<UserPage> {
 
       if (!context.mounted) return;
 
+      // For pending results (e.g. iOS/Android store management page),
+      // cancelSubscription() already awaits the restore+refresh, so the
+      // subscription status is up-to-date when we reach here.
+      // Use localized messages for the snackbar.
+      final String message;
+      if (result.isPending) {
+        message = context.l10n.subscriptionChangesMayTakeMoment;
+      } else if (result.isSuccess) {
+        message = context.l10n.subscriptionCancelledSuccessfully;
+      } else {
+        message = context.l10n.couldNotOpenSubscriptionManagement;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
 
-      // After the user returns from the store management page, wait briefly
-      // for the background restore+refresh to update Firestore, then rebuild.
-      if (result.isPending) {
-        await Future.delayed(const Duration(seconds: 3));
-        if (mounted) setState(() {});
+      if (result.isPending && mounted) {
+        setState(() {});
       }
     } finally {
       if (mounted) {
