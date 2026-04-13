@@ -30,8 +30,8 @@ Future<CloudFunctionResult> callCloudFunction(
   Map<String, dynamic>? data,
   String region = _defaultRegion,
 ]) async {
-  // On web and non-Apple platforms, use the standard SDK.
-  if (kIsWeb || !(Platform.isIOS || Platform.isMacOS)) {
+  // On web and non-Apple/Windows platforms, use the standard SDK.
+  if (kIsWeb || !(Platform.isIOS || Platform.isMacOS || Platform.isWindows)) {
     final functions = region == _defaultRegion
         ? FirebaseFunctions.instance
         : FirebaseFunctions.instanceFor(app: Firebase.app(), region: region);
