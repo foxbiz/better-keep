@@ -18,7 +18,6 @@ class AppInstallInfo {
   final bool isWindows;
   final bool isMacOS;
   final bool hasNativeApp;
-  final bool iosAppComingSoon;
 
   AppInstallInfo({
     required this.platform,
@@ -33,14 +32,13 @@ class AppInstallInfo {
     required this.isWindows,
     required this.isMacOS,
     required this.hasNativeApp,
-    required this.iosAppComingSoon,
   });
 
   /// Whether we should show the install button in sidebar
   bool get shouldShowInstallButton {
     if (!kIsWeb) return false;
     if (pwaInstalled) return false;
-    // Show for: platforms with native apps, iOS (coming soon), or PWA installable
+    // Show for: platforms with native apps or PWA installable
     // Also show for macOS/Linux where PWA is the best option
     return canInstallPWA ||
         hasNativeApp ||
@@ -55,8 +53,7 @@ class AppInstallInfo {
     if (promptShown || promptDismissed) return false;
     if (pwaInstalled) return false;
     // Only show prompt if we have something to offer:
-    // - Native app available (Android, Windows)
-    // - iOS (coming soon message)
+    // - Native app available (iOS, Android, Windows)
     // - PWA can be installed
     // Don't show empty prompts for macOS/Linux without PWA support
     return hasNativeApp || isIOS || canInstallPWA;
@@ -64,7 +61,7 @@ class AppInstallInfo {
 
   /// Get the appropriate action label
   String get installButtonLabel {
-    if (isIOS) return 'Install App';
+    if (isIOS) return 'Open App Store';
     if (hasNativeApp) return 'Get App';
     if (canInstallPWA) return 'Install App';
     return 'Install App';
@@ -73,7 +70,7 @@ class AppInstallInfo {
   /// Get the prompt message based on platform
   String get promptMessage {
     if (isIOS) {
-      return 'iOS app coming soon! Install as a web app for the best experience.';
+      return 'Get Better Keep from the App Store for the best experience!';
     }
     if (isAndroid) {
       return 'Get Better Keep from Google Play for the best experience!';
@@ -102,7 +99,6 @@ extension _BetterKeepInstallJSExtension on _BetterKeepInstallJS {
   external void tryOpenNativeApp();
   external String? getStoreUrl();
   external JSPromise<JSAny?> triggerPWAInstall();
-  external void showIOSInstallInstructions();
   external _InstallInfoJS getInstallInfo();
   external void updateThemeColor(String color);
   external void updateBackgroundColor(String color);
@@ -151,7 +147,6 @@ extension _InstallInfoJSExtension on _InstallInfoJS {
   external bool get isWindows;
   external bool get isMacOS;
   external bool get hasNativeApp;
-  external bool get iosAppComingSoon;
 }
 
 /// Service to handle app installation prompts and actions
@@ -234,7 +229,6 @@ class AppInstallService {
       isWindows: info.isWindows,
       isMacOS: info.isMacOS,
       hasNativeApp: info.hasNativeApp,
-      iosAppComingSoon: info.iosAppComingSoon,
     );
   }
 
@@ -290,10 +284,7 @@ class AppInstallService {
     final info = getInstallInfo();
     if (info == null) return;
 
-    if (info.isIOS) {
-      // Show iOS PWA install instructions
-      _betterKeepInstall?.showIOSInstallInstructions();
-    } else if (info.hasNativeApp && info.storeUrl != null) {
+    if (info.hasNativeApp && info.storeUrl != null) {
       // Open store URL
       web.window.open(info.storeUrl!, '_blank');
     } else if (info.canInstallPWA) {

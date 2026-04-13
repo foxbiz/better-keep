@@ -2605,22 +2605,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get installBetterKeep => 'Install Better Keep';
 
   @override
-  String get iosAppComingSoon => '📱 iOS App Coming Soon!';
-
-  @override
-  String get iosAppBeingReviewed =>
-      'Our iOS app is being reviewed. In the meantime, you can install the web app:';
-
-  @override
-  String get iosInstallStep1 => '1. Tap the Share button in Safari';
-
-  @override
-  String get iosInstallStep2 => '2. Scroll down and tap \"Add to Home Screen\"';
-
-  @override
-  String get iosInstallStep3 => '3. Tap \"Add\" to install';
-
-  @override
   String get getAndroidApp => 'Get Android App';
 
   @override
@@ -2672,13 +2656,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get addColorsToOrganize =>
       'Add colors to your notes to organize them into folders';
-
-  @override
-  String get iosAppComingSoonTitle => 'iOS App Coming Soon!';
-
-  @override
-  String get iosAppComingSoonMessage =>
-      'Our iOS app is being reviewed by Apple. In the meantime, you can install Better Keep as a web app for quick access.\n\nTap Share → Add to Home Screen in Safari.';
 
   @override
   String get getTheAndroidApp => 'Get the Android App';

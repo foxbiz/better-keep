@@ -80,50 +80,7 @@ class _SidebarState extends State<Sidebar> {
     final info = _installInfo;
     if (info == null) return;
 
-    if (info.isIOS) {
-      _showIOSInstallDialog();
-    } else {
-      AppInstallService.instance.handleInstallAction();
-    }
-  }
-
-  void _showIOSInstallDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.apple, size: 28),
-            SizedBox(width: 12),
-            Text(context.l10n.installBetterKeep),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.iosAppComingSoon,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            SizedBox(height: 12),
-            Text(context.l10n.iosAppBeingReviewed),
-            SizedBox(height: 16),
-            Text(context.l10n.iosInstallStep1),
-            SizedBox(height: 8),
-            Text(context.l10n.iosInstallStep2),
-            SizedBox(height: 8),
-            Text(context.l10n.iosInstallStep3),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(context.l10n.gotIt),
-          ),
-        ],
-      ),
-    );
+    AppInstallService.instance.handleInstallAction();
   }
 
   @override
@@ -139,10 +96,15 @@ class _SidebarState extends State<Sidebar> {
               padding: EdgeInsets.zero,
               children: <Widget>[
                 if (!_isBigScreen) Logo(),
-                _buildTile(Icons.note, context.l10n.notes, () {
-                  if (!_isBigScreen) Navigator.pop(context);
-                  AppState.showNotes = NoteType.all;
-                }, selected: AppState.showNotes == NoteType.all),
+                _buildTile(
+                  Icons.note,
+                  context.l10n.notes,
+                  () {
+                    if (!_isBigScreen) Navigator.pop(context);
+                    AppState.showNotes = NoteType.all;
+                  },
+                  selected: AppState.showNotes == NoteType.all,
+                ),
                 _buildTile(Icons.label, context.l10n.labels, () {
                   labels(context);
                 }),
@@ -188,8 +150,7 @@ class _SidebarState extends State<Sidebar> {
           ),
           if (isAlarmSupported)
             ValueListenableBuilder<bool>(
-              valueListenable:
-                  ReminderPermissionService().permissionGranted,
+              valueListenable: ReminderPermissionService().permissionGranted,
               builder: (context, granted, _) {
                 if (granted) return const SizedBox.shrink();
                 return _buildTile(

@@ -2616,23 +2616,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get installBetterKeep => 'Better Keep\'i Yükle';
 
   @override
-  String get iosAppComingSoon => '📱 iOS Uygulaması Yakında!';
-
-  @override
-  String get iosAppBeingReviewed =>
-      'iOS uygulamamız inceleme aşamasında. Bu arada web uygulamasını yükleyebilirsiniz:';
-
-  @override
-  String get iosInstallStep1 => '1. Safari\'de Paylaş düğmesine dokunun';
-
-  @override
-  String get iosInstallStep2 =>
-      '2. Aşağı kaydırın ve \"Ana Ekrana Ekle\"ye dokunun';
-
-  @override
-  String get iosInstallStep3 => '3. Yüklemek için \"Ekle\"ye dokunun';
-
-  @override
   String get getAndroidApp => 'Android Uygulamasını Edin';
 
   @override
@@ -2684,13 +2667,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get addColorsToOrganize =>
       'Notlarınızı klasörler halinde düzenlemek için renkler ekleyin';
-
-  @override
-  String get iosAppComingSoonTitle => 'iOS Uygulaması Yakında!';
-
-  @override
-  String get iosAppComingSoonMessage =>
-      'iOS uygulamamız Apple tarafından inceleniyor. Bu arada, hızlı erişim için Better Keep\'i bir web uygulaması olarak yükleyebilirsiniz.\n\nSafari\'de Paylaş → Ana Ekrana Ekle\'ye dokunun.';
 
   @override
   String get getTheAndroidApp => 'Android Uygulamasını Edin';

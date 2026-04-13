@@ -2544,21 +2544,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get installBetterKeep => 'Better Keepをインストール';
 
   @override
-  String get iosAppComingSoon => '📱 iOSアプリ近日公開！';
-
-  @override
-  String get iosAppBeingReviewed => 'iOSアプリは審査中です。その間、ウェブアプリをインストールできます:';
-
-  @override
-  String get iosInstallStep1 => '1. Safariで共有ボタンをタップ';
-
-  @override
-  String get iosInstallStep2 => '2. 下にスクロールして「ホーム画面に追加」をタップ';
-
-  @override
-  String get iosInstallStep3 => '3. 「追加」をタップしてインストール';
-
-  @override
   String get getAndroidApp => 'Androidアプリを入手';
 
   @override
@@ -2608,13 +2593,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get addColorsToOrganize => 'ノートに色を追加してフォルダに整理しましょう';
-
-  @override
-  String get iosAppComingSoonTitle => 'iOSアプリ近日公開！';
-
-  @override
-  String get iosAppComingSoonMessage =>
-      'iOSアプリはAppleの審査中です。その間、Better KeepをウェブアプリとしてインストールしてSafariで素早くアクセスできます。\n\n共有→ホーム画面に追加をタップ。';
 
   @override
   String get getTheAndroidApp => 'Androidアプリを入手';

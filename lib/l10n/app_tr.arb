@@ -2711,24 +2711,6 @@
   "installBetterKeep": "Better Keep'i Yükle",
   "@installBetterKeep": {"description": "Install Better Keep dialog title"},
   
-  "iosAppComingSoon": "📱 iOS Uygulaması Yakında!",
-  "@iosAppComingSoon": {"description": "iOS app coming soon heading"},
-  
-  "iosAppBeingReviewed": "iOS uygulamamız inceleme aşamasında. Bu arada web uygulamasını yükleyebilirsiniz:",
-  "@iosAppBeingReviewed": {"description": "iOS app being reviewed message"},
-  
-  "iosInstallStep1": "1. Safari'de Paylaş düğmesine dokunun",
-  "@iosInstallStep1": {"description": "iOS install step 1"},
-  
-  "iosInstallStep2": "2. Aşağı kaydırın ve \"Ana Ekrana Ekle\"ye dokunun",
-  "@iosInstallStep2": {"description": "iOS install step 2"},
-  
-  "iosInstallStep3": "3. Yüklemek için \"Ekle\"ye dokunun",
-  "@iosInstallStep3": {"description": "iOS install step 3"},
-  
-  "gotIt": "Anladım",
-  "@gotIt": {"description": "Got it button text"},
-  
   "installApp": "Uygulamayı Yükle",
   "@installApp": {"description": "Install app button label"},
   
@@ -2785,12 +2767,6 @@
   
   "addColorsToOrganize": "Notlarınızı klasörler halinde düzenlemek için renkler ekleyin",
   "@addColorsToOrganize": {"description": "Add colors hint message"},
-  
-  "iosAppComingSoonTitle": "iOS Uygulaması Yakında!",
-  "@iosAppComingSoonTitle": {"description": "iOS app coming soon dialog title"},
-  
-  "iosAppComingSoonMessage": "iOS uygulamamız Apple tarafından inceleniyor. Bu arada, hızlı erişim için Better Keep'i bir web uygulaması olarak yükleyebilirsiniz.\n\nSafari'de Paylaş → Ana Ekrana Ekle'ye dokunun.",
-  "@iosAppComingSoonMessage": {"description": "iOS app coming soon dialog message"},
   
   "getTheAndroidApp": "Android Uygulamasını Edin",
   "@getTheAndroidApp": {"description": "Get the Android app dialog title"},

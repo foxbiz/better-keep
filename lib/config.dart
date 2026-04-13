@@ -18,6 +18,8 @@ const String demoAccountEmail = 'review@betterkeep.app';
 /// App store URLs
 const String playStoreUrl =
     'https://play.google.com/store/apps/details?id=io.foxbiz.better_keep';
+const String appStoreUrl =
+    'https://apps.apple.com/us/app/better-keep-notes/id6759548198';
 const String microsoftStoreUrl =
     'https://apps.microsoft.com/detail/9PHT5C6WK6Q1';
 

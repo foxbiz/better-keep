@@ -2507,21 +2507,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get installBetterKeep => '安装 Better Keep';
 
   @override
-  String get iosAppComingSoon => '📱 iOS 应用即将推出！';
-
-  @override
-  String get iosAppBeingReviewed => '我们的 iOS 应用正在审核中。在此期间，您可以安装网页应用：';
-
-  @override
-  String get iosInstallStep1 => '1. 在 Safari 中点击分享按钮';
-
-  @override
-  String get iosInstallStep2 => '2. 向下滚动并点击「添加到主屏幕」';
-
-  @override
-  String get iosInstallStep3 => '3. 点击「添加」完成安装';
-
-  @override
   String get getAndroidApp => '获取 Android 应用';
 
   @override
@@ -2571,13 +2556,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addColorsToOrganize => '为笔记添加颜色以便整理';
-
-  @override
-  String get iosAppComingSoonTitle => 'iOS 应用即将推出！';
-
-  @override
-  String get iosAppComingSoonMessage =>
-      '我们的 iOS 应用正在接受 Apple 审核。在此期间，您可以将 Better Keep 安装为网页应用以便快速访问。\n\n在 Safari 中点击分享 → 添加到主屏幕。';
 
   @override
   String get getTheAndroidApp => '获取 Android 应用';

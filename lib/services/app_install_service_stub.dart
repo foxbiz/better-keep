@@ -15,7 +15,6 @@ class AppInstallInfo {
   final bool isWindows;
   final bool isMacOS;
   final bool hasNativeApp;
-  final bool iosAppComingSoon;
 
   AppInstallInfo({
     required this.platform,
@@ -30,7 +29,6 @@ class AppInstallInfo {
     required this.isWindows,
     required this.isMacOS,
     required this.hasNativeApp,
-    required this.iosAppComingSoon,
   });
 
   /// Whether we should show the install button in sidebar

@@ -1,10 +1,8 @@
 # Better Keep ![Users](https://img.shields.io/endpoint?url=https://us-central1-better-keep-notes.cloudfunctions.net/getPublicStats&style=flat&logo=firebase&logoColor=white)
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/foxbiz/better-keep) ![Android](https://img.shields.io/badge/Android-3DDC84?style=flat&logo=android&logoColor=white) ![iOS](https://img.shields.io/badge/iOS-000000?style=flat&logo=apple&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white) ![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMyAyMyI+PHBhdGggZmlsbD0iI2YxZjFmMSIgZD0iTTAgMGgxMXYxMUgweiIvPjxwYXRoIGZpbGw9IiNmMWYxZjEiIGQ9Ik0xMiAwaDExdjExSDEyeiIvPjxwYXRoIGZpbGw9IiNmMWYxZjEiIGQ9Ik0wIDEyaDExdjExSDB6Ii8+PHBhdGggZmlsbD0iI2YxZjFmMSIgZD0iTTEyIDEyaDExdjExSDEyeiIvPjwvc3ZnPg==&logoColor=white) ![Web](https://img.shields.io/badge/Web-4285F4?style=flat&logo=googlechrome&logoColor=white)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/foxbiz/better-keep) ![Android](https://img.shields.io/badge/Android-3DDC84?style=flat&logo=android&logoColor=white) [![iOS](https://img.shields.io/badge/iOS-000000?style=flat&logo=apple&logoColor=white)](https://apps.apple.com/us/app/better-keep-notes/id6759548198) ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white) ![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows11&logoColor=white) ![Web](https://img.shields.io/badge/Web-4285F4?style=flat&logo=googlechrome&logoColor=white)
 
-[![Google Play](https://img.shields.io/badge/Google_Play-414141?style=for-the-badge&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=io.foxbiz.better_keep) [![Web App](https://img.shields.io/badge/Web_App-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](https://betterkeep.app)
-
- <!-- [![App Store](https://img.shields.io/badge/App_Store-0D96F6?style=for-the-badge&logo=app-store&logoColor=white)](https://apps.apple.com/app/id<YOUR_APP_ID>) -->
+[![Google Play](https://img.shields.io/badge/Google_Play-414141?style=for-the-badge&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=io.foxbiz.better_keep) [![App Store](https://img.shields.io/badge/App_Store-0A84FF?style=for-the-badge&logo=app-store&logoColor=white)](https://apps.apple.com/us/app/better-keep-notes/id6759548198) [![Web App](https://img.shields.io/badge/Web_App-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](https://betterkeep.app)
 
 [![Microsoft Store](https://img.shields.io/badge/Microsoft_Store-0078D4?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMyAyMyI+PHBhdGggZmlsbD0iI2YxZjFmMSIgZD0iTTAgMGgxMXYxMUgweiIvPjxwYXRoIGZpbGw9IiNmMWYxZjEiIGQ9Ik0xMiAwaDExdjExSDEyeiIvPjxwYXRoIGZpbGw9IiNmMWYxZjEiIGQ9Ik0wIDEyaDExdjExSDB6Ii8+PHBhdGggZmlsbD0iI2YxZjFmMSIgZD0iTTEyIDEyaDExdjExSDEyeiIvPjwvc3ZnPg==&logoColor=white)](https://apps.microsoft.com/detail/9PHT5C6WK6Q1)
 
@@ -254,6 +252,7 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
 2.  Log in: `firebase login`
 3.  Activate FlutterFire CLI: `dart pub global activate flutterfire_cli`
 4.  Configure the app:
+
     ```bash
     flutterfire configure
     ```
@@ -261,6 +260,7 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
     - Select your Firebase project (or create a new one).
     - Select the platforms you want to support (Android, iOS, Web, macOS, Windows).
     - This will generate `lib/firebase_options.dart`.
+
 5.  Enable **Authentication** (Google Sign-In) and **Firestore Database** in your Firebase Console.
 
 - `flutter pub get` – install dependencies.

@@ -2717,24 +2717,6 @@
   "installBetterKeep": "Install Better Keep",
   "@installBetterKeep": {"description": "Install Better Keep dialog title"},
   
-  "iosAppComingSoon": "📱 iOS App Coming Soon!",
-  "@iosAppComingSoon": {"description": "iOS app coming soon heading"},
-  
-  "iosAppBeingReviewed": "Our iOS app is being reviewed. In the meantime, you can install the web app:",
-  "@iosAppBeingReviewed": {"description": "iOS app being reviewed message"},
-  
-  "iosInstallStep1": "1. Tap the Share button in Safari",
-  "@iosInstallStep1": {"description": "iOS install step 1"},
-  
-  "iosInstallStep2": "2. Scroll down and tap \"Add to Home Screen\"",
-  "@iosInstallStep2": {"description": "iOS install step 2"},
-  
-  "iosInstallStep3": "3. Tap \"Add\" to install",
-  "@iosInstallStep3": {"description": "iOS install step 3"},
-  
-  "gotIt": "Got it",
-  "@gotIt": {"description": "Got it button text"},
-  
   "installApp": "Install App",
   "@installApp": {"description": "Install app button label"},
   
@@ -2791,12 +2773,6 @@
   
   "addColorsToOrganize": "Add colors to your notes to organize them into folders",
   "@addColorsToOrganize": {"description": "Add colors hint message"},
-  
-  "iosAppComingSoonTitle": "iOS App Coming Soon!",
-  "@iosAppComingSoonTitle": {"description": "iOS app coming soon dialog title"},
-  
-  "iosAppComingSoonMessage": "Our iOS app is being reviewed by Apple. In the meantime, you can install Better Keep as a web app for quick access.\n\nTap Share → Add to Home Screen in Safari.",
-  "@iosAppComingSoonMessage": {"description": "iOS app coming soon dialog message"},
   
   "getTheAndroidApp": "Get the Android App",
   "@getTheAndroidApp": {"description": "Get the Android app dialog title"},

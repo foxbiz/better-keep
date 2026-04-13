@@ -2606,23 +2606,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get installBetterKeep => 'Instal Better Keep';
 
   @override
-  String get iosAppComingSoon => '📱 Aplikasi iOS Segera Hadir!';
-
-  @override
-  String get iosAppBeingReviewed =>
-      'Aplikasi iOS kami sedang ditinjau. Sementara itu, Anda dapat menginstal aplikasi web:';
-
-  @override
-  String get iosInstallStep1 => '1. Ketuk tombol Bagikan di Safari';
-
-  @override
-  String get iosInstallStep2 =>
-      '2. Gulir ke bawah dan ketuk \"Tambahkan ke Layar Utama\"';
-
-  @override
-  String get iosInstallStep3 => '3. Ketuk \"Tambahkan\" untuk menginstal';
-
-  @override
   String get getAndroidApp => 'Dapatkan Aplikasi Android';
 
   @override
@@ -2674,13 +2657,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get addColorsToOrganize =>
       'Tambahkan warna ke catatan Anda untuk mengorganisirnya ke dalam folder';
-
-  @override
-  String get iosAppComingSoonTitle => 'Aplikasi iOS Segera Hadir!';
-
-  @override
-  String get iosAppComingSoonMessage =>
-      'Aplikasi iOS kami sedang ditinjau oleh Apple. Sementara itu, Anda dapat menginstal Better Keep sebagai aplikasi web untuk akses cepat.\n\nKetuk Bagikan → Tambahkan ke Layar Utama di Safari.';
 
   @override
   String get getTheAndroidApp => 'Dapatkan Aplikasi Android';

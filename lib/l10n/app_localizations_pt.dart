@@ -2636,23 +2636,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get installBetterKeep => 'Instalar Better Keep';
 
   @override
-  String get iosAppComingSoon => '📱 App para iOS em breve!';
-
-  @override
-  String get iosAppBeingReviewed =>
-      'Nosso app para iOS está sendo revisado. Enquanto isso, você pode instalar o web app:';
-
-  @override
-  String get iosInstallStep1 => '1. Toque no botão Compartilhar no Safari';
-
-  @override
-  String get iosInstallStep2 =>
-      '2. Role para baixo e toque em \"Adicionar à Tela de Início\"';
-
-  @override
-  String get iosInstallStep3 => '3. Toque em \"Adicionar\" para instalar';
-
-  @override
   String get getAndroidApp => 'Obter app Android';
 
   @override
@@ -2704,13 +2687,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get addColorsToOrganize =>
       'Adicione cores às suas notas para organizá-las em pastas';
-
-  @override
-  String get iosAppComingSoonTitle => 'App para iOS em breve!';
-
-  @override
-  String get iosAppComingSoonMessage =>
-      'Nosso app para iOS está sendo revisado pela Apple. Enquanto isso, você pode instalar o Better Keep como um web app para acesso rápido.\n\nToque em Compartilhar → Adicionar à Tela de Início no Safari.';
 
   @override
   String get getTheAndroidApp => 'Obter o app Android';

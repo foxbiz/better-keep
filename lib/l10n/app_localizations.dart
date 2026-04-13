@@ -4704,36 +4704,6 @@ abstract class AppLocalizations {
   /// **'Install Better Keep'**
   String get installBetterKeep;
 
-  /// iOS app coming soon heading
-  ///
-  /// In en, this message translates to:
-  /// **'📱 iOS App Coming Soon!'**
-  String get iosAppComingSoon;
-
-  /// iOS app being reviewed message
-  ///
-  /// In en, this message translates to:
-  /// **'Our iOS app is being reviewed. In the meantime, you can install the web app:'**
-  String get iosAppBeingReviewed;
-
-  /// iOS install step 1
-  ///
-  /// In en, this message translates to:
-  /// **'1. Tap the Share button in Safari'**
-  String get iosInstallStep1;
-
-  /// iOS install step 2
-  ///
-  /// In en, this message translates to:
-  /// **'2. Scroll down and tap \"Add to Home Screen\"'**
-  String get iosInstallStep2;
-
-  /// iOS install step 3
-  ///
-  /// In en, this message translates to:
-  /// **'3. Tap \"Add\" to install'**
-  String get iosInstallStep3;
-
   /// Get Android app button label
   ///
   /// In en, this message translates to:
@@ -4835,18 +4805,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add colors to your notes to organize them into folders'**
   String get addColorsToOrganize;
-
-  /// iOS app coming soon dialog title
-  ///
-  /// In en, this message translates to:
-  /// **'iOS App Coming Soon!'**
-  String get iosAppComingSoonTitle;
-
-  /// iOS app coming soon dialog message
-  ///
-  /// In en, this message translates to:
-  /// **'Our iOS app is being reviewed by Apple. In the meantime, you can install Better Keep as a web app for quick access.\n\nTap Share → Add to Home Screen in Safari.'**
-  String get iosAppComingSoonMessage;
 
   /// Get the Android app dialog title
   ///

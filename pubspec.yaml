@@ -1,7 +1,7 @@
 name: better_keep
 description: 'Notes app with enhanced features'
 publish_to: 'none'
-version: 1.0.63+63
+version: 1.0.64+64
 
 environment:
   sdk: ^3.10.0
@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  cupertino_icons: ^1.0.8
   crypto: ^3.0.6
   alarm: ^5.1.5
   sqflite_common_ffi: ^2.4.0
@@ -77,7 +78,7 @@ msix_config:
   publisher_display_name: Foxbiz Software Pvt. Ltd.
   identity_name: FoxbizSotware.BetterKeepNotes
   publisher: 'CN=886C9A5B-2D6E-4AE6-822D-DE6C845ECD7D'
-  msix_version: 1.0.63.0
+  msix_version: 1.0.64.0
   logo_path: assets/better_keep-512.png
   capabilities: internetClient, internetClientServer, privateNetworkClientServer
   protocol_activation: betterkeep

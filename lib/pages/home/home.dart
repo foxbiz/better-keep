@@ -164,10 +164,16 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
         if (info.isIOS) {
           icon = Icons.apple;
-          title = context.l10n.iosAppComingSoonTitle;
-          message = context.l10n.iosAppComingSoonMessage;
-          actionLabel = context.l10n.gotIt;
-          onAction = () => Navigator.pop(context);
+          title = context.l10n.installBetterKeep;
+          message = info.promptMessage;
+          actionLabel = info.installButtonLabel;
+          onAction = () {
+            Navigator.pop(context);
+            launchUrl(
+              Uri.parse(appStoreUrl),
+              mode: LaunchMode.externalApplication,
+            );
+          };
         } else if (info.isAndroid) {
           icon = Icons.android;
           title = context.l10n.getTheAndroidApp;

@@ -15,6 +15,7 @@
 
   const APP_URLS = {
     android: 'https://play.google.com/store/apps/details?id=io.foxbiz.better_keep',
+    ios: 'https://apps.apple.com/us/app/better-keep-notes/id6759548198',
     windows: 'https://apps.microsoft.com/detail/9PHT5C6WK6Q1',
     deepLink: 'betterkeep://'
   };
@@ -277,6 +278,8 @@
   function getStoreUrl() {
     const platform = getPlatform();
     switch (platform) {
+      case 'ios':
+        return APP_URLS.ios;
       case 'android':
         return APP_URLS.android;
       case 'windows':
@@ -341,8 +344,8 @@
       isAndroid: platform === 'android',
       isWindows: platform === 'windows',
       isMacOS: platform === 'macos',
-      hasNativeApp: platform === 'android' || platform === 'windows',
-      iosAppComingSoon: platform === 'ios'
+      hasNativeApp:
+        platform === 'ios' || platform === 'android' || platform === 'windows'
     };
   }
 

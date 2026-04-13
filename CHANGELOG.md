@@ -5,11 +5,12 @@ All notable changes to Better Keep will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.58] - 2026-04-03
+## [1.0.58] - 2026-04-13
 
-- **Publish to IOS App Store**: Successfully published Better Keep version 1.0.58 to the iOS App Store, making it available for download on iPhone and iPad devices.
+- **Published to iOS App Store**: Better Keep version 1.0.58 is now live on the App Store for iPhone and iPad.
   - Updated app metadata, screenshots, and descriptions to reflect the latest features and improvements.
   - Ensured compliance with App Store guidelines and resolved any issues during the review process.
+  - Added the public App Store link across the site and project documentation: https://apps.apple.com/us/app/better-keep-notes/id6759548198
 
 ## [1.0.43] - 2026-01-17
 
