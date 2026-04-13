@@ -11,8 +11,9 @@ import 'package:url_launcher/url_launcher.dart';
 String _localizedPurchaseMessage(BuildContext context, PurchaseResult result) {
   final msg = result.message;
   if (msg.contains('restored')) return context.l10n.subscriptionRestored;
-  if (msg.contains('already have'))
+  if (msg.contains('already have')) {
     return context.l10n.subscriptionAlreadyActive;
+  }
   if (msg.contains('activated')) return context.l10n.subscriptionActivated;
   if (msg.contains('cancelled') || msg.contains('canceled')) {
     return context.l10n.purchaseCancelled;

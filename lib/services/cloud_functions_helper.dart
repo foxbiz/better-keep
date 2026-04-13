@@ -19,19 +19,19 @@ class CloudFunctionResult {
 
 /// Calls a Firebase Cloud Function.
 ///
-/// On iOS, bypasses the native Firebase SDK and makes a direct HTTPS POST
-/// to avoid the "freed pointer was not the last allocation" SIGABRT crash
-/// that occurs in release builds (a known iOS/Xcode Swift concurrency bug
-/// in the native Firebase Functions layer).
+/// On Apple native platforms (iOS/macOS), makes a direct HTTPS
+/// POST instead of using [FirebaseFunctions.httpsCallable] to avoid the
+/// Swift concurrency SIGABRT crash in the native Firebase Functions SDK.
 ///
-/// On all other platforms, delegates to [FirebaseFunctions.httpsCallable].
+/// On web, delegates to [FirebaseFunctions.httpsCallable] since
+/// browser CORS handling is managed by the SDK.
 Future<CloudFunctionResult> callCloudFunction(
   String functionName, [
   Map<String, dynamic>? data,
   String region = _defaultRegion,
 ]) async {
-  // On non-iOS platforms (or web), use the standard SDK
-  if (kIsWeb || !Platform.isIOS) {
+  // On web and non-Apple platforms, use the standard SDK.
+  if (kIsWeb || !(Platform.isIOS || Platform.isMacOS)) {
     final functions = region == _defaultRegion
         ? FirebaseFunctions.instance
         : FirebaseFunctions.instanceFor(app: Firebase.app(), region: region);
@@ -39,7 +39,7 @@ Future<CloudFunctionResult> callCloudFunction(
     return CloudFunctionResult(result.data);
   }
 
-  // On iOS: Direct HTTPS call to avoid native SDK crash in release mode
+  // On Apple native platforms: Direct HTTPS call to avoid native SDK crash
   final projectId = Firebase.app().options.projectId;
 
   final String baseUrl;

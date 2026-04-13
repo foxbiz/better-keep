@@ -149,11 +149,15 @@ class SubscriptionService {
   /// Clear last purchase error
   void clearLastPurchaseError() => _lastPurchaseError = null;
 
+  /// True when running on Apple platforms (iOS/macOS), never on web.
+  bool get _isApplePlatform => !kIsWeb && (Platform.isIOS || Platform.isMacOS);
+
   /// Whether purchases are available on this platform
   bool get canMakePurchases {
     if (kIsWeb) return true; // Web uses Razorpay
     return Platform.isIOS ||
         Platform.isAndroid ||
+        Platform.isMacOS ||
         Platform.isWindows ||
         Platform.isLinux;
   }
@@ -204,7 +208,7 @@ Expected IDs: ${ProductIds.all}
       return;
     }
 
-    if (Platform.isIOS || Platform.isAndroid) {
+    if (Platform.isIOS || Platform.isAndroid || Platform.isMacOS) {
       await _initInAppPurchase();
     } else {
       AppLogger.log(
@@ -427,8 +431,7 @@ Expected IDs: ${ProductIds.all}
             // redundant Cloud Function calls and duplicate welcome emails.
             if (purchase.status == PurchaseStatus.restored &&
                 _restoredIosReceiptVerified &&
-                !kIsWeb &&
-                Platform.isIOS) {
+                _isApplePlatform) {
               AppLogger.log(
                 'SubscriptionService: Skipping duplicate iOS restored purchase ${purchase.productID}',
               );
@@ -449,7 +452,7 @@ Expected IDs: ${ProductIds.all}
             // If _verifyPurchase() triggers a native StoreKit crash (release mode),
             // the transaction must already be cleared from the queue — otherwise
             // StoreKit replays it on every app launch, causing a permanent crash loop.
-            if (!kIsWeb && Platform.isIOS && purchase.pendingCompletePurchase) {
+            if (_isApplePlatform && purchase.pendingCompletePurchase) {
               try {
                 await _iap.completePurchase(purchase);
               } catch (e) {
@@ -469,7 +472,7 @@ Expected IDs: ${ProductIds.all}
               // Mark that we found a restored subscription
               if (purchase.status == PurchaseStatus.restored) {
                 _restoredSubscriptionFound = true;
-                if (!kIsWeb && Platform.isIOS) {
+                if (_isApplePlatform) {
                   _restoredIosReceiptVerified = true;
                 }
               }
@@ -492,9 +495,10 @@ Expected IDs: ${ProductIds.all}
               }
             }
 
-            // Complete the purchase (Android only — iOS already completed above)
+            // Complete the purchase (Android only — iOS/macOS already completed above)
             if (!kIsWeb &&
                 !Platform.isIOS &&
+                !Platform.isMacOS &&
                 purchase.pendingCompletePurchase) {
               await _iap.completePurchase(purchase);
             }
@@ -713,7 +717,7 @@ Expected IDs: ${ProductIds.all}
       final localVerificationData =
           purchase.verificationData.localVerificationData;
 
-      if (!kIsWeb && Platform.isIOS) {
+      if (_isApplePlatform) {
         AppLogger.log(
           'SubscriptionService: [$verifyTraceId] iOS verification payload lengths - '
           'local: ${localVerificationData.length}, '
@@ -730,7 +734,7 @@ Expected IDs: ${ProductIds.all}
           ? serverVerificationData
           : localVerificationData;
 
-      if (!kIsWeb && Platform.isIOS) {
+      if (_isApplePlatform) {
         if (verificationToken.trim().isEmpty) {
           return VerifyPurchaseResult(
             valid: false,
@@ -749,7 +753,7 @@ Expected IDs: ${ProductIds.all}
       }
 
       // Log payload format for debugging
-      if (!kIsWeb && Platform.isIOS) {
+      if (_isApplePlatform) {
         final format = _isJWSPayload(verificationToken)
             ? 'JWS signed transaction'
             : 'legacy base64 receipt';
@@ -762,7 +766,7 @@ Expected IDs: ${ProductIds.all}
       final result = await callCloudFunction('verifyPurchase', {
         'productId': purchase.productID,
         'purchaseToken': verificationToken,
-        'source': Platform.isIOS ? 'app_store' : 'play_store',
+        'source': _isApplePlatform ? 'app_store' : 'play_store',
         'verifyTraceId': verifyTraceId,
       });
 
@@ -915,8 +919,8 @@ Expected IDs: ${ProductIds.all}
       }
     }
 
-    // For iOS: look up separate monthly/yearly products directly
-    if (!kIsWeb && Platform.isIOS) {
+    // For iOS/macOS: look up separate monthly/yearly products directly
+    if (_isApplePlatform) {
       final iosProductId = yearly
           ? ProductIds.proYearlyIos
           : ProductIds.proMonthlyIos;
@@ -1001,8 +1005,8 @@ Expected IDs: ${ProductIds.all}
       return (pricing['monthly']! / divisor, pricing['yearly']! / divisor);
     }
 
-    // For iOS: look up separate monthly/yearly products directly
-    if (!kIsWeb && Platform.isIOS) {
+    // For iOS/macOS: look up separate monthly/yearly products directly
+    if (_isApplePlatform) {
       final monthlyProduct = _products.cast<ProductDetails?>().firstWhere(
         (p) => p?.id == ProductIds.proMonthlyIos,
         orElse: () => null,
@@ -1068,8 +1072,8 @@ Expected IDs: ${ProductIds.all}
       );
     }
 
-    // For iOS: look up separate monthly/yearly products
-    if (Platform.isIOS) {
+    // For iOS/macOS: look up separate monthly/yearly products
+    if (_isApplePlatform) {
       final monthlyProduct = _products.cast<ProductDetails?>().firstWhere(
         (p) => p?.id == ProductIds.proMonthlyIos,
         orElse: () => null,
@@ -1221,8 +1225,8 @@ Expected IDs: ${ProductIds.all}
       isLoading.value = false;
     }
 
-    // On iOS, use separate product IDs; on Android, use the single product with base plan
-    if (!kIsWeb && Platform.isIOS) {
+    // On iOS/macOS, use separate product IDs; on Android, use the single product with base plan
+    if (_isApplePlatform) {
       final iosProductId = yearly
           ? ProductIds.proYearlyIos
           : ProductIds.proMonthlyIos;
@@ -1463,7 +1467,7 @@ Expected IDs: ${ProductIds.all}
         success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
       } catch (e) {
         if (!kIsWeb &&
-            Platform.isIOS &&
+            _isApplePlatform &&
             e.toString().contains('storekit_duplicate_product')) {
           AppLogger.log(
             'SubscriptionService: Pending transaction detected, waiting for completion...',
@@ -1541,9 +1545,9 @@ Expected IDs: ${ProductIds.all}
       return _cancelRazorpaySubscription();
     }
 
-    // On mobile, redirect to platform subscription management
-    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
-      if (Platform.isIOS) {
+    // On mobile/macOS, redirect to platform subscription management
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid || Platform.isMacOS)) {
+      if (_isApplePlatform) {
         // Use StoreKit 2 API which handles sandbox vs production automatically
         try {
           const channel = MethodChannel('com.betterkeep/subscriptions');

@@ -40,15 +40,15 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Allow Better Keep to capture photos for your notes.</string>
+	<string>We need access to your camera to add photos to notes.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Allow Better Keep to record audio attachments.</string>
+	<string>Better Keep uses your microphone to record audio notes and transcribe them into text using on-device speech recognition.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Allow Better Keep to select and save images for your notes.</string>
+	<string>We need access to your photo library to add images to notes.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
