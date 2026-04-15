@@ -59,6 +59,7 @@ enum NoteType { all, archived, trashed, pinned, locked, reminder }
 class Note extends BaseModel<Note> {
   static final ModelSchema<Note> _schema = _createSchema();
   static const model = "note";
+  static const decryptionFailedContent = '{"decryption_failed": true}';
 
   bool _locked;
   bool pinned;
@@ -1485,6 +1486,10 @@ class Note extends BaseModel<Note> {
             'previewImage': sketch.previewImage,
             'backgroundImage': sketch.backgroundImage,
             'aspectRatio': sketch.aspectRatio,
+            if (sketch.strokesFilePath != null)
+              'strokesFilePath': sketch.strokesFilePath,
+            if (sketch.strokesContentHash != null)
+              'strokesContentHash': sketch.strokesContentHash,
             if (sketch.blurredThumbnail != null)
               'blurredThumbnail': sketch.blurredThumbnail,
           };

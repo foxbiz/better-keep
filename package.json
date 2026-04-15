@@ -1,6 +1,6 @@
 {
 	"name": "better-keep-notes",
-	"version": "1.0.57",
+	"version": "1.0.66",
 	"description": "Better Keep Notes - Build Scripts",
 	"scripts": {
 		"firebase-emulators": "firebase emulators:start",

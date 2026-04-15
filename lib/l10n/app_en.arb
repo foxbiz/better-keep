@@ -230,12 +230,6 @@
 	"lightTheme": "Light Theme",
 	"@lightTheme": { "description": "Light theme label" },
 
-	"language": "Language",
-	"@language": { "description": "Language setting label" },
-
-	"systemDefault": "System default",
-	"@systemDefault": { "description": "System default language option" },
-
 	"showSyncProgress": "Show Sync Progress",
 	"@showSyncProgress": { "description": "Show sync progress toggle label" },
 
@@ -320,9 +314,6 @@
 
 	"copyAs": "Copy as",
 	"@copyAs": { "description": "Copy as menu item" },
-
-	"pasteAs": "Paste as",
-	"@pasteAs": { "description": "Paste as menu item" },
 
 	"share": "Share",
 	"@share": { "description": "Share action" },
@@ -503,9 +494,6 @@
 	"upgradeNow": "Upgrade Now",
 	"@upgradeNow": { "description": "Upgrade now button label" },
 
-	"upgradeToPro": "Upgrade to Pro",
-	"@upgradeToPro": { "description": "Upgrade to pro button label" },
-
 	"continueTrial": "Continue Trial",
 	"@continueTrial": { "description": "Continue trial button label" },
 
@@ -574,9 +562,6 @@
 		"description": "Recovery success welcome message"
 	},
 
-	"requestTimedOut": "Request timed out. Please try again.",
-	"@requestTimedOut": { "description": "Request timed out message" },
-
 	"confirmConsequences": "Please confirm that you understand the consequences",
 	"@confirmConsequences": { "description": "Confirm consequences message" },
 
@@ -640,9 +625,6 @@
 	"@failedCreateImageNote": {
 		"description": "Failed to create image note message"
 	},
-
-	"errorSavingSketch": "Error saving sketch, no preview available",
-	"@errorSavingSketch": { "description": "Error saving sketch message" },
 
 	"errorSavingSketchWithError": "Error saving sketch: {error}",
 	"@errorSavingSketchWithError": {
@@ -1108,12 +1090,6 @@
 	"getApp": "Get the App",
 	"@getApp": { "description": "Get the app dialog title" },
 
-	"installApp": "Install App",
-	"@installApp": { "description": "Install app button" },
-
-	"notNow": "Not now",
-	"@notNow": { "description": "Not now button" },
-
 	"sessionExpired": "Your session has expired. Please sign in again.",
 	"@sessionExpired": { "description": "Session expired message" },
 
@@ -1381,9 +1357,6 @@
 	"resettingPassword": "Resetting Password...",
 	"@resettingPassword": { "description": "Resetting password status" },
 
-	"passwordsDoNotMatch": "Passwords do not match",
-	"@passwordsDoNotMatch": { "description": "Passwords do not match error" },
-
 	"pleaseEnterNewPassword": "Please enter a new password",
 	"@pleaseEnterNewPassword": {
 		"description": "Please enter new password validation error"
@@ -1561,9 +1534,6 @@
 
 	"notes_": "Notes",
 	"@notes_": { "description": "Notes stat label" },
-
-	"reminders": "Reminders",
-	"@reminders": { "description": "Reminders stat label" },
 
 	"media": "Media",
 	"@media": { "description": "Media stat label" },
@@ -1803,11 +1773,6 @@
 
 	"cannotUnlinkPrimary": "Cannot unlink the original sign-in method",
 	"@cannotUnlinkPrimary": { "description": "Cannot unlink primary tooltip" },
-
-	"sendingVerificationCode": "Sending verification code...",
-	"@sendingVerificationCode": {
-		"description": "Sending verification code status"
-	},
 
 	"verifyAccountLink": "Verify Account Link",
 	"@verifyAccountLink": { "description": "Verify account link dialog title" },
@@ -2261,9 +2226,6 @@
 	"custom": "Custom",
 	"@custom": { "description": "Custom option label" },
 
-	"noLabelsYet": "No labels yet",
-	"@noLabelsYet": { "description": "Empty labels state title" },
-
 	"createLabelToOrganize": "Create a label above to organize your notes",
 	"@createLabelToOrganize": { "description": "Empty labels state description" },
 
@@ -2626,9 +2588,6 @@
 	"permanentDeleteWarning": "This will permanently delete all data and cannot be recovered.",
 	"@permanentDeleteWarning": { "description": "Permanent delete warning" },
 
-	"deleteForever": "Delete Forever",
-	"@deleteForever": { "description": "Delete forever button text" },
-
 	"sentVerificationCodeTo": "We sent a verification code to:",
 	"@sentVerificationCodeTo": {
 		"description": "Sent verification code message"
@@ -2815,13 +2774,33 @@
 	"encryptedNote": "Encrypted Note",
 	"@encryptedNote": { "description": "Encrypted note dialog title" },
 
-	"encryptedNoteCannotBeDecrypted": "This note could not be decrypted. The encryption keys are missing or invalid, and the note cannot be recovered.",
-	"@encryptedNoteCannotBeDecrypted": {
-		"description": "Encrypted note cannot be decrypted message"
-	},
-
 	"decryptionFailed": "Decryption failed",
 	"@decryptionFailed": { "description": "Decryption failed label" },
+
+	"decryptionFailedRetryMessage": "This note could not be decrypted. This can happen when encryption keys are temporarily unavailable. You can try syncing again, or delete the note permanently.",
+	"@decryptionFailedRetryMessage": {
+		"description": "Message shown when a note fails to decrypt, offering retry"
+	},
+
+	"deletingNoteFromAllDevicesWarning": "Deleting will remove this note from all your devices, including the encrypted copy on the server.",
+	"@deletingNoteFromAllDevicesWarning": {
+		"description": "Warning that deleting a decryption-failed note destroys the server copy"
+	},
+
+	"retryDecryption": "Retry",
+	"@retryDecryption": {
+		"description": "Button to retry decrypting a failed note"
+	},
+
+	"retryingDecryption": "Retrying sync...",
+	"@retryingDecryption": {
+		"description": "Snackbar message when retrying decryption"
+	},
+
+	"e2eeNotReady": "Encryption is not ready. Please check your device approval status.",
+	"@e2eeNotReady": {
+		"description": "Message when E2EE is not ready for retry"
+	},
 
 	"thisNoteIsLocked": "This note is locked",
 	"@thisNoteIsLocked": { "description": "Locked note label" },
@@ -3065,16 +3044,8 @@
 	"notNow": "Not now",
 	"@notNow": { "description": "Not now button label" },
 
-	"recoveryKeySavedSuccessfully": "Recovery key saved successfully!",
-	"@recoveryKeySavedSuccessfully": {
-		"description": "Recovery key saved success message"
-	},
-
 	"noRecoveryKey": "No Recovery Key",
 	"@noRecoveryKey": { "description": "No recovery key dialog title" },
-
-	"noRecoveryKeyWarning": "Without a recovery key, you will permanently lose access to all your encrypted notes if you lose all your devices.\n\nConsider setting up a recovery key later in Settings.",
-	"@noRecoveryKeyWarning": { "description": "No recovery key warning message" },
 
 	"iUnderstand": "I understand",
 	"@iUnderstand": { "description": "I understand button label" },
@@ -3223,11 +3194,6 @@
 	"signingOut": "Signing out...",
 	"@signingOut": { "description": "Signing out status message" },
 
-	"sendingVerificationCode": "Sending verification code...",
-	"@sendingVerificationCode": {
-		"description": "Sending verification code message"
-	},
-
 	"takingTooLongTryAgain": "Taking too long. You can cancel and try again.",
 	"@takingTooLongTryAgain": {
 		"description": "Taking too long timeout message"
@@ -3240,9 +3206,6 @@
 	"@failedToSendVerificationCode": {
 		"description": "Failed to send verification code error message"
 	},
-
-	"verifyYourIdentity": "Verify Your Identity",
-	"@verifyYourIdentity": { "description": "Verify your identity dialog title" },
 
 	"yourEmail": "your email",
 	"@yourEmail": { "description": "Your email fallback text" },

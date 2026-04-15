@@ -4,7 +4,6 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:better_keep/components/animated_icon.dart';
 import 'package:better_keep/components/note_image_grid.dart';
-import 'package:better_keep/dialogs/delete_dialog.dart';
 import 'package:better_keep/dialogs/unlock_note_dialog.dart';
 import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
@@ -12,6 +11,7 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -69,10 +69,7 @@ class _NoteCardState extends State<NoteCard>
   /// Returns true if the note content contains a decryption_failed error
   /// This happens when E2EE decryption fails and the note cannot be recovered
   bool get _hasDecryptionError {
-    final content = widget.note.content;
-    if (content == null || content.isEmpty) return false;
-    return content.contains('"error"') &&
-        content.contains('"decryption_failed"');
+    return widget.note.content == Note.decryptionFailedContent;
   }
 
   /// Returns max chars based on screen width (1000 for bigger screens, 500 for smaller)
@@ -318,16 +315,91 @@ class _NoteCardState extends State<NoteCard>
       return;
     }
 
-    // Handle decryption-failed notes - prompt for permanent deletion
+    // Handle decryption-failed notes - offer retry or permanent deletion
     if (_hasDecryptionError) {
-      final confirmed = await showDeleteDialog(
-        context,
-        title: context.l10n.encryptedNote,
-        message: context.l10n.encryptedNoteCannotBeDecrypted,
-        isPermanent: true,
+      final l10n = context.l10n;
+      final action = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            icon: const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange,
+              size: 40,
+            ),
+            title: Text(l10n.encryptedNote),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.decryptionFailedRetryMessage),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          l10n.deletingNoteFromAllDevicesWarning,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'cancel'),
+                child: Text(l10n.cancel),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'delete'),
+                child: Text(
+                  l10n.deleteForever,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, 'retry'),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(l10n.retryDecryption),
+              ),
+            ],
+          );
+        },
       );
-      if (confirmed == true && mounted) {
-        final l10n = context.l10n;
+      if (!mounted) return;
+      if (action == 'retry') {
+        if (E2EEService.instance.isReady && E2EEService.instance.isAvailable) {
+          if (NoteSyncService().isSyncing.value) {
+            snackbar(l10n.syncing);
+          } else {
+            snackbar(l10n.retryingDecryption);
+            final success = await NoteSyncService().retryDecryptionForNote(
+              widget.note.id!,
+            );
+            if (!success && mounted) {
+              snackbar(l10n.decryptionFailed);
+            }
+          }
+        } else {
+          snackbar(l10n.e2eeNotReady);
+        }
+      } else if (action == 'delete') {
         await widget.note.delete();
         snackbar(l10n.noteDeletedPermanently);
       }

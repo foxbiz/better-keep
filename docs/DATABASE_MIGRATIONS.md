@@ -32,3 +32,21 @@ This is not something users would know to do, so migration bugs must be fixed in
 1. **Always guard `ALTER TABLE ADD COLUMN` with a column existence check** using `PRAGMA table_info(<table>)`. Never assume the column is absent just because the version number says it should be.
 2. **Never rely on uninstall to reset state on desktop platforms.** AppData is preserved on Windows and macOS across uninstalls.
 3. **Test migrations from every prior version**, not just the immediately previous one.
+
+---
+
+## Migration History
+
+### Version 2
+
+- **`label`**: Added `created_at DATETIME`, `updated_at DATETIME` columns.
+
+### Version 3
+
+- **`label`**: Added `is_system INTEGER DEFAULT 0` column.
+
+### Version 4
+
+- **`file_sync_track`**: Added `content_hash TEXT` column.
+  - Stores SHA-256 hash of plaintext file content for change detection during sync.
+  - Used by sketch attachment upload/download to detect edits at the same URL.

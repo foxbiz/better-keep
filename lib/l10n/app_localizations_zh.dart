@@ -231,12 +231,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lightTheme => '浅色主题';
 
   @override
-  String get language => '语言';
-
-  @override
-  String get systemDefault => '系统默认';
-
-  @override
   String get showSyncProgress => '显示同步进度';
 
   @override
@@ -316,9 +310,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get copyAs => '复制为';
-
-  @override
-  String get pasteAs => '粘贴为';
 
   @override
   String get share => '分享';
@@ -483,9 +474,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get upgradeNow => '立即升级';
 
   @override
-  String get upgradeToPro => '升级到专业版';
-
-  @override
   String get continueTrial => '继续试用';
 
   @override
@@ -533,9 +521,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recoverySuccessWelcome => '恢复成功！欢迎回来。';
-
-  @override
-  String get requestTimedOut => '请求超时。请重试。';
 
   @override
   String get confirmConsequences => '请确认你了解后果';
@@ -587,11 +572,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get failedCreateImageNote => '创建图片笔记失败';
-
-  @override
-  String errorSavingSketch(String error) {
-    return '保存草图错误：$error';
-  }
 
   @override
   String errorSavingSketchWithError(String error) {
@@ -751,6 +731,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importFile => '导入文件';
+
+  @override
+  String get language => '语言';
+
+  @override
+  String get systemDefault => '系统默认';
 
   @override
   String get selectLanguage => '选择语言';
@@ -1019,12 +1005,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get getApp => '获取应用';
 
   @override
-  String get installApp => '安装应用';
-
-  @override
-  String get notNow => '以后再说';
-
-  @override
   String get sessionExpired => '你的会话已过期。请重新登录。';
 
   @override
@@ -1232,9 +1212,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get resettingPassword => '正在重置密码...';
 
   @override
-  String get passwordsDoNotMatch => '密码不匹配';
-
-  @override
   String get pleaseEnterNewPassword => '请输入新密码';
 
   @override
@@ -1380,9 +1357,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notes_ => '笔记';
-
-  @override
-  String get reminders => '提醒';
 
   @override
   String get media => '媒体';
@@ -1935,9 +1909,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get custom => '自定义';
 
   @override
-  String get noLabelsYet => '还没有标签';
-
-  @override
   String get createLabelToOrganize => '在上方创建标签以整理您的笔记';
 
   @override
@@ -1955,6 +1926,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String deleteLabelConfirmation(String labelName) {
     return '确定要删除此标签（$labelName）吗？';
   }
+
+  @override
+  String get pasteAs => '粘贴为';
 
   @override
   String get formattedText => '格式化文本';
@@ -2219,9 +2193,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get permanentDeleteWarning => '这将永久删除所有数据且无法恢复。';
 
   @override
-  String get deleteForever => '永久删除';
-
-  @override
   String get sentVerificationCodeTo => '我们已发送验证码到：';
 
   @override
@@ -2372,10 +2343,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get encryptedNote => '加密笔记';
 
   @override
-  String get encryptedNoteCannotBeDecrypted => '此笔记无法解密。加密密钥丢失或无效，笔记无法恢复。';
+  String get decryptionFailed => '解密失败';
 
   @override
-  String get decryptionFailed => '解密失败';
+  String get decryptionFailedRetryMessage =>
+      '此笔记无法解密。这可能是因为加密密钥暂时不可用。您可以尝试重新同步，或永久删除该笔记。';
+
+  @override
+  String get deletingNoteFromAllDevicesWarning =>
+      '删除将从您所有设备中移除此笔记，包括服务器上的加密副本。';
+
+  @override
+  String get retryDecryption => '重试';
+
+  @override
+  String get retryingDecryption => '正在重新同步...';
+
+  @override
+  String get e2eeNotReady => '加密未就绪。请检查您的设备授权状态。';
 
   @override
   String get thisNoteIsLocked => '此笔记已锁定';
@@ -2494,6 +2479,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trash => '回收站';
 
   @override
+  String get reminders => '提醒';
+
+  @override
   String get notificationsEnabled => '通知已启用！您的提醒已设置。';
 
   @override
@@ -2505,6 +2493,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get installBetterKeep => '安装 Better Keep';
+
+  @override
+  String get installApp => '安装应用';
 
   @override
   String get getAndroidApp => '获取 Android 应用';
@@ -2549,6 +2540,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createYourFirstNote => '创建您的第一条笔记';
 
   @override
+  String get noLabelsYet => '还没有标签';
+
+  @override
   String get noColoredNotesYet => '还没有彩色笔记';
 
   @override
@@ -2584,10 +2578,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get install => '安装';
 
   @override
+  String get notNow => '以后再说';
+
+  @override
   String get noRecoveryKey => '没有恢复密钥';
 
   @override
   String get iUnderstand => '我明白了';
+
+  @override
+  String get deleteForever => '永久删除';
 
   @override
   String get deleteAllTrashForever => '确定要永久删除回收站中的所有笔记吗？此操作无法撤销。';
@@ -2629,6 +2629,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pleaseConfirmYourPassword => '请确认您的密码';
+
+  @override
+  String get passwordsDoNotMatch => '密码不匹配';
 
   @override
   String get creatingAccount => '正在创建账户...';
@@ -2707,6 +2710,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get takingTooLongTryAgain => '耗时过长。您可以取消并重试。';
 
   @override
+  String get requestTimedOut => '请求超时。请重试。';
+
+  @override
   String get failedToSendVerificationCode => '发送验证码失败';
 
   @override
@@ -2772,6 +2778,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToSaveSketch => '保存草图失败';
 
   @override
+  String errorSavingSketch(String error) {
+    return '保存草图错误：$error';
+  }
+
+  @override
   String get planFree => '免费版';
 
   @override
@@ -2793,6 +2804,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get upgrade => '升级';
+
+  @override
+  String get upgradeToPro => '升级到专业版';
 
   @override
   String unlockFeature(String feature) {

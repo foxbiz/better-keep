@@ -231,12 +231,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lightTheme => 'ライトテーマ';
 
   @override
-  String get language => '言語';
-
-  @override
-  String get systemDefault => 'システムデフォルト';
-
-  @override
   String get showSyncProgress => '同期進捗を表示';
 
   @override
@@ -316,9 +310,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get copyAs => 'コピー形式';
-
-  @override
-  String get pasteAs => '貼り付け形式';
 
   @override
   String get share => '共有';
@@ -483,9 +474,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get upgradeNow => '今すぐアップグレード';
 
   @override
-  String get upgradeToPro => 'Proにアップグレード';
-
-  @override
   String get continueTrial => 'トライアルを続ける';
 
   @override
@@ -533,9 +521,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recoverySuccessWelcome => 'リカバリー成功！おかえりなさい。';
-
-  @override
-  String get requestTimedOut => 'リクエストがタイムアウトしました。もう一度お試しください。';
 
   @override
   String get confirmConsequences => '結果を理解していることを確認してください';
@@ -587,11 +572,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedCreateImageNote => '画像ノートの作成に失敗しました';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'スケッチの保存エラー、プレビューがありません';
-  }
 
   @override
   String errorSavingSketchWithError(String error) {
@@ -751,6 +731,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get importFile => 'ファイルをインポート';
+
+  @override
+  String get language => '言語';
+
+  @override
+  String get systemDefault => 'システムデフォルト';
 
   @override
   String get selectLanguage => '言語を選択';
@@ -1019,12 +1005,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get getApp => 'アプリを入手';
 
   @override
-  String get installApp => 'アプリをインストール';
-
-  @override
-  String get notNow => '後で';
-
-  @override
   String get sessionExpired => 'セッションが期限切れです。再度サインインしてください。';
 
   @override
@@ -1236,9 +1216,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get resettingPassword => 'パスワードをリセット中...';
 
   @override
-  String get passwordsDoNotMatch => 'パスワードが一致しません';
-
-  @override
   String get pleaseEnterNewPassword => '新しいパスワードを入力してください';
 
   @override
@@ -1387,9 +1364,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get notes_ => 'ノート';
-
-  @override
-  String get reminders => 'リマインダー';
 
   @override
   String get media => 'メディア';
@@ -1954,9 +1928,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get custom => 'カスタム';
 
   @override
-  String get noLabelsYet => 'ラベルがまだありません';
-
-  @override
   String get createLabelToOrganize => '上のラベルを作成してノートを整理しましょう';
 
   @override
@@ -1974,6 +1945,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String deleteLabelConfirmation(String labelName) {
     return 'このラベル（$labelName）を削除してもよろしいですか？';
   }
+
+  @override
+  String get pasteAs => '貼り付け形式';
 
   @override
   String get formattedText => 'フォーマット済みテキスト';
@@ -2253,9 +2227,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get permanentDeleteWarning => 'すべてのデータが完全に削除され、復元できません。';
 
   @override
-  String get deleteForever => '完全に削除';
-
-  @override
   String get sentVerificationCodeTo => '確認コードを送信しました:';
 
   @override
@@ -2408,11 +2379,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get encryptedNote => '暗号化されたノート';
 
   @override
-  String get encryptedNoteCannotBeDecrypted =>
-      'このノートは復号できませんでした。暗号化キーが見つからないか無効であり、ノートを復元できません。';
+  String get decryptionFailed => '復号に失敗しました';
 
   @override
-  String get decryptionFailed => '復号に失敗しました';
+  String get decryptionFailedRetryMessage =>
+      'このノートを復号できませんでした。暗号化キーが一時的に利用できない場合に発生することがあります。再同期を試みるか、ノートを完全に削除できます。';
+
+  @override
+  String get deletingNoteFromAllDevicesWarning =>
+      '削除すると、サーバー上の暗号化されたコピーを含め、すべてのデバイスからこのノートが削除されます。';
+
+  @override
+  String get retryDecryption => '再試行';
+
+  @override
+  String get retryingDecryption => '同期を再試行中...';
+
+  @override
+  String get e2eeNotReady => '暗号化の準備ができていません。デバイスの承認状態を確認してください。';
 
   @override
   String get thisNoteIsLocked => 'このノートはロックされています';
@@ -2531,6 +2515,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trash => 'ゴミ箱';
 
   @override
+  String get reminders => 'リマインダー';
+
+  @override
   String get notificationsEnabled => '通知が有効になりました！リマインダーが設定されました。';
 
   @override
@@ -2542,6 +2529,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get installBetterKeep => 'Better Keepをインストール';
+
+  @override
+  String get installApp => 'アプリをインストール';
 
   @override
   String get getAndroidApp => 'Androidアプリを入手';
@@ -2586,6 +2576,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createYourFirstNote => '最初のノートを作成';
 
   @override
+  String get noLabelsYet => 'ラベルがまだありません';
+
+  @override
   String get noColoredNotesYet => '色付きのノートがまだありません';
 
   @override
@@ -2622,10 +2615,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get install => 'インストール';
 
   @override
+  String get notNow => '後で';
+
+  @override
   String get noRecoveryKey => 'リカバリーキーがありません';
 
   @override
   String get iUnderstand => '理解しました';
+
+  @override
+  String get deleteForever => '完全に削除';
 
   @override
   String get deleteAllTrashForever =>
@@ -2668,6 +2667,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pleaseConfirmYourPassword => 'パスワードを確認してください';
+
+  @override
+  String get passwordsDoNotMatch => 'パスワードが一致しません';
 
   @override
   String get creatingAccount => 'アカウントを作成中...';
@@ -2749,6 +2751,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get takingTooLongTryAgain => '時間がかかっています。キャンセルしてもう一度お試しください。';
 
   @override
+  String get requestTimedOut => 'リクエストがタイムアウトしました。もう一度お試しください。';
+
+  @override
   String get failedToSendVerificationCode => '確認コードの送信に失敗しました';
 
   @override
@@ -2814,6 +2819,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToSaveSketch => 'スケッチの保存に失敗しました';
 
   @override
+  String errorSavingSketch(String error) {
+    return 'スケッチの保存エラー: $error';
+  }
+
+  @override
   String get planFree => '無料';
 
   @override
@@ -2835,6 +2845,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get upgrade => 'アップグレード';
+
+  @override
+  String get upgradeToPro => 'Proにアップグレード';
 
   @override
   String unlockFeature(String feature) {

@@ -671,6 +671,12 @@ class _SketchPageState extends State<SketchPage>
 
     if (confirm != true) return;
 
+    // Cancel any pending save timers to prevent stale saves from re-adding the sketch
+    _autoSaveTimer?.cancel();
+    _debounceSaveTimer?.cancel();
+    _debounceSaveTimer = null;
+    _pendingSaveState = null;
+
     final isOnPendingSketch = _pendingNewSketch == _sketchData;
 
     if (isOnPendingSketch) {
@@ -696,8 +702,9 @@ class _SketchPageState extends State<SketchPage>
       _localSketches.removeAt(deletedIndex);
     }
 
-    // Remove from note
-    widget.note.removeSketch(_sketchData);
+    // Remove from note and delete associated files
+    _isDirty = false;
+    await widget.note.removeSketch(_sketchData);
 
     // Determine where to navigate
     if (_localSketches.isEmpty && _pendingNewSketch == null) {
@@ -756,7 +763,14 @@ class _SketchPageState extends State<SketchPage>
       _hasFitted = false;
     });
 
-    if (_sketchData.backgroundImage != null) {
+    // Load strokes from file if needed (old sketches store strokes in separate files)
+    if (_strokes.isEmpty && _sketchData.hasStrokesFile) {
+      _loadStrokesFromFile().then((_) {
+        if (mounted && _sketchData.backgroundImage != null) {
+          _loadBackgroundImage();
+        }
+      });
+    } else if (_sketchData.backgroundImage != null) {
       _loadBackgroundImage();
     }
   }

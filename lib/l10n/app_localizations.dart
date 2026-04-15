@@ -552,18 +552,6 @@ abstract class AppLocalizations {
   /// **'Light Theme'**
   String get lightTheme;
 
-  /// Language setting label
-  ///
-  /// In en, this message translates to:
-  /// **'Language'**
-  String get language;
-
-  /// System default language option
-  ///
-  /// In en, this message translates to:
-  /// **'System Default'**
-  String get systemDefault;
-
   /// Show sync progress toggle label
   ///
   /// In en, this message translates to:
@@ -725,12 +713,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copy as'**
   String get copyAs;
-
-  /// Paste as dialog title
-  ///
-  /// In en, this message translates to:
-  /// **'Paste as'**
-  String get pasteAs;
 
   /// Share action
   ///
@@ -1044,12 +1026,6 @@ abstract class AppLocalizations {
   /// **'Upgrade Now'**
   String get upgradeNow;
 
-  /// Upgrade to Pro heading/button text
-  ///
-  /// In en, this message translates to:
-  /// **'Upgrade to Pro'**
-  String get upgradeToPro;
-
   /// Continue trial button label
   ///
   /// In en, this message translates to:
@@ -1127,12 +1103,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recovery successful! Welcome back.'**
   String get recoverySuccessWelcome;
-
-  /// Request timed out message
-  ///
-  /// In en, this message translates to:
-  /// **'Request timed out. Please try again.'**
-  String get requestTimedOut;
 
   /// Confirm consequences message
   ///
@@ -1223,12 +1193,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to create image note'**
   String get failedCreateImageNote;
-
-  /// Error saving sketch with details
-  ///
-  /// In en, this message translates to:
-  /// **'Error saving sketch: {error}'**
-  String errorSavingSketch(String error);
 
   /// Error saving sketch with error message
   ///
@@ -1499,6 +1463,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Import File'**
   String get importFile;
+
+  /// Language setting label
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get language;
+
+  /// System default language option
+  ///
+  /// In en, this message translates to:
+  /// **'System Default'**
+  String get systemDefault;
 
   /// Select language dialog title
   ///
@@ -2016,18 +1992,6 @@ abstract class AppLocalizations {
   /// **'Get the App'**
   String get getApp;
 
-  /// Install app button label
-  ///
-  /// In en, this message translates to:
-  /// **'Install App'**
-  String get installApp;
-
-  /// Not now button label
-  ///
-  /// In en, this message translates to:
-  /// **'Not now'**
-  String get notNow;
-
   /// Session expired message
   ///
   /// In en, this message translates to:
@@ -2424,12 +2388,6 @@ abstract class AppLocalizations {
   /// **'Resetting Password...'**
   String get resettingPassword;
 
-  /// Password mismatch error message
-  ///
-  /// In en, this message translates to:
-  /// **'Passwords do not match'**
-  String get passwordsDoNotMatch;
-
   /// Please enter new password validation error
   ///
   /// In en, this message translates to:
@@ -2478,7 +2436,7 @@ abstract class AppLocalizations {
   /// **'Verify Your Email'**
   String get verifyYourEmail;
 
-  /// Sending verification code message
+  /// Sending verification code status
   ///
   /// In en, this message translates to:
   /// **'Sending verification code...'**
@@ -2711,12 +2669,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Notes'**
   String get notes_;
-
-  /// Reminders navigation item
-  ///
-  /// In en, this message translates to:
-  /// **'Reminders'**
-  String get reminders;
 
   /// Media stat label
   ///
@@ -3282,7 +3234,7 @@ abstract class AppLocalizations {
   /// **'Failed to enable E2EE: {error}'**
   String failedEnableE2EE(String error);
 
-  /// Recovery key saved success message
+  /// Recovery key saved message
   ///
   /// In en, this message translates to:
   /// **'Recovery key saved successfully!'**
@@ -3291,7 +3243,7 @@ abstract class AppLocalizations {
   /// No recovery key warning message
   ///
   /// In en, this message translates to:
-  /// **'Without a recovery key, you will permanently lose access to all your encrypted notes if you lose all your devices.\n\nConsider setting up a recovery key later in Settings.'**
+  /// **'Warning: Without a recovery key, you may lose access to your notes if you lose all devices.'**
   String get noRecoveryKeyWarning;
 
   /// Recovery key options message
@@ -3522,7 +3474,7 @@ abstract class AppLocalizations {
   /// **'Delete Account'**
   String get deleteAccount;
 
-  /// Verify your identity dialog title
+  /// Verify identity dialog title
   ///
   /// In en, this message translates to:
   /// **'Verify Your Identity'**
@@ -3666,12 +3618,6 @@ abstract class AppLocalizations {
   /// **'Custom'**
   String get custom;
 
-  /// No labels yet empty state
-  ///
-  /// In en, this message translates to:
-  /// **'No labels yet'**
-  String get noLabelsYet;
-
   /// Empty labels state description
   ///
   /// In en, this message translates to:
@@ -3701,6 +3647,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to delete this label ({labelName})?'**
   String deleteLabelConfirmation(String labelName);
+
+  /// Paste as dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Paste as'**
+  String get pasteAs;
 
   /// Formatted text paste option
   ///
@@ -4194,12 +4146,6 @@ abstract class AppLocalizations {
   /// **'This will permanently delete all data and cannot be recovered.'**
   String get permanentDeleteWarning;
 
-  /// Delete forever dialog title
-  ///
-  /// In en, this message translates to:
-  /// **'Delete Forever'**
-  String get deleteForever;
-
   /// Sent verification code message
   ///
   /// In en, this message translates to:
@@ -4476,17 +4422,41 @@ abstract class AppLocalizations {
   /// **'Encrypted Note'**
   String get encryptedNote;
 
-  /// Encrypted note cannot be decrypted message
-  ///
-  /// In en, this message translates to:
-  /// **'This note could not be decrypted. The encryption keys are missing or invalid, and the note cannot be recovered.'**
-  String get encryptedNoteCannotBeDecrypted;
-
   /// Decryption failed label
   ///
   /// In en, this message translates to:
   /// **'Decryption failed'**
   String get decryptionFailed;
+
+  /// Message shown when a note fails to decrypt, offering retry
+  ///
+  /// In en, this message translates to:
+  /// **'This note could not be decrypted. This can happen when encryption keys are temporarily unavailable. You can try syncing again, or delete the note permanently.'**
+  String get decryptionFailedRetryMessage;
+
+  /// Warning that deleting a decryption-failed note destroys the server copy
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting will remove this note from all your devices, including the encrypted copy on the server.'**
+  String get deletingNoteFromAllDevicesWarning;
+
+  /// Button to retry decrypting a failed note
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retryDecryption;
+
+  /// Snackbar message when retrying decryption
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying sync...'**
+  String get retryingDecryption;
+
+  /// Message when E2EE is not ready for retry
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption is not ready. Please check your device approval status.'**
+  String get e2eeNotReady;
 
   /// Locked note label
   ///
@@ -4680,6 +4650,12 @@ abstract class AppLocalizations {
   /// **'Trash'**
   String get trash;
 
+  /// Reminders navigation item
+  ///
+  /// In en, this message translates to:
+  /// **'Reminders'**
+  String get reminders;
+
   /// Snackbar message after enabling notification permissions
   ///
   /// In en, this message translates to:
@@ -4703,6 +4679,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Install Better Keep'**
   String get installBetterKeep;
+
+  /// Install app button label
+  ///
+  /// In en, this message translates to:
+  /// **'Install App'**
+  String get installApp;
 
   /// Get Android app button label
   ///
@@ -4788,6 +4770,12 @@ abstract class AppLocalizations {
   /// **'Create your first note'**
   String get createYourFirstNote;
 
+  /// No labels yet empty state
+  ///
+  /// In en, this message translates to:
+  /// **'No labels yet'**
+  String get noLabelsYet;
+
   /// No colored notes yet empty state
   ///
   /// In en, this message translates to:
@@ -4854,6 +4842,12 @@ abstract class AppLocalizations {
   /// **'Install'**
   String get install;
 
+  /// Not now button label
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get notNow;
+
   /// No recovery key dialog title
   ///
   /// In en, this message translates to:
@@ -4865,6 +4859,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'I understand'**
   String get iUnderstand;
+
+  /// Delete forever dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Forever'**
+  String get deleteForever;
 
   /// Delete all trash confirmation message
   ///
@@ -4931,6 +4931,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please confirm your password'**
   String get pleaseConfirmYourPassword;
+
+  /// Password mismatch error message
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords do not match'**
+  String get passwordsDoNotMatch;
 
   /// Creating account status message
   ///
@@ -5082,6 +5088,12 @@ abstract class AppLocalizations {
   /// **'Taking too long. You can cancel and try again.'**
   String get takingTooLongTryAgain;
 
+  /// Request timed out message
+  ///
+  /// In en, this message translates to:
+  /// **'Request timed out. Please try again.'**
+  String get requestTimedOut;
+
   /// Failed to send verification code error message
   ///
   /// In en, this message translates to:
@@ -5208,6 +5220,12 @@ abstract class AppLocalizations {
   /// **'Failed to save sketch'**
   String get failedToSaveSketch;
 
+  /// Error saving sketch with details
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving sketch: {error}'**
+  String errorSavingSketch(String error);
+
   /// Free plan name for display
   ///
   /// In en, this message translates to:
@@ -5249,6 +5267,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Upgrade'**
   String get upgrade;
+
+  /// Upgrade to Pro heading/button text
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Pro'**
+  String get upgradeToPro;
 
   /// Unlock a specific feature message
   ///

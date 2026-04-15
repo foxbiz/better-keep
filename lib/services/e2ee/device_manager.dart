@@ -256,8 +256,15 @@ class DeviceManager {
     }
 
     if (device.isApproved && device.hasWrappedUMK && _cachedUMK == null) {
-      // Try to unwrap UMK
-      await _unwrapAndCacheUMK(device);
+      // Try to unwrap UMK — wrap in try/catch to handle secure storage failures
+      // gracefully (e.g., Android KeyStore invalidation, iOS Keychain errors).
+      // Without this, a transient storage failure would propagate as an unhandled
+      // exception, setting E2EEStatus.error and breaking all decryption.
+      try {
+        await _unwrapAndCacheUMK(device);
+      } catch (e) {
+        AppLogger.error('E2EE: Failed to unwrap UMK during init (will retry on next launch)', e);
+      }
     }
 
     // Start listening for pending approvals (if this device is approved)

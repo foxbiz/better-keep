@@ -232,12 +232,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lightTheme => 'Aydınlık Tema';
 
   @override
-  String get language => 'Dil';
-
-  @override
-  String get systemDefault => 'Sistem Varsayılanı';
-
-  @override
   String get showSyncProgress => 'Eşitleme İlerlemesini Göster';
 
   @override
@@ -318,9 +312,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get copyAs => 'Farklı kopyala';
-
-  @override
-  String get pasteAs => 'Farklı yapıştır';
 
   @override
   String get share => 'Paylaş';
@@ -487,9 +478,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get upgradeNow => 'Şimdi Yükselt';
 
   @override
-  String get upgradeToPro => 'Pro\'ya Yükselt';
-
-  @override
   String get continueTrial => 'Denemeye Devam Et';
 
   @override
@@ -538,10 +526,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get recoverySuccessWelcome =>
       'Kurtarma başarılı! Tekrar hoş geldiniz.';
-
-  @override
-  String get requestTimedOut =>
-      'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.';
 
   @override
   String get confirmConsequences => 'Lütfen sonuçları anladığınızı onaylayın';
@@ -594,11 +578,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get failedCreateImageNote => 'Resim notu oluşturulamadı';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'Çizim kaydedilirken hata oluştu: $error';
-  }
 
   @override
   String errorSavingSketchWithError(String error) {
@@ -758,6 +737,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get importFile => 'Dosya İçe Aktar';
+
+  @override
+  String get language => 'Dil';
+
+  @override
+  String get systemDefault => 'Sistem Varsayılanı';
 
   @override
   String get selectLanguage => 'Dil Seç';
@@ -1026,12 +1011,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get getApp => 'Uygulamayı Edin';
 
   @override
-  String get installApp => 'Uygulamayı Yükle';
-
-  @override
-  String get notNow => 'Şimdi değil';
-
-  @override
   String get sessionExpired =>
       'Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.';
 
@@ -1251,9 +1230,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get resettingPassword => 'Parola Sıfırlanıyor...';
 
   @override
-  String get passwordsDoNotMatch => 'Parolalar eşleşmiyor';
-
-  @override
   String get pleaseEnterNewPassword => 'Lütfen yeni bir parola girin';
 
   @override
@@ -1413,9 +1389,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get notes_ => 'Notlar';
-
-  @override
-  String get reminders => 'Hatırlatıcılar';
 
   @override
   String get media => 'Medya';
@@ -1999,9 +1972,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get custom => 'Özel';
 
   @override
-  String get noLabelsYet => 'Henüz etiket yok';
-
-  @override
   String get createLabelToOrganize =>
       'Notlarınızı düzenlemek için yukarıdan bir etiket oluşturun';
 
@@ -2020,6 +1990,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String deleteLabelConfirmation(String labelName) {
     return 'Bu etiketi ($labelName) silmek istediğinizden emin misiniz?';
   }
+
+  @override
+  String get pasteAs => 'Farklı yapıştır';
 
   @override
   String get formattedText => 'Biçimlendirilmiş metin';
@@ -2313,9 +2286,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bu, tüm verileri kalıcı olarak silecektir ve kurtarılamaz.';
 
   @override
-  String get deleteForever => 'Sonsuza Dek Sil';
-
-  @override
   String get sentVerificationCodeTo =>
       'Şu adrese bir doğrulama kodu gönderdik:';
 
@@ -2477,11 +2447,25 @@ class AppLocalizationsTr extends AppLocalizations {
   String get encryptedNote => 'Şifrelenmiş Not';
 
   @override
-  String get encryptedNoteCannotBeDecrypted =>
-      'Bu notun şifresi çözülemedi. Şifreleme anahtarları eksik veya geçersiz bu yüzden not kurtarılamıyor.';
+  String get decryptionFailed => 'Şifre çözme başarısız oldu';
 
   @override
-  String get decryptionFailed => 'Şifre çözme başarısız oldu';
+  String get decryptionFailedRetryMessage =>
+      'Bu not şifresi çözülemedi. Bu, şifreleme anahtarlarının geçici olarak kullanılamaması durumunda olabilir. Tekrar senkronize etmeyi deneyebilir veya notu kalıcı olarak silebilirsiniz.';
+
+  @override
+  String get deletingNoteFromAllDevicesWarning =>
+      'Silme işlemi bu notu sunucudaki şifrelenmiş kopya dahil tüm cihazlarınızdan kaldırır.';
+
+  @override
+  String get retryDecryption => 'Tekrar Dene';
+
+  @override
+  String get retryingDecryption => 'Senkronizasyon yeniden deneniyor...';
+
+  @override
+  String get e2eeNotReady =>
+      'Şifreleme hazır değil. Lütfen cihaz onay durumunuzu kontrol edin.';
 
   @override
   String get thisNoteIsLocked => 'Bu not kilitli';
@@ -2602,6 +2586,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get trash => 'Çöp Kutusu';
 
   @override
+  String get reminders => 'Hatırlatıcılar';
+
+  @override
   String get notificationsEnabled =>
       'Bildirimler etkinleştirildi! Hatırlatıcılarınız ayarlandı.';
 
@@ -2614,6 +2601,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get installBetterKeep => 'Better Keep\'i Yükle';
+
+  @override
+  String get installApp => 'Uygulamayı Yükle';
 
   @override
   String get getAndroidApp => 'Android Uygulamasını Edin';
@@ -2658,6 +2648,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createYourFirstNote => 'İlk notunuzu oluşturun';
 
   @override
+  String get noLabelsYet => 'Henüz etiket yok';
+
+  @override
   String get noColoredNotesYet => 'Henüz renkli not yok';
 
   @override
@@ -2696,10 +2689,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get install => 'Yükle';
 
   @override
+  String get notNow => 'Şimdi değil';
+
+  @override
   String get noRecoveryKey => 'Kurtarma Anahtarı Yok';
 
   @override
   String get iUnderstand => 'Anlıyorum';
+
+  @override
+  String get deleteForever => 'Sonsuza Dek Sil';
 
   @override
   String get deleteAllTrashForever =>
@@ -2746,6 +2745,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get pleaseConfirmYourPassword => 'Lütfen parolanızı onaylayın';
+
+  @override
+  String get passwordsDoNotMatch => 'Parolalar eşleşmiyor';
 
   @override
   String get creatingAccount => 'Hesap oluşturuluyor...';
@@ -2830,6 +2832,10 @@ class AppLocalizationsTr extends AppLocalizations {
       'Çok uzun sürüyor. İptal edip tekrar deneyebilirsiniz.';
 
   @override
+  String get requestTimedOut =>
+      'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.';
+
+  @override
   String get failedToSendVerificationCode => 'Doğrulama kodu gönderilemedi';
 
   @override
@@ -2901,6 +2907,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get failedToSaveSketch => 'Çizim kaydedilemedi';
 
   @override
+  String errorSavingSketch(String error) {
+    return 'Çizim kaydedilirken hata oluştu: $error';
+  }
+
+  @override
   String get planFree => 'Ücretsiz';
 
   @override
@@ -2923,6 +2934,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get upgrade => 'Yükselt';
+
+  @override
+  String get upgradeToPro => 'Pro\'ya Yükselt';
 
   @override
   String unlockFeature(String feature) {

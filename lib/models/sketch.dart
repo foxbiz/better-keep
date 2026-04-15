@@ -177,6 +177,11 @@ class SketchData {
   /// The file is uploaded to Firebase Storage and downloaded on other devices.
   String? strokesFilePath;
 
+  /// SHA-256 hash of the plaintext strokes file content.
+  /// Used to detect when a remote file has been updated at the same URL
+  /// (e.g., sketch edited on another device and re-uploaded to the same path).
+  String? strokesContentHash;
+
   SketchData({
     this.previewImage,
     this.backgroundImage,
@@ -188,6 +193,7 @@ class SketchData {
     this.encryptedStrokes,
     this.encryptedMetadata,
     this.strokesFilePath,
+    this.strokesContentHash,
   });
 
   /// Returns true if this sketch has encrypted strokes (locked note)
@@ -215,6 +221,7 @@ class SketchData {
       'previewImage': previewImage,
       'backgroundImage': backgroundImage,
       if (blurredThumbnail != null) 'blurredThumbnail': blurredThumbnail,
+      if (strokesContentHash != null) 'strokesContentHash': strokesContentHash,
     };
   }
 
@@ -302,6 +309,7 @@ class SketchData {
         pagePattern: pattern,
         blurredThumbnail: json['blurredThumbnail'] as String?,
         strokesFilePath: json['strokesFilePath'] as String?,
+        strokesContentHash: json['strokesContentHash'] as String?,
       );
     } catch (e) {
       AppLogger.error('Error parsing sketch data', e);

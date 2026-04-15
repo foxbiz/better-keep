@@ -231,12 +231,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get lightTheme => 'Tema Terang';
 
   @override
-  String get language => 'Bahasa';
-
-  @override
-  String get systemDefault => 'Default Sistem';
-
-  @override
   String get showSyncProgress => 'Tampilkan Kemajuan Sinkronisasi';
 
   @override
@@ -318,9 +312,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get copyAs => 'Salin sebagai';
-
-  @override
-  String get pasteAs => 'Tempel sebagai';
 
   @override
   String get share => 'Bagikan';
@@ -487,9 +478,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get upgradeNow => 'Upgrade Sekarang';
 
   @override
-  String get upgradeToPro => 'Upgrade ke Pro';
-
-  @override
   String get continueTrial => 'Lanjutkan Uji Coba';
 
   @override
@@ -538,9 +526,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get recoverySuccessWelcome =>
       'Pemulihan berhasil! Selamat datang kembali.';
-
-  @override
-  String get requestTimedOut => 'Permintaan habis waktu. Silakan coba lagi.';
 
   @override
   String get confirmConsequences =>
@@ -593,11 +578,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedCreateImageNote => 'Gagal membuat catatan gambar';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'Error menyimpan sketsa: $error';
-  }
 
   @override
   String errorSavingSketchWithError(String error) {
@@ -757,6 +737,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get importFile => 'Impor File';
+
+  @override
+  String get language => 'Bahasa';
+
+  @override
+  String get systemDefault => 'Default Sistem';
 
   @override
   String get selectLanguage => 'Pilih Bahasa';
@@ -1025,12 +1011,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get getApp => 'Dapatkan Aplikasi';
 
   @override
-  String get installApp => 'Instal Aplikasi';
-
-  @override
-  String get notNow => 'Nanti saja';
-
-  @override
   String get sessionExpired => 'Sesi Anda telah berakhir. Silakan masuk lagi.';
 
   @override
@@ -1250,9 +1230,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get resettingPassword => 'Mereset Kata Sandi...';
 
   @override
-  String get passwordsDoNotMatch => 'Kata sandi tidak cocok';
-
-  @override
   String get pleaseEnterNewPassword => 'Silakan masukkan kata sandi baru';
 
   @override
@@ -1412,9 +1389,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get notes_ => 'Catatan';
-
-  @override
-  String get reminders => 'Pengingat';
 
   @override
   String get media => 'Media';
@@ -2002,9 +1976,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get custom => 'Kustom';
 
   @override
-  String get noLabelsYet => 'Belum ada label';
-
-  @override
   String get createLabelToOrganize =>
       'Buat label di atas untuk mengorganisir catatan Anda';
 
@@ -2023,6 +1994,9 @@ class AppLocalizationsId extends AppLocalizations {
   String deleteLabelConfirmation(String labelName) {
     return 'Apakah Anda yakin ingin menghapus label ini ($labelName)?';
   }
+
+  @override
+  String get pasteAs => 'Tempel sebagai';
 
   @override
   String get formattedText => 'Teks berformat';
@@ -2304,9 +2278,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Ini akan menghapus semua data secara permanen dan tidak dapat dipulihkan.';
 
   @override
-  String get deleteForever => 'Hapus Selamanya';
-
-  @override
   String get sentVerificationCodeTo => 'Kami mengirim kode verifikasi ke:';
 
   @override
@@ -2467,11 +2438,25 @@ class AppLocalizationsId extends AppLocalizations {
   String get encryptedNote => 'Catatan Terenkripsi';
 
   @override
-  String get encryptedNoteCannotBeDecrypted =>
-      'Catatan ini tidak dapat didekripsi. Kunci enkripsi hilang atau tidak valid, dan catatan tidak dapat dipulihkan.';
+  String get decryptionFailed => 'Dekripsi gagal';
 
   @override
-  String get decryptionFailed => 'Dekripsi gagal';
+  String get decryptionFailedRetryMessage =>
+      'Catatan ini tidak dapat didekripsi. Ini bisa terjadi saat kunci enkripsi sementara tidak tersedia. Anda dapat mencoba menyinkronkan ulang, atau menghapus catatan secara permanen.';
+
+  @override
+  String get deletingNoteFromAllDevicesWarning =>
+      'Menghapus akan menghapus catatan ini dari semua perangkat Anda, termasuk salinan terenkripsi di server.';
+
+  @override
+  String get retryDecryption => 'Coba Lagi';
+
+  @override
+  String get retryingDecryption => 'Mencoba sinkronisasi ulang...';
+
+  @override
+  String get e2eeNotReady =>
+      'Enkripsi belum siap. Silakan periksa status persetujuan perangkat Anda.';
 
   @override
   String get thisNoteIsLocked => 'Catatan ini terkunci';
@@ -2592,6 +2577,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get trash => 'Sampah';
 
   @override
+  String get reminders => 'Pengingat';
+
+  @override
   String get notificationsEnabled =>
       'Notifikasi diaktifkan! Pengingat Anda telah diatur.';
 
@@ -2604,6 +2592,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get installBetterKeep => 'Instal Better Keep';
+
+  @override
+  String get installApp => 'Instal Aplikasi';
 
   @override
   String get getAndroidApp => 'Dapatkan Aplikasi Android';
@@ -2648,6 +2639,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get createYourFirstNote => 'Buat catatan pertama Anda';
 
   @override
+  String get noLabelsYet => 'Belum ada label';
+
+  @override
   String get noColoredNotesYet => 'Belum ada catatan berwarna';
 
   @override
@@ -2686,10 +2680,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get install => 'Instal';
 
   @override
+  String get notNow => 'Nanti saja';
+
+  @override
   String get noRecoveryKey => 'Tidak Ada Kunci Pemulihan';
 
   @override
   String get iUnderstand => 'Saya Mengerti';
+
+  @override
+  String get deleteForever => 'Hapus Selamanya';
 
   @override
   String get deleteAllTrashForever =>
@@ -2735,6 +2735,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get pleaseConfirmYourPassword => 'Silakan konfirmasi kata sandi Anda';
+
+  @override
+  String get passwordsDoNotMatch => 'Kata sandi tidak cocok';
 
   @override
   String get creatingAccount => 'Membuat akun...';
@@ -2820,6 +2823,9 @@ class AppLocalizationsId extends AppLocalizations {
       'Terlalu lama. Anda dapat membatalkan dan mencoba lagi.';
 
   @override
+  String get requestTimedOut => 'Permintaan habis waktu. Silakan coba lagi.';
+
+  @override
   String get failedToSendVerificationCode => 'Gagal mengirim kode verifikasi';
 
   @override
@@ -2890,6 +2896,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get failedToSaveSketch => 'Gagal menyimpan sketsa';
 
   @override
+  String errorSavingSketch(String error) {
+    return 'Error menyimpan sketsa: $error';
+  }
+
+  @override
   String get planFree => 'Gratis';
 
   @override
@@ -2912,6 +2923,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get upgrade => 'Upgrade';
+
+  @override
+  String get upgradeToPro => 'Upgrade ke Pro';
 
   @override
   String unlockFeature(String feature) {

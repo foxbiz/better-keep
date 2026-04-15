@@ -232,12 +232,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lightTheme => 'Light Theme';
 
   @override
-  String get language => 'Language';
-
-  @override
-  String get systemDefault => 'System Default';
-
-  @override
   String get showSyncProgress => 'Show Sync Progress';
 
   @override
@@ -318,9 +312,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get copyAs => 'Copy as';
-
-  @override
-  String get pasteAs => 'Paste as';
 
   @override
   String get share => 'Share';
@@ -487,9 +478,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get upgradeNow => 'Upgrade Now';
 
   @override
-  String get upgradeToPro => 'Upgrade to Pro';
-
-  @override
   String get continueTrial => 'Continue Trial';
 
   @override
@@ -537,9 +525,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recoverySuccessWelcome => 'Recovery successful! Welcome back.';
-
-  @override
-  String get requestTimedOut => 'Request timed out. Please try again.';
 
   @override
   String get confirmConsequences =>
@@ -592,11 +577,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get failedCreateImageNote => 'Failed to create image note';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'Error saving sketch: $error';
-  }
 
   @override
   String errorSavingSketchWithError(String error) {
@@ -756,6 +736,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importFile => 'Import File';
+
+  @override
+  String get language => 'Language';
+
+  @override
+  String get systemDefault => 'System Default';
 
   @override
   String get selectLanguage => 'Select Language';
@@ -1024,12 +1010,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get getApp => 'Get the App';
 
   @override
-  String get installApp => 'Install App';
-
-  @override
-  String get notNow => 'Not now';
-
-  @override
   String get sessionExpired =>
       'Your session has expired. Please sign in again.';
 
@@ -1248,9 +1228,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get resettingPassword => 'Resetting Password...';
 
   @override
-  String get passwordsDoNotMatch => 'Passwords do not match';
-
-  @override
   String get pleaseEnterNewPassword => 'Please enter a new password';
 
   @override
@@ -1408,9 +1385,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notes_ => 'Notes';
-
-  @override
-  String get reminders => 'Reminders';
 
   @override
   String get media => 'Media';
@@ -1769,7 +1743,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noRecoveryKeyWarning =>
-      'Without a recovery key, you will permanently lose access to all your encrypted notes if you lose all your devices.\n\nConsider setting up a recovery key later in Settings.';
+      'Warning: Without a recovery key, you may lose access to your notes if you lose all devices.';
 
   @override
   String get recoveryKeySetUp =>
@@ -1992,9 +1966,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get custom => 'Custom';
 
   @override
-  String get noLabelsYet => 'No labels yet';
-
-  @override
   String get createLabelToOrganize =>
       'Create a label above to organize your notes';
 
@@ -2013,6 +1984,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String deleteLabelConfirmation(String labelName) {
     return 'Are you sure you want to delete this label ($labelName)?';
   }
+
+  @override
+  String get pasteAs => 'Paste as';
 
   @override
   String get formattedText => 'Formatted text';
@@ -2305,9 +2279,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'This will permanently delete all data and cannot be recovered.';
 
   @override
-  String get deleteForever => 'Delete Forever';
-
-  @override
   String get sentVerificationCodeTo => 'We sent a verification code to:';
 
   @override
@@ -2467,11 +2438,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get encryptedNote => 'Encrypted Note';
 
   @override
-  String get encryptedNoteCannotBeDecrypted =>
-      'This note could not be decrypted. The encryption keys are missing or invalid, and the note cannot be recovered.';
+  String get decryptionFailed => 'Decryption failed';
 
   @override
-  String get decryptionFailed => 'Decryption failed';
+  String get decryptionFailedRetryMessage =>
+      'This note could not be decrypted. This can happen when encryption keys are temporarily unavailable. You can try syncing again, or delete the note permanently.';
+
+  @override
+  String get deletingNoteFromAllDevicesWarning =>
+      'Deleting will remove this note from all your devices, including the encrypted copy on the server.';
+
+  @override
+  String get retryDecryption => 'Retry';
+
+  @override
+  String get retryingDecryption => 'Retrying sync...';
+
+  @override
+  String get e2eeNotReady =>
+      'Encryption is not ready. Please check your device approval status.';
 
   @override
   String get thisNoteIsLocked => 'This note is locked';
@@ -2591,6 +2576,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trash => 'Trash';
 
   @override
+  String get reminders => 'Reminders';
+
+  @override
   String get notificationsEnabled =>
       'Notifications enabled! Your reminders are set.';
 
@@ -2603,6 +2591,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get installBetterKeep => 'Install Better Keep';
+
+  @override
+  String get installApp => 'Install App';
 
   @override
   String get getAndroidApp => 'Get Android App';
@@ -2647,6 +2638,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createYourFirstNote => 'Create your first note';
 
   @override
+  String get noLabelsYet => 'No labels yet';
+
+  @override
   String get noColoredNotesYet => 'No colored notes yet';
 
   @override
@@ -2685,10 +2679,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get install => 'Install';
 
   @override
+  String get notNow => 'Not now';
+
+  @override
   String get noRecoveryKey => 'No Recovery Key';
 
   @override
   String get iUnderstand => 'I understand';
+
+  @override
+  String get deleteForever => 'Delete Forever';
 
   @override
   String get deleteAllTrashForever =>
@@ -2734,6 +2734,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pleaseConfirmYourPassword => 'Please confirm your password';
+
+  @override
+  String get passwordsDoNotMatch => 'Passwords do not match';
 
   @override
   String get creatingAccount => 'Creating account...';
@@ -2819,6 +2822,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Taking too long. You can cancel and try again.';
 
   @override
+  String get requestTimedOut => 'Request timed out. Please try again.';
+
+  @override
   String get failedToSendVerificationCode => 'Failed to send verification code';
 
   @override
@@ -2887,6 +2893,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get failedToSaveSketch => 'Failed to save sketch';
 
   @override
+  String errorSavingSketch(String error) {
+    return 'Error saving sketch: $error';
+  }
+
+  @override
   String get planFree => 'Free';
 
   @override
@@ -2909,6 +2920,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get upgrade => 'Upgrade';
+
+  @override
+  String get upgradeToPro => 'Upgrade to Pro';
 
   @override
   String unlockFeature(String feature) {

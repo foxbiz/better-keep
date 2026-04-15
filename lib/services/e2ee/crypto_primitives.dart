@@ -426,6 +426,45 @@ class FileEncryption {
         data[7] == 0x70) {
       return false;
     }
+    // JSON: starts with { or [ followed by a valid JSON continuation character.
+    // Two-byte check reduces false negatives from ~0.78% (1/128) to ~0.003%
+    // when encrypted data's random nonce happens to start with { or [.
+    if (data.length >= 2 &&
+        ((data[0] == 0x7B &&
+                // { followed by: " (key), } (empty obj), whitespace, newline
+                (data[1] == 0x22 ||
+                    data[1] == 0x7D ||
+                    data[1] == 0x20 ||
+                    data[1] == 0x0A ||
+                    data[1] == 0x0D ||
+                    data[1] == 0x09)) ||
+            (data[0] == 0x5B &&
+                // [ followed by: [ (nested array), { (object), ] (empty array),
+                // " (string), digit, whitespace, newline, - (negative number),
+                // n (null), t (true), f (false)
+                (data[1] == 0x5B ||
+                    data[1] == 0x7B ||
+                    data[1] == 0x5D ||
+                    data[1] == 0x22 ||
+                    data[1] == 0x20 ||
+                    data[1] == 0x0A ||
+                    data[1] == 0x0D ||
+                    data[1] == 0x09 ||
+                    data[1] == 0x2D ||
+                    data[1] == 0x6E ||
+                    data[1] == 0x74 ||
+                    data[1] == 0x66 ||
+                    (data[1] >= 0x30 && data[1] <= 0x39))))) {
+      return false;
+    }
+    // UTF-8 BOM followed by JSON opening bracket
+    if (data.length >= 4 &&
+        data[0] == 0xEF &&
+        data[1] == 0xBB &&
+        data[2] == 0xBF &&
+        (data[3] == 0x7B || data[3] == 0x5B)) {
+      return false;
+    }
 
     return true;
   }

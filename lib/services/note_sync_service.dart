@@ -87,6 +87,10 @@ class NoteSyncService {
   /// Cache service for managing pending remote syncs
   final RemoteSyncCacheService _syncCache = RemoteSyncCacheService();
 
+  /// Maximum number of sync retries before saving error content for the user.
+  /// After this limit, the note is shown with the retry/delete dialog.
+  static const int _maxSyncRetries = 5;
+
   final ValueNotifier<bool> isSyncing = ValueNotifier(false);
   final ValueNotifier<String> statusMessage = ValueNotifier("");
 
@@ -579,7 +583,6 @@ class NoteSyncService {
     }
 
     DateTime? lastSynced = AppState.lastSynced;
-    final bool isFirstSync = lastSynced == null;
     Query<Map<String, dynamic>> query = _notesCollection;
 
     if (lastSynced != null) {
@@ -667,7 +670,9 @@ class NoteSyncService {
 
           // On first sync, skip deleted notes - there's no point in processing
           // thousands of deleted notes when we're starting fresh.
-          if (isFirstSync && isDeleted) {
+          // Check live state (not captured at listener start) because lastSynced
+          // is updated during the first sync while this listener keeps running.
+          if (AppState.lastSynced == null && isDeleted) {
             skippedCount++;
             continue;
           }
@@ -704,7 +709,12 @@ class NoteSyncService {
             final localUpdatedAt = localNote.updatedAt;
             final remoteUpdatedAt = DateTime.parse(remoteData['updated_at']);
 
-            if (localUpdatedAt != null &&
+            // Always re-process notes stuck with decryption_failed content
+            final hasDecryptionError =
+                localNote.content == Note.decryptionFailedContent;
+
+            if (!hasDecryptionError &&
+                localUpdatedAt != null &&
                 (remoteUpdatedAt.isBefore(localUpdatedAt) ||
                     remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt))) {
               AppLogger.log(
@@ -805,6 +815,54 @@ class NoteSyncService {
     _syncTimer = Timer(const Duration(seconds: 5), () async {
       await _sync();
     });
+  }
+
+  /// Retry decryption for a specific note that previously failed.
+  /// Fetches the note from Firestore and re-processes it, bypassing the
+  /// sync cache which may have already marked this note as completed.
+  Future<bool> retryDecryptionForNote(int noteId) async {
+    if (currentUser == null) return false;
+    if (!_canReceiveSync) {
+      AppLogger.log("[SYNC] RETRY: Skipping - E2EE not ready");
+      return false;
+    }
+
+    final syncTrack = await NoteSyncTrack.getByLocalId(noteId);
+    if (syncTrack == null || syncTrack.remoteId == null) {
+      AppLogger.log(
+        "[SYNC] RETRY: Note $noteId has no sync track or remote ID",
+      );
+      return false;
+    }
+
+    try {
+      final docSnapshot = await _notesCollection.doc(syncTrack.remoteId).get();
+      if (!docSnapshot.exists || docSnapshot.data() == null) {
+        AppLogger.log("[SYNC] RETRY: Remote doc not found for note $noteId");
+        return false;
+      }
+
+      final remoteData = docSnapshot.data()!;
+      remoteData['local_id'] = noteId;
+
+      _addSyncingIncoming(noteId);
+      try {
+        final success = await _patchRemoteNote(remoteData, docSnapshot.id);
+        if (success) {
+          // Clear any failed sync markers
+          syncFailed.value = Set.from(syncFailed.value)..remove(noteId);
+          AppLogger.log("[SYNC] RETRY: Note $noteId decrypted successfully");
+        } else {
+          AppLogger.log("[SYNC] RETRY: Note $noteId decryption still failing");
+        }
+        return success;
+      } finally {
+        _removeSyncingIncoming(noteId);
+      }
+    } catch (e) {
+      AppLogger.error('[SYNC] RETRY: Failed for note $noteId', e);
+      return false;
+    }
   }
 
   /// Manual refresh - pushes local changes and pulls remote changes
@@ -968,7 +1026,15 @@ class NoteSyncService {
         }
 
         if (remoteData != null) {
-          final remoteUpdatedAt = DateTime.parse(remoteData['updated_at']);
+          final remoteUpdatedAtStr = remoteData['updated_at'] as String?;
+          if (remoteUpdatedAtStr == null) {
+            AppLogger.log(
+              "[SYNC] PUSH: Note ${sync.localId} - remote has null updated_at, skipping",
+            );
+            _removeSyncingOutgoing(sync.localId);
+            continue;
+          }
+          final remoteUpdatedAt = DateTime.parse(remoteUpdatedAtStr);
 
           // Check if there's a pending sync for this note - if so, don't overwrite local changes
           final hasPendingSync =
@@ -1137,6 +1203,17 @@ class NoteSyncService {
         final localId = sync.localId;
         final capturedSyncStartTime = syncStartTime;
         if (sync.remoteId != null) {
+          // When note is encrypted, explicitly delete plaintext fields from
+          // Firestore. SetOptions(merge: true) only adds/updates fields — it
+          // won't remove fields absent from the payload. Without this, a note
+          // that was previously stored unencrypted retains its old plaintext
+          // alongside the new ciphertext.
+          // Only applies to updates — new documents never have old plaintext.
+          if (noteData.containsKey('e2ee_ciphertext')) {
+            noteData['title'] = FieldValue.delete();
+            noteData['content'] = FieldValue.delete();
+            noteData['plain_text'] = FieldValue.delete();
+          }
           batch.set(
             _notesCollection.doc(sync.remoteId),
             noteData,
@@ -1158,6 +1235,13 @@ class NoteSyncService {
             _removeSyncingOutgoing(localId);
           });
         } else {
+          // For new documents, remove plaintext fields instead of using
+          // FieldValue.delete() which is invalid without SetOptions(merge: true).
+          if (noteData.containsKey('e2ee_ciphertext')) {
+            noteData.remove('title');
+            noteData.remove('content');
+            noteData.remove('plain_text');
+          }
           final newDocRef = _notesCollection.doc();
           batch.set(newDocRef, noteData);
           sync.remoteId = newDocRef.id;
@@ -1190,7 +1274,11 @@ class NoteSyncService {
           AppLogger.log("[SYNC] PUSH: Committing batch of 400 notes");
           await batch.commit();
           for (final action in postCommitActions) {
-            await action();
+            try {
+              await action();
+            } catch (e) {
+              AppLogger.error('[SYNC] PUSH: Post-commit action failed', e);
+            }
           }
           postCommitActions.clear();
           batch = _firestore.batch();
@@ -1207,7 +1295,11 @@ class NoteSyncService {
     if (batchCount > 0) {
       await batch.commit();
       for (final action in postCommitActions) {
-        await action();
+        try {
+          await action();
+        } catch (e) {
+          AppLogger.error('[SYNC] PUSH: Post-commit action failed', e);
+        }
       }
     }
 
@@ -1489,6 +1581,50 @@ class NoteSyncService {
 
       // Check if there's a pending sync for this note - don't overwrite local changes
       final localPendingSync = await NoteSyncTrack.getByLocalId(localId);
+
+      // If this note has exceeded the retry limit, save it with error content
+      // so the user can see it in the retry/delete dialog and take action.
+      // Skip this for notes with pending local changes (they'll be handled
+      // by the upload path instead).
+      if (pendingSync.retryCount >= _maxSyncRetries &&
+          (localPendingSync == null ||
+              (localPendingSync.status != SyncStatus.pending &&
+                  localPendingSync.status != SyncStatus.failed))) {
+        AppLogger.log(
+          "[SYNC] PROCESS: Note $localId exceeded max retries "
+          "(${pendingSync.retryCount}/$_maxSyncRetries), "
+          "saving with error content",
+        );
+        // Save the note with decryption error content so the user can see it
+        // and decide to retry or delete via the note card dialog.
+        final note = await Note.findById(localId) ?? Note(id: localId);
+        // Preserve valid local content — only overwrite if the note has no
+        // content or already contains the error marker. This prevents data
+        // loss when a newer remote version can't be decrypted (e.g., UMK
+        // temporarily unavailable) but the local copy is still valid.
+        final hasValidLocalContent =
+            note.content != null &&
+            note.content!.isNotEmpty &&
+            note.content != Note.decryptionFailedContent;
+        if (hasValidLocalContent) {
+          AppLogger.log(
+            "[SYNC] PROCESS: Note $localId has valid local content, "
+            "preserving instead of overwriting with error marker",
+          );
+        } else {
+          note.content = Note.decryptionFailedContent;
+        }
+        if (remoteData['updated_at'] != null) {
+          note.updatedAt = DateTime.parse(remoteData['updated_at'] as String);
+        }
+        await note.save(false);
+        await _syncCache.markCompleted(localId);
+        _markSyncFailed(localId);
+        failedCount++;
+        syncProgress.value = (syncedCount + failedCount, totalCount);
+        continue;
+      }
+
       if (localPendingSync != null &&
           (localPendingSync.status == SyncStatus.pending ||
               localPendingSync.status == SyncStatus.failed)) {
@@ -1508,7 +1644,14 @@ class NoteSyncService {
         final localUpdatedAt = localNote.updatedAt;
         final remoteUpdatedAt = DateTime.parse(remoteData['updated_at']);
 
-        if (localUpdatedAt != null &&
+        // Always re-process notes stuck with decryption_failed content —
+        // these were saved by a previous bug where failed decryption
+        // permanently overwrote the local content with an error marker.
+        final hasDecryptionError =
+            localNote.content == Note.decryptionFailedContent;
+
+        if (!hasDecryptionError &&
+            localUpdatedAt != null &&
             (remoteUpdatedAt.isBefore(localUpdatedAt) ||
                 remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt))) {
           // Local is newer, skip
@@ -1535,12 +1678,13 @@ class NoteSyncService {
           syncProgress.value = (syncedCount, totalCount);
           AppLogger.log("[SYNC] PROCESS: Note $localId synced successfully");
         } else {
-          await _syncCache.markFailed(localId, "Attachment download failed");
+          await _syncCache.markFailed(
+            localId,
+            "Sync failed (decryption or attachment download)",
+          );
           _markSyncFailed(localId);
           failedCount++;
-          AppLogger.log(
-            "[SYNC] PROCESS: Note $localId failed - attachment download failed",
-          );
+          AppLogger.log("[SYNC] PROCESS: Note $localId failed");
         }
       } catch (e) {
         await _syncCache.markFailed(localId, e.toString());
@@ -1569,6 +1713,11 @@ class NoteSyncService {
     AppLogger.log(
       "[SYNC] PROCESS COMPLETE: $activeSynced active synced, $deletedCount deleted processed, $skippedCount skipped, $failedCount failed",
     );
+
+    // Mark sync as complete if all items were processed successfully
+    if (failedSyncs.isEmpty) {
+      await _syncCache.markSyncComplete();
+    }
 
     // Reset progress when done
     syncProgress.value = (0, 0);
@@ -1642,16 +1791,15 @@ class NoteSyncService {
         Note(id: updatedNoteData['local_id'] as int);
 
     if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
-      updatedNoteData['title'] = "Encrypted Note";
-      // Preserve existing attachments on decryption failure — the 'attachments'
-      // key in remoteData contains unencrypted attachment metadata (URLs, types)
-      // which is safe to use even when note content can't be decrypted.
-      // Don't overwrite with null — let updateFromJson skip the field.
-      updatedNoteData.remove('attachments');
-      updatedNoteData['content'] = "[{ \"error\": \"decryption_failed\" }]";
+      // Decryption failed — E2EE reported ready but the actual decrypt returned
+      // null (e.g., UMK was lost from secure storage, or ciphertext is corrupt).
+      // Return false to keep the note in the sync cache for retry instead of
+      // permanently saving error content that would block future re-sync
+      // (because updatedAt would match the remote, causing the note to be skipped).
       AppLogger.log(
-        "[SYNC] PROCESS: Note $localId - decryption failed, setting error content",
+        "[SYNC] PROCESS: Note $localId - decryption failed, deferring for retry",
       );
+      return false;
     } else {
       // Normalize attachments to List<dynamic> — Firestore may return a JSON string
       var rawAttachments = updatedNoteData['attachments'];
@@ -1876,6 +2024,14 @@ class NoteSyncService {
         );
         if (remoteUrl != null) {
           data['strokesFilePath'] = remoteUrl;
+          // Use the content hash already computed by _uploadFile and stored
+          // in the FileSyncTrack record, avoiding a redundant file read.
+          final uploadedSync = await FileSyncTrack.getByLocalPath(
+            sketch.strokesFilePath!,
+          );
+          if (uploadedSync?.contentHash != null) {
+            data['strokesContentHash'] = uploadedSync!.contentHash;
+          }
           // Remove inline strokes since they're now in the file
           data.remove('strokes');
           data.remove('bgColor');
@@ -1952,18 +2108,45 @@ class NoteSyncService {
     }
 
     String? remoteUrl;
+    String? uploadContentHash;
     final FileSyncTrack? sync = await FileSyncTrack.getByLocalPath(src);
 
     if (sync != null && sync.remotePath != null) {
-      // Verify remote file still exists - it may have been incorrectly deleted
-      final remoteExists = await _verifyRemoteFileExists(sync.remotePath!);
-      if (remoteExists) {
-        return sync.remotePath!;
+      // Check if the local file content has changed since last upload.
+      // The strokes file is overwritten in-place when a sketch is edited,
+      // so the path stays the same but content changes.
+      final fs = await fileSystem();
+      bool contentChanged = false;
+      if (await fs.exists(src)) {
+        try {
+          final currentBytes = await readEncryptedBytes(src);
+          final currentHash = FileSyncTrack.computeHash(currentBytes);
+          if (sync.contentHash == null || sync.contentHash != currentHash) {
+            contentChanged = true;
+            AppLogger.log("Local file content changed since last upload: $src");
+          }
+        } catch (e) {
+          // If we can't read the file (e.g., encryption key mismatch after
+          // migration), treat as changed to trigger re-upload.
+          contentChanged = true;
+          AppLogger.error(
+            'Failed to read local file for hash comparison: $src',
+            e,
+          );
+        }
       }
-      // Remote file is missing, need to re-upload
-      AppLogger.log(
-        "Remote file missing for ${sync.localPath}, will re-upload",
-      );
+
+      if (!contentChanged) {
+        // Verify remote file still exists - it may have been incorrectly deleted
+        final remoteExists = await _verifyRemoteFileExists(sync.remotePath!);
+        if (remoteExists) {
+          return sync.remotePath!;
+        }
+        // Remote file is missing, need to re-upload
+        AppLogger.log(
+          "Remote file missing for ${sync.localPath}, will re-upload",
+        );
+      }
     }
 
     final userStorageRef = getNoteDocsRef(note.id!);
@@ -1977,6 +2160,9 @@ class NoteSyncService {
 
         final base64Data = src.substring(commaIndex + 1);
         var bytes = Uint8List.fromList(base64Decode(base64Data));
+
+        // Compute hash from plaintext bytes before encryption
+        uploadContentHash = FileSyncTrack.computeHash(bytes);
 
         String extension = 'bin';
         final regex = RegExp(
@@ -2018,7 +2204,9 @@ class NoteSyncService {
           statusMessage.value = "Uploading media...";
           _setNoteStatus(note.id!, "Uploading media...");
 
-          var fileBytes = await readEncryptedBytes(src);
+          final plainBytes = await readEncryptedBytes(src);
+          uploadContentHash = FileSyncTrack.computeHash(plainBytes);
+          var fileBytes = plainBytes;
 
           // Encrypt file if E2EE is enabled
           final e2ee = E2EEService.instance;
@@ -2051,11 +2239,14 @@ class NoteSyncService {
       final newSync = FileSyncTrack(
         localPath: src,
         remotePath: remoteUrl,
+        contentHash: uploadContentHash,
         noteId: note.id!,
       );
       await newSync.save();
     } else {
-      await sync.setRemotePath(remoteUrl);
+      sync.remotePath = remoteUrl;
+      sync.contentHash = uploadContentHash;
+      await sync.save();
     }
 
     return remoteUrl;
@@ -2080,7 +2271,11 @@ class NoteSyncService {
       if (sketch.strokesFilePath != null &&
           sketch.strokesFilePath!.isNotEmpty &&
           sketch.strokesFilePath!.startsWith('http')) {
-        final result = await _downloadFile(sketch.strokesFilePath!, note);
+        final result = await _downloadFile(
+          sketch.strokesFilePath!,
+          note,
+          expectedContentHash: sketch.strokesContentHash,
+        );
         if (result.isSuccess && result.localPath != null) {
           sketch.strokesFilePath = result.localPath;
           // Load strokes from the downloaded file
@@ -2203,8 +2398,17 @@ class NoteSyncService {
     return DownloadResult.success;
   }
 
-  /// Helper to download a single file and return local path with result status
-  Future<FileDownloadResult> _downloadFile(String src, Note note) async {
+  /// Helper to download a single file and return local path with result status.
+  ///
+  /// [expectedContentHash] is the SHA-256 hash of the plaintext file content
+  /// from the remote metadata (e.g., attachment JSON in Firestore). When provided,
+  /// it's compared against the locally cached file's hash to detect when the remote
+  /// file was updated at the same URL (e.g., sketch re-uploaded to the same path).
+  Future<FileDownloadResult> _downloadFile(
+    String src,
+    Note note, {
+    String? expectedContentHash,
+  }) async {
     if (!src.startsWith('http')) {
       return FileDownloadResult(DownloadResult.temporaryFailure);
     }
@@ -2228,6 +2432,20 @@ class NoteSyncService {
             await fs.delete(fixedLocalPath);
             AppLogger.log(
               "Local file appears E2EE-encrypted, will re-download: $fixedLocalPath",
+            );
+          } else if (expectedContentHash != null &&
+              sync.contentHash != expectedContentHash) {
+            // Remote content was updated at the same URL (e.g., sketch edited
+            // on another device). Delete stale cache and re-download.
+            // Also triggers when sync.contentHash is null (pre-update records
+            // that lack a hash) — re-downloading populates the hash for future
+            // comparisons.
+            await sync.delete();
+            try {
+              await fs.delete(fixedLocalPath);
+            } catch (_) {}
+            AppLogger.log(
+              "Remote content changed (hash mismatch), re-downloading: $fixedLocalPath",
             );
           } else {
             // Update sync record if path changed (iOS container migration)
@@ -2305,10 +2523,11 @@ class NoteSyncService {
       // This ensures files can be read with readEncryptedBytes elsewhere
       await writeEncryptedBytes(localPath, bytes);
 
-      // Track the downloaded file
+      // Track the downloaded file with content hash for change detection
       final newSync = FileSyncTrack(
         localPath: localPath,
         remotePath: src,
+        contentHash: FileSyncTrack.computeHash(bytes),
         noteId: note.id!,
       );
       await newSync.save();
@@ -2410,9 +2629,14 @@ class NoteSyncService {
       }
 
       // If using strokesFilePath (new format), the strokes file is already
-      // encrypted during upload. Just pass through the sketch data.
+      // encrypted during upload. Strip any residual inline sensitive fields
+      // that may exist during format migration (strokes, bgColor, pagePattern).
       if (data['strokesFilePath'] != null) {
-        result.add(Map<String, dynamic>.from(att));
+        final cleanedData = Map<String, dynamic>.from(data);
+        cleanedData.remove('strokes');
+        cleanedData.remove('bgColor');
+        cleanedData.remove('pagePattern');
+        result.add({'type': type, 'data': cleanedData});
         continue;
       }
 

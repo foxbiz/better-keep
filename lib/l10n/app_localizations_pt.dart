@@ -232,12 +232,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get lightTheme => 'Tema claro';
 
   @override
-  String get language => 'Idioma';
-
-  @override
-  String get systemDefault => 'Padrão do sistema';
-
-  @override
   String get showSyncProgress => 'Mostrar progresso da sincronização';
 
   @override
@@ -320,9 +314,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get copyAs => 'Copiar como';
-
-  @override
-  String get pasteAs => 'Colar como';
 
   @override
   String get share => 'Compartilhar';
@@ -490,9 +481,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get upgradeNow => 'Fazer upgrade agora';
 
   @override
-  String get upgradeToPro => 'Fazer upgrade para Pro';
-
-  @override
   String get continueTrial => 'Continuar período de teste';
 
   @override
@@ -542,10 +530,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get recoverySuccessWelcome =>
       'Recuperação bem-sucedida! Bem-vindo de volta.';
-
-  @override
-  String get requestTimedOut =>
-      'A solicitação expirou. Por favor, tente novamente.';
 
   @override
   String get confirmConsequences =>
@@ -598,11 +582,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get failedCreateImageNote => 'Falha ao criar nota de imagem';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'Erro ao salvar esboço: $error';
-  }
 
   @override
   String errorSavingSketchWithError(String error) {
@@ -762,6 +741,12 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get importFile => 'Importar arquivo';
+
+  @override
+  String get language => 'Idioma';
+
+  @override
+  String get systemDefault => 'Padrão do sistema';
 
   @override
   String get selectLanguage => 'Selecionar idioma';
@@ -1030,12 +1015,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get getApp => 'Obter o app';
 
   @override
-  String get installApp => 'Instalar app';
-
-  @override
-  String get notNow => 'Agora não';
-
-  @override
   String get sessionExpired =>
       'Sua sessão expirou. Por favor, faça login novamente.';
 
@@ -1259,9 +1238,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get resettingPassword => 'Redefinindo senha...';
 
   @override
-  String get passwordsDoNotMatch => 'As senhas não coincidem';
-
-  @override
   String get pleaseEnterNewPassword => 'Por favor, digite uma nova senha';
 
   @override
@@ -1424,9 +1400,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get notes_ => 'Notas';
-
-  @override
-  String get reminders => 'Lembretes';
 
   @override
   String get media => 'Mídia';
@@ -2014,9 +1987,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get custom => 'Personalizado';
 
   @override
-  String get noLabelsYet => 'Nenhuma etiqueta ainda';
-
-  @override
   String get createLabelToOrganize =>
       'Crie uma etiqueta acima para organizar suas notas';
 
@@ -2035,6 +2005,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String deleteLabelConfirmation(String labelName) {
     return 'Tem certeza de que deseja excluir esta etiqueta ($labelName)?';
   }
+
+  @override
+  String get pasteAs => 'Colar como';
 
   @override
   String get formattedText => 'Texto formatado';
@@ -2333,9 +2306,6 @@ class AppLocalizationsPt extends AppLocalizations {
       'Isso excluirá permanentemente todos os dados e não pode ser recuperado.';
 
   @override
-  String get deleteForever => 'Excluir para sempre';
-
-  @override
   String get sentVerificationCodeTo =>
       'Enviamos um código de verificação para:';
 
@@ -2497,11 +2467,25 @@ class AppLocalizationsPt extends AppLocalizations {
   String get encryptedNote => 'Nota criptografada';
 
   @override
-  String get encryptedNoteCannotBeDecrypted =>
-      'Esta nota não pôde ser descriptografada. As chaves de criptografia estão faltando ou são inválidas, e a nota não pode ser recuperada.';
+  String get decryptionFailed => 'Descriptografia falhou';
 
   @override
-  String get decryptionFailed => 'Descriptografia falhou';
+  String get decryptionFailedRetryMessage =>
+      'Esta nota não pôde ser descriptografada. Isso pode acontecer quando as chaves de criptografia estão temporariamente indisponíveis. Você pode tentar sincronizar novamente ou excluir a nota permanentemente.';
+
+  @override
+  String get deletingNoteFromAllDevicesWarning =>
+      'Excluir removerá esta nota de todos os seus dispositivos, incluindo a cópia criptografada no servidor.';
+
+  @override
+  String get retryDecryption => 'Tentar novamente';
+
+  @override
+  String get retryingDecryption => 'Tentando sincronizar novamente...';
+
+  @override
+  String get e2eeNotReady =>
+      'A criptografia não está pronta. Verifique o status de aprovação do seu dispositivo.';
 
   @override
   String get thisNoteIsLocked => 'Esta nota está bloqueada';
@@ -2622,6 +2606,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get trash => 'Lixeira';
 
   @override
+  String get reminders => 'Lembretes';
+
+  @override
   String get notificationsEnabled =>
       'Notificações ativadas! Seus lembretes foram definidos.';
 
@@ -2634,6 +2621,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get installBetterKeep => 'Instalar Better Keep';
+
+  @override
+  String get installApp => 'Instalar app';
 
   @override
   String get getAndroidApp => 'Obter app Android';
@@ -2678,6 +2668,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get createYourFirstNote => 'Crie sua primeira nota';
 
   @override
+  String get noLabelsYet => 'Nenhuma etiqueta ainda';
+
+  @override
   String get noColoredNotesYet => 'Nenhuma nota colorida ainda';
 
   @override
@@ -2716,10 +2709,16 @@ class AppLocalizationsPt extends AppLocalizations {
   String get install => 'Instalar';
 
   @override
+  String get notNow => 'Agora não';
+
+  @override
   String get noRecoveryKey => 'Sem chave de recuperação';
 
   @override
   String get iUnderstand => 'Eu entendo';
+
+  @override
+  String get deleteForever => 'Excluir para sempre';
 
   @override
   String get deleteAllTrashForever =>
@@ -2765,6 +2764,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get pleaseConfirmYourPassword => 'Por favor, confirme sua senha';
+
+  @override
+  String get passwordsDoNotMatch => 'As senhas não coincidem';
 
   @override
   String get creatingAccount => 'Criando conta...';
@@ -2850,6 +2852,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Demorando muito. Você pode cancelar e tentar novamente.';
 
   @override
+  String get requestTimedOut =>
+      'A solicitação expirou. Por favor, tente novamente.';
+
+  @override
   String get failedToSendVerificationCode =>
       'Falha ao enviar código de verificação';
 
@@ -2921,6 +2927,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get failedToSaveSketch => 'Falha ao salvar esboço';
 
   @override
+  String errorSavingSketch(String error) {
+    return 'Erro ao salvar esboço: $error';
+  }
+
+  @override
   String get planFree => 'Grátis';
 
   @override
@@ -2943,6 +2954,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get upgrade => 'Fazer upgrade';
+
+  @override
+  String get upgradeToPro => 'Fazer upgrade para Pro';
 
   @override
   String unlockFeature(String feature) {

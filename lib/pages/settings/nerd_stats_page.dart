@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show compute, kDebugMode;
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/remote_sync_cache_service.dart';
 import 'package:better_keep/state.dart';
@@ -104,7 +105,9 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
             'DB Size': '${((results[4] as int) / 1024).toStringAsFixed(2)} KB',
             'Is Syncing': NoteSyncService().isSyncing.value,
             'Cache Has Pending': RemoteSyncCacheService().hasPendingSyncs,
-            'Cache Initialized': RemoteSyncCacheService().metadata != null,
+            'Sync Cache Active': RemoteSyncCacheService().metadata != null,
+            'E2EE Status': E2EEService.instance.status.value.name,
+            'E2EE UMK Available': E2EEService.instance.isAvailable,
           };
           _pendingItems = results[3] as List<NoteSyncTrack>;
           _loading = false;

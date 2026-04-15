@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'package:better_keep/utils/logger.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -75,6 +76,8 @@ class E2EESecureStorage {
   static const String _signInProgressKey = 'e2ee_sign_in_progress';
 
   // Secure storage instance (for native platforms)
+  // flutter_secure_storage v10+ uses custom ciphers on Android by default,
+  // automatically migrating from the old EncryptedSharedPreferences backend.
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     aOptions: AndroidOptions(),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
@@ -217,7 +220,16 @@ class E2EESecureStorage {
       if (encrypted == null) return null;
       return await _webDecrypt(encrypted);
     }
-    return await _secureStorage.read(key: key);
+    try {
+      return await _secureStorage.read(key: key);
+    } catch (e) {
+      // Native secure storage can throw on iOS (Keychain errors after backup
+      // restore, biometric changes) and Android (KeyStore corruption, OS
+      // updates). Return null so callers degrade gracefully instead of
+      // crashing the E2EE initialization chain.
+      AppLogger.error('E2EE: Secure storage read failed for key $key', e);
+      return null;
+    }
   }
 
   // Platform-aware write (with encryption on web)
@@ -226,7 +238,12 @@ class E2EESecureStorage {
       final encrypted = await _webEncrypt(value);
       await _webPrefs?.setString(key, encrypted);
     } else {
-      await _secureStorage.write(key: key, value: value);
+      try {
+        await _secureStorage.write(key: key, value: value);
+      } catch (e) {
+        AppLogger.error('E2EE: Secure storage write failed for key $key', e);
+        rethrow;
+      }
     }
   }
 

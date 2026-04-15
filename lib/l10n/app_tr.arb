@@ -230,12 +230,6 @@
 	"lightTheme": "Aydınlık Tema",
 	"@lightTheme": { "description": "Light theme label" },
 
-	"language": "Dil",
-	"@language": { "description": "Language setting label" },
-
-	"systemDefault": "Sistem varsayılanı",
-	"@systemDefault": { "description": "System default language option" },
-
 	"showSyncProgress": "Eşitleme İlerlemesini Göster",
 	"@showSyncProgress": { "description": "Show sync progress toggle label" },
 
@@ -320,9 +314,6 @@
 
 	"copyAs": "Farklı kopyala",
 	"@copyAs": { "description": "Copy as menu item" },
-
-	"pasteAs": "Farklı yapıştır",
-	"@pasteAs": { "description": "Paste as menu item" },
 
 	"share": "Paylaş",
 	"@share": { "description": "Share action" },
@@ -503,9 +494,6 @@
 	"upgradeNow": "Şimdi Yükselt",
 	"@upgradeNow": { "description": "Upgrade now button label" },
 
-	"upgradeToPro": "Pro'ya Yükselt",
-	"@upgradeToPro": { "description": "Upgrade to pro button label" },
-
 	"continueTrial": "Denemeye Devam Et",
 	"@continueTrial": { "description": "Continue trial button label" },
 
@@ -640,9 +628,6 @@
 	"@failedCreateImageNote": {
 		"description": "Failed to create image note message"
 	},
-
-	"errorSavingSketch": "Çizim kaydedilirken hata oluştu, önizleme yok",
-	"@errorSavingSketch": { "description": "Error saving sketch message" },
 
 	"errorSavingSketchWithError": "Çizim kaydedilirken hata oluştu: {error}",
 	"@errorSavingSketchWithError": {
@@ -1108,12 +1093,6 @@
 	"getApp": "Uygulamayı Edin",
 	"@getApp": { "description": "Get the app dialog title" },
 
-	"installApp": "Uygulamayı Yükle",
-	"@installApp": { "description": "Install app button" },
-
-	"notNow": "Şimdi değil",
-	"@notNow": { "description": "Not now button" },
-
 	"sessionExpired": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
 	"@sessionExpired": { "description": "Session expired message" },
 
@@ -1416,11 +1395,6 @@
 	"verifyYourEmail": "E-postanızı Doğrulayın",
 	"@verifyYourEmail": { "description": "Verify your email title" },
 
-	"sendingVerificationCode": "Doğrulama kodu gönderiliyor...",
-	"@sendingVerificationCode": {
-		"description": "Sending verification code status"
-	},
-
 	"emailVerifiedSuccessfully": "E-posta başarıyla doğrulandı!",
 	"@emailVerifiedSuccessfully": {
 		"description": "Email verified success message"
@@ -1561,9 +1535,6 @@
 
 	"notes_": "Notlar",
 	"@notes_": { "description": "Notes stat label" },
-
-	"reminders": "Hatırlatıcılar",
-	"@reminders": { "description": "Reminders stat label" },
 
 	"media": "Medya",
 	"@media": { "description": "Media stat label" },
@@ -1984,9 +1955,6 @@
 		"description": "Recovery key saved message"
 	},
 
-	"noRecoveryKeyWarning": "Uyarı: Bir Kurtarma Anahtarı olmadan, tüm cihazları kaybederseniz notlarınıza erişimi kaybedebilirsiniz.",
-	"@noRecoveryKeyWarning": { "description": "No recovery key warning message" },
-
 	"recoveryKeySetUp": "Ayarlanmış bir Kurtarma Anahtarınız var. Ne yapmak istersiniz?",
 	"@recoveryKeySetUp": { "description": "Recovery key options message" },
 
@@ -2251,9 +2219,6 @@
 
 	"custom": "Özel",
 	"@custom": { "description": "Custom option label" },
-
-	"noLabelsYet": "Henüz etiket yok",
-	"@noLabelsYet": { "description": "Empty labels state title" },
 
 	"createLabelToOrganize": "Notlarınızı düzenlemek için yukarıdan bir etiket oluşturun",
 	"@createLabelToOrganize": { "description": "Empty labels state description" },
@@ -2617,9 +2582,6 @@
 	"permanentDeleteWarning": "Bu, tüm verileri kalıcı olarak silecektir ve kurtarılamaz.",
 	"@permanentDeleteWarning": { "description": "Permanent delete warning" },
 
-	"deleteForever": "Sonsuza Dek Sil",
-	"@deleteForever": { "description": "Delete forever button text" },
-
 	"sentVerificationCodeTo": "Şu adrese bir doğrulama kodu gönderdik:",
 	"@sentVerificationCodeTo": {
 		"description": "Sent verification code message"
@@ -2806,13 +2768,14 @@
 	"encryptedNote": "Şifrelenmiş Not",
 	"@encryptedNote": { "description": "Encrypted note dialog title" },
 
-	"encryptedNoteCannotBeDecrypted": "Bu notun şifresi çözülemedi. Şifreleme anahtarları eksik veya geçersiz bu yüzden not kurtarılamıyor.",
-	"@encryptedNoteCannotBeDecrypted": {
-		"description": "Encrypted note cannot be decrypted message"
-	},
-
 	"decryptionFailed": "Şifre çözme başarısız oldu",
 	"@decryptionFailed": { "description": "Decryption failed label" },
+
+	"decryptionFailedRetryMessage": "Bu not şifresi çözülemedi. Bu, şifreleme anahtarlarının geçici olarak kullanılamaması durumunda olabilir. Tekrar senkronize etmeyi deneyebilir veya notu kalıcı olarak silebilirsiniz.",
+	"deletingNoteFromAllDevicesWarning": "Silme işlemi bu notu sunucudaki şifrelenmiş kopya dahil tüm cihazlarınızdan kaldırır.",
+	"retryDecryption": "Tekrar Dene",
+	"retryingDecryption": "Senkronizasyon yeniden deneniyor...",
+	"e2eeNotReady": "Şifreleme hazır değil. Lütfen cihaz onay durumunuzu kontrol edin.",
 
 	"thisNoteIsLocked": "Bu not kilitli",
 	"@thisNoteIsLocked": { "description": "Locked note label" },
@@ -3051,11 +3014,6 @@
 	"notNow": "Şimdi değil",
 	"@notNow": { "description": "Not now button label" },
 
-	"recoveryKeySavedSuccessfully": "Kurtarma Anahtarı başarıyla kaydedildi!",
-	"@recoveryKeySavedSuccessfully": {
-		"description": "Recovery key saved success message"
-	},
-
 	"noRecoveryKey": "Kurtarma Anahtarı Yok",
 	"@noRecoveryKey": { "description": "No recovery key dialog title" },
 
@@ -3117,9 +3075,6 @@
 	"@pleaseConfirmYourPassword": {
 		"description": "Confirm password validation error message"
 	},
-
-	"passwordsDoNotMatch": "Parolalar eşleşmiyor",
-	"@passwordsDoNotMatch": { "description": "Password mismatch error message" },
 
 	"creatingAccount": "Hesap oluşturuluyor...",
 	"@creatingAccount": { "description": "Creating account status message" },
@@ -3209,26 +3164,15 @@
 	"signingOut": "Çıkış yapılıyor...",
 	"@signingOut": { "description": "Signing out status message" },
 
-	"sendingVerificationCode": "Doğrulama kodu gönderiliyor...",
-	"@sendingVerificationCode": {
-		"description": "Sending verification code message"
-	},
-
 	"takingTooLongTryAgain": "Çok uzun sürüyor. İptal edip tekrar deneyebilirsiniz.",
 	"@takingTooLongTryAgain": {
 		"description": "Taking too long timeout message"
 	},
 
-	"requestTimedOut": "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.",
-	"@requestTimedOut": { "description": "Request timed out message" },
-
 	"failedToSendVerificationCode": "Doğrulama kodu gönderilemedi",
 	"@failedToSendVerificationCode": {
 		"description": "Failed to send verification code error message"
 	},
-
-	"verifyYourIdentity": "Kimliğinizi Doğrulayın",
-	"@verifyYourIdentity": { "description": "Verify your identity dialog title" },
 
 	"yourEmail": "e-postanız",
 	"@yourEmail": { "description": "Your email fallback text" },
