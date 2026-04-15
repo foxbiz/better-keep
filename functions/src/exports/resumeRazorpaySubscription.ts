@@ -74,10 +74,9 @@ export default onCall(
 						"Your current subscription will remain active until it expires. " +
 						"You can subscribe again after it expires.",
 				);
-			} else if (
-				razorpaySub.status === "halted" ||
-				razorpaySub.status === "paused"
-			) {
+			}
+
+			if (razorpaySub.status === "halted" || razorpaySub.status === "paused") {
 				// Subscription can be resumed
 				await razorpayRequest(
 					keyId,
@@ -98,26 +97,26 @@ export default onCall(
 				console.log(`Resumed subscription for user ${userId}`);
 
 				// Send resume email
-				await sendRazorpaySubscriptionEmail(
-					userId,
-					"resumed",
-					subData.expiryDate?.toDate(),
-				);
+				const expiryDate =
+					subData.expiresAt?.toDate() || subData.expiryDate?.toDate();
+				await sendRazorpaySubscriptionEmail(userId, "resumed", expiryDate);
 
 				return { success: true };
-			} else if (razorpaySub.status === "cancelled") {
+			}
+
+			if (razorpaySub.status === "cancelled") {
 				// Subscription is fully cancelled in Razorpay - can't resume
 				throw new HttpsError(
 					"failed-precondition",
 					"This subscription has been fully cancelled and cannot be resumed. " +
 						"Please create a new subscription.",
 				);
-			} else {
-				throw new HttpsError(
-					"failed-precondition",
-					`Subscription is in '${razorpaySub.status}' state and cannot be resumed.`,
-				);
 			}
+
+			throw new HttpsError(
+				"failed-precondition",
+				`Subscription is in '${razorpaySub.status}' state and cannot be resumed.`,
+			);
 		} catch (error) {
 			console.error("Error resuming Razorpay subscription:", error);
 			if (error instanceof HttpsError) throw error;

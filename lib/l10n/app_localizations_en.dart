@@ -2959,4 +2959,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enableNotifications => 'Enable';
+
+  @override
+  String get rateOnAppStore => 'Rate on App Store';
+
+  @override
+  String get rateOnPlayStore => 'Rate on Play Store';
+
+  @override
+  String get rateOnMicrosoftStore => 'Rate on Microsoft Store';
 }

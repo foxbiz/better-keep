@@ -356,6 +356,7 @@ class _AttachButtonState extends State<AttachButton> {
           backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
         ),
       ),
+      allowFullScreen: true,
     );
     // Scroll to attachment after returning from sketch page if sketch was added
     widget.onAttachmentAdded?.call();

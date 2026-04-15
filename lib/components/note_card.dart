@@ -342,7 +342,7 @@ class _NoteCardState extends State<NoteCard>
     }
 
     if (mounted) {
-      showPage(context, NoteEditor(note: widget.note));
+      showPage(context, NoteEditor(note: widget.note), allowFullScreen: true);
     }
   }
 
@@ -962,7 +962,10 @@ class _NoteCardState extends State<NoteCard>
                     onPressed: _selectionMode
                         ? null
                         : () async {
-                            final newReminder = await reminder(context, initialReminder: note.reminder);
+                            final newReminder = await reminder(
+                              context,
+                              initialReminder: note.reminder,
+                            );
 
                             if (newReminder == null) {
                               return;

@@ -133,6 +133,7 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
                       heroTag: heroTag,
                       initialIndex: sketchIndex >= 0 ? sketchIndex : null,
                     ),
+                    allowFullScreen: true,
                   );
 
                   if (widget.onPop != null) {

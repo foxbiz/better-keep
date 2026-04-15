@@ -93,10 +93,12 @@ export default onCall(
 			}
 
 			// Send cancellation email
+			const expiryDate =
+				subData.expiresAt?.toDate() || subData.expiryDate?.toDate();
 			await sendRazorpaySubscriptionEmail(
 				userId,
 				"cancelled",
-				cancelImmediately ? null : subData.expiryDate?.toDate(),
+				cancelImmediately ? null : expiryDate,
 			);
 
 			return { success: true, immediate: cancelImmediately };

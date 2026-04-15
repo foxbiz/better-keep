@@ -2993,4 +2993,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get enableNotifications => 'Ativar';
+
+  @override
+  String get rateOnAppStore => 'Avaliar na App Store';
+
+  @override
+  String get rateOnPlayStore => 'Avaliar na Play Store';
+
+  @override
+  String get rateOnMicrosoftStore => 'Avaliar na Microsoft Store';
 }

@@ -211,6 +211,7 @@ class Note extends BaseModel<Note> {
     final rows = await AppState.db.rawQuery('''
         SELECT DISTINCT color, COUNT(*) as count
         FROM note
+        WHERE trashed = 0 AND archived = 0
         GROUP BY color
         ORDER BY color ASC;
       ''');

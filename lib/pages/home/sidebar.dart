@@ -14,9 +14,10 @@ import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/utils.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class Sidebar extends StatefulWidget {
   final bool shrink;
@@ -162,6 +163,8 @@ class _SidebarState extends State<Sidebar> {
               },
             ),
           if (showInstallButton) _buildInstallButton(),
+          if (!kIsWeb && (!AppState.rateAppDismissed || kDebugMode))
+            _buildRateAppTile(),
           ValueListenableBuilder<SubscriptionStatus>(
             valueListenable: PlanService.instance.statusNotifier,
             builder: (context, status, _) {
@@ -211,6 +214,30 @@ class _SidebarState extends State<Sidebar> {
     }
 
     return _buildTile(icon, label, _handleInstallTap);
+  }
+
+  Widget _buildRateAppTile() {
+    final String url;
+    final String label;
+
+    if (Platform.isIOS || Platform.isMacOS) {
+      url = appStoreUrl;
+      label = context.l10n.rateOnAppStore;
+    } else if (Platform.isWindows) {
+      url = microsoftStoreUrl;
+      label = context.l10n.rateOnMicrosoftStore;
+    } else if (Platform.isAndroid) {
+      url = playStoreUrl;
+      label = context.l10n.rateOnPlayStore;
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return _buildTile(Icons.star_outline, label, () {
+      AppState.rateAppDismissed = true;
+      setState(() {});
+      launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    });
   }
 
   Widget _buildTile(

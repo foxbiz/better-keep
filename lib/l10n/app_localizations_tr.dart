@@ -2973,4 +2973,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enableNotifications => 'Etkinleştir';
+
+  @override
+  String get rateOnAppStore => 'App Store\'da Değerlendir';
+
+  @override
+  String get rateOnPlayStore => 'Play Store\'da Değerlendir';
+
+  @override
+  String get rateOnMicrosoftStore => 'Microsoft Store\'da Değerlendir';
 }

@@ -130,8 +130,9 @@ class SubscriptionStatus {
 
     return SubscriptionStatus(
       plan: UserPlan.fromString(data['plan'] as String?),
-      // Support both 'expiryDate' (Razorpay) and 'expiresAt' (legacy)
-      expiresAt: _parseDateTime(data['expiryDate'] ?? data['expiresAt']),
+      // Support both 'expiresAt' (Play Store/App Store) and 'expiryDate' (Razorpay/trial)
+      // Prefer 'expiresAt' as the canonical field from store-verified purchases
+      expiresAt: _parseDateTime(data['expiresAt'] ?? data['expiryDate']),
       billingPeriod: _parseBillingPeriod(data['billingPeriod'] as String?),
       inGracePeriod: data['inGracePeriod'] as bool? ?? false,
       gracePeriodEndsAt: _parseDateTime(data['gracePeriodEndsAt']),

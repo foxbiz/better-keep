@@ -112,6 +112,11 @@ export default onCall(
 								});
 							}
 
+							// Ensure custom claims are set for active subscriptions
+							if (isActive) {
+								await setSubscriptionClaims(userId, "pro", expiresAt);
+							}
+
 							return {
 								hasSubscription: isActive,
 								subscription: {
@@ -162,6 +167,10 @@ export default onCall(
 							// Fall back to local data
 						}
 					}
+
+					// Ensure custom claims are set for active subscriptions
+					// (handles users who subscribed before server-side enforcement)
+					await setSubscriptionClaims(userId, "pro", expiresAt);
 
 					return {
 						hasSubscription: true,

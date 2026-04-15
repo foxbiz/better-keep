@@ -74,9 +74,11 @@ export default onRequest(
 							.doc("status")
 							.update({
 								razorpayPaymentId: payment.id,
-								expiryDate: Timestamp.fromDate(expiryDate),
+								expiresAt: Timestamp.fromDate(expiryDate),
 								subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
 								updatedAt: FieldValue.serverTimestamp(),
+								// Remove stale trial field that conflicts with canonical expiresAt
+								expiryDate: FieldValue.delete(),
 							});
 
 						// Update custom claims for server-side enforcement

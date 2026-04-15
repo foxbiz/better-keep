@@ -2879,4 +2879,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get enableNotifications => '활성화';
+
+  @override
+  String get rateOnAppStore => 'App Store에서 평가하기';
+
+  @override
+  String get rateOnPlayStore => 'Play Store에서 평가하기';
+
+  @override
+  String get rateOnMicrosoftStore => 'Microsoft Store에서 평가하기';
 }

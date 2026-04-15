@@ -5327,6 +5327,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enable'**
   String get enableNotifications;
+
+  /// Sidebar item to rate the app on the App Store (iOS)
+  ///
+  /// In en, this message translates to:
+  /// **'Rate on App Store'**
+  String get rateOnAppStore;
+
+  /// Sidebar item to rate the app on the Play Store (Android)
+  ///
+  /// In en, this message translates to:
+  /// **'Rate on Play Store'**
+  String get rateOnPlayStore;
+
+  /// Sidebar item to rate the app on the Microsoft Store (Windows)
+  ///
+  /// In en, this message translates to:
+  /// **'Rate on Microsoft Store'**
+  String get rateOnMicrosoftStore;
 }
 
 class _AppLocalizationsDelegate

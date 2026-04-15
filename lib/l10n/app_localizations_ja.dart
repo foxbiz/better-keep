@@ -2881,4 +2881,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get enableNotifications => '有効にする';
+
+  @override
+  String get rateOnAppStore => 'App Storeで評価する';
+
+  @override
+  String get rateOnPlayStore => 'Play Storeで評価する';
+
+  @override
+  String get rateOnMicrosoftStore => 'Microsoft Storeで評価する';
 }

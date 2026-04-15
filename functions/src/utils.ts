@@ -369,6 +369,9 @@ export async function verifyGooglePlayPurchase(
 				basePlanId,
 				verifiedAt: FieldValue.serverTimestamp(),
 				updatedAt: FieldValue.serverTimestamp(),
+				// Remove stale trial fields that conflict with store-verified data
+				expiryDate: FieldValue.delete(),
+				status: FieldValue.delete(),
 			},
 			{ merge: true },
 		);
@@ -806,6 +809,9 @@ async function handleVerifiedJWSTransaction(
 				source: "app_store",
 				verifiedAt: FieldValue.serverTimestamp(),
 				updatedAt: FieldValue.serverTimestamp(),
+				// Remove stale trial fields that conflict with store-verified data
+				expiryDate: FieldValue.delete(),
+				status: FieldValue.delete(),
 			},
 			{ merge: true },
 		);
@@ -1109,6 +1115,9 @@ export async function verifyAppStorePurchase(
 				source: "app_store",
 				verifiedAt: FieldValue.serverTimestamp(),
 				updatedAt: FieldValue.serverTimestamp(),
+				// Remove stale trial fields that conflict with store-verified data
+				expiryDate: FieldValue.delete(),
+				status: FieldValue.delete(),
 			},
 			{ merge: true },
 		);

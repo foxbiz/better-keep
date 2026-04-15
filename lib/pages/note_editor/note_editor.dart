@@ -749,7 +749,27 @@ class _NoteEditorState extends State<NoteEditor>
           foregroundColor: foregroundColor,
           iconTheme: IconThemeData(color: foregroundColor),
           actionsIconTheme: IconThemeData(color: foregroundColor),
-          leading: BackButton(color: foregroundColor),
+          leadingWidth: isBigScreen(context) ? 96 : null,
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BackButton(color: foregroundColor),
+              if (isBigScreen(context))
+                IconButton(
+                  color: foregroundColor,
+                  onPressed: () {
+                    setState(() {
+                      AppState.editorFullScreen = !AppState.editorFullScreen;
+                    });
+                  },
+                  icon: Icon(
+                    AppState.editorFullScreen
+                        ? Icons.fullscreen_exit
+                        : Icons.fullscreen,
+                  ),
+                ),
+            ],
+          ),
           title: _buildAppBarTitle(foregroundColor),
           centerTitle: true,
           actions: _note.trashed
@@ -1241,6 +1261,7 @@ class _NoteEditorState extends State<NoteEditor>
           backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
         ),
       ),
+      allowFullScreen: true,
     );
     _scrollToAttachments();
   }

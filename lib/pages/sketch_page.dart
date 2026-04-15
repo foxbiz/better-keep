@@ -869,145 +869,7 @@ class _SketchPageState extends State<SketchPage>
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false,
-        extendBodyBehindAppBar: true,
         backgroundColor: _backgroundColor,
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight),
-          child: SlideTransition(
-            position: _appbarSlideAnimation,
-            child: FadeTransition(
-              opacity: _appbarFadeAnimation,
-              child: AppBar(
-                backgroundColor: _backgroundColor.withValues(alpha: 0.8),
-                elevation: 0,
-                scrolledUnderElevation: 0,
-                flexibleSpace: ClipRect(
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(color: Colors.transparent),
-                  ),
-                ),
-                foregroundColor: _foregroundColor,
-                iconTheme: IconThemeData(color: _foregroundColor),
-                actionsIconTheme: IconThemeData(color: _foregroundColor),
-                leading: BackButton(color: _foregroundColor),
-                titleTextStyle: TextStyle(
-                  color: _foregroundColor,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
-                ),
-                actions: [
-                  if (!_isImageBasedSketch)
-                    IconButton(
-                      icon: const Icon(Icons.color_lens),
-                      color: _foregroundColor,
-                      onPressed: () => _pickColor(true),
-                      tooltip: context.l10n.paperColor,
-                    ),
-                  if (!_isImageBasedSketch)
-                    PopupMenuButton<PagePattern>(
-                      icon: Icon(
-                        _sketchData.pagePattern.icon,
-                        color: _foregroundColor,
-                      ),
-                      tooltip: context.l10n.pagePattern,
-                      onSelected: (pattern) {
-                        setState(() {
-                          _sketchData.pagePattern = pattern;
-                          _isDirty = true;
-                        });
-                      },
-                      itemBuilder: (context) => PagePattern.values.map((
-                        pattern,
-                      ) {
-                        final isSelected = _sketchData.pagePattern == pattern;
-                        return PopupMenuItem(
-                          value: pattern,
-                          child: Row(
-                            children: [
-                              Icon(
-                                pattern.icon,
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                pattern.displayName,
-                                style: isSelected
-                                    ? TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        fontWeight: FontWeight.w600,
-                                      )
-                                    : null,
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  // Overflow menu for save and delete actions
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert, color: _foregroundColor),
-                    tooltip: context.l10n.moreOptions,
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'save':
-                          _saveToGallery();
-                          break;
-                        case 'delete':
-                          _deleteCurrentSketch();
-                          break;
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      if (_strokes.isNotEmpty)
-                        PopupMenuItem(
-                          value: 'save',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.save_alt,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(context.l10n.saveToGallery),
-                            ],
-                          ),
-                        ),
-                      if (_localSketches.contains(_sketchData) ||
-                          _pendingNewSketch == _sketchData)
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete,
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                context.l10n.delete,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
         body: Stack(
           children: [
             // Canvas - fills the entire screen including behind appbar
@@ -1413,7 +1275,178 @@ class _SketchPageState extends State<SketchPage>
                       ),
               ),
             ),
+            // Custom pill-shaped titlebar
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SlideTransition(
+                position: _appbarSlideAnimation,
+                child: FadeTransition(
+                  opacity: _appbarFadeAnimation,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Left pill: back button
+                          _buildTitlebarPill(
+                            child: BackButton(color: _foregroundColor),
+                          ),
+                          // Right pill: action buttons
+                          _buildTitlebarPill(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!_isImageBasedSketch)
+                                  IconButton(
+                                    icon: const Icon(Icons.color_lens),
+                                    color: _foregroundColor,
+                                    onPressed: () => _pickColor(true),
+                                    tooltip: context.l10n.paperColor,
+                                  ),
+                                if (!_isImageBasedSketch)
+                                  PopupMenuButton<PagePattern>(
+                                    icon: Icon(
+                                      _sketchData.pagePattern.icon,
+                                      color: _foregroundColor,
+                                    ),
+                                    tooltip: context.l10n.pagePattern,
+                                    onSelected: (pattern) {
+                                      setState(() {
+                                        _sketchData.pagePattern = pattern;
+                                        _isDirty = true;
+                                      });
+                                    },
+                                    itemBuilder: (context) =>
+                                        PagePattern.values.map((pattern) {
+                                          final isSelected =
+                                              _sketchData.pagePattern ==
+                                              pattern;
+                                          return PopupMenuItem(
+                                            value: pattern,
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  pattern.icon,
+                                                  color: isSelected
+                                                      ? Theme.of(
+                                                          context,
+                                                        ).colorScheme.primary
+                                                      : Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Text(
+                                                  pattern.displayName,
+                                                  style: isSelected
+                                                      ? TextStyle(
+                                                          color: Theme.of(
+                                                            context,
+                                                          ).colorScheme.primary,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        )
+                                                      : null,
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                  ),
+                                PopupMenuButton<String>(
+                                  icon: Icon(
+                                    Icons.more_vert,
+                                    color: _foregroundColor,
+                                  ),
+                                  tooltip: context.l10n.moreOptions,
+                                  onSelected: (value) {
+                                    switch (value) {
+                                      case 'save':
+                                        _saveToGallery();
+                                        break;
+                                      case 'delete':
+                                        _deleteCurrentSketch();
+                                        break;
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    if (_strokes.isNotEmpty)
+                                      PopupMenuItem(
+                                        value: 'save',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.save_alt,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(context.l10n.saveToGallery),
+                                          ],
+                                        ),
+                                      ),
+                                    if (_localSketches.contains(_sketchData) ||
+                                        _pendingNewSketch == _sketchData)
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.delete,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.error,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              context.l10n.delete,
+                                              style: TextStyle(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.error,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds a pill-shaped container with blur background for titlebar buttons
+  Widget _buildTitlebarPill({required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(100),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _backgroundColor.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: child,
         ),
       ),
     );
@@ -1718,7 +1751,7 @@ class _SketchPageState extends State<SketchPage>
   }
 
   void _fitToScreen(double viewportWidth, double viewportHeight) {
-    final appBarHeight = MediaQuery.of(context).padding.top + kToolbarHeight;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
 
     final double scaleX = viewportWidth / _canvasSize.width;
     final double scaleY = viewportHeight / _canvasSize.height;
@@ -1727,13 +1760,13 @@ class _SketchPageState extends State<SketchPage>
     final double offsetX = (viewportWidth - _canvasSize.width * scale) / 2;
     double offsetY = (viewportHeight - _canvasSize.height * scale) / 2;
 
-    // If the canvas would overlap with the appbar when centered, push it down
-    if (offsetY < appBarHeight) {
-      final availableHeight = viewportHeight - appBarHeight;
+    // If the canvas would overlap with the status bar when centered, push it down
+    if (offsetY < statusBarHeight) {
+      final availableHeight = viewportHeight - statusBarHeight;
       final adjustedScale =
           min(scaleX, availableHeight / _canvasSize.height) * 0.95;
       offsetY =
-          appBarHeight +
+          statusBarHeight +
           (availableHeight - _canvasSize.height * adjustedScale) / 2;
     }
 

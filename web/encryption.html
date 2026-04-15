@@ -397,39 +397,103 @@
 
     /* Footer */
     footer {
-      margin-top: 6rem;
-      padding: 2rem;
-      text-align: center;
-      border-top: 1px solid var(--border-subtle);
+      background: #0a0a0a;
+      padding: 3rem 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 3rem;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .footer-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    .footer-brand span {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .footer-section p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+    }
+
+    .footer-section h4 {
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      color: var(--text-primary);
     }
 
     .footer-links {
-      display: flex;
-      justify-content: center;
-      gap: 2rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
+      list-style: none;
+    }
+
+    .footer-links li {
+      margin-bottom: 0.75rem;
     }
 
     .footer-links a {
       color: var(--text-secondary);
       text-decoration: none;
-      transition: color var(--transition-fast);
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
     }
 
     .footer-links a:hover {
       color: var(--primary);
     }
 
-    .footer-copyright {
-      color: var(--text-muted);
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 2rem auto 0;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .footer-bottom p {
+      color: var(--text-secondary);
       font-size: 0.9rem;
     }
 
     /* Responsive */
+    @media (max-width: 968px) {
+      .footer-content {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
     @media (max-width: 768px) {
       .nav-links {
         display: none;
+      }
+
+      .footer-content {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-bottom {
+        justify-content: center;
       }
 
       .mobile-menu-toggle {
@@ -740,16 +804,49 @@
   </main>
 
   <footer>
-    <div class="footer-links">
-      <a href="/">Home</a>
-      <a href="pricing.html">Pricing</a>
-      <a href="privacy.html">Privacy</a>
-      <a href="terms.html">Terms</a>
-      <a href="encryption.html">Security</a>
-      <a href="open-source.html">Open Source</a>
-      <a href="faqs.html">FAQs</a>
+    <div class="footer-content">
+      <div class="footer-section">
+        <div class="footer-brand">
+          <img src="icons/logo.png" alt="Better Keep Notes Logo">
+          <span>Better Keep Notes</span>
+        </div>
+        <p>A beautiful, private note-taking app designed for the modern world.</p>
+        <p>Contact: <a href="mailto:contact@betterkeep.app" style="color: var(--primary);">contact@betterkeep.app</a>
+        </p>
+      </div>
+      <div class="footer-section">
+        <h4>Product</h4>
+        <ul class="footer-links">
+          <li><a href="/">Launch App</a></li>
+          <li><a href="/welcome.html#features">Features</a></li>
+          <li><a href="/welcome.html#platforms">Platforms</a></li>
+          <li><a href="/pricing.html">Pricing</a></li>
+          <li><a href="/self-host.html">Self-Host</a></li>
+          <li><a href="/encryption.html">Encryption</a></li>
+        </ul>
+      </div>
+      <div class="footer-section">
+        <h4>Legal</h4>
+        <ul class="footer-links">
+          <li><a href="/faqs.html">FAQ</a></li>
+          <li><a href="/contact.html">Contact</a></li>
+          <li><a href="/privacy.html">Privacy Policy</a></li>
+          <li><a href="/terms.html">Terms of Service</a></li>
+          <li><a href="/delete-user.html">Delete Account</a></li>
+          <li><a href="/cancellation-refund.html">Cancellation &amp; Refund</a></li>
+        </ul>
+      </div>
+      <div class="footer-section">
+        <h4>Open Source</h4>
+        <ul class="footer-links">
+          <li><a href="https://github.com/foxbiz/better-keep" target="_blank">GitHub</a></li>
+          <li><a href="/open-source.html">About Open Source</a></li>
+        </ul>
+      </div>
     </div>
-    <p class="footer-copyright">© 2025 Better Keep Notes. All rights reserved.</p>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Foxbiz Software Pvt. Ltd. All rights reserved.</p>
+    </div>
   </footer>
 
   <script>

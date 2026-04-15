@@ -2838,4 +2838,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableNotifications => '启用';
+
+  @override
+  String get rateOnAppStore => '在 App Store 上评分';
+
+  @override
+  String get rateOnPlayStore => '在 Play Store 上评分';
+
+  @override
+  String get rateOnMicrosoftStore => '在 Microsoft Store 上评分';
 }

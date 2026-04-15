@@ -45,11 +45,7 @@ Available on **Android**, **iOS**, **macOS**, **Windows**, and **Web**.
 
 | Login                                 | Home                                  | Editor                                |
 | ------------------------------------- | ------------------------------------- | ------------------------------------- |
-| ![Home screen](web/screenshots/1.jpg) | ![Rich editor](web/screenshots/2.jpg) | ![Unlock note](web/screenshots/3.jpg) |
-
-Watch a quick walkthrough of creating and completing a reminder:
-
-- [Youtube Short](screenshots/recording.mp4)
+| ![Home screen](web/screenshots/1.png) | ![Rich editor](web/screenshots/2.png) | ![Unlock note](web/screenshots/5.png) |
 
 ## Try it quickly
 

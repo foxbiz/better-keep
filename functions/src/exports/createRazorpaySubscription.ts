@@ -3,8 +3,8 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
 	DEFAULT_CURRENCY,
-	db,
 	RAZORPAY_PLANS,
+	db,
 	razorpayKeyId,
 	razorpayKeySecret,
 } from "../config";
@@ -61,8 +61,10 @@ export default onCall(
 					existingSub.source !== "trial" && // Allow upgrade from trial
 					existingSub.purchasePlatform !== "trial" // Allow upgrade from trial
 				) {
-					// Check if not expired
-					const expiryDate = existingSub.expiryDate?.toDate?.();
+					// Check if not expired (support both field names)
+					const expiryDate =
+						existingSub.expiresAt?.toDate?.() ||
+						existingSub.expiryDate?.toDate?.();
 					if (expiryDate && expiryDate > new Date()) {
 						console.log(
 							`User ${userId} already has an active subscription: ${existingSub.plan}`,

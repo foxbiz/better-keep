@@ -138,10 +138,9 @@ async function main() {
 		.set({
 			plan: "pro",
 			source: "trial",
-			expiryDate: admin.firestore.Timestamp.fromDate(trialExpiresAt),
+			expiresAt: admin.firestore.Timestamp.fromDate(trialExpiresAt),
 			billingPeriod: "trial",
 			willAutoRenew: false,
-			status: "trial",
 			trialStartedAt: admin.firestore.Timestamp.now(),
 			updatedAt: admin.firestore.Timestamp.now(),
 		});

@@ -75,7 +75,6 @@ export default onSchedule(
 						subscriptionDoc.data()?.source === "trial"
 					) {
 						await subscriptionRef.update({
-							status: "expired",
 							plan: "free",
 							updatedAt: Timestamp.now(),
 						});

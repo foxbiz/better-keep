@@ -298,6 +298,53 @@
       fill: var(--primary);
     }
 
+    .github-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 1.25rem;
+    }
+
+    .github-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: all var(--transition-fast);
+    }
+
+    .github-badge:hover {
+      background: rgba(255, 213, 79, 0.1);
+      border-color: rgba(255, 213, 79, 0.35);
+      color: var(--text-primary);
+    }
+
+    .github-badge svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .github-badge .badge-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .github-badge .badge-icon-primary {
+      fill: var(--primary);
+    }
+
+    .github-badge .badge-icon-secondary {
+      fill: var(--text-secondary);
+    }
+
     .hero-buttons {
       display: flex;
       gap: 1rem;
@@ -877,7 +924,7 @@
       max-width: 1200px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
       gap: 3rem;
     }
 
@@ -984,43 +1031,7 @@
       }
 
       .footer-content {
-        grid-template-columns: 1fr;
-        text-align: center;
-      }
-
-      .footer-bottom {
-        justify-content: center;
-      }
-
-      .features-grid {
-        grid-template-columns: 1fr;
-        gap: 1.5rem;
-      }
-
-      .platform-icons {
-        gap: 1.5rem;
-      }
-
-      .platform-icon {
-        min-width: 120px;
-        padding: 1.5rem;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .nav-links {
-        display: none;
-      }
-
-      .mobile-menu-toggle {
-        display: block;
-      }
-
-      nav {
-        padding: 0.75rem 1rem;
-      }
-
-      .hero {
+        grid-template-columns: 1fr 1fr;
         padding: 6rem 1rem 3rem;
         min-height: auto;
       }
@@ -1032,6 +1043,10 @@
 
       .hero-text p {
         font-size: 1rem;
+      }
+
+      .github-badges {
+        justify-content: center;
       }
 
       .btn-primary,
@@ -1254,18 +1269,6 @@
               </span>
             </div>
           </a>
-          <a href="https://github.com/foxbiz/better-keep/releases" title="Download from GitHub" class="github-link">
-            <div class="platform-btn">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-              </svg>
-              <span class="btn-text">
-                <span class="btn-subtitle">Download from</span>
-                <span class="btn-title">GitHub</span>
-              </span>
-            </div>
-          </a>
           <a href="https://play.google.com/store/apps/details?id=io.foxbiz.better_keep" title="Get it on Google Play"
             data-platform="android">
             <div class="platform-btn">
@@ -1308,6 +1311,34 @@
         </div>
         <p class="platforms-note" id="platformsNote">Also available on <a href="#platforms">Android, iOS, macOS,
             Windows &amp; Web</a></p>
+        <div class="github-badges">
+          <a href="https://github.com/foxbiz/better-keep" target="_blank" rel="noopener noreferrer"
+            class="github-badge">
+            <!-- heart icon -->
+            <svg viewBox="0 0 24 24" class="badge-icon-primary">
+              <path
+                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+            Open Source
+          </a>
+          <a href="https://github.com/foxbiz/better-keep/stargazers" target="_blank" rel="noopener noreferrer"
+            class="github-badge" id="githubStarsBadge">
+            <!-- star icon -->
+            <svg viewBox="0 0 24 24" class="badge-icon-primary">
+              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+            </svg>
+            <span class="badge-value" id="githubStarCount">—</span>
+          </a>
+          <a href="https://github.com/foxbiz/better-keep/forks" target="_blank" rel="noopener noreferrer"
+            class="github-badge" id="githubForksBadge">
+            <!-- fork icon -->
+            <svg viewBox="0 0 16 16" class="badge-icon-secondary">
+              <path
+                d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z" />
+            </svg>
+            <span class="badge-value" id="githubForkCount">—</span>
+          </a>
+        </div>
       </div>
       <div class="hero-image animate-in" style="animation-delay: 0.2s;">
         <img src="screenshots/2.png" alt="Better Keep Notes App Screenshot" class="app-preview">
@@ -1396,36 +1427,39 @@
         <p>Use Better Keep Notes on all your favorite platforms.</p>
       </div>
       <div class="platform-icons">
-        <div class="platform-icon">
+        <a href="https://apps.apple.com/us/app/better-keep-notes/id6759548198" class="platform-icon"
+          title="Download on the App Store" style="text-decoration: none; color: inherit;">
           <svg viewBox="0 0 24 24">
             <path
               d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
           </svg>
           <span>iOS</span>
-        </div>
-        <div class="platform-icon">
+        </a>
+        <a href="https://play.google.com/store/apps/details?id=io.foxbiz.better_keep" class="platform-icon"
+          title="Get it on Google Play" style="text-decoration: none; color: inherit;">
           <svg viewBox="0 0 24 24">
             <path
               d="M17.523 15.341c-.5 0-.919-.177-1.256-.53-.337-.354-.506-.795-.506-1.324s.169-.97.506-1.324c.337-.353.756-.53 1.256-.53.51 0 .929.177 1.256.53.337.354.506.795.506 1.324s-.169.97-.506 1.324c-.327.353-.746.53-1.256.53zm-11.046 0c-.5 0-.919-.177-1.256-.53-.337-.354-.506-.795-.506-1.324s.169-.97.506-1.324c.337-.353.756-.53 1.256-.53.51 0 .929.177 1.256.53.337.354.506.795.506 1.324s-.169.97-.506 1.324c-.327.353-.746.53-1.256.53zM17.83 8.18l1.914-3.307c.089-.157.039-.354-.118-.454-.157-.089-.354-.039-.454.118l-1.943 3.357c-1.482-.675-3.149-1.05-4.929-1.05s-3.447.375-4.929 1.05L5.428 4.537c-.1-.157-.297-.207-.454-.118-.157.1-.207.297-.118.454l1.914 3.307C3.705 9.89 1.503 13.082 1.503 16.893h21c0-3.81-2.203-7.002-4.673-8.713z" />
           </svg>
           <span>Android</span>
-        </div>
-        <div class="platform-icon">
+        </a>
+        <a href="https://apps.microsoft.com/detail/9PHT5C6WK6Q1" class="platform-icon"
+          title="Get it from Microsoft Store" style="text-decoration: none; color: inherit;">
           <svg viewBox="0 0 24 24">
             <path
               d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
           </svg>
           <span>Windows</span>
-        </div>
-        <div class="platform-icon">
+        </a>
+        <a href="/" class="platform-icon" title="Open Web App" style="text-decoration: none; color: inherit;">
           <svg viewBox="0 0 24 24">
             <path
               d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
             <circle cx="12" cy="12" r="5" />
           </svg>
           <span>Web</span>
-        </div>
-        <a href="https://github.com/foxbiz/better-keep/releases" class="platform-icon"
+        </a>
+        <a href="https://github.com/foxbiz/better-keep/releases" class="platform-icon" title="Download from GitHub"
           style="text-decoration: none; color: inherit;">
           <svg viewBox="0 0 24 24">
             <path
@@ -1492,6 +1526,8 @@
           <li><a href="#features">Features</a></li>
           <li><a href="#platforms">Platforms</a></li>
           <li><a href="/pricing.html">Pricing</a></li>
+          <li><a href="/self-host.html">Self-Host</a></li>
+          <li><a href="/encryption.html">Encryption</a></li>
         </ul>
       </div>
       <div class="footer-section">
@@ -1553,26 +1589,32 @@
         badges.forEach(badge => badge.classList.add('platform-current'));
       }
 
-      // Update platforms note to exclude current platform
-      const allPlatforms = {
-        'android': 'Android',
-        'ios': 'iOS',
-        'macos': 'macOS',
-        'windows': 'Windows',
-        'web': 'Web'
-      };
-
-      const otherPlatforms = Object.entries(allPlatforms)
-        .filter(([key]) => key !== platform)
-        .map(([, name]) => name);
-
       const platformsNote = document.getElementById('platformsNote');
-      if (platformsNote && otherPlatforms.length > 0) {
-        const lastPlatform = otherPlatforms.pop();
-        const platformsText = otherPlatforms.length > 0
-          ? otherPlatforms.join(', ') + ' & ' + lastPlatform
-          : lastPlatform;
-        platformsNote.innerHTML = 'Also available on <a href="#platforms">' + platformsText + '</a>';
+
+      if (!badgeShown) {
+        // All platform badges are already visible — no need for the note
+        if (platformsNote) platformsNote.style.display = 'none';
+      } else {
+        // Update platforms note to exclude current platform
+        const allPlatforms = {
+          'android': 'Android',
+          'ios': 'iOS',
+          'macos': 'macOS',
+          'windows': 'Windows',
+          'web': 'Web'
+        };
+
+        const otherPlatforms = Object.entries(allPlatforms)
+          .filter(([key]) => key !== platform)
+          .map(([, name]) => name);
+
+        if (platformsNote && otherPlatforms.length > 0) {
+          const lastPlatform = otherPlatforms.pop();
+          const platformsText = otherPlatforms.length > 0
+            ? otherPlatforms.join(', ') + ' & ' + lastPlatform
+            : lastPlatform;
+          platformsNote.innerHTML = 'Also available on <a href="#platforms">' + platformsText + '</a>';
+        }
       }
     })();
 
@@ -1660,6 +1702,22 @@
         .catch(() => {
           // Silently fail - badge stays hidden
         });
+    })();
+
+    // Fetch GitHub stars and forks
+    (function fetchGitHubStats() {
+      fetch('https://api.github.com/repos/foxbiz/better-keep')
+        .then(r => r.json())
+        .then(data => {
+          const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n;
+          if (data.stargazers_count !== undefined) {
+            document.getElementById('githubStarCount').textContent = fmt(data.stargazers_count);
+          }
+          if (data.forks_count !== undefined) {
+            document.getElementById('githubForkCount').textContent = fmt(data.forks_count);
+          }
+        })
+        .catch(() => { });
     })();
   </script>
 </body>

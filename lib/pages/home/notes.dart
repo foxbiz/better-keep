@@ -452,7 +452,29 @@ class NotesState extends State<Notes> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () {
-                  showPage(context, NoteEditor());
+                  final currentFolder = AppState.currentFolder;
+                  final labels = <String>[];
+                  Color color = Colors.transparent;
+                  if (currentFolder != null) {
+                    if (currentFolder.labelName != null &&
+                        currentFolder.labelName!.isNotEmpty) {
+                      labels.add(currentFolder.labelName!);
+                    }
+                    if (currentFolder.color != null) {
+                      color = currentFolder.color!;
+                    }
+                  }
+                  showPage(
+                    context,
+                    NoteEditor(
+                      note: Note(
+                        content: '[]',
+                        labels: labels.join(','),
+                        color: color,
+                      ),
+                    ),
+                    allowFullScreen: true,
+                  );
                 },
                 child: Text(context.l10n.createYourFirstNote),
               ),

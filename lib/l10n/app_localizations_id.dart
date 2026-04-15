@@ -2961,4 +2961,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enableNotifications => 'Aktifkan';
+
+  @override
+  String get rateOnAppStore => 'Beri Nilai di App Store';
+
+  @override
+  String get rateOnPlayStore => 'Beri Nilai di Play Store';
+
+  @override
+  String get rateOnMicrosoftStore => 'Beri Nilai di Microsoft Store';
 }

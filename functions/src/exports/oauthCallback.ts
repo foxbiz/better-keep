@@ -2,15 +2,15 @@ import type * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import {
-	auth,
 	DEBUG_TRIAL_MINUTES,
+	TRIAL_DAYS,
+	TRIAL_ENABLED,
+	auth,
 	db,
 	facebookAppId,
 	facebookAppSecret,
 	githubClientId,
 	githubClientSecret,
-	TRIAL_DAYS,
-	TRIAL_ENABLED,
 	twitterClientId,
 	twitterClientSecret,
 } from "../config";
@@ -715,10 +715,9 @@ export default onRequest(
 							subscriptionRef.set({
 								plan: "pro",
 								source: "trial",
-								expiryDate: Timestamp.fromDate(trialExpiresAt),
+								expiresAt: Timestamp.fromDate(trialExpiresAt),
 								billingPeriod: "trial",
 								willAutoRenew: false,
-								status: "trial",
 								trialStartedAt: Timestamp.now(),
 								updatedAt: Timestamp.now(),
 							}),

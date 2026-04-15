@@ -2,10 +2,10 @@ import { Timestamp } from "firebase-admin/firestore";
 import { beforeUserSignedIn } from "firebase-functions/v2/identity";
 import {
 	DEBUG_TRIAL_MINUTES,
-	db,
-	emailPassword,
 	TRIAL_DAYS,
 	TRIAL_ENABLED,
+	db,
+	emailPassword,
 } from "../config";
 import { sendTrialWelcomeEmail } from "../utils";
 
@@ -102,10 +102,9 @@ export default beforeUserSignedIn(
 				subscriptionRef.set({
 					plan: "pro",
 					source: "trial",
-					expiryDate: Timestamp.fromDate(trialExpiresAt),
+					expiresAt: Timestamp.fromDate(trialExpiresAt),
 					billingPeriod: "trial",
 					willAutoRenew: false,
-					status: "trial",
 					trialStartedAt: Timestamp.now(),
 					updatedAt: Timestamp.now(),
 				}),

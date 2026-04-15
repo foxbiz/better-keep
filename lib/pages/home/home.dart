@@ -884,7 +884,11 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         });
       },
       onDefaultAction: () {
-        showPage(context, NoteEditor(note: _createNewNote(content: '[]')));
+        showPage(
+          context,
+          NoteEditor(note: _createNewNote(content: '[]')),
+          allowFullScreen: true,
+        );
       },
       items: [
         BubbleMenuItem(
@@ -908,6 +912,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                 backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
               ),
             ),
+            allowFullScreen: true,
           ),
         ),
         BubbleMenuItem(
@@ -991,7 +996,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       await note.save();
 
       if (mounted) {
-        showPage(context, NoteEditor(note: note));
+        showPage(context, NoteEditor(note: note), allowFullScreen: true);
       }
     }
   }
@@ -1129,7 +1134,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
       // Open the note in editor
       if (mounted) {
-        showPage(context, NoteEditor(note: note));
+        showPage(context, NoteEditor(note: note), allowFullScreen: true);
       }
     } catch (e) {
       // Dismiss loading dialog on error
@@ -1208,6 +1213,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       showPage(
         context,
         NoteEditor(note: note, autoFocus: true, deleteIfUnchanged: true),
+        allowFullScreen: true,
       );
     }
   }

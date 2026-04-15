@@ -47,10 +47,12 @@ final _defaultState = {
   "sketch_eraser_size": 20.0,
   "sketch_pen_color": Colors.black,
   "forget_locked_note_password": false,
+  "rate_app_dismissed": false,
   "notes_view_mode": NoteViewMode.grid,
   "current_folder": null,
   "toolbar_grid_modes": <String, bool>{},
   "locale": null,
+  "editor_full_screen": false,
 };
 
 class AppState {
@@ -261,6 +263,10 @@ class AppState {
     _state["forget_locked_note_password"] =
         prefsInstance.getBool("forget_locked_note_password") ?? false;
 
+    // Load rate app dismissed setting
+    _state["rate_app_dismissed"] =
+        prefsInstance.getBool("rate_app_dismissed") ?? false;
+
     final toolbarModesJson =
         jsonDecode(prefsInstance.getString("toolbar_grid_modes") ?? "{}")
             as Map<String, dynamic>;
@@ -270,6 +276,11 @@ class AppState {
     );
 
     _state["current_folder"] = prefsInstance.getString("current_folder");
+
+    // Load editor full screen preference
+    _state["editor_full_screen"] =
+        prefsInstance.getBool("editor_full_screen") ?? false;
+    editorFullScreenNotifier.value = _state["editor_full_screen"] as bool;
 
     // Load locale preference
     final localeString = prefsInstance.getString("locale");
@@ -406,6 +417,21 @@ class AppState {
   static set showSyncProgress(bool value) {
     set("show_sync_progress", value);
     _persistToPrefs((p) async => p.setBool("show_sync_progress", value));
+  }
+
+  /// ValueNotifier for reactive UI updates (used by _DialogPageRoute)
+  static final ValueNotifier<bool> editorFullScreenNotifier = ValueNotifier(
+    false,
+  );
+
+  static bool get editorFullScreen {
+    return _state["editor_full_screen"] as bool? ?? false;
+  }
+
+  static set editorFullScreen(bool value) {
+    set("editor_full_screen", value);
+    editorFullScreenNotifier.value = value;
+    _persistToPrefs((p) async => p.setBool("editor_full_screen", value));
   }
 
   static SketchTool get sketchTool {
@@ -639,6 +665,16 @@ class AppState {
     _persistToPrefs(
       (p) async => p.setBool("forget_locked_note_password", value),
     );
+  }
+
+  /// Whether the user has dismissed the "Rate App" sidebar item
+  static bool get rateAppDismissed {
+    return _state["rate_app_dismissed"] as bool? ?? false;
+  }
+
+  static set rateAppDismissed(bool value) {
+    set("rate_app_dismissed", value);
+    _persistToPrefs((p) async => p.setBool("rate_app_dismissed", value));
   }
 
   /// View mode for displaying notes (grid, list, or folder)
