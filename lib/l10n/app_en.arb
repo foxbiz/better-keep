@@ -1155,9 +1155,15 @@
 		}
 	},
 
-	"whisperModelNotDownloaded": "Not downloaded - tap to download",
+	"whisperModelNotDownloaded": "Not downloaded ({size}) - tap to download",
 	"@whisperModelNotDownloaded": {
-		"description": "Whisper model not downloaded"
+		"description": "Whisper model not downloaded",
+		"placeholders": {
+			"size": {
+				"type": "String",
+				"example": "75.0 MB"
+			}
+		}
 	},
 
 	"deleteWhisperModelConfirm": "Delete the speech recognition model? You can re-download it later.",
@@ -2544,8 +2550,16 @@
 	"whisperModelRequired": "Speech recognition model required",
 	"@whisperModelRequired": { "description": "Whisper model required title" },
 
-	"whisperModelDescription": "Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.",
-	"@whisperModelDescription": { "description": "Whisper model description" },
+	"whisperModelDescription": "Download a small ({size}) AI model for on-device speech-to-text. Your audio never leaves your device.",
+	"@whisperModelDescription": {
+		"description": "Whisper model description",
+		"placeholders": {
+			"size": {
+				"type": "String",
+				"example": "75.0 MB"
+			}
+		}
+	},
 
 	"downloadModel": "Download Model",
 	"@downloadModel": { "description": "Download model button" },

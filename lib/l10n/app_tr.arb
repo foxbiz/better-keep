@@ -1158,7 +1158,7 @@
 		}
 	},
 
-	"whisperModelNotDownloaded": "İndirilmedi - indirmek için dokunun",
+	"whisperModelNotDownloaded": "İndirilmedi ({size}) - indirmek için dokunun",
 	"@whisperModelNotDownloaded": {
 		"description": "Whisper model not downloaded"
 	},
@@ -2538,8 +2538,16 @@
 	"whisperModelRequired": "Ses tanıma modeli gereklidir",
 	"@whisperModelRequired": { "description": "Whisper model required title" },
 
-	"whisperModelDescription": "Cihaz üzerinde sesten metne dönüştürme için küçük bir AI modeli (~31 MB) indirin. Sesiniz asla cihazınızı terk etmez.",
-	"@whisperModelDescription": { "description": "Whisper model description" },
+	"whisperModelDescription": "Cihaz üzerinde sesten metne dönüştürme için küçük bir AI modeli ({size}) indirin. Sesiniz asla cihazınızı terk etmez.",
+	"@whisperModelDescription": {
+		"description": "Whisper model description",
+		"placeholders": {
+			"size": {
+				"type": "String",
+				"example": "75.0 MB"
+			}
+		}
+	},
 
 	"downloadModel": "Modeli İndir",
 	"@downloadModel": { "description": "Download model button" },

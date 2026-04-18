@@ -792,7 +792,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          l10n.whisperModelDescription,
+                          l10n.whisperModelDescription(
+                            '${(WhisperService.defaultModelSize.approximateSizeBytes / (1024 * 1024)).toStringAsFixed(0)} MB',
+                          ),
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.outline,
                             fontSize: 12,

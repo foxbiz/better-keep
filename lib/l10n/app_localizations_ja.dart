@@ -1059,7 +1059,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get whisperModelNotDownloaded => '未ダウンロード - タップしてダウンロード';
+  String whisperModelNotDownloaded(String size) {
+    return '未ダウンロード ($size) - タップしてダウンロード';
+  }
 
   @override
   String get deleteWhisperModelConfirm => '音声認識モデルを削除しますか？後で再ダウンロードできます。';
@@ -2190,8 +2192,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get whisperModelRequired => '音声認識モデルが必要です';
 
   @override
-  String get whisperModelDescription =>
-      'デバイス上で音声をテキストに変換する小さなAIモデル（約31 MB）をダウンロードします。音声データはデバイス外に送信されません。';
+  String whisperModelDescription(String size) {
+    return 'デバイス上で音声をテキストに変換する小さなAIモデル（$size）をダウンロードします。音声データはデバイス外に送信されません。';
+  }
 
   @override
   String get downloadModel => 'モデルをダウンロード';

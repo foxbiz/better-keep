@@ -1067,7 +1067,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get whisperModelNotDownloaded => 'Not downloaded - tap to download';
+  String whisperModelNotDownloaded(String size) {
+    return 'Not downloaded ($size) - tap to download';
+  }
 
   @override
   String get deleteWhisperModelConfirm =>
@@ -2240,8 +2242,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whisperModelRequired => 'Speech recognition model required';
 
   @override
-  String get whisperModelDescription =>
-      'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.';
+  String whisperModelDescription(String size) {
+    return 'Download a small ($size) AI model for on-device speech-to-text. Your audio never leaves your device.';
+  }
 
   @override
   String get downloadModel => 'Download Model';

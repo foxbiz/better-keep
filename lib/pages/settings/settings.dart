@@ -857,7 +857,13 @@ class _WhisperModelTileState extends State<_WhisperModelTile> {
           : Text(
               _isDownloaded
                   ? l10n.whisperModelDownloaded(_formatBytes(_modelSize))
-                  : l10n.whisperModelNotDownloaded,
+                  : l10n.whisperModelNotDownloaded(
+                      _formatBytes(
+                        WhisperModelService
+                            .defaultModelSize
+                            .approximateSizeBytes,
+                      ),
+                    ),
             ),
       trailing: _isDownloading
           ? null

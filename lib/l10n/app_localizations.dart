@@ -2097,8 +2097,8 @@ abstract class AppLocalizations {
   /// Whisper model not downloaded
   ///
   /// In en, this message translates to:
-  /// **'Not downloaded - tap to download'**
-  String get whisperModelNotDownloaded;
+  /// **'Not downloaded ({size}) - tap to download'**
+  String whisperModelNotDownloaded(String size);
 
   /// Delete whisper model confirmation
   ///
@@ -4077,8 +4077,8 @@ abstract class AppLocalizations {
   /// Whisper model description
   ///
   /// In en, this message translates to:
-  /// **'Download a small (~31 MB) AI model for on-device speech-to-text. Your audio never leaves your device.'**
-  String get whisperModelDescription;
+  /// **'Download a small ({size}) AI model for on-device speech-to-text. Your audio never leaves your device.'**
+  String whisperModelDescription(String size);
 
   /// Download model button
   ///

@@ -1074,7 +1074,9 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get whisperModelNotDownloaded => 'Não baixado - toque para baixar';
+  String whisperModelNotDownloaded(String size) {
+    return 'Não baixado ($size) - toque para baixar';
+  }
 
   @override
   String get deleteWhisperModelConfirm =>
@@ -2266,8 +2268,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Modelo de reconhecimento de voz necessário';
 
   @override
-  String get whisperModelDescription =>
-      'Baixe um pequeno modelo de IA (~31 MB) para conversão de voz em texto no dispositivo. Seu áudio nunca sai do dispositivo.';
+  String whisperModelDescription(String size) {
+    return 'Baixe um pequeno modelo de IA ($size) para conversão de voz em texto no dispositivo. Seu áudio nunca sai do dispositivo.';
+  }
 
   @override
   String get downloadModel => 'Baixar Modelo';

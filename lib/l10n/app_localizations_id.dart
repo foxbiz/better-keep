@@ -1067,8 +1067,9 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get whisperModelNotDownloaded =>
-      'Belum terunduh - ketuk untuk mengunduh';
+  String whisperModelNotDownloaded(String size) {
+    return 'Belum terunduh ($size) - ketuk untuk mengunduh';
+  }
 
   @override
   String get deleteWhisperModelConfirm =>
@@ -2239,8 +2240,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get whisperModelRequired => 'Diperlukan model pengenalan suara';
 
   @override
-  String get whisperModelDescription =>
-      'Unduh model AI kecil (~31 MB) untuk konversi suara-ke-teks di perangkat. Audio Anda tidak pernah meninggalkan perangkat.';
+  String whisperModelDescription(String size) {
+    return 'Unduh model AI kecil ($size) untuk konversi suara-ke-teks di perangkat. Audio Anda tidak pernah meninggalkan perangkat.';
+  }
 
   @override
   String get downloadModel => 'Unduh Model';

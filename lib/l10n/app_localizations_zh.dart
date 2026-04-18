@@ -1058,7 +1058,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get whisperModelNotDownloaded => '未下载 - 点击下载';
+  String whisperModelNotDownloaded(String size) {
+    return '未下载 ($size) - 点击下载';
+  }
 
   @override
   String get deleteWhisperModelConfirm => '删除语音识别模型？您可以稍后重新下载。';
@@ -2156,8 +2158,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whisperModelRequired => '需要语音识别模型';
 
   @override
-  String get whisperModelDescription =>
-      '下载一个小型 AI 模型（约 31 MB）用于设备端语音转文字。您的音频不会离开设备。';
+  String whisperModelDescription(String size) {
+    return '下载一个小型 AI 模型（$size）用于设备端语音转文字。您的音频不会离开设备。';
+  }
 
   @override
   String get downloadModel => '下载模型';

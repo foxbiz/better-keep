@@ -1069,7 +1069,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get whisperModelNotDownloaded => 'İndirilmedi - indirmek için dokunun';
+  String whisperModelNotDownloaded(String size) {
+    return 'İndirilmedi ($size) - indirmek için dokunun';
+  }
 
   @override
   String get deleteWhisperModelConfirm =>
@@ -2246,8 +2248,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get whisperModelRequired => 'Ses tanıma modeli gereklidir';
 
   @override
-  String get whisperModelDescription =>
-      'Cihaz üzerinde sesten metne dönüştürme için küçük bir AI modeli (~31 MB) indirin. Sesiniz asla cihazınızı terk etmez.';
+  String whisperModelDescription(String size) {
+    return 'Cihaz üzerinde sesten metne dönüştürme için küçük bir AI modeli ($size) indirin. Sesiniz asla cihazınızı terk etmez.';
+  }
 
   @override
   String get downloadModel => 'Modeli İndir';

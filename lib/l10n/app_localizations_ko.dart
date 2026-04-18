@@ -1059,7 +1059,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get whisperModelNotDownloaded => '다운로드되지 않음 - 탭하여 다운로드';
+  String whisperModelNotDownloaded(String size) {
+    return '다운로드되지 않음 ($size) - 탭하여 다운로드';
+  }
 
   @override
   String get deleteWhisperModelConfirm =>
@@ -2187,8 +2189,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get whisperModelRequired => '음성 인식 모델이 필요합니다';
 
   @override
-  String get whisperModelDescription =>
-      '기기 내 음성-텍스트 변환을 위한 작은 AI 모델(~31MB)을 다운로드합니다. 오디오는 기기 밖으로 전송되지 않습니다.';
+  String whisperModelDescription(String size) {
+    return '기기 내 음성-텍스트 변환을 위한 작은 AI 모델($size)을 다운로드합니다. 오디오는 기기 밖으로 전송되지 않습니다.';
+  }
 
   @override
   String get downloadModel => '모델 다운로드';
