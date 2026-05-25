@@ -1,0 +1,417 @@
+# Better Keep — Project Context for LLMs
+
+> **IMPORTANT**: After making any significant code change (adding/removing files, changing architecture, updating dependencies, modifying database schema, adding new services/components), update this file to reflect the new state. Keep it current — stale context leads to bad suggestions.
+
+---
+
+## Overview
+
+Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app inspired by Google Keep. Built with **Flutter** (Dart), backed by **Firebase** (Auth, Firestore, Storage, Cloud Functions). Features rich-text editing, E2E encryption, AI audio transcription (Whisper), reminders, sketches, labels, folders, and subscription monetization.
+
+- **Version**: 1.0.66+66
+- **License**: CC BY-NC 4.0
+- **Publisher**: Foxbiz Software Pvt. Ltd.
+- **Firebase Project**: `better-keep-notes`
+- **Live App**: https://betterkeep.app
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Flutter 3.10+ (Dart SDK ^3.10.0) |
+| Rich Text | flutter_quill v11+ (Delta JSON format) |
+| Local DB | SQLite via sqflite (sqflite_common_ffi for desktop/web) |
+| Cloud DB | Firebase Firestore |
+| File Storage | Firebase Storage |
+| Auth | Firebase Auth (email/password, Google, Apple, OAuth) |
+| Backend | Firebase Cloud Functions (Node.js 20, TypeScript, 41 functions) |
+| Payments | in_app_purchase (Apple/Google), Razorpay (web/desktop) |
+| Encryption | XChaCha20-Poly1305, X25519 ECDH, Argon2id (via `cryptography` package) |
+| AI / STT | On-device Whisper (whisper_flutter_new), speech_to_text |
+| Audio | record + audioplayers |
+| State Mgmt | Custom lightweight pub/sub AppState (NO Provider/Riverpod/Bloc) |
+| Testing | flutter_test (3 test files, light coverage) |
+| Linting | flutter_lints |
+| CI/CD | GitHub Actions (.github/workflows/build-release.yml) |
+
+---
+
+## Directory Structure
+
+```
+better-keep/
+├── lib/                          # Main Dart source (177 files)
+│   ├── main.dart                 # Entry point: init bindings, Firebase, DB, Auth, E2EE
+│   ├── app.dart                  # MaterialApp wrapper: auth flow, routing, E2EE gating
+│   ├── config.dart               # Constants: DB version, platform detection flags
+│   ├── state.dart                # Global AppState pub/sub store (756 lines)
+│   ├── firebase_options.dart     # Platform-specific Firebase config (gitignored)
+│   │
+│   ├── components/               # Reusable UI widgets (20 files)
+│   │   ├── note_card.dart        # Note card in masonry grid
+│   │   ├── note_audio_player.dart
+│   │   ├── note_image_grid.dart
+│   │   ├── note_attachments_carousel.dart
+│   │   ├── folder_tile.dart
+│   │   ├── adaptive_toolbar.dart
+│   │   ├── adaptive_popup_menu.dart
+│   │   ├── bubble_menu.dart
+│   │   ├── auth_scaffold.dart
+│   │   ├── alarm_banner.dart
+│   │   ├── session_invalid_banner.dart
+│   │   ├── open_in_app_banner.dart
+│   │   ├── sync_progress_widget.dart
+│   │   ├── sketch_tool_popup.dart
+│   │   ├── universal_image.dart
+│   │   ├── user_avatar.dart
+│   │   ├── logo.dart
+│   │   ├── animated_icon.dart
+│   │   ├── otp_input_field.dart
+│   │   └── page_pattern_painter.dart
+│   │
+│   ├── dialogs/                  # Modal dialogs (17 files)
+│   │   ├── prompt.dart, delete_dialog.dart, loading_dialog.dart
+│   │   ├── labels.dart, color_picker.dart, link_dialog.dart
+│   │   ├── lock_note_dialog.dart, unlock_note_dialog.dart
+│   │   ├── share_note_dialog.dart, export_dialog.dart
+│   │   ├── recovery_key_dialog.dart, otp_dialog.dart
+│   │   ├── reminder.dart, audio_recorder_dialog.dart
+│   │   ├── checkbox_cascade_dialog.dart, paste_dialog.dart
+│   │   └── snackbar.dart
+│   │
+│   ├── models/                   # Data models (13 files)
+│   │   ├── base_model.dart       # Base class with pub/sub events
+│   │   ├── note.dart             # Note model (~1732 lines, largest file)
+│   │   ├── label.dart
+│   │   ├── note_attachment.dart
+│   │   ├── note_image.dart
+│   │   ├── note_recording.dart
+│   │   ├── sketch.dart
+│   │   ├── reminder.dart
+│   │   ├── share_link.dart
+│   │   ├── note_sync_track.dart
+│   │   ├── file_sync_track.dart
+│   │   ├── label_sync_track.dart
+│   │   └── pending_remote_sync.dart
+│   │
+│   ├── pages/                    # Screen-level widgets
+│   │   ├── home/                 # Main screen (home, notes grid, sidebar, labels, folders)
+│   │   │   ├── home.dart         # Dashboard shell with sidebar + notes grid
+│   │   │   ├── notes.dart        # Masonry grid / list / folder view
+│   │   │   ├── sidebar.dart      # Navigation sidebar (labels, archive, trash, folders)
+│   │   │   ├── labels.dart       # Label management
+│   │   │   ├── folder_breadcrumb.dart
+│   │   │   └── view_mode_toggle.dart
+│   │   ├── note_editor/          # Rich-text editor
+│   │   │   ├── note_editor.dart  # Main editor widget using flutter_quill
+│   │   │   └── toolbar/          # Editor toolbar buttons (11 files)
+│   │   ├── login_page.dart
+│   │   ├── email_login_page.dart
+│   │   ├── email_verification_page.dart
+│   │   ├── password_reset_page.dart
+│   │   ├── pending_approval_page.dart
+│   │   ├── account_recovery_page.dart
+│   │   ├── setup_recovery_key_page.dart
+│   │   ├── user_page.dart
+│   │   ├── settings_page.dart (+ nerd_stats)
+│   │   ├── sketch_page.dart
+│   │   ├── image_viewer.dart
+│   │   ├── content_preview_page.dart
+│   │   ├── about_page.dart
+│   │   └── help_page.dart
+│   │
+│   ├── services/                 # Business logic & platform services
+│   │   ├── database.dart         # SQLite initialization & migrations (v4)
+│   │   ├── auth_service.dart     # Firebase Auth (1838 lines)
+│   │   ├── note_sync_service.dart
+│   │   ├── label_sync_service.dart
+│   │   ├── remote_sync_cache_service.dart
+│   │   ├── file_system.dart      # Cross-platform file I/O (conditional imports)
+│   │   ├── file_system_base.dart
+│   │   ├── file_system_io.dart   # Native (IO) implementation
+│   │   ├── file_system_stub.dart # Web fallback
+│   │   ├── web_file_system.dart  # Web implementation
+│   │   ├── alarm_id_service.dart
+│   │   ├── all_day_reminder_notification_service.dart
+│   │   ├── device_approval_notification_service.dart
+│   │   ├── intent_handler_service.dart
+│   │   ├── reminder_permission_service.dart
+│   │   ├── note_export_service.dart
+│   │   ├── note_share_service.dart
+│   │   ├── export_data_service.dart
+│   │   ├── markdown_import_service.dart
+│   │   ├── encrypted_file_storage.dart
+│   │   ├── local_data_encryption.dart
+│   │   ├── firebase_emulator_config.dart
+│   │   ├── cloud_functions_helper.dart
+│   │   ├── checkbox_service.dart
+│   │   ├── sketch_preview_generator.dart
+│   │   ├── camera_capture.dart + camera_detection.dart (+ stubs)
+│   │   ├── app_install_service.dart (+ stubs)
+│   │   ├── country_detection_service.dart
+│   │   ├── web_oauth.dart (+ stub)
+│   │   ├── web_camera.dart (+ stub)
+│   │   ├── desktop_auth_service.dart
+│   │   │
+│   │   ├── e2ee/                 # End-to-End Encryption (6 files)
+│   │   │   ├── e2ee_service.dart        # Coordinator (737 lines)
+│   │   │   ├── device_manager.dart      # X25519 keypair, device approval
+│   │   │   ├── note_encryption.dart     # Encrypt/decrypt notes
+│   │   │   ├── crypto_primitives.dart   # XChaCha20-Poly1305, ECDH
+│   │   │   ├── recovery_key.dart        # Argon2id-based recovery
+│   │   │   └── secure_storage.dart      # Platform-specific key storage
+│   │   │
+│   │   ├── monetization/         # Subscriptions & payments (10 files)
+│   │   │   ├── monetization.dart, plan_service.dart
+│   │   │   ├── subscription_service.dart, subscription_status.dart
+│   │   │   ├── user_plan.dart, entitlements.dart, entitlement_guard.dart
+│   │   │   └── razorpay_service.dart (+ stub + web)
+│   │   │
+│   │   └── whisper/              # On-device AI transcription (5 files)
+│   │       ├── whisper.dart, whisper_service.dart (+ native + stub)
+│   │       └── whisper_types.dart
+│   │
+│   ├── themes/                   # Theme system (3 files)
+│   │   ├── dark_themes.dart, light_themes.dart, theme_registry.dart
+│   │
+│   ├── ui/                       # UI utilities
+│   │   ├── custom_icons.dart     # Auto-generated icon font constants
+│   │   └── paywall/              # Subscription paywall UI (3 files)
+│   │
+│   ├── utils/                    # Utilities (15 files)
+│   │   ├── encryption.dart       # XOR+SHA-256 note-level encryption
+│   │   ├── quill_config.dart     # FlutterQuill editor configuration
+│   │   ├── quill_image_utils.dart
+│   │   ├── db_init.dart (+ native + web stubs)
+│   │   ├── file_utils.dart
+│   │   ├── image_compressor.dart
+│   │   ├── thumbnail_generator.dart
+│   │   ├── markdown_converter.dart
+│   │   ├── audio_content_utils.dart
+│   │   ├── logger.dart
+│   │   ├── utils.dart
+│   │   ├── week_days.dart
+│   │   └── l10n_helper.dart
+│   │
+│   └── l10n/                     # Localization (15 files, 7 languages)
+│
+├── functions/                    # Firebase Cloud Functions (TypeScript, 47 files)
+│   └── src/
+│       ├── index.ts              # Entry point — exports 41 cloud functions
+│       └── exports/              # Individual function modules (41 files)
+│
+├── test/                         # Tests (3 files, light coverage)
+├── docs/                         # Technical docs (4 files)
+│   ├── E2EE.md                   # E2EE architecture deep-dive
+│   ├── DATABASE_MIGRATIONS.md
+│   ├── CONNECTED_ACCOUNTS.md
+│   └── SERVER_SIDE_SUBSCRIPTION_ENFORCEMENT.md
+├── assets/                       # App assets (icons, fonts, sounds)
+├── android/                      # Android platform project
+├── ios/                          # iOS platform project
+├── macos/                        # macOS platform project
+├── windows/                      # Windows platform project
+├── web/                          # Web platform project + static pages
+├── linux/                        # Linux platform project (disabled)
+├── scripts/                      # Utility scripts
+├── pubspec.yaml                  # Flutter project definition (50+ dependencies)
+├── package.json                  # Node build scripts (root-level)
+```
+
+---
+
+## Key Architecture Patterns
+
+### State Management: AppState Pub/Sub
+
+No Provider, Riverpod, or Bloc. A lightweight global `Map<String, Object?>` with subscribe/notify:
+
+```dart
+// Subscribe
+AppState.subscribe("theme", (key, value) {
+  setState(() => _theme = value as ThemeData);
+});
+
+// Update
+AppState.notify("theme", newTheme);
+
+// Persist
+AppState.set("locale", "en");  // auto-persists to SharedPreferences
+```
+
+Key state keys: `db`, `theme`, `followSystemTheme`, `showNotes`, `filterLabels`, `selectedNotes`, `notesViewMode`, `currentFolder`, `locale`, `editorFullScreen`, alarm settings, sketch tool prefs.
+
+### Routing: Imperative Navigator
+
+No named routes or router package. All navigation uses `Navigator.push()` / `Navigator.pop()`. Global keys stored in AppState:
+- `navKey` — `NavigatorKey` for programmatic navigation from services
+- `scaffoldKey` — `ScaffoldMessengerKey` for showing snackbars from anywhere
+
+### Database: SQLite with Manual Migrations
+
+- **Version**: 4 (handled in `database.dart`)
+- **Tables**: `note`, `label`, `note_image`, `note_recording`, `sketch`, `reminder`, `note_sync_track`, `file_sync_track`, `label_sync_track`, `pending_remote_sync`
+- **Base Model**: `base_model.dart` — all models extend this, get pub/sub events, `toMap()`/`fromMap()`
+- Note content stored as Flutter Quill Delta JSON
+- Locked notes use XOR+SHA-256 encryption via `utils/encryption.dart`
+
+### Sync: Local-First, Newest-Wins
+
+1. SQLite is source of truth; Firestore is sync medium
+2. Push: fetch remote timestamp → if remote newer, abort push + pull remote; if local newer, push
+3. Pull: Firestore live listeners update local DB in real-time
+4. `local_id` mapping prevents duplicates on reinstall
+5. Attachments synced to Firebase Storage (encrypted with UMK when E2EE active)
+
+### E2EE Architecture
+
+- **User Master Key (UMK)**: 32-byte symmetric key encrypts all note content
+- **Device Keypairs**: X25519 per device, private key in platform secure storage
+- **XChaCha20-Poly1305** for note/attachment encryption with fresh nonces
+- **ECDH** (X25519) for key exchange between devices during device approval
+- **Argon2id** for recovery passphrase-based key derivation
+- Metadata (labels, colors, timestamps) intentionally NOT encrypted (needed for filtering/sorting)
+
+### Platform Abstraction
+
+Conditional imports for web vs native:
+```dart
+import 'file_system_stub.dart' if (dart.library.io) 'file_system_io.dart' if (dart.library.html) 'web_file_system.dart';
+```
+
+`config.dart` caches platform detection: `isDesktop`, `isMobile`, `isWeb`, `isAlarmSupported`.
+
+### Theming
+
+Multiple pre-built dark and light themes in `lib/themes/`. `ThemeRegistry` maps IDs to `ThemeData`. User can pick theme per mode or follow-system.
+
+### Localization
+
+7 languages via ARB files in `lib/l10n/`. Auto-generated Dart classes. Configured in `l10n.yaml`.
+
+### Monetization
+
+- Free (trial) vs Pro
+- Apple IAP + Google Play Billing for mobile
+- Razorpay for web/desktop
+- Server-side enforcement via Firebase Custom Claims (`plan: 'pro'`, `planExpiresAt`)
+- Entitlement guard pattern
+
+---
+
+## Development Commands
+
+```bash
+# Install dependencies
+flutter pub get
+
+# Run the app (requires .env file)
+flutter run --dart-define-from-file=.env
+
+# Static analysis
+flutter analyze
+
+# Tests
+flutter test
+
+# Format code
+dart format lib test
+
+# Firebase emulators (requires Node.js)
+npm run firebase-emulators
+
+# Build Cloud Functions
+npm run build:functions
+
+# Platform builds (all require .env)
+npm run build:android     # flutter build appbundle --release
+npm run build:ios         # flutter build ios --release
+npm run build:macos       # flutter build macos --release
+npm run build:windows     # flutter build windows --release + MSIX
+npm run build:web         # flutter build web --release
+npm run build:icons       # Generate custom icon font
+```
+
+---
+
+## Naming & Code Conventions
+
+- **Files**: snake_case (e.g., `note_sync_service.dart`)
+- **Classes**: PascalCase (e.g., `NoteSyncService`)
+- **Widget files**: one widget per file
+- **Imports**: package imports (`package:better_keep/...`)
+- **No comments** in code (keep code self-documenting)
+- **Model pattern**: extend `BaseModel`, implement `toMap()`/`fromMap()`
+- **Service pattern**: singleton-like with static or instance methods, often lazy-initialized via AppState
+- **Dialog pattern**: call via `showDialog()` or `showModalBottomSheet()`, usually passed callbacks for results
+- **Platform stubs**: conditional imports with `dart.library.io` / `dart.library.html`
+- **State updates**: always go through `AppState.notify()` for shared state; use `setState()` for widget-local state
+
+---
+
+## Key Files Reference
+
+| File | Lines | Purpose |
+|---|---|---|
+| `lib/main.dart` | ~150 | App entry: init, bootstrap |
+| `lib/app.dart` | ~400 | MaterialApp, auth routing, lifecycle |
+| `lib/state.dart` | 756 | Global pub/sub state |
+| `lib/models/note.dart` | 1732 | Note model — largest file |
+| `lib/services/auth_service.dart` | 1838 | All auth logic |
+| `lib/services/database.dart` | ~300 | SQLite init + migrations |
+| `lib/services/e2ee/e2ee_service.dart` | 737 | E2EE coordinator |
+| `lib/services/note_sync_service.dart` | ~500 | Firestore note sync |
+| `lib/pages/home/notes.dart` | ~800 | Masonry grid + list + folder views |
+| `lib/pages/note_editor/note_editor.dart` | ~600 | Rich-text editor |
+| `functions/src/index.ts` | ~200 | Cloud Functions entry (exports 41 functions) |
+| `pubspec.yaml` | ~200 | 50+ Flutter dependencies |
+| `docs/E2EE.md` | 363 | E2EE architecture docs |
+
+---
+
+## Database Schema (SQLite v4)
+
+```sql
+note: id, local_id, title, content (Quill Delta JSON), labels (comma-separated),
+      color, is_pinned, is_archived, is_deleted, is_locked, lock_type,
+      reminder, created_at, updated_at, synced_at, ...
+label: id, local_id, name, color, created_at, updated_at, synced_at, ...
+note_image: id, note_id, local_path, remote_path, width, height, ...
+note_recording: id, note_id, local_path, remote_path, duration, transcription, ...
+sketch: id, note_id, data (JSON), background_image, ...
+reminder: id, note_id, alarm_id, time, repeat_days, ...
+note_sync_track: id, note_id, synced, updated_at
+file_sync_track: id, attachment_id, attachment_type, synced, ...
+label_sync_track: id, label_id, synced, updated_at
+pending_remote_sync: id, item_id, item_type, operation, ...
+```
+
+---
+
+## Cloud Functions (41 total)
+
+- **Auth**: custom tokens, OTPs, password reset, account linking, account deletion, token revocation, device approval, start-fresh
+- **Subscriptions**: Razorpay CRUD, Play Store/App Store webhooks, purchase verification, expiry checks, trial grants
+- **Maintenance**: cleanup pending devices, expired shares, failed payments, scheduled deletions
+- **Stats**: public user count endpoint
+
+---
+
+## Important Notes for Development
+
+1. **`.env` required**: All `flutter run`/`flutter build` commands need `--dart-define-from-file=.env`
+2. **`firebase_options.dart` is gitignored**: Each dev must generate their own via `flutterfire configure`
+3. **Desktop DB requires FFI init**: `sqflite_common_ffi` must be initialized before database access on Windows/macOS/Linux
+4. **E2EE is complex**: Read `docs/E2EE.md` before touching encryption code
+5. **State flows through AppState**: Don't introduce new state management patterns — use the existing pub/sub
+6. **Sync tracking tables**: Always update corresponding `*_sync_track` entries when modifying notes/labels/files
+7. **Web has limitations**: File system, camera, OAuth, and Razorpay all use web-specific stubs
+8. **Test coverage is light**: Be cautious with refactors — there are only 3 test files
+9. **No comments**: The codebase avoids comments — follow this convention
+10. **Keep this file updated**: After adding/removing files, changing architecture, or updating dependencies, update `llm.txt`
+
+---
+
+*Last updated: 2026-05-20*
