@@ -94,12 +94,19 @@
 	</dict>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dartobservatory._tcp</string>
+		<string>_dartVmService._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>We need access to your camera to add photos to notes.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>This app needs to access your Documents folder to store AI models for transcription.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>This app needs to access your Downloads folder to store AI models for transcription.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Better Keep needs local network access while debugging to connect Flutter developer tools.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Better Keep uses your microphone to record audio notes and transcribe them into text using on-device speech recognition.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

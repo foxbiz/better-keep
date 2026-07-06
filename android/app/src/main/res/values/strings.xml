@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Better Keep Notes</string>
+    <string name="note_widget_description">Shows a selected Better Keep note on your home screen.</string>
+    <string name="note_list_widget_description">Shows your recent Better Keep notes at a glance.</string>
+    <string name="quick_actions_widget_description">Quickly create a note, to-do list, voice note, or photo note.</string>
     <string name="billing_key">MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnZHyvxudtGCBHTg2t5qBwLyz+t6gcRXgxE4pG+7P4tiXGkll0UzSVrGKt8YTULNvhVrhpXMKKW4eBRt99yy+7E8aPgxNzF2RNdW3GttNYtLDV1/BC+jesMhj+2a8aF7Nw4q42xQpxCciUiXcfmnU9ebdWTNvp/VfeQpb6EIrWMp2ODPHUrJi/zGKsDpxukkxDLhkmjWDeTC2lc4qfIlgD6HCgdIdjNJR44LFJQHva7olV0A9m/SYSAtgrLg7ZoeHBLSF/C5n4qhxS/e8nyv4kw1l7ZU2RsHmqtFJf9uGzi5Sit3+8bcssCisylJOITZN6Yz4sg9QFo+uGXfz6iH6EQIDAQAB</string>
 </resources>

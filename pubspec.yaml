@@ -67,6 +67,7 @@ dependencies:
   markdown: ^7.3.0
   flutter_html: ^3.0.0
   flutter_quill_extensions: ^11.0.0
+  home_widget: ^0.9.3
 
 dev_dependencies:
   msix: ^3.16.7

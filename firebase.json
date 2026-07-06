@@ -1,0 +1,164 @@
+{
+	"emulators": {
+		"auth": {
+			"port": 9099,
+			"host": "0.0.0.0"
+		},
+		"functions": {
+			"port": 5001,
+			"host": "0.0.0.0"
+		},
+		"firestore": {
+			"port": 8080,
+			"host": "0.0.0.0"
+		},
+		"storage": {
+			"port": 9199,
+			"host": "0.0.0.0"
+		},
+		"ui": {
+			"enabled": true,
+			"port": 4000,
+			"host": "0.0.0.0"
+		},
+		"singleProjectMode": true
+	},
+	"hosting": {
+		"public": "build/web",
+		"ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+		"headers": [
+			{
+				"source": "**",
+				"headers": [
+					{
+						"key": "X-Frame-Options",
+						"value": "ALLOW-FROM https://puter.com"
+					},
+					{
+						"key": "Content-Security-Policy",
+						"value": "frame-ancestors https://puter.com"
+					},
+					{
+						"key": "X-Content-Type-Options",
+						"value": "nosniff"
+					}
+				]
+			}
+		],
+		"rewrites": [
+			{
+				"source": "/privacy",
+				"destination": "/privacy.html"
+			},
+			{
+				"source": "/terms",
+				"destination": "/terms.html"
+			},
+			{
+				"source": "/faqs",
+				"destination": "/faqs.html"
+			},
+			{
+				"source": "/pricing",
+				"destination": "/pricing.html"
+			},
+			{
+				"source": "/encryption",
+				"destination": "/encryption.html"
+			},
+			{
+				"source": "/open-source",
+				"destination": "/open-source.html"
+			},
+			{
+				"source": "/self-host",
+				"destination": "/self-host.html"
+			},
+			{
+				"source": "/welcome",
+				"destination": "/welcome.html"
+			},
+			{
+				"source": "/delete-user",
+				"destination": "/delete-user.html"
+			},
+			{
+				"source": "/desktop-checkout",
+				"destination": "/desktop-checkout.html"
+			},
+			{
+				"source": "/contact",
+				"destination": "/contact.html"
+			},
+			{
+				"source": "/cancellation-refund",
+				"destination": "/cancellation-refund.html"
+			},
+			{
+				"source": "/s/**",
+				"destination": "/s/index.html"
+			},
+			{
+				"source": "/oauth/start",
+				"function": "oauthStart"
+			},
+			{
+				"source": "/oauth/callback",
+				"function": "oauthCallback"
+			},
+			{
+				"source": "**",
+				"destination": "/index.html"
+			}
+		]
+	},
+	"firestore": {
+		"database": "better-keep",
+		"rules": "firestore.rules"
+	},
+	"storage": {
+		"rules": "storage.rules"
+	},
+	"functions": {
+		"source": "functions",
+		"runtime": "nodejs20"
+	},
+	"flutter": {
+		"platforms": {
+			"android": {
+				"default": {
+					"projectId": "better-keep-notes",
+					"appId": "1:1058616680754:android:758305adecc3abdb7bf72b",
+					"fileOutput": "android/app/google-services.json"
+				}
+			},
+			"dart": {
+				"lib/firebase_options.dart": {
+					"projectId": "better-keep-notes",
+					"configurations": {
+						"android": "1:1058616680754:android:758305adecc3abdb7bf72b",
+						"ios": "1:1058616680754:ios:ba12e91b4b4600537bf72b",
+						"macos": "1:1058616680754:ios:4674c5e161bef8027bf72b",
+						"web": "1:1058616680754:web:b406c8db2f39a2d17bf72b"
+					}
+				}
+			},
+			"ios": {
+				"default": {
+					"projectId": "better-keep-notes",
+					"appId": "1:1058616680754:ios:ba12e91b4b4600537bf72b",
+					"uploadDebugSymbols": false,
+					"fileOutput": "ios/Runner/GoogleService-Info.plist"
+				}
+			},
+			"macos": {
+				"default": {
+					"projectId": "better-keep-notes",
+					"appId": "1:1058616680754:ios:4674c5e161bef8027bf72b",
+					"uploadDebugSymbols": false,
+					"fileOutput": "macos/Runner/GoogleService-Info.plist"
+				}
+			}
+		}
+	}
+}

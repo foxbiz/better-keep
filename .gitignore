@@ -48,7 +48,8 @@ app.*.map.json
 /android/app/google-services.json
 
 #firebase
-firebase.json
 web/firebase-config.json
 .env
 .firebase/
+firepit-log.txt
+.metadata

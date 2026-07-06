@@ -411,7 +411,8 @@ pending_remote_sync: id, item_id, item_type, operation, ...
 8. **Test coverage is light**: Be cautious with refactors — there are only 3 test files
 9. **No comments**: The codebase avoids comments — follow this convention
 10. **Keep this file updated**: After adding/removing files, changing architecture, or updating dependencies, update `llm.txt`
+11. **Home Screen Widgets**: iOS (SwiftUI+WidgetKit) and Android (Kotlin+RemoteViews) widgets provide Single Note, Note List, and Quick Actions. Bridge via `home_widget` package. WidgetService coordinates data serialization and refresh on note CRUD. Deep links: `betterkeep://note?id=N` and `betterkeep://create?type=`. iOS target: `NoteWidgetExtension` with App Group `group.io.foxbiz.better-keep`.
 
 ---
 
-*Last updated: 2026-05-20*
+*Last updated: 2026-06-22*

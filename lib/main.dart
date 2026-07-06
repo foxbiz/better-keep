@@ -20,6 +20,7 @@ import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
+import 'package:better_keep/services/widget_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
@@ -33,6 +34,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/alarm_id_service.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
+import 'package:better_keep/pages/note_editor/note_editor.dart';
+import 'package:better_keep/pages/widget_note_selection_page.dart';
+import 'package:better_keep/utils/utils.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -177,6 +181,7 @@ class _BetterKeepState extends State<BetterKeep> {
   /// App links for deep linking (OAuth callback)
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _appLinksSubscription;
+  Uri? _pendingWidgetDeepLink;
 
   @override
   void initState() {
@@ -203,6 +208,11 @@ class _BetterKeepState extends State<BetterKeep> {
 
       // Initialize intent handler for opening/sharing files
       IntentHandlerService.instance.init();
+
+      // Initialize widget service for home screen widget refresh
+      await WidgetService.instance.init();
+
+      _replayPendingWidgetDeepLink();
 
       // Initialize subscription service for IAP early (doesn't require auth)
       // This allows products to load while user is logging in
@@ -264,18 +274,15 @@ class _BetterKeepState extends State<BetterKeep> {
   void _handleDeepLink(Uri uri) {
     AppLogger.log('[DeepLink] Received: $uri');
 
-    // Handle OAuth callback (betterkeep://auth?token=xxx)
     if (uri.scheme == 'betterkeep' && uri.host == 'auth') {
       AuthService.handleOAuthCallback(uri);
+      return;
     }
 
-    // Handle password reset complete (betterkeep://password-reset-complete?email=xxx)
-    // This is triggered when user completes password reset in browser (Windows/Linux)
     if (uri.scheme == 'betterkeep' && uri.host == 'password-reset-complete') {
       final email = uri.queryParameters['email'];
       AppLogger.log('[DeepLink] Password reset complete for: $email');
 
-      // Show a snackbar notification to confirm password was reset
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final context = AppState.navigatorKey.currentContext;
         if (context != null) {
@@ -290,7 +297,113 @@ class _BetterKeepState extends State<BetterKeep> {
           );
         }
       });
+      return;
     }
+
+    if (uri.scheme == 'betterkeep' && uri.host == 'note') {
+      if (!_canHandleWidgetDeepLink()) {
+        _pendingWidgetDeepLink = uri;
+        return;
+      }
+      _handleNoteDeepLink(uri);
+      return;
+    }
+
+    if (uri.scheme == 'betterkeep' && uri.host == 'create') {
+      if (!_canHandleWidgetDeepLink()) {
+        _pendingWidgetDeepLink = uri;
+        return;
+      }
+      _handleCreateDeepLink(uri);
+      return;
+    }
+
+    if (uri.scheme == 'betterkeep' &&
+        uri.host == 'widget' &&
+        uri.path == '/select-note') {
+      if (!_canHandleWidgetDeepLink()) {
+        _pendingWidgetDeepLink = uri;
+        return;
+      }
+      _handleWidgetNoteSelectionDeepLink(uri);
+      return;
+    }
+  }
+
+  bool _canHandleWidgetDeepLink() {
+    return db != null && AuthService.currentUser != null;
+  }
+
+  void _replayPendingWidgetDeepLink() {
+    final uri = _pendingWidgetDeepLink;
+    if (uri == null || !_canHandleWidgetDeepLink()) return;
+
+    _pendingWidgetDeepLink = null;
+    _handleDeepLink(uri);
+  }
+
+  void _handleNoteDeepLink(Uri uri) {
+    final noteIdStr = uri.queryParameters['id'];
+    if (noteIdStr == null) return;
+
+    final noteId = int.tryParse(noteIdStr);
+    if (noteId == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final context = AppState.navigatorKey.currentContext;
+      if (context == null) return;
+
+      final note = await Note.findById(noteId);
+      if (note == null) return;
+
+      if (!context.mounted) return;
+      showPage(context, NoteEditor(note: note), allowFullScreen: true);
+    });
+  }
+
+  void _handleCreateDeepLink(Uri uri) {
+    final type = uri.queryParameters['type'] ?? 'note';
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = AppState.navigatorKey.currentContext;
+      if (context == null) return;
+
+      if (type == 'todo') {
+        final note = Note(
+          content:
+              '[{"insert":"Tasks"},{"insert":"\\n","attributes":{"header":1}},{"insert":"\\n","attributes":{"list":"unchecked"}}]',
+        );
+        showPage(
+          context,
+          NoteEditor(note: note, autoFocus: true, deleteIfUnchanged: true),
+          allowFullScreen: true,
+        );
+      } else {
+        showPage(
+          context,
+          NoteEditor(note: Note(content: '[]')),
+          allowFullScreen: true,
+        );
+      }
+    });
+  }
+
+  void _handleWidgetNoteSelectionDeepLink(Uri uri) {
+    final widgetId = int.tryParse(uri.queryParameters['widgetId'] ?? '');
+    final iosSlot =
+        int.tryParse(uri.queryParameters['iosSlot'] ?? '') ??
+        (widgetId == null && Platform.isIOS ? 1 : null);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = AppState.navigatorKey.currentContext;
+      if (context == null) return;
+
+      showPage(
+        context,
+        WidgetNoteSelectionPage(widgetId: widgetId, iosSlot: iosSlot),
+        allowFullScreen: true,
+      );
+    });
   }
 
   @override

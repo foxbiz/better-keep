@@ -1355,7 +1355,7 @@ class _NoteEditorState extends State<NoteEditor>
     );
   }
 
-  void _saveNote({bool clearPasswordAfterSave = false}) async {
+  Future<void> _saveNote({bool clearPasswordAfterSave = false}) async {
     // Update note title from title controller
     final title = _titleController.text;
     _note.title = title;
