@@ -1,6 +1,6 @@
 {
 	"@@locale": "tr",
-	"@@last_modified": "2026-03-09",
+	"@@last_modified": "2026-05-19",
 
 	"appTitle": "Better Keep",
 	"@appTitle": { "description": "The name of the application" },
@@ -571,9 +571,6 @@
 	"@recoverySuccessWelcome": {
 		"description": "Recovery success welcome message"
 	},
-
-	"requestTimedOut": "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.",
-	"@requestTimedOut": { "description": "Request timed out message" },
 
 	"confirmConsequences": "Lütfen sonuçları anladığınızı onaylayın",
 	"@confirmConsequences": { "description": "Confirm consequences message" },
@@ -1170,7 +1167,13 @@
 
 	"whisperModelNotDownloaded": "İndirilmedi ({size}) - indirmek için dokunun",
 	"@whisperModelNotDownloaded": {
-		"description": "Whisper model not downloaded"
+		"description": "Whisper model not downloaded",
+		"placeholders": {
+			"size": {
+				"type": "String",
+				"example": "75.0 MB"
+			}
+		}
 	},
 
 	"deleteWhisperModelConfirm": "Ses tanıma modeli silinsin mi? Daha sonra tekrar indirebilirsiniz.",
@@ -1370,9 +1373,6 @@
 	"resettingPassword": "Parola Sıfırlanıyor...",
 	"@resettingPassword": { "description": "Resetting password status" },
 
-	"passwordsDoNotMatch": "Parolalar eşleşmiyor",
-	"@passwordsDoNotMatch": { "description": "Passwords do not match error" },
-
 	"pleaseEnterNewPassword": "Lütfen yeni bir parola girin",
 	"@pleaseEnterNewPassword": {
 		"description": "Please enter new password validation error"
@@ -1404,6 +1404,11 @@
 
 	"verifyYourEmail": "E-postanızı Doğrulayın",
 	"@verifyYourEmail": { "description": "Verify your email title" },
+
+	"sendingVerificationCode": "Doğrulama kodu gönderiliyor...",
+	"@sendingVerificationCode": {
+		"description": "Sending verification code status"
+	},
 
 	"emailVerifiedSuccessfully": "E-posta başarıyla doğrulandı!",
 	"@emailVerifiedSuccessfully": {
@@ -1618,8 +1623,14 @@
 	"@manageSubscription": { "description": "Manage subscription button" },
 
 	"renewSubscription": "Aboneliği Yenile",
+	"@renewSubscription": {
+		"description": "Renew cancelled subscription button"
+	},
 
 	"restoreInfoText": "Abone olduğunuzda, mevcut abonelikleriniz veya önceki satın alımlarınız otomatik olarak geri yüklenir.",
+	"@restoreInfoText": {
+		"description": "Info text explaining automatic restore on paywall"
+	},
 
 	"cancelSubscriptionConfirmation": "Aboneliğinizi iptal etmek istediğinizden emin misiniz?\n\nAboneliğiniz, mevcut fatura döneminin sonuna kadar aktif kalacaktır. Bundan sonra Pro özelliklerine erişiminizi kaybedeceksiniz.",
 	"@cancelSubscriptionConfirmation": {
@@ -1627,6 +1638,9 @@
 	},
 
 	"subscriptionChangesMayTakeMoment": "Değişiklik yaptıysanız, görünmesi biraz zaman alabilir.",
+	"@subscriptionChangesMayTakeMoment": {
+		"description": "Snackbar message shown after returning from platform subscription management"
+	},
 
 	"subscriptionRestored": "Aboneliğiniz geri yüklendi!",
 	"@subscriptionRestored": {
@@ -1775,11 +1789,6 @@
 
 	"cannotUnlinkPrimary": "Orijinal giriş yönteminin bağlantısı kaldırılamaz",
 	"@cannotUnlinkPrimary": { "description": "Cannot unlink primary tooltip" },
-
-	"sendingVerificationCode": "Doğrulama kodu gönderiliyor...",
-	"@sendingVerificationCode": {
-		"description": "Sending verification code status"
-	},
 
 	"verifyAccountLink": "Hesap Bağlantısını Doğrula",
 	"@verifyAccountLink": { "description": "Verify account link dialog title" },
@@ -1964,6 +1973,9 @@
 	"@recoveryKeySavedSuccessfully": {
 		"description": "Recovery key saved message"
 	},
+
+	"noRecoveryKeyWarning": "Uyarı: Bir Kurtarma Anahtarı olmadan, tüm cihazlarınızı kaybederseniz notlarınızı kurtaramazsınız!",
+	"@noRecoveryKeyWarning": { "description": "No recovery key warning message" },
 
 	"recoveryKeySetUp": "Ayarlanmış bir Kurtarma Anahtarınız var. Ne yapmak istersiniz?",
 	"@recoveryKeySetUp": { "description": "Recovery key options message" },
@@ -2790,10 +2802,29 @@
 	"@decryptionFailed": { "description": "Decryption failed label" },
 
 	"decryptionFailedRetryMessage": "Bu not şifresi çözülemedi. Bu, şifreleme anahtarlarının geçici olarak kullanılamaması durumunda olabilir. Tekrar senkronize etmeyi deneyebilir veya notu kalıcı olarak silebilirsiniz.",
+	"@decryptionFailedRetryMessage": {
+		"description": "Message shown when a note fails to decrypt, offering retry"
+	},
+
 	"deletingNoteFromAllDevicesWarning": "Silme işlemi bu notu sunucudaki şifrelenmiş kopya dahil tüm cihazlarınızdan kaldırır.",
+	"@deletingNoteFromAllDevicesWarning": {
+		"description": "Warning that deleting a decryption-failed note destroys the server copy"
+	},
+
 	"retryDecryption": "Tekrar Dene",
+	"@retryDecryption": {
+		"description": "Button to retry decrypting a failed note"
+	},
+
 	"retryingDecryption": "Senkronizasyon yeniden deneniyor...",
+	"@retryingDecryption": {
+		"description": "Snackbar message when retrying decryption"
+	},
+
 	"e2eeNotReady": "Şifreleme hazır değil. Lütfen cihaz onay durumunuzu kontrol edin.",
+	"@e2eeNotReady": {
+		"description": "Message when E2EE is not ready for retry"
+	},
 
 	"thisNoteIsLocked": "Bu not kilitli",
 	"@thisNoteIsLocked": { "description": "Locked note label" },
@@ -2937,6 +2968,11 @@
 	"reminders": "Hatırlatıcılar",
 	"@reminders": { "description": "Reminders navigation item" },
 
+	"notificationsEnabled": "Bildirimler etkinleştirildi! Hatırlatıcılarınız ayarlandı.",
+	"@notificationsEnabled": {
+		"description": "Snackbar message after enabling notification permissions"
+	},
+
 	"shareApp": "Uygulamayı Paylaş",
 	"@shareApp": { "description": "Share app menu item" },
 
@@ -3035,9 +3071,6 @@
 	"noRecoveryKey": "Kurtarma Anahtarı Yok",
 	"@noRecoveryKey": { "description": "No recovery key dialog title" },
 
-	"noRecoveryKeyWarning": "Bir Kurtarma Anahtarı olmadan, tüm cihazlarınızı kaybederseniz şifrelenmiş tüm notlarınıza erişiminizi kalıcı olarak kaybedersiniz.\n\nDaha sonra Ayarlar'dan bir Kurtarma Anahtarı ayarlamayı düşünebilirsiniz.",
-	"@noRecoveryKeyWarning": { "description": "No recovery key warning message" },
-
 	"iUnderstand": "Anlıyorum",
 	"@iUnderstand": { "description": "I understand button label" },
 
@@ -3093,6 +3126,9 @@
 	"@pleaseConfirmYourPassword": {
 		"description": "Confirm password validation error message"
 	},
+
+	"passwordsDoNotMatch": "Parolalar eşleşmiyor",
+	"@passwordsDoNotMatch": { "description": "Password mismatch error message" },
 
 	"creatingAccount": "Hesap oluşturuluyor...",
 	"@creatingAccount": { "description": "Creating account status message" },
@@ -3186,6 +3222,9 @@
 	"@takingTooLongTryAgain": {
 		"description": "Taking too long timeout message"
 	},
+
+	"requestTimedOut": "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.",
+	"@requestTimedOut": { "description": "Request timed out message" },
 
 	"failedToSendVerificationCode": "Doğrulama kodu gönderilemedi",
 	"@failedToSendVerificationCode": {
@@ -3377,11 +3416,6 @@
 	"maybeLater": "Belki daha sonra",
 	"@maybeLater": { "description": "Dismiss/skip button text for paywall" },
 
-	"notificationsEnabled": "Bildirimler etkinleştirildi! Hatırlatıcılarınız ayarlandı.",
-	"@notificationsEnabled": {
-		"description": "Snackbar message after enabling notification permissions"
-	},
-
 	"enableNotificationsTitle": "Bildirimleri Etkinleştir",
 	"@enableNotificationsTitle": {
 		"description": "Title for the dialog prompting notification permissions after sync restores reminders"
@@ -3398,6 +3432,17 @@
 	},
 
 	"rateOnAppStore": "App Store'da Değerlendir",
+	"@rateOnAppStore": {
+		"description": "Sidebar item to rate the app on the App Store (iOS)"
+	},
+
 	"rateOnPlayStore": "Play Store'da Değerlendir",
-	"rateOnMicrosoftStore": "Microsoft Store'da Değerlendir"
+	"@rateOnPlayStore": {
+		"description": "Sidebar item to rate the app on the Play Store (Android)"
+	},
+
+	"rateOnMicrosoftStore": "Microsoft Store'da Değerlendir",
+	"@rateOnMicrosoftStore": {
+		"description": "Sidebar item to rate the app on the Microsoft Store (Windows)"
+	}
 }
