@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:better_keep/components/e2ee_status_card.dart';
 import 'package:better_keep/components/user_avatar.dart';
+import 'package:better_keep/components/user_device_tile.dart';
 import 'package:better_keep/dialogs/loading_dialog.dart';
 import 'package:better_keep/dialogs/otp_dialog.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
@@ -227,7 +229,15 @@ class _UserPageState extends State<UserPage> {
                       const SizedBox(height: 32),
 
                       // E2EE Section
-                      _buildE2EESection(context),
+                      E2EEStatusCard(
+                        status: E2EEService.instance.status.value,
+                        approvedDeviceCount: _devices
+                            .where((device) => device.isApproved)
+                            .length,
+                        hasRecoveryKey: _hasRecoveryKey,
+                        onManageRecoveryKey: _manageRecoveryKey,
+                        onSetupE2ee: _setupE2EE,
+                      ),
 
                       const SizedBox(height: 32),
 
@@ -1987,216 +1997,6 @@ class _UserPageState extends State<UserPage> {
     }
   }
 
-  Widget _buildE2EESection(BuildContext context) {
-    final e2ee = E2EEService.instance;
-    final status = e2ee.status.value;
-    final theme = Theme.of(context);
-
-    String statusText;
-    Color statusColor;
-    IconData statusIcon;
-
-    switch (status) {
-      case E2EEStatus.ready:
-        statusText = "Your notes are protected";
-        statusColor = Colors.green;
-        statusIcon = Icons.lock;
-        break;
-      case E2EEStatus.pendingApproval:
-        statusText = "Waiting for device approval";
-        statusColor = Colors.orange;
-        statusIcon = Icons.hourglass_empty;
-        break;
-      case E2EEStatus.notSetUp:
-        statusText = "Protection not enabled";
-        statusColor = Colors.grey;
-        statusIcon = Icons.lock_open;
-        break;
-      case E2EEStatus.error:
-        statusText = "Something went wrong";
-        statusColor = Colors.orange;
-        statusIcon = Icons.error_outline;
-        break;
-      case E2EEStatus.revoked:
-        statusText = "Device access removed";
-        statusColor = Colors.red;
-        statusIcon = Icons.block;
-        break;
-      default:
-        statusText = "Getting ready...";
-        statusColor = Colors.grey;
-        statusIcon = Icons.lock_open;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: statusColor.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(statusIcon, color: statusColor, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        statusText,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
-                        ),
-                      ),
-                      if (status == E2EEStatus.ready)
-                        Text(
-                          "Your notes and attachments are encrypted",
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            if (status == E2EEStatus.ready) ...[
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 12),
-
-              // Encryption details
-              _buildInfoRow(
-                context,
-                "Encryption",
-                "XChaCha20-Poly1305",
-                Icons.shield,
-              ),
-              const SizedBox(height: 8),
-              _buildInfoRow(
-                context,
-                "Key Exchange",
-                "X25519 ECDH",
-                Icons.swap_horiz,
-              ),
-              const SizedBox(height: 8),
-              _buildInfoRow(context, "Key Size", "256-bit", Icons.key),
-              const SizedBox(height: 8),
-              _buildInfoRow(
-                context,
-                "Devices",
-                "${_devices.where((d) => d.isApproved).length} authorized",
-                Icons.devices,
-              ),
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 12),
-
-              // Recovery key management
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.vpn_key),
-                title: Row(
-                  children: [
-                    Text(context.l10n.recoveryKey),
-                    if (!_hasRecoveryKey) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          context.l10n.important,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                subtitle: Text(context.l10n.manageRecoveryPassphrase),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _manageRecoveryKey,
-              ),
-            ],
-
-            if (status == E2EEStatus.notSetUp) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _setupE2EE,
-                  icon: const Icon(Icons.lock),
-                  label: Text(context.l10n.enableE2EE),
-                ),
-              ),
-            ],
-
-            if (status == E2EEStatus.pendingApproval) ...[
-              const SizedBox(height: 12),
-              Text(
-                context.l10n.approveOnOtherDevice,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(
-    BuildContext context,
-    String label,
-    String value,
-    IconData icon,
-  ) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          value,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildDeviceSection(BuildContext context) {
     final theme = Theme.of(context);
     final approvedDevices = _devices.where((d) => d.isApproved).toList();
@@ -2421,99 +2221,45 @@ class _UserPageState extends State<UserPage> {
         platformIcon = Icons.devices_other;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: isCurrentDevice
-            ? Border.all(color: theme.colorScheme.primary, width: 1)
-            : null,
-      ),
-      child: Row(
+    Widget? trailing;
+    if (_processingDeviceIds.contains(device.id)) {
+      trailing = const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else if (isPending && _isFirstDevice) {
+      trailing = Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            platformIcon,
-            size: 24,
-            color: isPending ? Colors.orange : theme.colorScheme.onSurface,
+          IconButton(
+            icon: const Icon(Icons.check_circle, color: Colors.green),
+            onPressed: () => _approveDevice(device.id),
+            tooltip: context.l10n.approve,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      device.name,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    if (isCurrentDevice) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          context.l10n.thisDevice,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onPrimary,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                Text(
-                  _formatDeviceSubtitle(device),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+          IconButton(
+            icon: const Icon(Icons.cancel, color: Colors.red),
+            onPressed: () => _revokeDevice(device.id),
+            tooltip: context.l10n.deny,
           ),
-
-          // Action buttons
-          if (_processingDeviceIds.contains(device.id))
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else if (isPending && _isFirstDevice)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                  onPressed: () => _approveDevice(device.id),
-                  tooltip: context.l10n.approve,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.cancel, color: Colors.red),
-                  onPressed: () => _revokeDevice(device.id),
-                  tooltip: context.l10n.deny,
-                ),
-              ],
-            )
-          else if (canManage)
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
-              onPressed: () => _confirmRevokeDevice(device),
-              tooltip: context.l10n.removeDevice,
-            ),
         ],
-      ),
+      );
+    } else if (canManage) {
+      trailing = IconButton(
+        icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
+        onPressed: () => _confirmRevokeDevice(device),
+        tooltip: context.l10n.removeDevice,
+      );
+    }
+
+    return UserDeviceTile(
+      name: device.name,
+      subtitle: _formatDeviceSubtitle(device),
+      platformIcon: platformIcon,
+      isPending: isPending,
+      isCurrentDevice: isCurrentDevice,
+      currentDeviceLabel: context.l10n.thisDevice,
+      trailing: trailing,
     );
   }
 
