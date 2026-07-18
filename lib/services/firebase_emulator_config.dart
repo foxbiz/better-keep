@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'firebase_emulator_host.dart';
+
 /// Configuration for Firebase Emulators in debug mode.
 ///
 /// Shows a dialog to let the user choose between emulator or live Firebase.
@@ -33,6 +35,9 @@ class FirebaseEmulatorConfig {
   /// True when running on the iOS/macOS simulator (not a physical device)
   static bool _isIOSSimulator = false;
 
+  /// Host machine address used by physical devices on the local network.
+  static const String _physicalDeviceHost = '192.168.0.109';
+
   /// Detect whether we're running on a simulator/emulator or a physical device.
   /// Must be called before [connectToEmulators].
   static Future<void> initDeviceInfo() async {
@@ -50,21 +55,13 @@ class FirebaseEmulatorConfig {
   }
 
   static String get _host {
-    if (kIsWeb) {
-      return 'localhost';
-    }
-
-    if (Platform.isAndroid && _isAndroidEmulator) {
-      return '10.0.2.2';
-    }
-
-    // iOS simulator and macOS run on the same machine as the emulators
-    if (_isIOSSimulator) {
-      return 'localhost';
-    }
-
-    // Physical device: connect via host machine's LAN IP
-    return '192.168.0.109';
+    return selectFirebaseEmulatorHost(
+      isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
+      isAndroidEmulator: _isAndroidEmulator,
+      isAppleSimulator: _isIOSSimulator,
+      physicalDeviceHost: _physicalDeviceHost,
+    );
   }
 
   /// Initialize with SharedPreferences instance
@@ -140,27 +137,28 @@ class FirebaseEmulatorConfig {
     debugPrint('  Functions: $_host:5001');
     debugPrint('  Storage:   $_host:9199');
 
-    // Pre-check: verify the emulator host is reachable before SDK calls.
-    // Throws if unreachable so the caller can report the error instead of
-    // silently falling back to live Firebase.
-    try {
-      final socket = await Socket.connect(
-        _host,
-        9099,
-        timeout: const Duration(milliseconds: 500),
-      );
-      socket.destroy();
-      debugPrint('Firebase Emulators: Network reachability OK ($_host:9099)');
-    } catch (e) {
-      debugPrint(
-        'Firebase Emulators: NETWORK UNREACHABLE - cannot reach $_host:9099\n'
-        '  Error: $e\n'
-        '  Check: emulators running? firewall? correct IP?',
-      );
-      throw Exception(
-        'Cannot reach emulator at $_host:9099.\n'
-        'Make sure Firebase emulators are running and the host IP is correct.',
-      );
+    // Browsers cannot open raw TCP sockets. The Firebase web SDK performs the
+    // reachability check through its normal HTTP requests instead.
+    if (!kIsWeb) {
+      try {
+        final socket = await Socket.connect(
+          _host,
+          9099,
+          timeout: const Duration(milliseconds: 500),
+        );
+        socket.destroy();
+        debugPrint('Firebase Emulators: Network reachability OK ($_host:9099)');
+      } catch (e) {
+        debugPrint(
+          'Firebase Emulators: NETWORK UNREACHABLE - cannot reach $_host:9099\n'
+          '  Error: $e\n'
+          '  Check: emulators running? firewall? correct IP?',
+        );
+        throw Exception(
+          'Cannot reach emulator at $_host:9099.\n'
+          'Make sure Firebase emulators are running and the host IP is correct.',
+        );
+      }
     }
 
     // Auth Emulator

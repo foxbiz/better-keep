@@ -1759,7 +1759,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noRecoveryKeyWarning =>
-      'Bir Kurtarma Anahtarı olmadan, tüm cihazlarınızı kaybederseniz şifrelenmiş tüm notlarınıza erişiminizi kalıcı olarak kaybedersiniz.\n\nDaha sonra Ayarlar\'dan bir Kurtarma Anahtarı ayarlamayı düşünebilirsiniz.';
+      'Uyarı: Bir Kurtarma Anahtarı olmadan, tüm cihazlarınızı kaybederseniz notlarınızı kurtaramazsınız!';
 
   @override
   String get recoveryKeySetUp =>

@@ -43,7 +43,7 @@ export default onCall(
 			}
 
 			const otpData = otpDoc.data();
-			if (!otpData || !otpData.verified) {
+			if (!otpData?.verified) {
 				throw new HttpsError(
 					"permission-denied",
 					"OTP not verified. Please start over.",

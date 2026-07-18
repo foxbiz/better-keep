@@ -2,15 +2,15 @@ import type * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import {
-	DEBUG_TRIAL_MINUTES,
-	TRIAL_DAYS,
-	TRIAL_ENABLED,
 	auth,
+	DEBUG_TRIAL_MINUTES,
 	db,
 	facebookAppId,
 	facebookAppSecret,
 	githubClientId,
 	githubClientSecret,
+	TRIAL_DAYS,
+	TRIAL_ENABLED,
 	twitterClientId,
 	twitterClientSecret,
 } from "../config";

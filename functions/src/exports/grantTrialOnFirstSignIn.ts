@@ -2,10 +2,10 @@ import { Timestamp } from "firebase-admin/firestore";
 import { beforeUserSignedIn } from "firebase-functions/v2/identity";
 import {
 	DEBUG_TRIAL_MINUTES,
-	TRIAL_DAYS,
-	TRIAL_ENABLED,
 	db,
 	emailPassword,
+	TRIAL_DAYS,
+	TRIAL_ENABLED,
 } from "../config";
 import { sendTrialWelcomeEmail } from "../utils";
 

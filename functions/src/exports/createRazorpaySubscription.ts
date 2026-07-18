@@ -3,8 +3,8 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
 	DEFAULT_CURRENCY,
-	RAZORPAY_PLANS,
 	db,
+	RAZORPAY_PLANS,
 	razorpayKeyId,
 	razorpayKeySecret,
 } from "../config";
@@ -93,7 +93,7 @@ export default onCall(
 			// - Monthly: max 100 cycles (about 8 years)
 			// - Yearly: max 100 cycles (about 100 years)
 			// Using conservative values to stay within limits
-			const totalCount = yearly ? 50 : 100;
+			const totalCount = yearly ? 30 : 100;
 
 			const subscription = await razorpayRequest(
 				keyId,
