@@ -4,7 +4,8 @@ publish_to: 'none'
 version: 1.0.66+66
 
 environment:
-  sdk: ^3.10.0
+  sdk: ^3.12.0
+  flutter: '>=3.44.0'
 
 dependencies:
   flutter:
@@ -22,7 +23,7 @@ dependencies:
   path_provider: ^2.1.5
   flutter_image_compress: ^2.4.0
   flutter_staggered_grid_view: ^0.7.0
-  record: ^6.1.2
+  record: ^7.1.1
   audioplayers: ^6.5.1
   shared_preferences: ^2.5.3
   file_picker: ^11.0.2
@@ -35,7 +36,7 @@ dependencies:
   firebase_core: ^4.2.1
   firebase_auth: ^6.1.2
   google_sign_in: ^7.2.0
-  sign_in_with_apple: ^7.0.1
+  sign_in_with_apple: ^8.1.0
   cloud_firestore: ^6.1.0
   cloud_functions: ^6.0.4
   firebase_storage: ^13.0.4
@@ -52,7 +53,7 @@ dependencies:
   hashlib: ^2.2.0
   flutter_secure_storage: ^10.0.0
   uuid: ^4.5.1
-  flutter_local_notifications: ^21.0.0
+  flutter_local_notifications: ^22.0.1
   device_info_plus: ^12.3.0
   package_info_plus: ^9.0.0
   archive: ^4.0.4
@@ -61,8 +62,9 @@ dependencies:
   in_app_purchase: ^3.2.3
   in_app_purchase_storekit: ^0.4.8+1
   webview_flutter: ^4.13.0
-  in_app_purchase_android: ^0.4.0+8
-  receive_sharing_intent: ^1.8.1
+  in_app_purchase_android: ^0.5.1
+  # 1.9.0 requires AGP 9/API 37 and contains breaking iOS changes.
+  receive_sharing_intent: 1.8.1
   app_links: ^7.0.0
   markdown: ^7.3.0
   flutter_html: ^3.0.0

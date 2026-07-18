@@ -223,6 +223,14 @@ class AppLocalizationsPt extends AppLocalizations {
       'Alternar automaticamente entre claro e escuro';
 
   @override
+  String get followSystemAnimations =>
+      'Seguir preferência de animação do sistema';
+
+  @override
+  String get reduceAnimationsFromSystem =>
+      'Reduzir animações quando ativado nas configurações do dispositivo ou navegador';
+
+  @override
   String get darkMode => 'Modo escuro';
 
   @override

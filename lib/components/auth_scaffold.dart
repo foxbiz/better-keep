@@ -23,6 +23,7 @@ class _AuthScaffoldState extends State<AuthScaffold>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
+  bool? _disableAnimations;
   String _version = '';
 
   @override
@@ -37,8 +38,21 @@ class _AuthScaffoldState extends State<AuthScaffold>
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+  }
 
-    _pulseController.repeat(reverse: true);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _pulseController.stop();
+      _pulseController.value = _pulseController.upperBound;
+    } else if (!_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    }
   }
 
   Future<void> _loadVersion() async {

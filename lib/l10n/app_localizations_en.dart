@@ -223,6 +223,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Automatically switch between light and dark';
 
   @override
+  String get followSystemAnimations => 'Follow system animation preference';
+
+  @override
+  String get reduceAnimationsFromSystem =>
+      'Reduce animations when enabled in your device or browser settings';
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override

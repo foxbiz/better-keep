@@ -222,6 +222,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get autoSwitchLightDark => 'Beralih otomatis antara terang dan gelap';
 
   @override
+  String get followSystemAnimations => 'Ikuti preferensi animasi sistem';
+
+  @override
+  String get reduceAnimationsFromSystem =>
+      'Kurangi animasi saat diaktifkan di pengaturan perangkat atau browser';
+
+  @override
   String get darkMode => 'Mode Gelap';
 
   @override

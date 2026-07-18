@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:better_keep/dialogs/audio_recorder_options.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/whisper/whisper_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -230,18 +231,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
         _speechError = false;
         _transcriptionController.clear();
 
-        // Configure recording format based on transcription method
-        RecordConfig config;
-        if (useWavFormat) {
-          // Whisper requires 16kHz WAV
-          config = const RecordConfig(
-            encoder: AudioEncoder.wav,
-            sampleRate: 16000,
-            numChannels: 1,
-          );
-        } else {
-          config = const RecordConfig();
-        }
+        final config = AudioRecorderOptions.recordConfig(
+          useWhisperFormat: useWavFormat,
+        );
 
         await _audioRecorder.start(config, path: audioPath);
 
@@ -302,13 +294,7 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
             });
           }
         },
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
-        listenOptions: SpeechListenOptions(
-          partialResults: true,
-          cancelOnError: false,
-          listenMode: ListenMode.dictation,
-        ),
+        listenOptions: AudioRecorderOptions.speechListenOptions(),
       );
     } catch (e) {
       if (mounted) {

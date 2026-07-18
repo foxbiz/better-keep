@@ -24,6 +24,7 @@ class Settings extends StatefulWidget {
 class _SettingsState extends State<Settings> {
   String _themeId = AppState.themeId;
   bool _followSystemTheme = AppState.followSystemTheme;
+  bool _followSystemAnimations = AppState.followSystemAnimations;
   String _darkThemeId = AppState.darkThemeId;
   String _lightThemeId = AppState.lightThemeId;
   String _alarmSound = AppState.alarmSound;
@@ -62,6 +63,10 @@ class _SettingsState extends State<Settings> {
     _fetchLocalEncryptionState();
     AppState.subscribe("theme_id", _themeIdListener);
     AppState.subscribe("follow_system_theme", _followSystemThemeListener);
+    AppState.subscribe(
+      "follow_system_animations",
+      _followSystemAnimationsListener,
+    );
     AppState.subscribe("dark_theme_id", _darkThemeIdListener);
     AppState.subscribe("light_theme_id", _lightThemeIdListener);
     AppState.subscribe("alarm_sound", _alarmListener);
@@ -80,6 +85,10 @@ class _SettingsState extends State<Settings> {
   void dispose() {
     AppState.unsubscribe("theme_id", _themeIdListener);
     AppState.unsubscribe("follow_system_theme", _followSystemThemeListener);
+    AppState.unsubscribe(
+      "follow_system_animations",
+      _followSystemAnimationsListener,
+    );
     AppState.unsubscribe("dark_theme_id", _darkThemeIdListener);
     AppState.unsubscribe("light_theme_id", _lightThemeIdListener);
     AppState.unsubscribe("alarm_sound", _alarmListener);
@@ -105,6 +114,12 @@ class _SettingsState extends State<Settings> {
   void _followSystemThemeListener(dynamic value) {
     setState(() {
       _followSystemTheme = value as bool;
+    });
+  }
+
+  void _followSystemAnimationsListener(dynamic value) {
+    setState(() {
+      _followSystemAnimations = value as bool;
     });
   }
 
@@ -297,6 +312,12 @@ class _SettingsState extends State<Settings> {
             onTap: _followSystemTheme
                 ? null
                 : () => _showThemePicker(isDarkMode),
+          ),
+          SystemAnimationPreferenceTile(
+            value: _followSystemAnimations,
+            onChanged: (value) {
+              AppState.followSystemAnimations = value;
+            },
           ),
           const Divider(),
 
@@ -722,6 +743,29 @@ class _SettingsState extends State<Settings> {
         ),
       );
     }
+  }
+}
+
+/// Reusable presentation for the opt-in system animation preference.
+class SystemAnimationPreferenceTile extends StatelessWidget {
+  const SystemAnimationPreferenceTile({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.animation),
+      title: Text(context.l10n.followSystemAnimations),
+      subtitle: Text(context.l10n.reduceAnimationsFromSystem),
+      value: value,
+      onChanged: onChanged,
+    );
   }
 }
 

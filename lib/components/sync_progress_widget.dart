@@ -229,6 +229,7 @@ class _SyncProgressCard extends StatefulWidget {
 class _SyncProgressCardState extends State<_SyncProgressCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _rotationController;
+  bool? _disableAnimations;
 
   @override
   void initState() {
@@ -237,20 +238,34 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-    if (widget.isSyncing || widget.isVerifyingE2EE) {
-      _rotationController.repeat();
-    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+
+    _disableAnimations = disableAnimations;
+    _syncRotationAnimation();
   }
 
   @override
   void didUpdateWidget(_SyncProgressCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncRotationAnimation();
+  }
+
+  void _syncRotationAnimation() {
     final shouldAnimate = widget.isSyncing || widget.isVerifyingE2EE;
-    if (shouldAnimate && !_rotationController.isAnimating) {
-      _rotationController.repeat();
-    } else if (!shouldAnimate && _rotationController.isAnimating) {
+    if (!shouldAnimate) {
       _rotationController.stop();
       _rotationController.reset();
+    } else if (_disableAnimations == true) {
+      _rotationController.stop();
+      _rotationController.value = _rotationController.upperBound;
+    } else if (!_rotationController.isAnimating) {
+      _rotationController.repeat();
     }
   }
 

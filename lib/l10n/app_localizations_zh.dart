@@ -222,6 +222,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoSwitchLightDark => '自动切换浅色和深色模式';
 
   @override
+  String get followSystemAnimations => '跟随系统动画偏好';
+
+  @override
+  String get reduceAnimationsFromSystem => '当设备或浏览器设置启用时减少动画';
+
+  @override
   String get darkMode => '深色模式';
 
   @override

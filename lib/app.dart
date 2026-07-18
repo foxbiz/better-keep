@@ -22,6 +22,7 @@ import 'package:better_keep/services/monetization/razorpay_web.dart'
     if (dart.library.io) 'package:better_keep/services/monetization/razorpay_stub.dart'
     as razorpay_platform;
 import 'package:better_keep/services/monetization/subscription_service.dart';
+import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -168,14 +169,17 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         title: 'Better Keep',
         theme: themeData,
         builder: (context, child) {
-          // Wrap with banners at the top of the app
-          return Overlay(
-            initialEntries: [
-              OverlayEntry(
-                builder: (context) =>
-                    _BannerLayout(child: child ?? const SizedBox.shrink()),
-              ),
-            ],
+          // Keep MediaQuery consumers, such as animated images, aligned with
+          // the binding-level policy used by AnimationController.
+          return MotionMediaQuery(
+            child: Overlay(
+              initialEntries: [
+                OverlayEntry(
+                  builder: (context) =>
+                      _BannerLayout(child: child ?? const SizedBox.shrink()),
+                ),
+              ],
+            ),
           );
         },
         home: ValueListenableBuilder<bool>(

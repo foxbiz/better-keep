@@ -3,6 +3,7 @@ import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ final _defaultState = {
   "theme_id": ThemeRegistry.defaultDarkThemeId,
   "theme": ThemeRegistry.darkThemes[ThemeRegistry.defaultDarkThemeId],
   "follow_system_theme": false,
+  "follow_system_animations": false,
   "dark_theme_id": ThemeRegistry.defaultDarkThemeId,
   "light_theme_id": ThemeRegistry.defaultLightThemeId,
   "recent_colors": <Color>[],
@@ -83,6 +85,7 @@ class AppState {
     String themeId = AppState.themeId;
     String alarmSound = AppState.alarmSound;
     bool followSystemTheme = AppState.followSystemTheme;
+    bool followSystemAnimations = AppState.followSystemAnimations;
     String darkThemeId = AppState.darkThemeId;
     String lightThemeId = AppState.lightThemeId;
     GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
@@ -96,6 +99,7 @@ class AppState {
         ThemeRegistry.getTheme(themeId) ??
         ThemeRegistry.darkThemes[ThemeRegistry.defaultDarkThemeId];
     _state["follow_system_theme"] = followSystemTheme;
+    _state["follow_system_animations"] = followSystemAnimations;
     _state["dark_theme_id"] = darkThemeId;
     _state["light_theme_id"] = lightThemeId;
     _state["alarm_sound"] = alarmSound;
@@ -115,6 +119,8 @@ class AppState {
     // Load theme settings
     final followSystemTheme =
         prefsInstance.getBool("follow_system_theme") ?? false;
+    final followSystemAnimations =
+        prefsInstance.getBool("follow_system_animations") ?? false;
     final darkThemeId =
         prefsInstance.getString("dark_theme_id") ??
         ThemeRegistry.defaultDarkThemeId;
@@ -173,6 +179,8 @@ class AppState {
     }
 
     _state["follow_system_theme"] = followSystemTheme;
+    _state["follow_system_animations"] = followSystemAnimations;
+    MotionPreferences.instance.setFollowSystem(followSystemAnimations);
     _state["dark_theme_id"] = darkThemeId;
     _state["light_theme_id"] = lightThemeId;
     _state["theme_id"] = themeId;
@@ -354,6 +362,18 @@ class AppState {
           SchedulerBinding.instance.platformDispatcher.platformBrightness;
       applySystemBrightness(brightness);
     }
+  }
+
+  /// Whether app animations should follow the platform's reduced-motion
+  /// preference. This is opt-in so existing installs retain normal animations.
+  static bool get followSystemAnimations {
+    return _state["follow_system_animations"] as bool? ?? false;
+  }
+
+  static set followSystemAnimations(bool value) {
+    set("follow_system_animations", value);
+    MotionPreferences.instance.setFollowSystem(value);
+    _persistToPrefs((p) async => p.setBool("follow_system_animations", value));
   }
 
   /// The preferred dark theme ID

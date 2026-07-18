@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:better_keep/services/country_detection_service.dart';
+import 'package:better_keep/services/monetization/google_play_product_selector.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -1362,10 +1363,6 @@ Expected IDs: ${ProductIds.all}
       if (basePlanId != null &&
           Platform.isAndroid &&
           product is GooglePlayProductDetails) {
-        // The in_app_purchase_android package creates separate GooglePlayProductDetails
-        // for each subscription offer. We need to find the one matching our base plan.
-        GooglePlayProductDetails? selectedProduct;
-
         // Log all products with this ID for debugging
         final matchingProducts = _products
             .where((p) => p.id == productId)
@@ -1374,35 +1371,11 @@ Expected IDs: ${ProductIds.all}
           'SubscriptionService: Found ${matchingProducts.length} products with ID "$productId"',
         );
 
-        // Search through all loaded products to find one with matching base plan
-        for (final p in _products) {
-          if (p.id == productId && p is GooglePlayProductDetails) {
-            final offers = p.productDetails.subscriptionOfferDetails;
-            final subIndex = p.subscriptionIndex ?? 0;
-
-            AppLogger.log(
-              'SubscriptionService: Checking product - subscriptionIndex: $subIndex, '
-              'offers count: ${offers?.length ?? 0}',
-            );
-
-            if (offers != null &&
-                offers.isNotEmpty &&
-                subIndex < offers.length) {
-              final selectedOffer = offers[subIndex];
-              AppLogger.log(
-                'SubscriptionService: Offer at index $subIndex - basePlanId: ${selectedOffer.basePlanId}',
-              );
-
-              if (selectedOffer.basePlanId == basePlanId) {
-                selectedProduct = p;
-                AppLogger.log(
-                  'SubscriptionService: ✓ Found matching product with basePlan "$basePlanId" at index $subIndex',
-                );
-                break;
-              }
-            }
-          }
-        }
+        final selectedProduct = selectGooglePlayProductForBasePlan(
+          _products,
+          productId: productId,
+          basePlanId: basePlanId,
+        );
 
         if (selectedProduct == null) {
           // Fallback: If we can't find the exact match, log available options

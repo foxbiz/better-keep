@@ -221,6 +221,16 @@
 		"description": "Follow system theme toggle subtitle"
 	},
 
+  "followSystemAnimations": "Follow system animation preference",
+	"@followSystemAnimations": {
+		"description": "Follow system animation preference toggle label"
+	},
+
+	"reduceAnimationsFromSystem": "Reduce animations when enabled in your device or browser settings",
+	"@reduceAnimationsFromSystem": {
+		"description": "Follow system animation preference toggle subtitle"
+	},
+
 	"darkMode": "Dark Mode",
 	"@darkMode": { "description": "Dark mode toggle label" },
 

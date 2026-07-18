@@ -36,6 +36,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   late final Animation<double> _buttonOpacity;
   late final Animation<Offset> _buttonSlide;
   late final Animation<double> _pulseAnimation;
+  bool? _disableAnimations;
 
   @override
   void initState() {
@@ -125,9 +126,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     // Start animations
     _logoController.forward().then((_) {
+      if (!mounted) return;
       _contentController.forward();
-      _pulseController.repeat(reverse: true);
+      if (_disableAnimations == true) {
+        _pulseController.value = _pulseController.upperBound;
+      } else {
+        _pulseController.repeat(reverse: true);
+      }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _logoController.stop();
+      _logoController.value = _logoController.upperBound;
+      _contentController.stop();
+      _contentController.value = _contentController.upperBound;
+      _pulseController.stop();
+      _pulseController.value = _pulseController.upperBound;
+    } else if (_logoController.isCompleted &&
+        _contentController.isCompleted &&
+        !_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    }
   }
 
   Future<void> _loadVersion() async {

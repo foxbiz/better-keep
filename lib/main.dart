@@ -17,6 +17,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
+import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
@@ -39,7 +40,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  BetterKeepWidgetsBinding.ensureInitialized();
 
   // Enable edge-to-edge display for Android 15+ compatibility
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -52,6 +53,8 @@ void main() async {
   );
 
   initializeDb();
+  // Native motion detection is best-effort and must never delay app startup.
+  unawaited(MotionPreferences.instance.initialize());
 
   // Load SharedPreferences once and share across services
   final prefsInstance = await SharedPreferences.getInstance();

@@ -362,6 +362,8 @@ class Note extends BaseModel<Note> {
     this.plainText,
     this.createdAt,
     this.updatedAt,
+    // Keep the public constructor argument separate from its private backing
+    // field so callers can continue using `Note(locked: ...)`.
     bool locked = false,
     this.pinned = false,
     this.trashed = false,
@@ -370,6 +372,7 @@ class Note extends BaseModel<Note> {
     this.completed = false,
     this.color = Colors.transparent,
     List<NoteAttachment>? attachments,
+    // ignore: prefer_initializing_formals
   }) : _locked = locked,
        attachments = attachments ?? [];
 

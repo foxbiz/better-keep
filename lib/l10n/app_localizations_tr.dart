@@ -223,6 +223,13 @@ class AppLocalizationsTr extends AppLocalizations {
       'Açık ve karanlık mod arasında otomatik geçiş yap';
 
   @override
+  String get followSystemAnimations => 'Sistem animasyon tercihine uy';
+
+  @override
+  String get reduceAnimationsFromSystem =>
+      'Cihaz veya tarayıcı ayarlarında etkinse animasyonları azalt';
+
+  @override
   String get darkMode => 'Karanlık Mod';
 
   @override

@@ -221,6 +221,16 @@
 		"description": "Follow system theme toggle subtitle"
 	},
 
+	"followSystemAnimations": "Sistem animasyon tercihine uy",
+	"@followSystemAnimations": {
+		"description": "Follow system animation preference toggle label"
+	},
+
+	"reduceAnimationsFromSystem": "Cihaz veya tarayıcı ayarlarında etkinse animasyonları azalt",
+	"@reduceAnimationsFromSystem": {
+		"description": "Follow system animation preference toggle subtitle"
+	},
+
 	"darkMode": "Karanlık Mod",
 	"@darkMode": { "description": "Dark mode toggle label" },
 
