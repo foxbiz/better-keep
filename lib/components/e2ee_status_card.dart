@@ -20,30 +20,31 @@ class E2EEStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final theme = Theme.of(context);
     final (statusText, statusColor, statusIcon) = switch (status) {
       E2EEStatus.ready => (
-        'Your notes are protected',
+        l10n.yourNotesAreProtected,
         Colors.green,
         Icons.lock,
       ),
       E2EEStatus.pendingApproval => (
-        'Waiting for device approval',
+        l10n.waitingForDeviceApproval,
         Colors.orange,
         Icons.hourglass_empty,
       ),
       E2EEStatus.notSetUp => (
-        'Protection not enabled',
+        l10n.protectionNotEnabled,
         Colors.grey,
         Icons.lock_open,
       ),
       E2EEStatus.error => (
-        'Something went wrong',
+        l10n.somethingWentWrong,
         Colors.orange,
         Icons.error_outline,
       ),
-      E2EEStatus.revoked => ('Device access removed', Colors.red, Icons.block),
-      _ => ('Getting ready...', Colors.grey, Icons.lock_open),
+      E2EEStatus.revoked => (l10n.deviceAccessRemoved, Colors.red, Icons.block),
+      _ => (l10n.gettingReady, Colors.grey, Icons.lock_open),
     };
 
     final cardShape = RoundedRectangleBorder(
@@ -81,7 +82,7 @@ class E2EEStatusCard extends StatelessWidget {
                           ),
                           if (status == E2EEStatus.ready)
                             Text(
-                              'Your notes and attachments are encrypted',
+                              l10n.notesAndAttachmentsEncrypted,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -97,24 +98,24 @@ class E2EEStatusCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   _buildInfoRow(
                     theme,
-                    'Encryption',
+                    l10n.encryption,
                     'XChaCha20-Poly1305',
                     Icons.shield,
                   ),
                   const SizedBox(height: 8),
                   _buildInfoRow(
                     theme,
-                    'Key Exchange',
+                    l10n.keyExchange,
                     'X25519 ECDH',
                     Icons.swap_horiz,
                   ),
                   const SizedBox(height: 8),
-                  _buildInfoRow(theme, 'Key Size', '256-bit', Icons.key),
+                  _buildInfoRow(theme, l10n.keySize, '256-bit', Icons.key),
                   const SizedBox(height: 8),
                   _buildInfoRow(
                     theme,
-                    'Devices',
-                    '$approvedDeviceCount authorized',
+                    l10n.devices,
+                    l10n.nDevicesAuthorized(approvedDeviceCount),
                     Icons.devices,
                   ),
                   const SizedBox(height: 16),
@@ -125,7 +126,7 @@ class E2EEStatusCard extends StatelessWidget {
                     leading: const Icon(Icons.vpn_key),
                     title: Row(
                       children: [
-                        Text(context.l10n.recoveryKey),
+                        Text(l10n.recoveryKey),
                         if (!hasRecoveryKey) ...[
                           const SizedBox(width: 8),
                           Container(
@@ -138,7 +139,7 @@ class E2EEStatusCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              context.l10n.important,
+                              l10n.important,
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: theme.colorScheme.onPrimaryContainer,
                                 fontWeight: FontWeight.w600,
@@ -148,7 +149,7 @@ class E2EEStatusCard extends StatelessWidget {
                         ],
                       ],
                     ),
-                    subtitle: Text(context.l10n.manageRecoveryPassphrase),
+                    subtitle: Text(l10n.manageRecoveryPassphrase),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: onManageRecoveryKey,
                   ),
@@ -160,14 +161,14 @@ class E2EEStatusCard extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: onSetupE2ee,
                       icon: const Icon(Icons.lock),
-                      label: Text(context.l10n.enableE2EE),
+                      label: Text(l10n.enableE2EE),
                     ),
                   ),
                 ],
                 if (status == E2EEStatus.pendingApproval) ...[
                   const SizedBox(height: 12),
                   Text(
-                    context.l10n.approveOnOtherDevice,
+                    l10n.approveOnOtherDevice,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

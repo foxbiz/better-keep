@@ -3,6 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('optional trailing widget can be omitted', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: UserDeviceTile(
+            name: 'Current phone',
+            subtitle: 'Android 16',
+            platformIcon: Icons.android,
+            isPending: false,
+            isCurrentDevice: true,
+            currentDeviceLabel: 'This device',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Current phone'), findsOneWidget);
+    expect(find.text('This device'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('long device name stays clear of approval actions', (
     tester,
   ) async {

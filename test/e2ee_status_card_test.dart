@@ -55,4 +55,37 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('ready E2EE card localizes all user-facing details', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ja'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: E2EEStatusCard(
+            status: E2EEStatus.ready,
+            approvedDeviceCount: 2,
+            hasRecoveryKey: false,
+            onManageRecoveryKey: () {},
+            onSetupE2ee: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('ノートは保護されています'), findsOneWidget);
+    expect(find.text('ノートと添付ファイルは暗号化されています'), findsOneWidget);
+    expect(find.text('暗号化'), findsOneWidget);
+    expect(find.text('鍵交換'), findsOneWidget);
+    expect(find.text('鍵サイズ'), findsOneWidget);
+    expect(find.text('デバイス'), findsOneWidget);
+    expect(find.text('2台承認済み'), findsOneWidget);
+    expect(find.text('リカバリーキー'), findsOneWidget);
+    expect(find.text('重要'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
