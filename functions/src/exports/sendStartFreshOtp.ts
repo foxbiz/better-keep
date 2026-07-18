@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { REVIEW_ACCOUNT_EMAIL, auth, db, emailPassword } from "../config";
+import { auth, db, emailPassword, REVIEW_ACCOUNT_EMAIL } from "../config";
 import { generateOtpEmailHtml, generateOtpEmailText } from "../email_templates";
 import type { OtpEmailConfig } from "../types";
 import { generateOtp, getEmailTransporter, sendEmail } from "../utils";

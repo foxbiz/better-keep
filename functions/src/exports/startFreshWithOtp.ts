@@ -1,7 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { REVIEW_ACCOUNT_EMAIL, db, storage } from "../config";
+import { db, REVIEW_ACCOUNT_EMAIL, storage } from "../config";
 
 /**
  * Deletes all notes from the user's collection.

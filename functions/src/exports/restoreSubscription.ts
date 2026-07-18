@@ -1,10 +1,10 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
-	IOS_PRODUCT_IDS,
-	SUBSCRIPTION_PRODUCT_ID,
 	appStoreSharedSecret,
 	googlePlayCredentials,
+	IOS_PRODUCT_IDS,
+	SUBSCRIPTION_PRODUCT_ID,
 } from "../config";
 import { verifyAppStorePurchase, verifyGooglePlayPurchase } from "../utils";
 

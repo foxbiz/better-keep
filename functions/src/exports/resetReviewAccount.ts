@@ -1,6 +1,6 @@
-import { onCall } from "firebase-functions/v2/https";
-import { HttpsError } from "firebase-functions/v2/https";
-import { REVIEW_ACCOUNT_EMAIL, auth, db } from "../config";
+import type { UserRecord } from "firebase-admin/auth";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { auth, db, REVIEW_ACCOUNT_EMAIL } from "../config";
 import { setSubscriptionClaims } from "../utils";
 
 /**
@@ -13,7 +13,7 @@ import { setSubscriptionClaims } from "../utils";
  */
 export default onCall(async () => {
 	// Look up review account by email
-	let reviewUser;
+	let reviewUser: UserRecord;
 	try {
 		reviewUser = await auth.getUserByEmail(REVIEW_ACCOUNT_EMAIL);
 	} catch {
