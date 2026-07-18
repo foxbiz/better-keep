@@ -73,6 +73,8 @@
 	"customizeAppearance": "外観をカスタマイズ",
 	"followSystemTheme": "システムテーマに従う",
 	"autoSwitchLightDark": "ライトとダークを自動切替",
+	"followSystemAnimations": "システムのアニメーション設定に従う",
+	"reduceAnimationsFromSystem": "デバイスやブラウザで有効な場合、アニメーションを減らす",
 	"darkMode": "ダークモード",
 	"darkTheme": "ダークテーマ",
 	"lightTheme": "ライトテーマ",

@@ -123,6 +123,7 @@ class UserAvatar extends StatefulWidget {
 
 class _UserAvatarState extends State<UserAvatar> with TickerProviderStateMixin {
   AnimationController? _animationController;
+  bool? _disableAnimations;
 
   @override
   void initState() {
@@ -146,14 +147,8 @@ class _UserAvatarState extends State<UserAvatar> with TickerProviderStateMixin {
 
   void _onSubscriptionChange() {
     if (mounted) {
-      final isPro = widget.showProBorder && PlanService.instance.isPaid;
-      // Dispose animation controller if no longer pro
-      if (!isPro && _animationController != null) {
-        _animationController?.dispose();
-        _animationController = null;
-      }
-      // Create animation controller if now pro
       _initAnimationIfNeeded();
+      _syncBorderAnimation();
       setState(() {});
     }
   }
@@ -164,22 +159,56 @@ class _UserAvatarState extends State<UserAvatar> with TickerProviderStateMixin {
       _animationController = AnimationController(
         vsync: this,
         duration: const Duration(seconds: 3),
-      )..repeat();
+      );
+    } else if (!isPro && _animationController != null) {
+      _animationController?.dispose();
+      _animationController = null;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+
+    _disableAnimations = disableAnimations;
+    _syncBorderAnimation();
+  }
+
+  void _syncBorderAnimation() {
+    final controller = _animationController;
+    if (controller == null) return;
+
+    if (_disableAnimations == true) {
+      controller.stop();
+      controller.value = controller.upperBound;
+    } else if (!controller.isAnimating) {
+      controller.repeat();
     }
   }
 
   @override
   void didUpdateWidget(UserAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.showProBorder != oldWidget.showProBorder) {
+      if (oldWidget.showProBorder) {
+        PlanService.instance.statusNotifier.removeListener(
+          _onSubscriptionChange,
+        );
+      }
+      if (widget.showProBorder) {
+        PlanService.instance.statusNotifier.addListener(_onSubscriptionChange);
+      }
+    }
     _initAnimationIfNeeded();
+    _syncBorderAnimation();
   }
 
   @override
   void dispose() {
     _AvatarCache.cacheVersion.removeListener(_onCacheChange);
-    if (widget.showProBorder) {
-      PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
-    }
+    PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     _animationController?.dispose();
     super.dispose();
   }

@@ -73,6 +73,8 @@
 	"customizeAppearance": "앱 모양 사용자 지정",
 	"followSystemTheme": "시스템 테마 따르기",
 	"autoSwitchLightDark": "라이트와 다크 자동 전환",
+	"followSystemAnimations": "시스템 애니메이션 설정 따르기",
+	"reduceAnimationsFromSystem": "기기 또는 브라우저 설정에서 활성화하면 애니메이션 줄이기",
 	"darkMode": "다크 모드",
 	"darkTheme": "다크 테마",
 	"lightTheme": "라이트 테마",

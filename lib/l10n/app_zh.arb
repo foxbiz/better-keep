@@ -73,6 +73,8 @@
 	"customizeAppearance": "自定义应用外观",
 	"followSystemTheme": "跟随系统主题",
 	"autoSwitchLightDark": "自动切换浅色和深色模式",
+	"followSystemAnimations": "跟随系统动画偏好",
+	"reduceAnimationsFromSystem": "当设备或浏览器设置启用时减少动画",
 	"darkMode": "深色模式",
 	"darkTheme": "深色主题",
 	"lightTheme": "浅色主题",

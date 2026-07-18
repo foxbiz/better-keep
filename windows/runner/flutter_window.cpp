@@ -4,6 +4,15 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+namespace {
+
+constexpr char kMotionPreferenceChannel[] =
+    "com.betterkeep/motion_preferences";
+constexpr char kGetReduceMotionMethod[] = "getReduceMotionEnabled";
+constexpr char kReduceMotionChangedMethod[] = "reduceMotionChanged";
+
+}  // namespace
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -25,6 +34,23 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  reduce_motion_enabled_ = QueryReduceMotionEnabled();
+  motion_preference_channel_ = std::make_unique<
+      flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), kMotionPreferenceChannel,
+      &flutter::StandardMethodCodec::GetInstance());
+  motion_preference_channel_->SetMethodCallHandler(
+      [this](const auto& call, auto result) {
+        if (call.method_name() != kGetReduceMotionMethod) {
+          result->NotImplemented();
+          return;
+        }
+
+        reduce_motion_enabled_ = QueryReduceMotionEnabled();
+        result->Success(flutter::EncodableValue(reduce_motion_enabled_));
+      });
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,6 +66,10 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (motion_preference_channel_) {
+    motion_preference_channel_->SetMethodCallHandler(nullptr);
+  }
+  motion_preference_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -65,7 +95,33 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_SETTINGCHANGE:
+      NotifyReduceMotionPreferenceIfChanged();
+      break;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+bool FlutterWindow::QueryReduceMotionEnabled() const {
+  BOOL animations_enabled = TRUE;
+  if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0,
+                             &animations_enabled, 0)) {
+    return false;
+  }
+  return animations_enabled == FALSE;
+}
+
+void FlutterWindow::NotifyReduceMotionPreferenceIfChanged() {
+  const bool reduce_motion_enabled = QueryReduceMotionEnabled();
+  if (reduce_motion_enabled == reduce_motion_enabled_) {
+    return;
+  }
+
+  reduce_motion_enabled_ = reduce_motion_enabled;
+  if (motion_preference_channel_) {
+    motion_preference_channel_->InvokeMethod(
+        kReduceMotionChangedMethod,
+        std::make_unique<flutter::EncodableValue>(reduce_motion_enabled_));
+  }
 }

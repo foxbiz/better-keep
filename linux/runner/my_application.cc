@@ -1,5 +1,7 @@
 #include "my_application.h"
 
+#include <cstring>
+
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -10,9 +12,80 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FlMethodChannel* motion_preference_channel;
+  GtkSettings* gtk_settings;
+  gulong gtk_animations_changed_handler;
+  gboolean reduce_motion_enabled;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+static gboolean get_reduce_motion_enabled(GtkSettings* settings) {
+  gboolean animations_enabled = TRUE;
+  g_object_get(settings, "gtk-enable-animations", &animations_enabled, nullptr);
+  return !animations_enabled;
+}
+
+static void motion_preference_method_call_cb(FlMethodChannel* channel,
+                                             FlMethodCall* method_call,
+                                             gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  g_autoptr(FlMethodResponse) response = nullptr;
+
+  if (strcmp(fl_method_call_get_name(method_call),
+             "getReduceMotionEnabled") == 0) {
+    self->reduce_motion_enabled =
+        get_reduce_motion_enabled(self->gtk_settings);
+    g_autoptr(FlValue) value =
+        fl_value_new_bool(self->reduce_motion_enabled);
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+
+  g_autoptr(GError) error = nullptr;
+  if (!fl_method_call_respond(method_call, response, &error)) {
+    g_warning("Failed to send motion preference response: %s",
+              error->message);
+  }
+}
+
+static void gtk_animations_changed_cb(GtkSettings* settings, GParamSpec* pspec,
+                                      gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  const gboolean reduce_motion_enabled =
+      get_reduce_motion_enabled(settings);
+  if (reduce_motion_enabled == self->reduce_motion_enabled) {
+    return;
+  }
+
+  self->reduce_motion_enabled = reduce_motion_enabled;
+  g_autoptr(FlValue) value = fl_value_new_bool(reduce_motion_enabled);
+  fl_method_channel_invoke_method(
+      self->motion_preference_channel, "reduceMotionChanged", value, nullptr,
+      nullptr, nullptr);
+}
+
+static void create_motion_preference_channel(MyApplication* self,
+                                             FlView* view) {
+  FlEngine* engine = fl_view_get_engine(view);
+  FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+
+  self->motion_preference_channel = fl_method_channel_new(
+      messenger, "com.betterkeep/motion_preferences", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->motion_preference_channel, motion_preference_method_call_cb, self,
+      nullptr);
+
+  self->gtk_settings =
+      GTK_SETTINGS(g_object_ref(gtk_widget_get_settings(GTK_WIDGET(view))));
+  self->reduce_motion_enabled =
+      get_reduce_motion_enabled(self->gtk_settings);
+  self->gtk_animations_changed_handler = g_signal_connect(
+      self->gtk_settings, "notify::gtk-enable-animations",
+      G_CALLBACK(gtk_animations_changed_cb), self);
+}
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
@@ -74,6 +147,7 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  create_motion_preference_channel(self, view);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -120,6 +194,18 @@ static void my_application_shutdown(GApplication* application) {
 // Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
+  if (self->gtk_settings != nullptr &&
+      self->gtk_animations_changed_handler != 0) {
+    g_signal_handler_disconnect(self->gtk_settings,
+                                self->gtk_animations_changed_handler);
+    self->gtk_animations_changed_handler = 0;
+  }
+  if (self->motion_preference_channel != nullptr) {
+    fl_method_channel_set_method_call_handler(
+        self->motion_preference_channel, nullptr, nullptr, nullptr);
+  }
+  g_clear_object(&self->motion_preference_channel);
+  g_clear_object(&self->gtk_settings);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }

@@ -222,6 +222,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get autoSwitchLightDark => 'ライトとダークを自動切替';
 
   @override
+  String get followSystemAnimations => 'システムのアニメーション設定に従う';
+
+  @override
+  String get reduceAnimationsFromSystem => 'デバイスやブラウザで有効な場合、アニメーションを減らす';
+
+  @override
   String get darkMode => 'ダークモード';
 
   @override

@@ -222,6 +222,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get autoSwitchLightDark => '라이트와 다크 자동 전환';
 
   @override
+  String get followSystemAnimations => '시스템 애니메이션 설정 따르기';
+
+  @override
+  String get reduceAnimationsFromSystem => '기기 또는 브라우저 설정에서 활성화하면 애니메이션 줄이기';
+
+  @override
   String get darkMode => '다크 모드';
 
   @override

@@ -73,6 +73,8 @@
 	"customizeAppearance": "Personalizar aparência do app",
 	"followSystemTheme": "Seguir tema do sistema",
 	"autoSwitchLightDark": "Alternar automaticamente entre claro e escuro",
+	"followSystemAnimations": "Seguir preferência de animação do sistema",
+	"reduceAnimationsFromSystem": "Reduzir animações quando ativado nas configurações do dispositivo ou navegador",
 	"darkMode": "Modo escuro",
 	"darkTheme": "Tema escuro",
 	"lightTheme": "Tema claro",

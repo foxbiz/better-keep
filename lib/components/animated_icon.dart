@@ -23,26 +23,75 @@ class _AnimatedMenuIconState extends State<AnimatedMenuIcon>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
+  bool? _disableAnimations;
 
   @override
   void initState() {
-    _controller = AnimationController(vsync: this, duration: widget.duration)
-      ..forward();
-
-    if (widget.repeat) {
-      _controller.addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          _controller.reverse();
-        } else if (status == AnimationStatus.dismissed) {
-          _controller.forward();
-        }
-      });
-    }
-
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _animation = Tween<double>(begin: 0.0, end: 1.0)
         .chain(CurveTween(curve: widget.curve ?? Curves.linear))
         .animate(_controller);
-    super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+
+    _disableAnimations = disableAnimations;
+    _applyMotionPreference();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedMenuIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final durationChanged = widget.duration != oldWidget.duration;
+    if (durationChanged) {
+      _controller.duration = widget.duration;
+    }
+    if (widget.curve != oldWidget.curve) {
+      _animation = Tween<double>(begin: 0.0, end: 1.0)
+          .chain(CurveTween(curve: widget.curve ?? Curves.linear))
+          .animate(_controller);
+    }
+
+    final iconChanged = widget.icon != oldWidget.icon;
+    final repeatChanged = widget.repeat != oldWidget.repeat;
+    if (_disableAnimations == true) {
+      _showFinalFrame();
+    } else if (repeatChanged) {
+      if (widget.repeat) {
+        _controller.repeat(reverse: true);
+      } else {
+        _showFinalFrame();
+      }
+    } else if (iconChanged) {
+      if (widget.repeat) {
+        _controller.repeat(reverse: true);
+      } else {
+        _controller.forward(from: 0.0);
+      }
+    } else if (widget.repeat && durationChanged) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  void _applyMotionPreference() {
+    if (_disableAnimations == true) {
+      _showFinalFrame();
+    } else if (widget.repeat) {
+      _controller.repeat(reverse: true);
+    } else if (_controller.value == _controller.lowerBound) {
+      _controller.forward();
+    }
+  }
+
+  void _showFinalFrame() {
+    _controller.stop();
+    _controller.value = _controller.upperBound;
   }
 
   @override
@@ -90,6 +139,7 @@ class _IconTransitionAnimationState extends State<IconTransitionAnimation>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late Animation<double> _animation;
+  bool? _disableAnimations;
 
   @override
   void initState() {
@@ -98,7 +148,16 @@ class _IconTransitionAnimationState extends State<IconTransitionAnimation>
       ..addStatusListener(_handleStatus);
 
     _animation = CurvedAnimation(parent: _controller, curve: widget.curve);
-    _controller.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+
+    _disableAnimations = disableAnimations;
+    _applyMotionPreference();
   }
 
   @override
@@ -115,9 +174,16 @@ class _IconTransitionAnimationState extends State<IconTransitionAnimation>
 
     if (widget.fromIcon != oldWidget.fromIcon ||
         widget.toIcon != oldWidget.toIcon) {
-      if (_controller.status == AnimationStatus.dismissed ||
-          _controller.status == AnimationStatus.completed) {
+      if (_disableAnimations == true) {
+        _showFinalFrame();
+      } else {
         _controller.forward(from: 0.0);
+      }
+    } else if (widget.repeat != oldWidget.repeat) {
+      if (widget.repeat) {
+        _applyMotionPreference();
+      } else {
+        _showFinalFrame();
       }
     }
   }
@@ -130,7 +196,7 @@ class _IconTransitionAnimationState extends State<IconTransitionAnimation>
   }
 
   void _handleStatus(AnimationStatus status) {
-    if (!widget.repeat) {
+    if (!widget.repeat || _disableAnimations == true) {
       return;
     }
 
@@ -139,6 +205,21 @@ class _IconTransitionAnimationState extends State<IconTransitionAnimation>
     } else if (status == AnimationStatus.dismissed) {
       _controller.forward();
     }
+  }
+
+  void _applyMotionPreference() {
+    if (_disableAnimations == true) {
+      _showFinalFrame();
+    } else if (widget.repeat) {
+      _controller.forward(from: 0.0);
+    } else if (_controller.value == _controller.lowerBound) {
+      _controller.forward();
+    }
+  }
+
+  void _showFinalFrame() {
+    _controller.stop();
+    _controller.value = _controller.upperBound;
   }
 
   @override

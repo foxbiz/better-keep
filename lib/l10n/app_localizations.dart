@@ -534,6 +534,18 @@ abstract class AppLocalizations {
   /// **'Automatically switch between light and dark'**
   String get autoSwitchLightDark;
 
+  /// Follow system animation preference toggle label
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system animation preference'**
+  String get followSystemAnimations;
+
+  /// Follow system animation preference toggle subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Reduce animations when enabled in your device or browser settings'**
+  String get reduceAnimationsFromSystem;
+
   /// Dark mode toggle label
   ///
   /// In en, this message translates to:

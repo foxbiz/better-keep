@@ -73,6 +73,8 @@
 	"customizeAppearance": "Sesuaikan tampilan aplikasi",
 	"followSystemTheme": "Ikuti Tema Sistem",
 	"autoSwitchLightDark": "Beralih otomatis antara terang dan gelap",
+	"followSystemAnimations": "Ikuti preferensi animasi sistem",
+	"reduceAnimationsFromSystem": "Kurangi animasi saat diaktifkan di pengaturan perangkat atau browser",
 	"darkMode": "Mode Gelap",
 	"darkTheme": "Tema Gelap",
 	"lightTheme": "Tema Terang",

@@ -491,22 +491,28 @@ class _NoteCardState extends State<NoteCard>
   }
 
   Widget _buildSyncIndicator() {
+    final icon = Icon(
+      _isSyncingOutgoing ? Icons.cloud_upload : Icons.cloud_download,
+      size: 14.0,
+      color: Theme.of(context).colorScheme.primary,
+    );
+
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return Transform.rotate(angle: 2 * pi, child: icon);
+    }
+
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 800),
       builder: (context, value, child) {
-        return Transform.rotate(angle: value * 2 * 3.14159, child: child);
+        return Transform.rotate(angle: value * 2 * pi, child: child);
       },
       onEnd: () {
         if (mounted && (_isSyncingOutgoing || _isSyncingIncoming)) {
           setState(() {}); // Trigger rebuild to restart animation
         }
       },
-      child: Icon(
-        _isSyncingOutgoing ? Icons.cloud_upload : Icons.cloud_download,
-        size: 14.0,
-        color: Theme.of(context).colorScheme.primary,
-      ),
+      child: icon,
     );
   }
 
