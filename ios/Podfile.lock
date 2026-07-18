@@ -1,20 +1,26 @@
 PODS:
   - Flutter (1.0.0)
+  - receive_sharing_intent (1.8.1):
+    - Flutter
   - whisper_flutter_new (0.0.1):
     - Flutter
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
+  - receive_sharing_intent (from `.symlinks/plugins/receive_sharing_intent/ios`)
   - whisper_flutter_new (from `.symlinks/plugins/whisper_flutter_new/ios`)
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
+  receive_sharing_intent:
+    :path: ".symlinks/plugins/receive_sharing_intent/ios"
   whisper_flutter_new:
     :path: ".symlinks/plugins/whisper_flutter_new/ios"
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  receive_sharing_intent: 222384f00ffe7e952bbfabaa9e3967cb87e5fe00
   whisper_flutter_new: 9276535665f51f845831fe94859b2cccd0334a70
 
 PODFILE CHECKSUM: ed3eb792c7537b64bbe1acf210d1ca2ee4e524d7
