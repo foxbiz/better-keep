@@ -1029,7 +1029,7 @@ class _SketchPageState extends State<SketchPage>
         appBar: AppBar(
           backgroundColor: _backgroundColor,
           foregroundColor: _foregroundColor,
-          title: const Text('Protected sketch'),
+          title: Text(context.l10n.protectedSketchTitle),
         ),
         body: Center(
           child: Padding(
@@ -1044,9 +1044,7 @@ class _SketchPageState extends State<SketchPage>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'This older protected sketch could not be recovered yet. '
-                  'Its original encrypted drawing has been preserved and the '
-                  'app will retry after the next successful unlock.',
+                  context.l10n.protectedSketchRecoveryMessage,
                   textAlign: TextAlign.center,
                   style: TextStyle(color: _foregroundColor, fontSize: 16),
                 ),
@@ -1471,8 +1469,8 @@ class _SketchPageState extends State<SketchPage>
                           children: [
                             const Icon(Icons.image_not_supported_outlined),
                             const SizedBox(height: 12),
-                            const Text(
-                              'Background unavailable; drawing preserved',
+                            Text(
+                              context.l10n.sketchBackgroundUnavailable,
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 12),
@@ -1488,7 +1486,7 @@ class _SketchPageState extends State<SketchPage>
                                       ),
                                     )
                                   : const Icon(Icons.refresh),
-                              label: const Text('Retry'),
+                              label: Text(context.l10n.retry),
                             ),
                           ],
                         ),
@@ -2317,9 +2315,7 @@ class _SketchPageState extends State<SketchPage>
     if (!_isCanvasReady) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Background unavailable; drawing preserved'),
-          ),
+          SnackBar(content: Text(context.l10n.sketchBackgroundUnavailable)),
         );
       }
       return;

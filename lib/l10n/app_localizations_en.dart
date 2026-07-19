@@ -30,6 +30,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retry => 'Retry';
 
   @override
+  String get protectedSketchTitle => 'Protected sketch';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'This older protected sketch could not be recovered yet. Its original encrypted drawing has been preserved and the app will retry after the next successful unlock.';
+
+  @override
+  String get sketchBackgroundUnavailable =>
+      'Background unavailable; drawing preserved';
+
+  @override
   String get discard => 'Discard';
 
   @override

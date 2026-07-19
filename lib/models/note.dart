@@ -2521,9 +2521,9 @@ class Note extends BaseModel<Note> {
     final payload = source.substring(comma + 1);
     try {
       if (metadata.endsWith(';base64')) {
-        return Uint8List.fromList(base64Decode(payload));
+        return base64Decode(payload);
       }
-      return Uint8List.fromList(utf8.encode(Uri.decodeComponent(payload)));
+      return utf8.encode(Uri.decodeComponent(payload));
     } catch (error) {
       throw NoteUnlockException('Inline attachment data is invalid: $error');
     }

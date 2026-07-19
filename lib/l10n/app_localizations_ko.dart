@@ -30,6 +30,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get retry => '다시 시도';
 
   @override
+  String get protectedSketchTitle => '보호된 스케치';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      '이 이전 형식의 보호된 스케치를 아직 복구할 수 없습니다. 원본 암호화 그림은 보존되었으며 다음에 잠금 해제에 성공하면 앱에서 다시 시도합니다.';
+
+  @override
+  String get sketchBackgroundUnavailable => '배경을 사용할 수 없습니다. 그림은 보존되었습니다';
+
+  @override
   String get discard => '버리기';
 
   @override

@@ -150,6 +150,24 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get retry;
 
+  /// Title for a protected sketch that could not be recovered
+  ///
+  /// In en, this message translates to:
+  /// **'Protected sketch'**
+  String get protectedSketchTitle;
+
+  /// Explanation shown when an older protected sketch is preserved for a later recovery attempt
+  ///
+  /// In en, this message translates to:
+  /// **'This older protected sketch could not be recovered yet. Its original encrypted drawing has been preserved and the app will retry after the next successful unlock.'**
+  String get protectedSketchRecoveryMessage;
+
+  /// Message shown when an image sketch background is unavailable but its drawing data is preserved
+  ///
+  /// In en, this message translates to:
+  /// **'Background unavailable; drawing preserved'**
+  String get sketchBackgroundUnavailable;
+
   /// Discard an uncommitted local item
   ///
   /// In en, this message translates to:

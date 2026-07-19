@@ -23,6 +23,15 @@
 	"retry": "Retry",
 	"@retry": { "description": "Retry button text" },
 
+	"protectedSketchTitle": "Protected sketch",
+	"@protectedSketchTitle": { "description": "Title for a protected sketch that could not be recovered" },
+
+	"protectedSketchRecoveryMessage": "This older protected sketch could not be recovered yet. Its original encrypted drawing has been preserved and the app will retry after the next successful unlock.",
+	"@protectedSketchRecoveryMessage": { "description": "Explanation shown when an older protected sketch is preserved for a later recovery attempt" },
+
+	"sketchBackgroundUnavailable": "Background unavailable; drawing preserved",
+	"@sketchBackgroundUnavailable": { "description": "Message shown when an image sketch background is unavailable but its drawing data is preserved" },
+
 	"discard": "Discard",
 	"@discard": { "description": "Discard an uncommitted local item" },
 

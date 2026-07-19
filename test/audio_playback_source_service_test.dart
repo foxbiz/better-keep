@@ -108,12 +108,13 @@ void main() {
         '/docs/protected.wav',
         protectedSource: true,
         passwordProtectedDecoder: (bytes) async {
-          decoderInput = Uint8List.fromList(bytes);
+          decoderInput = bytes;
           return plaintext;
         },
       );
 
       expect(decoderInput, protectedBytes);
+      expect(decoderInput, same(files.rawReadBuffers.first));
       expect(lease.isTemporary, isTrue);
       expect(files.raw[lease.location], plaintext);
       expect(files.raw['/docs/protected.wav'], protectedBytes);
@@ -320,6 +321,7 @@ class _FakeAudioFiles {
   final Map<String, Uint8List> decrypted = {};
   final List<String> writes = [];
   final List<String> deleteCalls = [];
+  final List<Uint8List> rawReadBuffers = [];
   int _nextId = 0;
 
   _FakeAudioFiles({this.corruptWrites = false});
@@ -332,7 +334,11 @@ class _FakeAudioFiles {
           final bytes = raw[filePath]!;
           return Uint8List.fromList(bytes.take(length).toList(growable: false));
         },
-        readRaw: (filePath) async => Uint8List.fromList(raw[filePath]!),
+        readRaw: (filePath) async {
+          final bytes = Uint8List.fromList(raw[filePath]!);
+          rawReadBuffers.add(bytes);
+          return bytes;
+        },
         readDecrypted: (filePath) async =>
             Uint8List.fromList(decrypted[filePath] ?? raw[filePath]!),
         writeRaw: (filePath, bytes) async {

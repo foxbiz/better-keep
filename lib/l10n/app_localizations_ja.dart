@@ -30,6 +30,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get retry => '再試行';
 
   @override
+  String get protectedSketchTitle => '保護されたスケッチ';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'この古い保護されたスケッチはまだ復元できません。元の暗号化された描画は保持されており、次回ロック解除に成功した後にアプリが再試行します。';
+
+  @override
+  String get sketchBackgroundUnavailable => '背景を利用できません。描画は保持されています';
+
+  @override
   String get discard => '破棄';
 
   @override

@@ -30,6 +30,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
+  String get protectedSketchTitle => '受保护的草图';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      '暂时无法恢复这个旧版受保护草图。原始加密绘图已保留，应用会在下次成功解锁后重试。';
+
+  @override
+  String get sketchBackgroundUnavailable => '背景不可用；绘图已保留';
+
+  @override
   String get discard => '丢弃';
 
   @override

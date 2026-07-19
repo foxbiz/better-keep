@@ -2,13 +2,44 @@ import 'package:better_keep/models/sketch.dart';
 import 'package:flutter/material.dart';
 import 'package:perfect_freehand/perfect_freehand.dart';
 
+typedef SketchStrokeOutlineCacheKey = (String, double, SketchTool);
+
+/// Bounded outline cache shared by sketch painters.
+///
+/// The full structural key is retained so Dart's map equality check can
+/// disambiguate integer hash collisions.
+@visibleForTesting
+final class SketchStrokeOutlineCache {
+  final int maxEntries;
+  final Map<SketchStrokeOutlineCacheKey, List<Offset>> _entries = {};
+
+  SketchStrokeOutlineCache({this.maxEntries = 500})
+    : assert(maxEntries > 0, 'maxEntries must be positive');
+
+  int get length => _entries.length;
+
+  List<Offset> getOrCreate(
+    SketchStroke stroke,
+    List<Offset> Function() create,
+  ) {
+    final key = (stroke.points, stroke.size, stroke.tool);
+    final cached = _entries[key];
+    if (cached != null) return cached;
+
+    final outline = create();
+    if (_entries.length >= maxEntries) {
+      _entries.remove(_entries.keys.first);
+    }
+    _entries[key] = outline;
+    return outline;
+  }
+}
+
 class SketchPainter extends CustomPainter {
   final List<SketchStroke> strokes;
 
-  /// Cache for parsed points and computed stroke outlines
-  /// Key: stroke.points hashCode, Value: computed outline points
-  static final Map<int, List<Offset>> _strokeCache = {};
-  static const int _maxCacheSize = 500;
+  static final SketchStrokeOutlineCache _strokeCache =
+      SketchStrokeOutlineCache();
 
   SketchPainter({required this.strokes});
 
@@ -50,13 +81,9 @@ class SketchPainter extends CustomPainter {
     SketchStroke stroke,
     List<PointVector> points,
   ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
+    final outlinePoints = _strokeCache.getOrCreate(
+      stroke,
+      () => getStroke(
         points,
         options: StrokeOptions(
           size: stroke.size,
@@ -65,12 +92,8 @@ class SketchPainter extends CustomPainter {
           streamline: 0.75, // Higher streamline for natural flow
           isComplete: true,
         ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
+      ),
+    );
 
     if (outlinePoints.isEmpty) return;
 
@@ -108,13 +131,9 @@ class SketchPainter extends CustomPainter {
     SketchStroke stroke,
     List<PointVector> points,
   ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
+    final outlinePoints = _strokeCache.getOrCreate(
+      stroke,
+      () => getStroke(
         points,
         options: StrokeOptions(
           size: stroke.size * 0.9, // Slightly thinner than pen
@@ -123,12 +142,8 @@ class SketchPainter extends CustomPainter {
           streamline: 0.6, // Better streamline for natural pencil feel
           isComplete: true,
         ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
+      ),
+    );
 
     if (outlinePoints.isEmpty) return;
 
@@ -167,13 +182,9 @@ class SketchPainter extends CustomPainter {
     SketchStroke stroke,
     List<PointVector> points,
   ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
+    final outlinePoints = _strokeCache.getOrCreate(
+      stroke,
+      () => getStroke(
         points,
         options: StrokeOptions(
           size: stroke.size,
@@ -190,12 +201,8 @@ class SketchPainter extends CustomPainter {
           ),
           isComplete: true,
         ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
+      ),
+    );
 
     if (outlinePoints.isEmpty) return;
 
@@ -269,13 +276,9 @@ class SketchPainter extends CustomPainter {
     SketchStroke stroke,
     List<PointVector> points,
   ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
+    final outlinePoints = _strokeCache.getOrCreate(
+      stroke,
+      () => getStroke(
         points,
         options: StrokeOptions(
           size: stroke.size,
@@ -284,12 +287,8 @@ class SketchPainter extends CustomPainter {
           streamline: 0.7,
           isComplete: true,
         ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
+      ),
+    );
 
     if (outlinePoints.isEmpty) return;
 

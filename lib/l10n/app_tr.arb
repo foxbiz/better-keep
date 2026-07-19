@@ -21,6 +21,9 @@
 	"@close": { "description": "Close button text" },
 
 	"retry": "Yeniden Dene",
+	"protectedSketchTitle": "Korumalı çizim",
+	"protectedSketchRecoveryMessage": "Bu eski korumalı çizim henüz kurtarılamadı. Orijinal şifreli çizim korundu ve uygulama bir sonraki başarılı kilit açma işleminden sonra yeniden deneyecek.",
+	"sketchBackgroundUnavailable": "Arka plan kullanılamıyor; çizim korundu",
 	"discard": "Sil",
 	"attachmentCommitFailedTitle": "Ek eklenemedi",
 	"attachmentCommitFailedMessage": "Orijinal dosya güvende. Eklemeyi yeniden deneyin veya bu cihazdan silin.",

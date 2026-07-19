@@ -30,6 +30,17 @@ class AppLocalizationsId extends AppLocalizations {
   String get retry => 'Coba Lagi';
 
   @override
+  String get protectedSketchTitle => 'Sketsa terlindungi';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'Sketsa lama yang dilindungi ini belum dapat dipulihkan. Gambar terenkripsi aslinya telah dipertahankan dan aplikasi akan mencoba lagi setelah pembukaan kunci berhasil berikutnya.';
+
+  @override
+  String get sketchBackgroundUnavailable =>
+      'Latar belakang tidak tersedia; gambar tetap tersimpan';
+
+  @override
   String get discard => 'Buang';
 
   @override

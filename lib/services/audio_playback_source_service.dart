@@ -267,7 +267,7 @@ class AudioPlaybackSourceService {
         );
       }
       try {
-        decoded = await decoder(Uint8List.fromList(decoded));
+        decoded = await decoder(decoded);
       } catch (error) {
         throw AudioPlaybackSourceException(
           AudioPlaybackSourceError.decryptionFailed,

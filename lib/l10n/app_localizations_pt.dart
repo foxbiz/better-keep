@@ -30,6 +30,17 @@ class AppLocalizationsPt extends AppLocalizations {
   String get retry => 'Tentar novamente';
 
   @override
+  String get protectedSketchTitle => 'Esboço protegido';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'Este esboço protegido antigo ainda não pôde ser recuperado. O desenho criptografado original foi preservado, e o aplicativo tentará novamente após o próximo desbloqueio bem-sucedido.';
+
+  @override
+  String get sketchBackgroundUnavailable =>
+      'Plano de fundo indisponível; desenho preservado';
+
+  @override
   String get discard => 'Descartar';
 
   @override
