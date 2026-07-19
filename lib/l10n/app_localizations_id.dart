@@ -30,6 +30,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get retry => 'Coba Lagi';
 
   @override
+  String get discard => 'Buang';
+
+  @override
+  String get attachmentCommitFailedTitle => 'Tidak dapat menambahkan lampiran';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      'File asli tetap aman. Coba tambahkan lagi, atau buang dari perangkat ini.';
+
+  @override
   String get done => 'Selesai';
 
   @override
@@ -2472,6 +2482,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get audio => 'Audio';
+
+  @override
+  String audioCount(int count) {
+    return '$count audio';
+  }
 
   @override
   String syncFailedCount(int count) {

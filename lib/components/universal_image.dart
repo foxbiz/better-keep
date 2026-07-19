@@ -4,7 +4,11 @@ import 'package:better_keep/utils/file_utils.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/utils/encryption.dart';
 import 'package:flutter/material.dart';
+
+typedef PasswordProtectedImageDecoder =
+    Future<Uint8List> Function(Uint8List protectedBytes);
 
 /// Global in-memory cache for image bytes to support smooth Hero animations.
 /// When an image is loaded, it's cached here so the destination Hero widget
@@ -62,6 +66,7 @@ class UniversalImage extends StatefulWidget {
   final BoxFit? fit;
   final Widget Function(BuildContext, Widget, ImageChunkEvent?)? loadingBuilder;
   final Widget Function(BuildContext, Object, StackTrace?)? errorBuilder;
+  final PasswordProtectedImageDecoder? passwordProtectedDecoder;
 
   const UniversalImage({
     super.key,
@@ -69,7 +74,24 @@ class UniversalImage extends StatefulWidget {
     this.fit,
     this.loadingBuilder,
     this.errorBuilder,
+    this.passwordProtectedDecoder,
   });
+
+  @visibleForTesting
+  static Future<Uint8List> prepareImageBytes(
+    Uint8List storedBytes, {
+    PasswordProtectedImageDecoder? passwordProtectedDecoder,
+  }) async {
+    if (!isBytesPasswordEncrypted(storedBytes)) return storedBytes;
+    if (passwordProtectedDecoder == null) {
+      throw StateError('Image file is still password-protected');
+    }
+    final plaintext = await passwordProtectedDecoder(storedBytes);
+    if (plaintext.isEmpty || isBytesPasswordEncrypted(plaintext)) {
+      throw StateError('Password-protected image failed verification');
+    }
+    return plaintext;
+  }
 
   @override
   State<UniversalImage> createState() => _UniversalImageState();
@@ -83,6 +105,7 @@ class _UniversalImageState extends State<UniversalImage> {
 
   // Track the path we're currently loading to handle race conditions
   String? _loadingPath;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -93,13 +116,23 @@ class _UniversalImageState extends State<UniversalImage> {
   @override
   void didUpdateWidget(UniversalImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.path != widget.path) {
+    final authorizationChanged =
+        (oldWidget.passwordProtectedDecoder == null) !=
+        (widget.passwordProtectedDecoder == null);
+    if (oldWidget.path != widget.path || authorizationChanged) {
+      if (authorizationChanged) {
+        // Never retain authenticated bytes after the session ends, or reuse a
+        // previous load failure after a session begins.
+        _fixedPath = null;
+        _imageBytes = null;
+      }
       _initImage();
     }
   }
 
   void _initImage() {
     final path = widget.path;
+    final loadGeneration = ++_loadGeneration;
 
     // Handle data URIs and network URLs immediately (synchronous)
     if (path.startsWith('data:image') || path.startsWith('http')) {
@@ -110,12 +143,17 @@ class _UniversalImageState extends State<UniversalImage> {
     }
 
     // Check cache synchronously - critical for Hero animations
-    final cachedBytes = UniversalImageCache.instance.getBytes(path);
-    if (cachedBytes != null) {
-      _imageBytes = cachedBytes;
-      _isLoading = false;
-      _error = null;
-      return;
+    // Authenticated plaintext is intentionally scoped to this widget rather
+    // than the global path cache. A locked card must never recover full image
+    // bytes merely by knowing the canonical attachment path.
+    if (widget.passwordProtectedDecoder == null) {
+      final cachedBytes = UniversalImageCache.instance.getBytes(path);
+      if (cachedBytes != null && !isBytesPasswordEncrypted(cachedBytes)) {
+        _imageBytes = cachedBytes;
+        _isLoading = false;
+        _error = null;
+        return;
+      }
     }
 
     // Need to load async - but keep the old image visible to prevent blinking
@@ -125,10 +163,10 @@ class _UniversalImageState extends State<UniversalImage> {
     }
     _error = null;
     _loadingPath = path;
-    _loadImage();
+    _loadImage(loadGeneration);
   }
 
-  Future<void> _loadImage() async {
+  Future<void> _loadImage(int loadGeneration) async {
     final path = widget.path;
     final loadingPath = _loadingPath;
 
@@ -136,12 +174,20 @@ class _UniversalImageState extends State<UniversalImage> {
       final fixedPath = await FileUtils.fixPath(path);
 
       // Check if the path changed while we were loading
-      if (_loadingPath != loadingPath || !mounted) return;
+      if (_loadGeneration != loadGeneration ||
+          _loadingPath != loadingPath ||
+          !mounted) {
+        return;
+      }
 
       // Double-check cache after async gap
-      final cachedBytes = UniversalImageCache.instance.getBytes(fixedPath);
-      if (cachedBytes != null) {
-        if (mounted && _loadingPath == loadingPath) {
+      final cachedBytes = widget.passwordProtectedDecoder == null
+          ? UniversalImageCache.instance.getBytes(fixedPath)
+          : null;
+      if (cachedBytes != null && !isBytesPasswordEncrypted(cachedBytes)) {
+        if (mounted &&
+            _loadGeneration == loadGeneration &&
+            _loadingPath == loadingPath) {
           setState(() {
             _fixedPath = fixedPath;
             _imageBytes = cachedBytes;
@@ -154,7 +200,11 @@ class _UniversalImageState extends State<UniversalImage> {
       final fs = await fileSystem();
 
       // Check again if path changed
-      if (_loadingPath != loadingPath || !mounted) return;
+      if (_loadGeneration != loadGeneration ||
+          _loadingPath != loadingPath ||
+          !mounted) {
+        return;
+      }
 
       var exists = await fs.exists(fixedPath);
 
@@ -163,7 +213,11 @@ class _UniversalImageState extends State<UniversalImage> {
         final redownloadedPath = await NoteSyncService().redownloadFile(path);
         if (redownloadedPath != null) {
           // Check path didn't change during redownload
-          if (_loadingPath != loadingPath || !mounted) return;
+          if (_loadGeneration != loadGeneration ||
+              _loadingPath != loadingPath ||
+              !mounted) {
+            return;
+          }
           exists = await fs.exists(fixedPath);
         }
       }
@@ -173,15 +227,28 @@ class _UniversalImageState extends State<UniversalImage> {
       }
 
       // Check again if path changed
-      if (_loadingPath != loadingPath || !mounted) return;
+      if (_loadGeneration != loadGeneration ||
+          _loadingPath != loadingPath ||
+          !mounted) {
+        return;
+      }
 
-      final bytes = await readEncryptedBytes(fixedPath);
+      final storedBytes = await readEncryptedBytes(fixedPath);
+      final bytes = await UniversalImage.prepareImageBytes(
+        storedBytes,
+        passwordProtectedDecoder: widget.passwordProtectedDecoder,
+      );
 
-      // Cache for future Hero animations
-      UniversalImageCache.instance.put(path, fixedPath, bytes);
+      // Public images can use the global Hero cache. Authenticated plaintext
+      // stays only in this widget's state for the duration of the session.
+      if (widget.passwordProtectedDecoder == null) {
+        UniversalImageCache.instance.put(path, fixedPath, bytes);
+      }
 
       // Final check before setting state
-      if (mounted && _loadingPath == loadingPath) {
+      if (mounted &&
+          _loadGeneration == loadGeneration &&
+          _loadingPath == loadingPath) {
         setState(() {
           _fixedPath = fixedPath;
           _imageBytes = bytes;
@@ -190,7 +257,9 @@ class _UniversalImageState extends State<UniversalImage> {
       }
     } catch (e) {
       // Only show error if this is still the current loading operation
-      if (mounted && _loadingPath == loadingPath) {
+      if (mounted &&
+          _loadGeneration == loadGeneration &&
+          _loadingPath == loadingPath) {
         setState(() {
           _error = e;
           _isLoading = false;

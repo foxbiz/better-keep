@@ -23,6 +23,15 @@
 	"retry": "Retry",
 	"@retry": { "description": "Retry button text" },
 
+	"discard": "Discard",
+	"@discard": { "description": "Discard an uncommitted local item" },
+
+	"attachmentCommitFailedTitle": "Couldn’t add attachment",
+	"@attachmentCommitFailedTitle": { "description": "Title shown when an attachment could not be committed to a note" },
+
+	"attachmentCommitFailedMessage": "The original file is still safe. Retry adding it, or discard it from this device.",
+	"@attachmentCommitFailedMessage": { "description": "Retry-or-discard explanation for an attachment commit failure" },
+
 	"done": "Done",
 	"@done": { "description": "Done button text" },
 
@@ -2831,6 +2840,11 @@
 
 	"audio": "Audio",
 	"@audio": { "description": "Audio fallback label" },
+	"audioCount": "{count, plural, =1{1 audio} other{{count} audios}}",
+	"@audioCount": {
+		"description": "Number of protected audio attachments shown on a locked note card",
+		"placeholders": { "count": { "type": "int" } }
+	},
 
 	"syncFailedCount": "{count, plural, =1{1 failed} other{{count} failed}}",
 	"@syncFailedCount": {

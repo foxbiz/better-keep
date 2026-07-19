@@ -30,6 +30,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
+  String get discard => '丢弃';
+
+  @override
+  String get attachmentCommitFailedTitle => '无法添加附件';
+
+  @override
+  String get attachmentCommitFailedMessage => '原始文件仍然安全。请重试添加，或从此设备丢弃。';
+
+  @override
   String get done => '完成';
 
   @override
@@ -2376,6 +2385,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audio => '音频';
+
+  @override
+  String audioCount(int count) {
+    return '$count 个音频';
+  }
 
   @override
   String syncFailedCount(int count) {

@@ -30,6 +30,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get retry => '다시 시도';
 
   @override
+  String get discard => '버리기';
+
+  @override
+  String get attachmentCommitFailedTitle => '첨부 파일을 추가할 수 없습니다';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      '원본 파일은 안전하게 보관되어 있습니다. 다시 추가하거나 이 기기에서 버리세요.';
+
+  @override
   String get done => '완료';
 
   @override
@@ -2409,6 +2419,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get audio => '오디오';
+
+  @override
+  String audioCount(int count) {
+    return '오디오 $count개';
+  }
 
   @override
   String syncFailedCount(int count) {

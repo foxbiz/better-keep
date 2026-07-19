@@ -30,6 +30,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get retry => '再試行';
 
   @override
+  String get discard => '破棄';
+
+  @override
+  String get attachmentCommitFailedTitle => '添付ファイルを追加できませんでした';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      '元のファイルは安全に保持されています。もう一度追加するか、このデバイスから破棄してください。';
+
+  @override
   String get done => '完了';
 
   @override
@@ -2412,6 +2422,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audio => '音声';
+
+  @override
+  String audioCount(int count) {
+    return '音声 $count 件';
+  }
 
   @override
   String syncFailedCount(int count) {

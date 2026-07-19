@@ -65,6 +65,10 @@ class _ImageViewerState extends State<ImageViewer> {
                 "image_${widget.note.id}_${_currentImage.src}",
             child: UniversalImage(
               path: _currentImage.src,
+              passwordProtectedDecoder:
+                  widget.note.locked && widget.note.unlocked
+                  ? widget.note.decryptAttachmentForSession
+                  : null,
               errorBuilder: (context, error, stackTrace) {
                 return const Center(
                   child: Icon(Icons.error, color: Colors.red),
@@ -95,7 +99,10 @@ class _ImageViewerState extends State<ImageViewer> {
       context,
       SketchPage(
         note: widget.note,
-        sketch: SketchData(backgroundImage: _currentImage.src),
+        sketch: SketchData(
+          backgroundImage: _currentImage.src,
+          aspectRatio: _currentImage.ratio,
+        ),
         sourceAttachment: widget.attachment,
       ),
     );

@@ -30,6 +30,17 @@ class AppLocalizationsPt extends AppLocalizations {
   String get retry => 'Tentar novamente';
 
   @override
+  String get discard => 'Descartar';
+
+  @override
+  String get attachmentCommitFailedTitle =>
+      'Não foi possível adicionar o anexo';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      'O arquivo original continua seguro. Tente adicioná-lo novamente ou descarte-o deste dispositivo.';
+
+  @override
   String get done => 'Concluído';
 
   @override
@@ -2503,6 +2514,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get audio => 'Áudio';
+
+  @override
+  String audioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count áudios',
+      one: '1 áudio',
+    );
+    return '$_temp0';
+  }
 
   @override
   String syncFailedCount(int count) {

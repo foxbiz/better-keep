@@ -182,6 +182,15 @@ class SketchData {
   /// (e.g., sketch edited on another device and re-uploaded to the same path).
   String? strokesContentHash;
 
+  /// Runtime-only state for the one-time legacy encrypted-strokes migration.
+  /// This is deliberately never serialized.
+  LegacySketchMigrationState legacyMigrationState;
+
+  /// Runtime-only diagnostic shown when a legacy sketch is quarantined.
+  String? legacyMigrationError;
+
+  bool _strokesHydrated;
+
   SketchData({
     this.previewImage,
     this.backgroundImage,
@@ -194,11 +203,56 @@ class SketchData {
     this.encryptedMetadata,
     this.strokesFilePath,
     this.strokesContentHash,
-  });
+    this.legacyMigrationState = LegacySketchMigrationState.none,
+    this.legacyMigrationError,
+    bool strokesHydrated = false,
+  }) : _strokesHydrated = strokesHydrated || strokes.isNotEmpty {
+    if (hasEncryptedStrokes &&
+        legacyMigrationState == LegacySketchMigrationState.none) {
+      legacyMigrationState = LegacySketchMigrationState.pending;
+    }
+  }
 
   /// Returns true if this sketch has encrypted strokes (locked note)
   bool get hasEncryptedStrokes =>
       encryptedStrokes != null && encryptedStrokes!.isNotEmpty;
+
+  /// True while the deprecated ciphertext is still the authoritative source.
+  bool get requiresLegacyMigration =>
+      hasEncryptedStrokes ||
+      hasEncryptedMetadata ||
+      legacyMigrationState == LegacySketchMigrationState.pending ||
+      legacyMigrationState == LegacySketchMigrationState.quarantined;
+
+  bool get isLegacyQuarantined =>
+      legacyMigrationState == LegacySketchMigrationState.quarantined;
+
+  bool get hasHydratedStrokeSource => _strokesHydrated;
+
+  void markStrokesHydrated() {
+    _strokesHydrated = true;
+  }
+
+  /// Marks the file-backed source as needing hydration again.
+  ///
+  /// Clearing [strokes] without clearing this flag would make an encrypted
+  /// source look like a verified empty drawing and risks overwriting it.
+  void markStrokesUnhydrated() {
+    _strokesHydrated = false;
+  }
+
+  void markLegacyMigrationFailed(Object error) {
+    legacyMigrationState = LegacySketchMigrationState.quarantined;
+    legacyMigrationError = error.toString();
+  }
+
+  void markLegacyMigrationSucceeded() {
+    encryptedStrokes = null;
+    encryptedMetadata = null;
+    legacyMigrationState = LegacySketchMigrationState.converted;
+    legacyMigrationError = null;
+    _strokesHydrated = true;
+  }
 
   /// Returns true if this sketch has encrypted metadata (local data encryption)
   bool get hasEncryptedMetadata =>
@@ -209,11 +263,13 @@ class SketchData {
       strokesFilePath != null && strokesFilePath!.isNotEmpty;
 
   Map<String, dynamic> toJson() {
-    // strokesFilePath is required - all stroke data must be in a file
-    // Old notes with inline strokes must be migrated before saving
+    // Current sketches require a strokes file. The sole exception is an
+    // existing deprecated protected source that has not yet been safely
+    // converted: it must survive unrelated note edits without being replaced
+    // by an empty drawing.
     assert(
-      hasStrokesFile,
-      'strokesFilePath is required. Migrate old sketches before saving.',
+      hasStrokesFile || hasEncryptedStrokes || hasEncryptedMetadata,
+      'strokesFilePath is required unless legacy ciphertext is preserved.',
     );
     return {
       'strokesFilePath': strokesFilePath,
@@ -222,6 +278,7 @@ class SketchData {
       'backgroundImage': backgroundImage,
       if (blurredThumbnail != null) 'blurredThumbnail': blurredThumbnail,
       if (strokesContentHash != null) 'strokesContentHash': strokesContentHash,
+      if (hasEncryptedStrokes) 'encryptedStrokes': encryptedStrokes,
     };
   }
 
@@ -244,22 +301,38 @@ class SketchData {
   /// Parses strokes data from a strokes file JSON.
   /// Used when loading sketch data from downloaded strokes file.
   void loadFromStrokesFileJson(Map<String, dynamic> json) {
-    if (json['strokes'] != null) {
-      strokes = (json['strokes'] as List)
-          .map((e) => SketchStroke.parse(e as String))
-          .toList();
-    }
-    if (json['bgColor'] != null) {
-      backgroundColor = Color(json['bgColor'] as int);
-    }
-    if (json['pagePattern'] != null) {
-      pagePattern = PagePattern.values.firstWhere(
-        (e) => e.name == json['pagePattern'],
-        orElse: () => PagePattern.blank,
-      );
-    }
-    if (json['aspectRatio'] != null) {
-      aspectRatio = (json['aspectRatio'] as num).toDouble();
+    final parsedStrokes = json['strokes'] == null
+        ? List<SketchStroke>.from(strokes)
+        : (json['strokes'] as List<dynamic>)
+              .map((e) => SketchStroke.parse(e as String))
+              .toList(growable: false);
+    final parsedBackgroundColor = json['bgColor'] == null
+        ? backgroundColor
+        : Color(json['bgColor'] as int);
+    final parsedPagePattern = json['pagePattern'] == null
+        ? pagePattern
+        : PagePattern.values.firstWhere(
+            (e) => e.name == json['pagePattern'],
+            orElse: () => PagePattern.blank,
+          );
+    final parsedAspectRatio = json['aspectRatio'] == null
+        ? aspectRatio
+        : (json['aspectRatio'] as num).toDouble();
+    final parsedEncryptedStrokes = json['encryptedStrokes'] as String?;
+
+    // Assign only after every field has parsed successfully. A malformed
+    // entry must not leave a partially hydrated drawing in memory.
+    strokes = parsedStrokes;
+    backgroundColor = parsedBackgroundColor;
+    pagePattern = parsedPagePattern;
+    aspectRatio = parsedAspectRatio;
+    if (parsedEncryptedStrokes != null && parsedEncryptedStrokes.isNotEmpty) {
+      encryptedStrokes = parsedEncryptedStrokes;
+      legacyMigrationState = LegacySketchMigrationState.pending;
+      legacyMigrationError = null;
+      _strokesHydrated = false;
+    } else {
+      _strokesHydrated = true;
     }
   }
 
@@ -322,3 +395,5 @@ class SketchData {
   factory SketchData.fromRawJson(String str) =>
       SketchData.fromJson(json.decode(str));
 }
+
+enum LegacySketchMigrationState { none, pending, quarantined, converted }

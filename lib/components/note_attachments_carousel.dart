@@ -3,6 +3,7 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/pages/image_viewer.dart';
 import 'package:better_keep/pages/sketch_page.dart';
+import 'package:better_keep/components/sketch_painter.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 
@@ -104,7 +105,14 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
                     aspectRatio: image.ratio,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: UniversalImage(path: image.src, fit: BoxFit.cover),
+                      child: UniversalImage(
+                        path: image.src,
+                        fit: BoxFit.cover,
+                        passwordProtectedDecoder:
+                            widget.note.locked && widget.note.unlocked
+                            ? widget.note.decryptAttachmentForSession
+                            : null,
+                      ),
                     ),
                   ),
                 ),
@@ -156,6 +164,10 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
                               ),
                               path: sketch.previewImage!,
                               fit: BoxFit.contain,
+                              passwordProtectedDecoder:
+                                  widget.note.locked && widget.note.unlocked
+                                  ? widget.note.decryptAttachmentForSession
+                                  : null,
                             ),
                           ),
                         ),

@@ -5,6 +5,7 @@ import 'package:better_keep/components/adaptive_toolbar.dart';
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
+import 'package:better_keep/dialogs/attachment_commit_dialog.dart';
 import 'package:better_keep/dialogs/checkbox_cascade_dialog.dart';
 import 'package:better_keep/dialogs/export_dialog.dart';
 import 'package:better_keep/dialogs/paste_dialog.dart';
@@ -28,14 +29,11 @@ import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/checkbox_service.dart';
-import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
-import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
-import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -59,17 +57,18 @@ import 'package:image_picker/image_picker.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:uuid/uuid.dart';
 
 class NoteEditor extends StatefulWidget {
   final Note? note;
   final bool autoFocus;
   final bool deleteIfUnchanged;
+  final ImageAttachmentPreparationService? imageAttachmentPreparationService;
   const NoteEditor({
     super.key,
     this.note,
     this.autoFocus = false,
     this.deleteIfUnchanged = false,
+    this.imageAttachmentPreparationService,
   });
 
   @override
@@ -84,6 +83,13 @@ class _NoteEditorState extends State<NoteEditor>
   StreamSubscription? _changesSubscription;
   String? _linkUrl;
   Timer? _changeTimer;
+  Future<void> _saveTail = Future<void>.value();
+  Future<void>? _pendingLockOperation;
+  Future<void>? _pendingLockRemovalOperation;
+  bool _isLockQueued = false;
+  bool _isLockRemovalQueued = false;
+  bool _isClosing = false;
+  bool _allowPop = false;
   Metadata? _linkMetadata;
   bool _isLoadingMetadata = false;
 
@@ -271,8 +277,7 @@ class _NoteEditorState extends State<NoteEditor>
 
     // Add title change listener for auto-save
     _titleController.addListener(() {
-      _changeTimer?.cancel();
-      _changeTimer = Timer(Duration(seconds: 1), _saveNote);
+      _scheduleAutosave();
     });
 
     _focusNode.addListener(_focusListener);
@@ -594,8 +599,6 @@ class _NoteEditorState extends State<NoteEditor>
     // Clear checkbox tracking state
     _bubbleUpdatedOffsets.clear();
     _checkboxService.invalidateCache();
-    // Pass flag to clear password after save completes (if setting enabled)
-    _saveNote(clearPasswordAfterSave: AppState.forgetLockedNotePassword);
     _controller.removeListener(_didChangeSelection);
     _controller.dispose();
     _titleController.dispose();
@@ -616,7 +619,7 @@ class _NoteEditorState extends State<NoteEditor>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _changeTimer?.cancel();
-      _saveNote();
+      unawaited(_enqueueSave());
     }
   }
 
@@ -710,305 +713,312 @@ class _NoteEditorState extends State<NoteEditor>
     }
 
     return PopScope(
-      canPop: false,
+      canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) {
-        _changeTimer?.cancel();
-        _saveNote();
         if (didPop) return;
-        Navigator.of(context).pop();
+        unawaited(_closeEditor(result));
       },
-      child: Scaffold(
-        floatingActionButton:
-            _showAttachmentFab && !_note.readOnly && !_note.trashed
-            ? BubbleMenu(
-                fabIcon: Icons.attach_file,
-                fabSize: 56,
-                itemDistance: 100,
-                itemSize: 48,
-                items: [
-                  BubbleMenuItem(
-                    icon: Icons.image,
-                    label: context.l10n.image,
-                    onTap: _showImageSourceDialog,
-                  ),
-                  BubbleMenuItem(
-                    icon: Icons.mic,
-                    label: context.l10n.audio,
-                    onTap: _handleAudioAttachment,
-                  ),
-                  BubbleMenuItem(
-                    icon: Icons.draw,
-                    label: context.l10n.sketch,
-                    onTap: _handleSketchAttachment,
-                  ),
-                ],
-              )
-            : null,
-        appBar: AppBar(
-          backgroundColor: backgroundColor,
-          foregroundColor: foregroundColor,
-          iconTheme: IconThemeData(color: foregroundColor),
-          actionsIconTheme: IconThemeData(color: foregroundColor),
-          leadingWidth: isBigScreen(context) ? 96 : null,
-          leading: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              BackButton(color: foregroundColor),
-              if (isBigScreen(context))
-                IconButton(
-                  color: foregroundColor,
-                  onPressed: () {
-                    setState(() {
-                      AppState.editorFullScreen = !AppState.editorFullScreen;
-                    });
-                  },
-                  icon: Icon(
-                    AppState.editorFullScreen
-                        ? Icons.fullscreen_exit
-                        : Icons.fullscreen,
-                  ),
-                ),
-            ],
-          ),
-          title: _buildAppBarTitle(foregroundColor),
-          centerTitle: true,
-          actions: _note.trashed
-              ? [
-                  IconButton(
-                    color: foregroundColor,
-                    onPressed: () async {
-                      final navigator = Navigator.of(context);
-                      await _note.restoreFromTrash();
-                      if (mounted) {
-                        navigator.pop();
-                      }
-                    },
-                    icon: Icon(Icons.restore_from_trash),
-                    tooltip: context.l10n.restore,
-                  ),
-                ]
-              : [
-                  _toolNoteColor(_note.color, foregroundColor),
-                  IconButton(
-                    color: foregroundColor,
-                    onPressed: () async {
-                      final res = await reminder(
-                        context,
-                        initialReminder: _note.reminder,
-                      );
-                      if (res != null) {
-                        await _note.setReminder(res);
-                        setState(() {});
-                      }
-                    },
-                    icon: Icon(
-                      _note.hasReminder
-                          ? (_note.completed
-                                ? Icons.notifications_off
-                                : (_note.hasReminderExpired
-                                      ? Icons.notification_important
-                                      : Icons.notifications_active))
-                          : Icons.notifications_none,
+      child: AbsorbPointer(
+        absorbing: _isClosing,
+        child: Scaffold(
+          floatingActionButton:
+              _showAttachmentFab && !_note.readOnly && !_note.trashed
+              ? BubbleMenu(
+                  fabIcon: Icons.attach_file,
+                  fabSize: 56,
+                  itemDistance: 100,
+                  itemSize: 48,
+                  items: [
+                    BubbleMenuItem(
+                      icon: Icons.image,
+                      label: context.l10n.image,
+                      onTap: _showImageSourceDialog,
                     ),
-                    tooltip: context.l10n.reminder,
-                  ),
+                    BubbleMenuItem(
+                      icon: Icons.mic,
+                      label: context.l10n.audio,
+                      onTap: _handleAudioAttachment,
+                    ),
+                    BubbleMenuItem(
+                      icon: Icons.draw,
+                      label: context.l10n.sketch,
+                      onTap: _handleSketchAttachment,
+                    ),
+                  ],
+                )
+              : null,
+          appBar: AppBar(
+            backgroundColor: backgroundColor,
+            foregroundColor: foregroundColor,
+            iconTheme: IconThemeData(color: foregroundColor),
+            actionsIconTheme: IconThemeData(color: foregroundColor),
+            leadingWidth: isBigScreen(context) ? 96 : null,
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                BackButton(
+                  color: foregroundColor,
+                  onPressed: () => unawaited(_closeEditor()),
+                ),
+                if (isBigScreen(context))
                   IconButton(
                     color: foregroundColor,
                     onPressed: () {
-                      _note.pinned = !_note.pinned;
-                      _note.save();
-                      setState(() {});
+                      setState(() {
+                        AppState.editorFullScreen = !AppState.editorFullScreen;
+                      });
                     },
                     icon: Icon(
-                      _note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                      AppState.editorFullScreen
+                          ? Icons.fullscreen_exit
+                          : Icons.fullscreen,
                     ),
                   ),
-                  IconButton(
-                    color: foregroundColor,
-                    onPressed: () async {
-                      final selectedLabels = await labels(
-                        context,
-                        mode: Labels.labelsModeSelect,
-                        initiallySelected: _note.labels != null
-                            ? _note.labels!.split(',')
-                            : [],
-                      );
-                      if (selectedLabels != null) {
-                        _note.labels = selectedLabels.join(',');
+              ],
+            ),
+            title: _buildAppBarTitle(foregroundColor),
+            centerTitle: true,
+            actions: _note.trashed
+                ? [
+                    IconButton(
+                      color: foregroundColor,
+                      onPressed: () async {
+                        final navigator = Navigator.of(context);
+                        await _note.restoreFromTrash();
+                        if (mounted) {
+                          navigator.pop();
+                        }
+                      },
+                      icon: Icon(Icons.restore_from_trash),
+                      tooltip: context.l10n.restore,
+                    ),
+                  ]
+                : [
+                    _toolNoteColor(_note.color, foregroundColor),
+                    IconButton(
+                      color: foregroundColor,
+                      onPressed: () async {
+                        final res = await reminder(
+                          context,
+                          initialReminder: _note.reminder,
+                        );
+                        if (res != null) {
+                          await _note.setReminder(res);
+                          setState(() {});
+                        }
+                      },
+                      icon: Icon(
+                        _note.hasReminder
+                            ? (_note.completed
+                                  ? Icons.notifications_off
+                                  : (_note.hasReminderExpired
+                                        ? Icons.notification_important
+                                        : Icons.notifications_active))
+                            : Icons.notifications_none,
+                      ),
+                      tooltip: context.l10n.reminder,
+                    ),
+                    IconButton(
+                      color: foregroundColor,
+                      onPressed: () {
+                        _note.pinned = !_note.pinned;
                         _note.save();
                         setState(() {});
-                      }
-                    },
-                    icon: Icon(
-                      _note.labels != null && _note.labels!.isNotEmpty
-                          ? Icons.label
-                          : Icons.label_outline,
+                      },
+                      icon: Icon(
+                        _note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                      ),
                     ),
-                    tooltip: context.l10n.labels,
-                  ),
-                  PopupMenuButton(itemBuilder: _buildPopupMenu),
-                ],
-        ),
-        backgroundColor: backgroundColor,
-        body: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _quillScrollController,
-                child: Column(
-                  children: [
-                    NoteAttachmentsCarousel(
-                      note: _note,
-                      onPop: () => setState(() {}),
-                      scrollController: _carouselScrollController,
+                    IconButton(
+                      color: foregroundColor,
+                      onPressed: () async {
+                        final selectedLabels = await labels(
+                          context,
+                          mode: Labels.labelsModeSelect,
+                          initiallySelected: _note.labels != null
+                              ? _note.labels!.split(',')
+                              : [],
+                        );
+                        if (selectedLabels != null) {
+                          _note.labels = selectedLabels.join(',');
+                          _note.save();
+                          setState(() {});
+                        }
+                      },
+                      icon: Icon(
+                        _note.labels != null && _note.labels!.isNotEmpty
+                            ? Icons.label
+                            : Icons.label_outline,
+                      ),
+                      tooltip: context.l10n.labels,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16, right: 16),
-                      child: Focus(
-                        onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent) {
-                            if (event.logicalKey == LogicalKeyboardKey.enter ||
-                                event.logicalKey == LogicalKeyboardKey.tab) {
-                              _handleTitleEnterPressed();
-                              return KeyEventResult.handled;
+                    PopupMenuButton(itemBuilder: _buildPopupMenu),
+                  ],
+          ),
+          backgroundColor: backgroundColor,
+          body: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _quillScrollController,
+                  child: Column(
+                    children: [
+                      NoteAttachmentsCarousel(
+                        note: _note,
+                        onPop: () => setState(() {}),
+                        scrollController: _carouselScrollController,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 16),
+                        child: Focus(
+                          onKeyEvent: (node, event) {
+                            if (event is KeyDownEvent) {
+                              if (event.logicalKey ==
+                                      LogicalKeyboardKey.enter ||
+                                  event.logicalKey == LogicalKeyboardKey.tab) {
+                                _handleTitleEnterPressed();
+                                return KeyEventResult.handled;
+                              }
                             }
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: TextField(
-                          controller: _titleController,
-                          focusNode: _titleFocusNode,
-                          autofocus:
-                              widget.autoFocus ||
-                              (!_note.readOnly && _note.content == ''),
-                          readOnly: _note.readOnly || _note.trashed,
-                          maxLines: null,
-                          keyboardType: TextInputType.text,
-                          textInputAction: TextInputAction.next,
-                          onSubmitted: (_) => _handleTitleEnterPressed(),
-                          onEditingComplete: _handleTitleEnterPressed,
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w600,
-                            color: foregroundColor,
-                          ),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.only(bottom: 8),
-                            border: InputBorder.none,
-                            hintText: context.l10n.titleYourThought,
-                            hintStyle: TextStyle(
+                            return KeyEventResult.ignored;
+                          },
+                          child: TextField(
+                            controller: _titleController,
+                            focusNode: _titleFocusNode,
+                            autofocus:
+                                widget.autoFocus ||
+                                (!_note.readOnly && _note.content == ''),
+                            readOnly: _note.readOnly || _note.trashed,
+                            maxLines: null,
+                            keyboardType: TextInputType.text,
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) => _handleTitleEnterPressed(),
+                            onEditingComplete: _handleTitleEnterPressed,
+                            style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.w600,
-                              color: placeholderColor,
+                              color: foregroundColor,
+                            ),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.only(bottom: 8),
+                              border: InputBorder.none,
+                              hintText: context.l10n.titleYourThought,
+                              hintStyle: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w600,
+                                color: placeholderColor,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    Theme(
-                      data: Theme.of(context).copyWith(
-                        checkboxTheme: CheckboxThemeData(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          checkboxTheme: CheckboxThemeData(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            side: BorderSide(width: 2, color: foregroundColor),
+                            splashRadius: 24,
+                            materialTapTargetSize: MaterialTapTargetSize.padded,
                           ),
-                          side: BorderSide(width: 2, color: foregroundColor),
-                          splashRadius: 24,
-                          materialTapTargetSize: MaterialTapTargetSize.padded,
                         ),
-                      ),
-                      child: DefaultTextStyle(
-                        style: TextStyle(color: foregroundColor),
-                        child: Focus(
-                          onKeyEvent: _handleKeyPressed,
-                          child: QuillEditor.basic(
-                            scrollController: _quillScrollController,
-                            focusNode: _focusNode,
-                            controller: _controller,
-                            config: QuillEditorConfig(
-                              editorKey: _editorKey,
-                              checkBoxReadOnly: _note.trashed,
-                              scrollable: false,
-                              padding: EdgeInsets.only(
-                                top: 0,
-                                bottom: 32,
-                                left: 16,
-                                right: 16,
+                        child: DefaultTextStyle(
+                          style: TextStyle(color: foregroundColor),
+                          child: Focus(
+                            onKeyEvent: _handleKeyPressed,
+                            child: QuillEditor.basic(
+                              scrollController: _quillScrollController,
+                              focusNode: _focusNode,
+                              controller: _controller,
+                              config: QuillEditorConfig(
+                                editorKey: _editorKey,
+                                checkBoxReadOnly: _note.trashed,
+                                scrollable: false,
+                                padding: EdgeInsets.only(
+                                  top: 0,
+                                  bottom: 32,
+                                  left: 16,
+                                  right: 16,
+                                ),
+                                readOnlyMouseCursor: SystemMouseCursors.alias,
+                                showCursor: !_note.readOnly && !_note.trashed,
+                                enableInteractiveSelection: true,
+                                enableSelectionToolbar: true,
+                                placeholder: context.l10n.startWriting,
+                                customLeadingBlockBuilder:
+                                    customLeadingBlockBuilder,
+                                customStyles: buildQuillStyles(
+                                  foregroundColor: foregroundColor,
+                                  backgroundColor: backgroundColor,
+                                  placeholderColor: placeholderColor,
+                                ),
+                                embedBuilders: kIsWeb
+                                    ? FlutterQuillEmbeds.editorWebBuilders()
+                                    : FlutterQuillEmbeds.editorBuilders(
+                                        imageEmbedConfig:
+                                            QuillEditorImageEmbedConfig(
+                                              imageProviderBuilder:
+                                                  buildQuillImageProvider,
+                                              imageErrorWidgetBuilder:
+                                                  buildQuillImageErrorWidget,
+                                            ),
+                                      ),
+                                customLinkPrefixes: const ['audio://'],
+                                linkActionPickerDelegate:
+                                    _audioLinkActionPicker,
+                                onLaunchUrl: (url) {
+                                  return;
+                                },
                               ),
-                              readOnlyMouseCursor: SystemMouseCursors.alias,
-                              showCursor: !_note.readOnly && !_note.trashed,
-                              enableInteractiveSelection: true,
-                              enableSelectionToolbar: true,
-                              placeholder: context.l10n.startWriting,
-                              customLeadingBlockBuilder:
-                                  customLeadingBlockBuilder,
-                              customStyles: buildQuillStyles(
-                                foregroundColor: foregroundColor,
-                                backgroundColor: backgroundColor,
-                                placeholderColor: placeholderColor,
-                              ),
-                              embedBuilders: kIsWeb
-                                  ? FlutterQuillEmbeds.editorWebBuilders()
-                                  : FlutterQuillEmbeds.editorBuilders(
-                                      imageEmbedConfig:
-                                          QuillEditorImageEmbedConfig(
-                                            imageProviderBuilder:
-                                                buildQuillImageProvider,
-                                            imageErrorWidgetBuilder:
-                                                buildQuillImageErrorWidget,
-                                          ),
-                                    ),
-                              customLinkPrefixes: const ['audio://'],
-                              linkActionPickerDelegate: _audioLinkActionPicker,
-                              onLaunchUrl: (url) {
-                                return;
-                              },
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    ..._note.recordings.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final recording = entry.value;
-                      _audioPlayerKeys[recording.src] ??= GlobalKey();
-                      return NoteAudioPlayer(
-                        key: _audioPlayerKeys[recording.src],
-                        recording: recording,
-                        onDelete: () async {
-                          _removeAudioTagsForIndex(index);
-                          await _note.removeRecording(recording.src);
-                          _audioPlayerKeys.remove(recording.src);
-                          setState(() {});
-                        },
-                        onUpdate: (updatedRecording) async {
-                          await _note.updateRecording(updatedRecording);
-                          setState(() {});
-                        },
-                      );
-                    }),
-                  ],
+                      ..._note.recordings.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final recording = entry.value;
+                        _audioPlayerKeys[recording.src] ??= GlobalKey();
+                        return NoteAudioPlayer(
+                          key: _audioPlayerKeys[recording.src],
+                          recording: recording,
+                          noteLocked: _note.locked,
+                          noteSessionUnlocked: _note.unlocked,
+                          passwordProtectedDecoder:
+                              _note.decryptAttachmentForSession,
+                          onDelete: () async {
+                            _removeAudioTagsForIndex(index);
+                            await _note.removeRecording(recording.src);
+                            _audioPlayerKeys.remove(recording.src);
+                            setState(() {});
+                          },
+                          onUpdate: (updatedRecording) async {
+                            await _note.updateRecording(updatedRecording);
+                            setState(() {});
+                          },
+                        );
+                      }),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            if (!_note.trashed && !_note.readOnly)
-              _buildLinkPreview(backgroundColor, foregroundColor),
-            if (!_note.trashed && !_note.readOnly)
-              AnimatedSize(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutCubic,
-                child: _showAttachmentFab
-                    ? const SizedBox.shrink()
-                    : _buildToolbar(),
-              ),
-          ],
+              if (!_note.trashed && !_note.readOnly)
+                _buildLinkPreview(backgroundColor, foregroundColor),
+              if (!_note.trashed && !_note.readOnly)
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  child: _showAttachmentFab
+                      ? const SizedBox.shrink()
+                      : _buildToolbar(),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
-
-  /// Maximum image size in bytes (500KB)
-  static const int _maxImageSize = 500 * 1024;
 
   /// Check if attachment limit is reached and show snackbar if so.
   bool _checkAttachmentLimit() {
@@ -1020,62 +1030,6 @@ class _NoteEditorState extends State<NoteEditor>
       return true;
     }
     return false;
-  }
-
-  /// Compresses an image to be under [_maxImageSize] bytes.
-  Future<Uint8List> _compressImageToTargetSize(Uint8List imageBytes) async {
-    // If already under target, just do a light compression
-    if (imageBytes.length <= _maxImageSize) {
-      return await ImageCompressor.compressWithList(imageBytes, quality: 90);
-    }
-
-    // Start with quality 85 and full size
-    int quality = 85;
-    int minWidth = 1920;
-    int minHeight = 1920;
-    Uint8List compressed = imageBytes;
-
-    // Try progressively lower quality first
-    while (quality >= 50) {
-      compressed = await ImageCompressor.compressWithList(
-        imageBytes,
-        quality: quality,
-        minWidth: minWidth,
-        minHeight: minHeight,
-      );
-
-      if (compressed.length <= _maxImageSize) {
-        return compressed;
-      }
-
-      quality -= 10;
-    }
-
-    // If still too large, reduce dimensions progressively
-    quality = 70;
-    while (minWidth >= 800) {
-      compressed = await ImageCompressor.compressWithList(
-        imageBytes,
-        quality: quality,
-        minWidth: minWidth,
-        minHeight: minHeight,
-      );
-
-      if (compressed.length <= _maxImageSize) {
-        return compressed;
-      }
-
-      minWidth = (minWidth * 0.75).toInt();
-      minHeight = (minHeight * 0.75).toInt();
-    }
-
-    // Final attempt with minimum settings
-    return await ImageCompressor.compressWithList(
-      imageBytes,
-      quality: 50,
-      minWidth: 800,
-      minHeight: 800,
-    );
   }
 
   void _showImageSourceDialog() async {
@@ -1146,63 +1100,64 @@ class _NoteEditorState extends State<NoteEditor>
       if (ext.isEmpty) ext = '.jpg';
     }
 
-    // Show loading dialog while processing
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => PopScope(
-          canPop: false,
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text(context.l10n.processingImage),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
+    var processingVisible = false;
+    void showProcessing() {
+      if (!mounted || processingVisible) return;
+      processingVisible = true;
+      showAttachmentProcessingDialog(context, context.l10n.processingImage);
     }
 
+    void dismissProcessing() {
+      if (!mounted || !processingVisible) return;
+      dismissAttachmentProcessingDialog(context);
+      processingVisible = false;
+    }
+
+    showProcessing();
+
+    PreparedImageAttachment? preparedImage;
     try {
-      final fs = await fileSystem();
-      final documentDir = await fs.documentDir;
-      final imagePath = path.join(documentDir, '${Uuid().v4()}$ext');
-
-      // Compress the image to be under 500KB
-      Uint8List bytes = await _compressImageToTargetSize(imageBytes);
-
-      await writeEncryptedBytes(imagePath, bytes);
-
-      final decodedImage = await decodeImageFromList(bytes);
-
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(bytes);
+      preparedImage =
+          await (widget.imageAttachmentPreparationService ??
+                  ImageAttachmentPreparationService.platform())
+              .prepare(
+                sourceBytes: imageBytes,
+                extension: ext,
+                generateBlurredThumbnail: true,
+              );
 
       final noteImage = NoteImage(
-        src: imagePath,
-        aspectRatio: "${decodedImage.width}:${decodedImage.height}",
-        size: bytes.length,
+        src: preparedImage.path,
+        aspectRatio:
+            '${preparedImage.dimensions.width}:${preparedImage.dimensions.height}',
+        size: preparedImage.byteLength,
         lastModified: DateTime.now().toIso8601String(),
         index: _note.images.length,
-        blurredThumbnail: thumbnail,
+        blurredThumbnail: preparedImage.blurredThumbnail,
       );
 
-      _note.addImage(noteImage);
-      _scrollToAttachments();
-    } finally {
-      // Dismiss loading dialog
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
+      if (!mounted) return;
+      final added = await commitAttachmentWithRetry(
+        context: context,
+        sourcePath: preparedImage.path,
+        commit: () => _note.addImage(noteImage),
+        beforeFailurePrompt: () async => dismissProcessing(),
+        beforeRetry: () async => showProcessing(),
+        sourceLease: preparedImage.sourceLease,
+      );
+      if (added && mounted) _scrollToAttachments();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to prepare an image attachment',
+        error,
+        stackTrace,
+      );
+      if (mounted) {
+        snackbar(context.l10n.attachmentCommitFailedTitle, Colors.red);
       }
+    } finally {
+      await preparedImage?.release();
+      dismissProcessing();
     }
   }
 
@@ -1215,23 +1170,21 @@ class _NoteEditorState extends State<NoteEditor>
     );
 
     if (result != null && mounted) {
-      _note.addRecording(
-        NoteRecording(
-          src: result.path,
-          title: result.title,
-          length: result.length,
-          transcript: result.transcription,
-        ),
+      final recording = NoteRecording(
+        src: result.path,
+        title: result.title,
+        length: result.length,
+        transcript: result.transcription,
       );
+      final added = await commitAttachmentWithRetry(
+        context: context,
+        sourcePath: result.path,
+        commit: () => _note.addRecording(recording),
+      );
+      if (!added || !mounted) return;
       _scrollToAttachments();
       // Append transcription to note if provided
       if (result.transcription != null && result.transcription!.isNotEmpty) {
-        final recording = NoteRecording(
-          src: result.path,
-          title: result.title,
-          length: result.length,
-          transcript: result.transcription,
-        );
         _appendTranscriptToNote(result.transcription!, recording);
       }
       // Set note title from first few words if note has no title
@@ -1301,6 +1254,8 @@ class _NoteEditorState extends State<NoteEditor>
         AttachButton(
           readOnly: _note.readOnly,
           note: _note,
+          imageAttachmentPreparationService:
+              widget.imageAttachmentPreparationService,
           onAppendTranscript: _appendTranscriptToNote,
           onAttachmentAdded: _scrollToAttachments,
         ),
@@ -1355,16 +1310,19 @@ class _NoteEditorState extends State<NoteEditor>
     );
   }
 
-  void _saveNote({bool clearPasswordAfterSave = false}) async {
-    // Update note title from title controller
-    final title = _titleController.text;
-    _note.title = title;
+  void _scheduleAutosave() {
+    if (_isClosing) return;
+    _changeTimer?.cancel();
+    _changeTimer = Timer(const Duration(seconds: 1), () {
+      unawaited(_enqueueSave());
+    });
+  }
 
-    // Create a combined delta with title as first line (h1) + content
+  _NoteEditorSaveSnapshot _captureSaveSnapshot() {
+    final title = _titleController.text;
     final contentDelta = _controller.document.toDelta().toJson();
     final combinedDeltaJson = <Map<String, dynamic>>[];
 
-    // Add title as h1 if not empty
     if (title.isNotEmpty) {
       combinedDeltaJson.add({'insert': title});
       combinedDeltaJson.add({
@@ -1373,64 +1331,237 @@ class _NoteEditorState extends State<NoteEditor>
       });
     }
 
-    // Add content delta operations
     combinedDeltaJson.addAll(List<Map<String, dynamic>>.from(contentDelta));
+    final combinedDoc = documentFromJsonSafe(combinedDeltaJson);
 
-    // If deleteIfUnchanged is set and content hasn't meaningfully changed, delete instead of save
+    return _NoteEditorSaveSnapshot(
+      title: title,
+      content: json.encode(combinedDeltaJson),
+      plainText: combinedDoc.toPlainText().trim(),
+      bodyPlainText: _controller.document.toPlainText().trim(),
+    );
+  }
+
+  Future<bool> _enqueueSave() {
+    late final _NoteEditorSaveSnapshot snapshot;
+    try {
+      snapshot = _captureSaveSnapshot();
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to capture note editor state', error, stackTrace);
+      return Future<bool>.value(false);
+    }
+
+    final completer = Completer<bool>();
+    _saveTail = _saveTail.then((_) async {
+      try {
+        completer.complete(await _persistSnapshot(snapshot));
+      } catch (error, stackTrace) {
+        AppLogger.error('Error saving note', error, stackTrace);
+        completer.complete(false);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> _enqueueLock(String password) {
+    final pending = _pendingLockOperation;
+    if (pending != null) return pending;
+
+    _changeTimer?.cancel();
+    late final _NoteEditorSaveSnapshot snapshot;
+    try {
+      snapshot = _captureSaveSnapshot();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to capture note state before locking',
+        error,
+        stackTrace,
+      );
+      return Future<void>.error(error, stackTrace);
+    }
+
+    if (mounted) {
+      setState(() => _isLockQueued = true);
+    } else {
+      _isLockQueued = true;
+    }
+
+    final operation = _saveTail.then((_) async {
+      if (!await _persistSnapshot(snapshot)) {
+        throw const NoteLockException(
+          'The latest editor changes could not be saved before locking',
+        );
+      }
+      await _note.lock(password);
+    });
+    _pendingLockOperation = operation;
+    _saveTail = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    unawaited(
+      operation.then<void>(
+        (_) => _finishQueuedLock(operation),
+        onError: (Object _, StackTrace _) => _finishQueuedLock(operation),
+      ),
+    );
+    return operation;
+  }
+
+  void _finishQueuedLock(Future<void> operation) {
+    if (!identical(_pendingLockOperation, operation)) return;
+    _pendingLockOperation = null;
+    if (mounted) {
+      setState(() => _isLockQueued = false);
+    } else {
+      _isLockQueued = false;
+    }
+  }
+
+  Future<void> _enqueueLockRemoval(String password) {
+    final pending = _pendingLockRemovalOperation;
+    if (pending != null) return pending;
+
+    _changeTimer?.cancel();
+    late final _NoteEditorSaveSnapshot snapshot;
+    try {
+      snapshot = _captureSaveSnapshot();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to capture note state before removing its lock',
+        error,
+        stackTrace,
+      );
+      return Future<void>.error(error, stackTrace);
+    }
+
+    if (mounted) {
+      setState(() => _isLockRemovalQueued = true);
+    } else {
+      _isLockRemovalQueued = true;
+    }
+
+    final operation = _saveTail.then((_) async {
+      if (!await _persistSnapshot(snapshot)) {
+        throw const NoteLockRemovalException(
+          'The latest editor changes could not be saved before removing the lock',
+        );
+      }
+      await _note.removeLock(password);
+    });
+    _pendingLockRemovalOperation = operation;
+    _saveTail = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    unawaited(
+      operation.then<void>(
+        (_) => _finishQueuedLockRemoval(operation),
+        onError: (Object _, StackTrace _) =>
+            _finishQueuedLockRemoval(operation),
+      ),
+    );
+    return operation;
+  }
+
+  void _finishQueuedLockRemoval(Future<void> operation) {
+    if (!identical(_pendingLockRemovalOperation, operation)) return;
+    _pendingLockRemovalOperation = null;
+    if (mounted) {
+      setState(() => _isLockRemovalQueued = false);
+    } else {
+      _isLockRemovalQueued = false;
+    }
+  }
+
+  Future<bool> _persistSnapshot(_NoteEditorSaveSnapshot snapshot) async {
     if (widget.deleteIfUnchanged && _initialPlainText != null) {
-      final combinedDoc = documentFromJsonSafe(combinedDeltaJson);
-      final currentPlainText = combinedDoc.toPlainText().trim();
-      if (currentPlainText == _initialPlainText) {
+      if (snapshot.plainText == _initialPlainText) {
+        if (_note.id == null) return true;
         try {
-          await _note.delete();
-        } catch (e) {
-          AppLogger.error('Error deleting unchanged note', e);
+          return await _note.delete() >= 0;
+        } catch (error, stackTrace) {
+          AppLogger.error('Error deleting unchanged note', error, stackTrace);
+          return false;
         }
+      }
+    }
+
+    if (_note.isEmpty && snapshot.isEmpty) {
+      if (_note.id == null) return true;
+      try {
+        return await _note.delete() >= 0;
+      } catch (error, stackTrace) {
+        AppLogger.error('Error deleting empty note', error, stackTrace);
+        return false;
+      }
+    }
+
+    if (_note.content == snapshot.content &&
+        (_note.title ?? '') == snapshot.title) {
+      return true;
+    }
+
+    try {
+      return await _note.saveEditorSnapshot(
+            title: snapshot.title,
+            content: snapshot.content,
+            plainText: snapshot.plainText,
+          ) >=
+          0;
+    } catch (error, stackTrace) {
+      AppLogger.error('Error saving note', error, stackTrace);
+      if (mounted) {
+        snackbar(context.l10n.errorSavingNote, Colors.red);
+      }
+      return false;
+    }
+  }
+
+  Future<void> _closeEditor([Object? result]) async {
+    if (_isClosing || _allowPop) return;
+
+    _changeTimer?.cancel();
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (mounted) {
+      setState(() => _isClosing = true);
+    }
+
+    final saved = await _enqueueSave();
+    if (!saved) {
+      _cancelCloseAfterFailure();
+      return;
+    }
+
+    if (AppState.forgetLockedNotePassword && _note.locked) {
+      try {
+        await _note.clearPassword();
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to restore protected note state before closing',
+          error,
+          stackTrace,
+        );
+        _cancelCloseAfterFailure();
         return;
       }
     }
 
-    final contentPlainText = _controller.document.toPlainText().trim();
-    final isEmpty = title.isEmpty && contentPlainText.isEmpty;
-
-    if (_note.isEmpty && isEmpty) {
-      try {
-        await _note.delete();
-      } catch (e) {
-        AppLogger.error('Error saving note', e);
-        if (mounted) {
-          snackbar(context.l10n.errorSavingNote, Colors.red);
-        }
-      }
-      return;
+    if (!mounted) return;
+    setState(() => _allowPop = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) {
+      Navigator.of(context).pop(result);
     }
+  }
 
-    final oldContent = _note.content;
-    final newContent = json.encode(combinedDeltaJson);
-
-    if (oldContent == newContent) {
-      // Even if content unchanged, clear password if requested
-      if (clearPasswordAfterSave && _note.locked) {
-        _note.clearPassword();
-      }
-      return;
-    }
-
-    try {
-      // Get plain text from combined document
-      final combinedDoc = documentFromJsonSafe(combinedDeltaJson);
-      final plainText = combinedDoc.toPlainText().trim();
-      await _note.setContent(newContent, plainText);
-      // Clear password after successful save if setting is enabled
-      if (clearPasswordAfterSave && _note.locked) {
-        _note.clearPassword();
-      }
-    } catch (e) {
-      AppLogger.error('Error saving note', e);
-      if (mounted) {
-        snackbar(context.l10n.errorSavingNote, Colors.red);
-      }
-    }
+  void _cancelCloseAfterFailure() {
+    if (!mounted) return;
+    setState(() {
+      _isClosing = false;
+      _allowPop = false;
+    });
+    snackbar(context.l10n.errorSavingNote, Colors.red);
   }
 
   Widget _toolNoteColor(Color noteColor, Color iconColor) {
@@ -1747,8 +1878,7 @@ class _NoteEditorState extends State<NoteEditor>
 
   void _controllerChangesListener(DocChange event) {
     // Always set the save timer for any document change (including cascade/bubble)
-    _changeTimer?.cancel();
-    _changeTimer = Timer(Duration(seconds: 1), _saveNote);
+    _scheduleAutosave();
 
     // Skip checkbox processing if we're applying checkbox cascade/bubble changes
     if (_isApplyingCheckboxChanges) return;
@@ -1999,78 +2129,90 @@ class _NoteEditorState extends State<NoteEditor>
         height: 20,
         child: CheckboxListTile(
           value: _note.locked,
-          onChanged: (checked) async {
-            Navigator.of(context).pop();
+          onChanged: _isLockQueued || _isLockRemovalQueued
+              ? null
+              : (checked) async {
+                  Navigator.of(context).pop();
 
-            if (checked == true) {
-              // Check entitlement before allowing new lock
-              final lockedNotes = await Note.get(NoteType.locked);
+                  if (checked == true) {
+                    // Check entitlement before allowing new lock
+                    final lockedNotes = await Note.get(NoteType.locked);
 
-              if (!context.mounted) return;
+                    if (!context.mounted) return;
 
-              final check = EntitlementGuard.canLockNote(
-                lockedNotes.length,
-                context.l10n,
-              );
+                    final check = EntitlementGuard.canLockNote(
+                      lockedNotes.length,
+                      context.l10n,
+                    );
 
-              if (!check.allowed) {
-                showPaywall(
-                  context,
-                  feature: GatedFeature.lockNote,
-                  customMessage: check.denialReason,
-                );
-                return;
-              }
+                    if (!check.allowed) {
+                      showPaywall(
+                        context,
+                        feature: GatedFeature.lockNote,
+                        customMessage: check.denialReason,
+                      );
+                      return;
+                    }
 
-              if (!context.mounted) {
-                snackbar(context.l10n.actionCancelled, Colors.red);
-                return;
-              }
+                    if (!context.mounted) {
+                      snackbar(context.l10n.actionCancelled, Colors.red);
+                      return;
+                    }
 
-              // Locking: show dialog to set password
-              final password = await showLockNoteDialog(context);
+                    // Locking: show dialog to set password
+                    final password = await showLockNoteDialog(context);
 
-              if (password == null || password.isEmpty) {
-                return;
-              }
+                    if (password == null || password.isEmpty) {
+                      return;
+                    }
 
-              try {
-                await _note.lock(password);
-                if (context.mounted) {
-                  snackbar(context.l10n.noteLocked, Colors.green);
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  snackbar(
-                    context.l10n.failedToLockNote(e.toString()),
-                    Colors.red,
-                  );
-                }
-              }
-            } else {
-              // Removing lock: need password to decrypt before removing lock
-              final password =
-                  _note.password ?? await showLockNoteDialog(context);
-              if (password == null || password.isEmpty) {
-                return;
-              }
-              try {
-                await _note.removeLock(password);
-                if (context.mounted) {
-                  snackbar(context.l10n.lockRemoved, Colors.green);
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  snackbar(
-                    context.l10n.failedToRemoveLock(e.toString()),
-                    Colors.red,
-                  );
-                }
-              }
-            }
-            setState(() {});
-          },
-          title: Text(context.l10n.locked),
+                    try {
+                      await _enqueueLock(password);
+                      if (context.mounted) {
+                        snackbar(context.l10n.noteLocked, Colors.green);
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        snackbar(
+                          context.l10n.failedToLockNote(e.toString()),
+                          Colors.red,
+                        );
+                      }
+                    }
+                  } else {
+                    // Removing lock: need password to decrypt before removing lock
+                    final password =
+                        _note.password ?? await showLockNoteDialog(context);
+                    if (password == null || password.isEmpty) {
+                      return;
+                    }
+                    try {
+                      await _enqueueLockRemoval(password);
+                      if (context.mounted) {
+                        snackbar(context.l10n.lockRemoved, Colors.green);
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        snackbar(
+                          context.l10n.failedToRemoveLock(e.toString()),
+                          Colors.red,
+                        );
+                      }
+                    }
+                  }
+                  if (mounted) setState(() {});
+                },
+          title: Row(
+            children: [
+              Expanded(child: Text(context.l10n.locked)),
+              if (_isLockQueued || _isLockRemovalQueued)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
         ),
       ),
       PopupMenuDivider(),
@@ -2166,4 +2308,20 @@ class _NoteEditorState extends State<NoteEditor>
       ),
     ];
   }
+}
+
+class _NoteEditorSaveSnapshot {
+  final String title;
+  final String content;
+  final String plainText;
+  final String bodyPlainText;
+
+  const _NoteEditorSaveSnapshot({
+    required this.title,
+    required this.content,
+    required this.plainText,
+    required this.bodyPlainText,
+  });
+
+  bool get isEmpty => title.isEmpty && bodyPlainText.isEmpty;
 }

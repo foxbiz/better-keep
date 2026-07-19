@@ -9,6 +9,7 @@ import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_image.dart';
+import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
@@ -32,6 +33,52 @@ class NoteCard extends StatefulWidget {
 
   const NoteCard({super.key, required this.note, required this.index});
 
+  /// Locked-note content is only revealed inside an authenticated editor.
+  /// Keeping [unlocked] in this policy interface prevents a future caller from
+  /// accidentally treating a cached PIN as permission to reveal home-card
+  /// attachments.
+  @visibleForTesting
+  static bool usesPrivateAttachmentPresentation({
+    required bool locked,
+    required bool unlocked,
+  }) => locked;
+
+  /// Recording titles are content and remain private on every locked card,
+  /// even while a cached PIN keeps the editor temporarily unlocked.
+  @visibleForTesting
+  static bool showsRecordingTitle({
+    required bool locked,
+    required bool unlocked,
+  }) => !locked;
+
+  /// Produces card-only attachment models which contain no full local path.
+  ///
+  /// The locked grid renders only [NoteImage.blurredThumbnail]. Keeping the
+  /// original source out of the grid also makes a future rendering regression
+  /// fail closed instead of revealing the full attachment.
+  @visibleForTesting
+  static List<NoteImage> privateAttachmentPresentations(Note note) => [
+    for (final image in note.images)
+      NoteImage(
+        src: '',
+        size: image.size,
+        index: image.index,
+        aspectRatio: image.aspectRatio,
+        lastModified: image.lastModified,
+        blurredThumbnail: image.blurredThumbnail,
+      ),
+    for (final (index, sketch) in note.sketches.indexed)
+      NoteImage(
+        src: '',
+        size: 0,
+        index: note.images.length + index,
+        aspectRatio:
+            '${((sketch.aspectRatio > 0 ? sketch.aspectRatio : 1.0) * 1000).round()}:1000',
+        lastModified: '',
+        blurredThumbnail: sketch.blurredThumbnail,
+      ),
+  ];
+
   /// Clear the static base64 image cache to free memory.
   static void clearImageCache() {
     _NoteCardState._base64ImageCache.clear();
@@ -39,6 +86,136 @@ class NoteCard extends StatefulWidget {
 
   @override
   State<NoteCard> createState() => _NoteCardState();
+}
+
+/// Owns the read-only document used by a note card.
+///
+/// Lock removal can change presentation access without changing the note's
+/// content bytes, so this cache must be synchronized with both values.
+@visibleForTesting
+class NoteCardBodyCache {
+  QuillController? _controller;
+
+  QuillController? get controller => _controller;
+
+  void update({required bool locked, required Document? document}) {
+    if (locked || document == null) {
+      _controller?.dispose();
+      _controller = null;
+      return;
+    }
+
+    if (_controller == null) {
+      _controller = QuillController(
+        readOnly: true,
+        document: document,
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    } else {
+      _controller!.document = document;
+    }
+  }
+
+  void dispose() {
+    _controller?.dispose();
+    _controller = null;
+  }
+}
+
+/// Compact audio presentation used by note cards.
+///
+/// A locked card exposes only the recording count. Recording titles remain
+/// available on ordinary cards and inside the authenticated editor.
+class NoteCardAudioIndicator extends StatelessWidget {
+  final String? recordingTitle;
+  final int? recordingCount;
+  final bool locked;
+  final Color foregroundColor;
+
+  const NoteCardAudioIndicator({
+    super.key,
+    this.recordingTitle,
+    this.recordingCount,
+    required this.locked,
+    required this.foregroundColor,
+  }) : assert(!locked || (recordingCount != null && recordingCount > 0));
+
+  @override
+  Widget build(BuildContext context) {
+    final label = locked
+        ? context.l10n.audioCount(recordingCount!)
+        : recordingTitle ?? context.l10n.audio;
+    final indicator = Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: foregroundColor.withAlpha(50)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.play_circle_outline, size: 16, color: foregroundColor),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 12, color: foregroundColor),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!locked) return indicator;
+    return Semantics(
+      label: context.l10n.audio,
+      excludeSemantics: true,
+      child: indicator,
+    );
+  }
+}
+
+/// Collapses protected recordings into one count badge while preserving the
+/// per-recording presentation for ordinary cards.
+class NoteCardAudioGroup extends StatelessWidget {
+  final List<NoteRecording> recordings;
+  final bool locked;
+  final Color foregroundColor;
+
+  const NoteCardAudioGroup({
+    super.key,
+    required this.recordings,
+    required this.locked,
+    required this.foregroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (recordings.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: locked
+          ? [
+              NoteCardAudioIndicator(
+                recordingCount: recordings.length,
+                locked: true,
+                foregroundColor: foregroundColor,
+              ),
+            ]
+          : [
+              for (final recording in recordings)
+                NoteCardAudioIndicator(
+                  recordingTitle: recording.title,
+                  locked: false,
+                  foregroundColor: foregroundColor,
+                ),
+            ],
+    );
+  }
 }
 
 class _NoteCardState extends State<NoteCard>
@@ -52,7 +229,8 @@ class _NoteCardState extends State<NoteCard>
   bool _isSyncingIncoming = false;
   bool _isSyncFailed = false;
   String? _syncStatus;
-  QuillController? _controller;
+  final NoteCardBodyCache _bodyCache = NoteCardBodyCache();
+  QuillController? get _controller => _bodyCache.controller;
   Timer? _noteReminderExpiration;
 
   late final AnimationController _anim;
@@ -63,6 +241,7 @@ class _NoteCardState extends State<NoteCard>
   final _scrollController = ScrollController();
 
   String? _lastContent;
+  late bool _lastLocked;
   Reminder? _lastReminder;
   int _lastMaxChars = 500;
 
@@ -143,6 +322,7 @@ class _NoteCardState extends State<NoteCard>
     final note = widget.note;
 
     _lastContent = note.content;
+    _lastLocked = note.locked;
     _lastReminder = note.reminder;
 
     // Listen for sync state changes
@@ -163,13 +343,10 @@ class _NoteCardState extends State<NoteCard>
       );
     }
 
-    if (!note.locked && doc != null) {
-      _controller = QuillController(
-        readOnly: true,
-        document: _createTruncatedDocument(doc) ?? doc,
-        selection: const TextSelection.collapsed(offset: 0),
-      );
-    }
+    _bodyCache.update(
+      locked: note.locked,
+      document: doc == null ? null : _createTruncatedDocument(doc) ?? doc,
+    );
 
     _selectionMode = selectedNotes.isNotEmpty;
     if (selectedNotes.isNotEmpty) {
@@ -202,25 +379,14 @@ class _NoteCardState extends State<NoteCard>
   void didUpdateWidget(NoteCard oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    bool contentChanged = widget.note.content != _lastContent;
-    bool reminderChanged = widget.note.reminder != _lastReminder;
+    final contentChanged = widget.note.content != _lastContent;
+    final lockedChanged = widget.note.locked != _lastLocked;
+    final reminderChanged = widget.note.reminder != _lastReminder;
 
-    if (widget.note != oldWidget.note || contentChanged) {
+    if (widget.note != oldWidget.note || contentChanged || lockedChanged) {
       _lastContent = widget.note.content;
-      // Update controller if note content changed
-      final doc = widget.note.document;
-      if (!widget.note.locked && doc != null) {
-        final truncatedDoc = _createTruncatedDocument(doc) ?? doc;
-        if (_controller == null) {
-          _controller = QuillController(
-            readOnly: true,
-            document: truncatedDoc,
-            selection: const TextSelection.collapsed(offset: 0),
-          );
-        } else {
-          _controller!.document = truncatedDoc;
-        }
-      }
+      _lastLocked = widget.note.locked;
+      _syncBodyController();
     }
 
     // Update reminder timer if needed
@@ -238,6 +404,21 @@ class _NoteCardState extends State<NoteCard>
         );
       }
     }
+  }
+
+  /// Keeps the body cache aligned with the note's privacy state.
+  ///
+  /// Lock removal mutates the existing [Note] instance, so content can remain
+  /// byte-for-byte unchanged while becoming safe to display. Conversely, a
+  /// newly locked note must immediately discard any previously rendered body.
+  void _syncBodyController() {
+    final document = widget.note.document;
+    _bodyCache.update(
+      locked: widget.note.locked,
+      document: document == null
+          ? null
+          : _createTruncatedDocument(document) ?? document,
+    );
   }
 
   void _onSyncStateChanged() {
@@ -270,7 +451,7 @@ class _NoteCardState extends State<NoteCard>
   @override
   void dispose() {
     _anim.dispose();
-    _controller?.dispose();
+    _bodyCache.dispose();
     _focusNode.dispose();
     _scrollController.dispose();
     _noteReminderExpiration?.cancel();
@@ -786,12 +967,10 @@ class _NoteCardState extends State<NoteCard>
             if (note.images.isNotEmpty || note.sketches.isNotEmpty) ...[
               Builder(
                 builder: (context) {
-                  // If note is locked, show blurred thumbnails for privacy
-                  // Always blur if forget password setting is enabled
-                  final shouldBlur =
-                      note.locked &&
-                      (!note.unlocked || AppState.forgetLockedNotePassword);
-                  if (shouldBlur) {
+                  if (NoteCard.usesPrivateAttachmentPresentation(
+                    locked: note.locked,
+                    unlocked: note.unlocked,
+                  )) {
                     return _buildLockedThumbnailGrid(note);
                   }
 
@@ -802,23 +981,18 @@ class _NoteCardState extends State<NoteCard>
                     ),
                     images: [
                       ...note.images,
-                      // Only include sketches that have a preview image
-                      ...note.sketches
-                          .where(
-                            (s) =>
-                                s.previewImage != null &&
-                                s.previewImage!.isNotEmpty,
-                          )
-                          .map(
-                            (s) => NoteImage(
-                              src: s.previewImage!,
-                              aspectRatio:
-                                  "${(s.aspectRatio > 0 ? s.aspectRatio : 1.0) * 1000 ~/ 1}:1000",
-                              size: 0,
-                              lastModified: DateTime.now().toIso8601String(),
-                              index: 0,
-                            ),
-                          ),
+                      ...note.sketches.map(
+                        (s) => NoteImage(
+                          // An empty source is rendered as the neutral
+                          // unavailable placeholder by NoteImageGrid.
+                          src: s.previewImage ?? '',
+                          aspectRatio:
+                              "${(s.aspectRatio > 0 ? s.aspectRatio : 1.0) * 1000 ~/ 1}:1000",
+                          size: 0,
+                          lastModified: DateTime.now().toIso8601String(),
+                          index: 0,
+                        ),
+                      ),
                     ],
                     onImageTap: (_) => _handleTap(),
                     maxHeight: 200,
@@ -996,34 +1170,10 @@ class _NoteCardState extends State<NoteCard>
                 ),
               ),
             SizedBox(height: 10),
-            ...note.recordings.map(
-              (recording) => Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: foregroundColor.withAlpha(50)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.play_circle_outline,
-                      size: 16,
-                      color: foregroundColor,
-                    ),
-                    SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        recording.title ?? context.l10n.audio,
-                        style: TextStyle(fontSize: 12, color: foregroundColor),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            NoteCardAudioGroup(
+              recordings: note.recordings,
+              locked: note.locked,
+              foregroundColor: foregroundColor,
             ),
             if (reminderLabelDate.isNotEmpty) ...[
               Builder(
@@ -1210,24 +1360,7 @@ class _NoteCardState extends State<NoteCard>
   /// Thumbnails are pre-generated tiny images (<1KB) that are safe to display
   /// even when note is locked - they're too low-res to reveal content.
   Widget _buildLockedThumbnailGrid(Note note) {
-    // Build the same image list as the unlocked grid
-    // Only include sketches that have a preview image
-    final images = [
-      ...note.images,
-      ...note.sketches
-          .where((s) => s.previewImage != null && s.previewImage!.isNotEmpty)
-          .map(
-            (s) => NoteImage(
-              src: s.previewImage!,
-              aspectRatio:
-                  "${(s.aspectRatio > 0 ? s.aspectRatio : 1.0) * 1000 ~/ 1}:1000",
-              size: 0,
-              lastModified: DateTime.now().toIso8601String(),
-              index: 0,
-              blurredThumbnail: s.blurredThumbnail,
-            ),
-          ),
-    ];
+    final images = NoteCard.privateAttachmentPresentations(note);
 
     // Check if any thumbnails are available
     final hasThumbnails = images.any((img) => img.blurredThumbnail != null);

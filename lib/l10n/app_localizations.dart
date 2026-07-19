@@ -150,6 +150,24 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get retry;
 
+  /// Discard an uncommitted local item
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discard;
+
+  /// Title shown when an attachment could not be committed to a note
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t add attachment'**
+  String get attachmentCommitFailedTitle;
+
+  /// Retry-or-discard explanation for an attachment commit failure
+  ///
+  /// In en, this message translates to:
+  /// **'The original file is still safe. Retry adding it, or discard it from this device.'**
+  String get attachmentCommitFailedMessage;
+
   /// Done button text
   ///
   /// In en, this message translates to:
@@ -4481,6 +4499,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio'**
   String get audio;
+
+  /// Number of protected audio attachments shown on a locked note card
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 audio} other{{count} audios}}'**
+  String audioCount(int count);
 
   /// Number of sync failures
   ///

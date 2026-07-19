@@ -6,7 +6,6 @@ import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/services/auth_service.dart';
-import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
@@ -161,7 +160,10 @@ class ExportDataService {
           for (final attachment in note.attachments) {
             try {
               // Use decrypted file reading to handle encrypted attachments
-              final fileData = await _getAttachmentDataDecrypted(attachment);
+              final fileData = await _getAttachmentDataDecrypted(
+                note,
+                attachment,
+              );
               if (fileData != null && fileData.isNotEmpty) {
                 final fileName = _getAttachmentFileName(attachment);
                 final noteFolder = 'attachments/note_${note.id}';
@@ -463,6 +465,7 @@ Exported on: ${DateTime.now().toIso8601String()}
 
   /// Get attachment data with automatic decryption for encrypted files
   Future<Uint8List?> _getAttachmentDataDecrypted(
+    Note note,
     NoteAttachment attachment,
   ) async {
     String? path;
@@ -472,6 +475,7 @@ Exported on: ${DateTime.now().toIso8601String()}
         path = attachment.image!.src;
         break;
       case AttachmentType.sketch:
+        if (attachment.sketch!.requiresLegacyMigration) return null;
         path = attachment.sketch!.previewImage;
         break;
       case AttachmentType.audio:
@@ -492,7 +496,8 @@ Exported on: ${DateTime.now().toIso8601String()}
       final fs = await fileSystem();
       if (await fs.exists(path)) {
         // Use readEncryptedBytes which automatically decrypts if needed
-        return await readEncryptedBytes(path);
+        if (note.locked && !note.unlocked) return null;
+        return await note.readAttachmentForSession(path);
       }
     } catch (e) {
       AppLogger.error('Error reading attachment file', e);

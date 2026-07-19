@@ -16,8 +16,12 @@ import 'package:better_keep/services/all_day_reminder_notification_service.dart'
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
+import 'package:better_keep/services/legacy_sketch_migration_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
+import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -35,6 +39,8 @@ import 'package:uuid/uuid.dart';
 typedef NoteEvent = ModelEvent<Note>;
 typedef NoteListener = ModelListener<Note>;
 
+enum _AttachmentSerializationPolicy { standard, lockedPinBoundary }
+
 class NoteColor {
   final Color value;
   final int count;
@@ -50,6 +56,95 @@ class NoteUnlockException implements Exception {
   String toString() => message;
 }
 
+class NoteLockRemovalException extends NoteUnlockException {
+  final Object? cause;
+
+  const NoteLockRemovalException(super.message, [this.cause]);
+
+  @override
+  String toString() => cause == null ? message : '$message: $cause';
+}
+
+class NoteLockException implements Exception {
+  final String message;
+  final Object? cause;
+
+  const NoteLockException(this.message, [this.cause]);
+
+  @override
+  String toString() => cause == null ? message : '$message: $cause';
+}
+
+class NoteRelockException implements Exception {
+  final String message;
+  final Object? cause;
+
+  const NoteRelockException(this.message, [this.cause]);
+
+  @override
+  String toString() => cause == null ? message : '$message: $cause';
+}
+
+class NoteSketchSaveException implements Exception {
+  final String message;
+  final Object? cause;
+
+  const NoteSketchSaveException(this.message, [this.cause]);
+
+  @override
+  String toString() => cause == null ? message : '$message: $cause';
+}
+
+enum NoteAttachmentCommitFailure {
+  authentication,
+  sourceUnavailable,
+  protection,
+  verification,
+  persistence,
+}
+
+class NoteAttachmentCommitException implements Exception {
+  final NoteAttachmentCommitFailure failure;
+  final String message;
+  final Object? cause;
+
+  const NoteAttachmentCommitException(this.failure, this.message, [this.cause]);
+
+  @override
+  String toString() => cause == null ? message : '$message: $cause';
+}
+
+@immutable
+class _ProtectedNoteUnlockState {
+  final String? content;
+  final bool locked;
+  final bool unlocked;
+  final String? password;
+
+  const _ProtectedNoteUnlockState({
+    required this.content,
+    required this.locked,
+    required this.unlocked,
+    required this.password,
+  });
+
+  factory _ProtectedNoteUnlockState.capture(Note note) {
+    return _ProtectedNoteUnlockState(
+      content: note.content,
+      locked: note._locked,
+      unlocked: note._unlocked,
+      password: note._password,
+    );
+  }
+
+  bool matches(Note note) {
+    return note.content == content &&
+        note._locked == locked &&
+        note._unlocked == unlocked &&
+        note._password == password;
+  }
+}
+
 extension NoteEventData on NoteEvent {
   Note get note => payload;
 }
@@ -60,6 +155,63 @@ class Note extends BaseModel<Note> {
   static final ModelSchema<Note> _schema = _createSchema();
   static const model = "note";
   static const decryptionFailedContent = '{"decryption_failed": true}';
+
+  @visibleForTesting
+  static NoteLockFileOperations? lockFileOperationsOverride;
+
+  @visibleForTesting
+  static void Function(Note note, bool wasNew)? lockCommittedNotifierOverride;
+
+  /// Pauses a lock after its detached row and journal are ready, but before the
+  /// optimistic database transaction starts.
+  @visibleForTesting
+  static Future<void> Function(Note note)? lockBeforeCommitOverride;
+
+  @visibleForTesting
+  static Future<void> Function(Note note)? lockRemovalBeforeCommitOverride;
+
+  @visibleForTesting
+  static void Function(Note note)? lockRemovalCommittedNotifierOverride;
+
+  @visibleForTesting
+  static Future<void> Function()? legacyMigrationSyncTriggerOverride;
+
+  @visibleForTesting
+  static Future<void> Function()? protectedAttachmentRepairSyncTriggerOverride;
+
+  @visibleForTesting
+  static Future<String> Function(String content, String password)?
+  pinContentEncryptOverride;
+
+  @visibleForTesting
+  static Future<String> Function(String content, String password)?
+  pinContentDecryptOverride;
+
+  @visibleForTesting
+  static Future<Uint8List> Function(Uint8List bytes, String password)?
+  pinAttachmentDecryptOverride;
+
+  @visibleForTesting
+  static Future<void> Function(Note note, String password)?
+  unlockPostAuthenticationOverride;
+
+  @visibleForTesting
+  static LocalSketchMetadataDecryptor? localSketchMetadataDecryptOverride;
+
+  @visibleForTesting
+  static LocalSketchMetadataEncryptor? localSketchMetadataEncryptOverride;
+
+  @visibleForTesting
+  static NewAttachmentTransactionJournal? newAttachmentJournalOverride;
+
+  @visibleForTesting
+  static AttachmentSessionRead? newAttachmentReadOverride;
+
+  @visibleForTesting
+  static AttachmentSessionWrite? newAttachmentWriteOverride;
+
+  @visibleForTesting
+  static void Function()? syncTriggerOverride;
 
   bool _locked;
   bool pinned;
@@ -77,6 +229,8 @@ class Note extends BaseModel<Note> {
   DateTime? createdAt;
   DateTime? updatedAt;
   List<NoteAttachment> attachments;
+
+  final _mutationQueue = _AsyncMutationQueue();
 
   bool _unlocked = false;
 
@@ -133,12 +287,88 @@ class Note extends BaseModel<Note> {
   bool get unlocked => _unlocked;
   String? get password => _password;
 
-  /// Clears the cached password from memory.
-  /// The note remains locked but will require the password to be entered again
-  /// to unlock it. This is useful for security when leaving the note editor.
-  void clearPassword() {
-    _password = null;
-    _unlocked = false;
+  /// Restores PIN-protected in-memory content and clears the cached password.
+  ///
+  /// The transition is atomic and throws [NoteRelockException] without clearing
+  /// the PIN when encryption, verification, or the optimistic state guard fails.
+  Future<void> clearPassword() =>
+      _enqueueMutation(_clearPasswordWithinMutation);
+
+  Future<void> _clearPasswordWithinMutation() async {
+    if (!_locked) {
+      _password = null;
+      _unlocked = false;
+      return;
+    }
+
+    if (!_unlocked) {
+      _clearPlaintextBodyCaches();
+      _password = null;
+      return;
+    }
+
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final password = _password;
+      if (password == null || password.isEmpty) {
+        throw const NoteRelockException(
+          'Cannot forget the PIN while the locked note is unprotected',
+        );
+      }
+
+      final plainContent = content ?? '';
+      final plainTextSnapshot = plainText;
+      late final String protectedContent;
+      late final String verifiedContent;
+      try {
+        protectedContent = await _encryptPinContent(plainContent, password);
+        verifiedContent = await _decryptPinContent(protectedContent, password);
+      } catch (error) {
+        throw NoteRelockException(
+          'Failed to restore protected note content',
+          error,
+        );
+      }
+
+      if (verifiedContent != plainContent) {
+        throw const NoteRelockException(
+          'Protected note content failed verification',
+        );
+      }
+
+      final stateIsUnchanged =
+          _locked &&
+          _unlocked &&
+          _password == password &&
+          content == plainContent &&
+          plainText == plainTextSnapshot;
+      if (!stateIsUnchanged) {
+        if (attempt == 0) continue;
+        throw const NoteRelockException(
+          'The note changed while its PIN was being forgotten',
+        );
+      }
+
+      content = protectedContent;
+      _clearPlaintextBodyCaches();
+      _clearSketchStrokes(attachments);
+      _password = null;
+      _unlocked = false;
+      return;
+    }
+  }
+
+  void _clearPlaintextBodyCaches() {
+    plainText = '';
+    _cachedCheckboxCount = null;
+    _lastContentForCheckbox = null;
+  }
+
+  static Future<String> _encryptPinContent(String content, String password) {
+    return (pinContentEncryptOverride ?? encrypt)(content, password);
+  }
+
+  static Future<String> _decryptPinContent(String content, String password) {
+    return (pinContentDecryptOverride ?? decrypt)(content, password);
   }
 
   /// Returns true if the note has any checkboxes
@@ -556,6 +786,10 @@ class Note extends BaseModel<Note> {
       if (attachment.type == AttachmentType.sketch &&
           attachment.sketch != null &&
           attachment.sketch!.hasEncryptedMetadata) {
+        // Local attachment encryption is not a substitute for the note PIN.
+        // Locked sketches keep this deprecated value opaque until the PIN has
+        // authenticated the migration that removes or re-protects it.
+        if (_locked) continue;
         try {
           final decryptedMetadata = await localEncryption.decryptString(
             attachment.sketch!.encryptedMetadata!,
@@ -574,6 +808,7 @@ class Note extends BaseModel<Note> {
             orElse: () => PagePattern.blank,
           );
           attachment.sketch!.encryptedMetadata = null;
+          attachment.sketch!.markStrokesHydrated();
         } catch (e) {
           AppLogger.error('Error decrypting sketch metadata', e);
         }
@@ -592,7 +827,12 @@ class Note extends BaseModel<Note> {
     final track =
         await syncTrack ?? NoteSyncTrack(localId: id!, action: action);
     await track.setAction(action);
-    NoteSyncService().sync();
+    final triggerSync = syncTriggerOverride;
+    if (triggerSync != null) {
+      triggerSync();
+    } else {
+      NoteSyncService().sync();
+    }
   }
 
   @override
@@ -622,236 +862,1046 @@ class Note extends BaseModel<Note> {
     final track =
         await syncTrack ?? NoteSyncTrack(localId: id!, action: action);
     await track.setAction(action);
-    NoteSyncService().sync();
+    final triggerSync = syncTriggerOverride;
+    if (triggerSync != null) {
+      triggerSync();
+    } else {
+      NoteSyncService().sync();
+    }
   }
 
-  Future<void> lock(String password) async {
+  /// Password-protects the note and all locally referenced source files.
+  ///
+  /// The transition is fail-closed: [NoteLockException] is thrown unless all
+  /// required files are staged, verified, and committed atomically.
+  Future<void> lock(String password) =>
+      _enqueueMutation(() => _lockWithinMutation(password));
+
+  Future<void> _lockWithinMutation(String password) async {
     if (_locked) {
       return;
     }
 
+    if (password.isEmpty) {
+      throw const NoteLockException('A PIN is required to lock this note');
+    }
+
+    final stateFingerprint = _NoteLockStateFingerprint.capture(this);
+    final authenticatedContent = content ?? '';
+    final authenticatedPlainText = plainText;
+    final originalId = id;
+    final wasNew = originalId == null;
+    Map<String, Object?>? expectedRow;
+    if (!wasNew) {
+      late final List<Map<String, Object?>> rows;
+      try {
+        rows = await AppState.db.query(
+          model,
+          where: 'id = ?',
+          whereArgs: [originalId],
+          limit: 1,
+        );
+      } catch (error) {
+        throw NoteLockException(
+          'Unable to read the note before locking',
+          error,
+        );
+      }
+      if (rows.isEmpty) {
+        throw const NoteLockException(
+          'The note no longer exists locally; reload it before locking',
+        );
+      }
+      expectedRow = Map<String, Object?>.from(rows.single);
+    }
+
+    late final NoteLockFileOperations operations;
+    late final NoteLockJournal journal;
     try {
-      final encryptedContent = await encrypt(content ?? '', password);
-      content = encryptedContent;
+      operations =
+          lockFileOperationsOverride ?? await NoteLockFileOperations.platform();
+      journal = NoteLockJournal(await AppState.prefs);
+    } catch (error) {
+      throw NoteLockException(
+        'Unable to initialize protected file storage',
+        error,
+      );
+    }
+
+    final noteId = originalId ?? DateTime.now().millisecondsSinceEpoch;
+    final transactionService = NoteLockTransactionService(operations);
+    NoteLockJournalRecord? activeRecord;
+    var databaseCommitted = false;
+
+    try {
+      final encryptedContent = await encrypt(authenticatedContent, password);
+      final workingAttachments = _deepCopyAttachments(attachments);
+
+      // Thumbnails are optional presentation data. Failure leaves a locked-card
+      // placeholder but must not weaken the source-file transaction.
+      await _generateMissingAttachmentThumbnails(workingAttachments);
+      final preparation = await transactionService.prepare(
+        noteId: noteId,
+        attachments: workingAttachments,
+        password: password,
+        journal: journal,
+      );
+      activeRecord = preparation.journalRecord;
+
+      preparation.apply(workingAttachments);
+      _clearSketchStrokes(workingAttachments);
+      final proposedUpdatedAt = DateTime.now();
+      final proposedCreatedAt =
+          createdAt ??
+          (wasNew
+              ? proposedUpdatedAt
+              : DateTime.tryParse(
+                  expectedRow?['created_at']?.toString() ?? '',
+                ));
+      final detached = Note(
+        id: noteId,
+        title: title,
+        labels: labels,
+        content: encryptedContent,
+        reminder: reminder,
+        plainText: '',
+        createdAt: proposedCreatedAt,
+        updatedAt: proposedUpdatedAt,
+        locked: true,
+        pinned: pinned,
+        trashed: trashed,
+        archived: archived,
+        readOnly: readOnly,
+        completed: completed,
+        color: color,
+        attachments: workingAttachments,
+      );
+      detached._password = password;
+      detached._unlocked = false;
+
+      final row = await detached.toJsonAsync();
+      row['id'] = noteId;
+      final attachmentsValue = row['attachments'] as String;
+      activeRecord = activeRecord.readyForCommit(attachmentsValue);
+      await journal.put(activeRecord);
+
+      await lockBeforeCommitOverride?.call(this);
+      if (!stateFingerprint.matches(this)) {
+        throw StateError(
+          'The note changed in memory while it was being locked; retry the lock',
+        );
+      }
+
+      await _commitLockTransaction(
+        noteId: noteId,
+        row: row,
+        expectedRow: expectedRow,
+        wasNew: wasNew,
+        replacements: activeRecord.replacements,
+      );
+      databaseCommitted = true;
+
+      // Publish the protected state only after SQLite and file tracking commit.
+      // No await belongs in this block: observers must never see a partial
+      // in-memory transition.
+      id = noteId;
+      if (!_publishAttachments(attachments, workingAttachments)) {
+        attachments = workingAttachments;
+      }
+      // Supplying the PIN authenticates the editor's current process session.
+      // SQLite and the canonical attachment files remain protected, while the
+      // live model keeps plaintext content so subsequent queued edits can be
+      // serialized safely with the cached PIN.
+      content = authenticatedContent;
+      plainText = authenticatedPlainText;
       _password = password;
       _locked = true;
-      _unlocked = false;
+      _unlocked = true;
+      updatedAt = proposedUpdatedAt;
+      createdAt = proposedCreatedAt;
+    } catch (error, stackTrace) {
+      if (!databaseCommitted && activeRecord != null) {
+        try {
+          final retainedPaths =
+              await NoteFileReferenceService.databaseReferencedLocalPaths(
+                AppState.db,
+              );
+          final cleaned = await transactionService.cleanupStaged(
+            activeRecord,
+            retainedPaths: retainedPaths,
+          );
+          if (cleaned) {
+            await journal.remove(activeRecord.transactionId);
+          }
+        } catch (cleanupError, cleanupStackTrace) {
+          AppLogger.error(
+            'Failed to safely clear rolled-back note-lock files',
+            cleanupError,
+            cleanupStackTrace,
+          );
+        }
+      }
 
-      await _generateMissingThumbnails();
-      await _encryptSketchData(password);
-      await _encryptAttachments(password);
-      await save();
-    } catch (e) {
-      AppLogger.log("Error locking note: $e");
+      AppLogger.error('Error locking note', error, stackTrace);
+      if (error is NoteLockException) rethrow;
+      throw NoteLockException('Failed to lock note', error);
+    }
+
+    final committedNotifier = lockCommittedNotifierOverride;
+    if (committedNotifier != null) {
+      committedNotifier(this, wasNew);
+    } else {
+      notify(wasNew ? 'created' : 'updated');
+    }
+
+    // The committed note references only verified encrypted copies. Cleanup is
+    // journaled and may safely continue on the next startup if deletion fails.
+    try {
+      final retainedPaths =
+          await NoteFileReferenceService.databaseReferencedLocalPaths(
+            AppState.db,
+          );
+      final cleaned = await transactionService.cleanupOriginals(
+        activeRecord,
+        retainedPaths: retainedPaths,
+      );
+      if (cleaned) {
+        await journal.remove(activeRecord.transactionId);
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Locked note committed; original-file cleanup will retry at startup',
+        error,
+        stackTrace,
+      );
     }
   }
 
-  Future<void> unlock(String password) async {
+  Future<void> _commitLockTransaction({
+    required int noteId,
+    required Map<String, Object?> row,
+    required Map<String, Object?>? expectedRow,
+    required bool wasNew,
+    required List<NoteLockFileReplacement> replacements,
+  }) async {
+    await AppState.db.transaction((transaction) async {
+      if (wasNew) {
+        final existing = await transaction.query(
+          model,
+          columns: ['id'],
+          where: 'id = ?',
+          whereArgs: [noteId],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) {
+          throw StateError('A note with this ID was created concurrently');
+        }
+        await transaction.insert(model, row);
+      } else {
+        final currentRows = await transaction.query(
+          model,
+          where: 'id = ?',
+          whereArgs: [noteId],
+          limit: 1,
+        );
+        if (currentRows.isEmpty ||
+            !mapEquals(
+              Map<String, Object?>.from(currentRows.single),
+              expectedRow,
+            )) {
+          throw StateError(
+            'The note changed while it was being locked; reload and retry',
+          );
+        }
+        final updated = await transaction.update(
+          model,
+          row,
+          where: 'id = ?',
+          whereArgs: [noteId],
+        );
+        if (updated != 1) {
+          throw StateError('The locked note could not be persisted');
+        }
+      }
+
+      for (final replacement in replacements) {
+        final oldPath = replacement.oldPath;
+        if (oldPath == null ||
+            oldPath.isEmpty ||
+            oldPath.startsWith('data:') ||
+            oldPath.startsWith('http://') ||
+            oldPath.startsWith('https://')) {
+          continue;
+        }
+        await transaction.rawUpdate(
+          '''
+          UPDATE file_sync_track
+          SET local_path = ?, content_hash = NULL
+          WHERE note_id = ? AND local_path = ?
+          ''',
+          [replacement.newPath, noteId, oldPath],
+        );
+      }
+    });
+  }
+
+  Future<void> unlock(String password) =>
+      _enqueueMutation(() => _unlockWithinMutation(password));
+
+  Future<void> _unlockWithinMutation(String password) async {
     if (!_locked || _unlocked) {
       return;
     }
 
+    final protectedState = _ProtectedNoteUnlockState.capture(this);
+    late final String decryptedContent;
     try {
-      jsonDecode(content ?? '');
-      try {
-        await _decryptAttachments(password);
-        await _decryptSketchData(password);
-      } catch (e) {
-        AppLogger.log("Error decrypting attachments: $e");
-        throw const NoteUnlockException('Incorrect PIN or corrupted note data');
-      }
-      _unlocked = true;
-      _password = password;
-      return;
-    } catch (e) {
-      // Continue to decryption
-    }
-
-    try {
-      final decryptedContent = await decrypt(content ?? '', password);
+      decryptedContent = await _decryptPinContent(content ?? '', password);
       if (decryptedContent.isEmpty && content != null && content!.isNotEmpty) {
         throw const NoteUnlockException('Decryption produced empty content');
       }
-
-      _unlocked = true;
-      _password = password;
-      content = decryptedContent;
-
-      await _decryptAttachments(password);
-      await _decryptSketchData(password);
     } on FormatException {
       throw const NoteUnlockException('Incorrect PIN or corrupted note data');
-    } catch (e) {
-      throw NoteUnlockException('Failed to unlock note: $e');
+    } on NoteUnlockException {
+      rethrow;
+    } catch (error) {
+      throw NoteUnlockException('Failed to unlock note: $error');
+    }
+
+    if (!protectedState.matches(this) ||
+        !protectedState.locked ||
+        protectedState.unlocked) {
+      throw const NoteUnlockException(
+        'The protected note changed while it was being unlocked',
+      );
+    }
+
+    // Publish the authenticated session without an asynchronous gap. From this
+    // point onward any save sees both plaintext content and the PIN required to
+    // protect its serialized copy.
+    content = decryptedContent;
+    _password = password;
+    _unlocked = true;
+
+    await _runPostUnlockBestEffort(password);
+  }
+
+  Future<void> _runPostUnlockBestEffort(String password) async {
+    try {
+      final override = unlockPostAuthenticationOverride;
+      if (override != null) {
+        await override(this, password);
+        return;
+      }
+
+      var migrationResult = const LegacySketchMigrationResult(
+        status: LegacySketchMigrationStatus.notNeeded,
+      );
+      if (id != null) {
+        migrationResult = await _migrateLegacySketchesAfterUnlock(password);
+      }
+
+      try {
+        await _repairExposedLockedAttachmentsAfterUnlock(password);
+      } catch (error, stackTrace) {
+        // Authentication succeeded, so do not deny note access merely because
+        // an older exposed canonical file could not be replaced yet. The
+        // originals and journal remain available for an idempotent retry.
+        AppLogger.error(
+          'Protected attachment repair was deferred for note $id',
+          error,
+          stackTrace,
+        );
+      }
+
+      await SketchPreviewRepairService.repairAfterUnlock(this);
+      if (migrationResult.shouldTriggerSync) {
+        _triggerLegacyMigrationSyncBestEffort();
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Post-unlock preparation was deferred for note $id',
+        error,
+        stackTrace,
+      );
     }
   }
 
-  Future<void> removeLock(String password) async {
-    if (!_locked) {
+  Future<void> _repairExposedLockedAttachmentsAfterUnlock(
+    String password,
+  ) async {
+    final noteId = id;
+    if (noteId == null || !_locked || !_unlocked || _password != password) {
       return;
     }
 
-    // First unlock the note if not already unlocked
-    if (!_unlocked) {
-      await unlock(password);
+    final operations =
+        lockFileOperationsOverride ?? await NoteLockFileOperations.platform();
+    if (!await _hasExposedCanonicalAttachment(operations)) return;
+
+    final rows = await AppState.db.query(
+      model,
+      where: 'id = ?',
+      whereArgs: [noteId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw const NoteUnlockException(
+        'The authenticated note no longer exists locally',
+      );
     }
+    final expectedRow = Map<String, Object?>.from(rows.single);
+    final stateFingerprint = _NoteLockStateFingerprint.capture(this);
+    final workingAttachments = _deepCopyAttachments(attachments);
+    final journal = NoteLockJournal(await AppState.prefs);
+    final transactionService = NoteLockTransactionService(operations);
+    NoteLockJournalRecord? activeRecord;
+    var databaseCommitted = false;
 
-    // Now permanently remove the lock
-    _locked = false;
-    _unlocked = false;
-    _password = null;
+    try {
+      final preparation = await transactionService.prepare(
+        noteId: noteId,
+        attachments: workingAttachments,
+        password: password,
+        journal: journal,
+      );
+      activeRecord = preparation.journalRecord;
+      preparation.apply(workingAttachments);
 
-    await save();
-  }
+      final detached = Note(locked: true, attachments: workingAttachments);
+      final attachmentsValue = await detached
+          .serializeAttachmentsForLocalStorage();
+      activeRecord = activeRecord.readyForCommit(attachmentsValue);
+      await journal.put(activeRecord);
 
-  Future<void> _encryptAttachments(String password) async {
-    final fs = await fileSystem();
-
-    for (final attachment in attachments) {
-      final paths = _getAttachmentPaths(attachment);
-
-      for (final path in paths) {
-        try {
-          if (path.isEmpty) continue;
-          if (!await fs.exists(path)) continue;
-          final data = await readEncryptedBytes(path);
-          if (isBytesPasswordEncrypted(data)) continue;
-          final encrypted = await encryptBytesWithPassword(data, password);
-          await writeEncryptedBytes(path, encrypted);
-          AppLogger.log('Encrypted attachment: $path');
-        } catch (e) {
-          AppLogger.error('Error encrypting attachment', e);
-        }
-      }
-    }
-  }
-
-  Future<void> _decryptAttachments(String password) async {
-    final fs = await fileSystem();
-
-    for (final attachment in attachments) {
-      final paths = _getAttachmentPaths(attachment);
-
-      for (final path in paths) {
-        try {
-          if (path.isEmpty) continue;
-          if (!await fs.exists(path)) continue;
-          final data = await readEncryptedBytes(path);
-          if (!isBytesPasswordEncrypted(data)) continue;
-          final decrypted = await decryptBytesWithPassword(data, password);
-          await writeEncryptedBytes(path, decrypted);
-          AppLogger.log('Decrypted attachment: $path');
-        } catch (e) {
-          AppLogger.error('Error decrypting attachment', e);
-        }
-      }
-    }
-  }
-
-  Future<void> _migrateSketchesToStrokesFiles() async {
-    final fs = await fileSystem();
-    final documentsDir = await fs.documentDir;
-
-    for (final attachment in attachments) {
-      if (attachment.type != AttachmentType.sketch) continue;
-
-      final sketch = attachment.sketch;
-      if (sketch == null) continue;
-
-      // Skip if already has strokes file
-      if (sketch.hasStrokesFile) continue;
-
-      try {
-        // Create strokes file
-        final strokesFilePath = path.join(documentsDir, '${Uuid().v4()}.json');
-
-        final strokesJson = json.encode(sketch.toStrokesFileJson());
-        await writeEncryptedBytes(
-          strokesFilePath,
-          Uint8List.fromList(utf8.encode(strokesJson)),
+      if (!stateFingerprint.matches(this) ||
+          !_locked ||
+          !_unlocked ||
+          _password != password) {
+        throw const NoteUnlockException(
+          'The note changed while its protected attachments were repaired',
         );
-
-        sketch.strokesFilePath = strokesFilePath;
-        AppLogger.log('Migrated sketch to strokes file: $strokesFilePath');
-      } catch (e) {
-        AppLogger.error('Error migrating sketch to strokes file', e);
       }
+
+      final proposedUpdatedAt = DateTime.now();
+      await _commitProtectedAttachmentRepair(
+        noteId: noteId,
+        expectedRow: expectedRow,
+        attachments: attachmentsValue,
+        updatedAt: proposedUpdatedAt,
+        replacements: activeRecord.replacements,
+      );
+      databaseCommitted = true;
+
+      if (!_publishAttachments(attachments, workingAttachments)) {
+        attachments = workingAttachments;
+      }
+      updatedAt = proposedUpdatedAt;
+      notify('updated', false);
+      final syncTrigger = protectedAttachmentRepairSyncTriggerOverride;
+      unawaited(syncTrigger != null ? syncTrigger() : NoteSyncService().sync());
+    } catch (_) {
+      if (!databaseCommitted && activeRecord != null) {
+        try {
+          final retainedPaths =
+              await NoteFileReferenceService.databaseReferencedLocalPaths(
+                AppState.db,
+              );
+          final cleaned = await transactionService.cleanupStaged(
+            activeRecord,
+            retainedPaths: retainedPaths,
+          );
+          if (cleaned) await journal.remove(activeRecord.transactionId);
+        } catch (cleanupError, cleanupStackTrace) {
+          AppLogger.error(
+            'Failed to safely clear staged attachment-repair files',
+            cleanupError,
+            cleanupStackTrace,
+          );
+        }
+      }
+      rethrow;
+    }
+
+    try {
+      final retainedPaths =
+          await NoteFileReferenceService.databaseReferencedLocalPaths(
+            AppState.db,
+          );
+      final cleaned = await transactionService.cleanupOriginals(
+        activeRecord,
+        retainedPaths: retainedPaths,
+      );
+      if (cleaned) await journal.remove(activeRecord.transactionId);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Protected attachment repair committed; cleanup will retry at startup',
+        error,
+        stackTrace,
+      );
     }
   }
 
-  Future<void> _encryptSketchData(String password) async {
+  Future<bool> _hasExposedCanonicalAttachment(
+    NoteLockFileOperations operations,
+  ) async {
+    final sourcePaths = <String>{};
+    for (final attachment in attachments) {
+      switch (attachment.type) {
+        case AttachmentType.image:
+          sourcePaths.add(attachment.image!.src);
+        case AttachmentType.audio:
+          sourcePaths.add(attachment.recording!.src);
+        case AttachmentType.sketch:
+          final sketch = attachment.sketch!;
+          if (sketch.backgroundImage?.isNotEmpty ?? false) {
+            sourcePaths.add(sketch.backgroundImage!);
+          }
+          if (sketch.previewImage?.isNotEmpty ?? false) {
+            sourcePaths.add(sketch.previewImage!);
+          }
+          if (sketch.strokesFilePath?.isNotEmpty ?? false) {
+            sourcePaths.add(sketch.strokesFilePath!);
+          }
+      }
+    }
+
+    for (final sourcePath in sourcePaths) {
+      if (sourcePath.isEmpty ||
+          sourcePath.startsWith('http://') ||
+          sourcePath.startsWith('https://')) {
+        continue;
+      }
+      // Inline sources are readable attachment bytes stored directly inside the
+      // note row. Even when those bytes already carry an ENCP header, moving
+      // them to a canonical protected file removes the payload from SQLite.
+      if (sourcePath.startsWith('data:')) return true;
+      final resolvedPath = await operations.resolve(sourcePath);
+      if (!await operations.exists(resolvedPath)) continue;
+      if (!isBytesPasswordEncrypted(await operations.read(resolvedPath))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _commitProtectedAttachmentRepair({
+    required int noteId,
+    required Map<String, Object?> expectedRow,
+    required String attachments,
+    required DateTime updatedAt,
+    required List<NoteLockFileReplacement> replacements,
+  }) async {
+    await AppState.db.transaction((transaction) async {
+      final currentRows = await transaction.query(
+        model,
+        where: 'id = ?',
+        whereArgs: [noteId],
+        limit: 1,
+      );
+      if (currentRows.isEmpty ||
+          !mapEquals(
+            Map<String, Object?>.from(currentRows.single),
+            expectedRow,
+          )) {
+        throw StateError(
+          'The note changed while its protected attachments were repaired',
+        );
+      }
+
+      final updated = await transaction.update(
+        model,
+        {'attachments': attachments, 'updated_at': updatedAt.toIso8601String()},
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+      if (updated != 1) {
+        throw StateError('Protected attachment repair was not persisted');
+      }
+
+      for (final replacement in replacements) {
+        final oldPath = replacement.oldPath;
+        if (oldPath == null ||
+            oldPath.isEmpty ||
+            oldPath.startsWith('data:') ||
+            oldPath.startsWith('http://') ||
+            oldPath.startsWith('https://')) {
+          continue;
+        }
+        await transaction.rawUpdate(
+          '''
+          UPDATE file_sync_track
+          SET local_path = ?, content_hash = NULL
+          WHERE note_id = ? AND local_path = ?
+          ''',
+          [replacement.newPath, noteId, oldPath],
+        );
+      }
+
+      final syncRows = await transaction.query(
+        NoteSyncTrack.model,
+        where: 'local_id = ?',
+        whereArgs: [noteId],
+        limit: 1,
+      );
+      final syncTime = DateTime.now().toIso8601String();
+      if (syncRows.isEmpty) {
+        await transaction.insert(NoteSyncTrack.model, {
+          'local_id': noteId,
+          'action': SyncAction.upload.name,
+          'status': SyncStatus.pending.name,
+          'created_at': syncTime,
+          'updated_at': syncTime,
+        });
+      } else if (syncRows.single['action'] != SyncAction.delete.name) {
+        await transaction.update(
+          NoteSyncTrack.model,
+          {
+            'action': SyncAction.upload.name,
+            'status': SyncStatus.pending.name,
+            'updated_at': syncTime,
+          },
+          where: 'id = ?',
+          whereArgs: [syncRows.single['id']],
+        );
+      }
+    });
+  }
+
+  Future<LegacySketchMigrationResult> _migrateLegacySketchesAfterUnlock(
+    String password,
+  ) async {
+    try {
+      final operations =
+          lockFileOperationsOverride ?? await NoteLockFileOperations.platform();
+      final migrationResult = await LegacySketchMigrationService(
+        database: AppState.db,
+        operations: operations,
+        journal: LegacySketchMigrationJournal(await AppState.prefs),
+        localMetadataDecryptor: localSketchMetadataDecryptOverride,
+      ).migrate(noteId: id!, password: password);
+      migrationResult.applyTo(this);
+      return migrationResult;
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Legacy sketch migration was deferred for note $id',
+        error,
+        stackTrace,
+      );
+      for (final sketch in sketches.where(
+        (candidate) =>
+            candidate.hasEncryptedStrokes || candidate.hasEncryptedMetadata,
+      )) {
+        sketch.markLegacyMigrationFailed(
+          'Legacy drawing conversion was deferred',
+        );
+      }
+      return const LegacySketchMigrationResult(
+        status: LegacySketchMigrationStatus.deferred,
+      );
+    }
+  }
+
+  void _triggerLegacyMigrationSyncBestEffort() {
+    try {
+      notify('updated', false);
+      final sync = legacyMigrationSyncTriggerOverride;
+      final syncFuture = sync != null ? sync() : NoteSyncService().sync();
+      unawaited(
+        syncFuture.catchError((Object error, StackTrace stackTrace) {
+          AppLogger.error(
+            'Failed to trigger sync after legacy sketch migration for note $id',
+            error,
+            stackTrace,
+          );
+        }),
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to schedule sync after legacy sketch migration for note $id',
+        error,
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> removeLock(String password) =>
+      _enqueueMutation(() => _removeLockWithinMutation(password));
+
+  Future<void> _removeLockWithinMutation(String password) async {
+    if (!_locked) return;
+    if (password.isEmpty) {
+      throw const NoteLockRemovalException(
+        'A PIN is required to remove the note lock',
+      );
+    }
+    final noteId = id;
+    if (noteId == null) {
+      throw const NoteLockRemovalException(
+        'The note must be saved before its lock can be removed',
+      );
+    }
+
+    late final String plaintextContent;
+    if (_unlocked) {
+      final cachedPassword = _password;
+      if (cachedPassword == null || cachedPassword.isEmpty) {
+        throw const NoteLockRemovalException(
+          'The unlocked note has no authenticated PIN',
+        );
+      }
+      if (cachedPassword != password) {
+        throw const NoteLockRemovalException('Incorrect PIN');
+      }
+      plaintextContent = content ?? '';
+    } else {
+      try {
+        plaintextContent = await decrypt(content ?? '', password);
+      } catch (error) {
+        throw NoteLockRemovalException('Incorrect PIN', error);
+      }
+    }
+
+    if (sketches.any((sketch) => sketch.requiresLegacyMigration)) {
+      try {
+        final operations =
+            lockFileOperationsOverride ??
+            await NoteLockFileOperations.platform();
+        final migration = await LegacySketchMigrationService(
+          database: AppState.db,
+          operations: operations,
+          journal: LegacySketchMigrationJournal(await AppState.prefs),
+          localMetadataDecryptor: localSketchMetadataDecryptOverride,
+        ).migrate(noteId: noteId, password: password);
+        migration.applyTo(this);
+        if (migration.shouldTriggerSync) {
+          notify('updated', false);
+          final sync = legacyMigrationSyncTriggerOverride;
+          if (sync != null) {
+            unawaited(sync());
+          } else {
+            unawaited(NoteSyncService().sync());
+          }
+        }
+      } catch (error) {
+        throw NoteLockRemovalException(
+          'The protected legacy drawing could not be recovered',
+          error,
+        );
+      }
+    }
+    if (sketches.any((sketch) => sketch.requiresLegacyMigration)) {
+      throw const NoteLockRemovalException(
+        'The lock cannot be removed until the protected legacy drawing is recovered',
+      );
+    }
+
+    late final Map<String, Object?> expectedRow;
+    try {
+      final rows = await AppState.db.query(
+        model,
+        where: 'id = ?',
+        whereArgs: [noteId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw const NoteLockRemovalException(
+          'The note no longer exists locally; reload it before removing the lock',
+        );
+      }
+      expectedRow = Map<String, Object?>.from(rows.single);
+    } on NoteLockRemovalException {
+      rethrow;
+    } catch (error) {
+      throw NoteLockRemovalException(
+        'Unable to read the note before removing its lock',
+        error,
+      );
+    }
+
+    final stateFingerprint = _NoteLockStateFingerprint.capture(this);
+    late final NoteLockFileOperations operations;
+    late final NoteLockRemovalJournal journal;
+    try {
+      operations =
+          lockFileOperationsOverride ?? await NoteLockFileOperations.platform();
+      journal = NoteLockRemovalJournal(await AppState.prefs);
+    } catch (error) {
+      throw NoteLockRemovalException(
+        'Unable to initialize lock-removal storage',
+        error,
+      );
+    }
+
+    final transactionService = NoteLockRemovalTransactionService(operations);
+    NoteLockRemovalJournalRecord? activeRecord;
+    var databaseCommitted = false;
+
+    try {
+      final workingAttachments = _deepCopyAttachments(attachments);
+      final preparation = await transactionService.prepare(
+        noteId: noteId,
+        attachments: workingAttachments,
+        password: password,
+        journal: journal,
+      );
+      activeRecord = preparation.journalRecord;
+      preparation.apply(workingAttachments);
+
+      final now = DateTime.now();
+      final proposedUpdatedAt = updatedAt != null && !now.isAfter(updatedAt!)
+          ? updatedAt!.add(const Duration(microseconds: 1))
+          : now;
+      final detached = Note(
+        id: noteId,
+        title: title,
+        labels: labels,
+        content: plaintextContent,
+        reminder: reminder,
+        plainText: plainText,
+        createdAt: createdAt,
+        updatedAt: proposedUpdatedAt,
+        locked: false,
+        pinned: pinned,
+        trashed: trashed,
+        archived: archived,
+        readOnly: readOnly,
+        completed: completed,
+        color: color,
+        attachments: workingAttachments,
+      );
+      final row = await detached.toJsonAsync();
+      row['id'] = noteId;
+      activeRecord = activeRecord.readyForCommit(row['attachments'] as String);
+      await journal.put(activeRecord);
+
+      await lockRemovalBeforeCommitOverride?.call(this);
+      if (!stateFingerprint.matches(this)) {
+        throw StateError(
+          'The note changed in memory while its lock was being removed',
+        );
+      }
+
+      await _commitLockRemovalTransaction(
+        noteId: noteId,
+        row: row,
+        expectedRow: expectedRow,
+        replacements: activeRecord.replacements,
+      );
+      databaseCommitted = true;
+
+      if (!_publishAttachments(attachments, workingAttachments)) {
+        attachments = workingAttachments;
+      }
+      content = plaintextContent;
+      plainText = detached.plainText;
+      _locked = false;
+      _unlocked = false;
+      _password = null;
+      updatedAt = proposedUpdatedAt;
+    } catch (error, stackTrace) {
+      if (!databaseCommitted && activeRecord != null) {
+        try {
+          final retainedPaths =
+              await NoteFileReferenceService.databaseReferencedLocalPaths(
+                AppState.db,
+              );
+          final cleaned = await transactionService.cleanupStaged(
+            activeRecord,
+            retainedPaths: retainedPaths,
+          );
+          if (cleaned) {
+            await journal.remove(activeRecord.transactionId);
+          }
+        } catch (cleanupError, cleanupStackTrace) {
+          AppLogger.error(
+            'Failed to safely clear rolled-back lock-removal files',
+            cleanupError,
+            cleanupStackTrace,
+          );
+        }
+      }
+      AppLogger.error('Error removing note lock', error, stackTrace);
+      if (error is NoteLockRemovalException) rethrow;
+      throw NoteLockRemovalException('Failed to remove note lock', error);
+    }
+
+    final committedNotifier = lockRemovalCommittedNotifierOverride;
+    if (committedNotifier != null) {
+      committedNotifier(this);
+    } else {
+      notify('updated', false);
+      unawaited(NoteSyncService().sync());
+    }
+
+    try {
+      final retainedPaths =
+          await NoteFileReferenceService.databaseReferencedLocalPaths(
+            AppState.db,
+          );
+      final cleaned = await transactionService.cleanupOriginals(
+        activeRecord,
+        retainedPaths: retainedPaths,
+      );
+      if (cleaned) {
+        await journal.remove(activeRecord.transactionId);
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Note lock removed; original-file cleanup will retry at startup',
+        error,
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _commitLockRemovalTransaction({
+    required int noteId,
+    required Map<String, Object?> row,
+    required Map<String, Object?> expectedRow,
+    required List<NoteLockFileReplacement> replacements,
+  }) async {
+    await AppState.db.transaction((transaction) async {
+      final currentRows = await transaction.query(
+        model,
+        where: 'id = ?',
+        whereArgs: [noteId],
+        limit: 1,
+      );
+      if (currentRows.isEmpty ||
+          !mapEquals(
+            Map<String, Object?>.from(currentRows.single),
+            expectedRow,
+          )) {
+        throw StateError(
+          'The note changed while its lock was being removed; reload and retry',
+        );
+      }
+      final updated = await transaction.update(
+        model,
+        row,
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+      if (updated != 1) {
+        throw StateError('The unlocked note could not be persisted');
+      }
+
+      for (final replacement in replacements) {
+        final oldPath = replacement.oldPath;
+        if (oldPath == null ||
+            oldPath.isEmpty ||
+            oldPath.startsWith('data:') ||
+            oldPath.startsWith('http://') ||
+            oldPath.startsWith('https://')) {
+          continue;
+        }
+        await transaction.rawUpdate(
+          '''
+          UPDATE file_sync_track
+          SET local_path = ?, content_hash = NULL
+          WHERE note_id = ? AND local_path = ?
+          ''',
+          [replacement.newPath, noteId, oldPath],
+        );
+      }
+
+      final syncRows = await transaction.query(
+        NoteSyncTrack.model,
+        where: 'local_id = ?',
+        whereArgs: [noteId],
+        limit: 1,
+      );
+      final syncTime = DateTime.now().toIso8601String();
+      if (syncRows.isEmpty) {
+        await transaction.insert(NoteSyncTrack.model, {
+          'local_id': noteId,
+          'action': SyncAction.upload.name,
+          'status': SyncStatus.pending.name,
+          'created_at': syncTime,
+          'updated_at': syncTime,
+        });
+      } else if (syncRows.single['action'] != SyncAction.delete.name) {
+        await transaction.update(
+          NoteSyncTrack.model,
+          {
+            'action': SyncAction.upload.name,
+            'status': SyncStatus.pending.name,
+            'updated_at': syncTime,
+          },
+          where: 'id = ?',
+          whereArgs: [syncRows.single['id']],
+        );
+      }
+    });
+  }
+
+  Future<void> _migrateSketchesToStrokesFiles({
+    bool rewriteLoadedStrokes = false,
+  }) async {
+    final fs = await fileSystem();
+
     for (final attachment in attachments) {
       if (attachment.type != AttachmentType.sketch) continue;
 
       final sketch = attachment.sketch;
       if (sketch == null) continue;
-      if (sketch.strokes.isEmpty && !sketch.hasEncryptedStrokes) continue;
-      if (sketch.hasEncryptedStrokes) continue;
 
-      try {
-        final sensitiveData = {
-          'strokes': sketch.strokes.map((s) => s.toString()).toList(),
-          'bgColor': sketch.backgroundColor.toARGB32(),
-          'pagePattern': sketch.pagePattern.name,
-        };
-        final sensitiveJson = json.encode(sensitiveData);
-        final encrypted = await encrypt(sensitiveJson, password);
+      // The one-time converter owns this ciphertext. A normal save may
+      // preserve it, but must never reinterpret it as an empty drawing.
+      if (sketch.requiresLegacyMigration) continue;
 
-        sketch.encryptedStrokes = encrypted;
-        sketch.strokes = [];
-
-        AppLogger.log('Encrypted sketch data');
-      } catch (e) {
-        AppLogger.error('Error encrypting sketch data', e);
+      // Normal saves only migrate missing files. Locking also flushes loaded
+      // strokes so clearing memory can never discard a newer drawing state.
+      if (sketch.hasStrokesFile &&
+          (!rewriteLoadedStrokes || sketch.strokes.isEmpty)) {
+        continue;
       }
+
+      final strokesFilePath = sketch.hasStrokesFile
+          ? sketch.strokesFilePath!
+          : path.join(await fs.documentDir, '${Uuid().v4()}.json');
+
+      final strokesJson = json.encode(sketch.toStrokesFileJson());
+      await writeEncryptedBytes(
+        strokesFilePath,
+        Uint8List.fromList(utf8.encode(strokesJson)),
+      );
+
+      sketch.strokesFilePath = strokesFilePath;
+      AppLogger.log('Migrated sketch to strokes file: $strokesFilePath');
     }
   }
 
-  Future<void> _decryptSketchData(String password) async {
-    for (final attachment in attachments) {
+  static void _clearSketchStrokes(List<NoteAttachment> targetAttachments) {
+    for (final attachment in targetAttachments) {
       if (attachment.type != AttachmentType.sketch) continue;
-
       final sketch = attachment.sketch;
-      if (sketch == null || !sketch.hasEncryptedStrokes) continue;
-
-      try {
-        // Decrypt the sketch data
-        final decryptedJson = await decrypt(sketch.encryptedStrokes!, password);
-        final data = json.decode(decryptedJson);
-
-        if (data is List) {
-          sketch.strokes = data
-              .map((e) => SketchStroke.parse(e as String))
-              .toList();
-        } else if (data is Map<String, dynamic>) {
-          if (data['strokes'] != null) {
-            sketch.strokes = (data['strokes'] as List)
-                .map((e) => SketchStroke.parse(e as String))
-                .toList();
-          }
-          if (data['bgColor'] != null) {
-            sketch.backgroundColor = Color(data['bgColor'] as int);
-          }
-          if (data['pagePattern'] != null) {
-            sketch.pagePattern = PagePattern.values.firstWhere(
-              (e) => e.name == data['pagePattern'],
-              orElse: () => PagePattern.blank,
-            );
-          }
-        }
-        sketch.encryptedStrokes = null;
-        AppLogger.log('Decrypted sketch data');
-      } catch (e) {
-        AppLogger.error('Error decrypting sketch data', e);
-        rethrow; // Let unlock handle the error
-      }
+      if (sketch == null) continue;
+      sketch.strokes = [];
+      sketch.markStrokesUnhydrated();
+      sketch.encryptedStrokes = null;
     }
   }
 
-  Future<void> _generateMissingThumbnails() async {
-    final fs = await fileSystem();
+  /// Generates local-only privacy thumbnails from attachment files which are
+  /// currently readable in plaintext.
+  ///
+  /// Callers must run this before password encryption or after successful PIN
+  /// decryption. The returned value reports whether attachment metadata changed
+  /// so repair flows can persist it with an attachment-only guarded update.
+  Future<bool> generateMissingAttachmentThumbnails({
+    Future<Uint8List> Function(String path)? readBytes,
+  }) => _generateMissingAttachmentThumbnails(attachments, readBytes: readBytes);
 
-    for (final attachment in attachments) {
+  static Future<bool> _generateMissingAttachmentThumbnails(
+    List<NoteAttachment> targetAttachments, {
+    Future<Uint8List> Function(String path)? readBytes,
+  }) async {
+    final fs = await fileSystem();
+    var changed = false;
+
+    for (final attachment in targetAttachments) {
       try {
         if (attachment.type == AttachmentType.image) {
           final image = attachment.image;
@@ -860,10 +1910,11 @@ class Note extends BaseModel<Note> {
           final path = image.src;
           if (path.isEmpty || !await fs.exists(path)) continue;
 
-          final data = await readEncryptedBytes(path);
+          final data = await (readBytes ?? readEncryptedBytes)(path);
           final thumbnail = await ThumbnailGenerator.generateFromBytes(data);
           if (thumbnail != null) {
             image.blurredThumbnail = thumbnail;
+            changed = true;
             AppLogger.log('Generated thumbnail for image: $path');
           }
         } else if (attachment.type == AttachmentType.sketch) {
@@ -873,10 +1924,11 @@ class Note extends BaseModel<Note> {
           final path = sketch.previewImage;
           if (path == null || path.isEmpty || !await fs.exists(path)) continue;
 
-          final data = await readEncryptedBytes(path);
+          final data = await (readBytes ?? readEncryptedBytes)(path);
           final thumbnail = await ThumbnailGenerator.generateFromBytes(data);
           if (thumbnail != null) {
             sketch.blurredThumbnail = thumbnail;
+            changed = true;
             AppLogger.log('Generated thumbnail for sketch: $path');
           }
         }
@@ -884,6 +1936,8 @@ class Note extends BaseModel<Note> {
         AppLogger.error('Error generating thumbnail', e);
       }
     }
+
+    return changed;
   }
 
   List<String> _getAttachmentPaths(NoteAttachment attachment) {
@@ -909,27 +1963,181 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  Future<void> addImage(NoteImage image) async {
-    if (hasImage(image)) {
-      return;
+  Future<void> addImage(NoteImage image) => _enqueueMutation(() async {
+    if (hasImage(image)) return;
+    await _commitNewFileAttachment(
+      sourcePath: image.src,
+      buildAttachment: (committedPath) => NoteAttachment.image(
+        NoteImage(
+          src: committedPath,
+          size: image.size,
+          index: image.index,
+          aspectRatio: image.aspectRatio,
+          lastModified: image.lastModified,
+          blurredThumbnail: image.blurredThumbnail,
+        ),
+      ),
+      publishCommittedPath: (committedPath, attachment) {
+        image.src = committedPath;
+        attachment.image = image;
+      },
+    );
+  });
+
+  Future<void> _commitNewFileAttachment({
+    required String sourcePath,
+    required NoteAttachment Function(String committedPath) buildAttachment,
+    required void Function(String committedPath, NoteAttachment attachment)
+    publishCommittedPath,
+  }) async {
+    PreparedNewAttachmentFile? prepared;
+    NewAttachmentTransactionService? transactionService;
+    NoteAttachment? pendingAttachment;
+    var databaseCommitted = false;
+    var committedPath = sourcePath;
+
+    try {
+      if (_locked) {
+        if (!_unlocked || _password == null || _password!.isEmpty) {
+          throw const NoteAttachmentCommitException(
+            NoteAttachmentCommitFailure.authentication,
+            'Unlock the note before adding an attachment',
+          );
+        }
+        final operations =
+            lockFileOperationsOverride ??
+            await NoteLockFileOperations.platform();
+        final journal =
+            newAttachmentJournalOverride ??
+            NewAttachmentTransactionJournal(await AppState.prefs);
+        transactionService = NewAttachmentTransactionService(
+          operations: operations,
+          journal: journal,
+        );
+        prepared = await transactionService.prepare(
+          sourcePath: sourcePath,
+          readForSession: newAttachmentReadOverride ?? readAttachmentForSession,
+          writeForSession:
+              newAttachmentWriteOverride ?? writeAttachmentForSession,
+        );
+        committedPath = prepared.stagedPath;
+      }
+
+      final attachment = buildAttachment(committedPath);
+      pendingAttachment = attachment;
+      attachments.add(attachment);
+      final result = await _saveWithinMutation();
+      if (result < 0) {
+        attachments.remove(attachment);
+        throw const NoteAttachmentCommitException(
+          NoteAttachmentCommitFailure.persistence,
+          'The attachment could not be saved',
+        );
+      }
+
+      databaseCommitted = true;
+      publishCommittedPath(committedPath, attachment);
+      pendingAttachment = null;
+
+      if (prepared != null && transactionService != null) {
+        try {
+          final cleaned = await transactionService.finishCommitted(
+            prepared,
+            AppState.db,
+          );
+          if (!cleaned) {
+            AppLogger.log(
+              'Attachment committed; source cleanup deferred to startup',
+            );
+          }
+        } catch (error, stackTrace) {
+          // SQLite already owns the staged path. Retain the journal and let
+          // startup recovery perform reference-safe cleanup.
+          AppLogger.error(
+            'Attachment committed but cleanup was deferred',
+            error,
+            stackTrace,
+          );
+        }
+      }
+    } catch (error, stackTrace) {
+      if (databaseCommitted) {
+        // SQLite already owns the attachment. Never roll back or invite a
+        // duplicate retry after a post-commit in-memory/cleanup failure.
+        AppLogger.error(
+          'Attachment committed with deferred in-memory cleanup',
+          error,
+          stackTrace,
+        );
+        return;
+      }
+      if (pendingAttachment != null) {
+        attachments.remove(pendingAttachment);
+      }
+      if (prepared != null && transactionService != null) {
+        try {
+          await transactionService.rollback(prepared);
+        } catch (cleanupError, cleanupStackTrace) {
+          AppLogger.error(
+            'Failed to roll back staged attachment files',
+            cleanupError,
+            cleanupStackTrace,
+          );
+        }
+      }
+      if (error is NoteAttachmentCommitException) rethrow;
+      final failure = switch (error) {
+        NewAttachmentPreparationException(
+          failure: NewAttachmentPreparationFailure.sourceUnavailable,
+        ) =>
+          NoteAttachmentCommitFailure.sourceUnavailable,
+        NewAttachmentPreparationException(
+          failure: NewAttachmentPreparationFailure.verification,
+        ) =>
+          NoteAttachmentCommitFailure.verification,
+        NewAttachmentPreparationException() =>
+          NoteAttachmentCommitFailure.protection,
+        _ => NoteAttachmentCommitFailure.persistence,
+      };
+      AppLogger.error('Failed to commit a new attachment', error, stackTrace);
+      throw NoteAttachmentCommitException(
+        failure,
+        'The attachment could not be added safely',
+        error,
+      );
+    }
+  }
+
+  Future<void> _protectNewAttachment(NoteAttachment attachment) async {
+    if (!_locked) return;
+
+    final password = _password;
+    if (password == null || password.isEmpty) {
+      throw const NoteRelockException(
+        'Cannot add an attachment to a locked note without its cached PIN',
+      );
     }
 
-    attachments.add(NoteAttachment.image(image));
-
-    // If note is locked and unlocked, encrypt the new attachment
-    if (_locked && _unlocked && _password != null) {
-      await _encryptSingleAttachment(image.src, _password!);
+    for (final path in _getAttachmentPaths(attachment)) {
+      await _encryptSingleAttachment(path, password);
     }
-
-    await save();
   }
 
   /// Encrypts a single attachment file with the note's password.
   Future<void> _encryptSingleAttachment(String? path, String password) async {
-    if (path == null || path.isEmpty) return;
+    if (path == null || path.isEmpty) {
+      throw const NoteRelockException(
+        'A protected attachment is missing its local source path',
+      );
+    }
 
     final fs = await fileSystem();
-    if (!await fs.exists(path)) return;
+    if (!await fs.exists(path)) {
+      throw NoteRelockException(
+        'A protected attachment source is unavailable locally',
+        path,
+      );
+    }
 
     try {
       final data = await readEncryptedBytes(path);
@@ -938,8 +2146,9 @@ class Note extends BaseModel<Note> {
       final encrypted = await encryptBytesWithPassword(data, password);
       await writeEncryptedBytes(path, encrypted);
       AppLogger.log('Encrypted new attachment: $path');
-    } catch (e) {
-      AppLogger.error('Error encrypting new attachment', e);
+    } catch (error, stackTrace) {
+      AppLogger.error('Error encrypting new attachment', error, stackTrace);
+      throw NoteRelockException('Failed to protect a new attachment', error);
     }
   }
 
@@ -963,45 +2172,47 @@ class Note extends BaseModel<Note> {
     );
   }
 
-  Future<NoteAttachment> removeImage(NoteImage image) async {
-    if (!hasImage(image)) {
-      throw Exception("Image not found in note attachments");
-    }
+  Future<NoteAttachment> removeImage(NoteImage image) =>
+      _enqueueMutation(() async {
+        if (!hasImage(image)) {
+          throw Exception("Image not found in note attachments");
+        }
 
-    final removed = attachments.firstWhere(
-      (attachment) =>
-          attachment.type == AttachmentType.image && attachment.image == image,
-    );
-    attachments.remove(removed);
-    await save();
-    return removed;
-  }
+        final removed = attachments.firstWhere(
+          (attachment) =>
+              attachment.type == AttachmentType.image &&
+              attachment.image == image,
+        );
+        attachments.remove(removed);
+        await _saveWithinMutation();
+        return removed;
+      });
 
-  Future<void> addSketch(SketchData sketch) async {
-    if (hasSketch(sketch)) {
-      return;
-    }
+  Future<void> addSketch(SketchData sketch) => _enqueueMutation(() async {
+    if (hasSketch(sketch)) return;
 
-    String previewImageSrc = sketch.previewImage ?? '';
-
+    final previewImageSrc = sketch.previewImage ?? '';
     if (previewImageSrc.isEmpty) {
       snackbar("Error saving sketch, no preview available", Colors.red);
       AppLogger.error('Error adding sketch to note: no preview image');
       return;
     }
 
-    attachments.add(NoteAttachment.sketch(sketch));
-
-    // If note is locked and unlocked, encrypt the new attachment
-    if (_locked && _unlocked && _password != null) {
-      await _encryptSingleAttachment(sketch.previewImage, _password!);
-      if (sketch.backgroundImage != null) {
-        await _encryptSingleAttachment(sketch.backgroundImage, _password!);
+    final attachment = NoteAttachment.sketch(sketch);
+    attachments.add(attachment);
+    try {
+      // A sketch without a strokes file is migrated before protection so a
+      // post-lock edit can never publish an unprotected source path.
+      if (_locked && !sketch.hasStrokesFile) {
+        await _migrateSketchesToStrokesFiles();
       }
+      await _protectNewAttachment(attachment);
+    } catch (_) {
+      attachments.remove(attachment);
+      rethrow;
     }
-
-    await save();
-  }
+    await _saveWithinMutation();
+  });
 
   bool hasSketch(SketchData sketch) {
     return attachments.any(
@@ -1011,24 +2222,27 @@ class Note extends BaseModel<Note> {
     );
   }
 
-  Future<NoteAttachment> removeSketch(SketchData sketch) async {
-    if (!hasSketch(sketch)) {
-      throw Exception("Sketch not found in note attachments");
-    }
+  Future<NoteAttachment> removeSketch(SketchData sketch) =>
+      _enqueueMutation(() async {
+        if (!hasSketch(sketch)) {
+          throw Exception("Sketch not found in note attachments");
+        }
 
-    final removed = attachments.firstWhere(
-      (attachment) =>
-          attachment.type == AttachmentType.sketch &&
-          attachment.sketch == sketch,
-    );
-    attachments.remove(removed);
-
-    // Delete the sketch's local files
-    await _deleteSketchFiles(sketch);
-
-    await save();
-    return removed;
-  }
+        final index = attachments.indexWhere(
+          (attachment) =>
+              attachment.type == AttachmentType.sketch &&
+              attachment.sketch == sketch,
+        );
+        final removed = attachments[index];
+        attachments.remove(removed);
+        final result = await _saveWithinMutation();
+        if (result < 0) {
+          attachments.insert(index, removed);
+          throw const NoteSketchSaveException('Failed to delete the sketch');
+        }
+        await _deleteSketchFiles(sketch);
+        return removed;
+      });
 
   /// Deletes local files associated with a sketch (preview image, strokes file, background image).
   Future<void> _deleteSketchFiles(SketchData sketch) async {
@@ -1059,26 +2273,38 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  void addRecording(NoteRecording recording) async {
-    if (hasRecording(recording.src)) {
-      return;
-    }
+  Future<void> addRecording(NoteRecording recording) =>
+      _enqueueMutation(() async {
+        if (hasRecording(recording.src)) return;
+        await _commitNewFileAttachment(
+          sourcePath: recording.src,
+          buildAttachment: (committedPath) => NoteAttachment.audio(
+            NoteRecording(
+              src: committedPath,
+              title: recording.title,
+              length: recording.length,
+              transcript: recording.transcript,
+            ),
+          ),
+          publishCommittedPath: (committedPath, attachment) {
+            recording.src = committedPath;
+            attachment.recording = recording;
+          },
+        );
+      });
 
-    attachments.add(NoteAttachment.audio(recording));
-    await save();
-  }
-
-  Future<void> updateRecording(NoteRecording recording) async {
-    final index = attachments.indexWhere(
-      (attachment) =>
-          attachment.type == AttachmentType.audio &&
-          attachment.recording!.src == recording.src,
-    );
-    if (index != -1) {
-      attachments[index].recording = recording;
-      await save();
-    }
-  }
+  Future<void> updateRecording(NoteRecording recording) =>
+      _enqueueMutation(() async {
+        final index = attachments.indexWhere(
+          (attachment) =>
+              attachment.type == AttachmentType.audio &&
+              attachment.recording!.src == recording.src,
+        );
+        if (index != -1) {
+          attachments[index].recording = recording;
+          await _saveWithinMutation();
+        }
+      });
 
   bool hasRecording(String src) {
     return attachments.any(
@@ -1088,20 +2314,21 @@ class Note extends BaseModel<Note> {
     );
   }
 
-  Future<NoteAttachment> removeRecording(String src) async {
-    if (!hasRecording(src)) {
-      throw Exception("Audio recording not found in note attachments");
-    }
+  Future<NoteAttachment> removeRecording(String src) =>
+      _enqueueMutation(() async {
+        if (!hasRecording(src)) {
+          throw Exception("Audio recording not found in note attachments");
+        }
 
-    final removed = attachments.firstWhere(
-      (attachment) =>
-          attachment.type == AttachmentType.audio &&
-          attachment.recording!.src == src,
-    );
-    attachments.remove(removed);
-    await save();
-    return removed;
-  }
+        final removed = attachments.firstWhere(
+          (attachment) =>
+              attachment.type == AttachmentType.audio &&
+              attachment.recording!.src == src,
+        );
+        attachments.remove(removed);
+        await _saveWithinMutation();
+        return removed;
+      });
 
   Future<int> done() async {
     if (id != null && isAlarmSupported) {
@@ -1153,11 +2380,205 @@ class Note extends BaseModel<Note> {
     return save();
   }
 
-  Future<int> setContent(String newContent, String newPlainText) {
-    content = newContent;
-    plainText = newPlainText;
-    _unlocked = true;
-    return save();
+  Future<int> setContent(String newContent, String newPlainText) =>
+      _enqueueMutation(() async {
+        if (_locked &&
+            (!_unlocked || _password == null || _password!.isEmpty)) {
+          throw const NoteRelockException(
+            'Cannot edit a locked note without an authenticated PIN session',
+          );
+        }
+        content = newContent;
+        plainText = newPlainText;
+        return _saveWithinMutation();
+      });
+
+  /// Persists one immutable editor snapshot as a single model mutation.
+  ///
+  /// When a lock command is already queued, this operation runs afterward and
+  /// uses the cached PIN to serialize the newer edit as protected content.
+  Future<int> saveEditorSnapshot({
+    required String title,
+    required String content,
+    required String plainText,
+    bool trackSync = true,
+  }) => _enqueueMutation(() async {
+    if (_locked) {
+      if (!_unlocked || _password == null || _password!.isEmpty) {
+        throw const NoteRelockException(
+          'Cannot edit a locked note without an authenticated PIN session',
+        );
+      }
+    }
+    this.title = title;
+    this.content = content;
+    this.plainText = plainText;
+    return _saveWithinMutation(trackSync);
+  });
+
+  /// Decrypts one password-protected attachment for the authenticated process
+  /// session without changing the canonical attachment file.
+  ///
+  /// The optimistic session check prevents a decoder that outlives
+  /// [clearPassword] or lock removal from publishing plaintext playback data.
+  Future<Uint8List> decryptAttachmentForSession(
+    Uint8List protectedBytes,
+  ) async {
+    if (!_locked || !_unlocked) {
+      throw const NoteUnlockException(
+        'The locked note has no authenticated session',
+      );
+    }
+    final password = _password;
+    if (password == null || password.isEmpty) {
+      throw const NoteUnlockException(
+        'The authenticated note session has no cached PIN',
+      );
+    }
+    if (!isBytesPasswordEncrypted(protectedBytes)) {
+      throw const NoteUnlockException(
+        'The attachment is not password-protected',
+      );
+    }
+
+    late final Uint8List plaintext;
+    try {
+      plaintext =
+          await (pinAttachmentDecryptOverride ?? decryptBytesWithPassword)(
+            protectedBytes,
+            password,
+          );
+    } catch (error) {
+      throw NoteUnlockException(
+        'The protected attachment could not be decrypted: $error',
+      );
+    }
+
+    if (!_locked || !_unlocked || _password != password) {
+      throw const NoteUnlockException(
+        'The authenticated note session ended during decryption',
+      );
+    }
+    if (plaintext.isEmpty ||
+        isBytesPasswordEncrypted(plaintext) ||
+        LocalDataEncryption.isBytesEncrypted(plaintext)) {
+      throw const NoteUnlockException(
+        'The protected attachment failed decryption verification',
+      );
+    }
+    return plaintext;
+  }
+
+  /// Reads a canonical attachment for the current authenticated session.
+  ///
+  /// Local at-rest encryption is removed first. PIN-protected bytes are then
+  /// decrypted only in memory; the canonical file is never rewritten.
+  Future<Uint8List> readAttachmentForSession(String filePath) async {
+    if (filePath.isEmpty || filePath.startsWith('http')) {
+      throw const NoteUnlockException(
+        'A local attachment path is required for reading',
+      );
+    }
+    if (_locked && (!_unlocked || _password == null || _password!.isEmpty)) {
+      throw const NoteUnlockException(
+        'The locked note has no authenticated session',
+      );
+    }
+
+    final expectedPassword = _password;
+    if (filePath.startsWith('data:')) {
+      final decoded = _decodeInlineAttachment(filePath);
+      if (_locked && (!_unlocked || _password != expectedPassword)) {
+        throw const NoteUnlockException(
+          'The authenticated note session ended while reading an attachment',
+        );
+      }
+      if (!_locked || !isBytesPasswordEncrypted(decoded)) return decoded;
+      return decryptAttachmentForSession(decoded);
+    }
+    final storedBytes = await readEncryptedBytes(filePath);
+    if (!_locked) return storedBytes;
+
+    if (!_unlocked || _password != expectedPassword) {
+      throw const NoteUnlockException(
+        'The authenticated note session ended while reading an attachment',
+      );
+    }
+    if (!isBytesPasswordEncrypted(storedBytes)) {
+      // Compatibility for sources exposed by the previous unlock behavior.
+      // The authenticated protection repair replaces them with ENCP copies.
+      return storedBytes;
+    }
+    return decryptAttachmentForSession(storedBytes);
+  }
+
+  static Uint8List _decodeInlineAttachment(String source) {
+    final comma = source.indexOf(',');
+    if (comma < 0) {
+      throw const NoteUnlockException('Inline attachment data is invalid');
+    }
+    final metadata = source.substring(0, comma).toLowerCase();
+    final payload = source.substring(comma + 1);
+    try {
+      if (metadata.endsWith(';base64')) {
+        return Uint8List.fromList(base64Decode(payload));
+      }
+      return Uint8List.fromList(utf8.encode(Uri.decodeComponent(payload)));
+    } catch (error) {
+      throw NoteUnlockException('Inline attachment data is invalid: $error');
+    }
+  }
+
+  /// Writes attachment content without moving a locked source outside the PIN
+  /// boundary. The caller keeps the plaintext only in its authenticated UI
+  /// state; the canonical file remains password-protected on disk.
+  Future<void> writeAttachmentForSession(
+    String filePath,
+    Uint8List plaintext,
+  ) async {
+    if (filePath.isEmpty || filePath.startsWith('http')) {
+      throw const NoteRelockException(
+        'A local attachment path is required for saving',
+      );
+    }
+    if (plaintext.isEmpty || isBytesPasswordEncrypted(plaintext)) {
+      throw const NoteRelockException(
+        'Attachment plaintext is empty or already password-protected',
+      );
+    }
+    if (!_locked) {
+      await writeEncryptedBytes(filePath, plaintext);
+      return;
+    }
+    if (!_unlocked) {
+      throw const NoteRelockException(
+        'Cannot save a locked attachment without an authenticated session',
+      );
+    }
+    final password = _password;
+    if (password == null || password.isEmpty) {
+      throw const NoteRelockException(
+        'The authenticated note session has no cached PIN',
+      );
+    }
+
+    late final Uint8List protectedBytes;
+    try {
+      protectedBytes = await encryptBytesWithPassword(plaintext, password);
+    } catch (error) {
+      throw NoteRelockException('Failed to protect attachment changes', error);
+    }
+    if (!_locked || !_unlocked || _password != password) {
+      throw const NoteRelockException(
+        'The authenticated note session ended while saving an attachment',
+      );
+    }
+    if (!isBytesPasswordEncrypted(protectedBytes)) {
+      throw const NoteRelockException(
+        'Attachment changes were not password-protected',
+      );
+    }
+    await writeEncryptedBytes(filePath, protectedBytes);
   }
 
   Future<int> setReminder(Reminder newReminder) async {
@@ -1244,20 +2665,69 @@ class Note extends BaseModel<Note> {
     );
   }
 
-  Future<int> save([bool trackSync = true]) async {
+  Future<T> _enqueueMutation<T>(Future<T> Function() action) {
+    return _mutationQueue.run(action);
+  }
+
+  /// Runs a complete sketch file/model update in the same per-note ordering
+  /// domain as [save], [lock], [unlock], and [removeLock].
+  ///
+  /// The callback must finish every required file write before publishing its
+  /// attachment mutations. It must not call another queued [Note] method.
+  Future<void> persistSketchMutation(
+    Future<void> Function() mutation, {
+    bool trackSync = true,
+  }) => _enqueueMutation(() async {
+    if (_locked && (!_unlocked || _password == null || _password!.isEmpty)) {
+      throw const NoteSketchSaveException(
+        'Cannot save a locked sketch without an authenticated PIN session',
+      );
+    }
+    await mutation();
+    final result = await _saveWithinMutation(trackSync);
+    if (result < 0) {
+      throw const NoteSketchSaveException('Failed to save the sketch');
+    }
+  });
+
+  Future<int> save([bool trackSync = true]) =>
+      _enqueueMutation(() => _saveWithinMutation(trackSync));
+
+  Future<int> _saveWithinMutation([bool trackSync = true]) async {
     if (isEmpty) {
       return Future.value(-1);
     }
 
-    // Migrate any old sketches to new strokes file format before saving
-    await _migrateSketchesToStrokesFiles();
+    // Migrate any old sketches to new strokes file format before saving. A
+    // failed source write must prevent attachment metadata from being saved.
+    try {
+      await _migrateSketchesToStrokesFiles();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to persist sketch source data',
+        error,
+        stackTrace,
+      );
+      snackbar('Failed to save the note', Colors.red);
+      return -1;
+    }
+
+    final previousUpdatedAt = updatedAt;
 
     // Only update timestamp for local changes, not when syncing from remote
     if (trackSync) {
       updatedAt = DateTime.now();
     }
 
-    var jsonObj = await toJsonAsync();
+    late final Map<String, dynamic> jsonObj;
+    try {
+      jsonObj = await toJsonAsync();
+    } catch (error, stackTrace) {
+      updatedAt = previousUpdatedAt;
+      AppLogger.error('Failed to serialize note safely', error, stackTrace);
+      snackbar('Failed to save the note', Colors.red);
+      return -1;
+    }
 
     if (id != null) {
       // Check if record exists
@@ -1278,6 +2748,7 @@ class Note extends BaseModel<Note> {
           notify("updated", trackSync);
           return id!;
         } catch (e) {
+          updatedAt = previousUpdatedAt;
           AppLogger.log("Error updating note: $e");
           snackbar("Failed to save the note", Colors.red);
           return -1;
@@ -1298,6 +2769,7 @@ class Note extends BaseModel<Note> {
       notify("created", trackSync);
       return id!;
     } catch (e) {
+      updatedAt = previousUpdatedAt;
       snackbar("Failed to save the note", Colors.red);
       AppLogger.log("Error saving note: $e");
       id = null;
@@ -1431,19 +2903,17 @@ class Note extends BaseModel<Note> {
 
     if (_locked && _unlocked) {
       if (_password == null || _password!.isEmpty) {
-        _unlocked = false;
-        AppLogger.log(
-          'Warning: Locked note without password, keeping existing content',
+        throw const NoteRelockException(
+          'Cannot serialize an unlocked locked note without its PIN',
         );
-      } else {
-        try {
-          contentToSave = await encrypt(content ?? '', _password!);
-          _unlocked = false;
-          content = contentToSave; // Update instance state
-        } catch (e) {
-          AppLogger.log('Error encrypting note content: $e');
-          _unlocked = false;
-        }
+      }
+      try {
+        contentToSave = await _encryptPinContent(content ?? '', _password!);
+      } catch (error) {
+        throw NoteRelockException(
+          'Failed to protect locked note content for storage',
+          error,
+        );
       }
     }
 
@@ -1465,44 +2935,7 @@ class Note extends BaseModel<Note> {
       contentToSave ?? '',
     );
 
-    // Encrypt sketch data within attachments if files encryption is enabled
-    final encryptedAttachments = <Map<String, dynamic>>[];
-    for (final attachment in attachments) {
-      final attachmentJson = attachment.toJson();
-
-      // Encrypt sketch metadata (strokes, bgColor, pagePattern) if files encryption is enabled
-      if (attachment.type == AttachmentType.sketch &&
-          attachment.sketch != null) {
-        final sketch = attachment.sketch!;
-        final sketchMetadata = json.encode({
-          'strokes': sketch.strokes.map((s) => s.toString()).toList(),
-          'bgColor': sketch.backgroundColor.toARGB32(),
-          'pagePattern': sketch.pagePattern.name,
-        });
-        final encryptedMetadata = await localEncryption
-            .encryptAttachmentMetadata(sketchMetadata);
-
-        // If encrypted (different from original), store as encrypted field
-        if (encryptedMetadata != sketchMetadata) {
-          attachmentJson['data'] = {
-            'encrypted_metadata': encryptedMetadata,
-            'previewImage': sketch.previewImage,
-            'backgroundImage': sketch.backgroundImage,
-            'aspectRatio': sketch.aspectRatio,
-            if (sketch.strokesFilePath != null)
-              'strokesFilePath': sketch.strokesFilePath,
-            if (sketch.strokesContentHash != null)
-              'strokesContentHash': sketch.strokesContentHash,
-            if (sketch.blurredThumbnail != null)
-              'blurredThumbnail': sketch.blurredThumbnail,
-          };
-        }
-      }
-
-      encryptedAttachments.add(attachmentJson);
-    }
-
-    final attachmentsJson = json.encode(encryptedAttachments);
+    final attachmentsJson = await serializeAttachmentsForLocalStorage();
 
     return {
       'id': id,
@@ -1522,6 +2955,98 @@ class Note extends BaseModel<Note> {
       'attachments': attachmentsJson,
       'reminder': reminder != null ? json.encode(reminder!.toJson()) : null,
     };
+  }
+
+  /// Serializes attachments exactly as they are stored in the local database.
+  /// This is intentionally separate from [toJsonAsync] so local maintenance
+  /// tasks can update attachment metadata without writing a stale whole note.
+  Future<String> serializeAttachmentsForLocalStorage() async {
+    final localEncryption = LocalDataEncryption.instance;
+    final policy = _locked
+        ? _AttachmentSerializationPolicy.lockedPinBoundary
+        : _AttachmentSerializationPolicy.standard;
+
+    // Encrypt sketch data within attachments if files encryption is enabled.
+    final encryptedAttachments = <Map<String, dynamic>>[];
+    for (final attachment in attachments) {
+      final attachmentJson = attachment.toJson();
+
+      // Encrypt sketch metadata (strokes, bgColor, pagePattern) if files encryption is enabled
+      if (attachment.type == AttachmentType.sketch &&
+          attachment.sketch != null) {
+        final sketch = attachment.sketch!;
+        if (policy == _AttachmentSerializationPolicy.lockedPinBoundary) {
+          // Never duplicate hydrated locked strokes under the app-wide local
+          // key. Preserve only a value that already existed so authenticated
+          // recovery can migrate the last surviving source without data loss.
+          if (sketch.hasEncryptedMetadata) {
+            attachmentJson['data'] = {
+              ...Map<String, dynamic>.from(
+                attachmentJson['data'] as Map<String, dynamic>,
+              ),
+              'encrypted_metadata': sketch.encryptedMetadata,
+            };
+          }
+          encryptedAttachments.add(attachmentJson);
+          continue;
+        }
+        final sketchMetadata = json.encode({
+          'strokes': sketch.strokes.map((s) => s.toString()).toList(),
+          'bgColor': sketch.backgroundColor.toARGB32(),
+          'pagePattern': sketch.pagePattern.name,
+        });
+        final metadataEncryptor = localSketchMetadataEncryptOverride;
+        final encryptedMetadata = metadataEncryptor != null
+            ? await metadataEncryptor(sketchMetadata)
+            : await localEncryption.encryptAttachmentMetadata(sketchMetadata);
+
+        // If encrypted (different from original), store as encrypted field
+        if (encryptedMetadata != sketchMetadata) {
+          attachmentJson['data'] = {
+            'encrypted_metadata': encryptedMetadata,
+            'previewImage': sketch.previewImage,
+            'backgroundImage': sketch.backgroundImage,
+            'aspectRatio': sketch.aspectRatio,
+            if (sketch.strokesFilePath != null)
+              'strokesFilePath': sketch.strokesFilePath,
+            if (sketch.strokesContentHash != null)
+              'strokesContentHash': sketch.strokesContentHash,
+            if (sketch.blurredThumbnail != null)
+              'blurredThumbnail': sketch.blurredThumbnail,
+            if (sketch.hasEncryptedStrokes)
+              'encryptedStrokes': sketch.encryptedStrokes,
+          };
+        }
+      }
+
+      encryptedAttachments.add(attachmentJson);
+    }
+
+    return json.encode(encryptedAttachments);
+  }
+
+  /// Updates only local attachment metadata when the database row still
+  /// matches the snapshot used to produce it.
+  ///
+  /// Guarding both values catches ordinary edits as well as sync writes that
+  /// preserve or reuse an `updated_at` timestamp.
+  static Future<bool> updateAttachmentsIfUnchanged({
+    required int id,
+    required Object? expectedUpdatedAt,
+    required Object? expectedAttachments,
+    required String attachments,
+  }) async {
+    final updatedRows = await AppState.db.rawUpdate(
+      '''
+      UPDATE note
+      SET attachments = ?
+      WHERE id = ?
+        AND updated_at IS ?
+        AND attachments IS ?
+      ''',
+      [attachments, id, expectedUpdatedAt, expectedAttachments],
+    );
+    return updatedRows == 1;
   }
 
   Map<String, dynamic> toJson() {
@@ -1573,6 +3098,203 @@ class Note extends BaseModel<Note> {
 
     return Note.fromJsonAsync(rows.first);
   }
+}
+
+class _NoteLockStateFingerprint {
+  final String value;
+  final String? password;
+
+  const _NoteLockStateFingerprint(this.value, this.password);
+
+  factory _NoteLockStateFingerprint.capture(Note note) =>
+      _NoteLockStateFingerprint(
+        jsonEncode({
+          'id': note.id,
+          'title': note.title,
+          'labels': note.labels,
+          'content': note.content,
+          'plainText': note.plainText,
+          'locked': note._locked,
+          'unlocked': note._unlocked,
+          'pinned': note.pinned,
+          'trashed': note.trashed,
+          'archived': note.archived,
+          'readOnly': note.readOnly,
+          'completed': note.completed,
+          'color': note.color.toARGB32(),
+          'reminder': note.reminder?.toJson(),
+          'createdAt': note.createdAt?.toIso8601String(),
+          'updatedAt': note.updatedAt?.toIso8601String(),
+          'attachments': note.attachments
+              .map(_attachmentLockFingerprint)
+              .toList(growable: false),
+        }),
+        note._password,
+      );
+
+  bool matches(Note note) {
+    final current = _NoteLockStateFingerprint.capture(note);
+    return value == current.value && password == current.password;
+  }
+}
+
+/// Serializes mutations for one model instance without letting a failed
+/// operation prevent later work from running.
+class _AsyncMutationQueue {
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> run<T>(Future<T> Function() action) {
+    final operation = _tail.then((_) => action());
+    _tail = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return operation;
+  }
+}
+
+Map<String, Object?> _attachmentLockFingerprint(NoteAttachment attachment) {
+  switch (attachment.type) {
+    case AttachmentType.image:
+      return {'type': 'image', 'data': attachment.image!.toJson()};
+    case AttachmentType.audio:
+      return {'type': 'audio', 'data': attachment.recording!.toJson()};
+    case AttachmentType.sketch:
+      final sketch = attachment.sketch!;
+      return {
+        'type': 'sketch',
+        'previewImage': sketch.previewImage,
+        'backgroundImage': sketch.backgroundImage,
+        'aspectRatio': sketch.aspectRatio,
+        'backgroundColor': sketch.backgroundColor.toARGB32(),
+        'pagePattern': sketch.pagePattern.name,
+        'blurredThumbnail': sketch.blurredThumbnail,
+        'encryptedStrokes': sketch.encryptedStrokes,
+        'encryptedMetadata': sketch.encryptedMetadata,
+        'strokesFilePath': sketch.strokesFilePath,
+        'strokesContentHash': sketch.strokesContentHash,
+        'legacyState': sketch.legacyMigrationState.name,
+        'legacyError': sketch.legacyMigrationError,
+        'strokesHydrated': sketch.hasHydratedStrokeSource,
+        'strokes': sketch.strokes
+            .map((stroke) => stroke.toString())
+            .toList(growable: false),
+      };
+  }
+}
+
+List<NoteAttachment> _deepCopyAttachments(List<NoteAttachment> attachments) =>
+    attachments
+        .map((attachment) {
+          switch (attachment.type) {
+            case AttachmentType.image:
+              final image = attachment.image!;
+              return NoteAttachment.image(
+                NoteImage(
+                  src: image.src,
+                  size: image.size,
+                  index: image.index,
+                  aspectRatio: image.aspectRatio,
+                  lastModified: image.lastModified,
+                  blurredThumbnail: image.blurredThumbnail,
+                ),
+              );
+            case AttachmentType.audio:
+              final recording = attachment.recording!;
+              return NoteAttachment.audio(
+                NoteRecording(
+                  src: recording.src,
+                  length: recording.length,
+                  title: recording.title,
+                  transcript: recording.transcript,
+                ),
+              );
+            case AttachmentType.sketch:
+              final sketch = attachment.sketch!;
+              return NoteAttachment.sketch(
+                SketchData(
+                  previewImage: sketch.previewImage,
+                  backgroundImage: sketch.backgroundImage,
+                  aspectRatio: sketch.aspectRatio,
+                  strokes: sketch.strokes
+                      .map(
+                        (stroke) => SketchStroke(
+                          points: stroke.points,
+                          color: stroke.color,
+                          size: stroke.size,
+                          tool: stroke.tool,
+                        ),
+                      )
+                      .toList(growable: false),
+                  backgroundColor: sketch.backgroundColor,
+                  pagePattern: sketch.pagePattern,
+                  blurredThumbnail: sketch.blurredThumbnail,
+                  encryptedStrokes: sketch.encryptedStrokes,
+                  encryptedMetadata: sketch.encryptedMetadata,
+                  strokesFilePath: sketch.strokesFilePath,
+                  strokesContentHash: sketch.strokesContentHash,
+                  legacyMigrationState: sketch.legacyMigrationState,
+                  legacyMigrationError: sketch.legacyMigrationError,
+                  strokesHydrated: sketch.hasHydratedStrokeSource,
+                ),
+              );
+          }
+        })
+        .toList(growable: false);
+
+bool _publishAttachments(
+  List<NoteAttachment> live,
+  List<NoteAttachment> prepared,
+) {
+  if (live.length != prepared.length) {
+    return false;
+  }
+
+  for (var index = 0; index < live.length; index++) {
+    final target = live[index];
+    final source = prepared[index];
+    if (target.type != source.type) {
+      return false;
+    }
+
+    switch (target.type) {
+      case AttachmentType.image:
+        final targetImage = target.image!;
+        final sourceImage = source.image!;
+        targetImage.src = sourceImage.src;
+        targetImage.size = sourceImage.size;
+        targetImage.index = sourceImage.index;
+        targetImage.aspectRatio = sourceImage.aspectRatio;
+        targetImage.lastModified = sourceImage.lastModified;
+        targetImage.blurredThumbnail = sourceImage.blurredThumbnail;
+      case AttachmentType.audio:
+        final targetRecording = target.recording!;
+        final sourceRecording = source.recording!;
+        targetRecording.src = sourceRecording.src;
+        targetRecording.length = sourceRecording.length;
+        targetRecording.title = sourceRecording.title;
+        targetRecording.transcript = sourceRecording.transcript;
+      case AttachmentType.sketch:
+        final targetSketch = target.sketch!;
+        final sourceSketch = source.sketch!;
+        targetSketch.previewImage = sourceSketch.previewImage;
+        targetSketch.backgroundImage = sourceSketch.backgroundImage;
+        targetSketch.aspectRatio = sourceSketch.aspectRatio;
+        targetSketch.strokes = sourceSketch.strokes;
+        targetSketch.backgroundColor = sourceSketch.backgroundColor;
+        targetSketch.pagePattern = sourceSketch.pagePattern;
+        targetSketch.blurredThumbnail = sourceSketch.blurredThumbnail;
+        targetSketch.encryptedStrokes = sourceSketch.encryptedStrokes;
+        targetSketch.encryptedMetadata = sourceSketch.encryptedMetadata;
+        targetSketch.strokesFilePath = sourceSketch.strokesFilePath;
+        targetSketch.strokesContentHash = sourceSketch.strokesContentHash;
+        targetSketch.legacyMigrationState = sourceSketch.legacyMigrationState;
+        targetSketch.legacyMigrationError = sourceSketch.legacyMigrationError;
+        if (sourceSketch.hasHydratedStrokeSource) {
+          targetSketch.markStrokesHydrated();
+        } else {
+          targetSketch.markStrokesUnhydrated();
+        }
+    }
+  }
+  return true;
 }
 
 ModelSchema<Note> _createSchema() {

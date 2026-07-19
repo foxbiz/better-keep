@@ -1,16 +1,21 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:better_keep/components/adaptive_popup_menu.dart';
 import 'package:better_keep/components/page_pattern_painter.dart';
+import 'package:better_keep/components/sketch_painter.dart';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/components/sketch_tool_popup.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sketch_preview_repair_service.dart';
+import 'package:better_keep/services/sketch_renderer.dart';
+import 'package:better_keep/services/sketch_strokes_file_service.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -30,7 +35,7 @@ import 'package:better_keep/dialogs/color_picker.dart';
 import 'package:perfect_freehand/perfect_freehand.dart';
 import 'package:uuid/uuid.dart';
 
-const Size kA4Size = Size(794, 1123); // A4 at 96 DPI
+const Size kA4Size = kSketchA4Size; // A4 at 96 DPI
 
 class SketchPage extends StatefulWidget {
   final Note note;
@@ -57,8 +62,129 @@ class SketchPage extends StatefulWidget {
     _SketchPageState._backgroundImageCache.clear();
   }
 
+  @visibleForTesting
+  static Future<void> Function(SketchSaveToken token)?
+  beforeCapturedSaveOverride;
+
   @override
   State<SketchPage> createState() => _SketchPageState();
+}
+
+/// Keeps file-backed stroke readiness scoped to one sketch activation.
+///
+/// A generation is stronger than checking [SketchData] identity alone: a user
+/// can navigate away from a sketch and return to the same object while its
+/// first hydration is still running. The edit revision is a final data-loss
+/// guard in case an input path ever bypasses the normal readiness gate.
+@visibleForTesting
+class SketchPageSourceController {
+  int _generation = 0;
+  int _strokeEditRevision = 0;
+  SketchData? _activeSketch;
+  bool _isStrokeSourceReady = false;
+
+  bool get isStrokeSourceReady => _isStrokeSourceReady;
+
+  static bool isImmediatelyReady(SketchData sketch) =>
+      !sketch.hasStrokesFile || sketch.hasHydratedStrokeSource;
+
+  SketchSourceActivation activate(SketchData sketch) {
+    _activeSketch = sketch;
+    _isStrokeSourceReady = isImmediatelyReady(sketch);
+    return SketchSourceActivation._(
+      sketch: sketch,
+      generation: ++_generation,
+      strokeEditRevision: _strokeEditRevision,
+    );
+  }
+
+  bool isCurrent(SketchSourceActivation activation) =>
+      activation.generation == _generation &&
+      identical(activation.sketch, _activeSketch);
+
+  bool canApplyHydratedSource(SketchSourceActivation activation) =>
+      isCurrent(activation) &&
+      activation.strokeEditRevision == _strokeEditRevision;
+
+  bool markHydratedSourceReady(SketchSourceActivation activation) {
+    if (!canApplyHydratedSource(activation)) return false;
+    _isStrokeSourceReady = true;
+    return true;
+  }
+
+  void recordStrokeEdit() {
+    _strokeEditRevision++;
+  }
+}
+
+@visibleForTesting
+class SketchSourceActivation {
+  final SketchData sketch;
+  final int generation;
+  final int strokeEditRevision;
+
+  const SketchSourceActivation._({
+    required this.sketch,
+    required this.generation,
+    required this.strokeEditRevision,
+  });
+}
+
+/// Invalidates captured saves when a sketch is deleted.
+///
+/// Identity semantics are intentional: two pages may contain identical drawing
+/// data while still having independent save lifecycles.
+@visibleForTesting
+class SketchSaveGenerationController {
+  final Map<SketchData, int> _generations = HashMap<SketchData, int>.identity();
+  final Set<SketchData> _tombstones = HashSet<SketchData>.identity();
+
+  SketchSaveToken capture(SketchData sketch) =>
+      SketchSaveToken._(sketch: sketch, generation: _generations[sketch] ?? 0);
+
+  void tombstone(SketchData sketch) {
+    _generations[sketch] = (_generations[sketch] ?? 0) + 1;
+    _tombstones.add(sketch);
+  }
+
+  /// Starts a fresh generation after a deletion failure. Previously captured
+  /// saves remain invalid, but the user can continue editing and retry.
+  void restore(SketchData sketch) {
+    _generations[sketch] = (_generations[sketch] ?? 0) + 1;
+    _tombstones.remove(sketch);
+  }
+
+  bool isDeleted(SketchData sketch) => _tombstones.contains(sketch);
+
+  bool isCurrent(SketchSaveToken token) =>
+      !_tombstones.contains(token.sketch) &&
+      (_generations[token.sketch] ?? 0) == token.generation;
+}
+
+@visibleForTesting
+class SketchSaveToken {
+  final SketchData sketch;
+  final int generation;
+
+  const SketchSaveToken._({required this.sketch, required this.generation});
+}
+
+/// Serializes page operations without allowing a failed operation to poison
+/// later autosaves, navigation, or deletion.
+class _SketchPageOperationQueue {
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> run<T>(Future<T> Function() operation) {
+    final result = _tail.then((_) => operation());
+    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
+  }
+}
+
+enum _SketchSaveResult { saved, unchanged, cancelled }
+
+class _StaleSketchSave implements Exception {
+  const _StaleSketchSave();
 }
 
 class _SketchPageState extends State<SketchPage>
@@ -69,6 +195,7 @@ class _SketchPageState extends State<SketchPage>
   /// Selected pen color - initialized from AppState in initState
   late Color _selectedColor;
   late Color _paperColor;
+  late PagePattern _pagePattern;
   late Color _backgroundColor;
   late Color _foregroundColor;
 
@@ -117,26 +244,43 @@ class _SketchPageState extends State<SketchPage>
   static const double _strokeStartThreshold = 3.0;
 
   Timer? _autoSaveTimer;
+  Future<void> _assetPreparation = Future<void>.value();
+  final SketchPageSourceController _sourceController =
+      SketchPageSourceController();
+  final Map<SketchData, Future<SketchStrokesLoadResult>> _strokeHydrations =
+      HashMap<SketchData, Future<SketchStrokesLoadResult>>.identity();
   SketchStroke? _currentStroke;
   List<SketchStroke> _strokes = [];
   ui.Image? _loadedBackgroundImage;
+  bool _ownsLoadedBackgroundImage = false;
+  bool _backgroundUnavailable = false;
+  bool _isRetryingBackground = false;
+  late SketchSourceActivation _currentSourceActivation;
   Size _canvasSize = kA4Size;
   bool _isImageBasedSketch = false;
-  final bool _isDeleted = false;
   bool _isDirty = false;
+  int _editRevision = 0;
   Offset? _cursorPosition;
   bool _isMouseInput = false;
+
+  /// Image sketches must use the decoded background's intrinsic dimensions
+  /// before recording or saving absolute stroke coordinates.
+  bool get _isCanvasReady =>
+      _sourceController.isStrokeSourceReady &&
+      (!_isImageBasedSketch || _loadedBackgroundImage != null);
+
+  bool get _isLegacySketchUnavailable => _sketchData.requiresLegacyMigration;
 
   /// Cache for loaded background images to avoid re-reading from OPFS
   /// Key: image path, Value: decoded ui.Image
   static final Map<String, ui.Image> _backgroundImageCache = {};
   static const int _maxImageCacheSize = 10;
 
-  /// Debounce timer for save operations during rapid sketch switching
-  Timer? _debounceSaveTimer;
-
-  /// Captured state for pending debounced save
-  _PendingSaveState? _pendingSaveState;
+  final SketchSaveGenerationController _saveGenerations =
+      SketchSaveGenerationController();
+  final _SketchPageOperationQueue _pageOperations = _SketchPageOperationQueue();
+  bool _isClosing = false;
+  bool _isDeleting = false;
 
   late SketchData _sketchData;
   int _currentSketchIndex = 0;
@@ -238,47 +382,199 @@ class _SketchPageState extends State<SketchPage>
     }
 
     _strokes = List<SketchStroke>.from(_sketchData.strokes);
+    final activation = _sourceController.activate(_sketchData);
+    _currentSourceActivation = activation;
     _paperColor = _isImageBasedSketch
         ? Colors.transparent
         : _sketchData.backgroundColor;
+    _pagePattern = _sketchData.pagePattern;
     // Keep persisted color if it contrasts with paper, otherwise use contrast color
     if (!_isImageBasedSketch && isDark(_paperColor) == isDark(_selectedColor)) {
       _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
     }
 
-    // Load strokes from file if strokes are empty but file exists
-    // This happens after app reload when strokes are stored in file
-    if (_strokes.isEmpty && _sketchData.hasStrokesFile) {
-      // Load strokes and then background image sequentially
-      _loadStrokesFromFile().then((_) {
-        if (mounted && _sketchData.backgroundImage != null) {
-          _loadBackgroundImage();
-        }
-      });
-    } else if (_sketchData.backgroundImage != null) {
-      _loadBackgroundImage();
-    }
+    _beginPreparingCurrentSketch(activation);
     WidgetsBinding.instance.addObserver(this);
   }
 
-  /// Load strokes from the strokes file
-  Future<void> _loadStrokesFromFile() async {
-    try {
-      final bytes = await readEncryptedBytes(_sketchData.strokesFilePath!);
-      final strokesJson = json.decode(utf8.decode(bytes));
-      _sketchData.loadFromStrokesFileJson(strokesJson as Map<String, dynamic>);
-      if (mounted) {
-        setState(() {
-          _strokes = List<SketchStroke>.from(_sketchData.strokes);
-          _paperColor = _isImageBasedSketch
-              ? Colors.transparent
-              : _sketchData.backgroundColor;
-          _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
-        });
-      }
-    } catch (e) {
-      AppLogger.error('Error loading strokes from file', e);
+  void _beginPreparingCurrentSketch(
+    SketchSourceActivation activation, {
+    bool prepareAssets = true,
+  }) {
+    // Replace the previous page's future immediately. A new blank page must
+    // never remain coupled to an unavailable source from the previous page.
+    _assetPreparation = Future<void>.value();
+    if (!prepareAssets || _isLegacySketchUnavailable) {
+      return;
     }
+    _assetPreparation = _prepareCurrentSketchAssets(activation);
+  }
+
+  Future<SketchStrokesLoadResult> _hydrateStrokeSourceOnce(SketchData sketch) {
+    final pending = _strokeHydrations[sketch];
+    if (pending != null) return pending;
+
+    final hydration = SketchStrokesFileService.hydrate(
+      sketch,
+      passwordProtectedDecoder: widget.note.locked && widget.note.unlocked
+          ? widget.note.decryptAttachmentForSession
+          : null,
+    );
+    _strokeHydrations[sketch] = hydration;
+    hydration.then<void>(
+      (_) {
+        if (identical(_strokeHydrations[sketch], hydration)) {
+          _strokeHydrations.remove(sketch);
+        }
+      },
+      onError: (Object _, StackTrace _) {
+        if (identical(_strokeHydrations[sketch], hydration)) {
+          _strokeHydrations.remove(sketch);
+        }
+      },
+    );
+    return hydration;
+  }
+
+  bool _canApplySourceResult(SketchSourceActivation activation) =>
+      mounted && _sourceController.canApplyHydratedSource(activation);
+
+  bool _isCurrentActivation(SketchSourceActivation activation) =>
+      mounted && _sourceController.isCurrent(activation);
+
+  void _activateSketch({
+    required SketchData sketch,
+    required int index,
+    required bool prepareAssets,
+    Color? loadingPaperColor,
+  }) {
+    final backgroundPath = sketch.backgroundImage;
+    final isImageBased = backgroundPath != null && backgroundPath.isNotEmpty;
+    final cachedBackground = isImageBased && !widget.note.locked
+        ? _backgroundImageCache[backgroundPath]
+        : null;
+    final sourceReady = SketchPageSourceController.isImmediatelyReady(sketch);
+    final paperColor = isImageBased
+        ? Colors.transparent
+        : !sourceReady && loadingPaperColor != null
+        ? loadingPaperColor
+        : sketch.backgroundColor;
+    final canvasSize = cachedBackground != null
+        ? Size(
+            cachedBackground.width.toDouble(),
+            cachedBackground.height.toDouble(),
+          )
+        : isImageBased && sketch.aspectRatio > 0
+        ? Size(kA4Size.width, kA4Size.width / sketch.aspectRatio)
+        : kA4Size;
+
+    _pendingDotTimer?.cancel();
+    _pendingDotTimer = null;
+    _pendingDotPosition = null;
+    _pendingDotPressure = null;
+    _lastTapTime = null;
+    if (_ownsLoadedBackgroundImage) {
+      _loadedBackgroundImage?.dispose();
+      _ownsLoadedBackgroundImage = false;
+    }
+
+    late final SketchSourceActivation activation;
+    setState(() {
+      activation = _sourceController.activate(sketch);
+      _currentSourceActivation = activation;
+      _currentSketchIndex = index;
+      _sketchData = sketch;
+      _strokes = List<SketchStroke>.from(sketch.strokes);
+      _undoCount = 0;
+      _redoStack.clear();
+      _isDirty = false;
+      _isImageBasedSketch = isImageBased;
+      _paperColor = paperColor;
+      _pagePattern = sketch.pagePattern;
+      _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
+      _canvasSize = canvasSize;
+      _loadedBackgroundImage = cachedBackground;
+      _ownsLoadedBackgroundImage = false;
+      _backgroundUnavailable = false;
+      _isRetryingBackground = false;
+      _hasFitted = false;
+
+      // A gesture from the previous page must not finish on this page.
+      _currentStroke = null;
+      _activePointerCount = 0;
+      _isMultiTouch = false;
+      _hasStartedDrawing = false;
+      _initialTouchPosition = null;
+      _cursorPosition = null;
+    });
+    _beginPreparingCurrentSketch(activation, prepareAssets: prepareAssets);
+  }
+
+  /// Hydrates source data before any preview repair. Keeping this sequence in
+  /// one future prevents a close or lifecycle save from rendering an image
+  /// sketch before its background dimensions are known.
+  Future<void> _prepareCurrentSketchAssets(
+    SketchSourceActivation activation,
+  ) async {
+    final sketch = activation.sketch;
+    if (!_sourceController.isCurrent(activation)) return;
+    var sourceReady = sketch.hasHydratedStrokeSource;
+    if (!sketch.hasHydratedStrokeSource) {
+      final hydration = await _hydrateStrokeSourceOnce(sketch);
+      if (hydration == SketchStrokesLoadResult.legacyPasswordProtected) {
+        sketch.markLegacyMigrationFailed(
+          'The protected legacy drawing could not be converted yet',
+        );
+        if (_isCurrentActivation(activation)) setState(() {});
+        return;
+      }
+      sourceReady =
+          hydration == SketchStrokesLoadResult.loaded ||
+          hydration == SketchStrokesLoadResult.alreadyLoaded ||
+          hydration == SketchStrokesLoadResult.empty;
+      if (!sourceReady && sketch.hasStrokesFile) return;
+    }
+    if (!_canApplySourceResult(activation)) return;
+
+    setState(() {
+      if (!_sourceController.markHydratedSourceReady(activation)) return;
+      _strokes = List<SketchStroke>.from(sketch.strokes);
+      _paperColor = _isImageBasedSketch
+          ? Colors.transparent
+          : sketch.backgroundColor;
+      _pagePattern = sketch.pagePattern;
+      _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
+    });
+
+    if (sketch.backgroundImage != null && sketch.backgroundImage!.isNotEmpty) {
+      try {
+        await _loadBackgroundImage(activation);
+      } catch (e, stackTrace) {
+        AppLogger.error('Error loading sketch background', e, stackTrace);
+        if (_isCurrentActivation(activation)) {
+          setState(() => _backgroundUnavailable = true);
+        }
+        return;
+      }
+    }
+
+    if (!_isCurrentActivation(activation)) return;
+    final previewPath = sketch.previewImage;
+    final fs = await fileSystem();
+    final previewMissing =
+        previewPath == null ||
+        previewPath.isEmpty ||
+        previewPath.startsWith('http') ||
+        !await fs.exists(previewPath);
+    if (!_isCurrentActivation(activation)) return;
+    if (!previewMissing) return;
+
+    if (widget.note.locked && widget.note.unlocked) {
+      await SketchPreviewRepairService.repairAfterUnlock(widget.note);
+    } else if (!widget.note.locked) {
+      await SketchPreviewRepairService.repairMissingPreviews(widget.note);
+    }
+    if (_isCurrentActivation(activation)) setState(() {});
   }
 
   @override
@@ -301,12 +597,13 @@ class _SketchPageState extends State<SketchPage>
     _toolbarAnimationController.dispose();
     _appbarAnimationController.dispose();
     _transformationController.dispose();
+    if (_ownsLoadedBackgroundImage) {
+      _loadedBackgroundImage?.dispose();
+    }
     _pagesPopupController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _autoSaveTimer?.cancel();
     _pendingDotTimer?.cancel();
-    // Flush any pending debounced save immediately
-    _flushPendingSave();
     super.dispose();
   }
 
@@ -339,207 +636,185 @@ class _SketchPageState extends State<SketchPage>
     }
   }
 
-  /// Immediately execute any pending debounced save
-  void _flushPendingSave() {
-    _debounceSaveTimer?.cancel();
-    _debounceSaveTimer = null;
-    if (_pendingSaveState != null) {
-      _executePendingSave(_pendingSaveState!);
-      _pendingSaveState = null;
-    }
-  }
-
-  /// Queue a save operation with debouncing
-  /// Captures current sketch state and schedules save after delay
-  void _queueDebouncedSave() {
-    // Flush any previous pending save first to prevent state mixup
-    // This ensures each sketch's state is saved before we overwrite _pendingSaveState
-    if (_pendingSaveState != null) {
-      // Cancel the timer since we're executing immediately
-      _debounceSaveTimer?.cancel();
-      _debounceSaveTimer = null;
-      _executePendingSave(_pendingSaveState!).catchError((e) {
-        AppLogger.error('Error flushing previous save', e);
-      });
-      _pendingSaveState = null;
-    }
-
-    // Capture current state before it changes
-    _pendingSaveState = _PendingSaveState(
-      sketchData: _sketchData,
-      strokes: List<SketchStroke>.from(_strokes),
-      paperColor: _paperColor,
-      canvasSize: _canvasSize,
-      isImageBasedSketch: _isImageBasedSketch,
-      loadedBackgroundImage: _loadedBackgroundImage,
-      note: widget.note,
-      sourceAttachment: widget.sourceAttachment,
-      localSketches: _localSketches,
-      onIndexUpdate: (index) {
-        if (mounted) {
-          setState(() => _currentSketchIndex = index);
-        }
-      },
-    );
-
-    // Start new timer for this save
-    _debounceSaveTimer = Timer(const Duration(milliseconds: 300), () {
-      if (_pendingSaveState != null) {
-        _executePendingSave(_pendingSaveState!).catchError((e) {
-          if (mounted) {
-            snackbar(context.l10n.errorSavingSketch(e.toString()), Colors.red);
-          }
-        });
-        _pendingSaveState = null;
-      }
-    });
-  }
+  _PendingSaveState _captureSaveState() => _PendingSaveState(
+    sketchData: _sketchData,
+    strokes: List<SketchStroke>.from(_strokes),
+    paperColor: _paperColor,
+    pagePattern: _pagePattern,
+    canvasSize: _canvasSize,
+    isImageBasedSketch: _isImageBasedSketch,
+    loadedBackgroundImage: _loadedBackgroundImage,
+    note: widget.note,
+    sourceAttachment: widget.sourceAttachment,
+    localSketches: _localSketches,
+    saveToken: _saveGenerations.capture(_sketchData),
+    revision: _editRevision,
+    onIndexUpdate: (index) {
+      if (mounted) setState(() => _currentSketchIndex = index);
+    },
+  );
 
   /// Execute the pending save with captured state
-  Future<void> _executePendingSave(_PendingSaveState state) async {
+  Future<_SketchSaveResult> _executePendingSave(_PendingSaveState state) async {
+    if (!_saveGenerations.isCurrent(state.saveToken)) {
+      return _SketchSaveResult.cancelled;
+    }
+    await SketchPage.beforeCapturedSaveOverride?.call(state.saveToken);
+    if (!_saveGenerations.isCurrent(state.saveToken)) {
+      return _SketchSaveResult.cancelled;
+    }
+    if (state.sketchData.requiresLegacyMigration) {
+      return _SketchSaveResult.unchanged;
+    }
+    if (state.strokes.isEmpty) {
+      if (state.note.hasSketch(state.sketchData)) {
+        await state.note.removeSketch(state.sketchData);
+      }
+      return _SketchSaveResult.saved;
+    }
+
+    final createdPaths = <String>[];
     try {
-      if (state.strokes.isEmpty) {
-        if (state.note.hasSketch(state.sketchData)) {
-          state.note.removeSketch(state.sketchData);
+      await state.note.persistSketchMutation(() async {
+        _throwIfStale(state);
+        final bodySize = state.canvasSize;
+        final pngBytes = await SketchRenderer.renderPng(
+          strokes: state.strokes,
+          sourceCanvasSize: bodySize,
+          outputSize: bodySize,
+          backgroundColor: state.paperColor,
+          pagePattern: state.pagePattern,
+          isImageBased: state.isImageBasedSketch,
+          backgroundImage: state.loadedBackgroundImage,
+        );
+        _throwIfStale(state);
+
+        final compressedBytes = await _compressSketchPreview(pngBytes);
+        _throwIfStale(state);
+
+        final fs = await fileSystem();
+        // Reuse existing preview path or create new one (only if valid local path)
+        final existingPreviewPath = state.sketchData.previewImage;
+        String previewPath;
+        if (existingPreviewPath != null &&
+            existingPreviewPath.isNotEmpty &&
+            !existingPreviewPath.startsWith('http')) {
+          previewPath = existingPreviewPath;
+        } else {
+          previewPath = path.join(await fs.documentDir, '${Uuid().v4()}.jpg');
+          createdPaths.add(previewPath);
         }
-        return;
-      }
-
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final bodySize = state.canvasSize;
-
-      // Draw background
-      if (state.isImageBasedSketch) {
-        canvas.drawColor(Colors.transparent, BlendMode.clear);
-      } else {
-        canvas.drawColor(state.paperColor, BlendMode.src);
-      }
-
-      if (state.loadedBackgroundImage != null) {
-        paintImage(
-          canvas: canvas,
-          rect: Offset.zero & bodySize,
-          image: state.loadedBackgroundImage!,
-          fit: state.isImageBasedSketch ? BoxFit.fill : BoxFit.contain,
+        _throwIfStale(state);
+        await _writeSketchFile(
+          state.note,
+          previewPath,
+          compressedBytes,
+          cacheImage: true,
         );
-      }
+        _throwIfStale(state);
 
-      // Draw page pattern
-      if (!state.isImageBasedSketch &&
-          state.sketchData.pagePattern != PagePattern.blank) {
-        final patternPainter = PagePatternPainter(
-          pattern: state.sketchData.pagePattern,
-          lineColor: isDark(state.paperColor)
-              ? Colors.white.withValues(alpha: 0.25)
-              : Colors.black.withValues(alpha: 0.18),
+        // Generate tiny thumbnail for locked note preview (under 1KB)
+        final thumbnail = await ThumbnailGenerator.generateFromBytes(
+          compressedBytes,
         );
-        patternPainter.paint(canvas, bodySize);
-      }
+        _throwIfStale(state);
 
-      // Draw strokes
-      final painter = SketchPainter(strokes: state.strokes);
-      painter.paint(canvas, bodySize);
-
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(
-        bodySize.width.toInt(),
-        bodySize.height.toInt(),
-      );
-      final pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
-
-      if (pngBytes == null) {
-        throw 'Failed to encode sketch image';
-      }
-
-      final compressedBytes = await _compressSketchPreview(
-        pngBytes.buffer.asUint8List(),
-      );
-
-      final fs = await fileSystem();
-      // Reuse existing preview path or create new one (only if valid local path)
-      final existingPreviewPath = state.sketchData.previewImage;
-      String previewPath;
-      if (existingPreviewPath != null && existingPreviewPath.isNotEmpty) {
-        previewPath = existingPreviewPath;
-      } else {
-        previewPath = path.join(await fs.documentDir, '${Uuid().v4()}.jpg');
-      }
-      // Update cache immediately with new bytes so UI shows updated preview
-      // This avoids race condition where UI rebuilds before file write completes
-      UniversalImageCache.instance.put(
-        previewPath,
-        previewPath,
-        compressedBytes,
-      );
-
-      // Fire and forget - don't await file write to prevent OPFS blocking UI
-      writeEncryptedBytes(previewPath, compressedBytes).catchError((e) {
-        AppLogger.error('Error writing preview', e);
-      });
-
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(
-        compressedBytes,
-      );
-
-      state.sketchData.strokes = state.strokes;
-      state.sketchData.backgroundColor = state.paperColor;
-      state.sketchData.previewImage = previewPath;
-      state.sketchData.aspectRatio = bodySize.width / bodySize.height;
-      state.sketchData.blurredThumbnail = thumbnail;
-
-      // Reuse existing strokes file path or create new one (only if valid local path)
-      final existingStrokesPath = state.sketchData.strokesFilePath;
-      String strokesFilePath;
-      if (existingStrokesPath != null && existingStrokesPath.isNotEmpty) {
-        strokesFilePath = existingStrokesPath;
-      } else {
-        strokesFilePath = path.join(
-          await fs.documentDir,
-          '${Uuid().v4()}.json',
+        // Reuse existing strokes file path or create new one (only if valid local path)
+        final existingStrokesPath = state.sketchData.strokesFilePath;
+        String strokesFilePath;
+        if (existingStrokesPath != null &&
+            existingStrokesPath.isNotEmpty &&
+            !existingStrokesPath.startsWith('http')) {
+          strokesFilePath = existingStrokesPath;
+        } else {
+          strokesFilePath = path.join(
+            await fs.documentDir,
+            '${Uuid().v4()}.json',
+          );
+          createdPaths.add(strokesFilePath);
+        }
+        final preparedSketch = SketchData(
+          strokes: List<SketchStroke>.from(state.strokes),
+          aspectRatio: bodySize.width / bodySize.height,
+          backgroundColor: state.paperColor,
+          pagePattern: state.pagePattern,
+          previewImage: previewPath,
+          backgroundImage: state.sketchData.backgroundImage,
+          blurredThumbnail: thumbnail,
+          strokesFilePath: strokesFilePath,
+          strokesContentHash: state.sketchData.strokesContentHash,
+          strokesHydrated: true,
         );
-      }
-      final strokesJson = json.encode(state.sketchData.toStrokesFileJson());
-      // Set strokesFilePath before write so toJson() assertion passes
-      state.sketchData.strokesFilePath = strokesFilePath;
-      // Await strokes file write - must complete before note save triggers sync
-      try {
-        await writeEncryptedBytes(
+        final strokesJson = json.encode(preparedSketch.toStrokesFileJson());
+        // Await strokes file write - must complete before note save triggers sync
+        _throwIfStale(state);
+        await _writeSketchFile(
+          state.note,
           strokesFilePath,
           Uint8List.fromList(utf8.encode(strokesJson)),
         );
-      } catch (e) {
-        AppLogger.error('Error writing strokes file', e);
-      }
+        _throwIfStale(state);
 
-      if (state.isImageBasedSketch && state.sourceAttachment != null) {
-        state.sourceAttachment!.type = AttachmentType.sketch;
-        state.sourceAttachment!.sketch = state.sketchData;
-        state.sourceAttachment!.image = null;
-        state.note.save();
-        if (!state.localSketches.contains(state.sketchData)) {
-          state.localSketches.add(state.sketchData);
+        // Publish only after both required files are complete. Locking cannot
+        // observe this object until this queued mutation finishes.
+        state.sketchData
+          ..strokes = preparedSketch.strokes
+          ..backgroundColor = preparedSketch.backgroundColor
+          ..pagePattern = preparedSketch.pagePattern
+          ..previewImage = preparedSketch.previewImage
+          ..aspectRatio = preparedSketch.aspectRatio
+          ..blurredThumbnail = preparedSketch.blurredThumbnail
+          ..strokesFilePath = preparedSketch.strokesFilePath;
+        state.sketchData.markStrokesHydrated();
+
+        if (state.isImageBasedSketch && state.sourceAttachment != null) {
+          state.sourceAttachment!.type = AttachmentType.sketch;
+          state.sourceAttachment!.sketch = state.sketchData;
+          state.sourceAttachment!.image = null;
+        } else if (!state.note.hasSketch(state.sketchData)) {
+          state.note.attachments.add(NoteAttachment.sketch(state.sketchData));
         }
-      } else if (!state.note.hasSketch(state.sketchData)) {
-        state.note.addSketch(state.sketchData);
-        if (!state.localSketches.contains(state.sketchData)) {
-          state.localSketches.add(state.sketchData);
-          state.onIndexUpdate?.call(
-            state.localSketches.indexOf(state.sketchData),
-          );
-        }
-      } else {
-        state.note.save();
+      });
+    } on _StaleSketchSave {
+      await _deleteCreatedSaveFiles(createdPaths);
+      return _SketchSaveResult.cancelled;
+    }
+
+    if (!_saveGenerations.isCurrent(state.saveToken)) {
+      return _SketchSaveResult.cancelled;
+    }
+    if (!state.localSketches.contains(state.sketchData)) {
+      state.localSketches.add(state.sketchData);
+      state.onIndexUpdate?.call(state.localSketches.indexOf(state.sketchData));
+    }
+    return _SketchSaveResult.saved;
+  }
+
+  void _throwIfStale(_PendingSaveState state) {
+    if (!_saveGenerations.isCurrent(state.saveToken)) {
+      throw const _StaleSketchSave();
+    }
+  }
+
+  Future<void> _deleteCreatedSaveFiles(List<String> paths) async {
+    if (paths.isEmpty) return;
+    final fs = await fileSystem();
+    for (final filePath in paths) {
+      try {
+        if (await fs.exists(filePath)) await fs.delete(filePath);
+        UniversalImageCache.instance.invalidate(filePath);
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to clean a cancelled sketch save file',
+          error,
+          stackTrace,
+        );
       }
-    } catch (e) {
-      AppLogger.error('Error in debounced save', e);
-      rethrow;
     }
   }
 
   /// Navigate to a different sketch by index
-  void _navigateToSketch(int index) {
+  Future<void> _navigateToSketch(int index) async {
     if (index < 0 || index >= _totalSketches) return;
     if (index == _currentSketchIndex) return;
 
@@ -549,13 +824,11 @@ class _SketchPageState extends State<SketchPage>
 
     // Only save if there are actual changes (dirty) and has content
     if (_isDirty && _strokes.isNotEmpty) {
-      // Queue debounced save - captures state and saves after delay
-      _queueDebouncedSave();
+      if (!await _save()) return;
       // Only clear pending if we just saved the pending sketch (it's now in _localSketches)
       if (isCurrentlyOnPendingSketch) {
         _pendingNewSketch = null;
       }
-      _isDirty = false; // Mark as not dirty since save is queued
     }
     // If on empty pending sketch, keep it stored so we can navigate back
 
@@ -564,20 +837,11 @@ class _SketchPageState extends State<SketchPage>
 
     if (isNavigatingToPendingSketch && _pendingNewSketch != null) {
       // Navigate to the pending new sketch
-      setState(() {
-        _currentSketchIndex = index;
-        _sketchData = _pendingNewSketch!;
-        _strokes = List<SketchStroke>.from(_sketchData.strokes);
-        _undoCount = 0;
-        _redoStack.clear();
-        _isDirty = false;
-        _isImageBasedSketch = false;
-        _paperColor = _sketchData.backgroundColor;
-        _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
-        _canvasSize = kA4Size;
-        _loadedBackgroundImage = null;
-        _hasFitted = false;
-      });
+      _activateSketch(
+        sketch: _pendingNewSketch!,
+        index: index,
+        prepareAssets: false,
+      );
       return;
     }
 
@@ -586,204 +850,107 @@ class _SketchPageState extends State<SketchPage>
       return;
     }
 
-    final newSketch = _localSketches[index];
-
-    // Check if background image is cached for instant display
-    final bgPath = newSketch.backgroundImage;
-    final cachedBgImage = bgPath != null ? _backgroundImageCache[bgPath] : null;
-
-    // Keep current paper color to prevent flash while loading
-    final previousPaperColor = _paperColor;
-
-    setState(() {
-      _currentSketchIndex = index;
-      _sketchData = newSketch;
-      _strokes = List<SketchStroke>.from(_sketchData.strokes);
-      _undoCount = 0;
-      _redoStack.clear();
-      _isDirty = false;
-      // Don't clear _pendingNewSketch here - keep it so we can navigate back
-
-      // Update image-based sketch flag
-      _isImageBasedSketch =
-          _sketchData.backgroundImage != null &&
-          _sketchData.backgroundImage!.isNotEmpty;
-
-      // Keep previous paper color if strokes need to be loaded from file
-      // (the actual color will be set when strokes file is loaded)
-      if (_strokes.isEmpty && _sketchData.hasStrokesFile) {
-        _paperColor = previousPaperColor;
-      } else {
-        _paperColor = _isImageBasedSketch
-            ? Colors.transparent
-            : _sketchData.backgroundColor;
-      }
-      _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
-
-      // Use cached background image if available for instant render
-      if (cachedBgImage != null) {
-        _loadedBackgroundImage = cachedBgImage;
-        _canvasSize = Size(
-          cachedBgImage.width.toDouble(),
-          cachedBgImage.height.toDouble(),
-        );
-      } else if (_isImageBasedSketch && _sketchData.aspectRatio > 0) {
-        // Fallback to aspect ratio while loading
-        _loadedBackgroundImage = null;
-        _canvasSize = Size(
-          kA4Size.width,
-          kA4Size.width / _sketchData.aspectRatio,
-        );
-      } else {
-        _loadedBackgroundImage = null;
-        _canvasSize = kA4Size;
-      }
-
-      _hasFitted = false;
-    });
-
-    // Load strokes from file if needed (strokes might be empty if stored in file)
-    if (_strokes.isEmpty && _sketchData.hasStrokesFile) {
-      _loadStrokesFromFile().then((_) {
-        // Load background image after strokes are loaded
-        if (mounted &&
-            _sketchData.backgroundImage != null &&
-            cachedBgImage == null) {
-          _loadBackgroundImage();
-        }
-      });
-    } else if (_sketchData.backgroundImage != null && cachedBgImage == null) {
-      // Load background image if present and not cached
-      _loadBackgroundImage();
-    }
+    _activateSketch(
+      sketch: _localSketches[index],
+      index: index,
+      prepareAssets: true,
+      loadingPaperColor: _paperColor,
+    );
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      _save();
+      unawaited(_save().then<void>((_) {}));
     }
   }
 
   /// Delete the current sketch and navigate to next or previous
   Future<void> _deleteCurrentSketch() async {
+    if (_isDeleting) return;
     final confirm = await showDeleteDialog(context, title: 'Delete Sketch?');
 
     if (confirm != true) return;
 
-    // Cancel any pending save timers to prevent stale saves from re-adding the sketch
+    final deletedSketch = _sketchData;
+    _isDeleting = true;
+    _saveGenerations.tombstone(deletedSketch);
     _autoSaveTimer?.cancel();
-    _debounceSaveTimer?.cancel();
-    _debounceSaveTimer = null;
-    _pendingSaveState = null;
+    _pendingDotTimer?.cancel();
 
-    final isOnPendingSketch = _pendingNewSketch == _sketchData;
-
-    if (isOnPendingSketch) {
-      // Just clear the pending sketch
-      _pendingNewSketch = null;
-
-      if (_localSketches.isEmpty) {
-        // No other sketches, close the page
-        if (mounted) {
-          Navigator.pop(context);
-        }
-        return;
+    try {
+      await _pageOperations.run(
+        () => _deleteSketchWithinPageQueue(deletedSketch),
+      );
+    } catch (error, stackTrace) {
+      _saveGenerations.restore(deletedSketch);
+      AppLogger.error('Failed to delete sketch', error, stackTrace);
+      if (mounted) {
+        snackbar('Failed to delete sketch', Colors.red);
       }
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
+  }
 
-      // Navigate to the last saved sketch
-      _navigateToSketch(_localSketches.length - 1);
-      return;
+  Future<void> _deleteSketchWithinPageQueue(SketchData deletedSketch) async {
+    final isOnPendingSketch = identical(_pendingNewSketch, deletedSketch);
+    final deletedIndex = _localSketches.indexOf(deletedSketch);
+
+    // A captured save that reached SQLite before seeing the tombstone is
+    // removed here. This makes confirmed deletion the final operation.
+    if (widget.note.hasSketch(deletedSketch)) {
+      await widget.note.removeSketch(deletedSketch);
     }
 
-    // Remove from local sketches
-    final deletedIndex = _localSketches.indexOf(_sketchData);
-    if (deletedIndex >= 0) {
+    if (isOnPendingSketch) {
+      _pendingNewSketch = null;
+    } else if (deletedIndex >= 0) {
       _localSketches.removeAt(deletedIndex);
     }
 
-    // Remove from note and delete associated files
     _isDirty = false;
-    await widget.note.removeSketch(_sketchData);
 
-    // Determine where to navigate
     if (_localSketches.isEmpty && _pendingNewSketch == null) {
-      // No sketches left, close the page
       if (mounted) {
         Navigator.pop(context);
       }
       return;
     }
 
-    // Navigate to next sketch if available, otherwise previous
     int newIndex;
     if (_pendingNewSketch != null) {
-      // Go to pending new sketch
       newIndex = _localSketches.length;
+    } else if (isOnPendingSketch) {
+      newIndex = _localSketches.length - 1;
     } else if (deletedIndex < _localSketches.length) {
-      // Next sketch exists at same index
-      newIndex = deletedIndex;
+      newIndex = max(0, deletedIndex);
     } else {
-      // Go to previous sketch
       newIndex = _localSketches.length - 1;
     }
 
-    // Load the new sketch
     final newSketch = newIndex < _localSketches.length
         ? _localSketches[newIndex]
         : _pendingNewSketch!;
 
-    setState(() {
-      _currentSketchIndex = newIndex;
-      _sketchData = newSketch;
-      _strokes = List<SketchStroke>.from(_sketchData.strokes);
-      _undoCount = 0;
-      _redoStack.clear();
-      _isDirty = false;
-
-      _isImageBasedSketch =
-          _sketchData.backgroundImage != null &&
-          _sketchData.backgroundImage!.isNotEmpty;
-
-      _paperColor = _isImageBasedSketch
-          ? Colors.transparent
-          : _sketchData.backgroundColor;
-      _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
-
-      if (_isImageBasedSketch && _sketchData.aspectRatio > 0) {
-        _canvasSize = Size(
-          kA4Size.width,
-          kA4Size.width / _sketchData.aspectRatio,
-        );
-      } else {
-        _canvasSize = kA4Size;
-      }
-
-      _loadedBackgroundImage = null;
-      _hasFitted = false;
-    });
-
-    // Load strokes from file if needed (old sketches store strokes in separate files)
-    if (_strokes.isEmpty && _sketchData.hasStrokesFile) {
-      _loadStrokesFromFile().then((_) {
-        if (mounted && _sketchData.backgroundImage != null) {
-          _loadBackgroundImage();
-        }
-      });
-    } else if (_sketchData.backgroundImage != null) {
-      _loadBackgroundImage();
-    }
+    final isPendingSketch = identical(newSketch, _pendingNewSketch);
+    _activateSketch(
+      sketch: newSketch,
+      index: newIndex,
+      prepareAssets: !isPendingSketch,
+      loadingPaperColor: _paperColor,
+    );
   }
 
   /// Create a new blank sketch
   void _createNewSketch() async {
     // Capture current sketch settings before saving
-    final currentBgColor = _sketchData.backgroundColor;
-    final currentPagePattern = _sketchData.pagePattern;
+    final currentBgColor = _paperColor;
+    final currentPagePattern = _pagePattern;
 
     // Save current sketch first if it has strokes
     if (_strokes.isNotEmpty) {
-      await _save();
+      if (!await _save()) return;
       // Clear pending since we just saved
       _pendingNewSketch = null;
     }
@@ -798,22 +965,12 @@ class _SketchPageState extends State<SketchPage>
       pagePattern: currentPagePattern,
     );
 
-    setState(() {
-      _pendingNewSketch = newSketch;
-      _sketchData = newSketch;
-      _strokes = [];
-      _undoCount = 0;
-      _redoStack.clear();
-      _isDirty = false;
-      _isImageBasedSketch = false;
-      _paperColor = newSketch.backgroundColor;
-      _selectedColor = isDark(_paperColor) ? Colors.white : Colors.black;
-      _canvasSize = kA4Size;
-      _loadedBackgroundImage = null;
-      _hasFitted = false;
-      // New sketch is at the end (after all local sketches)
-      _currentSketchIndex = _localSketches.length;
-    });
+    _pendingNewSketch = newSketch;
+    _activateSketch(
+      sketch: newSketch,
+      index: _localSketches.length,
+      prepareAssets: false,
+    );
   }
 
   void paintCanvas(Canvas canvas, Size size) {
@@ -866,13 +1023,56 @@ class _SketchPageState extends State<SketchPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_isLegacySketchUnavailable) {
+      return Scaffold(
+        backgroundColor: _backgroundColor,
+        appBar: AppBar(
+          backgroundColor: _backgroundColor,
+          foregroundColor: _foregroundColor,
+          title: const Text('Protected sketch'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  size: 56,
+                  color: _foregroundColor.withValues(alpha: 0.7),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'This older protected sketch could not be recovered yet. '
+                  'Its original encrypted drawing has been preserved and the '
+                  'app will retry after the next successful unlock.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _foregroundColor, fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        // Capture all data needed for save before popping
-        // This allows the save to complete even after widget disposes
-        _saveInBackground();
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        if (_isClosing || _isDeleting) return;
+        _isClosing = true;
+        await _assetPreparation;
+        if (!mounted || !context.mounted) return;
+        var saved = await _save();
+        while (saved && _isDirty) {
+          saved = await _save();
+        }
+        if (!saved) {
+          _isClosing = false;
+          return;
+        }
+        if (!mounted || !context.mounted) return;
         // If we came from image viewer and saved strokes, pop twice to skip the image viewer
         if (widget.sourceAttachment != null && _strokes.isNotEmpty) {
           Navigator.of(context).pop();
@@ -923,14 +1123,18 @@ class _SketchPageState extends State<SketchPage>
                             child: UniversalImage(
                               path: _sketchData.backgroundImage!,
                               fit: BoxFit.contain,
+                              passwordProtectedDecoder:
+                                  widget.note.locked && widget.note.unlocked
+                                  ? widget.note.decryptAttachmentForSession
+                                  : null,
                             ),
                           ),
                         // Page pattern layer - rendered dynamically, not saved in preview
                         if (!_isImageBasedSketch &&
-                            _sketchData.pagePattern != PagePattern.blank)
+                            _pagePattern != PagePattern.blank)
                           Positioned.fill(
                             child: PagePatternBackground(
-                              pattern: _sketchData.pagePattern,
+                              pattern: _pagePattern,
                               size: _canvasSize,
                               lineColor: isDark(_paperColor)
                                   ? Colors.white.withValues(alpha: 0.25)
@@ -956,7 +1160,11 @@ class _SketchPageState extends State<SketchPage>
                             },
                             child: Listener(
                               onPointerDown: (details) {
-                                if (widget.note.readOnly || _isMoveMode) return;
+                                if (widget.note.readOnly ||
+                                    _isMoveMode ||
+                                    !_isCanvasReady) {
+                                  return;
+                                }
                                 setState(() {
                                   _isMouseInput =
                                       details.kind ==
@@ -978,7 +1186,11 @@ class _SketchPageState extends State<SketchPage>
                                 });
                               },
                               onPointerMove: (details) {
-                                if (widget.note.readOnly || _isMoveMode) return;
+                                if (widget.note.readOnly ||
+                                    _isMoveMode ||
+                                    !_isCanvasReady) {
+                                  return;
+                                }
                                 setState(() {
                                   _cursorPosition = details.localPosition;
                                 });
@@ -1020,9 +1232,15 @@ class _SketchPageState extends State<SketchPage>
                                 }
                               },
                               onPointerUp: (details) {
-                                if (widget.note.readOnly || _isMoveMode) return;
+                                if (widget.note.readOnly ||
+                                    _isMoveMode ||
+                                    !_isCanvasReady) {
+                                  return;
+                                }
                                 setState(() {
-                                  _activePointerCount--;
+                                  if (_activePointerCount > 0) {
+                                    _activePointerCount--;
+                                  }
                                   if (_activePointerCount == 0) {
                                     _isMultiTouch = false;
                                     if (_hasStartedDrawing) {
@@ -1078,9 +1296,15 @@ class _SketchPageState extends State<SketchPage>
                                 });
                               },
                               onPointerCancel: (details) {
-                                if (widget.note.readOnly || _isMoveMode) return;
+                                if (widget.note.readOnly ||
+                                    _isMoveMode ||
+                                    !_isCanvasReady) {
+                                  return;
+                                }
                                 setState(() {
-                                  _activePointerCount--;
+                                  if (_activePointerCount > 0) {
+                                    _activePointerCount--;
+                                  }
                                   if (_activePointerCount == 0) {
                                     _isMultiTouch = false;
                                     // Don't save stroke on cancel
@@ -1213,6 +1437,13 @@ class _SketchPageState extends State<SketchPage>
                                     child: UniversalImage(
                                       path: _sketchData.previewImage!,
                                       fit: BoxFit.contain,
+                                      passwordProtectedDecoder:
+                                          widget.note.locked &&
+                                              widget.note.unlocked
+                                          ? widget
+                                                .note
+                                                .decryptAttachmentForSession
+                                          : null,
                                     ),
                                   );
                                 },
@@ -1227,6 +1458,45 @@ class _SketchPageState extends State<SketchPage>
                 },
               ),
             ),
+            if (_isImageBasedSketch && _backgroundUnavailable)
+              Positioned.fill(
+                child: SafeArea(
+                  child: Center(
+                    child: Card(
+                      margin: const EdgeInsets.all(24),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.image_not_supported_outlined),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Background unavailable; drawing preserved',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: _isRetryingBackground
+                                  ? null
+                                  : _retryBackground,
+                              icon: _isRetryingBackground
+                                  ? const SizedBox.square(
+                                      dimension: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             // Floating toolbar at the bottom
             Positioned(
               left: 0,
@@ -1264,6 +1534,8 @@ class _SketchPageState extends State<SketchPage>
                                         setState(() {
                                           --_undoCount;
                                           _redoStack.add(_strokes.removeLast());
+                                          _sourceController.recordStrokeEdit();
+                                          _editRevision++;
                                           _isDirty = true;
                                         });
                                       },
@@ -1276,6 +1548,8 @@ class _SketchPageState extends State<SketchPage>
                                         setState(() {
                                           ++_undoCount;
                                           _strokes.add(_redoStack.removeLast());
+                                          _sourceController.recordStrokeEdit();
+                                          _editRevision++;
                                           _isDirty = true;
                                         });
                                       },
@@ -1327,21 +1601,21 @@ class _SketchPageState extends State<SketchPage>
                                 if (!_isImageBasedSketch)
                                   PopupMenuButton<PagePattern>(
                                     icon: Icon(
-                                      _sketchData.pagePattern.icon,
+                                      _pagePattern.icon,
                                       color: _foregroundColor,
                                     ),
                                     tooltip: context.l10n.pagePattern,
                                     onSelected: (pattern) {
                                       setState(() {
-                                        _sketchData.pagePattern = pattern;
+                                        _pagePattern = pattern;
+                                        _editRevision++;
                                         _isDirty = true;
                                       });
                                     },
                                     itemBuilder: (context) =>
                                         PagePattern.values.map((pattern) {
                                           final isSelected =
-                                              _sketchData.pagePattern ==
-                                              pattern;
+                                              _pagePattern == pattern;
                                           return PopupMenuItem(
                                             value: pattern,
                                             child: Row(
@@ -1391,7 +1665,7 @@ class _SketchPageState extends State<SketchPage>
                                     }
                                   },
                                   itemBuilder: (context) => [
-                                    if (_strokes.isNotEmpty)
+                                    if (_strokes.isNotEmpty && _isCanvasReady)
                                       PopupMenuItem(
                                         value: 'save',
                                         child: Row(
@@ -1608,9 +1882,9 @@ class _SketchPageState extends State<SketchPage>
         return Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () {
+            onTap: () async {
               close();
-              _navigateToSketch(index);
+              await _navigateToSketch(index);
             },
             borderRadius: BorderRadius.circular(8),
             child: Container(
@@ -1636,6 +1910,10 @@ class _SketchPageState extends State<SketchPage>
                       UniversalImage(
                         path: sketch.previewImage!,
                         fit: BoxFit.cover,
+                        passwordProtectedDecoder:
+                            widget.note.locked && widget.note.unlocked
+                            ? widget.note.decryptAttachmentForSession
+                            : null,
                       ),
                     // Page number badge
                     Positioned(
@@ -1715,14 +1993,18 @@ class _SketchPageState extends State<SketchPage>
     );
   }
 
-  Future<void> _loadBackgroundImage() async {
-    final bgImage = _sketchData.backgroundImage!;
+  Future<void> _loadBackgroundImage(SketchSourceActivation activation) async {
+    final sketch = activation.sketch;
+    final bgImage = sketch.backgroundImage!;
 
     // Check cache first
-    if (_backgroundImageCache.containsKey(bgImage)) {
+    if (!widget.note.locked && _backgroundImageCache.containsKey(bgImage)) {
       final cachedImage = _backgroundImageCache[bgImage]!;
+      if (!_canApplySourceResult(activation)) return;
       setState(() {
         _loadedBackgroundImage = cachedImage;
+        _ownsLoadedBackgroundImage = false;
+        _backgroundUnavailable = false;
         if (_isImageBasedSketch) {
           _canvasSize = Size(
             cachedImage.width.toDouble(),
@@ -1740,19 +2022,30 @@ class _SketchPageState extends State<SketchPage>
       throw "$bgImage not found";
     }
 
-    final data = await fs.readBytes(bgImage);
+    final data = await widget.note.readAttachmentForSession(bgImage);
     final codec = await ui.instantiateImageCodec(data);
     final frame = await codec.getNextFrame();
+    codec.dispose();
 
-    // Add to cache, evict oldest if too large
-    if (_backgroundImageCache.length >= _maxImageCacheSize) {
-      final oldestKey = _backgroundImageCache.keys.first;
-      _backgroundImageCache.remove(oldestKey)?.dispose();
+    // Authenticated plaintext must remain scoped to this page. Public image
+    // backgrounds retain the global cache used for smooth navigation.
+    if (!widget.note.locked) {
+      if (_backgroundImageCache.length >= _maxImageCacheSize) {
+        final oldestKey = _backgroundImageCache.keys.first;
+        _backgroundImageCache.remove(oldestKey)?.dispose();
+      }
+      _backgroundImageCache[bgImage] = frame.image;
     }
-    _backgroundImageCache[bgImage] = frame.image;
+
+    if (!_canApplySourceResult(activation)) {
+      if (widget.note.locked) frame.image.dispose();
+      return;
+    }
 
     setState(() {
       _loadedBackgroundImage = frame.image;
+      _ownsLoadedBackgroundImage = widget.note.locked;
+      _backgroundUnavailable = false;
       // When we have a background image, use its dimensions for the canvas
       if (_isImageBasedSketch) {
         _canvasSize = Size(
@@ -1762,6 +2055,51 @@ class _SketchPageState extends State<SketchPage>
         _hasFitted = false; // Re-fit to screen with new canvas size
       }
     });
+  }
+
+  Future<void> _retryBackground() async {
+    if (_isRetryingBackground || !_isImageBasedSketch) return;
+    final activation = _currentSourceActivation;
+    final originalPath = activation.sketch.backgroundImage;
+    if (originalPath == null || originalPath.isEmpty) return;
+
+    setState(() => _isRetryingBackground = true);
+    try {
+      String? recoveredPath;
+      if (originalPath.startsWith('http://') ||
+          originalPath.startsWith('https://')) {
+        recoveredPath = await NoteSyncService().retryRemoteAttachmentDownload(
+          originalPath,
+          widget.note,
+        );
+      } else {
+        final fs = await fileSystem();
+        if (!await fs.exists(originalPath)) {
+          recoveredPath = await NoteSyncService().redownloadFile(originalPath);
+        }
+      }
+      if (!_isCurrentActivation(activation)) return;
+      if (recoveredPath != null && recoveredPath.isNotEmpty) {
+        activation.sketch.backgroundImage = recoveredPath;
+      }
+
+      await _loadBackgroundImage(activation);
+      if (!_isCurrentActivation(activation)) return;
+      if (widget.note.locked && widget.note.unlocked) {
+        await SketchPreviewRepairService.repairAfterUnlock(widget.note);
+      } else if (!widget.note.locked) {
+        await SketchPreviewRepairService.repairMissingPreviews(widget.note);
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error('Sketch background retry failed', error, stackTrace);
+      if (_isCurrentActivation(activation)) {
+        setState(() => _backgroundUnavailable = true);
+      }
+    } finally {
+      if (_isCurrentActivation(activation)) {
+        setState(() => _isRetryingBackground = false);
+      }
+    }
   }
 
   void _fitToScreen(double viewportWidth, double viewportHeight) {
@@ -1793,6 +2131,7 @@ class _SketchPageState extends State<SketchPage>
   }
 
   void _startStroke(double x, double y, double? pressure) {
+    if (_isClosing || _isDeleting) return;
     setState(() {
       _currentStroke = SketchStroke(
         // Use full precision for x,y since data is now saved in separate files
@@ -1806,6 +2145,7 @@ class _SketchPageState extends State<SketchPage>
   }
 
   void _updateStroke(double x, double y, double? pressure) {
+    if (_isClosing || _isDeleting) return;
     setState(() {
       if (_currentStroke != null) {
         // Use full precision for x,y for buttery smooth Bezier curves
@@ -1816,12 +2156,15 @@ class _SketchPageState extends State<SketchPage>
   }
 
   void _endStroke() {
+    if (_isClosing || _isDeleting) return;
     setState(() {
       if (_currentStroke != null) {
         ++_undoCount;
         _redoStack.clear();
         _strokes.add(_currentStroke!);
+        _sourceController.recordStrokeEdit();
         _currentStroke = null;
+        _editRevision++;
         _isDirty = true;
       }
     });
@@ -1832,6 +2175,7 @@ class _SketchPageState extends State<SketchPage>
 
   /// Place a dot at the given position (for quick taps)
   void _placeDot(double x, double y, double? pressure) {
+    if (_isClosing || _isDeleting) return;
     final p = (pressure ?? 0.5).toStringAsFixed(3);
     // Create a stroke with two points very close together to form a dot
     final dot = SketchStroke(
@@ -1844,51 +2188,13 @@ class _SketchPageState extends State<SketchPage>
       ++_undoCount;
       _redoStack.clear();
       _strokes.add(dot);
+      _sourceController.recordStrokeEdit();
+      _editRevision++;
       _isDirty = true;
     });
 
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 3), _save);
-  }
-
-  /// Save sketch in background without blocking UI.
-  /// Captures all necessary state upfront so save completes even after widget disposes.
-  void _saveInBackground() {
-    _autoSaveTimer?.cancel();
-
-    // Cancel any pending debounced save to prevent duplicate saves
-    _debounceSaveTimer?.cancel();
-    _debounceSaveTimer = null;
-    _pendingSaveState = null;
-
-    // Skip save if nothing changed
-    if (!_isDirty && !_isDeleted) {
-      return;
-    }
-
-    // Capture all state needed for saving
-    final strokes = List<SketchStroke>.from(_strokes);
-    final isDeleted = _isDeleted;
-    final sketchData = _sketchData;
-    final note = widget.note;
-    final canvasSize = _canvasSize;
-    final paperColor = _paperColor;
-    final isImageBasedSketch = _isImageBasedSketch;
-    final loadedBackgroundImage = _loadedBackgroundImage;
-    final sourceAttachment = widget.sourceAttachment;
-
-    // Fire and forget - save happens in background
-    _saveSketchAsync(
-      strokes: strokes,
-      isDeleted: isDeleted,
-      sketchData: sketchData,
-      note: note,
-      canvasSize: canvasSize,
-      paperColor: paperColor,
-      isImageBasedSketch: isImageBasedSketch,
-      loadedBackgroundImage: loadedBackgroundImage,
-      sourceAttachment: sourceAttachment,
-    );
   }
 
   /// Maximum preview image size in bytes (500KB)
@@ -1932,315 +2238,53 @@ class _SketchPageState extends State<SketchPage>
     );
   }
 
-  static Future<void> _saveSketchAsync({
-    required List<SketchStroke> strokes,
-    required bool isDeleted,
-    required SketchData sketchData,
-    required Note note,
-    required Size canvasSize,
-    required Color paperColor,
-    required bool isImageBasedSketch,
-    required ui.Image? loadedBackgroundImage,
-    required NoteAttachment? sourceAttachment,
+  static Future<void> _writeSketchFile(
+    Note note,
+    String filePath,
+    Uint8List plaintext, {
+    bool cacheImage = false,
   }) async {
-    if (isDeleted) {
-      note.removeSketch(sketchData);
-      return;
-    }
-
-    try {
-      if (strokes.isEmpty) {
-        if (note.hasSketch(sketchData)) {
-          note.removeSketch(sketchData);
-        }
-        return;
-      }
-
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-
-      // Draw background
-      if (isImageBasedSketch) {
-        canvas.drawColor(Colors.transparent, BlendMode.clear);
-      } else {
-        canvas.drawColor(paperColor, BlendMode.src);
-      }
-
-      if (loadedBackgroundImage != null) {
-        paintImage(
-          canvas: canvas,
-          rect: Offset.zero & canvasSize,
-          image: loadedBackgroundImage,
-          fit: isImageBasedSketch ? BoxFit.fill : BoxFit.contain,
-        );
-      }
-
-      // Draw page pattern
-      if (!isImageBasedSketch && sketchData.pagePattern != PagePattern.blank) {
-        final patternPainter = PagePatternPainter(
-          pattern: sketchData.pagePattern,
-          lineColor: isDark(paperColor)
-              ? Colors.white.withValues(alpha: 0.25)
-              : Colors.black.withValues(alpha: 0.18),
-        );
-        patternPainter.paint(canvas, canvasSize);
-      }
-
-      // Draw strokes
-      final painter = SketchPainter(strokes: strokes);
-      painter.paint(canvas, canvasSize);
-
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(
-        canvasSize.width.toInt(),
-        canvasSize.height.toInt(),
-      );
-      final pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
-
-      if (pngBytes == null) {
-        throw 'Failed to encode sketch image';
-      }
-
-      // Compress the preview image to be under 500KB
-      final compressedBytes = await _compressSketchPreview(
-        pngBytes.buffer.asUint8List(),
-      );
-
-      final fs = await fileSystem();
-      // Reuse existing preview path or create new one (only if valid local path)
-      final existingPreviewPath = sketchData.previewImage;
-      String previewPath;
-      if (existingPreviewPath != null && existingPreviewPath.isNotEmpty) {
-        previewPath = existingPreviewPath;
-      } else {
-        previewPath = path.join(await fs.documentDir, '${Uuid().v4()}.jpg');
-      }
-      // Update cache immediately with new bytes so UI shows updated preview
-      // This avoids race condition where UI rebuilds before file write completes
-      UniversalImageCache.instance.put(
-        previewPath,
-        previewPath,
-        compressedBytes,
-      );
-
-      // Fire and forget - don't await file write to prevent OPFS blocking UI
-      writeEncryptedBytes(previewPath, compressedBytes).catchError((e) {
-        AppLogger.error('Error writing preview', e);
-      });
-
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(
-        compressedBytes,
-      );
-
-      sketchData.strokes = strokes;
-      sketchData.backgroundColor = paperColor;
-      sketchData.previewImage = previewPath;
-      sketchData.aspectRatio = canvasSize.width / canvasSize.height;
-      sketchData.blurredThumbnail = thumbnail;
-
-      // Reuse existing strokes file path or create new one (only if valid local path)
-      final existingStrokesPath = sketchData.strokesFilePath;
-      String strokesFilePath;
-      if (existingStrokesPath != null && existingStrokesPath.isNotEmpty) {
-        strokesFilePath = existingStrokesPath;
-      } else {
-        strokesFilePath = path.join(
-          await fs.documentDir,
-          '${Uuid().v4()}.json',
-        );
-      }
-      // Set strokesFilePath before write so toJson() assertion passes
-      sketchData.strokesFilePath = strokesFilePath;
-      final strokesJson = json.encode(sketchData.toStrokesFileJson());
-      // Await strokes file write - must complete before note save triggers sync
-      try {
-        await writeEncryptedBytes(
-          strokesFilePath,
-          Uint8List.fromList(utf8.encode(strokesJson)),
-        );
-      } catch (e) {
-        AppLogger.error('Error writing strokes file', e);
-      }
-
-      // If this was an image attachment, convert it to a sketch
-      if (isImageBasedSketch && sourceAttachment != null) {
-        sourceAttachment.type = AttachmentType.sketch;
-        sourceAttachment.sketch = sketchData;
-        sourceAttachment.image = null;
-        note.save();
-      } else if (!note.hasSketch(sketchData)) {
-        note.addSketch(sketchData);
-      } else {
-        note.save();
-      }
-    } catch (e) {
-      AppLogger.error('Error saving sketch in background', e);
+    await note.writeAttachmentForSession(filePath, plaintext);
+    if (!cacheImage) return;
+    if (note.locked) {
+      UniversalImageCache.instance.invalidate(filePath);
+    } else {
+      UniversalImageCache.instance.put(filePath, filePath, plaintext);
     }
   }
 
-  Future<void> _save() async {
-    // Don't save while user is actively drawing - reschedule for later
+  Future<bool> _save() => _pageOperations.run(_saveWithinPageQueue);
+
+  Future<bool> _saveWithinPageQueue() async {
+    if (_isLegacySketchUnavailable) return true;
+    if (_saveGenerations.isDeleted(_sketchData)) return true;
+    if (!_isCanvasReady) return !_isDirty;
     if (_currentStroke != null) {
       _autoSaveTimer?.cancel();
       _autoSaveTimer = Timer(const Duration(seconds: 3), _save);
-      return;
+      return false;
     }
 
-    // Don't save if the sketch was deleted
-    if (_isDeleted) {
-      widget.note.removeSketch(_sketchData);
-      return;
-    }
+    _autoSaveTimer?.cancel();
+    if (!_isDirty) return true;
 
+    final state = _captureSaveState();
     try {
-      if (_strokes.isEmpty) {
-        if (widget.note.hasSketch(_sketchData)) {
-          widget.note.removeSketch(_sketchData);
-        }
-        return;
-      }
-
-      _autoSaveTimer?.cancel();
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final bodySize = _canvasSize;
-
-      // Draw background
-      if (_isImageBasedSketch) {
-        // For image-based sketch, use transparent background
-        canvas.drawColor(Colors.transparent, BlendMode.clear);
-      } else {
-        canvas.drawColor(_paperColor, BlendMode.src);
-      }
-
-      if (_loadedBackgroundImage != null) {
-        paintImage(
-          canvas: canvas,
-          rect: Offset.zero & bodySize,
-          image: _loadedBackgroundImage!,
-          fit: _isImageBasedSketch ? BoxFit.fill : BoxFit.contain,
-        );
-      }
-
-      // Draw page pattern
-      if (!_isImageBasedSketch &&
-          _sketchData.pagePattern != PagePattern.blank) {
-        final patternPainter = PagePatternPainter(
-          pattern: _sketchData.pagePattern,
-          lineColor: isDark(_paperColor)
-              ? Colors.white.withValues(alpha: 0.25)
-              : Colors.black.withValues(alpha: 0.18),
-        );
-        patternPainter.paint(canvas, bodySize);
-      }
-
-      // Draw strokes
-      final painter = SketchPainter(strokes: _strokes);
-      painter.paint(canvas, bodySize);
-
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(
-        bodySize.width.toInt(),
-        bodySize.height.toInt(),
-      );
-      final pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
-
-      if (pngBytes == null) {
-        throw 'Failed to encode sketch image';
-      }
-
-      // Compress the preview image to be under 500KB
-      final compressedBytes = await _compressSketchPreview(
-        pngBytes.buffer.asUint8List(),
-      );
-
-      final fs = await fileSystem();
-      // Reuse existing preview path or create new one (only if valid local path)
-      final existingPreviewPath = _sketchData.previewImage;
-      String previewPath;
-      if (existingPreviewPath != null && existingPreviewPath.isNotEmpty) {
-        previewPath = existingPreviewPath;
-      } else {
-        previewPath = path.join(await fs.documentDir, '${Uuid().v4()}.jpg');
-      }
-      // Update cache immediately with new bytes so UI shows updated preview
-      // This avoids race condition where UI rebuilds before file write completes
-      UniversalImageCache.instance.put(
-        previewPath,
-        previewPath,
-        compressedBytes,
-      );
-
-      // Fire and forget - don't await file write to prevent OPFS blocking UI
-      writeEncryptedBytes(previewPath, compressedBytes).catchError((e) {
-        AppLogger.error('Error writing preview', e);
-      });
-
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(
-        compressedBytes,
-      );
-
-      _sketchData.strokes = _strokes;
-      _sketchData.backgroundColor = _paperColor;
-      _sketchData.previewImage = previewPath;
-      _sketchData.aspectRatio = bodySize.width / bodySize.height;
-      _sketchData.blurredThumbnail = thumbnail;
-
-      // Reuse existing strokes file path or create new one (only if valid local path)
-      final existingStrokesPath = _sketchData.strokesFilePath;
-      String strokesFilePath;
-      if (existingStrokesPath != null && existingStrokesPath.isNotEmpty) {
-        strokesFilePath = existingStrokesPath;
-      } else {
-        strokesFilePath = path.join(
-          await fs.documentDir,
-          '${Uuid().v4()}.json',
-        );
-      }
-      // Set strokesFilePath before write so toJson() assertion passes
-      _sketchData.strokesFilePath = strokesFilePath;
-      final strokesJson = json.encode(_sketchData.toStrokesFileJson());
-      // Await strokes file write - must complete before note save triggers sync
-      try {
-        await writeEncryptedBytes(
-          strokesFilePath,
-          Uint8List.fromList(utf8.encode(strokesJson)),
-        );
-      } catch (e) {
-        AppLogger.error('Error writing strokes file', e);
-      }
-
-      // If this was an image attachment, convert it to a sketch
-      if (_isImageBasedSketch && widget.sourceAttachment != null) {
-        // Update the source attachment to become a sketch
-        widget.sourceAttachment!.type = AttachmentType.sketch;
-        widget.sourceAttachment!.sketch = _sketchData;
-        widget.sourceAttachment!.image = null;
-        widget.note.save();
-        // Add to local sketches if not already there
-        if (!_localSketches.contains(_sketchData)) {
-          _localSketches.add(_sketchData);
-        }
+      final result = await _executePendingSave(state);
+      if (result == _SketchSaveResult.cancelled) return true;
+      if (_saveGenerations.isCurrent(state.saveToken) &&
+          identical(state.sketchData, _sketchData) &&
+          state.revision == _editRevision) {
+        _isDirty = false;
         _pendingNewSketch = null;
-      } else if (!widget.note.hasSketch(_sketchData)) {
-        widget.note.addSketch(_sketchData);
-        // Add to local sketches and update index
-        if (!_localSketches.contains(_sketchData)) {
-          _localSketches.add(_sketchData);
-          _currentSketchIndex = _localSketches.indexOf(_sketchData);
-        }
-        _pendingNewSketch = null;
-      } else {
-        widget.note.save();
       }
-      _isDirty = false;
-    } catch (e) {
+      return true;
+    } catch (error, stackTrace) {
+      AppLogger.error('Error saving sketch', error, stackTrace);
       if (mounted) {
-        snackbar(context.l10n.errorSavingSketch(e.toString()), Colors.red);
+        snackbar(context.l10n.errorSavingSketch(error.toString()), Colors.red);
       }
-      AppLogger.error('Error saving sketch', e);
+      return false;
     }
   }
 
@@ -2255,6 +2299,7 @@ class _SketchPageState extends State<SketchPage>
       setState(() {
         if (isBackground) {
           _paperColor = color;
+          _editRevision++;
           _isDirty = true;
         } else {
           _selectedColor = color;
@@ -2269,77 +2314,49 @@ class _SketchPageState extends State<SketchPage>
   }
 
   Future<void> _saveToGallery() async {
+    if (!_isCanvasReady) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Background unavailable; drawing preserved'),
+          ),
+        );
+      }
+      return;
+    }
     try {
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
       final bodySize = _canvasSize;
-
-      // Draw background - same logic as preview save
-      if (_isImageBasedSketch) {
-        // For image-based sketch, use transparent background
-        canvas.drawColor(Colors.transparent, BlendMode.clear);
-      } else {
-        canvas.drawColor(_paperColor, BlendMode.src);
-      }
-
-      if (_loadedBackgroundImage != null) {
-        paintImage(
-          canvas: canvas,
-          rect: Offset.zero & bodySize,
-          image: _loadedBackgroundImage!,
-          fit: _isImageBasedSketch ? BoxFit.fill : BoxFit.contain,
-        );
-      }
-
-      // Draw page pattern
-      if (!_isImageBasedSketch &&
-          _sketchData.pagePattern != PagePattern.blank) {
-        final patternPainter = PagePatternPainter(
-          pattern: _sketchData.pagePattern,
-          lineColor: isDark(_paperColor)
-              ? Colors.white.withValues(alpha: 0.25)
-              : Colors.black.withValues(alpha: 0.18),
-        );
-        patternPainter.paint(canvas, bodySize);
-      }
-
-      // Draw strokes
-      final painter = SketchPainter(strokes: _strokes);
-      painter.paint(canvas, bodySize);
-
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(
-        bodySize.width.toInt(),
-        bodySize.height.toInt(),
+      final pngBytes = await SketchRenderer.renderPng(
+        strokes: _strokes,
+        sourceCanvasSize: bodySize,
+        outputSize: bodySize,
+        backgroundColor: _paperColor,
+        pagePattern: _pagePattern,
+        isImageBased: _isImageBasedSketch,
+        backgroundImage: _loadedBackgroundImage,
       );
-      final pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
 
-      if (pngBytes != null) {
-        final fs = await fileSystem();
-        final index = _localSketches.indexOf(_sketchData);
-        final fileName = 'sketch_${widget.note.id}_$index.png';
+      final fs = await fileSystem();
+      final index = _localSketches.indexOf(_sketchData);
+      final fileName = 'sketch_${widget.note.id}_$index.png';
 
-        final success = await fs.saveToGallery(
-          pngBytes.buffer.asUint8List(),
-          fileName,
-        );
+      final success = await fs.saveToGallery(pngBytes, fileName);
 
-        if (!mounted) return;
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                kIsWeb
-                    ? context.l10n.sketchDownloaded
-                    : context.l10n.savedToGallery,
-              ),
+      if (!mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              kIsWeb
+                  ? context.l10n.sketchDownloaded
+                  : context.l10n.savedToGallery,
             ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.failedToSaveSketch)),
-          );
-        }
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.failedToSaveSketch)),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -2351,365 +2368,35 @@ class _SketchPageState extends State<SketchPage>
   }
 }
 
-class SketchPainter extends CustomPainter {
-  final List<SketchStroke> strokes;
-
-  /// Cache for parsed points and computed stroke outlines
-  /// Key: stroke.points hashCode, Value: computed outline points
-  static final Map<int, List<Offset>> _strokeCache = {};
-  static const int _maxCacheSize = 500;
-
-  SketchPainter({required this.strokes});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
-    for (final stroke in strokes) {
-      _paintStroke(canvas, stroke);
-    }
-    canvas.restore();
-  }
-
-  void _paintStroke(Canvas canvas, SketchStroke stroke) {
-    final points = SketchStroke.parsePoints(stroke.points);
-    if (points.isEmpty) return;
-
-    switch (stroke.tool) {
-      case SketchTool.eraser:
-        _paintEraserStroke(canvas, stroke, points);
-        break;
-      case SketchTool.pencil:
-        _paintPencilStroke(canvas, stroke, points);
-        break;
-      case SketchTool.brush:
-        _paintBrushStroke(canvas, stroke, points);
-        break;
-      case SketchTool.highlighter:
-        _paintHighlighterStroke(canvas, stroke, points);
-        break;
-      case SketchTool.pen:
-        _paintPenStroke(canvas, stroke, points);
-        break;
-    }
-  }
-
-  /// Standard pen stroke - solid, consistent width with buttery smooth Bezier curves
-  void _paintPenStroke(
-    Canvas canvas,
-    SketchStroke stroke,
-    List<PointVector> points,
-  ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
-        points,
-        options: StrokeOptions(
-          size: stroke.size,
-          thinning: 0.4,
-          smoothing: 0.85, // High smoothing for buttery smooth strokes
-          streamline: 0.75, // Higher streamline for natural flow
-          isComplete: true,
-        ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
-
-    if (outlinePoints.isEmpty) return;
-
-    // Use quadratic Bezier curves for silky smooth edges
-    final path = Path();
-    path.moveTo(outlinePoints[0].dx, outlinePoints[0].dy);
-
-    for (int i = 1; i < outlinePoints.length - 1; i++) {
-      final p0 = outlinePoints[i];
-      final p1 = outlinePoints[i + 1];
-      final midX = (p0.dx + p1.dx) / 2;
-      final midY = (p0.dy + p1.dy) / 2;
-      path.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
-    }
-
-    if (outlinePoints.length > 1) {
-      final last = outlinePoints.last;
-      path.lineTo(last.dx, last.dy);
-    }
-    path.close();
-
-    final paint = Paint()
-      ..color = stroke.color
-      ..style = PaintingStyle.fill
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..isAntiAlias = true;
-
-    canvas.drawPath(path, paint);
-  }
-
-  /// Pencil stroke - graphite texture with slight opacity and noise
-  void _paintPencilStroke(
-    Canvas canvas,
-    SketchStroke stroke,
-    List<PointVector> points,
-  ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
-        points,
-        options: StrokeOptions(
-          size: stroke.size * 0.9, // Slightly thinner than pen
-          thinning: 0.55,
-          smoothing: 0.7, // Higher smoothing for smoother pencil strokes
-          streamline: 0.6, // Better streamline for natural pencil feel
-          isComplete: true,
-        ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
-
-    if (outlinePoints.isEmpty) return;
-
-    // Use quadratic Bezier curves for silky smooth edges
-    final path = Path();
-    path.moveTo(outlinePoints[0].dx, outlinePoints[0].dy);
-
-    for (int i = 1; i < outlinePoints.length - 1; i++) {
-      final p0 = outlinePoints[i];
-      final p1 = outlinePoints[i + 1];
-      final midX = (p0.dx + p1.dx) / 2;
-      final midY = (p0.dy + p1.dy) / 2;
-      path.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
-    }
-
-    if (outlinePoints.length > 1) {
-      final last = outlinePoints.last;
-      path.lineTo(last.dx, last.dy);
-    }
-    path.close();
-
-    // Main pencil stroke with reduced opacity for graphite look
-    final paint = Paint()
-      ..color = stroke.color.withValues(alpha: 0.75)
-      ..style = PaintingStyle.fill
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..isAntiAlias = true;
-
-    canvas.drawPath(path, paint);
-  }
-
-  /// Brush stroke - variable width based on velocity, tapered ends with buttery smooth Bezier curves
-  void _paintBrushStroke(
-    Canvas canvas,
-    SketchStroke stroke,
-    List<PointVector> points,
-  ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
-        points,
-        options: StrokeOptions(
-          size: stroke.size,
-          thinning: 0.65, // Refined thinning for natural brush effect
-          smoothing: 0.8, // High smoothing for buttery smooth brush strokes
-          streamline: 0.75, // Better streamline for fluid brush movement
-          start: StrokeEndOptions.start(
-            taperEnabled: true,
-            customTaper: stroke.size * 2.5,
-          ),
-          end: StrokeEndOptions.end(
-            taperEnabled: true,
-            customTaper: stroke.size * 2.5,
-          ),
-          isComplete: true,
-        ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
-
-    if (outlinePoints.isEmpty) return;
-
-    // Use quadratic Bezier curves for silky smooth brush strokes
-    final path = Path();
-    path.moveTo(outlinePoints[0].dx, outlinePoints[0].dy);
-
-    for (int i = 1; i < outlinePoints.length - 1; i++) {
-      final p0 = outlinePoints[i];
-      final p1 = outlinePoints[i + 1];
-      final midX = (p0.dx + p1.dx) / 2;
-      final midY = (p0.dy + p1.dy) / 2;
-      path.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
-    }
-
-    if (outlinePoints.length > 1) {
-      final last = outlinePoints.last;
-      path.lineTo(last.dx, last.dy);
-    }
-    path.close();
-
-    final paint = Paint()
-      ..color = stroke.color
-      ..style = PaintingStyle.fill
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..isAntiAlias = true;
-
-    canvas.drawPath(path, paint);
-  }
-
-  /// Highlighter stroke - transparent, wide stroke like a real highlighter
-  void _paintHighlighterStroke(
-    Canvas canvas,
-    SketchStroke stroke,
-    List<PointVector> points,
-  ) {
-    if (points.length < 2) return;
-
-    // Highlighter uses a wider, flat stroke
-    final highlighterSize = stroke.size * 2.5;
-
-    // Draw the main highlight path with transparency
-    final paint = Paint()
-      ..color = stroke.color.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = highlighterSize
-      ..strokeCap = StrokeCap.square
-      ..strokeJoin = StrokeJoin.round
-      ..blendMode = BlendMode.multiply;
-
-    final path = Path();
-    path.moveTo(points[0].x, points[0].y);
-
-    // Use quadratic bezier for smoother curves
-    for (int i = 1; i < points.length; i++) {
-      final p0 = points[i - 1];
-      final p1 = points[i];
-      final midX = (p0.x + p1.x) / 2;
-      final midY = (p0.y + p1.y) / 2;
-      path.quadraticBezierTo(p0.x, p0.y, midX, midY);
-    }
-    path.lineTo(points.last.x, points.last.y);
-
-    canvas.drawPath(path, paint);
-  }
-
-  /// Eraser stroke - clears underlying content with smooth Bezier curves
-  void _paintEraserStroke(
-    Canvas canvas,
-    SketchStroke stroke,
-    List<PointVector> points,
-  ) {
-    final cacheKey = Object.hash(stroke.points, stroke.size, stroke.tool);
-
-    List<Offset> outlinePoints;
-    if (_strokeCache.containsKey(cacheKey)) {
-      outlinePoints = _strokeCache[cacheKey]!;
-    } else {
-      outlinePoints = getStroke(
-        points,
-        options: StrokeOptions(
-          size: stroke.size,
-          thinning: 0.4,
-          smoothing: 0.75, // Smooth erasing for clean edges
-          streamline: 0.7,
-          isComplete: true,
-        ),
-      );
-      if (_strokeCache.length >= _maxCacheSize) {
-        _strokeCache.remove(_strokeCache.keys.first);
-      }
-      _strokeCache[cacheKey] = outlinePoints;
-    }
-
-    if (outlinePoints.isEmpty) return;
-
-    // Use quadratic Bezier curves for smooth eraser edges
-    final path = Path();
-    path.moveTo(outlinePoints[0].dx, outlinePoints[0].dy);
-
-    for (int i = 1; i < outlinePoints.length - 1; i++) {
-      final p0 = outlinePoints[i];
-      final p1 = outlinePoints[i + 1];
-      final midX = (p0.dx + p1.dx) / 2;
-      final midY = (p0.dy + p1.dy) / 2;
-      path.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
-    }
-
-    if (outlinePoints.length > 1) {
-      final last = outlinePoints.last;
-      path.lineTo(last.dx, last.dy);
-    }
-    path.close();
-
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..blendMode = BlendMode.clear
-      ..isAntiAlias = true;
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant SketchPainter oldDelegate) {
-    // Only repaint if strokes have changed
-    if (strokes.length != oldDelegate.strokes.length) return true;
-    for (int i = 0; i < strokes.length; i++) {
-      if (strokes[i].points != oldDelegate.strokes[i].points ||
-          strokes[i].color != oldDelegate.strokes[i].color ||
-          strokes[i].size != oldDelegate.strokes[i].size ||
-          strokes[i].tool != oldDelegate.strokes[i].tool) {
-        return true;
-      }
-    }
-    return false;
-  }
-}
-
-/// Captures the state needed for a debounced save operation
+/// Immutable state captured for one ordered sketch save operation.
 class _PendingSaveState {
   final SketchData sketchData;
   final List<SketchStroke> strokes;
   final Color paperColor;
+  final PagePattern pagePattern;
   final Size canvasSize;
   final bool isImageBasedSketch;
   final ui.Image? loadedBackgroundImage;
   final Note note;
   final NoteAttachment? sourceAttachment;
   final List<SketchData> localSketches;
+  final SketchSaveToken saveToken;
+  final int revision;
   final void Function(int)? onIndexUpdate;
 
   _PendingSaveState({
     required this.sketchData,
     required this.strokes,
     required this.paperColor,
+    required this.pagePattern,
     required this.canvasSize,
     required this.isImageBasedSketch,
     required this.loadedBackgroundImage,
     required this.note,
     required this.sourceAttachment,
     required this.localSketches,
+    required this.saveToken,
+    required this.revision,
     this.onIndexUpdate,
   });
 }

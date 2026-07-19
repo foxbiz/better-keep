@@ -21,6 +21,9 @@
 	"@close": { "description": "Close button text" },
 
 	"retry": "Yeniden Dene",
+	"discard": "Sil",
+	"attachmentCommitFailedTitle": "Ek eklenemedi",
+	"attachmentCommitFailedMessage": "Orijinal dosya güvende. Eklemeyi yeniden deneyin veya bu cihazdan silin.",
 	"@retry": { "description": "Retry button text" },
 
 	"done": "Bitti",
@@ -2830,6 +2833,7 @@
 	"@thisNoteIsLocked": { "description": "Locked note label" },
 
 	"audio": "Ses",
+	"audioCount": "{count} ses",
 	"@audio": { "description": "Audio fallback label" },
 
 	"syncFailedCount": "{count, plural, =1{1 başarısız} other{{count} başarısız}}",

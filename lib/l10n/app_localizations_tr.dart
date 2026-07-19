@@ -30,6 +30,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get retry => 'Yeniden Dene';
 
   @override
+  String get discard => 'Sil';
+
+  @override
+  String get attachmentCommitFailedTitle => 'Ek eklenemedi';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      'Orijinal dosya güvende. Eklemeyi yeniden deneyin veya bu cihazdan silin.';
+
+  @override
   String get done => 'Bitti';
 
   @override
@@ -2482,6 +2492,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get audio => 'Ses';
+
+  @override
+  String audioCount(int count) {
+    return '$count ses';
+  }
 
   @override
   String syncFailedCount(int count) {

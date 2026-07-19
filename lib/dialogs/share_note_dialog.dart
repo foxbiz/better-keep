@@ -1,12 +1,9 @@
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/share_link.dart';
-import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/export_data_service.dart';
-import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/note_share_service.dart';
+import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
-import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -866,115 +863,23 @@ Future<void> showShareNoteDialog(BuildContext context, Note note) async {
   }
 }
 
-/// Get attachment files as XFiles for sharing
-Future<List<XFile>> _getAttachmentFiles(Note note) async {
-  final List<XFile> files = [];
-
-  if (note.attachments.isEmpty) return files;
-
-  final fs = await fileSystem();
-
-  // Collect unique files: Map<sourcePath, (fileName, mimeType)>
-  final Map<String, (String, String)> uniqueFiles = {};
-
-  int imageIdx = 0;
-  int sketchIdx = 0;
-  int audioIdx = 0;
-
-  for (final attachment in note.attachments) {
-    String? path;
-    String name;
-    String mime;
-
-    switch (attachment.type) {
-      case AttachmentType.image:
-        path = attachment.image?.src;
-        if (path == null || uniqueFiles.containsKey(path)) continue;
-        final ext = path.split('.').lastOrNull?.toLowerCase() ?? 'jpg';
-        mime = switch (ext) {
-          'png' => 'image/png',
-          'gif' => 'image/gif',
-          'webp' => 'image/webp',
-          _ => 'image/jpeg',
-        };
-        name = 'image_$imageIdx.$ext';
-        imageIdx++;
-
-      case AttachmentType.sketch:
-        path = attachment.sketch?.previewImage;
-        if (path == null || uniqueFiles.containsKey(path)) continue;
-        mime = 'image/png';
-        name = 'sketch_$sketchIdx.png';
-        sketchIdx++;
-
-      case AttachmentType.audio:
-        path = attachment.recording?.src;
-        if (path == null || uniqueFiles.containsKey(path)) continue;
-        final ext = path.split('.').lastOrNull?.toLowerCase() ?? 'm4a';
-        mime = switch (ext) {
-          'mp3' => 'audio/mpeg',
-          'wav' => 'audio/wav',
-          'aac' => 'audio/aac',
-          'ogg' => 'audio/ogg',
-          _ => 'audio/mp4',
-        };
-        final title = attachment.recording?.title;
-        if (title != null && title.isNotEmpty) {
-          name = title.contains('.') ? title : '$title.$ext';
-        } else {
-          name = 'audio_$audioIdx.$ext';
-        }
-        audioIdx++;
-    }
-
-    uniqueFiles[path] = (name, mime);
-  }
-
-  // Get cache directory for sharing (uses FileSystem abstraction - web-safe)
-  final cacheDir = await fs.cacheDir;
-  final shareDirPath = '$cacheDir/share_attachments';
-  await fs.createDirectory(shareDirPath);
-
-  // Read each unique file and write to temp with proper name
-  for (final entry in uniqueFiles.entries) {
-    final sourcePath = entry.key;
-    final (name, mime) = entry.value;
-    final destPath = '$shareDirPath/$name';
-
-    try {
-      // Read file bytes (handles decryption if encrypted)
-      final bytes = await readEncryptedBytes(sourcePath);
-      // Write to temp file with proper name
-      await fs.writeBytes(destPath, bytes);
-      files.add(XFile(destPath, mimeType: mime));
-    } catch (e) {
-      try {
-        final bytes = await fs.readBytes(sourcePath);
-        await fs.writeBytes(destPath, bytes);
-        files.add(XFile(destPath, mimeType: mime));
-      } catch (e2) {
-        AppLogger.error('Failed to read attachment: $sourcePath', e2);
-      }
-    }
-  }
-
-  return files;
-}
-
 Future<void> _shareAsText(BuildContext context, Note note) async {
   final text = note.plainText ?? '';
   final title = note.title ?? 'Note';
 
-  // Get attachment files
-  final attachmentFiles = await _getAttachmentFiles(note);
-
-  await SharePlus.instance.share(
-    ShareParams(
-      text: '$title\n\n$text',
-      title: title,
-      files: attachmentFiles.isNotEmpty ? attachmentFiles : null,
-    ),
-  );
+  final staging = await ShareAttachmentStagingService.platform();
+  final lease = await staging.stage(note);
+  try {
+    await SharePlus.instance.share(
+      ShareParams(
+        text: '$title\n\n$text',
+        title: title,
+        files: lease.files.isNotEmpty ? lease.files : null,
+      ),
+    );
+  } finally {
+    await lease.release();
+  }
 }
 
 Future<void> _shareAsMarkdown(BuildContext context, Note note) async {
@@ -984,14 +889,17 @@ Future<void> _shareAsMarkdown(BuildContext context, Note note) async {
   );
   final title = note.title ?? 'Note';
 
-  // Get attachment files
-  final attachmentFiles = await _getAttachmentFiles(note);
-
-  await SharePlus.instance.share(
-    ShareParams(
-      text: markdown,
-      title: '$title.md',
-      files: attachmentFiles.isNotEmpty ? attachmentFiles : null,
-    ),
-  );
+  final staging = await ShareAttachmentStagingService.platform();
+  final lease = await staging.stage(note);
+  try {
+    await SharePlus.instance.share(
+      ShareParams(
+        text: markdown,
+        title: '$title.md',
+        files: lease.files.isNotEmpty ? lease.files : null,
+      ),
+    );
+  } finally {
+    await lease.release();
+  }
 }

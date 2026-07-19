@@ -5,6 +5,7 @@ import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/models/file_sync_track.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
 import 'package:better_keep/models/note_sync_track.dart';
@@ -18,9 +19,11 @@ import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/remote_sync_cache_service.dart';
 import 'package:better_keep/services/sketch_preview_generator.dart';
+import 'package:better_keep/services/sketch_strokes_file_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/utils/file_utils.dart';
+import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -41,6 +44,22 @@ enum DownloadResult {
 
   /// Permanent failure (object-not-found) - file is gone, skip this attachment
   permanentFailure,
+}
+
+enum AttachmentCiphertextKind { plaintext, passwordProtected, e2ee }
+
+/// Explicit PIN protection takes precedence over the structural E2EE
+/// heuristic. An E2EE-wrapped ENCP file does not expose the ENCP header until
+/// its outer layer has been decrypted.
+@visibleForTesting
+AttachmentCiphertextKind classifyAttachmentCiphertext(Uint8List bytes) {
+  if (isBytesPasswordEncrypted(bytes)) {
+    return AttachmentCiphertextKind.passwordProtected;
+  }
+  if (FileEncryption.looksEncrypted(bytes)) {
+    return AttachmentCiphertextKind.e2ee;
+  }
+  return AttachmentCiphertextKind.plaintext;
 }
 
 /// Result of downloading a file with path
@@ -713,10 +732,20 @@ class NoteSyncService {
             final hasDecryptionError =
                 localNote.content == Note.decryptionFailedContent;
 
+            final equalTimestampBackgroundRepair =
+                !hasDecryptionError &&
+                localUpdatedAt != null &&
+                remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
+                await _needsEqualTimestampBackgroundRepair(
+                  localNote,
+                  remoteData,
+                );
+
             if (!hasDecryptionError &&
                 localUpdatedAt != null &&
                 (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                    remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt))) {
+                    (remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
+                        !equalTimestampBackgroundRepair))) {
               AppLogger.log(
                 "[SYNC] REALTIME: Note $localId local is newer, skipping",
               );
@@ -1650,10 +1679,17 @@ class NoteSyncService {
         final hasDecryptionError =
             localNote.content == Note.decryptionFailedContent;
 
+        final equalTimestampBackgroundRepair =
+            !hasDecryptionError &&
+            localUpdatedAt != null &&
+            remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
+            await _needsEqualTimestampBackgroundRepair(localNote, remoteData);
+
         if (!hasDecryptionError &&
             localUpdatedAt != null &&
             (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt))) {
+                (remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
+                    !equalTimestampBackgroundRepair))) {
           // Local is newer, skip
           await _syncCache.markCompleted(localId);
           syncedCount++;
@@ -1814,10 +1850,15 @@ class NoteSyncService {
         }
       }
       final attachmentData = (rawAttachments as List<dynamic>?) ?? <dynamic>[];
+      final incomingNoteLocked = _isLockedValue(updatedNoteData['locked']);
       AppLogger.log(
         "Attachments found in remote data for note $localId: ${attachmentData.length}",
       );
-      final attachments = await _downloadAttachments(attachmentData, note);
+      final attachments = await _downloadAttachments(
+        attachmentData,
+        note,
+        incomingNoteLocked: incomingNoteLocked,
+      );
       if (attachments == null) {
         // Attachment download failed - log and skip this note
         AppLogger.log(
@@ -1848,6 +1889,79 @@ class NoteSyncService {
     }
 
     return true;
+  }
+
+  /// Repairs rows written by the old missing-background fallback without
+  /// turning equal timestamps into a general remote-wins rule.
+  Future<bool> _needsEqualTimestampBackgroundRepair(
+    Note localNote,
+    Map<String, dynamic> remoteData,
+  ) async {
+    Map<String, dynamic> decoded;
+    try {
+      decoded = await _decryptNoteData(remoteData);
+    } catch (_) {
+      return false;
+    }
+    if (decoded.containsKey('e2ee_ciphertext')) return false;
+
+    Object? rawAttachments = decoded['attachments'];
+    if (rawAttachments is String) {
+      try {
+        rawAttachments = jsonDecode(rawAttachments);
+      } catch (_) {
+        return false;
+      }
+    }
+    if (rawAttachments is! List) return false;
+
+    for (var index = 0; index < rawAttachments.length; index++) {
+      if (index >= localNote.attachments.length) break;
+      final raw = rawAttachments[index];
+      if (raw is! Map) continue;
+      final remoteAttachment = NoteAttachment.fromJson(
+        Map<String, dynamic>.from(raw),
+      );
+      final localAttachment = localNote.attachments[index];
+      if (remoteAttachment.type != AttachmentType.sketch ||
+          localAttachment.type != AttachmentType.sketch) {
+        continue;
+      }
+
+      final remoteSketch = remoteAttachment.sketch!;
+      final localSketch = localAttachment.sketch!;
+      final remoteBackground = remoteSketch.backgroundImage;
+      if (remoteBackground == null ||
+          remoteBackground.isEmpty ||
+          !remoteBackground.startsWith('http')) {
+        continue;
+      }
+
+      final remoteStrokes = remoteSketch.strokesFilePath;
+      final localStrokes = localSketch.strokesFilePath;
+      if (remoteStrokes == null ||
+          !remoteStrokes.startsWith('http') ||
+          localStrokes == null ||
+          localStrokes.isEmpty ||
+          (remoteSketch.strokesContentHash != null &&
+              localSketch.strokesContentHash != null &&
+              remoteSketch.strokesContentHash !=
+                  localSketch.strokesContentHash)) {
+        continue;
+      }
+      final strokesTrack = await FileSyncTrack.getByLocalPath(localStrokes);
+      if (strokesTrack?.remotePath != remoteStrokes) continue;
+
+      final localBackground = localSketch.backgroundImage;
+      if (localBackground == null || localBackground.isEmpty) return true;
+      final fs = await fileSystem();
+      if (await fs.exists(localBackground)) continue;
+      final backgroundTrack = await FileSyncTrack.getByLocalPath(
+        localBackground,
+      );
+      if (backgroundTrack?.remotePath == remoteBackground) return true;
+    }
+    return false;
   }
 
   /// Deletes orphaned attachment files (local only).
@@ -1899,16 +2013,26 @@ class NoteSyncService {
   /// Attachments with permanent failures (file doesn't exist) are skipped but don't block sync.
   Future<List<NoteAttachment>?> _downloadAttachments(
     List<dynamic> attachmentData,
-    Note note,
-  ) async {
+    Note note, {
+    required bool incomingNoteLocked,
+  }) async {
     List<NoteAttachment> attachments = [];
 
-    for (final data in attachmentData) {
+    for (final (index, data) in attachmentData.indexed) {
       AppLogger.log(
         "Processing attachment for note ${note.id}: ${data['id']} (${data['type']})",
       );
       final attachment = NoteAttachment.fromJson(data as Map<String, dynamic>);
-      final result = await _downloadAttachment(attachment, note);
+      final previousAttachment = index < note.attachments.length
+          ? note.attachments[index]
+          : null;
+      discardRemoteAttachmentPresentation(attachment);
+      final result = await _downloadAttachment(
+        attachment,
+        note,
+        incomingNoteLocked: incomingNoteLocked,
+        previousAttachment: previousAttachment,
+      );
 
       switch (result) {
         case DownloadResult.success:
@@ -2003,15 +2127,12 @@ class NoteSyncService {
   ) async {
     // Start with the current JSON representation
     final attachmentJson = attachment.toJson();
+    removeLocalAttachmentPresentationFromRemoteJson(attachmentJson);
 
     // Handle sketch attachments differently - upload strokes file, not preview
     if (attachment.type == AttachmentType.sketch) {
       final sketch = attachment.sketch!;
       final data = attachmentJson['data'] as Map<String, dynamic>;
-
-      // Remove fields that should not be synced (generated on device)
-      data.remove('previewImage');
-      data.remove('blurredThumbnail');
 
       // Upload strokes file if available
       if (sketch.strokesFilePath != null &&
@@ -2261,11 +2382,14 @@ class NoteSyncService {
   /// (downloading previewImage or using inline strokes) for backward compatibility.
   Future<DownloadResult> _downloadAttachment(
     NoteAttachment attachment,
-    Note note,
-  ) async {
+    Note note, {
+    required bool incomingNoteLocked,
+    NoteAttachment? previousAttachment,
+  }) async {
     // Handle sketch attachments with new strokes file format
     if (attachment.type == AttachmentType.sketch) {
       final sketch = attachment.sketch!;
+      final incomingStrokesRemotePath = sketch.strokesFilePath;
 
       // Try to download strokes file (new format)
       if (sketch.strokesFilePath != null &&
@@ -2278,21 +2402,16 @@ class NoteSyncService {
         );
         if (result.isSuccess && result.localPath != null) {
           sketch.strokesFilePath = result.localPath;
-          // Load strokes from the downloaded file
-          try {
-            final bytes = await readEncryptedBytes(result.localPath!);
-            final strokesJson = json.decode(utf8.decode(bytes));
-            sketch.loadFromStrokesFileJson(strokesJson as Map<String, dynamic>);
-            AppLogger.log('Loaded strokes from file for note ${note.id}');
-          } catch (e) {
-            AppLogger.error('Error loading strokes file', e);
-            // Continue with whatever strokes data we have
+          // Locked files remain password-encrypted until the first successful
+          // unlock. Unlocked notes can hydrate immediately for preview render.
+          if (!incomingNoteLocked) {
+            final hydration = await SketchStrokesFileService.hydrate(sketch);
+            if (hydration.hasStrokes) {
+              AppLogger.log('Loaded strokes from file for note ${note.id}');
+            }
           }
         } else if (result.result == DownloadResult.permanentFailure) {
-          // Strokes file not found - may be old format, continue
-          AppLogger.log(
-            'Strokes file not found, falling back to legacy format for note ${note.id}',
-          );
+          AppLogger.log('Strokes file not found for note ${note.id}');
           // Clear the remote URL since file doesn't exist
           sketch.strokesFilePath = null;
         } else {
@@ -2301,11 +2420,33 @@ class NoteSyncService {
         }
       }
 
-      // If strokes are still empty after download, check for legacy inline strokes
-      // Legacy format stored strokes directly in JSON (encryptedStrokes or strokes array)
-      if (sketch.strokes.isEmpty && sketch.hasEncryptedStrokes) {
-        AppLogger.log('Using legacy encrypted strokes for note ${note.id}');
-        // Encrypted strokes will be decrypted when note is unlocked
+      // Download the background before preview generation. Stroke points for
+      // image sketches are stored in the background's intrinsic pixel space.
+      var backgroundPermanentlyMissing = false;
+      if (sketch.backgroundImage != null &&
+          sketch.backgroundImage!.isNotEmpty &&
+          sketch.backgroundImage!.startsWith('http')) {
+        final result = await _downloadFile(sketch.backgroundImage!, note);
+        if (result.isSuccess && result.localPath != null) {
+          sketch.backgroundImage = result.localPath;
+        } else if (result.result == DownloadResult.temporaryFailure) {
+          return DownloadResult.temporaryFailure;
+        } else {
+          backgroundPermanentlyMissing = true;
+          AppLogger.log(
+            'Sketch background permanently missing for note ${note.id}; '
+            'preserving its image coordinate space and source marker',
+          );
+        }
+      }
+
+      if (backgroundPermanentlyMissing) {
+        await _retainMatchingSketchPresentation(
+          incoming: sketch,
+          previousAttachment: previousAttachment,
+          incomingStrokesRemotePath: incomingStrokesRemotePath,
+        );
+        return DownloadResult.success;
       }
 
       final previewNeedsRegen =
@@ -2313,14 +2454,10 @@ class NoteSyncService {
           sketch.previewImage!.isEmpty ||
           sketch.previewImage!.startsWith('http');
 
-      // Skip preview generation for locked notes - strokes are encrypted
-      // Preview will be generated when the note is unlocked
-      if (previewNeedsRegen && sketch.strokes.isNotEmpty && !note.locked) {
-        // Generate preview from strokes
-        // This is safe because we're in the sync download flow and the note
-        // will be saved with trackSync=false, so it won't trigger another sync.
-        // Note: On desktop platforms, this will skip preview generation due to
-        // platform limitations - the carousel will use CustomPaint fallback.
+      // Skip preview generation for locked notes - strokes are encrypted.
+      if (previewNeedsRegen &&
+          sketch.strokes.isNotEmpty &&
+          !incomingNoteLocked) {
         final oldPreviewPath = sketch.previewImage;
         sketch.previewImage = null;
         sketch.blurredThumbnail = null;
@@ -2328,29 +2465,13 @@ class NoteSyncService {
           final success = await SketchPreviewGenerator.generatePreview(sketch);
           if (success) {
             AppLogger.log('Generated preview for note ${note.id} after sync');
-            // Invalidate old preview image from cache so UI shows updated image
-            // Note: Don't invalidate the new path - generatePreview already
-            // populated the cache with the new image bytes
             if (oldPreviewPath != null && oldPreviewPath.isNotEmpty) {
               UniversalImageCache.instance.invalidate(oldPreviewPath);
             }
           }
-          // If generatePreview returns false, it's okay - on desktop it will
-          // use CustomPaint fallback, preview will be generated when sketch is opened
         } catch (e) {
           AppLogger.error('Error generating preview after sync', e);
         }
-      }
-
-      // Download background image if present
-      if (sketch.backgroundImage != null &&
-          sketch.backgroundImage!.isNotEmpty &&
-          sketch.backgroundImage!.startsWith('http')) {
-        final result = await _downloadFile(sketch.backgroundImage!, note);
-        if (result.isSuccess && result.localPath != null) {
-          sketch.backgroundImage = result.localPath;
-        }
-        // Background failure is not critical
       }
 
       return DownloadResult.success;
@@ -2398,6 +2519,102 @@ class NoteSyncService {
     return DownloadResult.success;
   }
 
+  Future<void> _retainMatchingSketchPresentation({
+    required SketchData incoming,
+    required NoteAttachment? previousAttachment,
+    required String? incomingStrokesRemotePath,
+  }) async {
+    if (previousAttachment?.type != AttachmentType.sketch ||
+        incomingStrokesRemotePath == null ||
+        !incomingStrokesRemotePath.startsWith('http') ||
+        incoming.strokesContentHash == null ||
+        incoming.strokesContentHash!.isEmpty) {
+      return;
+    }
+    final previous = previousAttachment!.sketch!;
+    if (previous.strokesContentHash != incoming.strokesContentHash) return;
+
+    final previousStrokesPath = previous.strokesFilePath;
+    final previousPreview = previous.previewImage;
+    if (previousStrokesPath == null ||
+        previousStrokesPath.isEmpty ||
+        previousPreview == null ||
+        previousPreview.isEmpty ||
+        previousPreview.startsWith('http')) {
+      return;
+    }
+    final tracking = await FileSyncTrack.getByLocalPath(previousStrokesPath);
+    final fs = await fileSystem();
+    if (!canRetainLastGoodSketchPreview(
+      incoming: incoming,
+      previousAttachment: previousAttachment,
+      incomingStrokesRemotePath: incomingStrokesRemotePath,
+      trackedStrokesRemotePath: tracking?.remotePath,
+      previewExists: await fs.exists(previousPreview),
+    )) {
+      return;
+    }
+
+    incoming.previewImage = previousPreview;
+    incoming.blurredThumbnail = previous.blurredThumbnail;
+  }
+
+  @visibleForTesting
+  static bool canRetainLastGoodSketchPreview({
+    required SketchData incoming,
+    required NoteAttachment? previousAttachment,
+    required String? incomingStrokesRemotePath,
+    required String? trackedStrokesRemotePath,
+    required bool previewExists,
+  }) {
+    if (previousAttachment?.type != AttachmentType.sketch ||
+        incomingStrokesRemotePath == null ||
+        !incomingStrokesRemotePath.startsWith('http') ||
+        incoming.strokesContentHash == null ||
+        incoming.strokesContentHash!.isEmpty ||
+        !previewExists) {
+      return false;
+    }
+    final previous = previousAttachment!.sketch!;
+    return previous.strokesContentHash == incoming.strokesContentHash &&
+        previous.previewImage != null &&
+        previous.previewImage!.isNotEmpty &&
+        !previous.previewImage!.startsWith('http') &&
+        trackedStrokesRemotePath == incomingStrokesRemotePath;
+  }
+
+  @visibleForTesting
+  static bool isIncomingNoteLocked(Object? value) => _isLockedValue(value);
+
+  static bool _isLockedValue(Object? value) => value == true || value == 1;
+
+  /// Generated previews and privacy thumbnails are device-local derivatives.
+  /// Remove them from outgoing JSON for every attachment type.
+  @visibleForTesting
+  static void removeLocalAttachmentPresentationFromRemoteJson(
+    Map<String, dynamic> attachmentJson,
+  ) {
+    final data = attachmentJson['data'];
+    if (data is! Map<String, dynamic>) return;
+
+    data.remove('blurredThumbnail');
+    if (attachmentJson['type'] == AttachmentType.sketch.name) {
+      data.remove('previewImage');
+    }
+  }
+
+  /// Ignore presentation derivatives left by older clients. A new device must
+  /// show placeholders until it can safely generate local thumbnails.
+  @visibleForTesting
+  static void discardRemoteAttachmentPresentation(NoteAttachment attachment) {
+    attachment.image?.blurredThumbnail = null;
+    final sketch = attachment.sketch;
+    if (sketch != null) {
+      sketch.previewImage = null;
+      sketch.blurredThumbnail = null;
+    }
+  }
+
   /// Helper to download a single file and return local path with result status.
   ///
   /// [expectedContentHash] is the SHA-256 hash of the plaintext file content
@@ -2426,7 +2643,8 @@ class NoteSyncService {
         // then check if the underlying bytes are E2EE-encrypted
         try {
           final bytes = await readEncryptedBytes(fixedLocalPath);
-          if (FileEncryption.looksEncrypted(bytes)) {
+          if (classifyAttachmentCiphertext(bytes) ==
+              AttachmentCiphertextKind.e2ee) {
             // File appears E2EE-encrypted - it was saved incorrectly, re-download
             await sync.delete();
             await fs.delete(fixedLocalPath);
@@ -2489,9 +2707,9 @@ class NoteSyncService {
 
       // Decrypt if E2EE is enabled and file appears encrypted
       final e2ee = E2EEService.instance;
-      final looksEncrypted = FileEncryption.looksEncrypted(bytes);
+      final ciphertextKind = classifyAttachmentCiphertext(bytes);
 
-      if (looksEncrypted) {
+      if (ciphertextKind == AttachmentCiphertextKind.e2ee) {
         if (!e2ee.isReady) {
           AppLogger.log(
             "Cannot decrypt attachment - E2EE not ready: $localPath",
@@ -2590,7 +2808,8 @@ class NoteSyncService {
   }
 
   /// Encrypts sensitive sketch data (strokes, bgColor, pagePattern) inline within attachments.
-  /// File URLs and thumbnails are kept unencrypted for sync and preview.
+  /// File URLs remain available for download; generated presentation fields
+  /// are removed before this stage and remain local-only.
   Future<dynamic> _encryptSketchDataInAttachments(dynamic attachments) async {
     final e2ee = E2EEService.instance;
     final umk = e2ee.deviceManager.getUMK();
@@ -2662,11 +2881,8 @@ class NoteSyncService {
 
       // Create new sketch data with encrypted fields
       final newData = <String, dynamic>{
-        if (data['previewImage'] != null) 'previewImage': data['previewImage'],
         if (data['backgroundImage'] != null)
           'backgroundImage': data['backgroundImage'],
-        if (data['blurredThumbnail'] != null)
-          'blurredThumbnail': data['blurredThumbnail'],
         if (data['aspectRatio'] != null) 'aspectRatio': data['aspectRatio'],
         // Encrypted sketch data
         'e2ee_sketch_ciphertext': encryptedData.ciphertext,
@@ -2856,9 +3072,9 @@ class NoteSyncService {
 
         // Decrypt if E2EE is enabled and file appears encrypted
         final e2ee = E2EEService.instance;
-        final looksEncrypted = FileEncryption.looksEncrypted(bytes);
+        final ciphertextKind = classifyAttachmentCiphertext(bytes);
 
-        if (looksEncrypted) {
+        if (ciphertextKind == AttachmentCiphertextKind.e2ee) {
           if (!e2ee.isReady) {
             AppLogger.log("Cannot decrypt redownloaded file - E2EE not ready");
             return null;
@@ -2903,5 +3119,19 @@ class NoteSyncService {
       AppLogger.error('Error redownloading file', e);
       return null;
     }
+  }
+
+  /// Retries a remote attachment whose first download never created a local
+  /// tracking row (for example, a temporarily missing sketch background).
+  Future<String?> retryRemoteAttachmentDownload(
+    String remotePath,
+    Note note,
+  ) async {
+    if (!remotePath.startsWith('http://') &&
+        !remotePath.startsWith('https://')) {
+      return null;
+    }
+    final result = await _downloadFile(remotePath, note);
+    return result.isSuccess ? result.localPath : null;
   }
 }

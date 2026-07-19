@@ -1,24 +1,30 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:better_keep/models/note_recording.dart';
-import 'package:better_keep/services/file_system.dart';
-import 'package:better_keep/utils/file_utils.dart';
+import 'package:better_keep/services/audio_playback_source_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
-import 'package:flutter/foundation.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 
 class NoteAudioPlayer extends StatefulWidget {
   final NoteRecording recording;
+  final bool noteLocked;
+  final bool noteSessionUnlocked;
+  final PasswordProtectedAudioDecoder? passwordProtectedDecoder;
   final VoidCallback onDelete;
   final void Function(NoteRecording)? onUpdate;
+  final AudioPlaybackResolve? sourceResolver;
 
   const NoteAudioPlayer({
     super.key,
     required this.recording,
+    this.noteLocked = false,
+    this.noteSessionUnlocked = false,
+    this.passwordProtectedDecoder,
     required this.onDelete,
     this.onUpdate,
+    this.sourceResolver,
   });
 
   @override
@@ -31,10 +37,19 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  AudioPlaybackSourceLease? _sourceLease;
+  Future<bool>? _sourceInitialization;
+  Future<void> _sourceQueue = Future<void>.value();
+  int _sourceGeneration = 0;
+  bool _sourceLoading = true;
+  bool _sourceReady = false;
+  bool _sourceFailed = false;
+  bool _playPending = false;
+  bool _disposed = false;
 
   /// Start playing the audio
   void play() {
-    _audioPlayer.resume();
+    unawaited(_playWhenReady());
   }
 
   @override
@@ -78,77 +93,239 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
         }
       }),
     );
-    _initAudioSource();
+    _sourceInitialization = _scheduleSourceInitialization();
   }
 
-  Future<void> _initAudioSource() async {
+  @override
+  void didUpdateWidget(NoteAudioPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recording.src != widget.recording.src ||
+        oldWidget.noteLocked != widget.noteLocked ||
+        oldWidget.noteSessionUnlocked != widget.noteSessionUnlocked) {
+      _sourceInitialization = _scheduleSourceInitialization();
+    }
+  }
+
+  Future<bool> _scheduleSourceInitialization() {
+    final generation = ++_sourceGeneration;
+    final source = widget.recording.src;
+    final protectedSource = widget.noteLocked;
+    _setSourceStatus(loading: true, ready: false, failed: false);
+    final completer = Completer<bool>();
+
+    _sourceQueue = _sourceQueue.catchError((Object _, StackTrace _) {}).then((
+      _,
+    ) async {
+      if (!_isCurrent(generation)) {
+        completer.complete(false);
+        return;
+      }
+
+      AudioPlaybackSourceLease? nextLease;
+      var sourceSubmitted = false;
+      try {
+        await _releaseCurrentSource();
+        final resolver = widget.sourceResolver ?? _resolveSource;
+        nextLease = await resolver(source, protectedSource: protectedSource);
+        if (!_isCurrent(generation)) {
+          await nextLease.release();
+          completer.complete(false);
+          return;
+        }
+
+        sourceSubmitted = true;
+        await _audioPlayer.setSource(_toPlayerSource(nextLease));
+        if (!_isCurrent(generation)) {
+          await _stopPlayerSafely();
+          await nextLease.release();
+          completer.complete(false);
+          return;
+        }
+
+        _sourceLease = nextLease;
+        nextLease = null;
+        await _loadDuration(generation);
+        if (!_isCurrent(generation)) {
+          await _releaseCurrentSource();
+          completer.complete(false);
+          return;
+        }
+
+        _setSourceStatus(loading: false, ready: true, failed: false);
+        completer.complete(true);
+      } catch (error, stackTrace) {
+        await nextLease?.release();
+        final hadCurrentLease = _sourceLease != null;
+        await _releaseCurrentSource();
+        if (sourceSubmitted && !hadCurrentLease) {
+          await _stopPlayerSafely();
+        }
+        if (_isCurrent(generation)) {
+          _setSourceStatus(loading: false, ready: false, failed: true);
+          final code = error is AudioPlaybackSourceException
+              ? error.code.name
+              : 'playerSource';
+          AppLogger.error(
+            'Failed to prepare audio playback ($code)',
+            error,
+            stackTrace,
+          );
+        }
+        if (!completer.isCompleted) completer.complete(false);
+      }
+    });
+
+    return completer.future;
+  }
+
+  Future<AudioPlaybackSourceLease> _resolveSource(
+    String source, {
+    required bool protectedSource,
+  }) async {
+    final service = await AudioPlaybackSourceService.platform();
+    return service.resolve(
+      source,
+      protectedSource: protectedSource,
+      passwordProtectedDecoder: widget.noteSessionUnlocked
+          ? widget.passwordProtectedDecoder
+          : null,
+    );
+  }
+
+  Source _toPlayerSource(AudioPlaybackSourceLease lease) {
+    return switch (lease.kind) {
+      AudioPlaybackSourceKind.url => UrlSource(
+        lease.location!,
+        mimeType: lease.mimeType,
+      ),
+      AudioPlaybackSourceKind.deviceFile => DeviceFileSource(
+        lease.location!,
+        mimeType: lease.mimeType,
+      ),
+      AudioPlaybackSourceKind.bytes => BytesSource(
+        lease.bytes!,
+        mimeType: lease.mimeType,
+      ),
+    };
+  }
+
+  Future<void> _loadDuration(int generation) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (!_isCurrent(generation)) return;
+
+    var duration = await _audioPlayer.getDuration();
+    if ((duration == null || duration == Duration.zero) &&
+        _isCurrent(generation)) {
+      await _audioPlayer.resume();
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (!_isCurrent(generation)) return;
+      await _audioPlayer.pause();
+      await _audioPlayer.seek(Duration.zero);
+      duration = await _audioPlayer.getDuration();
+    }
+
+    if (!_isCurrent(generation)) return;
+    if (duration != null && duration != Duration.zero) {
+      _updateDuration(duration);
+    } else if (widget.recording.length > 0) {
+      _updateDuration(Duration(seconds: widget.recording.length));
+    }
+  }
+
+  Future<void> _playWhenReady() async {
+    if (_playPending) return;
+    _playPending = true;
     try {
-      Source source;
-      if (widget.recording.src.startsWith('http')) {
-        source = UrlSource(widget.recording.src);
-      } else if (kIsWeb) {
-        // On web, files are stored in OPFS, so we need to read bytes and use BytesSource
-        final fs = await fileSystem();
-        final audioBytes = await fs.readBytes(widget.recording.src);
-        if (audioBytes.isEmpty) {
-          return;
-        }
-        source = BytesSource(audioBytes);
-      } else {
-        // Fix path for iOS where container ID changes between app launches
-        final fixedPath = await FileUtils.fixPath(widget.recording.src);
-
-        // Check if file exists and has content
-        final file = File(fixedPath);
-        if (!await file.exists()) {
-          return;
-        }
-        final fileSize = await file.length();
-        if (fileSize == 0) {
-          return;
-        }
-        source = DeviceFileSource(fixedPath);
+      var initialization = _sourceInitialization;
+      if (!_sourceReady && !_sourceLoading) {
+        initialization = _scheduleSourceInitialization();
+        _sourceInitialization = initialization;
       }
+      if (initialization != null && !await initialization) return;
+      if (_disposed || !_sourceReady) return;
+      await _audioPlayer.resume();
+    } catch (error, stackTrace) {
+      _setSourceStatus(loading: false, ready: false, failed: true);
+      AppLogger.error('Failed to start audio playback', error, stackTrace);
+    } finally {
+      _playPending = false;
+    }
+  }
 
-      await _audioPlayer.setSource(source);
+  Future<void> _pause() async {
+    if (!_sourceReady) return;
+    try {
+      await _audioPlayer.pause();
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to pause audio playback', error, stackTrace);
+    }
+  }
 
-      // Wait a bit for the source to be fully loaded
-      await Future.delayed(const Duration(milliseconds: 100));
+  Future<void> _releaseCurrentSource() async {
+    final lease = _sourceLease;
+    _sourceLease = null;
+    if (lease == null) return;
+    await _stopPlayerSafely();
+    await lease.release();
+  }
 
-      // Try to get duration, if it fails try playing briefly
-      Duration? duration = await _audioPlayer.getDuration();
-
-      if (duration == null || duration == Duration.zero) {
-        // Play and immediately pause to force duration loading
-        await _audioPlayer.resume();
-        await Future.delayed(const Duration(milliseconds: 50));
-        await _audioPlayer.pause();
-        await _audioPlayer.seek(Duration.zero);
-        duration = await _audioPlayer.getDuration();
-      }
-
-      if (duration != null && duration != Duration.zero && mounted) {
-        setState(() {
-          _duration = duration!;
-        });
-      } else if (widget.recording.length > 0 && mounted) {
-        // Fall back to stored length if audio player can't determine duration
-        setState(() {
-          _duration = Duration(seconds: widget.recording.length);
-        });
-      }
+  Future<void> _stopPlayerSafely() async {
+    try {
+      await _audioPlayer.stop();
     } catch (_) {
-      // Handle error gracefully - audio may not be playable
+      // A source may have failed before the native player was prepared.
+    }
+  }
+
+  bool _isCurrent(int generation) =>
+      !_disposed && generation == _sourceGeneration;
+
+  void _setSourceStatus({
+    required bool loading,
+    required bool ready,
+    required bool failed,
+  }) {
+    void update() {
+      _sourceLoading = loading;
+      _sourceReady = ready;
+      _sourceFailed = failed;
+    }
+
+    if (mounted) {
+      setState(update);
+    } else {
+      update();
+    }
+  }
+
+  void _updateDuration(Duration value) {
+    if (mounted) {
+      setState(() => _duration = value);
+    } else {
+      _duration = value;
     }
   }
 
   @override
   void dispose() {
+    _disposed = true;
+    _sourceGeneration++;
     for (final subscription in _subscriptions) {
-      subscription.cancel();
+      unawaited(subscription.cancel());
     }
     _subscriptions.clear();
-    _audioPlayer.dispose();
+    _sourceQueue = _sourceQueue.catchError((Object _, StackTrace _) {}).then((
+      _,
+    ) async {
+      try {
+        await _audioPlayer.dispose();
+      } catch (_) {
+        // The native player may never have received a valid source.
+      } finally {
+        await _sourceLease?.release();
+        _sourceLease = null;
+      }
+    });
     super.dispose();
   }
 
@@ -324,19 +501,35 @@ class NoteAudioPlayerState extends State<NoteAudioPlayer> {
                         height: 36,
                         child: IconButton(
                           padding: EdgeInsets.zero,
-                          icon: Icon(
-                            _isPlaying
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            size: 28,
+                          icon: _sourceLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(
+                                  _sourceFailed
+                                      ? Icons.refresh_rounded
+                                      : _isPlaying
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  size: 28,
+                                ),
+                          tooltip: _sourceFailed ? context.l10n.retry : null,
+                          onPressed: _sourceLoading
+                              ? null
+                              : () {
+                                  if (_isPlaying) {
+                                    unawaited(_pause());
+                                  } else {
+                                    play();
+                                  }
+                                },
+                          disabledColor: colorScheme.onSurface.withValues(
+                            alpha: 0.38,
                           ),
-                          onPressed: () {
-                            if (_isPlaying) {
-                              _audioPlayer.pause();
-                            } else {
-                              _audioPlayer.resume();
-                            }
-                          },
                         ),
                       ),
                       const SizedBox(width: 8),

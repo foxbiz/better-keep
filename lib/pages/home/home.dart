@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/components/logo.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
+import 'package:better_keep/dialogs/attachment_commit_dialog.dart';
 import 'package:better_keep/dialogs/share_note_dialog.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
@@ -17,12 +18,11 @@ import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
-import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
-import 'package:better_keep/utils/image_compressor.dart';
+import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/audio_content_utils.dart';
 import 'package:better_keep/utils/utils.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
@@ -37,10 +37,11 @@ import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:uuid/uuid.dart';
 
 class Home extends StatefulWidget {
-  const Home({super.key});
+  final ImageAttachmentPreparationService? imageAttachmentPreparationService;
+
+  const Home({super.key, this.imageAttachmentPreparationService});
 
   @override
   State<Home> createState() => _HomeState();
@@ -983,17 +984,18 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
       final note = _createNewNote(title: title, content: contentJson);
 
-      // Add recording to note
-      note.addRecording(
-        NoteRecording(
-          src: result.path,
-          title: audioTitle,
-          length: result.length,
-          transcript: result.transcription,
-        ),
+      final recording = NoteRecording(
+        src: result.path,
+        title: audioTitle,
+        length: result.length,
+        transcript: result.transcription,
       );
-
-      await note.save();
+      final added = await commitAttachmentWithRetry(
+        context: context,
+        sourcePath: result.path,
+        commit: () => note.addRecording(recording),
+      );
+      if (!added || !mounted) return;
 
       if (mounted) {
         showPage(context, NoteEditor(note: note), allowFullScreen: true);
@@ -1054,8 +1056,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     );
   }
 
-  static const int _maxImageSize = 500 * 1024;
-
   Future<void> _pickImageAndCreateNote(ImageSource source) async {
     Uint8List? imageBytes;
     String ext = '.jpg';
@@ -1073,47 +1073,36 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       if (ext.isEmpty) ext = '.jpg';
     }
 
-    // Show loading dialog
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => PopScope(
-          canPop: false,
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text(dialogContext.l10n.processingImage),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
+    var processingVisible = false;
+    void showProcessing() {
+      if (!mounted || processingVisible) return;
+      processingVisible = true;
+      showAttachmentProcessingDialog(context, context.l10n.processingImage);
     }
 
+    void dismissProcessing() {
+      if (!mounted || !processingVisible) return;
+      dismissAttachmentProcessingDialog(context);
+      processingVisible = false;
+    }
+
+    showProcessing();
+
+    PreparedImageAttachment? preparedImage;
     try {
-      final fs = await fileSystem();
-      final documentDir = await fs.documentDir;
-      final imagePath = path.join(documentDir, '${Uuid().v4()}$ext');
-
-      // Compress the image
-      Uint8List bytes = await _compressImageToTargetSize(imageBytes);
-
-      await writeEncryptedBytes(imagePath, bytes);
-
-      final decodedImage = await decodeImageFromList(bytes);
+      preparedImage =
+          await (widget.imageAttachmentPreparationService ??
+                  ImageAttachmentPreparationService.platform())
+              .prepare(
+                sourceBytes: imageBytes,
+                extension: ext,
+                generateBlurredThumbnail: false,
+              );
       final noteImage = NoteImage(
-        src: imagePath,
-        aspectRatio: "${decodedImage.width}:${decodedImage.height}",
-        size: bytes.length,
+        src: preparedImage.path,
+        aspectRatio:
+            '${preparedImage.dimensions.width}:${preparedImage.dimensions.height}',
+        size: preparedImage.byteLength,
         lastModified: DateTime.now().toIso8601String(),
         index: 0,
       );
@@ -1124,69 +1113,36 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           {'insert': '\n'},
         ]),
       );
-      note.addImage(noteImage);
-      await note.save();
-
-      // Dismiss loading dialog
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
+      if (!mounted) return;
+      final added = await commitAttachmentWithRetry(
+        context: context,
+        sourcePath: preparedImage.path,
+        commit: () => note.addImage(noteImage),
+        beforeFailurePrompt: () async => dismissProcessing(),
+        beforeRetry: () async => showProcessing(),
+        sourceLease: preparedImage.sourceLease,
+      );
+      if (!added) {
+        dismissProcessing();
+        return;
       }
+
+      dismissProcessing();
 
       // Open the note in editor
       if (mounted) {
         showPage(context, NoteEditor(note: note), allowFullScreen: true);
       }
-    } catch (e) {
-      // Dismiss loading dialog on error
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to prepare an image note', error, stackTrace);
+      dismissProcessing();
       if (mounted) {
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
         snackbar(context.l10n.failedToCreateImageNote, Colors.red);
       }
+    } finally {
+      await preparedImage?.release();
+      dismissProcessing();
     }
-  }
-
-  Future<Uint8List> _compressImageToTargetSize(Uint8List imageBytes) async {
-    if (imageBytes.length <= _maxImageSize) {
-      return await ImageCompressor.compressWithList(imageBytes, quality: 90);
-    }
-
-    int quality = 85;
-    int minWidth = 1920;
-    int minHeight = 1920;
-    Uint8List compressed = imageBytes;
-
-    while (quality >= 50) {
-      compressed = await ImageCompressor.compressWithList(
-        imageBytes,
-        quality: quality,
-        minWidth: minWidth,
-        minHeight: minHeight,
-      );
-      if (compressed.length <= _maxImageSize) return compressed;
-      quality -= 10;
-    }
-
-    quality = 70;
-    while (minWidth >= 800) {
-      compressed = await ImageCompressor.compressWithList(
-        imageBytes,
-        quality: quality,
-        minWidth: minWidth,
-        minHeight: minHeight,
-      );
-      if (compressed.length <= _maxImageSize) return compressed;
-      minWidth = (minWidth * 0.75).toInt();
-      minHeight = (minHeight * 0.75).toInt();
-    }
-
-    return await ImageCompressor.compressWithList(
-      imageBytes,
-      quality: 50,
-      minWidth: 800,
-      minHeight: 800,
-    );
   }
 
   /// Create a new todo note with empty checkbox

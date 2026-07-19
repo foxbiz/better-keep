@@ -10,6 +10,7 @@ import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/app_install_service.dart';
+import 'package:better_keep/services/audio_playback_source_service.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/all_day_reminder_notification_service.dart';
@@ -19,6 +20,11 @@ import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:better_keep/services/new_attachment_transaction_service.dart';
+import 'package:better_keep/services/legacy_sketch_migration_service.dart';
+import 'package:better_keep/services/sketch_preview_repair_service.dart';
+import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/state.dart';
@@ -417,7 +423,57 @@ class _BetterKeepState extends State<BetterKeep> {
     try {
       final db = await initDatabase();
       LocalDataEncryption.setDatabaseGetter(() => db);
+      // Resolve interrupted local lock transactions before the note UI, sync,
+      // or preview repair can observe a partially switched set of file paths.
+      final protectedFileOperations = await NoteLockFileOperations.platform();
+      await NoteLockRecoveryService.recoverPending(
+        database: db,
+        fileOperations: protectedFileOperations,
+      );
+      await NoteLockRemovalRecoveryService.recoverPending(
+        database: db,
+        fileOperations: protectedFileOperations,
+      );
+      await LegacySketchMigrationRecoveryService.recoverPending(
+        database: db,
+        fileOperations: protectedFileOperations,
+        journal: LegacySketchMigrationJournal(await AppState.prefs),
+      );
+      await NewAttachmentTransactionRecoveryService.recoverPending(
+        database: db,
+        operations: protectedFileOperations,
+        journal: NewAttachmentTransactionJournal(await AppState.prefs),
+      );
+      await PendingAttachmentSourceCleanupRecoveryService.recoverPending(
+        database: db,
+        operations: protectedFileOperations,
+        journal: PendingAttachmentSourceCleanupJournal(await AppState.prefs),
+      );
+      try {
+        await (await AudioPlaybackSourceService.platform()).cleanupStaleFiles();
+      } catch (error, stackTrace) {
+        // Playback files are disposable. A cleanup failure must not prevent
+        // the app from starting; the next launch will retry the same directory.
+        AppLogger.error(
+          'Failed to clean stale audio playback files',
+          error,
+          stackTrace,
+        );
+      }
+      try {
+        await (await ShareAttachmentStagingService.platform())
+            .cleanupStaleFiles();
+      } catch (error, stackTrace) {
+        // Share copies contain plaintext by design but are disposable. Failure
+        // is non-fatal and retried before notes are shown on the next launch.
+        AppLogger.error(
+          'Failed to clean stale share attachments',
+          error,
+          stackTrace,
+        );
+      }
       await Label.fixLabels();
+      unawaited(SketchPreviewRepairService.runIfNeeded());
       setState(() {
         this.db = db;
       });

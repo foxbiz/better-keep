@@ -102,27 +102,34 @@ class NoteImageGrid extends StatelessWidget {
       return customWidget;
     }
 
-    Widget imageWidget = UniversalImage(
-      path: image.src,
-      fit: fit,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Center(
-          child: CircularProgressIndicator(
-            value: loadingProgress.expectedTotalBytes != null
-                ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
-                : null,
-          ),
-        );
-      },
-      errorBuilder: (context, error, stackTrace) {
-        return const Center(child: Icon(Icons.error, color: Colors.red));
-      },
-    );
+    Widget imageWidget = image.src.isEmpty
+        ? const ColoredBox(
+            color: Colors.black12,
+            child: Center(
+              child: Icon(Icons.image_outlined, color: Colors.black38),
+            ),
+          )
+        : UniversalImage(
+            path: image.src,
+            fit: fit,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                      : null,
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return const Center(child: Icon(Icons.error, color: Colors.red));
+            },
+          );
 
     // Wrap in Hero for smooth transition to note editor
-    if (noteId != null) {
+    if (noteId != null && image.src.isNotEmpty) {
       final heroTag = 'image_${noteId}_${image.src}';
       imageWidget = Hero(tag: heroTag, child: imageWidget);
     }

@@ -11,7 +11,6 @@ import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/share_link.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart' as crypto;
-import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/export_data_service.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
@@ -420,6 +419,7 @@ class NoteShareService {
 
       // Upload encrypted attachments to storage
       final uploadedAttachments = await _uploadEncryptedAttachments(
+        note,
         note.attachments,
         shareId,
         shareKey,
@@ -532,6 +532,7 @@ class NoteShareService {
   /// Upload encrypted attachments to Firebase Storage
   /// Throws an exception if any attachment fails to upload, and cleans up any already-uploaded files
   Future<List<Map<String, dynamic>>> _uploadEncryptedAttachments(
+    Note note,
     List<NoteAttachment> attachments,
     String shareId,
     Uint8List shareKey,
@@ -563,6 +564,12 @@ class NoteShareService {
           mimeType = 'image/jpeg';
           filename = 'image_$i.jpg';
         case AttachmentType.sketch:
+          if (attachment.sketch?.requiresLegacyMigration ?? false) {
+            AppLogger.log(
+              'NoteShareService: Skipping quarantined legacy sketch $i',
+            );
+            continue;
+          }
           sourcePath = attachment.sketch?.previewImage;
           mimeType = 'image/png';
           filename = 'sketch_$i.png';
@@ -583,9 +590,10 @@ class NoteShareService {
         // Read the file bytes (handles decryption if locally encrypted)
         Uint8List fileBytes;
         try {
-          fileBytes = await readEncryptedBytes(sourcePath);
+          fileBytes = await note.readAttachmentForSession(sourcePath);
         } catch (e) {
-          // Fall back to raw read if not encrypted
+          if (note.locked) rethrow;
+          // Fall back to raw read only for ordinary non-locked files.
           fileBytes = await fs.readBytes(sourcePath);
         }
 
