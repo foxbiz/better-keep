@@ -30,6 +30,26 @@ class AppLocalizationsJa extends AppLocalizations {
   String get retry => '再試行';
 
   @override
+  String get protectedSketchTitle => '保護されたスケッチ';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'この古い保護されたスケッチはまだ復元できません。元の暗号化された描画は保持されており、次回ロック解除に成功した後にアプリが再試行します。';
+
+  @override
+  String get sketchBackgroundUnavailable => '背景を利用できません。描画は保持されています';
+
+  @override
+  String get discard => '破棄';
+
+  @override
+  String get attachmentCommitFailedTitle => '添付ファイルを追加できませんでした';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      '元のファイルは安全に保持されています。もう一度追加するか、このデバイスから破棄してください。';
+
+  @override
   String get done => '完了';
 
   @override
@@ -2412,6 +2432,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audio => '音声';
+
+  @override
+  String audioCount(int count) {
+    return '音声 $count 件';
+  }
 
   @override
   String syncFailedCount(int count) {

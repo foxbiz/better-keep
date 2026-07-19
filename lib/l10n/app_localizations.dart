@@ -150,6 +150,42 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get retry;
 
+  /// Title for a protected sketch that could not be recovered
+  ///
+  /// In en, this message translates to:
+  /// **'Protected sketch'**
+  String get protectedSketchTitle;
+
+  /// Explanation shown when an older protected sketch is preserved for a later recovery attempt
+  ///
+  /// In en, this message translates to:
+  /// **'This older protected sketch could not be recovered yet. Its original encrypted drawing has been preserved and the app will retry after the next successful unlock.'**
+  String get protectedSketchRecoveryMessage;
+
+  /// Message shown when an image sketch background is unavailable but its drawing data is preserved
+  ///
+  /// In en, this message translates to:
+  /// **'Background unavailable; drawing preserved'**
+  String get sketchBackgroundUnavailable;
+
+  /// Discard an uncommitted local item
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discard;
+
+  /// Title shown when an attachment could not be committed to a note
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t add attachment'**
+  String get attachmentCommitFailedTitle;
+
+  /// Retry-or-discard explanation for an attachment commit failure
+  ///
+  /// In en, this message translates to:
+  /// **'The original file is still safe. Retry adding it, or discard it from this device.'**
+  String get attachmentCommitFailedMessage;
+
   /// Done button text
   ///
   /// In en, this message translates to:
@@ -4481,6 +4517,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio'**
   String get audio;
+
+  /// Number of protected audio attachments shown on a locked note card
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 audio} other{{count} audios}}'**
+  String audioCount(int count);
 
   /// Number of sync failures
   ///

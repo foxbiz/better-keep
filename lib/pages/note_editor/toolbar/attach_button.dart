@@ -1,7 +1,6 @@
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
-import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
@@ -13,13 +12,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
-import 'package:better_keep/utils/image_compressor.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
-import 'package:better_keep/services/encrypted_file_storage.dart';
-import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/dialogs/attachment_commit_dialog.dart';
+import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/camera_capture.dart';
-import 'package:uuid/uuid.dart';
 
 class AttachButton extends StatefulWidget {
   final Note note;
@@ -27,6 +25,7 @@ class AttachButton extends StatefulWidget {
   final Color? parentColor;
   final void Function(String text, NoteRecording recording)? onAppendTranscript;
   final VoidCallback? onAttachmentAdded;
+  final ImageAttachmentPreparationService? imageAttachmentPreparationService;
 
   const AttachButton({
     super.key,
@@ -35,6 +34,7 @@ class AttachButton extends StatefulWidget {
     this.readOnly = false,
     this.onAppendTranscript,
     this.onAttachmentAdded,
+    this.imageAttachmentPreparationService,
   });
 
   @override
@@ -95,9 +95,6 @@ class _AttachButtonState extends State<AttachButton> {
     );
   }
 
-  /// Maximum image size in bytes (500KB)
-  static const int _maxImageSize = 500 * 1024;
-
   /// Check if attachment limit is reached and show snackbar if so.
   bool _checkAttachmentLimit() {
     if (widget.note.attachments.length >= maxAttachmentsPerNote) {
@@ -129,121 +126,65 @@ class _AttachButtonState extends State<AttachButton> {
       if (ext.isEmpty) ext = '.jpg';
     }
 
-    // Show loading dialog while processing
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const PopScope(
-          canPop: false,
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Processing image...'),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
+    var processingVisible = false;
+    void showProcessing() {
+      if (!mounted || processingVisible) return;
+      processingVisible = true;
+      showAttachmentProcessingDialog(context, context.l10n.processingImage);
     }
 
+    void dismissProcessing() {
+      if (!mounted || !processingVisible) return;
+      dismissAttachmentProcessingDialog(context);
+      processingVisible = false;
+    }
+
+    showProcessing();
+
+    PreparedImageAttachment? preparedImage;
     try {
-      final fs = await fileSystem();
-      final documentDir = await fs.documentDir;
-      final imagePath = path.join(documentDir, '${Uuid().v4()}$ext');
-
-      // Compress the image to be under 500KB
-      Uint8List bytes = await _compressImageToTargetSize(imageBytes);
-
-      await writeEncryptedBytes(imagePath, bytes);
-
-      final decodedImage = await decodeImageFromList(bytes);
-
-      // Generate tiny thumbnail for locked note preview (under 1KB)
-      final thumbnail = await ThumbnailGenerator.generateFromBytes(bytes);
+      preparedImage =
+          await (widget.imageAttachmentPreparationService ??
+                  ImageAttachmentPreparationService.platform())
+              .prepare(
+                sourceBytes: imageBytes,
+                extension: ext,
+                generateBlurredThumbnail: true,
+              );
 
       final noteImage = NoteImage(
-        src: imagePath,
-        aspectRatio: "${decodedImage.width}:${decodedImage.height}",
-        size: bytes.length,
+        src: preparedImage.path,
+        aspectRatio:
+            '${preparedImage.dimensions.width}:${preparedImage.dimensions.height}',
+        size: preparedImage.byteLength,
         lastModified: DateTime.now().toIso8601String(),
         index: widget.note.images.length,
-        blurredThumbnail: thumbnail,
+        blurredThumbnail: preparedImage.blurredThumbnail,
       );
 
-      widget.note.addImage(noteImage);
-      widget.onAttachmentAdded?.call();
+      if (!mounted) return;
+      final added = await commitAttachmentWithRetry(
+        context: context,
+        sourcePath: preparedImage.path,
+        commit: () => widget.note.addImage(noteImage),
+        beforeFailurePrompt: () async => dismissProcessing(),
+        beforeRetry: () async => showProcessing(),
+        sourceLease: preparedImage.sourceLease,
+      );
+      if (added && mounted) widget.onAttachmentAdded?.call();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to prepare an image attachment',
+        error,
+        stackTrace,
+      );
+      if (mounted) {
+        snackbar(context.l10n.attachmentCommitFailedTitle, Colors.red);
+      }
     } finally {
-      // Dismiss loading dialog
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
+      await preparedImage?.release();
+      dismissProcessing();
     }
-  }
-
-  /// Compresses an image to be under [_maxImageSize] bytes.
-  /// Progressively reduces quality and size until target is met.
-  Future<Uint8List> _compressImageToTargetSize(Uint8List imageBytes) async {
-    // If already under target, just do a light compression
-    if (imageBytes.length <= _maxImageSize) {
-      return await ImageCompressor.compressWithList(imageBytes, quality: 90);
-    }
-
-    // Start with quality 85 and full size
-    int quality = 85;
-    int minWidth = 1920;
-    int minHeight = 1920;
-    Uint8List compressed = imageBytes;
-
-    // Try progressively lower quality first
-    while (quality >= 50) {
-      compressed = await ImageCompressor.compressWithList(
-        imageBytes,
-        quality: quality,
-        minWidth: minWidth,
-        minHeight: minHeight,
-      );
-
-      if (compressed.length <= _maxImageSize) {
-        return compressed;
-      }
-
-      quality -= 10;
-    }
-
-    // If still too large, reduce dimensions progressively
-    quality = 70;
-    while (minWidth >= 800) {
-      compressed = await ImageCompressor.compressWithList(
-        imageBytes,
-        quality: quality,
-        minWidth: minWidth,
-        minHeight: minHeight,
-      );
-
-      if (compressed.length <= _maxImageSize) {
-        return compressed;
-      }
-
-      minWidth = (minWidth * 0.75).toInt();
-      minHeight = (minHeight * 0.75).toInt();
-    }
-
-    // Final attempt with minimum settings
-    return await ImageCompressor.compressWithList(
-      imageBytes,
-      quality: 50,
-      minWidth: 800,
-      minHeight: 800,
-    );
   }
 
   void _showImageSourceDialog() async {
@@ -306,25 +247,23 @@ class _AttachButtonState extends State<AttachButton> {
     );
 
     if (result != null && mounted) {
-      widget.note.addRecording(
-        NoteRecording(
-          src: result.path,
-          title: result.title,
-          length: result.length,
-          transcript: result.transcription,
-        ),
+      final recording = NoteRecording(
+        src: result.path,
+        title: result.title,
+        length: result.length,
+        transcript: result.transcription,
       );
+      final added = await commitAttachmentWithRetry(
+        context: context,
+        sourcePath: result.path,
+        commit: () => widget.note.addRecording(recording),
+      );
+      if (!added || !mounted) return;
       widget.onAttachmentAdded?.call();
       // Append transcription to note if provided
       if (result.transcription != null &&
           result.transcription!.isNotEmpty &&
           widget.onAppendTranscript != null) {
-        final recording = NoteRecording(
-          src: result.path,
-          title: result.title,
-          length: result.length,
-          transcript: result.transcription,
-        );
         widget.onAppendTranscript!(result.transcription!, recording);
       }
       // Set note title from first few words if note has no title

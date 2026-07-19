@@ -30,6 +30,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retry => 'Retry';
 
   @override
+  String get protectedSketchTitle => 'Protected sketch';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'This older protected sketch could not be recovered yet. Its original encrypted drawing has been preserved and the app will retry after the next successful unlock.';
+
+  @override
+  String get sketchBackgroundUnavailable =>
+      'Background unavailable; drawing preserved';
+
+  @override
+  String get discard => 'Discard';
+
+  @override
+  String get attachmentCommitFailedTitle => 'Couldn’t add attachment';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      'The original file is still safe. Retry adding it, or discard it from this device.';
+
+  @override
   String get done => 'Done';
 
   @override
@@ -2473,6 +2494,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audio => 'Audio';
+
+  @override
+  String audioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count audios',
+      one: '1 audio',
+    );
+    return '$_temp0';
+  }
 
   @override
   String syncFailedCount(int count) {

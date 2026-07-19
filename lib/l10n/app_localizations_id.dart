@@ -30,6 +30,27 @@ class AppLocalizationsId extends AppLocalizations {
   String get retry => 'Coba Lagi';
 
   @override
+  String get protectedSketchTitle => 'Sketsa terlindungi';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'Sketsa lama yang dilindungi ini belum dapat dipulihkan. Gambar terenkripsi aslinya telah dipertahankan dan aplikasi akan mencoba lagi setelah pembukaan kunci berhasil berikutnya.';
+
+  @override
+  String get sketchBackgroundUnavailable =>
+      'Latar belakang tidak tersedia; gambar tetap tersimpan';
+
+  @override
+  String get discard => 'Buang';
+
+  @override
+  String get attachmentCommitFailedTitle => 'Tidak dapat menambahkan lampiran';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      'File asli tetap aman. Coba tambahkan lagi, atau buang dari perangkat ini.';
+
+  @override
   String get done => 'Selesai';
 
   @override
@@ -2472,6 +2493,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get audio => 'Audio';
+
+  @override
+  String audioCount(int count) {
+    return '$count audio';
+  }
 
   @override
   String syncFailedCount(int count) {

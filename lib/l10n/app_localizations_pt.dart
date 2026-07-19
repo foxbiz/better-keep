@@ -30,6 +30,28 @@ class AppLocalizationsPt extends AppLocalizations {
   String get retry => 'Tentar novamente';
 
   @override
+  String get protectedSketchTitle => 'Esboço protegido';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      'Este esboço protegido antigo ainda não pôde ser recuperado. O desenho criptografado original foi preservado, e o aplicativo tentará novamente após o próximo desbloqueio bem-sucedido.';
+
+  @override
+  String get sketchBackgroundUnavailable =>
+      'Plano de fundo indisponível; desenho preservado';
+
+  @override
+  String get discard => 'Descartar';
+
+  @override
+  String get attachmentCommitFailedTitle =>
+      'Não foi possível adicionar o anexo';
+
+  @override
+  String get attachmentCommitFailedMessage =>
+      'O arquivo original continua seguro. Tente adicioná-lo novamente ou descarte-o deste dispositivo.';
+
+  @override
   String get done => 'Concluído';
 
   @override
@@ -2503,6 +2525,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get audio => 'Áudio';
+
+  @override
+  String audioCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count áudios',
+      one: '1 áudio',
+    );
+    return '$_temp0';
+  }
 
   @override
   String syncFailedCount(int count) {

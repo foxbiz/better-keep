@@ -30,6 +30,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
+  String get protectedSketchTitle => '受保护的草图';
+
+  @override
+  String get protectedSketchRecoveryMessage =>
+      '暂时无法恢复这个旧版受保护草图。原始加密绘图已保留，应用会在下次成功解锁后重试。';
+
+  @override
+  String get sketchBackgroundUnavailable => '背景不可用；绘图已保留';
+
+  @override
+  String get discard => '丢弃';
+
+  @override
+  String get attachmentCommitFailedTitle => '无法添加附件';
+
+  @override
+  String get attachmentCommitFailedMessage => '原始文件仍然安全。请重试添加，或从此设备丢弃。';
+
+  @override
   String get done => '完成';
 
   @override
@@ -2376,6 +2395,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audio => '音频';
+
+  @override
+  String audioCount(int count) {
+    return '$count 个音频';
+  }
 
   @override
   String syncFailedCount(int count) {
