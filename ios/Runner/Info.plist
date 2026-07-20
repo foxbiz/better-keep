@@ -100,6 +100,8 @@
 	<string>This app needs to access your Documents folder to store AI models for transcription.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>This app needs to access your Downloads folder to store AI models for transcription.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Better Keep uses your location only to add location metadata to photos attached to notes.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Better Keep uses your microphone to record audio notes and transcribe them into text using on-device speech recognition.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
