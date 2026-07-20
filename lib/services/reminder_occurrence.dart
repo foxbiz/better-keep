@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:better_keep/models/reminder.dart';
+import 'package:better_keep/utils/calendar_date.dart';
 import 'package:flutter/material.dart';
 
 DateTime effectiveReminderDateTime(
@@ -39,13 +40,12 @@ bool isReminderOccurrence(
     return false;
   }
 
-  final anchorDay = DateTime(anchor.year, anchor.month, anchor.day);
-  final dueDay = DateTime(dueAt.year, dueAt.month, dueAt.day);
-  if (dueDay.isBefore(anchorDay)) return false;
+  final elapsedDays = calendarDayDelta(anchor, dueAt);
+  if (elapsedDays < 0) return false;
   return switch (reminder.repeat) {
     Reminder.repeatDaily => true,
     Reminder.repeatWeekly =>
-      dueDay.difference(anchorDay).inDays % DateTime.daysPerWeek == 0,
+      elapsedDays % DateTime.daysPerWeek == 0,
     Reminder.repeatMonthly =>
       dueAt.day ==
           anchor.day.clamp(1, DateTime(dueAt.year, dueAt.month + 1, 0).day),

@@ -1,4 +1,5 @@
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/calendar_date.dart';
 import 'package:flutter/material.dart';
 
 enum ReminderType { notification, alarm, unsupported }
@@ -21,6 +22,24 @@ class ReminderScheduleResult {
   final Object? error;
 
   bool get isScheduled => state == ReminderDeliveryState.scheduled;
+}
+
+/// The complete outcome of saving and scheduling a reminder edit.
+///
+/// Persistence and device delivery are separate: a reminder can be saved and
+/// synced even when this device cannot schedule it locally.
+class ReminderUpdateResult {
+  const ReminderUpdateResult({
+    required this.rowId,
+    this.savedReminder,
+    this.delivery,
+  });
+
+  final int rowId;
+  final Reminder? savedReminder;
+  final ReminderScheduleResult? delivery;
+
+  bool get persisted => rowId >= 0 && savedReminder != null;
 }
 
 class Reminder {
@@ -256,14 +275,8 @@ class Reminder {
     var candidate = dateTime;
     if (candidate.isAfter(after)) return candidate;
 
-    final candidateDay = DateTime(
-      candidate.year,
-      candidate.month,
-      candidate.day,
-    );
-    final afterDay = DateTime(after.year, after.month, after.day);
-    final elapsedDays = afterDay.difference(candidateDay).inDays;
-    final intervals = (elapsedDays ~/ intervalDays) + 1;
+    final elapsedDays = calendarDayDelta(candidate, after);
+    final intervals = elapsedDays ~/ intervalDays;
     candidate = DateTime(
       candidate.year,
       candidate.month,

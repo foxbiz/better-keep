@@ -14,6 +14,7 @@ import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
@@ -1342,12 +1343,17 @@ class _NoteCardState extends State<NoteCard>
                               return;
                             }
 
-                            await note.setReminder(newReminder);
-                            if (mounted) {
+                            final result = await note.setReminder(newReminder);
+                            if (!mounted || !context.mounted) return;
+                            if (result.persisted) {
                               _lastReminder = note.reminder;
                               _scheduleReminderExpiration();
                               setState(() {});
                             }
+                            ReminderScheduleResultPresenter.instance.show(
+                              context,
+                              result,
+                            );
                           },
                     style: ButtonStyle(
                       padding: WidgetStatePropertyAll<EdgeInsets>(

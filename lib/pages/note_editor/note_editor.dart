@@ -32,6 +32,7 @@ import 'package:better_keep/services/checkbox_service.dart';
 import 'package:better_keep/services/due_reminder_presenter.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
+import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
@@ -835,11 +836,16 @@ class _NoteEditorState extends State<NoteEditor>
                           initialReminder: _note.reminder,
                         );
                         if (res != null) {
-                          await _note.setReminder(res);
-                          if (mounted) {
+                          final result = await _note.setReminder(res);
+                          if (!mounted || !context.mounted) return;
+                          if (result.persisted) {
                             _shownDueReminderOccurrences.clear();
                             setState(() {});
                           }
+                          ReminderScheduleResultPresenter.instance.show(
+                            context,
+                            result,
+                          );
                         }
                       },
                       icon: Icon(

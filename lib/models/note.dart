@@ -21,7 +21,6 @@ import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:flutter/foundation.dart';
@@ -35,6 +34,8 @@ import 'package:uuid/uuid.dart';
 
 typedef NoteEvent = ModelEvent<Note>;
 typedef NoteListener = ModelListener<Note>;
+typedef ReminderScheduleCallback =
+    Future<ReminderScheduleResult> Function(Note note);
 
 Reminder? _parseReminder(Object? raw) {
   if (raw == null) return null;
@@ -2557,7 +2558,10 @@ class Note extends BaseModel<Note> {
     await writeEncryptedBytes(filePath, protectedBytes);
   }
 
-  Future<int> setReminder(Reminder newReminder) async {
+  Future<ReminderUpdateResult> setReminder(
+    Reminder newReminder, {
+    ReminderScheduleCallback? schedule,
+  }) async {
     final nextRevision = (reminder?.revision ?? 0) + 1;
     final previousReminder = reminder;
     final previousCompleted = completed;
@@ -2567,61 +2571,20 @@ class Note extends BaseModel<Note> {
     if (rowId < 0) {
       reminder = previousReminder;
       completed = previousCompleted;
-      return rowId;
+      return ReminderUpdateResult(rowId: rowId);
     }
-    final result = await ReminderCoordinator.instance.schedule(
-      this,
-      requestPermissions: true,
+    final savedReminder = reminder!;
+    final delivery = await (schedule != null
+        ? schedule(this)
+        : ReminderCoordinator.instance.schedule(
+            this,
+            requestPermissions: true,
+          ));
+    return ReminderUpdateResult(
+      rowId: rowId,
+      savedReminder: savedReminder,
+      delivery: delivery,
     );
-    _showReminderScheduleResult(result);
-    return rowId;
-  }
-
-  void _showReminderScheduleResult(ReminderScheduleResult result) {
-    final context = AppState.navigatorKey.currentContext;
-    final l10n = context?.l10n;
-    switch (result.state) {
-      case ReminderDeliveryState.scheduled:
-        snackbar(l10n?.reminderSet ?? 'Reminder set', Colors.green[400]);
-      case ReminderDeliveryState.unsupported:
-        final message = reminder?.type == ReminderType.alarm
-            ? l10n?.alarmUnsupportedPlatform
-            : l10n?.notificationUnsupportedPlatform;
-        snackbar(message ?? result.message ?? 'Reminder saved', Colors.orange);
-      case ReminderDeliveryState.permissionDenied:
-        snackbarWithAction(
-          l10n?.reminderSavedPermissionRequired ??
-              result.message ??
-              'Reminder saved on this device',
-          actionLabel: l10n?.openSettings ?? 'Open Settings',
-          onAction: () {
-            unawaited(ReminderCoordinator.instance.openSystemSettings());
-          },
-          color: Colors.orange,
-        );
-      case ReminderDeliveryState.pastDue:
-        snackbar(
-          l10n?.reminderSavedAlreadyDue ?? 'Reminder saved and is already due',
-          Colors.orange,
-        );
-      case ReminderDeliveryState.superseded:
-        // A newer local edit owns the delivery state and its user feedback.
-        break;
-      case ReminderDeliveryState.capacityExceeded:
-        snackbar(
-          l10n?.reminderCapacityExceeded ??
-              result.message ??
-              'Reminder saved, but this device has too many pending reminders.',
-          Colors.orange,
-        );
-      case ReminderDeliveryState.failed:
-        snackbar(
-          result.message ??
-              l10n?.reminderScheduleFailed ??
-              'Failed to schedule reminder',
-          Colors.red,
-        );
-    }
   }
 
   /// Compatibility entry point retained for callers that previously requested

@@ -164,6 +164,28 @@ void main() {
   });
 
   group('Reminder recurrence', () {
+    test('daily recurrence keeps an upcoming occurrence on the same day', () {
+      final reminder = Reminder(
+        dateTime: DateTime(2026, 7, 1, 9, 30),
+        repeat: Reminder.repeatDaily,
+      );
+
+      final next = reminder.getNextOccurrence(after: DateTime(2026, 7, 20, 9));
+
+      expect(next!.dateTime, DateTime(2026, 7, 20, 9, 30));
+    });
+
+    test('weekly recurrence keeps an upcoming occurrence on the same day', () {
+      final reminder = Reminder(
+        dateTime: DateTime(2026, 7, 6, 9, 30),
+        repeat: Reminder.repeatWeekly,
+      );
+
+      final next = reminder.getNextOccurrence(after: DateTime(2026, 7, 20, 9));
+
+      expect(next!.dateTime, DateTime(2026, 7, 20, 9, 30));
+    });
+
     test('weekly recurrence retains its original weekday', () {
       final reminder = Reminder(
         dateTime: DateTime(2026, 7, 6, 9, 30), // Monday
