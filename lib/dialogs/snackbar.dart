@@ -13,3 +13,24 @@ void snackbar(String message, [Color? color]) {
   );
   AppState.scaffoldMessengerKey.currentState?.showSnackBar(snackBar);
 }
+
+void snackbarWithAction(
+  String message, {
+  required String actionLabel,
+  required VoidCallback onAction,
+  Color? color,
+}) {
+  final effectiveColor =
+      color ?? (AppState.isDarkMode ? Colors.white70 : Colors.black87);
+  final textColor = isDark(effectiveColor) ? Colors.white : Colors.black;
+  final snackBar = SnackBar(
+    content: Text(message, style: TextStyle(color: textColor)),
+    backgroundColor: effectiveColor,
+    action: SnackBarAction(
+      label: actionLabel,
+      textColor: textColor,
+      onPressed: onAction,
+    ),
+  );
+  AppState.scaffoldMessengerKey.currentState?.showSnackBar(snackBar);
+}

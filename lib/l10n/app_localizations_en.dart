@@ -12,6 +12,70 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get reminderType => 'Reminder type';
+
+  @override
+  String get notificationReminder => 'Notification';
+
+  @override
+  String get notificationReminderDescription =>
+      'Shows a standard time-sensitive notification';
+
+  @override
+  String get alarmReminder => 'Alarm';
+
+  @override
+  String get alarmReminderDescription => 'Rings continuously until you stop it';
+
+  @override
+  String get alarmUnsupportedPlatform =>
+      'Alarms are not supported on this platform. The reminder will sync and become an alarm on Android or iOS.';
+
+  @override
+  String get notificationUnsupportedPlatform =>
+      'Scheduled notifications are not available while Better Keep is closed on this platform. The reminder will still sync and appear in the app when due.';
+
+  @override
+  String get alarmRequiresSpecificTime =>
+      'Alarms require a specific time; All day is available for notifications only.';
+
+  @override
+  String get reminderDue => 'Reminder due';
+
+  @override
+  String get overdueReminderTitle => 'Overdue reminder';
+
+  @override
+  String get overdueReminderMessage =>
+      'This reminder is overdue. Mark it as done now?';
+
+  @override
+  String get markReminderDoneFailed =>
+      'Couldn’t mark this reminder as done. Please try again.';
+
+  @override
+  String get markAsDone => 'Mark as Done';
+
+  @override
+  String get reminderSavedPermissionRequired =>
+      'Reminder saved, but permission is required to schedule it on this device.';
+
+  @override
+  String get reminderSavedAlreadyDue => 'Reminder saved and is already due.';
+
+  @override
+  String get reminderScheduleFailed =>
+      'Reminder saved, but this device could not schedule it.';
+
+  @override
+  String get reminderCapacityExceeded =>
+      'Reminder saved, but this device has too many pending reminders to schedule another one.';
+
+  @override
+  String get reminderTimeZoneUnavailable =>
+      'Reminder saved, but this device\'s timezone could not be resolved. Check the device time settings and try again.';
+
+  @override
   String get cancel => 'Cancel';
 
   @override
@@ -802,16 +866,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nextWeek => 'Next week';
 
   @override
+  String get nextMonth => 'Next month';
+
+  @override
   String get pickDateTime => 'Pick date & time';
 
   @override
   String get time => 'Time';
 
   @override
+  String get selectTime => 'Select time';
+
+  @override
+  String get allDay => 'All day';
+
+  @override
   String get date => 'Date';
 
   @override
   String get repeat => 'Repeat';
+
+  @override
+  String get frequency => 'Frequency';
 
   @override
   String get never => 'Never';

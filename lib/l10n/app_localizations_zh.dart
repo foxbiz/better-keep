@@ -12,6 +12,63 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get reminderType => '提醒类型';
+
+  @override
+  String get notificationReminder => '通知';
+
+  @override
+  String get notificationReminderDescription => '显示标准的时效性通知';
+
+  @override
+  String get alarmReminder => '闹钟';
+
+  @override
+  String get alarmReminderDescription => '持续响铃，直到你将其停止';
+
+  @override
+  String get alarmUnsupportedPlatform =>
+      '此平台不支持闹钟。提醒将同步，并在 Android 或 iOS 上设置为闹钟。';
+
+  @override
+  String get notificationUnsupportedPlatform =>
+      '在此平台上，Better Keep 关闭时无法发送定时通知。提醒仍会同步，并在到期时显示在应用中。';
+
+  @override
+  String get alarmRequiresSpecificTime => '闹钟需要具体时间；全天仅适用于通知。';
+
+  @override
+  String get reminderDue => '提醒已到期';
+
+  @override
+  String get overdueReminderTitle => '逾期提醒';
+
+  @override
+  String get overdueReminderMessage => '此提醒已逾期。现在标记为完成吗？';
+
+  @override
+  String get markReminderDoneFailed => '无法将此提醒标记为完成。请重试。';
+
+  @override
+  String get markAsDone => '标记为完成';
+
+  @override
+  String get reminderSavedPermissionRequired => '提醒已保存，但需要权限才能在此设备上进行定时。';
+
+  @override
+  String get reminderSavedAlreadyDue => '提醒已保存，并且已经到期。';
+
+  @override
+  String get reminderScheduleFailed => '提醒已保存，但此设备无法安排通知。';
+
+  @override
+  String get reminderCapacityExceeded => '提醒已保存，但此设备的待处理提醒过多，无法再安排新的提醒。';
+
+  @override
+  String get reminderTimeZoneUnavailable =>
+      '提醒已保存，但无法识别此设备的时区。请检查设备的日期和时间设置后重试。';
+
+  @override
   String get cancel => '取消';
 
   @override
@@ -794,16 +851,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nextWeek => '下周';
 
   @override
+  String get nextMonth => '下个月';
+
+  @override
   String get pickDateTime => '选择日期和时间';
 
   @override
   String get time => '时间';
 
   @override
+  String get selectTime => '选择时间';
+
+  @override
+  String get allDay => '全天';
+
+  @override
   String get date => '日期';
 
   @override
   String get repeat => '重复';
+
+  @override
+  String get frequency => '频率';
 
   @override
   String get never => '从不';

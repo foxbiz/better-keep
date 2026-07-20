@@ -5,6 +5,7 @@ import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/models/file_sync_track.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/services/reminder_sync_codec.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
@@ -101,7 +102,7 @@ class NoteSyncService {
     return _firestoreInstance!;
   }
 
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  FirebaseStorage get _storage => FirebaseStorage.instance;
 
   /// Cache service for managing pending remote syncs
   final RemoteSyncCacheService _syncCache = RemoteSyncCacheService();
@@ -1190,6 +1191,7 @@ class NoteSyncService {
         }
 
         var noteData = note.toJson();
+        ReminderSyncCodec.encode(note.reminder, noteData);
 
         // Ensure locally encrypted content is properly decrypted before sync
         // This handles edge cases where content might still be encrypted
@@ -1821,6 +1823,7 @@ class NoteSyncService {
 
     // Decrypt E2EE data if encrypted
     final updatedNoteData = await _decryptNoteData(remoteData);
+    ReminderSyncCodec.decode(updatedNoteData);
 
     final note =
         await Note.findById(updatedNoteData['local_id'] as int) ??

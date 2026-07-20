@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/reminder.dart';
+import 'package:better_keep/services/local_notification_service.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -24,10 +26,15 @@ class ReminderPermissionService {
   /// Ensures all required permissions for reminders are granted.
   /// Returns true if all permissions are granted, false otherwise.
   /// This should be called before setting a reminder.
-  Future<bool> ensurePermissions() async {
-    if (kIsWeb) {
-      return true;
+  Future<bool> ensurePermissions(ReminderType type) async {
+    if (type == ReminderType.unsupported) return false;
+    if (type == ReminderType.notification) {
+      if (!LocalNotificationService.instance.supportsScheduling) return true;
+      return LocalNotificationService.instance.requestReminderPermissions(
+        exact: true,
+      );
     }
+    if (!isAlarmSupported) return true;
 
     bool result;
     if (Platform.isAndroid) {
@@ -80,10 +87,15 @@ class ReminderPermissionService {
   }
 
   /// Checks if all required permissions are already granted without requesting them.
-  Future<bool> hasPermissions() async {
-    if (kIsWeb) {
-      return true;
+  Future<bool> hasPermissions([ReminderType type = ReminderType.alarm]) async {
+    if (type == ReminderType.unsupported) return false;
+    if (type == ReminderType.notification) {
+      if (!LocalNotificationService.instance.supportsScheduling) return true;
+      return LocalNotificationService.instance.hasReminderPermissions(
+        exact: true,
+      );
     }
+    if (!isAlarmSupported) return true;
 
     if (Platform.isAndroid) {
       final notificationStatus = await Permission.notification.status;
@@ -97,6 +109,8 @@ class ReminderPermissionService {
     return true;
   }
 
+  Future<bool> openSystemSettings() => openAppSettings();
+
   /// Checks current permission status and updates [permissionGranted] notifier.
   /// This is a read-only check — it does NOT prompt the user.
   Future<void> checkAndNotify() async {
@@ -104,7 +118,7 @@ class ReminderPermissionService {
       permissionGranted.value = true;
       return;
     }
-    permissionGranted.value = await hasPermissions();
+    permissionGranted.value = await hasPermissions(ReminderType.alarm);
   }
 
   /// Reschedules alarms for all notes with active reminders.

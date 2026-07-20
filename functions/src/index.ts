@@ -21,6 +21,7 @@ import razorpayWebhook from "./exports/razorpayWebhook";
 import requestAccountLinkOtp from "./exports/requestAccountLinkOtp";
 import resetPasswordWithOtp from "./exports/resetPasswordWithOtp";
 import resetReviewAccount from "./exports/resetReviewAccount";
+import resolveLegacyReminderState from "./exports/resolveLegacyReminderState";
 import restoreSubscription from "./exports/restoreSubscription";
 import resumeRazorpaySubscription from "./exports/resumeRazorpaySubscription";
 import revokeSharesOnNoteDelete from "./exports/revokeSharesOnNoteDelete";
@@ -64,6 +65,7 @@ export {
 	requestAccountLinkOtp,
 	resetPasswordWithOtp,
 	resetReviewAccount,
+	resolveLegacyReminderState,
 	restoreSubscription,
 	resumeRazorpaySubscription,
 	revokeSharesOnNoteDelete,

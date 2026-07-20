@@ -3,6 +3,24 @@
 	"@@last_modified": "2026-05-19",
 
 	"appTitle": "Better Keep",
+	"reminderType": "Hatırlatıcı türü",
+	"notificationReminder": "Bildirim",
+	"notificationReminderDescription": "Zamana duyarlı standart bir bildirim gösterir",
+	"alarmReminder": "Alarm",
+	"alarmReminderDescription": "Siz durdurana kadar sürekli çalar",
+	"alarmUnsupportedPlatform": "Alarmlar bu platformda desteklenmiyor. Hatırlatıcı eşitlenecek ve Android ya da iOS'ta alarm olarak ayarlanacaktır.",
+	"notificationUnsupportedPlatform": "Bu platformda Better Keep kapalıyken zamanlanmış bildirim kullanılamaz. Hatırlatıcı yine eşitlenir ve zamanı geldiğinde uygulamada görünür.",
+	"alarmRequiresSpecificTime": "Alarmlar belirli bir saat gerektirir; Tüm gün yalnızca bildirimlerde kullanılabilir.",
+	"reminderDue": "Hatırlatıcı zamanı",
+	"overdueReminderTitle": "Gecikmiş hatırlatıcı",
+	"overdueReminderMessage": "Bu hatırlatıcının zamanı geçti. Şimdi tamamlandı olarak işaretlensin mi?",
+	"markReminderDoneFailed": "Hatırlatıcı tamamlandı olarak işaretlenemedi. Lütfen tekrar deneyin.",
+	"markAsDone": "Tamamlandı Olarak İşaretle",
+	"reminderSavedPermissionRequired": "Hatırlatıcı kaydedildi ancak bu cihazda zamanlamak için izin gerekiyor.",
+	"reminderSavedAlreadyDue": "Hatırlatıcı kaydedildi ve zamanı zaten geldi.",
+	"reminderScheduleFailed": "Hatırlatıcı kaydedildi ancak bu cihaz zamanlayamadı.",
+	"reminderCapacityExceeded": "Hatırlatıcı kaydedildi ancak bu cihazda yeni bir hatırlatıcı zamanlamak için çok fazla bekleyen hatırlatıcı var.",
+	"reminderTimeZoneUnavailable": "Hatırlatıcı kaydedildi ancak bu cihazın saat dilimi belirlenemedi. Cihazın saat ayarlarını kontrol edip tekrar deneyin.",
 	"@appTitle": { "description": "The name of the application" },
 
 	"cancel": "İptal",
@@ -858,17 +876,29 @@
 	"nextWeek": "Gelecek hafta",
 	"@nextWeek": { "description": "Next week label" },
 
+	"nextMonth": "Gelecek ay",
+	"@nextMonth": { "description": "Next month label" },
+
 	"pickDateTime": "Tarih ve saat seç",
 	"@pickDateTime": { "description": "Pick date and time option" },
 
 	"time": "Saat",
 	"@time": { "description": "Time label" },
 
+	"selectTime": "Saat seç",
+	"@selectTime": { "description": "Empty reminder time field hint" },
+
+	"allDay": "Tüm gün",
+	"@allDay": { "description": "All-day reminder option" },
+
 	"date": "Tarih",
 	"@date": { "description": "Date label" },
 
 	"repeat": "Tekrarla",
 	"@repeat": { "description": "Repeat label" },
+
+	"frequency": "Sıklık",
+	"@frequency": { "description": "Reminder repeat frequency field label" },
 
 	"never": "Asla",
 	"@never": { "description": "Never repeat option" },

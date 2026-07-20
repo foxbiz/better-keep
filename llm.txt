@@ -32,7 +32,7 @@ Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app in
 | AI / STT | On-device Whisper (whisper_flutter_new), speech_to_text |
 | Audio | record + audioplayers |
 | State Mgmt | Custom lightweight pub/sub AppState (NO Provider/Riverpod/Bloc) |
-| Testing | flutter_test (3 test files, light coverage) |
+| Testing | flutter_test (44 test files, including transaction and widget coverage) |
 | Linting | flutter_lints |
 | CI/CD | GitHub Actions (.github/workflows/build-release.yml) |
 
@@ -42,7 +42,7 @@ Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app in
 
 ```
 better-keep/
-├── lib/                          # Main Dart source (177 files)
+├── lib/                          # Main Dart source (215 files)
 │   ├── main.dart                 # Entry point: init bindings, Firebase, DB, Auth, E2EE
 │   ├── app.dart                  # MaterialApp wrapper: auth flow, routing, E2EE gating
 │   ├── config.dart               # Constants: DB version, platform detection flags
@@ -59,7 +59,6 @@ better-keep/
 │   │   ├── adaptive_popup_menu.dart
 │   │   ├── bubble_menu.dart
 │   │   ├── auth_scaffold.dart
-│   │   ├── alarm_banner.dart
 │   │   ├── session_invalid_banner.dart
 │   │   ├── open_in_app_banner.dart
 │   │   ├── sync_progress_widget.dart
@@ -123,7 +122,7 @@ better-keep/
 │   │   └── help_page.dart
 │   │
 │   ├── services/                 # Business logic & platform services
-│   │   ├── database.dart         # SQLite initialization & migrations (v4)
+│   │   ├── database.dart         # SQLite initialization & migrations (v6)
 │   │   ├── auth_service.dart     # Firebase Auth (1838 lines)
 │   │   ├── note_sync_service.dart
 │   │   ├── label_sync_service.dart
@@ -134,7 +133,19 @@ better-keep/
 │   │   ├── file_system_stub.dart # Web fallback
 │   │   ├── web_file_system.dart  # Web implementation
 │   │   ├── alarm_id_service.dart
-│   │   ├── all_day_reminder_notification_service.dart
+│   │   ├── alarm_lifecycle_service.dart # Non-visual alarm completion tracking
+│   │   ├── local_notification_service.dart # Central notification runtime
+│   │   ├── reminder_coordinator.dart # Notification/alarm scheduling orchestration
+│   │   ├── reminder_action_processor.dart # Lightweight background completion transaction
+│   │   ├── reminder_occurrence.dart # Shared occurrence and payload validation
+│   │   ├── reminder_navigation_service.dart # Durable Home-ready notification tap routing
+│   │   ├── reminder_session_service.dart # Cross-isolate signed-in safety signal
+│   │   ├── reminder_sign_out_cleanup_service.dart # Reminder-only delivery cleanup
+│   │   ├── due_reminder_presenter.dart # Editor-scoped due snackbar
+│   │   ├── reminder_action_receipt_service.dart # Idempotent action receipts
+│   │   ├── reminder_sync_codec.dart # Legacy-safe reminder_v2 cloud codec
+│   │   ├── reminder_time_zone_resolver.dart # Full IANA timezone resolution
+│   │   ├── reminder_notification_registration.dart # Pending request verification
 │   │   ├── device_approval_notification_service.dart
 │   │   ├── intent_handler_service.dart
 │   │   ├── reminder_permission_service.dart
@@ -251,11 +262,19 @@ No named routes or router package. All navigation uses `Navigator.push()` / `Nav
 
 ### Database: SQLite with Manual Migrations
 
-- **Version**: 4 (handled in `database.dart`)
+- **Version**: 6 (handled in `database.dart`)
 - **Tables**: `note`, `label`, `note_image`, `note_recording`, `sketch`, `reminder`, `note_sync_track`, `file_sync_track`, `label_sync_track`, `pending_remote_sync`
 - **Base Model**: `base_model.dart` — all models extend this, get pub/sub events, `toMap()`/`fromMap()`
 - Note content stored as Flutter Quill Delta JSON
 - Locked notes use XOR+SHA-256 encryption via `utils/encryption.dart`
+
+### Reminder Delivery and Notification Actions
+
+- Standard notification reminders use `flutter_local_notifications`; real alarms continue to use `alarm` only on supported mobile platforms.
+- Android/iOS background **Mark as Done** actions use `ReminderActionProcessor`, which initializes only preferences, SQLite, and notification delivery. It atomically validates the occurrence, advances/completes the reminder, records an idempotency receipt, and queues note sync.
+- The main isolate consumes unhandled action receipts on startup/resume, emits note-model updates, and merges only reminder metadata into an open editor so unsaved title/content remain intact.
+- Notification taps are persisted until authentication, database, Home, and root navigation are ready. Occurrence-level activation receipts suppress replayed Android launch intents.
+- `ReminderSessionService` fails closed while signed out. Sign-out cancels reminder notifications by payload/known note ID without using plugin-wide `cancelAll`, preserving unrelated device-approval notifications.
 
 ### Sync: Local-First, Newest-Wins
 
@@ -371,7 +390,7 @@ npm run build:icons       # Generate custom icon font
 
 ---
 
-## Database Schema (SQLite v4)
+## Database Schema (SQLite v6)
 
 ```sql
 note: id, local_id, title, content (Quill Delta JSON), labels (comma-separated),
@@ -382,6 +401,7 @@ note_image: id, note_id, local_path, remote_path, width, height, ...
 note_recording: id, note_id, local_path, remote_path, duration, transcription, ...
 sketch: id, note_id, data (JSON), background_image, ...
 reminder: id, note_id, alarm_id, time, repeat_days, ...
+reminder_action_receipt: token (PK), note_id, action, ui_consumed_at, created_at
 note_sync_track: id, note_id, synced, updated_at
 file_sync_track: id, attachment_id, attachment_type, synced, ...
 label_sync_track: id, label_id, synced, updated_at

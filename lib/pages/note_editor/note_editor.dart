@@ -29,8 +29,10 @@ import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/checkbox_service.dart';
+import 'package:better_keep/services/due_reminder_presenter.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
+import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
@@ -44,6 +46,7 @@ import 'package:better_keep/dialogs/labels.dart';
 import 'package:better_keep/dialogs/lock_note_dialog.dart';
 import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/state.dart';
@@ -83,6 +86,7 @@ class _NoteEditorState extends State<NoteEditor>
   StreamSubscription? _changesSubscription;
   String? _linkUrl;
   Timer? _changeTimer;
+  final Set<String> _shownDueReminderOccurrences = <String>{};
   Future<void> _saveTail = Future<void>.value();
   Future<void>? _pendingLockOperation;
   Future<void>? _pendingLockRemovalOperation;
@@ -283,6 +287,9 @@ class _NoteEditorState extends State<NoteEditor>
     _focusNode.addListener(_focusListener);
     _titleFocusNode.addListener(_titleFocusListener);
     _note.sub("changed", _onNoteChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_showOverdueReminderDialogIfNeeded());
+    });
   }
 
   void _titleFocusListener() {
@@ -403,10 +410,32 @@ class _NoteEditorState extends State<NoteEditor>
     );
   }
 
-  void _onNoteChanged(dynamic _) {
-    if (mounted) {
-      setState(() {});
+  void _onNoteChanged(NoteEvent event) {
+    if (!mounted || event.note.id != _note.id) return;
+    if (!identical(event.note, _note)) {
+      // Background notification actions update SQLite in a separate Flutter
+      // engine. Merge only reminder-owned metadata so an editor that is open
+      // in the main isolate keeps any unsaved title or content changes.
+      _note.completed = event.note.completed;
+      _note.reminder = event.note.reminder;
+      _note.updatedAt = event.note.updatedAt;
     }
+    setState(() {});
+  }
+
+  Future<void> _showOverdueReminderDialogIfNeeded() async {
+    if (!mounted || !_note.hasReminderExpired) return;
+    await DueReminderPresenter.instance.showIfDue(
+      note: _note,
+      shownOccurrences: _shownDueReminderOccurrences,
+      context: context,
+      onMarkDone: () async {
+        if (!await _enqueueSave()) return false;
+        final rowId = await _note.done();
+        if (mounted) setState(() {});
+        return rowId >= 0;
+      },
+    );
   }
 
   void _scrollToAttachments() {
@@ -620,6 +649,10 @@ class _NoteEditorState extends State<NoteEditor>
     if (state == AppLifecycleState.paused) {
       _changeTimer?.cancel();
       unawaited(_enqueueSave());
+    } else if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showOverdueReminderDialogIfNeeded());
+      });
     }
   }
 
@@ -712,7 +745,7 @@ class _NoteEditorState extends State<NoteEditor>
       placeholderColor = Colors.black38;
     }
 
-    return PopScope(
+    final editor = PopScope(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
@@ -803,17 +836,33 @@ class _NoteEditorState extends State<NoteEditor>
                           initialReminder: _note.reminder,
                         );
                         if (res != null) {
-                          await _note.setReminder(res);
-                          setState(() {});
+                          final result = await _note.setReminder(res);
+                          if (!mounted || !context.mounted) return;
+                          if (result.persisted) {
+                            _shownDueReminderOccurrences.clear();
+                            setState(() {});
+                          }
+                          ReminderScheduleResultPresenter.instance.show(
+                            context,
+                            result,
+                          );
                         }
                       },
                       icon: Icon(
                         _note.hasReminder
                             ? (_note.completed
-                                  ? Icons.notifications_off
+                                  ? (_note.reminder?.type == ReminderType.alarm
+                                        ? Icons.alarm_off
+                                        : Icons.notifications_off)
                                   : (_note.hasReminderExpired
-                                        ? Icons.notification_important
-                                        : Icons.notifications_active))
+                                        ? (_note.reminder?.type ==
+                                                  ReminderType.alarm
+                                              ? Icons.alarm_on
+                                              : Icons.notification_important)
+                                        : (_note.reminder?.type ==
+                                                  ReminderType.alarm
+                                              ? Icons.alarm
+                                              : Icons.notifications_active)))
                             : Icons.notifications_none,
                       ),
                       tooltip: context.l10n.reminder,
@@ -1018,6 +1067,8 @@ class _NoteEditorState extends State<NoteEditor>
         ),
       ),
     );
+
+    return editor;
   }
 
   /// Check if attachment limit is reached and show snackbar if so.

@@ -7,6 +7,7 @@ import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/labels.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/settings/settings.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
@@ -67,7 +68,7 @@ class _SidebarState extends State<Sidebar> {
 
   Future<void> _handleEnableNotifications() async {
     final service = ReminderPermissionService();
-    final granted = await service.ensurePermissions();
+    final granted = await service.ensurePermissions(ReminderType.alarm);
     await service.checkAndNotify();
     if (granted) {
       await service.rescheduleAllAlarms();

@@ -1,9 +1,10 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:better_keep/services/local_notification_service.dart';
+import 'package:better_keep/services/reminder_coordinator.dart';
+import 'package:better_keep/utils/logger.dart';
 
 /// Service to show local notifications for incoming device approval requests
 class DeviceApprovalNotificationService {
@@ -12,71 +13,25 @@ class DeviceApprovalNotificationService {
   factory DeviceApprovalNotificationService() => _instance;
   DeviceApprovalNotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _notifications =
-      FlutterLocalNotificationsPlugin();
-
-  static const String _channelId = 'device_approval';
-  static const String _channelName = 'Device Approval';
-  static const String _channelDescription =
-      'Notifications for new device approval requests';
-
   List<DeviceApprovalRequest> _lastKnownApprovals = [];
   bool _initialized = false;
+  bool _listenerAttached = false;
 
   /// Initialize the notification service
   Future<void> init() async {
-    if (kIsWeb ||
-        (!Platform.isAndroid && !Platform.isIOS && !Platform.isMacOS)) {
+    if (_initialized) return;
+    if (!LocalNotificationService
+        .instance
+        .supportsDeviceApprovalNotifications) {
       return;
     }
-
-    if (_initialized) return;
-
-    const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
-    );
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-    const macosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-      macOS: macosSettings,
-    );
-
-    await _notifications.initialize(
-      settings: initSettings,
-      onDidReceiveNotificationResponse: _onNotificationResponse,
-    );
-
-    // Create Android notification channel
-    if (Platform.isAndroid) {
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.createNotificationChannel(
-            const AndroidNotificationChannel(
-              _channelId,
-              _channelName,
-              description: _channelDescription,
-              importance: Importance.high,
-            ),
-          );
-    }
+    await ReminderCoordinator.instance.init();
 
     // Listen to pending approvals changes
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
       _onPendingApprovalsChanged,
     );
+    _listenerAttached = true;
 
     // Store initial state
     _lastKnownApprovals = List.from(
@@ -87,12 +42,28 @@ class DeviceApprovalNotificationService {
   }
 
   void dispose() {
-    E2EEService.instance.deviceManager.pendingApprovals.removeListener(
-      _onPendingApprovalsChanged,
+    if (_listenerAttached) {
+      E2EEService.instance.deviceManager.pendingApprovals.removeListener(
+        _onPendingApprovalsChanged,
+      );
+      _listenerAttached = false;
+    }
+    _initialized = false;
+  }
+
+  void _onPendingApprovalsChanged() {
+    unawaited(
+      _handlePendingApprovalsChanged().catchError(
+        (Object error, StackTrace stackTrace) => AppLogger.error(
+          'Failed to process device approval notification update',
+          error,
+          stackTrace,
+        ),
+      ),
     );
   }
 
-  void _onPendingApprovalsChanged() async {
+  Future<void> _handlePendingApprovalsChanged() async {
     // Only show notifications on master device
     final isMaster = await E2EEService.instance.deviceManager.isMasterDevice();
     if (!isMaster) return;
@@ -107,7 +78,7 @@ class DeviceApprovalNotificationService {
       );
 
       if (isNew) {
-        _showApprovalNotification(approval);
+        await _showApprovalNotification(approval);
       }
     }
 
@@ -115,52 +86,48 @@ class DeviceApprovalNotificationService {
     _lastKnownApprovals = List.from(currentApprovals);
   }
 
-  Future<void> _showApprovalNotification(DeviceApprovalRequest request) async {
+  Future<bool> _showApprovalNotification(DeviceApprovalRequest request) async {
     final platformName = _formatPlatform(request.platform);
 
-    const androidDetails = AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-
-    const iosDetails = DarwinNotificationDetails();
-
-    const macosDetails = DarwinNotificationDetails();
-
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-      macOS: macosDetails,
-    );
-
     // Use device ID hash as notification ID to avoid duplicates
-    final notificationId = request.deviceId.hashCode.abs() % 100000;
+    final notificationId = _notificationId(request.deviceId);
 
-    await _notifications.show(
+    final shown = await LocalNotificationService.instance.showDeviceApproval(
       id: notificationId,
       title: 'New Device Approval Request',
       body: '${request.deviceName} ($platformName) wants to access your notes',
-      notificationDetails: details,
       payload: request.deviceId,
     );
-  }
-
-  void _onNotificationResponse(NotificationResponse response) {
-    // User tapped notification - app will open to handle it
+    if (!shown) {
+      await AppLogger.log(
+        'Device approval notification skipped: unsupported platform',
+      );
+    }
+    return shown;
   }
 
   /// Cancel notification for a specific device
   Future<void> cancelNotification(String deviceId) async {
-    final notificationId = deviceId.hashCode.abs() % 100000;
-    await _notifications.cancel(id: notificationId);
+    await LocalNotificationService.instance.cancelDeviceApproval(
+      _notificationId(deviceId),
+    );
   }
 
   /// Cancel all device approval notifications
   Future<void> cancelAllNotifications() async {
-    await _notifications.cancelAll();
+    for (final approval in _lastKnownApprovals) {
+      await cancelNotification(approval.deviceId);
+    }
+    _lastKnownApprovals = [];
+  }
+
+  int _notificationId(String deviceId) {
+    var hash = 0x811c9dc5;
+    for (final unit in 'approval:$deviceId'.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    return hash == 0 ? 1 : hash;
   }
 
   String _formatPlatform(String platform) {

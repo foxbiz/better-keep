@@ -1,19 +1,15 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:alarm/alarm.dart';
-import 'package:alarm/utils/alarm_set.dart';
 import 'package:app_links/app_links.dart';
 import 'package:better_keep/app.dart';
-import 'package:better_keep/components/alarm_banner.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/models/label.dart';
-import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/audio_playback_source_service.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
-import 'package:better_keep/services/all_day_reminder_notification_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
@@ -26,6 +22,7 @@ import 'package:better_keep/services/legacy_sketch_migration_service.dart';
 import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/services/reminder_permission_service.dart';
+import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -177,8 +174,6 @@ class BetterKeep extends StatefulWidget {
 class _BetterKeepState extends State<BetterKeep> {
   Database? db;
   String dbError = "";
-  StreamSubscription<AlarmSet>? _alarmRingingSubscription;
-  final Map<int, int> _ringingAlarmNoteIds = {};
 
   /// Whether Firebase environment has been selected (debug mode only)
   bool _firebaseConfigured = !kDebugMode;
@@ -191,9 +186,6 @@ class _BetterKeepState extends State<BetterKeep> {
   void initState() {
     super.initState();
 
-    // Initialize the ringing alarm service for in-app banner
-    RingingAlarmService().init();
-
     // Initialize deep link handling for OAuth callback
     _initDeepLinks();
 
@@ -203,9 +195,10 @@ class _BetterKeepState extends State<BetterKeep> {
     }
 
     _initDb().then((_) async {
-      _startAlarmListeners();
-      // Check for active all-day reminders on app startup
-      _showActiveAllDayReminders();
+      await ReminderCoordinator.instance.init();
+      ReminderCoordinator.instance.attachUiActionListener();
+      await ReminderCoordinator.instance.consumePendingUiActions();
+      await ReminderCoordinator.instance.reconcileAll();
 
       // Check notification permission status (read-only, no prompt)
       ReminderPermissionService().checkAndNotify();
@@ -223,19 +216,11 @@ class _BetterKeepState extends State<BetterKeep> {
 
       // Initialize E2EE for already logged-in users, then start sync
       if (AuthService.currentUser != null) {
-        AllDayReminderNotificationService().init();
         await _initializeSignedInServices();
         NoteSyncService().init();
         LabelSyncService().init();
-      } else {
-        AllDayReminderNotificationService().init();
       }
     });
-  }
-
-  Future<void> _showActiveAllDayReminders() async {
-    final notes = await Note.get(NoteType.all);
-    await AllDayReminderNotificationService().showActiveAllDayReminders(notes);
   }
 
   Future<void> _initializeSignedInServices() async {
@@ -304,9 +289,8 @@ class _BetterKeepState extends State<BetterKeep> {
 
   @override
   void dispose() {
-    _alarmRingingSubscription?.cancel();
+    ReminderCoordinator.instance.detachUiActionListener();
     _appLinksSubscription?.cancel();
-    RingingAlarmService().dispose();
     super.dispose();
   }
 
@@ -507,50 +491,6 @@ class _BetterKeepState extends State<BetterKeep> {
       }
     }
     // If no saved choice (or saved choice failed), the selection screen will be shown in build()
-  }
-
-  void _startAlarmListeners() {
-    _alarmRingingSubscription ??= Alarm.ringing.listen((alarmSet) {
-      final currentAlarms = alarmSet.alarms;
-      final currentIds = currentAlarms.map((alarm) => alarm.id).toSet();
-
-      for (final alarm in currentAlarms) {
-        final noteId = int.tryParse(alarm.payload ?? '');
-        if (noteId != null) {
-          _ringingAlarmNoteIds[alarm.id] = noteId;
-        }
-      }
-
-      final endedAlarmIds = _ringingAlarmNoteIds.keys
-          .where((alarmId) => !currentIds.contains(alarmId))
-          .toList();
-
-      for (final alarmId in endedAlarmIds) {
-        final noteId = _ringingAlarmNoteIds.remove(alarmId);
-        if (noteId == null) {
-          continue;
-        }
-
-        unawaited(_completeNoteFromAlarm(noteId));
-      }
-    });
-  }
-
-  Future<void> _completeNoteFromAlarm(int noteId) async {
-    if (db == null) {
-      return;
-    }
-
-    final note = await Note.findById(noteId);
-    if (note == null) {
-      return;
-    }
-
-    if (note.completed) {
-      return;
-    }
-
-    await note.done();
   }
 }
 

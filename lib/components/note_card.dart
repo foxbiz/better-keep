@@ -14,6 +14,7 @@ import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
@@ -218,6 +219,152 @@ class NoteCardAudioGroup extends StatelessWidget {
   }
 }
 
+class _ReminderCardActions extends StatelessWidget {
+  static const double _iconSize = 20;
+  static const double _iconLabelSpacing = 6;
+  static const double _horizontalPadding = 10;
+  static const double _actionSpacing = 4;
+  static const double _minimumTouchTarget = 48;
+
+  final bool showDone;
+  final Color foregroundColor;
+  final Future<void> Function() onDone;
+  final Future<void> Function() onRemove;
+
+  const _ReminderCardActions({
+    required this.showDone,
+    required this.foregroundColor,
+    required this.onDone,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final actions =
+        <
+          ({
+            String label,
+            IconData icon,
+            Color color,
+            Future<void> Function() onPressed,
+          })
+        >[
+          if (showDone)
+            (
+              label: context.l10n.done,
+              icon: Icons.done,
+              color: foregroundColor,
+              onPressed: onDone,
+            ),
+          (
+            label: context.l10n.remove,
+            icon: Icons.notifications_off_outlined,
+            color: Colors.red.shade400,
+            onPressed: onRemove,
+          ),
+        ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textStyle = Theme.of(context).textTheme.labelLarge;
+        final labeledWidth =
+            actions.fold<double>(
+              0,
+              (width, action) =>
+                  width + _labeledActionWidth(context, action.label, textStyle),
+            ) +
+            _actionSpacing * (actions.length - 1);
+        final showLabels =
+            !constraints.hasBoundedWidth ||
+            constraints.maxWidth >= labeledWidth;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final (index, action) in actions.indexed) ...[
+              if (index > 0) const SizedBox(width: _actionSpacing),
+              _buildAction(action, showLabel: showLabels),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  double _labeledActionWidth(
+    BuildContext context,
+    String label,
+    TextStyle? style,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return max(
+      _minimumTouchTarget,
+      _horizontalPadding * 2 + _iconSize + _iconLabelSpacing + width,
+    );
+  }
+
+  Widget _buildAction(
+    ({
+      String label,
+      IconData icon,
+      Color color,
+      Future<void> Function() onPressed,
+    })
+    action, {
+    required bool showLabel,
+  }) {
+    if (showLabel) {
+      return Tooltip(
+        message: action.label,
+        child: TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: action.color,
+            minimumSize: const Size(_minimumTouchTarget, _minimumTouchTarget),
+            padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+          ),
+          onPressed: action.onPressed,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(action.icon, size: _iconSize),
+              const SizedBox(width: _iconLabelSpacing),
+              Text(
+                action.label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Semantics(
+      button: true,
+      label: action.label,
+      excludeSemantics: true,
+      child: IconButton(
+        tooltip: action.label,
+        color: action.color,
+        iconSize: _iconSize,
+        constraints: const BoxConstraints(
+          minWidth: _minimumTouchTarget,
+          minHeight: _minimumTouchTarget,
+        ),
+        onPressed: action.onPressed,
+        icon: Icon(action.icon),
+      ),
+    );
+  }
+}
+
 class _NoteCardState extends State<NoteCard>
     with SingleTickerProviderStateMixin {
   static final Map<String, MemoryImage> _base64ImageCache = {};
@@ -332,16 +479,7 @@ class _NoteCardState extends State<NoteCard>
     NoteSyncService().noteStatus.addListener(_onSyncStateChanged);
     _updateSyncState();
 
-    if (note.hasReminder && !note.hasReminderExpired) {
-      _noteReminderExpiration = Timer(
-        note.reminder!.dateTime.difference(DateTime.now()),
-        () {
-          if (mounted) {
-            setState(() {});
-          }
-        },
-      );
-    }
+    _scheduleReminderExpiration();
 
     _bodyCache.update(
       locked: note.locked,
@@ -392,18 +530,19 @@ class _NoteCardState extends State<NoteCard>
     // Update reminder timer if needed
     if (widget.note != oldWidget.note || reminderChanged) {
       _lastReminder = widget.note.reminder;
-      _noteReminderExpiration?.cancel();
-      if (widget.note.hasReminder && !widget.note.hasReminderExpired) {
-        _noteReminderExpiration = Timer(
-          widget.note.reminder!.dateTime.difference(DateTime.now()),
-          () {
-            if (mounted) {
-              setState(() {});
-            }
-          },
-        );
-      }
+      _scheduleReminderExpiration();
     }
+  }
+
+  void _scheduleReminderExpiration() {
+    _noteReminderExpiration?.cancel();
+    final note = widget.note;
+    if (!note.hasReminder || note.hasReminderExpired) return;
+    final delay = note.reminder!.overdueAt.difference(DateTime.now());
+    if (delay <= Duration.zero) return;
+    _noteReminderExpiration = Timer(delay, () {
+      if (mounted) setState(() {});
+    });
   }
 
   /// Keeps the body cache aligned with the note's privacy state.
@@ -788,7 +927,12 @@ class _NoteCardState extends State<NoteCard>
     if (reminder.isAllDay) {
       // All day reminder: <date> ALL DAY <REPEAT?>
       spans.add(TextSpan(text: '$dateLabel ', style: baseStyle));
-      spans.add(_buildStyledWord('All Day', baseStyle));
+      spans.add(
+        TextSpan(
+          text: context.l10n.allDay.toUpperCase(),
+          style: baseStyle.copyWith(fontWeight: FontWeight.bold),
+        ),
+      );
       if (isRepeating) {
         spans.add(TextSpan(text: ' ', style: baseStyle));
         spans.add(_buildStyledWord(repeat, baseStyle));
@@ -831,7 +975,7 @@ class _NoteCardState extends State<NoteCard>
     if (noteReminder == null) {
       reminderLabelTime = '';
     } else if (noteReminder.isAllDay) {
-      reminderLabelTime = 'All day';
+      reminderLabelTime = '';
     } else {
       // format time to AM/PM
       final hour = reminderDate!.hour;
@@ -1199,7 +1343,17 @@ class _NoteCardState extends State<NoteCard>
                               return;
                             }
 
-                            note.setReminder(newReminder);
+                            final result = await note.setReminder(newReminder);
+                            if (!mounted || !context.mounted) return;
+                            if (result.persisted) {
+                              _lastReminder = note.reminder;
+                              _scheduleReminderExpiration();
+                              setState(() {});
+                            }
+                            ReminderScheduleResultPresenter.instance.show(
+                              context,
+                              result,
+                            );
                           },
                     style: ButtonStyle(
                       padding: WidgetStatePropertyAll<EdgeInsets>(
@@ -1218,14 +1372,20 @@ class _NoteCardState extends State<NoteCard>
                       ),
                     ),
                     icon: IconTransitionAnimation(
-                      fromIcon: Icons.notifications,
+                      fromIcon: noteReminder.type == ReminderType.alarm
+                          ? Icons.alarm
+                          : Icons.notifications,
                       toIcon: note.completed
                           ? Icons.done
                           : isExpiredRepeating
                           ? Icons
                                 .update // Animated icon for expired repeating
                           : note.hasReminderExpired
-                          ? Icons.notifications_off
+                          ? noteReminder.type == ReminderType.alarm
+                                ? Icons.alarm_off
+                                : Icons.notifications_off
+                          : noteReminder.type == ReminderType.alarm
+                          ? Icons.alarm
                           : Icons.notifications,
                       duration: Duration(milliseconds: 1000),
                       repeat: true,
@@ -1272,46 +1432,20 @@ class _NoteCardState extends State<NoteCard>
               _buildCheckboxProgress(note, secondaryColor),
             ],
             if (AppState.showNotes == NoteType.reminder && note.hasReminder)
-              Center(
-                child: Wrap(
-                  spacing: 8.0,
-                  children: [
-                    // Show "Done" button only for non-repeating reminders that are not completed
-                    if (!note.reminder!.isRepeating && !note.completed)
-                      TextButton.icon(
-                        label: Text('Done'),
-                        icon: Icon(Icons.done),
-                        style: ButtonStyle(
-                          foregroundColor: WidgetStatePropertyAll<Color>(
-                            foregroundColor,
-                          ),
-                        ),
-                        onPressed: () async {
-                          await _handleReminderDone(note);
-                        },
-                      ),
-                    // Always show "Remove Reminder" button
-                    TextButton.icon(
-                      label: Text('Remove'),
-                      icon: Icon(Icons.notifications_off_outlined),
-                      style: ButtonStyle(
-                        foregroundColor: WidgetStatePropertyAll<Color>(
-                          Colors.red.shade400,
-                        ),
-                      ),
-                      onPressed: () async {
-                        try {
-                          await _handleRemoveReminder(note);
-                        } catch (e) {
-                          snackbar(
-                            'Failed to remove reminder: $e',
-                            Colors.red.shade400,
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                ),
+              _ReminderCardActions(
+                showDone: !note.reminder!.isRepeating && !note.completed,
+                foregroundColor: foregroundColor,
+                onDone: () => _handleReminderDone(note),
+                onRemove: () async {
+                  try {
+                    await _handleRemoveReminder(note);
+                  } catch (e) {
+                    snackbar(
+                      'Failed to remove reminder: $e',
+                      Colors.red.shade400,
+                    );
+                  }
+                },
               ),
           ],
         ),
@@ -1320,8 +1454,9 @@ class _NoteCardState extends State<NoteCard>
   }
 
   Future<void> _handleRemoveReminder(Note note) async {
+    final message = context.l10n.reminderRemoved;
     await note.deleteReminder();
-    snackbar('Reminder removed', Colors.green);
+    snackbar(message, Colors.green);
     if (mounted) {
       setState(() {});
     }
@@ -1347,7 +1482,7 @@ class _NoteCardState extends State<NoteCard>
 
   Future<void> _handleReminderDone(Note note) async {
     // Only for non-repeating reminders
-    snackbar('Reminder completed', Colors.green);
+    snackbar(context.l10n.reminderCompleted, Colors.green);
     await note.done();
 
     if (mounted) {

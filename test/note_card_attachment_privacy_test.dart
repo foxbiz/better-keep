@@ -5,6 +5,7 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/note_recording.dart';
+import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
@@ -244,5 +245,133 @@ void main() {
     expect(find.byIcon(Icons.image_outlined), findsNWidgets(2));
     expect(find.byIcon(Icons.error), findsNothing);
     expect(find.byType(Hero), findsNothing);
+  });
+
+  group('reminder card actions', () {
+    Note reminderNote({bool completed = false}) => Note(
+      id: 42,
+      title: 'Reminder action layout',
+      completed: completed,
+      reminder: Reminder(
+        dateTime: DateTime.now().add(const Duration(days: 1)),
+        type: ReminderType.notification,
+      ),
+    );
+
+    Future<void> pumpCard(
+      WidgetTester tester, {
+      required double width,
+      bool completed = false,
+    }) async {
+      AppState.showNotes = NoteType.reminder;
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: width,
+                child: NoteCard(
+                  note: reminderNote(completed: completed),
+                  index: 0,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      addTearDown(() => AppState.showNotes = NoteType.all);
+    }
+
+    testWidgets('wide cards show localized actions on one row', (tester) async {
+      await pumpCard(tester, width: 320);
+
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.text('Remove'), findsOneWidget);
+      expect(
+        tester.getCenter(find.byIcon(Icons.done)).dy,
+        tester.getCenter(find.byIcon(Icons.notifications_off_outlined)).dy,
+      );
+    });
+
+    testWidgets('narrow cards use accessible icon-only actions on one row', (
+      tester,
+    ) async {
+      await pumpCard(tester, width: 150);
+
+      expect(find.text('Done'), findsNothing);
+      expect(find.text('Remove'), findsNothing);
+      expect(find.byTooltip('Done'), findsOneWidget);
+      expect(find.byTooltip('Remove'), findsOneWidget);
+
+      final doneButton = find.ancestor(
+        of: find.byIcon(Icons.done),
+        matching: find.byType(IconButton),
+      );
+      final removeButton = find.ancestor(
+        of: find.byIcon(Icons.notifications_off_outlined),
+        matching: find.byType(IconButton),
+      );
+      expect(tester.getSize(doneButton), const Size(48, 48));
+      expect(tester.getSize(removeButton), const Size(48, 48));
+      Finder semanticsLabel(String label) => find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == label,
+      );
+      expect(semanticsLabel('Done'), findsOneWidget);
+      expect(semanticsLabel('Remove'), findsOneWidget);
+      expect(
+        tester.getCenter(doneButton).dy,
+        tester.getCenter(removeButton).dy,
+      );
+    });
+
+    testWidgets('single Remove action keeps its label when it fits', (
+      tester,
+    ) async {
+      await pumpCard(tester, width: 180, completed: true);
+
+      expect(find.byTooltip('Done'), findsNothing);
+      expect(find.text('Remove'), findsOneWidget);
+      expect(find.byIcon(Icons.notifications_off_outlined), findsOneWidget);
+    });
+
+    testWidgets('all-day card label never displays a delivery time', (
+      tester,
+    ) async {
+      AppState.showNotes = NoteType.reminder;
+      addTearDown(() => AppState.showNotes = NoteType.all);
+      final now = DateTime.now();
+      final allDayNote = Note(
+        id: 43,
+        title: 'All-day reminder',
+        reminder: Reminder(
+          dateTime: DateTime(now.year, now.month, now.day + 1, 17, 45),
+          isAllDay: true,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: NoteCard(note: allDayNote, index: 0)),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      final context = tester.element(find.byType(NoteCard));
+
+      expect(
+        find.textContaining('ALL DAY', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(AppState.morningTime.format(context)),
+        findsNothing,
+      );
+      expect(allDayNote.reminder!.dateTime.hour, 0);
+    });
   });
 }

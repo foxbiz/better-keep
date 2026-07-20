@@ -4,6 +4,24 @@
 
 	"appTitle": "Better Keep",
 	"@appTitle": { "description": "The name of the application" },
+	"reminderType": "Reminder type",
+	"notificationReminder": "Notification",
+	"notificationReminderDescription": "Shows a standard time-sensitive notification",
+	"alarmReminder": "Alarm",
+	"alarmReminderDescription": "Rings continuously until you stop it",
+	"alarmUnsupportedPlatform": "Alarms are not supported on this platform. The reminder will sync and become an alarm on Android or iOS.",
+	"notificationUnsupportedPlatform": "Scheduled notifications are not available while Better Keep is closed on this platform. The reminder will still sync and appear in the app when due.",
+	"alarmRequiresSpecificTime": "Alarms require a specific time; All day is available for notifications only.",
+	"reminderDue": "Reminder due",
+	"overdueReminderTitle": "Overdue reminder",
+	"overdueReminderMessage": "This reminder is overdue. Mark it as done now?",
+	"markReminderDoneFailed": "Couldn’t mark this reminder as done. Please try again.",
+	"markAsDone": "Mark as Done",
+	"reminderSavedPermissionRequired": "Reminder saved, but permission is required to schedule it on this device.",
+	"reminderSavedAlreadyDue": "Reminder saved and is already due.",
+	"reminderScheduleFailed": "Reminder saved, but this device could not schedule it.",
+	"reminderCapacityExceeded": "Reminder saved, but this device has too many pending reminders to schedule another one.",
+	"reminderTimeZoneUnavailable": "Reminder saved, but this device's timezone could not be resolved. Check the device time settings and try again.",
 
 	"cancel": "Cancel",
 	"@cancel": { "description": "Cancel button text" },
@@ -870,17 +888,29 @@
 	"nextWeek": "Next week",
 	"@nextWeek": { "description": "Next week label" },
 
+	"nextMonth": "Next month",
+	"@nextMonth": { "description": "Next month label" },
+
 	"pickDateTime": "Pick date & time",
 	"@pickDateTime": { "description": "Pick date and time option" },
 
 	"time": "Time",
 	"@time": { "description": "Time label" },
 
+	"selectTime": "Select time",
+	"@selectTime": { "description": "Empty reminder time field hint" },
+
+	"allDay": "All day",
+	"@allDay": { "description": "All-day reminder option" },
+
 	"date": "Date",
 	"@date": { "description": "Date label" },
 
 	"repeat": "Repeat",
 	"@repeat": { "description": "Repeat label" },
+
+	"frequency": "Frequency",
+	"@frequency": { "description": "Reminder repeat frequency field label" },
 
 	"never": "Never",
 	"@never": { "description": "Never repeat option" },
