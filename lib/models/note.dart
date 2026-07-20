@@ -1,9 +1,6 @@
-import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:alarm/alarm.dart';
-import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/note_attachment.dart';
@@ -11,8 +8,7 @@ import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/models/note_sync_track.dart';
-import 'package:better_keep/services/alarm_id_service.dart';
-import 'package:better_keep/services/all_day_reminder_notification_service.dart';
+import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
@@ -25,6 +21,7 @@ import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:flutter/foundation.dart';
@@ -38,6 +35,17 @@ import 'package:uuid/uuid.dart';
 
 typedef NoteEvent = ModelEvent<Note>;
 typedef NoteListener = ModelListener<Note>;
+
+Reminder? _parseReminder(Object? raw) {
+  if (raw == null) return null;
+  if (raw is String) {
+    return Reminder.fromJson(Map<String, Object?>.from(jsonDecode(raw) as Map));
+  }
+  if (raw is Map) {
+    return Reminder.fromJson(Map<String, Object?>.from(raw));
+  }
+  return null;
+}
 
 enum _AttachmentSerializationPolicy { standard, lockedPinBoundary }
 
@@ -472,25 +480,7 @@ class Note extends BaseModel<Note> {
   }
 
   bool get hasReminderExpired {
-    if (reminder == null) {
-      return false;
-    }
-
-    // For "All Day" reminders, consider expired only after the day ends (next day)
-    if (reminder!.isAllDay) {
-      final now = DateTime.now();
-      final reminderDate = reminder!.dateTime;
-      // Compare dates only - expired if reminder date is before today
-      final today = DateTime(now.year, now.month, now.day);
-      final reminderDay = DateTime(
-        reminderDate.year,
-        reminderDate.month,
-        reminderDate.day,
-      );
-      return reminderDay.isBefore(today);
-    }
-
-    return reminder!.dateTime.isBefore(DateTime.now());
+    return reminder?.isOverdueAt(DateTime.now()) ?? false;
   }
 
   /// Check if this note has an active "All Day" reminder for today
@@ -653,11 +643,7 @@ class Note extends BaseModel<Note> {
       completed: (obj['completed'] == 1 || obj['completed'] == true)
           ? true
           : false,
-      reminder: obj['reminder'] != null
-          ? (obj['reminder'] is String
-                ? Reminder.fromJson(json.decode(obj['reminder']))
-                : null)
-          : null,
+      reminder: _parseReminder(obj['reminder']),
       createdAt: obj['created_at'] is Timestamp
           ? (obj['created_at'] as Timestamp).toDate()
           : DateTime.tryParse(
@@ -713,19 +699,10 @@ class Note extends BaseModel<Note> {
       updatedAt = DateTime.now();
     }
 
-    if (obj['reminder'] != null) {
+    final reminderWasProvided = obj.containsKey('reminder');
+    if (reminderWasProvided) {
       final reminderData = obj['reminder'];
-      if (reminderData is String) {
-        reminder = Reminder.fromJson(
-          jsonDecode(reminderData) as Map<String, Object?>,
-        );
-      } else if (reminderData is Map) {
-        reminder = Reminder.fromJson(Map<String, Object?>.from(reminderData));
-      }
-      // Only set alarm if the reminder is not completed
-      if (!completed) {
-        await setAlarm();
-      }
+      reminder = _parseReminder(reminderData);
     }
 
     // Handle attachments - can be List<NoteAttachment>, JSON string, or List<dynamic>
@@ -750,6 +727,13 @@ class Note extends BaseModel<Note> {
     // Pass false to prevent triggering a sync back to Firebase
     // This method is called when syncing FROM remote, not for local changes
     await save(false);
+    if (id != null && reminderWasProvided) {
+      if (reminder != null && !completed && !trashed) {
+        await ReminderCoordinator.instance.schedule(this);
+      } else {
+        await ReminderCoordinator.instance.cancel(id!);
+      }
+    }
     return this;
   }
 
@@ -2331,53 +2315,45 @@ class Note extends BaseModel<Note> {
       });
 
   Future<int> done() async {
-    if (id != null && isAlarmSupported) {
-      final alarmId = await AlarmIdService.getAlarmId(id!);
-      await Alarm.stop(alarmId);
-      await AllDayReminderNotificationService().cancelNotification(id!);
-    }
-
     // Check if this is a repeating reminder
     if (reminder != null && reminder!.isRepeating) {
       // Schedule the next occurrence
-      final nextReminder = reminder!.getNextOccurrence();
+      final currentReminder = reminder!;
+      final nextReminder = currentReminder.getNextOccurrence();
       if (nextReminder != null) {
-        reminder = nextReminder;
+        reminder = nextReminder.copyWith(
+          revision: currentReminder.revision + 1,
+        );
         completed = false; // Keep it active for repeating reminders
         final rowId = await save();
-        await setAlarm(); // Schedule the next alarm
+        if (rowId >= 0) await ReminderCoordinator.instance.schedule(this);
         return rowId;
       }
     }
 
     // Non-repeating reminder: mark as completed
     completed = true;
-    return await save();
+    final rowId = await save();
+    if (rowId >= 0 && id != null) {
+      await ReminderCoordinator.instance.cancel(id!);
+    }
+    return rowId;
   }
 
   /// Delete the reminder from this note entirely
   Future<int> deleteReminder() async {
-    // Cancel alarm/notification in background - don't block UI
-    if (id != null && isAlarmSupported) {
-      final noteId = id!;
-      unawaited(
-        Future(() async {
-          try {
-            final alarmId = await AlarmIdService.getAlarmId(noteId);
-            await Alarm.stop(alarmId);
-            await AllDayReminderNotificationService().cancelNotification(
-              noteId,
-            );
-          } catch (e) {
-            AppLogger.log("Error cancelling alarm/notification: $e");
-          }
-        }),
-      );
-    }
-
+    final previousReminder = reminder;
+    final previousCompleted = completed;
     reminder = null;
     completed = false;
-    return save();
+    final rowId = await save();
+    if (rowId < 0) {
+      reminder = previousReminder;
+      completed = previousCompleted;
+      return rowId;
+    }
+    if (id != null) await ReminderCoordinator.instance.cancel(id!);
+    return rowId;
   }
 
   Future<int> setContent(String newContent, String newPlainText) =>
@@ -2582,87 +2558,77 @@ class Note extends BaseModel<Note> {
   }
 
   Future<int> setReminder(Reminder newReminder) async {
-    // Cancel any existing all-day notification before updating
-    if (id != null) {
-      await AllDayReminderNotificationService().cancelNotification(id!);
-    }
-
-    reminder = newReminder;
+    final nextRevision = (reminder?.revision ?? 0) + 1;
+    final previousReminder = reminder;
+    final previousCompleted = completed;
+    reminder = newReminder.copyWith(revision: nextRevision);
     completed = false;
     final rowId = await save();
-    unawaited(_scheduleReminderAlarm());
+    if (rowId < 0) {
+      reminder = previousReminder;
+      completed = previousCompleted;
+      return rowId;
+    }
+    final result = await ReminderCoordinator.instance.schedule(
+      this,
+      requestPermissions: true,
+    );
+    _showReminderScheduleResult(result);
     return rowId;
   }
 
-  Future<void> _scheduleReminderAlarm() async {
-    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
-      return;
-    }
-    try {
-      await setAlarm();
-      // Show persistent notification for all-day reminders that are active today
-      if (reminder != null && reminder!.isAllDay && isAllDayReminderActive) {
-        await AllDayReminderNotificationService().showAllDayNotification(this);
-      }
-      snackbar("Reminder set", Colors.green[400]);
-    } catch (e) {
-      snackbar(e.toString(), Colors.red);
+  void _showReminderScheduleResult(ReminderScheduleResult result) {
+    final context = AppState.navigatorKey.currentContext;
+    final l10n = context?.l10n;
+    switch (result.state) {
+      case ReminderDeliveryState.scheduled:
+        snackbar(l10n?.reminderSet ?? 'Reminder set', Colors.green[400]);
+      case ReminderDeliveryState.unsupported:
+        final message = reminder?.type == ReminderType.alarm
+            ? l10n?.alarmUnsupportedPlatform
+            : l10n?.notificationUnsupportedPlatform;
+        snackbar(message ?? result.message ?? 'Reminder saved', Colors.orange);
+      case ReminderDeliveryState.permissionDenied:
+        snackbarWithAction(
+          l10n?.reminderSavedPermissionRequired ??
+              result.message ??
+              'Reminder saved on this device',
+          actionLabel: l10n?.openSettings ?? 'Open Settings',
+          onAction: () {
+            unawaited(ReminderCoordinator.instance.openSystemSettings());
+          },
+          color: Colors.orange,
+        );
+      case ReminderDeliveryState.pastDue:
+        snackbar(
+          l10n?.reminderSavedAlreadyDue ?? 'Reminder saved and is already due',
+          Colors.orange,
+        );
+      case ReminderDeliveryState.superseded:
+        // A newer local edit owns the delivery state and its user feedback.
+        break;
+      case ReminderDeliveryState.capacityExceeded:
+        snackbar(
+          l10n?.reminderCapacityExceeded ??
+              result.message ??
+              'Reminder saved, but this device has too many pending reminders.',
+          Colors.orange,
+        );
+      case ReminderDeliveryState.failed:
+        snackbar(
+          result.message ??
+              l10n?.reminderScheduleFailed ??
+              'Failed to schedule reminder',
+          Colors.red,
+        );
     }
   }
 
+  /// Compatibility entry point retained for callers that previously requested
+  /// alarm-only scheduling after sync or permission changes.
   Future<void> setAlarm() async {
-    if (!isAlarmSupported) {
-      return;
-    }
-
-    if (id == null || reminder == null) {
-      return;
-    }
-
-    // Skip alarm for "All Day" reminders - they use visual highlight instead
-    if (reminder!.isAllDay) {
-      return;
-    }
-
-    // Compute the alarm time, advancing past alarms to their next occurrence.
-    // This prevents alarms from firing immediately during post-login sync when
-    // a reminder time (e.g. 6 AM) has already passed for the current day.
-    DateTime alarmDateTime = reminder!.dateTime;
-    if (alarmDateTime.isBefore(DateTime.now())) {
-      if (reminder!.isRepeating) {
-        final next = reminder!.getNextOccurrence();
-        if (next == null) return;
-        alarmDateTime = next.dateTime;
-      } else {
-        // Non-repeating past alarm — nothing to schedule
-        return;
-      }
-    }
-
-    final alarmId = await AlarmIdService.getAlarmId(id!);
-
-    await Alarm.stop(alarmId);
-    await Alarm.set(
-      alarmSettings: AlarmSettings(
-        id: alarmId,
-        dateTime: alarmDateTime,
-        assetAudioPath: AppState.alarmSound,
-        loopAudio: true,
-        vibrate: true,
-        androidFullScreenIntent: true,
-        volumeSettings: VolumeSettings.fade(
-          volume: 1,
-          fadeDuration: Duration(seconds: 3),
-        ),
-        notificationSettings: NotificationSettings(
-          title: title ?? 'Note reminder',
-          body: body,
-          iconColor: color,
-          stopButton: 'Mark as done',
-        ),
-        payload: id?.toString(),
-      ),
-    );
+    if (id == null || reminder == null || completed || trashed) return;
+    await ReminderCoordinator.instance.schedule(this);
   }
 
   Future<T> _enqueueMutation<T>(Future<T> Function() action) {
@@ -2778,29 +2744,23 @@ class Note extends BaseModel<Note> {
   }
 
   Future<void> moveToTrash() async {
-    // Cancel alarm/notification before trashing - don't block UI
-    if (id != null && reminder != null && !completed && isAlarmSupported) {
-      final noteId = id!;
-      unawaited(
-        Future(() async {
-          try {
-            final alarmId = await AlarmIdService.getAlarmId(noteId);
-            await Alarm.stop(alarmId);
-            await AllDayReminderNotificationService().cancelNotification(
-              noteId,
-            );
-          } catch (e) {
-            AppLogger.log("Error cancelling alarm on trash: $e");
-          }
-        }),
-      );
-    }
-
+    final previousTrashed = trashed;
+    final previousArchived = archived;
+    final previousPinned = pinned;
+    final previousReadOnly = readOnly;
     trashed = true;
     archived = false;
     pinned = false;
     readOnly = true;
-    await save();
+    final rowId = await save();
+    if (rowId < 0) {
+      trashed = previousTrashed;
+      archived = previousArchived;
+      pinned = previousPinned;
+      readOnly = previousReadOnly;
+      return;
+    }
+    if (id != null) await ReminderCoordinator.instance.cancel(id!);
 
     // Revoke all share links for this note
     final noteId = id?.toString();
@@ -2810,26 +2770,19 @@ class Note extends BaseModel<Note> {
   }
 
   Future<void> restoreFromTrash() async {
+    final previousTrashed = trashed;
+    final previousReadOnly = readOnly;
     trashed = false;
     readOnly = false;
-    await save();
+    final rowId = await save();
+    if (rowId < 0) {
+      trashed = previousTrashed;
+      readOnly = previousReadOnly;
+      return;
+    }
 
-    // Reschedule alarm if the note has an active reminder
-    if (reminder != null && !completed && isAlarmSupported) {
-      unawaited(
-        Future(() async {
-          try {
-            await setAlarm();
-            if (reminder!.isAllDay && isAllDayReminderActive) {
-              await AllDayReminderNotificationService().showAllDayNotification(
-                this,
-              );
-            }
-          } catch (e) {
-            AppLogger.log("Error rescheduling alarm on restore: $e");
-          }
-        }),
-      );
+    if (reminder != null && !completed) {
+      await ReminderCoordinator.instance.schedule(this);
     }
   }
 
@@ -2879,12 +2832,6 @@ class Note extends BaseModel<Note> {
     // Capture the note id before deletion for sync tracking
     final noteId = id!;
 
-    if (isAlarmSupported) {
-      final alarmId = await AlarmIdService.getAlarmId(noteId);
-      await Alarm.stop(alarmId);
-      await AlarmIdService.removeAlarmId(noteId);
-    }
-
     await _updateSyncTrack(SyncAction.delete);
 
     int result = await AppState.db.delete(
@@ -2892,6 +2839,15 @@ class Note extends BaseModel<Note> {
       where: "id = ?",
       whereArgs: [noteId],
     );
+    try {
+      await ReminderCoordinator.instance.forget(noteId);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Note deleted but reminder cleanup failed',
+        error,
+        stackTrace,
+      );
+    }
     await _deleteLocalFiles();
     super.notify("deleted");
     return result;

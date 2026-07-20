@@ -12,6 +12,70 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get reminderType => 'Tipo de lembrete';
+
+  @override
+  String get notificationReminder => 'Notificação';
+
+  @override
+  String get notificationReminderDescription =>
+      'Mostra uma notificação padrão sensível ao tempo';
+
+  @override
+  String get alarmReminder => 'Alarme';
+
+  @override
+  String get alarmReminderDescription => 'Toca continuamente até você parar';
+
+  @override
+  String get alarmUnsupportedPlatform =>
+      'Alarmes não são compatíveis com esta plataforma. O lembrete será sincronizado e se tornará um alarme no Android ou iOS.';
+
+  @override
+  String get notificationUnsupportedPlatform =>
+      'Notificações agendadas não ficam disponíveis enquanto o Better Keep está fechado nesta plataforma. O lembrete ainda será sincronizado e aparecerá no app quando vencer.';
+
+  @override
+  String get alarmRequiresSpecificTime =>
+      'Alarmes exigem um horário específico; Dia inteiro está disponível apenas para notificações.';
+
+  @override
+  String get reminderDue => 'Lembrete vencido';
+
+  @override
+  String get overdueReminderTitle => 'Lembrete atrasado';
+
+  @override
+  String get overdueReminderMessage =>
+      'Este lembrete está atrasado. Marcar como concluído agora?';
+
+  @override
+  String get markReminderDoneFailed =>
+      'Não foi possível marcar o lembrete como concluído. Tente novamente.';
+
+  @override
+  String get markAsDone => 'Marcar como concluído';
+
+  @override
+  String get reminderSavedPermissionRequired =>
+      'Lembrete salvo, mas é necessária permissão para agendá-lo neste dispositivo.';
+
+  @override
+  String get reminderSavedAlreadyDue => 'Lembrete salvo e já vencido.';
+
+  @override
+  String get reminderScheduleFailed =>
+      'Lembrete salvo, mas este dispositivo não conseguiu agendá-lo.';
+
+  @override
+  String get reminderCapacityExceeded =>
+      'Lembrete salvo, mas este dispositivo tem lembretes pendentes demais para agendar outro.';
+
+  @override
+  String get reminderTimeZoneUnavailable =>
+      'O lembrete foi salvo, mas não foi possível reconhecer o fuso horário deste dispositivo. Verifique as configurações de data e hora e tente novamente.';
+
+  @override
   String get cancel => 'Cancelar';
 
   @override
@@ -809,16 +873,28 @@ class AppLocalizationsPt extends AppLocalizations {
   String get nextWeek => 'Próxima semana';
 
   @override
+  String get nextMonth => 'Próximo mês';
+
+  @override
   String get pickDateTime => 'Escolher data e hora';
 
   @override
   String get time => 'Hora';
 
   @override
+  String get selectTime => 'Selecionar hora';
+
+  @override
+  String get allDay => 'Dia inteiro';
+
+  @override
   String get date => 'Data';
 
   @override
   String get repeat => 'Repetir';
+
+  @override
+  String get frequency => 'Frequência';
 
   @override
   String get never => 'Nunca';

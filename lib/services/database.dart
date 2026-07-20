@@ -5,6 +5,7 @@ import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/services/reminder_action_receipt_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -28,6 +29,7 @@ Future<Database> initDatabase() async {
       await NoteSyncTrack.createTable(db);
       await FileSyncTrack.createTable(db);
       await LabelSyncTrack.createTable(db);
+      await ReminderActionReceiptService.createTable(db);
     },
     onUpgrade: (db, oldVersion, newVersion) async {
       await Note.upgradeTable(db, oldVersion, newVersion);
@@ -35,6 +37,11 @@ Future<Database> initDatabase() async {
       await NoteSyncTrack.upgradeTable(db, oldVersion, newVersion);
       await FileSyncTrack.upgradeTable(db, oldVersion, newVersion);
       await LabelSyncTrack.upgradeTable(db, oldVersion, newVersion);
+      await ReminderActionReceiptService.upgradeTable(
+        db,
+        oldVersion,
+        newVersion,
+      );
     },
     version: databaseVersion,
   );

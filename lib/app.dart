@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:better_keep/components/alarm_banner.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
@@ -17,6 +16,7 @@ import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
+import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_web.dart'
     if (dart.library.io) 'package:better_keep/services/monetization/razorpay_stub.dart'
@@ -44,6 +44,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   late ThemeData themeData;
   late final void Function(dynamic) _themeListener;
   late final void Function(dynamic) _localeListener;
+  late final void Function(dynamic) _morningTimeListener;
   Locale? _locale;
 
   @override
@@ -74,8 +75,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       setState(() {
         _locale = value as Locale?;
       });
+      unawaited(ReminderCoordinator.instance.reconcileAll());
     };
     AppState.subscribe("locale", _localeListener);
+
+    _morningTimeListener = (_) {
+      unawaited(ReminderCoordinator.instance.reconcileAll());
+    };
+    AppState.subscribe("morning_time", _morningTimeListener);
 
     // Set navigator key for Razorpay dialogs on desktop
     if (isDesktop) {
@@ -88,6 +95,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     AppState.unsubscribe("theme", _themeListener);
     AppState.unsubscribe("locale", _localeListener);
+    AppState.unsubscribe("morning_time", _morningTimeListener);
     super.dispose();
   }
 
@@ -110,6 +118,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       }
       // Check for pending intents (files opened via intent while app was in background)
       IntentHandlerService.instance.checkPendingIntents();
+      unawaited(ReminderCoordinator.instance.onAppResumed());
     }
   }
 
@@ -564,16 +573,12 @@ class _BannerLayout extends StatelessWidget {
       listenable: Listenable.merge([
         AuthService.sessionInvalid,
         SessionInvalidBanner.isDismissed,
-        if (isAlarmSupported) RingingAlarmService().ringingAlarms,
       ]),
       builder: (context, _) {
         final hasSessionBanner =
             AuthService.sessionInvalid.value &&
             !SessionInvalidBanner.isDismissed.value;
-        final hasAlarmBanner =
-            isAlarmSupported &&
-            RingingAlarmService().ringingAlarms.value.isNotEmpty;
-        final hasBanner = hasSessionBanner || hasAlarmBanner;
+        final hasBanner = hasSessionBanner;
 
         final appChild = hasBanner
             ? MediaQuery.removePadding(
@@ -586,7 +591,6 @@ class _BannerLayout extends StatelessWidget {
         return Column(
           children: [
             const OpenInAppBanner(),
-            const AlarmBanner(),
             const SessionInvalidBanner(),
             Expanded(child: appChild),
           ],

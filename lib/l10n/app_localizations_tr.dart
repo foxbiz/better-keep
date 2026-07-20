@@ -12,6 +12,71 @@ class AppLocalizationsTr extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get reminderType => 'Hatırlatıcı türü';
+
+  @override
+  String get notificationReminder => 'Bildirim';
+
+  @override
+  String get notificationReminderDescription =>
+      'Zamana duyarlı standart bir bildirim gösterir';
+
+  @override
+  String get alarmReminder => 'Alarm';
+
+  @override
+  String get alarmReminderDescription => 'Siz durdurana kadar sürekli çalar';
+
+  @override
+  String get alarmUnsupportedPlatform =>
+      'Alarmlar bu platformda desteklenmiyor. Hatırlatıcı eşitlenecek ve Android ya da iOS\'ta alarm olarak ayarlanacaktır.';
+
+  @override
+  String get notificationUnsupportedPlatform =>
+      'Bu platformda Better Keep kapalıyken zamanlanmış bildirim kullanılamaz. Hatırlatıcı yine eşitlenir ve zamanı geldiğinde uygulamada görünür.';
+
+  @override
+  String get alarmRequiresSpecificTime =>
+      'Alarmlar belirli bir saat gerektirir; Tüm gün yalnızca bildirimlerde kullanılabilir.';
+
+  @override
+  String get reminderDue => 'Hatırlatıcı zamanı';
+
+  @override
+  String get overdueReminderTitle => 'Gecikmiş hatırlatıcı';
+
+  @override
+  String get overdueReminderMessage =>
+      'Bu hatırlatıcının zamanı geçti. Şimdi tamamlandı olarak işaretlensin mi?';
+
+  @override
+  String get markReminderDoneFailed =>
+      'Hatırlatıcı tamamlandı olarak işaretlenemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get markAsDone => 'Tamamlandı Olarak İşaretle';
+
+  @override
+  String get reminderSavedPermissionRequired =>
+      'Hatırlatıcı kaydedildi ancak bu cihazda zamanlamak için izin gerekiyor.';
+
+  @override
+  String get reminderSavedAlreadyDue =>
+      'Hatırlatıcı kaydedildi ve zamanı zaten geldi.';
+
+  @override
+  String get reminderScheduleFailed =>
+      'Hatırlatıcı kaydedildi ancak bu cihaz zamanlayamadı.';
+
+  @override
+  String get reminderCapacityExceeded =>
+      'Hatırlatıcı kaydedildi ancak bu cihazda yeni bir hatırlatıcı zamanlamak için çok fazla bekleyen hatırlatıcı var.';
+
+  @override
+  String get reminderTimeZoneUnavailable =>
+      'Hatırlatıcı kaydedildi ancak bu cihazın saat dilimi belirlenemedi. Cihazın saat ayarlarını kontrol edip tekrar deneyin.';
+
+  @override
   String get cancel => 'İptal';
 
   @override
@@ -803,16 +868,28 @@ class AppLocalizationsTr extends AppLocalizations {
   String get nextWeek => 'Gelecek hafta';
 
   @override
+  String get nextMonth => 'Gelecek ay';
+
+  @override
   String get pickDateTime => 'Tarih ve saat seç';
 
   @override
   String get time => 'Saat';
 
   @override
+  String get selectTime => 'Saat seç';
+
+  @override
+  String get allDay => 'Tüm gün';
+
+  @override
   String get date => 'Tarih';
 
   @override
   String get repeat => 'Tekrarla';
+
+  @override
+  String get frequency => 'Sıklık';
 
   @override
   String get never => 'Asla';

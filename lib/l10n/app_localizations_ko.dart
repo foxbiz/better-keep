@@ -12,6 +12,66 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get reminderType => '리마인더 유형';
+
+  @override
+  String get notificationReminder => '알림';
+
+  @override
+  String get notificationReminderDescription => '시간 지정 표준 알림을 표시합니다';
+
+  @override
+  String get alarmReminder => '알람';
+
+  @override
+  String get alarmReminderDescription => '중지할 때까지 계속 울립니다';
+
+  @override
+  String get alarmUnsupportedPlatform =>
+      '이 플랫폼에서는 알람이 지원되지 않습니다. 리마인더가 동기화되어 Android 또는 iOS에서 알람으로 설정됩니다.';
+
+  @override
+  String get notificationUnsupportedPlatform =>
+      '이 플랫폼에서는 Better Keep이 닫혀 있을 때 예약 알림을 사용할 수 없습니다. 리마인더는 계속 동기화되며 시간이 되면 앱에 표시됩니다.';
+
+  @override
+  String get alarmRequiresSpecificTime =>
+      '알람에는 특정 시간이 필요합니다. 종일은 알림에서만 사용할 수 있습니다.';
+
+  @override
+  String get reminderDue => '리마인더 시간';
+
+  @override
+  String get overdueReminderTitle => '기한이 지난 알림';
+
+  @override
+  String get overdueReminderMessage => '이 알림은 기한이 지났습니다. 지금 완료로 표시할까요?';
+
+  @override
+  String get markReminderDoneFailed => '알림을 완료로 표시하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get markAsDone => '완료로 표시';
+
+  @override
+  String get reminderSavedPermissionRequired =>
+      '리마인더가 저장되었지만 이 기기에서 예약하려면 권한이 필요합니다.';
+
+  @override
+  String get reminderSavedAlreadyDue => '리마인더가 저장되었으며 이미 시간이 지났습니다.';
+
+  @override
+  String get reminderScheduleFailed => '리마인더가 저장되었지만 이 기기에서 예약하지 못했습니다.';
+
+  @override
+  String get reminderCapacityExceeded =>
+      '리마인더가 저장되었지만 이 기기에 대기 중인 리마인더가 너무 많아 예약할 수 없습니다.';
+
+  @override
+  String get reminderTimeZoneUnavailable =>
+      '리마인더는 저장되었지만 이 기기의 시간대를 확인할 수 없습니다. 기기 시간 설정을 확인한 후 다시 시도하세요.';
+
+  @override
   String get cancel => '취소';
 
   @override
@@ -795,16 +855,28 @@ class AppLocalizationsKo extends AppLocalizations {
   String get nextWeek => '다음 주';
 
   @override
+  String get nextMonth => '다음 달';
+
+  @override
   String get pickDateTime => '날짜 및 시간 선택';
 
   @override
   String get time => '시간';
 
   @override
+  String get selectTime => '시간 선택';
+
+  @override
+  String get allDay => '하루 종일';
+
+  @override
   String get date => '날짜';
 
   @override
   String get repeat => '반복';
+
+  @override
+  String get frequency => '빈도';
 
   @override
   String get never => '안 함';

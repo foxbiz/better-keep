@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
+import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -324,12 +325,7 @@ Exported on: ${DateTime.now().toIso8601String()}
       'attachments': note.attachments
           .map((a) => _attachmentToExportJson(a))
           .toList(),
-      'reminder': note.reminder != null
-          ? {
-              'dateTime': note.reminder!.dateTime.toIso8601String(),
-              'isAllDay': note.reminder!.isAllDay,
-            }
-          : null,
+      'reminder': note.reminder?.toJson(),
       'createdAt': note.createdAt?.toIso8601String(),
       'updatedAt': note.updatedAt?.toIso8601String(),
       'archived': note.archived,
@@ -616,12 +612,25 @@ Exported on: ${DateTime.now().toIso8601String()}
     if (note.archived) metadata.add('📦 Archived');
     if (note.trashed) metadata.add('🗑️ Trashed');
     if (note.reminder != null) {
-      metadata.add('⏰ Reminder: ${note.reminder!.dateTime.toIso8601String()}');
+      final reminder = note.reminder!;
+      metadata.add(
+        '⏰ Reminder (${reminder.type.name}, ${reminder.repeat}): '
+        '${_formatReminderForExport(reminder)}',
+      );
     }
     buffer.writeln(metadata.join(' • '));
     buffer.writeln('</small>');
 
     return buffer.toString();
+  }
+
+  String _formatReminderForExport(Reminder reminder) {
+    if (!reminder.isAllDay) return reminder.dateTime.toIso8601String();
+    final date = reminder.dateTime;
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$year-$month-$day (All day)';
   }
 
   /// Convert Quill Delta JSON to Markdown

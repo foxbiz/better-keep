@@ -16,6 +16,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
 /// Device status in the E2EE system.
@@ -32,6 +33,8 @@ enum DeviceStatus {
 
 /// Device document stored in Firestore.
 class DeviceDocument {
+  static const reminderV2Capability = 'reminder_v2';
+
   final String id;
   final String name;
   final String platform;
@@ -44,6 +47,8 @@ class DeviceDocument {
   final DateTime? revokedAt;
   // Device identification info
   final Map<String, String?>? deviceDetails;
+  final Set<String> capabilities;
+  final String? appVersion;
 
   DeviceDocument({
     required this.id,
@@ -57,12 +62,15 @@ class DeviceDocument {
     this.approvedAt,
     this.revokedAt,
     this.deviceDetails,
+    this.capabilities = const <String>{},
+    this.appVersion,
   });
 
   bool get isApproved => status == DeviceStatus.approved;
   bool get isPending => status == DeviceStatus.pending;
   bool get isRevoked => status == DeviceStatus.revoked;
   bool get hasWrappedUMK => wrappedUMK != null && wrappedUMKNonce != null;
+  bool get supportsReminderV2 => capabilities.contains(reminderV2Capability);
 
   /// Gets the manufacturer from device details.
   String? get manufacturer => deviceDetails?['manufacturer'];
@@ -119,6 +127,12 @@ class DeviceDocument {
           ? DateTime.parse(data['revoked_at'] as String)
           : null,
       deviceDetails: details,
+      capabilities:
+          (data['capabilities'] as List<dynamic>?)
+              ?.map((value) => value.toString())
+              .toSet() ??
+          const <String>{},
+      appVersion: data['app_version'] as String?,
     );
   }
 
@@ -133,6 +147,8 @@ class DeviceDocument {
     if (approvedAt != null) 'approved_at': approvedAt!.toIso8601String(),
     if (revokedAt != null) 'revoked_at': revokedAt!.toIso8601String(),
     if (deviceDetails != null) 'device_details': deviceDetails,
+    if (capabilities.isNotEmpty) 'capabilities': capabilities.toList(),
+    if (appVersion != null) 'app_version': appVersion,
   };
 }
 
@@ -244,6 +260,8 @@ class DeviceManager {
       return;
     }
 
+    await _publishCurrentCapabilities(deviceId);
+
     final device = DeviceDocument.fromFirestore(deviceDoc);
 
     if (device.isRevoked) {
@@ -263,7 +281,10 @@ class DeviceManager {
       try {
         await _unwrapAndCacheUMK(device);
       } catch (e) {
-        AppLogger.error('E2EE: Failed to unwrap UMK during init (will retry on next launch)', e);
+        AppLogger.error(
+          'E2EE: Failed to unwrap UMK during init (will retry on next launch)',
+          e,
+        );
       }
     }
 
@@ -591,6 +612,8 @@ class DeviceManager {
       'created_at': DateTime.now().toIso8601String(),
       'approved_at': DateTime.now().toIso8601String(),
       'device_details': deviceDetails,
+      'capabilities': const [DeviceDocument.reminderV2Capability],
+      'app_version': await _appVersion(),
     });
 
     // Store device info locally AFTER Firestore write succeeds
@@ -677,6 +700,8 @@ class DeviceManager {
           'device_details': isReview
               ? <String, String?>{}
               : await DeviceInfo.getDeviceDetails(),
+          'capabilities': const [DeviceDocument.reminderV2Capability],
+          'app_version': await _appVersion(),
         });
 
         // Store device info locally
@@ -719,6 +744,8 @@ class DeviceManager {
       'status': DeviceStatus.pending.name,
       'created_at': DateTime.now().toIso8601String(),
       'device_details': deviceDetails,
+      'capabilities': const [DeviceDocument.reminderV2Capability],
+      'app_version': await _appVersion(),
     });
 
     // Store device info locally AFTER Firestore write succeeds
@@ -900,6 +927,24 @@ class DeviceManager {
         if (b.id == currentDeviceId) return 1;
         return b.createdAt.compareTo(a.createdAt);
       });
+  }
+
+  Future<void> _publishCurrentCapabilities(String deviceId) async {
+    try {
+      await _devicesCollection.doc(deviceId).set({
+        'capabilities': const [DeviceDocument.reminderV2Capability],
+        'app_version': await _appVersion(),
+      }, SetOptions(merge: true));
+    } catch (error) {
+      // Capability publication is retried at the next initialization. It must
+      // not block note access when the user is temporarily offline.
+      AppLogger.log('E2EE: Could not publish device capabilities: $error');
+    }
+  }
+
+  Future<String> _appVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    return '${info.version}+${info.buildNumber}';
   }
 
   /// Gets the unwrapped UMK for encrypting/decrypting notes.

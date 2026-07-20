@@ -13,6 +13,8 @@ import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/reminder_session_service.dart';
+import 'package:better_keep/services/reminder_sign_out_cleanup_service.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/desktop_auth_service.dart';
@@ -370,9 +372,15 @@ class AuthService {
       }
     }
 
+    await ReminderSessionService.setSignedIn(
+      _auth.currentUser != null,
+      preferences: prefsInstance,
+    );
+
     // Listen for auth state changes to start/stop the revocation listener
     _authStateSubscription?.cancel();
     _authStateSubscription = _auth.authStateChanges().listen((user) async {
+      await ReminderSessionService.setSignedIn(user != null);
       if (user != null && _tokenRevocationSubscription == null) {
         // If we're in the middle of sign-in, defer starting the listener
         // _completeSignIn will handle this after auth is fully complete
@@ -1623,8 +1631,19 @@ class AuthService {
 
   static Future<void> signOut() async {
     try {
+      await ReminderSessionService.setSignedIn(false);
+
       // Stop token revocation listener
       _stopTokenRevocationListener();
+
+      // Cancel only note reminder deliveries before the note database is
+      // deleted. Device-approval notifications use a separate payload and ID
+      // namespace and remain independently managed below.
+      try {
+        await ReminderSignOutCleanupService.cancelDeliveries();
+      } catch (e) {
+        AppLogger.error('Error cancelling reminders during signout: $e');
+      }
 
       // Cancel all alarms
       try {

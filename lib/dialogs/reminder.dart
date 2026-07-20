@@ -1,32 +1,11 @@
-import 'package:better_keep/services/reminder_permission_service.dart';
+import 'package:better_keep/config.dart';
+import 'package:better_keep/services/local_notification_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
-import 'package:better_keep/utils/week_days.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/models/reminder.dart';
 
-Future<Reminder?> reminder(
-  BuildContext context, {
-  Reminder? initialReminder,
-}) async {
-  // Request permissions just-in-time before showing the reminder dialog
-  final hasPermission = await ReminderPermissionService().ensurePermissions();
-
-  if (!hasPermission) {
-    // Show a message if permissions were denied
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.notificationPermissionsRequired),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-    return null;
-  }
-
-  if (!context.mounted) return null;
-
+Future<Reminder?> reminder(BuildContext context, {Reminder? initialReminder}) {
   return showDialog<Reminder>(
     context: context,
     builder: (context) {
@@ -45,18 +24,24 @@ class DatetimePicker extends StatefulWidget {
 }
 
 class _DatetimePickerState extends State<DatetimePicker> {
+  static const double _maxDialogWidth = 440;
+
   late String _date;
   late String? _time;
   late String _repeat;
   late String _selectedDateOption;
   late String? _selectedTimeOption;
   late bool _isRepeatMode;
+  late ReminderType _type;
 
   @override
   void initState() {
     super.initState();
     final r = widget.initialReminder;
     if (r != null) {
+      _type = r.type == ReminderType.unsupported
+          ? ReminderType.notification
+          : r.type;
       _isRepeatMode = r.isRepeating;
       _repeat = r.isRepeating ? r.repeat : Reminder.repeatDaily;
       _date = r.dateTime.toIso8601String();
@@ -84,7 +69,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
       // Try to match the stored time to a named time option
       if (r.isAllDay) {
         _selectedTimeOption = Reminder.allDay;
-        _time = 'All Day';
+        _time = null;
       } else {
         final reminderTime = TimeOfDay(
           hour: r.dateTime.hour,
@@ -107,6 +92,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
         }
       }
     } else {
+      _type = ReminderType.notification;
       _isRepeatMode = false;
       _repeat = Reminder.repeatDaily;
       _date = DateTime.now().toIso8601String();
@@ -119,68 +105,126 @@ class _DatetimePickerState extends State<DatetimePicker> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      constraints: const BoxConstraints(maxWidth: _maxDialogWidth),
       title: Text(context.l10n.setReminder),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Toggle switch for repeat mode
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(context.l10n.repeat),
-              Switch(
-                value: _isRepeatMode,
-                onChanged: (value) {
-                  setState(() {
-                    _isRepeatMode = value;
-                    if (value) {
-                      // Switching to repeat mode - reset to defaults
-                      _repeat = Reminder.repeatDaily;
-                    } else {
-                      // Switching to date mode - reset to today
-                      _selectedDateOption = Reminder.today;
-                      _date = DateTime.now().toIso8601String();
-                    }
-                  });
-                },
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          // Show date selector or repeat selector based on toggle
-          if (_isRepeatMode)
-            DropdownButton<String>(
-              isExpanded: true,
-              value: _repeat,
-              onChanged: (option) {
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ReminderDropdownField<ReminderType>(
+              label: context.l10n.reminderType,
+              value: _type,
+              items: [
+                DropdownMenuItem(
+                  value: ReminderType.notification,
+                  child: _ReminderOptionSummary(
+                    primary: context.l10n.notificationReminder,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: ReminderType.alarm,
+                  child: _ReminderOptionSummary(
+                    primary: context.l10n.alarmReminder,
+                  ),
+                ),
+              ],
+              onChanged: (type) {
+                if (type == null) return;
                 setState(() {
-                  _repeat = option ?? Reminder.repeatDaily;
+                  _type = type;
+                  if (_type == ReminderType.alarm &&
+                      _selectedTimeOption == Reminder.allDay) {
+                    _selectedTimeOption = null;
+                    _time = null;
+                  }
                 });
               },
-              items: Reminder.repeatOptions
-                  .where(
-                    (r) =>
-                        r != Reminder.repeatNever && r != Reminder.repeatOnce,
-                  )
-                  .map(_buildRepeatItem)
-                  .toList(),
-            )
-          else
-            DropdownButton<String>(
-              isExpanded: true,
-              value: _selectedDateOption,
-              onChanged: _selectDate,
-              items: Reminder.dateOptions.map(_buildItem).toList(),
             ),
-          SizedBox(height: 8),
-          DropdownButton<String>(
-            hint: Text(context.l10n.time),
-            isExpanded: true,
-            value: _selectedTimeOption,
-            onChanged: _selectTime,
-            items: Reminder.timeOptions.map(_buildTimeItem).toList(),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _type == ReminderType.notification
+                    ? context.l10n.notificationReminderDescription
+                    : context.l10n.alarmReminderDescription,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            if (_platformInfo != null) ...[
+              const SizedBox(height: 12),
+              _buildInfo(_platformInfo!),
+            ],
+            if (_type == ReminderType.alarm) ...[
+              const SizedBox(height: 8),
+              _buildInfo(context.l10n.alarmRequiresSpecificTime),
+            ],
+            const SizedBox(height: 12),
+            // Toggle switch for repeat mode
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(context.l10n.repeat),
+                Switch(
+                  value: _isRepeatMode,
+                  onChanged: (value) {
+                    setState(() {
+                      _isRepeatMode = value;
+                      if (value) {
+                        // Switching to repeat mode - reset to defaults
+                        _repeat = Reminder.repeatDaily;
+                      } else {
+                        // Switching to date mode - reset to today
+                        _selectedDateOption = Reminder.today;
+                        _date = DateTime.now().toIso8601String();
+                      }
+                    });
+                  },
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            // Show date selector or repeat selector based on toggle
+            if (_isRepeatMode)
+              _ReminderDropdownField<String>(
+                label: context.l10n.frequency,
+                value: _repeat,
+                onChanged: (option) {
+                  setState(() {
+                    _repeat = option ?? Reminder.repeatDaily;
+                  });
+                },
+                items: Reminder.repeatOptions
+                    .where(
+                      (r) =>
+                          r != Reminder.repeatNever && r != Reminder.repeatOnce,
+                    )
+                    .map(_buildRepeatItem)
+                    .toList(),
+              )
+            else
+              _ReminderDropdownField<String>(
+                label: context.l10n.date,
+                value: _selectedDateOption,
+                onChanged: _selectDate,
+                items: Reminder.dateOptions.map(_buildItem).toList(),
+              ),
+            const SizedBox(height: 12),
+            _ReminderDropdownField<String>(
+              label: context.l10n.time,
+              hint: context.l10n.selectTime,
+              value: _selectedTimeOption,
+              onChanged: _selectTime,
+              items: Reminder.timeOptions
+                  .where(
+                    (option) =>
+                        _type != ReminderType.alarm ||
+                        option != Reminder.allDay,
+                  )
+                  .map(_buildTimeItem)
+                  .toList(),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -188,7 +232,7 @@ class _DatetimePickerState extends State<DatetimePicker> {
           child: Text(context.l10n.cancel),
         ),
         TextButton(
-          onPressed: _time == null
+          onPressed: !_hasSelectedTime
               ? null
               : () {
                   final effectiveRepeat = _isRepeatMode
@@ -200,7 +244,14 @@ class _DatetimePickerState extends State<DatetimePicker> {
                       : _date;
                   Navigator.pop(
                     context,
-                    Reminder.build(effectiveDate, _time!, effectiveRepeat),
+                    Reminder.build(
+                      effectiveDate,
+                      _selectedTimeOption == Reminder.allDay
+                          ? Reminder.allDay
+                          : _time!,
+                      effectiveRepeat,
+                      type: _type,
+                    ),
                   );
                 },
           child: Text(context.l10n.ok),
@@ -209,38 +260,70 @@ class _DatetimePickerState extends State<DatetimePicker> {
     );
   }
 
+  String? get _platformInfo {
+    if (_type == ReminderType.alarm && !isAlarmSupported) {
+      return context.l10n.alarmUnsupportedPlatform;
+    }
+    if (_type == ReminderType.notification &&
+        !LocalNotificationService.instance.supportsScheduling) {
+      return context.l10n.notificationUnsupportedPlatform;
+    }
+    return null;
+  }
+
+  Widget _buildInfo(String text) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 18,
+            color: colors.onSecondaryContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.onSecondaryContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   DropdownMenuItem<String> _buildRepeatItem(String option) {
-    return DropdownMenuItem(value: option, child: Text(option));
+    return DropdownMenuItem(
+      value: option,
+      child: _ReminderOptionSummary(primary: _optionLabel(option)),
+    );
   }
 
   DropdownMenuItem<String> _buildTimeItem(String option) {
-    Widget displayValue = SizedBox.shrink();
-
-    if (option != Reminder.custom) {
-      String timeValue = Reminder.getValueOf(context, option);
-      if (timeValue.isNotEmpty) {
-        displayValue = Text(
-          timeValue,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 12,
-          ),
-        );
-      }
-    } else if (_selectedTimeOption == Reminder.custom && _time != null) {
-      // Show custom selected time
-      displayValue = Text(
-        _time!,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontSize: 12,
-        ),
-      );
+    String? displayValue;
+    if (option != Reminder.custom && option != Reminder.allDay) {
+      displayValue = Reminder.getValueOf(context, option);
+    } else if (option == Reminder.custom &&
+        _selectedTimeOption == Reminder.custom) {
+      displayValue = _formatStoredTime(_time);
     }
 
     return DropdownMenuItem(
       value: option,
-      child: Row(children: [Text(option), Spacer(), displayValue]),
+      child: _ReminderOptionSummary(
+        primary: _optionLabel(option),
+        secondary: displayValue,
+      ),
     );
   }
 
@@ -315,58 +398,144 @@ class _DatetimePickerState extends State<DatetimePicker> {
         Reminder.morning => Reminder.getMorningValue(context),
         Reminder.afternoon => Reminder.getAfternoonValue(context),
         Reminder.evening => Reminder.getEveningValue(context),
-        Reminder.allDay => "All Day",
+        Reminder.allDay => null,
         _ => _time,
       };
     });
   }
 
+  bool get _hasSelectedTime =>
+      _selectedTimeOption == Reminder.allDay || _time != null;
+
   DropdownMenuItem<String> _buildItem(String option) {
-    String value = option;
-    Widget displayValue = SizedBox.shrink();
+    DateTime? displayDate;
 
     if (option != Reminder.custom) {
-      if (Reminder.dateOptions.contains(option)) {
-        value = Reminder.getValueOf(context, option);
-
-        DateTime date = DateTime.parse(value);
-
-        displayValue = Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              weekDays[date.weekday - 1],
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 12,
-              ),
-            ),
-            Text(
-              "${date.day}/${date.month}/${date.year}",
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        );
-      } else if (Reminder.timeOptions.contains(option)) {
-        value = Reminder.getValueOf(context, option);
-
-        displayValue = Text(
-          value,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 12,
-          ),
-        );
-      }
+      displayDate = DateTime.tryParse(Reminder.getValueOf(context, option));
+    } else if (_selectedDateOption == Reminder.custom) {
+      displayDate = DateTime.tryParse(_date);
     }
 
     return DropdownMenuItem(
       value: option,
-      child: Row(children: [Text(option), Spacer(), displayValue]),
+      child: _ReminderOptionSummary(
+        primary: _optionLabel(option),
+        secondary: displayDate == null
+            ? null
+            : MaterialLocalizations.of(context).formatMediumDate(displayDate),
+      ),
+    );
+  }
+
+  String _optionLabel(String option) {
+    return switch (option) {
+      Reminder.today => context.l10n.today,
+      Reminder.tomorrow => context.l10n.tomorrow,
+      Reminder.nextWeek => context.l10n.nextWeek,
+      Reminder.nextMonth => context.l10n.nextMonth,
+      Reminder.morning => context.l10n.morning,
+      Reminder.afternoon => context.l10n.afternoon,
+      Reminder.evening => context.l10n.evening,
+      Reminder.allDay => context.l10n.allDay,
+      Reminder.custom => context.l10n.custom,
+      Reminder.repeatDaily => context.l10n.daily,
+      Reminder.repeatWeekly => context.l10n.weekly,
+      Reminder.repeatMonthly => context.l10n.monthly,
+      Reminder.repeatYearly => context.l10n.yearly,
+      _ => option,
+    };
+  }
+
+  String? _formatStoredTime(String? value) {
+    if (value == null || value == Reminder.allDay) return null;
+
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})(?:\s+(AM|PM))?$',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return value;
+
+    var hour = int.tryParse(match.group(1)!);
+    final minute = int.tryParse(match.group(2)!);
+    final period = match.group(3)?.toUpperCase();
+    if (hour == null || minute == null || minute > 59) return value;
+
+    if (period != null) {
+      if (hour < 1 || hour > 12) return value;
+      if (hour == 12) hour = 0;
+      if (period == 'PM') hour += 12;
+    } else if (hour > 23) {
+      return value;
+    }
+
+    return TimeOfDay(hour: hour, minute: minute).format(context);
+  }
+}
+
+class _ReminderDropdownField<T> extends StatelessWidget {
+  const _ReminderDropdownField({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.hint,
+  });
+
+  final String label;
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?>? onChanged;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      isEmpty: value == null,
+      decoration: InputDecoration(
+        labelText: label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsetsDirectional.fromSTEB(12, 8, 8, 8),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          hint: hint == null ? null : _ReminderOptionSummary(primary: hint!),
+          isExpanded: true,
+          itemHeight: null,
+          borderRadius: BorderRadius.circular(12),
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+class _ReminderOptionSummary extends StatelessWidget {
+  const _ReminderOptionSummary({required this.primary, this.secondary});
+
+  final String primary;
+  final String? secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(primary),
+          if (secondary?.isNotEmpty == true)
+            Text(
+              secondary!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

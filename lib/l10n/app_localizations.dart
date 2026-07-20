@@ -114,6 +114,114 @@ abstract class AppLocalizations {
   /// **'Better Keep'**
   String get appTitle;
 
+  /// No description provided for @reminderType.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder type'**
+  String get reminderType;
+
+  /// No description provided for @notificationReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification'**
+  String get notificationReminder;
+
+  /// No description provided for @notificationReminderDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows a standard time-sensitive notification'**
+  String get notificationReminderDescription;
+
+  /// No description provided for @alarmReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Alarm'**
+  String get alarmReminder;
+
+  /// No description provided for @alarmReminderDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Rings continuously until you stop it'**
+  String get alarmReminderDescription;
+
+  /// No description provided for @alarmUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Alarms are not supported on this platform. The reminder will sync and become an alarm on Android or iOS.'**
+  String get alarmUnsupportedPlatform;
+
+  /// No description provided for @notificationUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled notifications are not available while Better Keep is closed on this platform. The reminder will still sync and appear in the app when due.'**
+  String get notificationUnsupportedPlatform;
+
+  /// No description provided for @alarmRequiresSpecificTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Alarms require a specific time; All day is available for notifications only.'**
+  String get alarmRequiresSpecificTime;
+
+  /// No description provided for @reminderDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder due'**
+  String get reminderDue;
+
+  /// No description provided for @overdueReminderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue reminder'**
+  String get overdueReminderTitle;
+
+  /// No description provided for @overdueReminderMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This reminder is overdue. Mark it as done now?'**
+  String get overdueReminderMessage;
+
+  /// No description provided for @markReminderDoneFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t mark this reminder as done. Please try again.'**
+  String get markReminderDoneFailed;
+
+  /// No description provided for @markAsDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as Done'**
+  String get markAsDone;
+
+  /// No description provided for @reminderSavedPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder saved, but permission is required to schedule it on this device.'**
+  String get reminderSavedPermissionRequired;
+
+  /// No description provided for @reminderSavedAlreadyDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder saved and is already due.'**
+  String get reminderSavedAlreadyDue;
+
+  /// No description provided for @reminderScheduleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder saved, but this device could not schedule it.'**
+  String get reminderScheduleFailed;
+
+  /// No description provided for @reminderCapacityExceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder saved, but this device has too many pending reminders to schedule another one.'**
+  String get reminderCapacityExceeded;
+
+  /// No description provided for @reminderTimeZoneUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder saved, but this device\'s timezone could not be resolved. Check the device time settings and try again.'**
+  String get reminderTimeZoneUnavailable;
+
   /// Cancel button text
   ///
   /// In en, this message translates to:
@@ -1584,6 +1692,12 @@ abstract class AppLocalizations {
   /// **'Next week'**
   String get nextWeek;
 
+  /// Next month label
+  ///
+  /// In en, this message translates to:
+  /// **'Next month'**
+  String get nextMonth;
+
   /// Pick date and time option
   ///
   /// In en, this message translates to:
@@ -1596,6 +1710,18 @@ abstract class AppLocalizations {
   /// **'Time'**
   String get time;
 
+  /// Empty reminder time field hint
+  ///
+  /// In en, this message translates to:
+  /// **'Select time'**
+  String get selectTime;
+
+  /// All-day reminder option
+  ///
+  /// In en, this message translates to:
+  /// **'All day'**
+  String get allDay;
+
   /// Date label
   ///
   /// In en, this message translates to:
@@ -1607,6 +1733,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Repeat'**
   String get repeat;
+
+  /// Reminder repeat frequency field label
+  ///
+  /// In en, this message translates to:
+  /// **'Frequency'**
+  String get frequency;
 
   /// Never repeat option
   ///

@@ -1,6 +1,28 @@
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 
+enum ReminderType { notification, alarm, unsupported }
+
+enum ReminderDeliveryState {
+  scheduled,
+  unsupported,
+  permissionDenied,
+  pastDue,
+  superseded,
+  capacityExceeded,
+  failed,
+}
+
+class ReminderScheduleResult {
+  const ReminderScheduleResult(this.state, {this.message, this.error});
+
+  final ReminderDeliveryState state;
+  final String? message;
+  final Object? error;
+
+  bool get isScheduled => state == ReminderDeliveryState.scheduled;
+}
+
 class Reminder {
   static const String repeatNever = "Never";
   static const String repeatOnce = "Once";
@@ -27,37 +49,33 @@ class Reminder {
   }
 
   static String get tomorrowValue {
-    final now = DateTime.now().add(Duration(days: 1));
+    final now = DateTime.now().add(const Duration(days: 1));
     return DateTime(now.year, now.month, now.day).toIso8601String();
   }
 
   static String get nextWeekValue {
-    final now = DateTime.now().add(Duration(days: 7));
+    final now = DateTime.now().add(const Duration(days: 7));
     return DateTime(now.year, now.month, now.day).toIso8601String();
   }
 
   static String get nextMonthValue {
-    final now = DateTime.now().add(Duration(days: 30));
+    final now = DateTime.now().add(const Duration(days: 30));
     return DateTime(now.year, now.month, now.day).toIso8601String();
   }
 
-  static String formatTimeOfDay(BuildContext context, TimeOfDay time) {
-    return time.format(context);
-  }
+  static String formatTimeOfDay(BuildContext context, TimeOfDay time) =>
+      time.format(context);
 
-  static String getMorningValue(BuildContext context) {
-    return formatTimeOfDay(context, AppState.morningTime);
-  }
+  static String getMorningValue(BuildContext context) =>
+      formatTimeOfDay(context, AppState.morningTime);
 
-  static String getAfternoonValue(BuildContext context) {
-    return formatTimeOfDay(context, AppState.afternoonTime);
-  }
+  static String getAfternoonValue(BuildContext context) =>
+      formatTimeOfDay(context, AppState.afternoonTime);
 
-  static String getEveningValue(BuildContext context) {
-    return formatTimeOfDay(context, AppState.eveningTime);
-  }
+  static String getEveningValue(BuildContext context) =>
+      formatTimeOfDay(context, AppState.eveningTime);
 
-  static List<String> dateOptions = [
+  static const List<String> dateOptions = [
     today,
     tomorrow,
     nextWeek,
@@ -65,7 +83,7 @@ class Reminder {
     custom,
   ];
 
-  static List<String> timeOptions = [
+  static const List<String> timeOptions = [
     morning,
     afternoon,
     evening,
@@ -73,7 +91,7 @@ class Reminder {
     custom,
   ];
 
-  static List<String> repeatOptions = [
+  static const List<String> repeatOptions = [
     repeatNever,
     repeatOnce,
     repeatDaily,
@@ -98,17 +116,25 @@ class Reminder {
   final DateTime dateTime;
   final String repeat;
   final bool isAllDay;
+  final ReminderType type;
+  final DateTime recurrenceAnchor;
+  final int revision;
 
-  factory Reminder.build(String dateStr, String timeStr, String repeat) {
+  factory Reminder.build(
+    String dateStr,
+    String timeStr,
+    String repeat, {
+    ReminderType type = ReminderType.notification,
+    int revision = 1,
+  }) {
     DateTime date = DateTime.parse(dateStr);
 
-    if (timeStr != "All Day") {
+    if (timeStr != allDay) {
       final timeParts = timeStr.split(' ');
       final hmParts = timeParts[0].split(':');
       int hour = int.parse(hmParts[0]);
-      final int minute = int.parse(hmParts[1]);
+      final minute = int.parse(hmParts[1]);
 
-      // Handle 12-hour format (with AM/PM)
       if (timeParts.length > 1) {
         final period = timeParts[1].toUpperCase();
         if (period == 'PM' && hour != 12) {
@@ -117,119 +143,204 @@ class Reminder {
           hour = 0;
         }
       }
-      // For 24-hour format, hour is already correct
-
       date = DateTime(date.year, date.month, date.day, hour, minute);
     }
 
     return Reminder(
       dateTime: date,
+      recurrenceAnchor: date,
       repeat: repeat,
-      isAllDay: timeStr == "All Day",
+      isAllDay: timeStr == allDay,
+      type: type,
+      revision: revision,
     );
   }
 
   factory Reminder.fromJson(Map<String, Object?> json) {
+    final dateTime = DateTime.parse(json['dateTime'] as String);
+    final isAllDay = json['isAllDay'] as bool? ?? false;
+    final rawType = json['type'] as String?;
+    final type = switch (rawType) {
+      'notification' => ReminderType.notification,
+      'alarm' => ReminderType.alarm,
+      null => isAllDay ? ReminderType.notification : ReminderType.alarm,
+      _ => ReminderType.unsupported,
+    };
+
     return Reminder(
-      dateTime: DateTime.parse(json["dateTime"] as String),
-      repeat: json["repeat"] as String,
-      isAllDay: json["isAllDay"] as bool,
+      dateTime: dateTime,
+      recurrenceAnchor:
+          DateTime.tryParse(json['recurrenceAnchor'] as String? ?? '') ??
+          dateTime,
+      repeat: json['repeat'] as String? ?? repeatNever,
+      isAllDay: isAllDay,
+      type: type,
+      revision: (json['revision'] as num?)?.toInt() ?? 0,
     );
   }
 
   Reminder({
-    required this.dateTime,
+    required DateTime dateTime,
+    DateTime? recurrenceAnchor,
     this.repeat = repeatNever,
     this.isAllDay = false,
-  });
+    ReminderType type = ReminderType.notification,
+    this.revision = 1,
+  }) : dateTime = isAllDay ? _dateOnly(dateTime) : dateTime,
+       type = isAllDay && type == ReminderType.alarm
+           ? ReminderType.notification
+           : type,
+       recurrenceAnchor = isAllDay
+           ? _dateOnly(recurrenceAnchor ?? dateTime)
+           : recurrenceAnchor ?? dateTime;
 
-  /// Returns true if this reminder repeats
-  bool get isRepeating {
-    return repeat != repeatNever && repeat != repeatOnce;
+  bool get isRepeating => repeat != repeatNever && repeat != repeatOnce;
+
+  bool get isSupportedType => type != ReminderType.unsupported;
+
+  /// The point after which this reminder is overdue.
+  ///
+  /// All-day reminders remain active for their entire calendar day. Their
+  /// delivery time (for example, the configured Morning time) is deliberately
+  /// separate from this date-only boundary.
+  DateTime get overdueAt => isAllDay
+      ? DateTime(dateTime.year, dateTime.month, dateTime.day + 1)
+      : dateTime;
+
+  bool isOverdueAt(DateTime time) => !overdueAt.isAfter(time);
+
+  Reminder copyWith({
+    DateTime? dateTime,
+    String? repeat,
+    bool? isAllDay,
+    ReminderType? type,
+    DateTime? recurrenceAnchor,
+    int? revision,
+  }) {
+    return Reminder(
+      dateTime: dateTime ?? this.dateTime,
+      repeat: repeat ?? this.repeat,
+      isAllDay: isAllDay ?? this.isAllDay,
+      type: type ?? this.type,
+      recurrenceAnchor: recurrenceAnchor ?? this.recurrenceAnchor,
+      revision: revision ?? this.revision,
+    );
   }
 
-  /// Calculate the next occurrence of this reminder based on repeat type
-  Reminder? getNextOccurrence() {
-    if (!isRepeating) {
-      return null;
-    }
+  /// Returns the first occurrence strictly after [after]. Calendar arithmetic
+  /// is used instead of durations so wall-clock reminders retain their time
+  /// across daylight-saving transitions.
+  Reminder? getNextOccurrence({DateTime? after}) {
+    if (!isRepeating) return null;
 
-    DateTime nextDateTime;
-    final now = DateTime.now();
+    final threshold = after ?? DateTime.now();
+    late DateTime candidate;
 
     switch (repeat) {
       case repeatDaily:
-        // Next day, same time
-        nextDateTime = DateTime(
-          now.year,
-          now.month,
-          now.day + 1,
-          dateTime.hour,
-          dateTime.minute,
-        );
-        break;
+        candidate = _nextDailyOrWeekly(threshold, 1);
       case repeatWeekly:
-        // Next week, same day and time
-        nextDateTime = DateTime(
-          now.year,
-          now.month,
-          now.day + 7,
-          dateTime.hour,
-          dateTime.minute,
-        );
-        break;
+        candidate = _nextDailyOrWeekly(threshold, 7);
       case repeatMonthly:
-        // Next month, same day and time
-        final nextMonth = now.month == 12 ? 1 : now.month + 1;
-        final nextYear = now.month == 12 ? now.year + 1 : now.year;
-        // Handle edge case where day doesn't exist in next month
-        // Use day 0 of the following month to get last day of target month
-        final monthAfter = nextMonth == 12 ? 1 : nextMonth + 1;
-        final yearOfMonthAfter = nextMonth == 12 ? nextYear + 1 : nextYear;
-        final daysInNextMonth = DateTime(yearOfMonthAfter, monthAfter, 0).day;
-        final day = dateTime.day > daysInNextMonth
-            ? daysInNextMonth
-            : dateTime.day;
-        nextDateTime = DateTime(
-          nextYear,
-          nextMonth,
-          day,
-          dateTime.hour,
-          dateTime.minute,
-        );
-        break;
+        candidate = _nextMonthly(threshold);
       case repeatYearly:
-        // Next year, same month, day and time
-        // Handle Feb 29 on leap years - clamp to last day of month
-        final targetYear = now.year + 1;
-        final daysInTargetMonth = DateTime(
-          targetYear,
-          dateTime.month + 1,
-          0,
-        ).day;
-        final day = dateTime.day > daysInTargetMonth
-            ? daysInTargetMonth
-            : dateTime.day;
-        nextDateTime = DateTime(
-          targetYear,
-          dateTime.month,
-          day,
-          dateTime.hour,
-          dateTime.minute,
-        );
-        break;
+        candidate = _nextYearly(threshold);
       default:
         return null;
     }
 
-    return Reminder(dateTime: nextDateTime, repeat: repeat, isAllDay: isAllDay);
+    return copyWith(dateTime: candidate);
   }
 
-  dynamic toJson() {
+  DateTime _nextDailyOrWeekly(DateTime after, int intervalDays) {
+    var candidate = dateTime;
+    if (candidate.isAfter(after)) return candidate;
+
+    final candidateDay = DateTime(
+      candidate.year,
+      candidate.month,
+      candidate.day,
+    );
+    final afterDay = DateTime(after.year, after.month, after.day);
+    final elapsedDays = afterDay.difference(candidateDay).inDays;
+    final intervals = (elapsedDays ~/ intervalDays) + 1;
+    candidate = DateTime(
+      candidate.year,
+      candidate.month,
+      candidate.day + (intervals * intervalDays),
+      recurrenceAnchor.hour,
+      recurrenceAnchor.minute,
+      recurrenceAnchor.second,
+    );
+    if (!candidate.isAfter(after)) {
+      candidate = DateTime(
+        candidate.year,
+        candidate.month,
+        candidate.day + intervalDays,
+        recurrenceAnchor.hour,
+        recurrenceAnchor.minute,
+        recurrenceAnchor.second,
+      );
+    }
+    return candidate;
+  }
+
+  DateTime _nextMonthly(DateTime after) {
+    var monthIndex = dateTime.year * 12 + dateTime.month - 1;
+    final afterIndex = after.year * 12 + after.month - 1;
+    if (monthIndex < afterIndex) monthIndex = afterIndex;
+
+    var candidate = _dateInMonth(monthIndex, recurrenceAnchor.day);
+    if (!candidate.isAfter(after)) {
+      candidate = _dateInMonth(monthIndex + 1, recurrenceAnchor.day);
+    }
+    return candidate;
+  }
+
+  DateTime _dateInMonth(int monthIndex, int anchorDay) {
+    final year = monthIndex ~/ 12;
+    final month = monthIndex % 12 + 1;
+    final lastDay = DateTime(year, month + 1, 0).day;
+    return DateTime(
+      year,
+      month,
+      anchorDay.clamp(1, lastDay),
+      recurrenceAnchor.hour,
+      recurrenceAnchor.minute,
+      recurrenceAnchor.second,
+    );
+  }
+
+  DateTime _nextYearly(DateTime after) {
+    var year = dateTime.year < after.year ? after.year : dateTime.year;
+    var candidate = _dateInYear(year);
+    if (!candidate.isAfter(after)) candidate = _dateInYear(year + 1);
+    return candidate;
+  }
+
+  DateTime _dateInYear(int year) {
+    final lastDay = DateTime(year, recurrenceAnchor.month + 1, 0).day;
+    return DateTime(
+      year,
+      recurrenceAnchor.month,
+      recurrenceAnchor.day.clamp(1, lastDay),
+      recurrenceAnchor.hour,
+      recurrenceAnchor.minute,
+      recurrenceAnchor.second,
+    );
+  }
+
+  Map<String, Object?> toJson() {
     return {
-      "dateTime": dateTime.toIso8601String(),
-      "repeat": repeat,
-      "isAllDay": isAllDay,
+      'dateTime': dateTime.toIso8601String(),
+      'repeat': repeat,
+      'isAllDay': isAllDay,
+      'type': type.name,
+      'recurrenceAnchor': recurrenceAnchor.toIso8601String(),
+      'revision': revision,
     };
   }
+
+  static DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
 }

@@ -34,6 +34,7 @@ import 'package:better_keep/pages/home/sidebar.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/pages/user_page.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/reminder_navigation_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -125,6 +126,11 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     _checkInstallPrompt();
 
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ReminderNavigationService.instance.registerReadyHost(this);
+      }
+    });
   }
 
   /// Check and show install prompt for first-time web users
@@ -315,6 +321,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    ReminderNavigationService.instance.unregisterReadyHost(this);
     _searchController.dispose();
     _searchFocusNode.dispose();
     AppState.unsubscribe("show_notes", _showNotesListener);

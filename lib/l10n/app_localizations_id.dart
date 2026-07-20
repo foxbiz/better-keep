@@ -12,6 +12,72 @@ class AppLocalizationsId extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get reminderType => 'Jenis pengingat';
+
+  @override
+  String get notificationReminder => 'Notifikasi';
+
+  @override
+  String get notificationReminderDescription =>
+      'Menampilkan notifikasi standar yang peka waktu';
+
+  @override
+  String get alarmReminder => 'Alarm';
+
+  @override
+  String get alarmReminderDescription =>
+      'Berbunyi terus sampai Anda menghentikannya';
+
+  @override
+  String get alarmUnsupportedPlatform =>
+      'Alarm tidak didukung di platform ini. Pengingat akan disinkronkan dan menjadi alarm di Android atau iOS.';
+
+  @override
+  String get notificationUnsupportedPlatform =>
+      'Notifikasi terjadwal tidak tersedia saat Better Keep ditutup di platform ini. Pengingat tetap disinkronkan dan muncul di aplikasi saat waktunya tiba.';
+
+  @override
+  String get alarmRequiresSpecificTime =>
+      'Alarm memerlukan waktu tertentu; Sepanjang hari hanya tersedia untuk notifikasi.';
+
+  @override
+  String get reminderDue => 'Pengingat jatuh tempo';
+
+  @override
+  String get overdueReminderTitle => 'Pengingat terlambat';
+
+  @override
+  String get overdueReminderMessage =>
+      'Pengingat ini sudah lewat waktunya. Tandai sebagai selesai sekarang?';
+
+  @override
+  String get markReminderDoneFailed =>
+      'Tidak dapat menandai pengingat ini sebagai selesai. Coba lagi.';
+
+  @override
+  String get markAsDone => 'Tandai Selesai';
+
+  @override
+  String get reminderSavedPermissionRequired =>
+      'Pengingat disimpan, tetapi izin diperlukan untuk menjadwalkannya di perangkat ini.';
+
+  @override
+  String get reminderSavedAlreadyDue =>
+      'Pengingat disimpan dan waktunya sudah tiba.';
+
+  @override
+  String get reminderScheduleFailed =>
+      'Pengingat disimpan, tetapi perangkat ini tidak dapat menjadwalkannya.';
+
+  @override
+  String get reminderCapacityExceeded =>
+      'Pengingat disimpan, tetapi perangkat ini memiliki terlalu banyak pengingat tertunda untuk menjadwalkan yang baru.';
+
+  @override
+  String get reminderTimeZoneUnavailable =>
+      'Pengingat disimpan, tetapi zona waktu perangkat ini tidak dapat dikenali. Periksa pengaturan waktu perangkat dan coba lagi.';
+
+  @override
   String get cancel => 'Batal';
 
   @override
@@ -803,16 +869,28 @@ class AppLocalizationsId extends AppLocalizations {
   String get nextWeek => 'Minggu depan';
 
   @override
+  String get nextMonth => 'Bulan depan';
+
+  @override
   String get pickDateTime => 'Pilih tanggal & waktu';
 
   @override
   String get time => 'Waktu';
 
   @override
+  String get selectTime => 'Pilih waktu';
+
+  @override
+  String get allDay => 'Sepanjang hari';
+
+  @override
   String get date => 'Tanggal';
 
   @override
   String get repeat => 'Ulangi';
+
+  @override
+  String get frequency => 'Frekuensi';
 
   @override
   String get never => 'Tidak pernah';

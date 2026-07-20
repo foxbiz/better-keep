@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
@@ -128,6 +129,68 @@ void main() {
     expect(note.unlocked, isTrue);
     expect(note.password, password);
     expect(note.content, contains('Changed'));
+  });
+
+  testWidgets(
+    'background reminder update preserves unsaved editor title and content',
+    (tester) async {
+      final initialContent = _content('unsaved body');
+      final dueAt = DateTime.now().add(const Duration(days: 1));
+      final note = Note(
+        id: 91,
+        content: initialContent,
+        reminder: Reminder(dateTime: dueAt, type: ReminderType.notification),
+      );
+      final externallyUpdatedAt = DateTime.now().add(
+        const Duration(seconds: 1),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: NoteEditor(note: note),
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byType(TextField).first, 'Unsaved title');
+
+      Note(
+        id: note.id,
+        completed: true,
+        reminder: null,
+        updatedAt: externallyUpdatedAt,
+      ).notify('updated', false);
+      await tester.pump();
+
+      final titleField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(titleField.controller!.text, 'Unsaved title');
+      expect(note.content, initialContent);
+      expect(note.completed, isTrue);
+      expect(note.reminder, isNull);
+      expect(note.updatedAt, externallyUpdatedAt);
+    },
+  );
+
+  testWidgets('editor does not create a nested reminder messenger', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: NoteEditor(note: Note()),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byType(NoteEditor),
+        matching: find.byType(ScaffoldMessenger),
+      ),
+      findsNothing,
+    );
   });
 }
 
