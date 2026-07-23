@@ -1,12 +1,24 @@
 import Flutter
 import UIKit
 import XCTest
+@testable import Runner
 
 class RunnerTests: XCTestCase {
+  func testAssistantBridgeParsesSavedResult() {
+    let result = AssistantNoteBridgeResult.fromFlutter([
+      "status": "saved",
+      "noteId": 42,
+    ])
 
-  func testExample() {
-    // If you add code to the Runner application, consider adding tests here.
-    // See https://developer.apple.com/documentation/xctest for more information about using XCTest.
+    XCTAssertEqual(result.status, .saved)
+    XCTAssertEqual(result.noteId, 42)
   }
 
+  func testAssistantBridgeRejectsMalformedResult() {
+    XCTAssertEqual(AssistantNoteBridgeResult.fromFlutter(nil).status, .failed)
+    XCTAssertEqual(
+      AssistantNoteBridgeResult.fromFlutter(["status": "unknown"]).status,
+      .failed
+    )
+  }
 }

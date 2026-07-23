@@ -30,6 +30,14 @@
 	"@ok": { "description": "OK button text" },
 
 	"save": "Save",
+	"saveVoiceNoteTitle": "Save voice note?",
+	"@saveVoiceNoteTitle": { "description": "Title of the Android assistant note confirmation dialog" },
+	"voiceNoteTitleLabel": "Title",
+	"@voiceNoteTitleLabel": { "description": "Label for the dictated note title" },
+	"voiceNoteContentLabel": "Note",
+	"@voiceNoteContentLabel": { "description": "Label for dictated note content" },
+	"voiceNoteSaved": "Voice note saved",
+	"@voiceNoteSaved": { "description": "Confirmation shown after saving an assistant-created note" },
 	"@save": { "description": "Save button text" },
 
 	"delete": "Delete",

@@ -85,6 +85,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get save => 'Salvar';
 
   @override
+  String get saveVoiceNoteTitle => 'Save voice note?';
+
+  @override
+  String get voiceNoteTitleLabel => 'Title';
+
+  @override
+  String get voiceNoteContentLabel => 'Note';
+
+  @override
+  String get voiceNoteSaved => 'Voice note saved';
+
+  @override
   String get delete => 'Excluir';
 
   @override

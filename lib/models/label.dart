@@ -16,9 +16,11 @@ class Label extends BaseModel<Label> {
   static const model = "label";
   static const String sharedTextLabelName = 'Shared Text';
   static const String sharedFileLabelName = 'Shared File';
+  static const String voiceNotesLabelName = 'Voice Notes';
   static const List<String> systemLabelNames = [
     sharedTextLabelName,
     sharedFileLabelName,
+    voiceNotesLabelName,
   ];
 
   String name;

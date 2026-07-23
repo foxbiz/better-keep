@@ -34,6 +34,9 @@ import flutter_local_notifications
       GeneratedPluginRegistrant.register(with: registry)
     }
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    AssistantNotesBridge.shared.configure(
+      messenger: engineBridge.applicationRegistrar.messenger()
+    )
   }
 
   @available(iOS 13.0, *)

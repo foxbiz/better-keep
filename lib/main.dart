@@ -7,6 +7,7 @@ import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/services/app_install_service.dart';
+import 'package:better_keep/services/assistant_notes_platform_bridge.dart';
 import 'package:better_keep/services/audio_playback_source_service.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
@@ -220,6 +221,10 @@ class _BetterKeepState extends State<BetterKeep> {
         NoteSyncService().init();
         LabelSyncService().init();
       }
+
+      // Tell native voice-assistant entry points that Flutter, the database,
+      // authentication, and encryption state are ready to accept requests.
+      await AssistantNotesPlatformBridge.instance.init();
     });
   }
 

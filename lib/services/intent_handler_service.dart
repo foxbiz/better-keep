@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:better_keep/models/label.dart';
-import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/content_preview_page.dart';
+import 'package:better_keep/services/assistant_note_capture_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:uuid/uuid.dart';
 
 /// Service to handle intents for opening/sharing files
 class IntentHandlerService {
@@ -19,6 +19,9 @@ class IntentHandlerService {
   }
 
   IntentHandlerService._();
+
+  final AssistantNoteCaptureService _sharedTextCaptureService =
+      AssistantNoteCaptureService(labelName: Label.sharedTextLabelName);
 
   StreamSubscription? _intentDataStreamSubscription;
   bool _initialized = false;
@@ -170,28 +173,20 @@ class IntentHandlerService {
     }
 
     try {
-      // Create Quill Delta for plain text
-      final delta = <Map<String, dynamic>>[];
-
-      // Add content
-      delta.add({'insert': "\n$sharedText\n"});
-
-      // Get or create the "Shared Text" system label
-      final label = await Label.getOrCreateSystemLabel(
-        Label.sharedTextLabelName,
+      final result = await _sharedTextCaptureService.capture(
+        AssistantNoteCaptureRequest(
+          requestId: const Uuid().v4(),
+          source: 'sharedText',
+          text: sharedText,
+        ),
       );
-
-      // Create and save the note with the system label
-      final note = Note(
-        title: '',
-        content: json.encode(delta),
-        plainText: sharedText,
-        labels: label.name,
-      );
-      await note.save();
+      if (result.status != AssistantNoteCaptureStatus.saved) {
+        _showError('Failed to save note.');
+        return;
+      }
 
       AppLogger.log(
-        '[IntentHandler] Created note from shared text: ${note.id}',
+        '[IntentHandler] Created note from shared text: ${result.noteId}',
       );
 
       // Show confirmation

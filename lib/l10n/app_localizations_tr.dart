@@ -86,6 +86,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get save => 'Kaydet';
 
   @override
+  String get saveVoiceNoteTitle => 'Save voice note?';
+
+  @override
+  String get voiceNoteTitleLabel => 'Title';
+
+  @override
+  String get voiceNoteContentLabel => 'Note';
+
+  @override
+  String get voiceNoteSaved => 'Voice note saved';
+
+  @override
   String get delete => 'Sil';
 
   @override

@@ -81,6 +81,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get save => '저장';
 
   @override
+  String get saveVoiceNoteTitle => 'Save voice note?';
+
+  @override
+  String get voiceNoteTitleLabel => 'Title';
+
+  @override
+  String get voiceNoteContentLabel => 'Note';
+
+  @override
+  String get voiceNoteSaved => 'Voice note saved';
+
+  @override
   String get delete => '삭제';
 
   @override

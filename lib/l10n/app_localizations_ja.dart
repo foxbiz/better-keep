@@ -80,6 +80,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get save => '保存';
 
   @override
+  String get saveVoiceNoteTitle => 'Save voice note?';
+
+  @override
+  String get voiceNoteTitleLabel => 'Title';
+
+  @override
+  String get voiceNoteContentLabel => 'Note';
+
+  @override
+  String get voiceNoteSaved => 'Voice note saved';
+
+  @override
   String get delete => '削除';
 
   @override

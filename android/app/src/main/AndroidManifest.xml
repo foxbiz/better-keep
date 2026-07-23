@@ -39,6 +39,12 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Standard Google Assistant/Gemini create-note contract. -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.actions.CREATE_NOTE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
             <!-- Deep link for OAuth callback -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>

@@ -1,4 +1,5 @@
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -95,12 +96,68 @@ class HelpPage extends StatelessWidget {
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
+          _buildVoiceAssistantsSection(context),
+          const SizedBox(height: 16),
           ..._faqs.map((faq) => _buildFaqItem(context, faq)),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
           _buildContactSection(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildVoiceAssistantsSection(BuildContext context) {
+    final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final isAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+    final description = isIOS
+        ? 'Say “Siri, create a note in Better Keep.” Siri asks what the note '
+              'should say and saves it after device authentication.'
+        : isAndroid
+        ? 'Say “Hey Google, take a note with Better Keep Notes.” Better Keep '
+              'shows the dictated title and text so you can confirm before saving. '
+              'Gemini support can vary because some quick voice actions are still '
+              'handled by Google Assistant.'
+        : 'On iPhone, say “Siri, create a note in Better Keep.” On Android, '
+              'say “Hey Google, take a note with Better Keep Notes.”';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.record_voice_over_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Voice assistants',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(description),
+                  const SizedBox(height: 8),
+                  Text(
+                    'For privacy, Better Keep never includes dictated note '
+                    'content in analytics or diagnostic logs.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -240,6 +240,30 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get save;
 
+  /// Title of the Android assistant note confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Save voice note?'**
+  String get saveVoiceNoteTitle;
+
+  /// Label for the dictated note title
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get voiceNoteTitleLabel;
+
+  /// Label for dictated note content
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get voiceNoteContentLabel;
+
+  /// Confirmation shown after saving an assistant-created note
+  ///
+  /// In en, this message translates to:
+  /// **'Voice note saved'**
+  String get voiceNoteSaved;
+
   /// Delete button text
   ///
   /// In en, this message translates to:
