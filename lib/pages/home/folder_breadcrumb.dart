@@ -5,21 +5,25 @@ import 'package:flutter/material.dart';
 class FolderLocation {
   final bool isPinned;
   final String? labelName;
+  final String? labelSyncId;
   final Color? color;
 
   const FolderLocation.pinned()
     : isPinned = true,
       labelName = null,
+      labelSyncId = null,
       color = null;
 
-  const FolderLocation.label(String name)
+  const FolderLocation.label(String name, {String? syncId})
     : isPinned = false,
       labelName = name,
+      labelSyncId = syncId,
       color = null;
 
   const FolderLocation.color(Color c)
     : isPinned = false,
       labelName = null,
+      labelSyncId = null,
       color = c;
 
   @override
@@ -29,14 +33,23 @@ class FolderLocation {
           runtimeType == other.runtimeType &&
           isPinned == other.isPinned &&
           labelName == other.labelName &&
+          labelSyncId == other.labelSyncId &&
           color == other.color;
 
   @override
-  int get hashCode => Object.hash(isPinned, labelName, color);
+  int get hashCode => Object.hash(isPinned, labelName, labelSyncId, color);
 
   factory FolderLocation.fromString(String str) {
     if (str == 'pinned') {
       return FolderLocation.pinned();
+    } else if (str.startsWith('label2:')) {
+      final parts = str.substring(7).split(':');
+      if (parts.length >= 2) {
+        return FolderLocation.label(
+          Uri.decodeComponent(parts.sublist(1).join(':')),
+          syncId: Uri.decodeComponent(parts.first),
+        );
+      }
     } else if (str.startsWith('label:')) {
       return FolderLocation.label(str.substring(6));
     } else if (str.startsWith('color:')) {
@@ -62,6 +75,10 @@ class FolderLocation {
     if (isPinned) {
       return 'pinned';
     } else if (labelName != null) {
+      if (labelSyncId != null) {
+        return 'label2:${Uri.encodeComponent(labelSyncId!)}:'
+            '${Uri.encodeComponent(labelName!)}';
+      }
       return 'label:$labelName';
     } else if (color != null) {
       return 'color:${color!.toARGB32()}';

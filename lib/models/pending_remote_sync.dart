@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Represents a remote note document that needs to be synced locally.
 /// This is used to cache fetched remote data for reliable sync with retry support.
 class PendingRemoteSync {
-  /// The local note ID
+  /// Legacy source-device ID, retained only as a candidate local row ID.
+  ///
+  /// Cache identity and incoming-note resolution use [remoteDocId].
   final int localId;
 
   /// The Firestore document ID
@@ -112,8 +114,8 @@ class PendingRemoteSyncPage {
   /// Page number (0-indexed)
   final int pageIndex;
 
-  /// The pending syncs in this page
-  final Map<int, PendingRemoteSync> syncs;
+  /// Pending syncs keyed by stable Firestore document ID.
+  final Map<String, PendingRemoteSync> syncs;
 
   /// Firestore cursor for fetching next page (last document snapshot ID)
   final String? lastDocumentId;
@@ -134,12 +136,14 @@ class PendingRemoteSyncPage {
 
   factory PendingRemoteSyncPage.fromJson(Map<String, dynamic> json) {
     final syncsJson = json['syncs'] as Map<String, dynamic>;
-    final syncs = <int, PendingRemoteSync>{};
+    final syncs = <String, PendingRemoteSync>{};
     for (final entry in syncsJson.entries) {
       final sync = PendingRemoteSync.fromJson(
         Map<String, dynamic>.from(entry.value as Map),
       );
-      syncs[int.parse(entry.key)] = sync;
+      // Older cache pages used the source device's integer note ID as the
+      // key. Re-key from the payload so an interrupted upgrade is safe.
+      syncs[sync.remoteDocId] = sync;
     }
 
     return PendingRemoteSyncPage(

@@ -223,6 +223,7 @@ class Note extends BaseModel<Note> {
   static void Function()? syncTriggerOverride;
 
   bool _locked;
+  String? syncId;
   bool pinned;
   Color color;
   bool trashed;
@@ -576,6 +577,7 @@ class Note extends BaseModel<Note> {
 
   Note({
     super.id,
+    this.syncId,
     this.title,
     this.labels,
     this.content,
@@ -636,6 +638,7 @@ class Note extends BaseModel<Note> {
     final note = Note(
       locked: locked,
       id: obj['id'] ?? -1,
+      syncId: obj['sync_id'] as String?,
       title: obj['title'] ?? '',
       labels: obj['labels'] ?? '',
       content: obj['content'] ?? '',
@@ -679,6 +682,7 @@ class Note extends BaseModel<Note> {
   }
 
   Future<Note> updateFromJson(Map<String, dynamic> obj) async {
+    syncId = obj['sync_id'] as String? ?? syncId;
     pinned = obj['pinned'] == 1;
     _locked = obj['locked'] == 1;
     trashed = obj['trashed'] == 1;
@@ -727,7 +731,7 @@ class Note extends BaseModel<Note> {
 
     // Pass false to prevent triggering a sync back to Firebase
     // This method is called when syncing FROM remote, not for local changes
-    await save(false);
+    await save(false, ModelChangeOrigin.remoteSync);
     if (id != null && reminderWasProvided) {
       if (reminder != null && !completed && !trashed) {
         await ReminderCoordinator.instance.schedule(this);
@@ -821,8 +825,12 @@ class Note extends BaseModel<Note> {
   }
 
   @override
-  void notify(String event, [bool trackSync = true]) async {
-    super.notify(event);
+  void notify(
+    String event, [
+    bool trackSync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  ]) async {
+    super.notifyWithOrigin(event, origin);
 
     if (!trackSync) return;
 
@@ -2619,13 +2627,19 @@ class Note extends BaseModel<Note> {
     }
   });
 
-  Future<int> save([bool trackSync = true]) =>
-      _enqueueMutation(() => _saveWithinMutation(trackSync));
+  Future<int> save([
+    bool trackSync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  ]) => _enqueueMutation(() => _saveWithinMutation(trackSync, origin));
 
-  Future<int> _saveWithinMutation([bool trackSync = true]) async {
+  Future<int> _saveWithinMutation([
+    bool trackSync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  ]) async {
     if (isEmpty) {
       return Future.value(-1);
     }
+    syncId ??= const Uuid().v4();
 
     // Migrate any old sketches to new strokes file format before saving. A
     // failed source write must prevent attachment metadata from being saved.
@@ -2674,7 +2688,7 @@ class Note extends BaseModel<Note> {
             where: "id = ?",
             whereArgs: [id],
           );
-          notify("updated", trackSync);
+          notify("updated", trackSync, origin);
           return id!;
         } catch (e) {
           updatedAt = previousUpdatedAt;
@@ -2689,13 +2703,14 @@ class Note extends BaseModel<Note> {
     }
 
     jsonObj['id'] = id;
+    jsonObj['sync_id'] = syncId;
     if (jsonObj['created_at'] == null) {
       jsonObj['created_at'] = DateTime.now().toIso8601String();
     }
 
     try {
       await AppState.db.insert(model, jsonObj);
-      notify("created", trackSync);
+      notify("created", trackSync, origin);
       return id!;
     } catch (e) {
       updatedAt = previousUpdatedAt;
@@ -2786,7 +2801,10 @@ class Note extends BaseModel<Note> {
     }
   }
 
-  Future<int> delete() async {
+  Future<int> delete({
+    bool trackSync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  }) async {
     // If id is null, the note was never saved - nothing to delete
     if (id == null) {
       return 0;
@@ -2795,7 +2813,9 @@ class Note extends BaseModel<Note> {
     // Capture the note id before deletion for sync tracking
     final noteId = id!;
 
-    await _updateSyncTrack(SyncAction.delete);
+    if (trackSync) {
+      await _updateSyncTrack(SyncAction.delete);
+    }
 
     int result = await AppState.db.delete(
       model,
@@ -2812,7 +2832,7 @@ class Note extends BaseModel<Note> {
       );
     }
     await _deleteLocalFiles();
-    super.notify("deleted");
+    super.notifyWithOrigin("deleted", origin);
     return result;
   }
 
@@ -2858,6 +2878,7 @@ class Note extends BaseModel<Note> {
 
     return {
       'id': id,
+      'sync_id': syncId,
       'title': title,
       'labels': labels,
       'content': contentEncrypted,
@@ -2973,6 +2994,7 @@ class Note extends BaseModel<Note> {
 
     return {
       'id': id,
+      'sync_id': syncId,
       'title': title,
       'labels': labels,
       'content': content,
@@ -3015,6 +3037,17 @@ class Note extends BaseModel<Note> {
       return null;
     }
 
+    return Note.fromJsonAsync(rows.first);
+  }
+
+  static Future<Note?> findBySyncId(String syncId) async {
+    final rows = await AppState.db.query(
+      model,
+      where: "sync_id = ?",
+      whereArgs: [syncId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
     return Note.fromJsonAsync(rows.first);
   }
 }
@@ -3224,10 +3257,11 @@ ModelSchema<Note> _createSchema() {
 
 class _NoteSchema implements ModelSchema<Note> {
   @override
-  Future<void> createTable(Database db) {
-    return db.execute("""
+  Future<void> createTable(Database db) async {
+    await db.execute("""
       CREATE TABLE IF NOT EXISTS note (
         id INTEGER PRIMARY KEY,
+        sync_id TEXT,
         title TEXT,
         color TEXT,
         content TEXT,
@@ -3246,14 +3280,21 @@ class _NoteSchema implements ModelSchema<Note> {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     """);
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_note_sync_id '
+      'ON note(sync_id) WHERE sync_id IS NOT NULL',
+    );
   }
 
   @override
-  Future<void> upgradeTable(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {}
+  Future<void> upgradeTable(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 8 && newVersion >= 8) {
+      final columns = await db.rawQuery('PRAGMA table_info(note)');
+      if (!columns.any((column) => column['name'] == 'sync_id')) {
+        await db.execute('ALTER TABLE note ADD COLUMN sync_id TEXT');
+      }
+    }
+  }
 
   @override
   Future<List<Note>> get(List<dynamic> args) async {

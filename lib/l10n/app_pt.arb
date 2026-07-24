@@ -910,5 +910,19 @@
 
 	"rateOnAppStore": "Avaliar na App Store",
 	"rateOnPlayStore": "Avaliar na Play Store",
-	"rateOnMicrosoftStore": "Avaliar na Microsoft Store"
+	"rateOnMicrosoftStore": "Avaliar na Microsoft Store",
+	"sortBy": "Ordenar por",
+	"sortCustom": "Personalizado",
+	"sortCreatedNewest": "Data de criação",
+	"sortUpdatedNewest": "Data de atualização",
+	"dragToReorder": "Pressione e segure para reordenar",
+	"moveNoteBefore": "Mover nota para antes",
+	"moveNoteAfter": "Mover nota para depois",
+	"pinnedReorderBoundary": "As notas fixadas e não fixadas são organizadas separadamente.",
+	"reorderSaveFailed": "Não foi possível salvar a nova ordem das notas. A ordem anterior foi restaurada.",
+	"noteDisplayOptions": "Opções de exibição das notas",
+	"noteDisplayOptionsSaveFailed": "Não foi possível salvar as opções de exibição das notas. Tente novamente.",
+	"noteDisplayOptionsSaved": "Opções de exibição das notas salvas",
+	"reorderCustomHint": "Pressione e segure uma nota e arraste-a para reorganizar.",
+	"reorderDateSortHint": "A reorganização manual não está disponível ao ordenar por data. Escolha Personalizado para reorganizar as notas."
 }

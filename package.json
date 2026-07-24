@@ -10,9 +10,14 @@
 		"build:ios": "flutter build ios --release --dart-define-from-file=.env",
 		"build:android": "flutter build appbundle --release --dart-define-from-file=.env",
 		"build:web": "flutter build web --release --dart-define-from-file=.env",
-		"build:icons": "dart ./scripts/generate_custom_icons.dart"
+		"build:icons": "dart ./scripts/generate_custom_icons.dart",
+		"test:firestore-rules": "./tool/test_firestore_rules.sh"
 	},
 	"author": "Foxbiz Software Pvt. Ltd.",
 	"license": "UNLICENSED",
-	"private": true
+	"private": true,
+	"devDependencies": {
+		"@firebase/rules-unit-testing": "5.0.1",
+		"firebase": "12.16.0"
+	}
 }

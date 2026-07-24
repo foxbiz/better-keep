@@ -3097,4 +3097,51 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get rateOnMicrosoftStore => 'Beri Nilai di Microsoft Store';
+
+  @override
+  String get sortBy => 'Urutkan berdasarkan';
+
+  @override
+  String get sortCustom => 'Kustom';
+
+  @override
+  String get sortCreatedNewest => 'Tanggal dibuat';
+
+  @override
+  String get sortUpdatedNewest => 'Tanggal diperbarui';
+
+  @override
+  String get dragToReorder => 'Tekan dan tahan untuk mengurutkan';
+
+  @override
+  String get moveNoteBefore => 'Pindahkan catatan ke depan';
+
+  @override
+  String get moveNoteAfter => 'Pindahkan catatan ke belakang';
+
+  @override
+  String get pinnedReorderBoundary =>
+      'Catatan yang disematkan dan tidak disematkan diatur secara terpisah.';
+
+  @override
+  String get reorderSaveFailed =>
+      'Urutan catatan baru tidak dapat disimpan. Urutan sebelumnya telah dipulihkan.';
+
+  @override
+  String get noteDisplayOptions => 'Opsi tampilan catatan';
+
+  @override
+  String get noteDisplayOptionsSaveFailed =>
+      'Opsi tampilan catatan tidak dapat disimpan. Silakan coba lagi.';
+
+  @override
+  String get noteDisplayOptionsSaved => 'Opsi tampilan catatan disimpan';
+
+  @override
+  String get reorderCustomHint =>
+      'Tekan dan tahan catatan, lalu seret untuk mengatur ulang.';
+
+  @override
+  String get reorderDateSortHint =>
+      'Pengaturan ulang manual tidak tersedia saat mengurutkan berdasarkan tanggal. Pilih Kustom untuk mengatur ulang catatan.';
 }

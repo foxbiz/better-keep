@@ -910,5 +910,19 @@
 
 	"rateOnAppStore": "App Storeで評価する",
 	"rateOnPlayStore": "Play Storeで評価する",
-	"rateOnMicrosoftStore": "Microsoft Storeで評価する"
+	"rateOnMicrosoftStore": "Microsoft Storeで評価する",
+	"sortBy": "並べ替え",
+	"sortCustom": "カスタム",
+	"sortCreatedNewest": "作成日",
+	"sortUpdatedNewest": "更新日",
+	"dragToReorder": "長押しして並べ替え",
+	"moveNoteBefore": "ノートを前に移動",
+	"moveNoteAfter": "ノートを後ろに移動",
+	"pinnedReorderBoundary": "固定済みと未固定のノートは別々に並べ替えます。",
+	"reorderSaveFailed": "新しいノートの順序を保存できませんでした。以前の順序に戻しました。",
+	"noteDisplayOptions": "ノートの表示オプション",
+	"noteDisplayOptionsSaveFailed": "ノートの表示オプションを保存できませんでした。もう一度お試しください。",
+	"noteDisplayOptionsSaved": "ノートの表示オプションを保存しました",
+	"reorderCustomHint": "ノートを長押ししてからドラッグして並べ替えます。",
+	"reorderDateSortHint": "日付で並べ替えている間は手動で並べ替えできません。ノートを並べ替えるには「カスタム」を選択してください。"
 }

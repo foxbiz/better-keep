@@ -16,6 +16,7 @@ import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
 import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/legacy_sketch_migration_service.dart';
@@ -217,8 +218,9 @@ class _BetterKeepState extends State<BetterKeep> {
       // Initialize E2EE for already logged-in users, then start sync
       if (AuthService.currentUser != null) {
         await _initializeSignedInServices();
-        NoteSyncService().init();
+        await NoteSyncService().init();
         LabelSyncService().init();
+        await NoteSortService().startCloudSync();
       }
     });
   }
@@ -407,6 +409,7 @@ class _BetterKeepState extends State<BetterKeep> {
     try {
       final db = await initDatabase();
       LocalDataEncryption.setDatabaseGetter(() => db);
+      await NoteSortService().init();
       // Resolve interrupted local lock transactions before the note UI, sync,
       // or preview repair can observe a partially switched set of file paths.
       final protectedFileOperations = await NoteLockFileOperations.platform();

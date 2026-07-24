@@ -3,6 +3,7 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 typedef LabelEvent = ModelEvent<Label>;
 typedef LabelListener = ModelListener<Label>;
@@ -22,6 +23,7 @@ class Label extends BaseModel<Label> {
   ];
 
   String name;
+  String? syncId;
   bool isSystem;
   int? notesCount;
   DateTime? createdAt;
@@ -53,6 +55,17 @@ class Label extends BaseModel<Label> {
   static Future<Label?> findByName(String name) async {
     final db = AppState.db;
     final result = await db.query(model, where: "name = ?", whereArgs: [name]);
+    if (result.isEmpty) return null;
+    return Label.fromJson(result.first);
+  }
+
+  static Future<Label?> findBySyncId(String syncId) async {
+    final result = await AppState.db.query(
+      model,
+      where: "sync_id = ?",
+      whereArgs: [syncId],
+      limit: 1,
+    );
     if (result.isEmpty) return null;
     return Label.fromJson(result.first);
   }
@@ -104,6 +117,7 @@ class Label extends BaseModel<Label> {
   Label({
     super.id,
     required this.name,
+    this.syncId,
     this.isSystem = false,
     this.createdAt,
     this.updatedAt,
@@ -112,6 +126,7 @@ class Label extends BaseModel<Label> {
   factory Label.fromJson(Map<String, Object?> json) {
     return Label(
       id: json["id"] as int?,
+      syncId: json["sync_id"] as String?,
       name: json["name"] as String,
       isSystem: (json["is_system"] as int?) == 1,
       createdAt: json["created_at"] != null
@@ -126,6 +141,7 @@ class Label extends BaseModel<Label> {
   Map<String, Object?> toJson() {
     return {
       "id": id,
+      "sync_id": syncId,
       "name": name,
       "is_system": isSystem ? 1 : 0,
       "created_at": createdAt?.toIso8601String(),
@@ -133,8 +149,12 @@ class Label extends BaseModel<Label> {
     };
   }
 
-  Future<int> save({bool sync = true}) async {
+  Future<int> save({
+    bool sync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  }) async {
     final db = AppState.db;
+    syncId ??= const Uuid().v4();
     updatedAt = DateTime.now();
 
     if (id == null) {
@@ -145,7 +165,7 @@ class Label extends BaseModel<Label> {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       id = rowId;
-      notify("created");
+      notifyWithOrigin("created", origin);
       if (sync) {
         LabelSyncService().queueSync(this);
       }
@@ -153,14 +173,17 @@ class Label extends BaseModel<Label> {
     }
 
     await db.update(model, toJson(), where: "id = ?", whereArgs: [id]);
-    notify("updated");
+    notifyWithOrigin("updated", origin);
     if (sync) {
       LabelSyncService().queueSync(this);
     }
     return id!;
   }
 
-  Future<int> delete({bool sync = true}) async {
+  Future<int> delete({
+    bool sync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  }) async {
     if (id == null) {
       throw ArgumentError('Cannot delete label: ID is null');
     }
@@ -171,7 +194,7 @@ class Label extends BaseModel<Label> {
       where: "id = ?",
       whereArgs: [id],
     );
-    notify("deleted");
+    notifyWithOrigin("deleted", origin);
     if (sync) {
       LabelSyncService().queueDelete(labelId);
     }
@@ -193,6 +216,7 @@ class Label extends BaseModel<Label> {
     return Label(
       name: name,
       id: id,
+      syncId: syncId,
       isSystem: isSystem,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -232,16 +256,21 @@ ModelSchema<Label> _createSchema() {
 
 class _LabelSchema implements ModelSchema<Label> {
   @override
-  Future<void> createTable(Database db) {
-    return db.execute("""
+  Future<void> createTable(Database db) async {
+    await db.execute("""
       CREATE TABLE IF NOT EXISTS label (
         id INTEGER PRIMARY KEY,
+        sync_id TEXT,
         name TEXT NOT NULL,
         is_system INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     """);
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_label_sync_id '
+      'ON label(sync_id) WHERE sync_id IS NOT NULL',
+    );
   }
 
   @override
@@ -258,6 +287,12 @@ class _LabelSchema implements ModelSchema<Label> {
       await db.execute(
         "ALTER TABLE label ADD COLUMN is_system INTEGER DEFAULT 0",
       );
+    }
+    if (oldVersion < 8 && newVersion >= 8) {
+      final columns = await db.rawQuery('PRAGMA table_info(label)');
+      if (!columns.any((column) => column['name'] == 'sync_id')) {
+        await db.execute('ALTER TABLE label ADD COLUMN sync_id TEXT');
+      }
     }
   }
 

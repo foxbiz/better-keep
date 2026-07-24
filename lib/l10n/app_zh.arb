@@ -910,5 +910,19 @@
 
 	"rateOnAppStore": "在 App Store 上评分",
 	"rateOnPlayStore": "在 Play Store 上评分",
-	"rateOnMicrosoftStore": "在 Microsoft Store 上评分"
+	"rateOnMicrosoftStore": "在 Microsoft Store 上评分",
+	"sortBy": "排序方式",
+	"sortCustom": "自定义",
+	"sortCreatedNewest": "创建日期",
+	"sortUpdatedNewest": "更新日期",
+	"dragToReorder": "长按以重新排序",
+	"moveNoteBefore": "将笔记移到前面",
+	"moveNoteAfter": "将笔记移到后面",
+	"pinnedReorderBoundary": "置顶和未置顶笔记需分别排序。",
+	"reorderSaveFailed": "无法保存新的笔记顺序，已恢复之前的顺序。",
+	"noteDisplayOptions": "笔记显示选项",
+	"noteDisplayOptionsSaveFailed": "无法保存笔记显示选项。请重试。",
+	"noteDisplayOptionsSaved": "已保存笔记显示选项",
+	"reorderCustomHint": "长按笔记，然后拖动以重新排列。",
+	"reorderDateSortHint": "按日期排序时无法手动重新排列。请选择“自定义”以重新排列笔记。"
 }

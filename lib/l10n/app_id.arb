@@ -910,5 +910,19 @@
 
 	"rateOnAppStore": "Beri Nilai di App Store",
 	"rateOnPlayStore": "Beri Nilai di Play Store",
-	"rateOnMicrosoftStore": "Beri Nilai di Microsoft Store"
+	"rateOnMicrosoftStore": "Beri Nilai di Microsoft Store",
+	"sortBy": "Urutkan berdasarkan",
+	"sortCustom": "Kustom",
+	"sortCreatedNewest": "Tanggal dibuat",
+	"sortUpdatedNewest": "Tanggal diperbarui",
+	"dragToReorder": "Tekan dan tahan untuk mengurutkan",
+	"moveNoteBefore": "Pindahkan catatan ke depan",
+	"moveNoteAfter": "Pindahkan catatan ke belakang",
+	"pinnedReorderBoundary": "Catatan yang disematkan dan tidak disematkan diatur secara terpisah.",
+	"reorderSaveFailed": "Urutan catatan baru tidak dapat disimpan. Urutan sebelumnya telah dipulihkan.",
+	"noteDisplayOptions": "Opsi tampilan catatan",
+	"noteDisplayOptionsSaveFailed": "Opsi tampilan catatan tidak dapat disimpan. Silakan coba lagi.",
+	"noteDisplayOptionsSaved": "Opsi tampilan catatan disimpan",
+	"reorderCustomHint": "Tekan dan tahan catatan, lalu seret untuk mengatur ulang.",
+	"reorderDateSortHint": "Pengaturan ulang manual tidak tersedia saat mengurutkan berdasarkan tanggal. Pilih Kustom untuk mengatur ulang catatan."
 }

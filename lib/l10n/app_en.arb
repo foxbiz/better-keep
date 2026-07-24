@@ -3497,5 +3497,34 @@
 	"rateOnMicrosoftStore": "Rate on Microsoft Store",
 	"@rateOnMicrosoftStore": {
 		"description": "Sidebar item to rate the app on the Microsoft Store (Windows)"
-	}
+	},
+
+	"sortBy": "Sort by",
+	"@sortBy": { "description": "Tooltip and menu title for note sorting" },
+	"sortCustom": "Custom",
+	"@sortCustom": { "description": "Manual note ordering option" },
+	"sortCreatedNewest": "Date created",
+	"@sortCreatedNewest": { "description": "Newest-created note sorting option" },
+	"sortUpdatedNewest": "Date updated",
+	"@sortUpdatedNewest": { "description": "Most-recently-updated note sorting option" },
+	"dragToReorder": "Press and hold to reorder",
+	"@dragToReorder": { "description": "Accessible label for whole-card note reordering" },
+	"moveNoteBefore": "Move note before",
+	"@moveNoteBefore": { "description": "Accessible action to move a note earlier in its section" },
+	"moveNoteAfter": "Move note after",
+	"@moveNoteAfter": { "description": "Accessible action to move a note later in its section" },
+	"pinnedReorderBoundary": "Pinned and unpinned notes are arranged separately.",
+	"@pinnedReorderBoundary": { "description": "Message shown for an invalid cross-section note move" },
+	"reorderSaveFailed": "Could not save the new note order. Your previous order was restored.",
+	"@reorderSaveFailed": { "description": "Message shown when manual note ordering cannot be saved" },
+	"noteDisplayOptions": "Note display options",
+	"@noteDisplayOptions": { "description": "Title and tooltip for configuring note view and sorting" },
+	"noteDisplayOptionsSaveFailed": "Could not save the note display options. Please try again.",
+	"@noteDisplayOptionsSaveFailed": { "description": "Error shown when note display options cannot be saved" },
+	"noteDisplayOptionsSaved": "Note display options saved",
+	"@noteDisplayOptionsSaved": { "description": "Accessibility announcement after note display options are saved" },
+	"reorderCustomHint": "Press and hold a note, then drag to rearrange it.",
+	"@reorderCustomHint": { "description": "Guidance shown when custom note sorting enables manual reordering" },
+	"reorderDateSortHint": "Manual rearranging is unavailable while sorting by date. Choose Custom to rearrange notes.",
+	"@reorderDateSortHint": { "description": "Guidance explaining why manual reordering is unavailable in date sort modes" }
 }

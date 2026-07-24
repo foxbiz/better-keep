@@ -3481,5 +3481,20 @@
 	"rateOnMicrosoftStore": "Microsoft Store'da Değerlendir",
 	"@rateOnMicrosoftStore": {
 		"description": "Sidebar item to rate the app on the Microsoft Store (Windows)"
-	}
+	},
+
+	"sortBy": "Sıralama ölçütü",
+	"sortCustom": "Özel",
+	"sortCreatedNewest": "Oluşturma tarihi",
+	"sortUpdatedNewest": "Güncelleme tarihi",
+	"dragToReorder": "Yeniden sıralamak için basılı tutun",
+	"moveNoteBefore": "Notu önceye taşı",
+	"moveNoteAfter": "Notu sonraya taşı",
+	"pinnedReorderBoundary": "Sabitlenmiş ve sabitlenmemiş notlar ayrı ayrı düzenlenir.",
+	"reorderSaveFailed": "Yeni not sırası kaydedilemedi. Önceki sıra geri yüklendi.",
+	"noteDisplayOptions": "Not görüntüleme seçenekleri",
+	"noteDisplayOptionsSaveFailed": "Not görüntüleme seçenekleri kaydedilemedi. Tekrar deneyin.",
+	"noteDisplayOptionsSaved": "Not görüntüleme seçenekleri kaydedildi",
+	"reorderCustomHint": "Bir nota basılı tutun, ardından yeniden düzenlemek için sürükleyin.",
+	"reorderDateSortHint": "Tarihe göre sıralarken elle yeniden düzenleme kullanılamaz. Notları yeniden düzenlemek için Özel'i seçin."
 }

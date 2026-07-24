@@ -1,5 +1,6 @@
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:sqflite/sqflite.dart';
 
 enum LabelSyncAction { upload, delete }
@@ -150,21 +151,47 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
   }
 
   Future<int> save() async {
-    var jsonObj = toJson();
-    jsonObj['updated_at'] = DateTime.now().toIso8601String();
-
-    if (id != null) {
-      await AppState.db.update(
+    final now = DateTime.now();
+    await AppState.db.transaction((txn) async {
+      if (remoteId != null) {
+        final owners = await txn.query(
+          model,
+          columns: ['local_id'],
+          where: 'remote_id = ? AND local_id != ?',
+          whereArgs: [remoteId, localId],
+          limit: 1,
+        );
+        if (owners.isNotEmpty) {
+          throw SyncTrackIdentityConflict(
+            remoteId: remoteId!,
+            existingLocalId: owners.first['local_id'] as int,
+            requestedLocalId: localId,
+          );
+        }
+      }
+      final existing = await txn.query(
         model,
-        jsonObj,
-        where: "id = ?",
-        whereArgs: [id],
+        where: 'local_id = ?',
+        whereArgs: [localId],
+        limit: 1,
       );
-      return id!;
-    }
-
-    jsonObj['created_at'] = DateTime.now().toIso8601String();
-    id = await AppState.db.insert(model, jsonObj);
+      final existingTrack = existing.isEmpty
+          ? null
+          : LabelSyncTrack.fromJson(existing.first);
+      if (existingTrack?.action == LabelSyncAction.delete &&
+          action == LabelSyncAction.upload) {
+        action = LabelSyncAction.delete;
+      }
+      id = existingTrack?.id ?? id;
+      createdAt = existingTrack?.createdAt ?? createdAt ?? now;
+      updatedAt = now;
+      final jsonObj = toJson()..remove('id');
+      if (id == null) {
+        id = await txn.insert(model, jsonObj);
+      } else {
+        await txn.update(model, jsonObj, where: 'id = ?', whereArgs: [id]);
+      }
+    });
     return id!;
   }
 
@@ -238,6 +265,20 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
   }
 
   Future<void> setAction(LabelSyncAction newAction) async {
+    if (id != null) {
+      final current = await getByLocalId(localId);
+      if (current != null) {
+        if (current.action == LabelSyncAction.delete &&
+            newAction == LabelSyncAction.upload) {
+          return;
+        }
+        action = current.action;
+        remoteId = current.remoteId;
+        status = current.status;
+        createdAt = current.createdAt;
+        updatedAt = current.updatedAt;
+      }
+    }
     action = newAction;
     status = LabelSyncStatus.pending;
     await save();
@@ -246,8 +287,8 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
 
 class _LabelSyncTrackSchema implements ModelSchema<LabelSyncTrack> {
   @override
-  Future<void> createTable(Database db) {
-    return db.execute("""
+  Future<void> createTable(Database db) async {
+    await db.execute("""
       CREATE TABLE IF NOT EXISTS label_sync_track (
         id INTEGER PRIMARY KEY,
         remote_id TEXT,
@@ -258,6 +299,14 @@ class _LabelSyncTrackSchema implements ModelSchema<LabelSyncTrack> {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     """);
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_label_sync_track_local_id '
+      'ON label_sync_track(local_id)',
+    );
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_label_sync_track_remote_id '
+      'ON label_sync_track(remote_id) WHERE remote_id IS NOT NULL',
+    );
   }
 
   @override

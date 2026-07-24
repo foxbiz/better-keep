@@ -3008,4 +3008,48 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get rateOnMicrosoftStore => 'Microsoft Storeで評価する';
+
+  @override
+  String get sortBy => '並べ替え';
+
+  @override
+  String get sortCustom => 'カスタム';
+
+  @override
+  String get sortCreatedNewest => '作成日';
+
+  @override
+  String get sortUpdatedNewest => '更新日';
+
+  @override
+  String get dragToReorder => '長押しして並べ替え';
+
+  @override
+  String get moveNoteBefore => 'ノートを前に移動';
+
+  @override
+  String get moveNoteAfter => 'ノートを後ろに移動';
+
+  @override
+  String get pinnedReorderBoundary => '固定済みと未固定のノートは別々に並べ替えます。';
+
+  @override
+  String get reorderSaveFailed => '新しいノートの順序を保存できませんでした。以前の順序に戻しました。';
+
+  @override
+  String get noteDisplayOptions => 'ノートの表示オプション';
+
+  @override
+  String get noteDisplayOptionsSaveFailed =>
+      'ノートの表示オプションを保存できませんでした。もう一度お試しください。';
+
+  @override
+  String get noteDisplayOptionsSaved => 'ノートの表示オプションを保存しました';
+
+  @override
+  String get reorderCustomHint => 'ノートを長押ししてからドラッグして並べ替えます。';
+
+  @override
+  String get reorderDateSortHint =>
+      '日付で並べ替えている間は手動で並べ替えできません。ノートを並べ替えるには「カスタム」を選択してください。';
 }

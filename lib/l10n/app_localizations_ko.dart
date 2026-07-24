@@ -3007,4 +3007,48 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get rateOnMicrosoftStore => 'Microsoft Store에서 평가하기';
+
+  @override
+  String get sortBy => '정렬 기준';
+
+  @override
+  String get sortCustom => '사용자 지정';
+
+  @override
+  String get sortCreatedNewest => '생성 날짜';
+
+  @override
+  String get sortUpdatedNewest => '수정 날짜';
+
+  @override
+  String get dragToReorder => '길게 눌러 순서 변경';
+
+  @override
+  String get moveNoteBefore => '메모를 앞으로 이동';
+
+  @override
+  String get moveNoteAfter => '메모를 뒤로 이동';
+
+  @override
+  String get pinnedReorderBoundary => '고정된 메모와 고정되지 않은 메모는 별도로 정렬됩니다.';
+
+  @override
+  String get reorderSaveFailed => '새 메모 순서를 저장할 수 없습니다. 이전 순서로 복원했습니다.';
+
+  @override
+  String get noteDisplayOptions => '노트 표시 옵션';
+
+  @override
+  String get noteDisplayOptionsSaveFailed =>
+      '노트 표시 옵션을 저장할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get noteDisplayOptionsSaved => '노트 표시 옵션을 저장했습니다';
+
+  @override
+  String get reorderCustomHint => '노트를 길게 누른 다음 드래그하여 순서를 변경하세요.';
+
+  @override
+  String get reorderDateSortHint =>
+      '날짜순 정렬 중에는 수동으로 순서를 변경할 수 없습니다. 노트를 재정렬하려면 사용자 지정을 선택하세요.';
 }

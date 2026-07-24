@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/models/label.dart';
+import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/initial_hydration_gate.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
@@ -12,12 +14,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:better_keep/config.dart' show demoAccountEmail;
+import 'package:uuid/uuid.dart';
 
 class LabelSyncService {
   Timer? _syncTimer;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   StreamSubscription<User?>? _userStreamSubscription;
   bool _initialized = false;
+  final InitialHydrationGate _initialHydration = InitialHydrationGate();
+  final HydrationRetryController _listenerRetry = HydrationRetryController();
+
+  Future<void> get initialHydration => _initialHydration.ready;
+
   LabelSyncService._internal();
 
   factory LabelSyncService() => _instance;
@@ -256,7 +264,7 @@ class LabelSyncService {
 
   /// Start listening for real-time updates from Firebase
   void _startRemoteListener() {
-    _stopRemoteListener();
+    _stopRemoteListener(cancelRetry: false);
     if (currentUser == null) return;
 
     DateTime? lastSynced = AppState.lastLabelSynced;
@@ -268,137 +276,198 @@ class LabelSyncService {
       );
     }
 
-    _remoteListener = query.snapshots().listen(
-      (snapshot) async {
-        if (snapshot.docChanges.isEmpty) return;
-
-        final changes = snapshot.docChanges.where(
-          (change) =>
-              change.type == DocumentChangeType.modified ||
-              change.type == DocumentChangeType.added,
-        );
-
-        if (changes.isEmpty) return;
-
-        AppLogger.log(
-          "[LABEL_SYNC] Received ${changes.length} remote changes via real-time listener",
-        );
-
-        final Set<String> processedIds = {};
-
-        for (final change in changes) {
-          final remoteData = change.doc.data();
-          if (remoteData == null) {
-            AppLogger.log("[LABEL_SYNC] Remote data is null, skipping");
-            continue;
-          }
-
-          final remoteDocId = change.doc.id;
-          AppLogger.log(
-            "[LABEL_SYNC] Processing remote change for doc $remoteDocId",
-          );
-
-          if (processedIds.contains(remoteDocId)) {
-            AppLogger.log(
-              "[LABEL_SYNC] Already processed $remoteDocId in this batch, skipping",
+    final hydrationGeneration = _initialHydration.startAttempt();
+    _remoteListener = query
+        .snapshots(includeMetadataChanges: true)
+        .listen(
+          (snapshot) async {
+            _initialHydration.beginWork(
+              hydrationGeneration,
+              isFromCache: snapshot.metadata.isFromCache,
             );
-            continue;
-          }
-          processedIds.add(remoteDocId);
+            var hydrationFailed = false;
+            try {
+              if (snapshot.docChanges.isEmpty) return;
 
-          final isDeleted =
-              remoteData['deleted'] == true || remoteData['deleted'] == 1;
-
-          // Find existing sync track by remoteId
-          final existingSyncTrack = await LabelSyncTrack.getByRemoteId(
-            remoteDocId,
-          );
-          final localId = existingSyncTrack?.localId;
-
-          if (isDeleted) {
-            AppLogger.log(
-              "[LABEL_SYNC] Label doc $remoteDocId is deleted, handling deletion",
-            );
-            if (localId != null) {
-              _addSyncingIncoming(localId);
-              try {
-                await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
-              } finally {
-                _removeSyncingIncoming(localId);
-              }
-            } else {
-              await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
-            }
-            continue;
-          }
-
-          if (existingSyncTrack != null &&
-              (existingSyncTrack.status == LabelSyncStatus.pending ||
-                  existingSyncTrack.status == LabelSyncStatus.failed)) {
-            AppLogger.log(
-              "[LABEL_SYNC] Skipping real-time update for doc $remoteDocId - has pending local changes",
-            );
-            continue;
-          }
-
-          Label? localLabel;
-          if (localId != null) {
-            localLabel = await Label.findById(localId);
-          }
-
-          if (localLabel != null && remoteData['updated_at'] != null) {
-            final localUpdatedAt = localLabel.updatedAt;
-            final remoteUpdatedAt = DateTime.parse(remoteData['updated_at']);
-
-            if (localUpdatedAt != null &&
-                (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                    remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt))) {
-              AppLogger.log(
-                "[LABEL_SYNC] Skipping doc $remoteDocId - local is same or newer (local: $localUpdatedAt, remote: $remoteUpdatedAt)",
+              final changes = snapshot.docChanges.where(
+                (change) =>
+                    change.type == DocumentChangeType.modified ||
+                    change.type == DocumentChangeType.added,
               );
-              continue;
-            }
-          }
 
-          AppLogger.log(
-            "[LABEL_SYNC] Patching label from remote doc $remoteDocId",
-          );
-          if (localId != null) {
-            _addSyncingIncoming(localId);
-          }
-          try {
-            await _patchRemoteLabel(remoteData, remoteDocId);
-            AppLogger.log(
-              "[LABEL_SYNC] Patched local label from real-time update: $remoteDocId",
-            );
-          } finally {
-            if (localId != null) {
-              _removeSyncingIncoming(localId);
-            }
-          }
-        }
+              if (changes.isEmpty) return;
 
-        AppState.lastLabelSynced = DateTime.now();
-      },
-      onError: (error) {
-        AppLogger.error('LabelSync: Remote listener error', error);
-        // Auto-restart the listener after a delay on transient errors
-        // (e.g. permission-denied from stale auth token, network blip)
-        Future.delayed(const Duration(seconds: 5), () {
-          if (_initialized && currentUser != null) {
-            AppLogger.log(
-              '[LABEL_SYNC] Restarting remote listener after error',
-            );
-            _startRemoteListener();
-          }
-        });
-      },
-    );
+              AppLogger.log(
+                "[LABEL_SYNC] Received ${changes.length} remote changes via real-time listener",
+              );
+
+              final Set<String> processedIds = {};
+
+              for (final change in changes) {
+                final remoteData = change.doc.data();
+                if (remoteData == null) {
+                  AppLogger.log("[LABEL_SYNC] Remote data is null, skipping");
+                  continue;
+                }
+
+                final remoteDocId = change.doc.id;
+                AppLogger.log(
+                  "[LABEL_SYNC] Processing remote change for doc $remoteDocId",
+                );
+
+                if (processedIds.contains(remoteDocId)) {
+                  AppLogger.log(
+                    "[LABEL_SYNC] Already processed $remoteDocId in this batch, skipping",
+                  );
+                  continue;
+                }
+                processedIds.add(remoteDocId);
+
+                final isDeleted =
+                    remoteData['deleted'] == true || remoteData['deleted'] == 1;
+
+                final remoteName = remoteData['name'];
+                if (!isDeleted &&
+                    (remoteName is! String ||
+                        !_hasValidRemoteDate(remoteData['created_at']) ||
+                        !_hasValidRemoteDate(remoteData['updated_at']))) {
+                  AppLogger.error(
+                    '[LABEL_SYNC] Quarantined malformed label $remoteDocId',
+                    StateError(
+                      'name and ISO-8601 timestamps are required when present',
+                    ),
+                  );
+                  continue;
+                }
+
+                // Find existing sync track by remoteId
+                final existingSyncTrack = await LabelSyncTrack.getByRemoteId(
+                  remoteDocId,
+                );
+                final stableLabel = await Label.findBySyncId(remoteDocId);
+                final localId = existingSyncTrack?.localId ?? stableLabel?.id;
+
+                if (isDeleted) {
+                  AppLogger.log(
+                    "[LABEL_SYNC] Label doc $remoteDocId is deleted, handling deletion",
+                  );
+                  if (localId != null) {
+                    _addSyncingIncoming(localId);
+                    try {
+                      await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
+                    } finally {
+                      _removeSyncingIncoming(localId);
+                    }
+                  } else {
+                    await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
+                  }
+                  continue;
+                }
+
+                if (existingSyncTrack != null &&
+                    (existingSyncTrack.status == LabelSyncStatus.pending ||
+                        existingSyncTrack.status == LabelSyncStatus.failed)) {
+                  AppLogger.log(
+                    "[LABEL_SYNC] Skipping real-time update for doc $remoteDocId - has pending local changes",
+                  );
+                  continue;
+                }
+
+                Label? localLabel;
+                if (localId != null) {
+                  localLabel = await Label.findById(localId);
+                }
+
+                if (localLabel != null && remoteData['updated_at'] != null) {
+                  final localUpdatedAt = localLabel.updatedAt;
+                  final updatedAtValue = remoteData['updated_at'];
+                  final remoteUpdatedAt = updatedAtValue is String
+                      ? DateTime.tryParse(updatedAtValue)
+                      : null;
+                  if (remoteUpdatedAt == null) {
+                    AppLogger.error(
+                      '[LABEL_SYNC] Quarantined malformed label $remoteDocId',
+                      StateError('updated_at must be an ISO-8601 string'),
+                    );
+                    continue;
+                  }
+
+                  if (localUpdatedAt != null &&
+                      (remoteUpdatedAt.isBefore(localUpdatedAt) ||
+                          remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt))) {
+                    AppLogger.log(
+                      "[LABEL_SYNC] Skipping doc $remoteDocId - local is same or newer (local: $localUpdatedAt, remote: $remoteUpdatedAt)",
+                    );
+                    continue;
+                  }
+                }
+
+                AppLogger.log(
+                  "[LABEL_SYNC] Patching label from remote doc $remoteDocId",
+                );
+                if (localId != null) {
+                  _addSyncingIncoming(localId);
+                }
+                try {
+                  await _patchRemoteLabel(remoteData, remoteDocId);
+                  AppLogger.log(
+                    "[LABEL_SYNC] Patched local label from real-time update: $remoteDocId",
+                  );
+                } finally {
+                  if (localId != null) {
+                    _removeSyncingIncoming(localId);
+                  }
+                }
+              }
+
+              AppState.lastLabelSynced = DateTime.now();
+            } catch (error, stackTrace) {
+              hydrationFailed = true;
+              AppLogger.error(
+                '[LABEL_SYNC] Hydration attempt failed',
+                error,
+                stackTrace,
+              );
+            } finally {
+              _initialHydration.endWork(
+                hydrationGeneration,
+                failed: hydrationFailed,
+              );
+              if (hydrationFailed) {
+                _restartRemoteListenerAfterFailure(hydrationGeneration);
+              } else if (_initialHydration.isReady) {
+                _listenerRetry.succeeded();
+              }
+            }
+          },
+          onError: (error) {
+            AppLogger.error('LabelSync: Remote listener error', error);
+            _initialHydration.failAttempt(hydrationGeneration);
+            _restartRemoteListenerAfterFailure(hydrationGeneration);
+          },
+        );
 
     AppLogger.log("[LABEL_SYNC] Started real-time remote listener");
   }
 
-  void _stopRemoteListener() {
+  void _restartRemoteListenerAfterFailure(int generation) {
+    if (!_initialHydration.isCurrent(generation)) return;
+    _listenerRetry.schedule(() {
+      if (_initialized && currentUser != null && _canReceiveSync) {
+        AppLogger.log('[LABEL_SYNC] Restarting remote listener after failure');
+        _startRemoteListener();
+      }
+    });
+  }
+
+  bool _hasValidRemoteDate(Object? value) {
+    return value == null ||
+        (value is String && DateTime.tryParse(value) != null);
+  }
+
+  void _stopRemoteListener({bool cancelRetry = true}) {
+    if (cancelRetry) _listenerRetry.cancel();
+    _initialHydration.invalidateAttempt();
     try {
       _remoteListener?.cancel();
     } catch (e) {
@@ -422,6 +491,8 @@ class LabelSyncService {
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     E2EEService.instance.status.removeListener(_onE2EEStatusChange);
     _initialized = false;
+    _initialHydration.reset();
+    _listenerRetry.cancel();
     // Reset so the ready→ready transition is detected correctly on re-login
     _lastKnownE2EEStatus = null;
     // Clear cached Firestore instance so a fresh one is created after signout/signin
@@ -664,7 +735,17 @@ class LabelSyncService {
             _removeSyncingOutgoing(localId);
           });
         } else {
-          final newDocRef = _labelsCollection.doc();
+          final stableId = label.syncId ?? const Uuid().v4();
+          if (label.syncId != stableId) {
+            label.syncId = stableId;
+            await AppState.db.update(
+              Label.model,
+              {'sync_id': stableId},
+              where: 'id = ?',
+              whereArgs: [label.id],
+            );
+          }
+          final newDocRef = _labelsCollection.doc(stableId);
           batch.set(newDocRef, labelData);
           sync.remoteId = newDocRef.id;
           await sync.save();
@@ -834,15 +915,13 @@ class LabelSyncService {
 
   Future<void> _handleRemoteDeletedLabelByRemoteId(String remoteDocId) async {
     final syncTrack = await LabelSyncTrack.getByRemoteId(remoteDocId);
-    if (syncTrack == null) {
-      return;
-    }
-
-    final label = await Label.findById(syncTrack.localId);
+    final label =
+        await Label.findBySyncId(remoteDocId) ??
+        (syncTrack == null ? null : await Label.findById(syncTrack.localId));
     if (label != null) {
-      await label.delete(sync: false);
+      await label.delete(sync: false, origin: ModelChangeOrigin.remoteSync);
     }
-    await syncTrack.delete();
+    await syncTrack?.delete();
     AppLogger.log(
       "[LABEL_SYNC] Deleted local label from remote deletion by remoteId: $remoteDocId",
     );
@@ -890,6 +969,8 @@ class LabelSyncService {
       label = await Label.findById(existingSyncTrack.localId);
     }
 
+    label ??= await Label.findBySyncId(remoteDocId);
+
     // Fallback: find by name. If found, also link the sync track so
     // future syncs won't create a duplicate for this remote doc.
     if (label == null) {
@@ -904,6 +985,7 @@ class LabelSyncService {
       // Create new label - let SQLite auto-generate the ID
       label = Label(
         name: remoteData['name'] as String,
+        syncId: remoteDocId,
         createdAt: remoteData['created_at'] != null
             ? DateTime.parse(remoteData['created_at'])
             : null,
@@ -913,11 +995,15 @@ class LabelSyncService {
       );
 
       // Save without triggering sync (we're pulling from remote)
-      final newId = await label.save(sync: false);
+      final newId = await label.save(
+        sync: false,
+        origin: ModelChangeOrigin.remoteSync,
+      );
       label.id = newId;
     } else {
       // Update existing label
       label.name = remoteData['name'] as String;
+      label.syncId = remoteDocId;
       label.updatedAt = remoteData['updated_at'] != null
           ? DateTime.parse(remoteData['updated_at'])
           : DateTime.now();
@@ -928,7 +1014,7 @@ class LabelSyncService {
         where: "id = ?",
         whereArgs: [label.id],
       );
-      label.notify("updated");
+      label.notifyWithOrigin("updated", ModelChangeOrigin.remoteSync);
     }
 
     // Update or create sync track using the label's actual local ID
