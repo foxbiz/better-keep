@@ -1,6 +1,6 @@
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/state.dart';
-import 'package:better_keep/services/sync_identity_migration.dart';
+import 'package:better_keep/services/sync_track_store.dart';
 import 'package:sqflite/sqflite.dart';
 
 enum LabelSyncAction { upload, delete }
@@ -151,47 +151,12 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
   }
 
   Future<int> save() async {
-    final now = DateTime.now();
-    await AppState.db.transaction((txn) async {
-      if (remoteId != null) {
-        final owners = await txn.query(
-          model,
-          columns: ['local_id'],
-          where: 'remote_id = ? AND local_id != ?',
-          whereArgs: [remoteId, localId],
-          limit: 1,
-        );
-        if (owners.isNotEmpty) {
-          throw SyncTrackIdentityConflict(
-            remoteId: remoteId!,
-            existingLocalId: owners.first['local_id'] as int,
-            requestedLocalId: localId,
-          );
-        }
-      }
-      final existing = await txn.query(
-        model,
-        where: 'local_id = ?',
-        whereArgs: [localId],
-        limit: 1,
-      );
-      final existingTrack = existing.isEmpty
-          ? null
-          : LabelSyncTrack.fromJson(existing.first);
-      if (existingTrack?.action == LabelSyncAction.delete &&
-          action == LabelSyncAction.upload) {
-        action = LabelSyncAction.delete;
-      }
-      id = existingTrack?.id ?? id;
-      createdAt = existingTrack?.createdAt ?? createdAt ?? now;
-      updatedAt = now;
-      final jsonObj = toJson()..remove('id');
-      if (id == null) {
-        id = await txn.insert(model, jsonObj);
-      } else {
-        await txn.update(model, jsonObj, where: 'id = ?', whereArgs: [id]);
-      }
-    });
+    final canonical = await SyncTrackStore.save(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+    );
+    _applyStoreRow(canonical);
     return id!;
   }
 
@@ -221,67 +186,77 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
     DateTime syncStartTime, [
     String? newRemoteId,
   ]) async {
-    if (action == LabelSyncAction.delete) {
-      await delete();
-      return true;
-    }
-
-    // Re-fetch from database to check current state
-    final current = await getByLocalId(localId);
-    if (current == null) {
-      // Sync track was deleted, nothing to do
-      return true;
-    }
-
-    // Check if the sync track was modified after sync started
-    // This means the label was changed during sync
-    if (current.updatedAt != null &&
-        current.updatedAt!.isAfter(syncStartTime)) {
-      // Label was modified during sync, don't mark as synced
-      // The new changes will be synced in the next cycle
-      return false;
-    }
-
-    status = LabelSyncStatus.synced;
-    remoteId = newRemoteId ?? remoteId;
-    await save();
-    return true;
+    final transition = await SyncTrackStore.markSyncedIfUnchanged(
+      database: AppState.db,
+      table: model,
+      localId: localId,
+      syncStartTime: syncStartTime,
+      expectedUpdatedAt: updatedAt,
+      newRemoteId: newRemoteId,
+    );
+    _applyStoreRow(transition.row);
+    return transition.applied;
   }
 
   Future<void> markSynced([String? newRemoteId]) async {
-    if (action == LabelSyncAction.delete) {
-      await delete();
-      return;
-    }
-
-    status = LabelSyncStatus.synced;
-    remoteId = newRemoteId ?? remoteId;
-    await save();
+    await markSyncedIfUnchanged(updatedAt ?? DateTime.now(), newRemoteId);
   }
 
   Future<void> markFailed() async {
-    status = LabelSyncStatus.failed;
-    await save();
+    final canonical = await SyncTrackStore.markStatusIfUnchanged(
+      database: AppState.db,
+      table: model,
+      localId: localId,
+      expectedUpdatedAt: updatedAt,
+      status: LabelSyncStatus.failed.name,
+    );
+    if (canonical != null) _applyStoreRow(canonical);
   }
 
   Future<void> setAction(LabelSyncAction newAction) async {
-    if (id != null) {
-      final current = await getByLocalId(localId);
-      if (current != null) {
-        if (current.action == LabelSyncAction.delete &&
-            newAction == LabelSyncAction.upload) {
-          return;
-        }
-        action = current.action;
-        remoteId = current.remoteId;
-        status = current.status;
-        createdAt = current.createdAt;
-        updatedAt = current.updatedAt;
-      }
+    final canonical = await SyncTrackStore.setAction(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+      action: newAction.name,
+    );
+    _applyStoreRow(canonical);
+  }
+
+  Future<void> claimRemoteId(String newRemoteId) async {
+    final canonical = await SyncTrackStore.claimRemoteId(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+      expectedRemoteId: remoteId,
+      remoteId: newRemoteId,
+    );
+    _applyStoreRow(canonical);
+  }
+
+  SyncTrackRow _toStoreRow() {
+    return SyncTrackRow(
+      id: id,
+      localId: localId,
+      remoteId: remoteId,
+      action: action.name,
+      status: status.name,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
+
+  void _applyStoreRow(SyncTrackRow? row) {
+    if (row == null) {
+      id = null;
+      return;
     }
-    action = newAction;
-    status = LabelSyncStatus.pending;
-    await save();
+    id = row.id;
+    remoteId = row.remoteId;
+    action = LabelSyncAction.values.byName(row.action);
+    status = LabelSyncStatus.values.byName(row.status);
+    createdAt = row.createdAt;
+    updatedAt = row.updatedAt;
   }
 }
 

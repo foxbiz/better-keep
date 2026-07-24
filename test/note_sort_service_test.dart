@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
@@ -9,6 +11,7 @@ import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:better_keep/state.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -26,6 +29,8 @@ void main() {
     NoteSortService.canReceiveCloudOverride = null;
     NoteSortService.canPushCloudOverride = null;
     NoteSortService.cloudRepositoryOverride = null;
+    NoteSortService.uploadRetryDelayOverride = null;
+    NoteSortService.disposeTimeoutOverride = null;
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     AppState.db = database;
     await Note.createTable(database);
@@ -41,6 +46,8 @@ void main() {
     NoteSortService.canReceiveCloudOverride = null;
     NoteSortService.canPushCloudOverride = null;
     NoteSortService.cloudRepositoryOverride = null;
+    NoteSortService.uploadRetryDelayOverride = null;
+    NoteSortService.disposeTimeoutOverride = null;
     await database.close();
   });
 
@@ -483,6 +490,135 @@ void main() {
     expect(rebased.dirty, isTrue);
   });
 
+  test('remote events are applied in listener delivery order', () async {
+    final firstStarted = Completer<void>();
+    final releaseFirst = Completer<void>();
+    final older = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['older'],
+      revision: 'remote-older',
+      baseRevision: 'remote-older',
+      updatedAt: DateTime.utc(2026, 7, 23),
+      hydrated: true,
+    );
+    final newer = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['newer'],
+      revision: 'remote-newer',
+      baseRevision: 'remote-newer',
+      updatedAt: DateTime.utc(2026, 7, 24),
+      hydrated: true,
+    );
+
+    final first = service.enqueueRemoteDecodeForTesting(1, () async {
+      firstStarted.complete();
+      await releaseFirst.future;
+      return older;
+    });
+    await firstStarted.future;
+    final second = service.enqueueRemoteDecodeForTesting(1, () async => newer);
+
+    releaseFirst.complete();
+    await Future.wait([first, second]);
+
+    expect(service.snapshotFor(grid).revision, 'remote-newer');
+    expect(service.snapshotFor(grid).orderedNoteIds, ['newer']);
+  });
+
+  test('committed drag rebases its move over deferred remote state', () async {
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = false;
+    for (var id = 1; id <= 3; id++) {
+      await _insertNote(
+        database,
+        id: id,
+        updatedAt: DateTime.utc(2026, 7, 25 - id),
+      );
+    }
+    await service.applyRemoteSnapshotForTesting(
+      NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: const ['note-1', 'note-2', 'note-3'],
+        revision: 'drag-base',
+        baseRevision: 'drag-base',
+        updatedAt: DateTime.utc(2026, 7, 23),
+        hydrated: true,
+      ),
+    );
+
+    service.beginDrag(grid);
+    await service.receiveRemoteSnapshotForTesting(
+      NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: const [
+          'note-1',
+          'remote-during-drag',
+          'note-2',
+          'note-3',
+        ],
+        revision: 'drag-remote',
+        baseRevision: 'drag-remote',
+        updatedAt: DateTime.utc(2026, 7, 24),
+        hydrated: true,
+      ),
+    );
+    await service.reorderVisibleNotes(
+      context: grid,
+      draggedId: 3,
+      targetId: 1,
+      placeAfter: false,
+      visibleNotes: await Note.get(NoteType.all),
+    );
+    await service.endDrag(grid, committed: true);
+
+    final rebased = service.snapshotFor(grid);
+    expect(rebased.orderedNoteIds, [
+      'note-3',
+      'note-1',
+      'remote-during-drag',
+      'note-2',
+    ]);
+    expect(rebased.baseRevision, 'drag-remote');
+    expect(rebased.dirty, isTrue);
+  });
+
+  test('cancelled drag applies deferred remote state directly', () async {
+    await service.applyRemoteSnapshotForTesting(
+      NoteOrderSnapshot(
+        context: list,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: const ['before'],
+        revision: 'cancel-base',
+        baseRevision: 'cancel-base',
+        updatedAt: DateTime.utc(2026, 7, 23),
+        hydrated: true,
+      ),
+    );
+
+    service.beginDrag(list);
+    await service.receiveRemoteSnapshotForTesting(
+      NoteOrderSnapshot(
+        context: list,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: const ['after'],
+        revision: 'cancel-remote',
+        baseRevision: 'cancel-remote',
+        updatedAt: DateTime.utc(2026, 7, 24),
+        hydrated: true,
+      ),
+    );
+    await service.endDrag(list, committed: false);
+
+    final applied = service.snapshotFor(list);
+    expect(applied.revision, 'cancel-remote');
+    expect(applied.orderedNoteIds, ['after']);
+    expect(applied.dirty, isFalse);
+  });
+
   test('failed chunk upload is journaled and cleaned safely', () async {
     final cloud = _FakeNoteSortCloudRepository()..failWrites = true;
     NoteSortService.cloudRepositoryOverride = cloud;
@@ -558,6 +694,181 @@ void main() {
     expect(rows.single['revision'], 'orphan-revision');
     expect(rows.single['retry_count'], 1);
     expect(rows.single['next_retry_at'], isNotNull);
+  });
+
+  test('cleanup requested during a drain runs another pass', () async {
+    final deleteStarted = Completer<void>();
+    final releaseDelete = Completer<void>();
+    final cloud = _FakeNoteSortCloudRepository()
+      ..deleteStarted = deleteStarted
+      ..deleteBarrier = releaseDelete;
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    await _insertCleanup(
+      database,
+      contextKey: grid.key,
+      revision: 'cleanup-first',
+      chunkCount: 1,
+    );
+
+    final firstDrain = service.drainCloudCleanupForTesting();
+    await deleteStarted.future;
+    await _insertCleanup(
+      database,
+      contextKey: grid.key,
+      revision: 'cleanup-second',
+      chunkCount: 1,
+    );
+    await service.drainCloudCleanupForTesting();
+
+    releaseDelete.complete();
+    await firstDrain;
+    await _waitUntil(
+      () => cloud.deletedRevisions.toSet().containsAll({
+        'cleanup-first',
+        'cleanup-second',
+      }),
+    );
+
+    expect(cloud.deletedRevisions, ['cleanup-first', 'cleanup-second']);
+    expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
+  });
+
+  test('dirty snapshot retries automatically after upload failure', () async {
+    final cloud = _FakeNoteSortCloudRepository()..failWriteCount = 1;
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = true;
+    NoteSortService.uploadRetryDelayOverride = (_) => Duration.zero;
+    final snapshot = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['retry-note'],
+      revision: 'retry-revision',
+      updatedAt: DateTime.utc(2026, 7, 24),
+      dirty: true,
+      hydrated: true,
+    );
+
+    await service.uploadSnapshotWithRetryForTesting(snapshot);
+    await _waitUntil(
+      () =>
+          cloud.writeCalls >= 2 &&
+          cloud.manifests[grid.key]?['revision'] == 'retry-revision' &&
+          service.snapshotFor(grid).dirty == false,
+    );
+
+    expect(cloud.writeCalls, 2);
+    expect(service.snapshotFor(grid).dirty, isFalse);
+    expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
+  });
+
+  test('conflict recovery failure retries without another mutation', () async {
+    final cloud = _FakeNoteSortCloudRepository()
+      ..conflictCount = 1
+      ..failReadManifestCalls.add(2);
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = true;
+    NoteSortService.uploadRetryDelayOverride = (_) => Duration.zero;
+    final snapshot = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['conflict-note'],
+      revision: 'conflict-retry',
+      baseRevision: 'remote-before-conflict',
+      updatedAt: DateTime.utc(2026, 7, 24),
+      dirty: true,
+      hydrated: true,
+    );
+
+    await service.uploadSnapshotWithRetryForTesting(snapshot);
+    await _waitUntil(
+      () =>
+          cloud.commitCalls >= 2 &&
+          cloud.manifests[grid.key]?['revision'] == 'conflict-retry' &&
+          service.snapshotFor(grid).dirty == false,
+    );
+
+    expect(cloud.commitCalls, 2);
+    expect(service.snapshotFor(grid).dirty, isFalse);
+  });
+
+  test(
+    'authorization failure retains dirty state without retry loop',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository()
+        ..writeError = FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'permission-denied',
+        );
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      NoteSortService.uploadRetryDelayOverride = (_) => Duration.zero;
+      final snapshot = NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: const ['denied-note'],
+        revision: 'denied-revision',
+        updatedAt: DateTime.utc(2026, 7, 24),
+        dirty: true,
+        hydrated: true,
+      );
+
+      await service.uploadSnapshotWithRetryForTesting(snapshot);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(cloud.writeCalls, 1);
+      expect(service.snapshotFor(grid).dirty, isTrue);
+    },
+  );
+
+  test('timed-out upload cannot cross into a new cloud session', () async {
+    final writeStarted = Completer<void>();
+    final releaseWrite = Completer<void>();
+    final oldCloud = _FakeNoteSortCloudRepository()
+      ..writeStarted = writeStarted
+      ..writeBarrier = releaseWrite;
+    NoteSortService.cloudRepositoryOverride = oldCloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.disposeTimeoutOverride = Duration.zero;
+    final snapshot = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['old-user-note'],
+      revision: 'old-user-revision',
+      updatedAt: DateTime.utc(2026, 7, 24),
+      dirty: true,
+      hydrated: true,
+    );
+
+    final oldUpload = service.uploadSnapshotForTesting(snapshot);
+    await writeStarted.future;
+    await service.dispose();
+
+    await database.close();
+    database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    AppState.db = database;
+    await Note.createTable(database);
+    await Label.createTable(database);
+    await NoteSyncTrack.createTable(database);
+    await LabelSyncTrack.createTable(database);
+    await NoteSortService.createTable(database);
+
+    final newCloud = _FakeNoteSortCloudRepository();
+    NoteSortService.cloudRepositoryOverride = newCloud;
+    await service.drainCloudCleanupForTesting();
+
+    releaseWrite.complete();
+    await oldUpload;
+
+    expect(oldCloud.deletedRevisions, ['old-user-revision']);
+    expect(newCloud.writeCalls, 0);
+    expect(newCloud.commitCalls, 0);
+    expect(newCloud.readManifestCalls, 0);
+    expect(newCloud.deletedRevisions, isEmpty);
+    expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
   });
 
   test(
@@ -872,6 +1183,17 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
   bool failWrites = false;
   bool failDeletes = false;
   bool conflictOnCommit = false;
+  int failWriteCount = 0;
+  int conflictCount = 0;
+  int writeCalls = 0;
+  int commitCalls = 0;
+  int readManifestCalls = 0;
+  Object? writeError;
+  Completer<void>? writeStarted;
+  Completer<void>? writeBarrier;
+  Completer<void>? deleteStarted;
+  Completer<void>? deleteBarrier;
+  final Set<int> failReadManifestCalls = {};
 
   @override
   Future<NoteSortCloudCommitResult> commitManifest({
@@ -882,7 +1204,11 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
     required int chunkCount,
     required int noteCount,
   }) async {
-    if (conflictOnCommit) throw const NoteSortRevisionConflict();
+    commitCalls++;
+    if (conflictOnCommit || conflictCount > 0) {
+      if (conflictCount > 0) conflictCount--;
+      throw const NoteSortRevisionConflict();
+    }
     final previous = manifests[contextKey];
     manifests[contextKey] = {
       'schema_version': schemaVersion,
@@ -901,6 +1227,8 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
   @override
   Future<void> deleteRevision(String revision, int chunkCount) async {
     if (failDeletes) throw StateError('delete failed');
+    if (deleteStarted?.isCompleted == false) deleteStarted!.complete();
+    await deleteBarrier?.future;
     deletedRevisions.add(revision);
     chunks.remove(revision);
   }
@@ -915,11 +1243,17 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
 
   @override
   Future<Map<String, dynamic>?> readManifest(String contextKey) async {
+    readManifestCalls++;
+    if (failReadManifestCalls.contains(readManifestCalls)) {
+      throw StateError('manifest read failed');
+    }
     return manifests[contextKey];
   }
 
   @override
   Future<void> writeChunks(String revision, List<List<String>> values) async {
+    writeCalls++;
+    if (writeStarted?.isCompleted == false) writeStarted!.complete();
     chunks[revision] = [
       for (final value in values)
         {
@@ -928,6 +1262,11 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
           'note_ids': value,
         },
     ];
-    if (failWrites) throw StateError('write failed');
+    await writeBarrier?.future;
+    if (writeError != null) throw writeError!;
+    if (failWrites || failWriteCount > 0) {
+      if (failWriteCount > 0) failWriteCount--;
+      throw StateError('write failed');
+    }
   }
 }

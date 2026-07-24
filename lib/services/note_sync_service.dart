@@ -1391,10 +1391,9 @@ class NoteSyncService {
           }
           final newDocRef = _notesCollection.doc(stableId);
           batch.set(newDocRef, noteData);
-          sync.remoteId = newDocRef.id;
           // Save remoteId immediately to prevent duplicates if another sync runs
           // before the batch commits and markSynced is called
-          await sync.save();
+          await sync.claimRemoteId(newDocRef.id);
           postCommitActions.add(() async {
             final wasUnchanged = await sync.markSyncedIfUnchanged(
               capturedSyncStartTime,
@@ -2056,7 +2055,9 @@ class NoteSyncService {
       );
       await syncTrack.save();
     } else {
-      syncTrack.remoteId ??= remoteDocId;
+      if (syncTrack.remoteId != remoteDocId) {
+        await syncTrack.claimRemoteId(remoteDocId);
+      }
       syncTrack.status = SyncStatus.synced;
       syncTrack.action = SyncAction.upload;
       await syncTrack.save();

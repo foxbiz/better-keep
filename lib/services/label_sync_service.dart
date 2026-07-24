@@ -747,8 +747,7 @@ class LabelSyncService {
           }
           final newDocRef = _labelsCollection.doc(stableId);
           batch.set(newDocRef, labelData);
-          sync.remoteId = newDocRef.id;
-          await sync.save();
+          await sync.claimRemoteId(newDocRef.id);
           postCommitActions.add(() async {
             final wasUnchanged = await sync.markSyncedIfUnchanged(
               capturedSyncStartTime,
@@ -1028,7 +1027,9 @@ class LabelSyncService {
         status: LabelSyncStatus.synced,
       );
     } else {
-      syncTrack.remoteId = remoteDocId;
+      if (syncTrack.remoteId != remoteDocId) {
+        await syncTrack.claimRemoteId(remoteDocId);
+      }
       syncTrack.status = LabelSyncStatus.synced;
     }
     await syncTrack.save();
@@ -1045,9 +1046,7 @@ class LabelSyncService {
     LabelSyncTrack? existing = await LabelSyncTrack.getByLocalId(label.id!);
 
     if (existing != null) {
-      existing.status = LabelSyncStatus.pending;
-      existing.action = LabelSyncAction.upload;
-      await existing.save();
+      await existing.setAction(LabelSyncAction.upload);
     } else {
       final syncTrack = LabelSyncTrack(
         localId: label.id!,
@@ -1068,9 +1067,7 @@ class LabelSyncService {
     LabelSyncTrack? existing = await LabelSyncTrack.getByLocalId(labelId);
 
     if (existing != null) {
-      existing.action = LabelSyncAction.delete;
-      existing.status = LabelSyncStatus.pending;
-      await existing.save();
+      await existing.setAction(LabelSyncAction.delete);
     } else {
       final syncTrack = LabelSyncTrack(
         localId: labelId,
