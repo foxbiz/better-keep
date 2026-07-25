@@ -23,16 +23,53 @@ import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/utils/week_days.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 
+@immutable
+class NoteCardReorderConfig {
+  const NoteCardReorderConfig({
+    required this.enabled,
+    required this.dragging,
+    required this.dragLabel,
+    required this.moveBeforeLabel,
+    required this.moveAfterLabel,
+    required this.onLift,
+    required this.onMove,
+    required this.onDrop,
+    required this.onCancel,
+    required this.onMoveBefore,
+    required this.onMoveAfter,
+  });
+
+  final bool enabled;
+  final bool dragging;
+  final String dragLabel;
+  final String moveBeforeLabel;
+  final String moveAfterLabel;
+  final ValueChanged<Offset> onLift;
+  final ValueChanged<Offset> onMove;
+  final ValueChanged<Offset> onDrop;
+  final VoidCallback onCancel;
+  final VoidCallback onMoveBefore;
+  final VoidCallback onMoveAfter;
+}
+
 class NoteCard extends StatefulWidget {
   final Note note;
   final int index;
+  final NoteCardReorderConfig? reorderConfig;
 
-  const NoteCard({super.key, required this.note, required this.index});
+  const NoteCard({
+    super.key,
+    required this.note,
+    required this.index,
+    this.reorderConfig,
+  });
 
   /// Locked-note content is only revealed inside an authenticated editor.
   /// Keeping [unlocked] in this policy interface prevents a future caller from
@@ -376,6 +413,7 @@ class _NoteCardState extends State<NoteCard>
   bool _isSyncingIncoming = false;
   bool _isSyncFailed = false;
   String? _syncStatus;
+  bool _reorderGestureMoved = false;
   final NoteCardBodyCache _bodyCache = NoteCardBodyCache();
   QuillController? get _controller => _bodyCache.controller;
   Timer? _noteReminderExpiration;
@@ -615,17 +653,94 @@ class _NoteCardState extends State<NoteCard>
       }
     }
 
-    return FadeTransition(
-      opacity: _fade,
-      child: SlideTransition(
-        position: _slide,
-        child: GestureDetector(
-          behavior: HitTestBehavior.deferToChild,
-          onTap: _handleTap,
-          onLongPress: _selectionMode ? null : _toggleSelection,
+    final reorderConfig = widget.reorderConfig;
+    final canReorder = reorderConfig?.enabled == true && !_selectionMode;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 140);
+
+    Widget interactiveCard = GestureDetector(
+      behavior: HitTestBehavior.deferToChild,
+      onTap: _handleTap,
+      onLongPress: canReorder || _selectionMode ? null : _toggleSelection,
+      onLongPressStart: canReorder
+          ? (details) {
+              _reorderGestureMoved = false;
+              reorderConfig!.onLift(details.globalPosition);
+            }
+          : null,
+      onLongPressMoveUpdate: canReorder
+          ? (details) {
+              if (!_reorderGestureMoved &&
+                  details.offsetFromOrigin.distance < kTouchSlop) {
+                return;
+              }
+              _reorderGestureMoved = true;
+              reorderConfig!.onMove(details.globalPosition);
+            }
+          : null,
+      onLongPressEnd: canReorder
+          ? (details) {
+              if (_reorderGestureMoved) {
+                reorderConfig!.onDrop(details.globalPosition);
+              } else {
+                reorderConfig!.onCancel();
+                _toggleSelection();
+              }
+              _reorderGestureMoved = false;
+            }
+          : null,
+      onLongPressCancel: canReorder
+          ? () {
+              _reorderGestureMoved = false;
+              reorderConfig!.onCancel();
+            }
+          : null,
+      child: AnimatedScale(
+        scale: reorderConfig?.dragging == true ? 1.02 : 1,
+        duration: motionDuration,
+        curve: Curves.easeOutCubic,
+        child: AnimatedPhysicalModel(
+          duration: motionDuration,
+          curve: Curves.easeOutCubic,
+          shape: BoxShape.rectangle,
+          borderRadius: BorderRadius.circular(12),
+          elevation: reorderConfig?.dragging == true ? 8 : 0,
+          color: Colors.transparent,
+          shadowColor: Colors.black26,
+          clipBehavior: Clip.none,
           child: _buildCard(),
         ),
       ),
+    );
+
+    if (canReorder) {
+      interactiveCard = CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true):
+              reorderConfig!.onMoveBefore,
+          const SingleActivator(LogicalKeyboardKey.arrowDown, alt: true):
+              reorderConfig.onMoveAfter,
+        },
+        child: Focus(
+          canRequestFocus: true,
+          child: Semantics(
+            label: reorderConfig.dragLabel,
+            customSemanticsActions: {
+              CustomSemanticsAction(label: reorderConfig.moveBeforeLabel):
+                  reorderConfig.onMoveBefore,
+              CustomSemanticsAction(label: reorderConfig.moveAfterLabel):
+                  reorderConfig.onMoveAfter,
+            },
+            child: interactiveCard,
+          ),
+        ),
+      );
+    }
+
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(position: _slide, child: interactiveCard),
     );
   }
 

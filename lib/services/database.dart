@@ -6,6 +6,8 @@ import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/services/reminder_action_receipt_service.dart';
+import 'package:better_keep/services/note_sort_service.dart';
+import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -30,6 +32,8 @@ Future<Database> initDatabase() async {
       await FileSyncTrack.createTable(db);
       await LabelSyncTrack.createTable(db);
       await ReminderActionReceiptService.createTable(db);
+      await NoteSortService.createTable(db);
+      await SyncIdentityMigration.migrate(db);
     },
     onUpgrade: (db, oldVersion, newVersion) async {
       await Note.upgradeTable(db, oldVersion, newVersion);
@@ -42,6 +46,10 @@ Future<Database> initDatabase() async {
         oldVersion,
         newVersion,
       );
+      if (oldVersion < 9 && newVersion >= 9) {
+        await SyncIdentityMigration.migrate(db);
+      }
+      await NoteSortService.upgradeTable(db, oldVersion, newVersion);
     },
     version: databaseVersion,
   );

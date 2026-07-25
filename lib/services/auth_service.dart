@@ -13,6 +13,7 @@ import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/reminder_session_service.dart';
 import 'package:better_keep/services/reminder_sign_out_cleanup_service.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
@@ -1354,8 +1355,9 @@ class AuthService {
       await DeviceApprovalNotificationService().init();
       // Initialize sync services after E2EE is ready
       // This prevents Firestore connections before E2EE initialization completes
-      NoteSyncService().init();
+      await NoteSyncService().init();
       LabelSyncService().init();
+      await NoteSortService().startCloudSync();
       // Clear sign-in progress flag on success
       final canUseE2EEStorage =
           !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
@@ -1676,6 +1678,12 @@ class AuthService {
       }
 
       try {
+        await NoteSortService().dispose();
+      } catch (e) {
+        AppLogger.error('Error disposing NoteSortService: $e');
+      }
+
+      try {
         NoteShareService().dispose();
       } catch (e) {
         AppLogger.error('Error disposing NoteShareService: $e');
@@ -1801,6 +1809,7 @@ class AuthService {
       // Reinitialize database after sign out
       await Future.microtask(() {});
       await initDatabase();
+      await NoteSortService().init();
     } catch (e) {
       AppLogger.error('Error signing out', e);
       // Ensure we at least sign out from Firebase even if cleanup fails.
@@ -1818,6 +1827,7 @@ class AuthService {
 
       try {
         await initDatabase();
+        await NoteSortService().init();
       } catch (dbError) {
         AppLogger.error(
           'Error reinitializing database after fallback signout: $dbError',

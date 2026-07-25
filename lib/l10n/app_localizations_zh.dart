@@ -2963,4 +2963,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get rateOnMicrosoftStore => '在 Microsoft Store 上评分';
+
+  @override
+  String get sortBy => '排序方式';
+
+  @override
+  String get sortCustom => '自定义';
+
+  @override
+  String get sortCreatedNewest => '创建日期';
+
+  @override
+  String get sortUpdatedNewest => '更新日期';
+
+  @override
+  String get dragToReorder => '长按以重新排序';
+
+  @override
+  String get moveNoteBefore => '将笔记移到前面';
+
+  @override
+  String get moveNoteAfter => '将笔记移到后面';
+
+  @override
+  String get pinnedReorderBoundary => '置顶和未置顶笔记需分别排序。';
+
+  @override
+  String get reorderSaveFailed => '无法保存新的笔记顺序，已恢复之前的顺序。';
+
+  @override
+  String get noteDisplayOptions => '笔记显示选项';
+
+  @override
+  String get noteDisplayOptionsSaveFailed => '无法保存笔记显示选项。请重试。';
+
+  @override
+  String get noteDisplayOptionsSaved => '已保存笔记显示选项';
+
+  @override
+  String get reorderCustomHint => '长按笔记，然后拖动以重新排列。';
+
+  @override
+  String get reorderDateSortHint => '按日期排序时无法手动重新排列。请选择“自定义”以重新排列笔记。';
 }

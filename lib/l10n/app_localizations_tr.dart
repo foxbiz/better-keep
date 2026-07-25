@@ -3109,4 +3109,52 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get rateOnMicrosoftStore => 'Microsoft Store\'da Değerlendir';
+
+  @override
+  String get sortBy => 'Sıralama ölçütü';
+
+  @override
+  String get sortCustom => 'Özel';
+
+  @override
+  String get sortCreatedNewest => 'Oluşturma tarihi';
+
+  @override
+  String get sortUpdatedNewest => 'Güncelleme tarihi';
+
+  @override
+  String get dragToReorder => 'Yeniden sıralamak için basılı tutun';
+
+  @override
+  String get moveNoteBefore => 'Notu önceye taşı';
+
+  @override
+  String get moveNoteAfter => 'Notu sonraya taşı';
+
+  @override
+  String get pinnedReorderBoundary =>
+      'Sabitlenmiş ve sabitlenmemiş notlar ayrı ayrı düzenlenir.';
+
+  @override
+  String get reorderSaveFailed =>
+      'Yeni not sırası kaydedilemedi. Önceki sıra geri yüklendi.';
+
+  @override
+  String get noteDisplayOptions => 'Not görüntüleme seçenekleri';
+
+  @override
+  String get noteDisplayOptionsSaveFailed =>
+      'Not görüntüleme seçenekleri kaydedilemedi. Tekrar deneyin.';
+
+  @override
+  String get noteDisplayOptionsSaved =>
+      'Not görüntüleme seçenekleri kaydedildi';
+
+  @override
+  String get reorderCustomHint =>
+      'Bir nota basılı tutun, ardından yeniden düzenlemek için sürükleyin.';
+
+  @override
+  String get reorderDateSortHint =>
+      'Tarihe göre sıralarken elle yeniden düzenleme kullanılamaz. Notları yeniden düzenlemek için Özel\'i seçin.';
 }

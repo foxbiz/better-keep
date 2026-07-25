@@ -1,5 +1,6 @@
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/services/sync_track_store.dart';
 import 'package:sqflite/sqflite.dart';
 
 enum LabelSyncAction { upload, delete }
@@ -150,21 +151,12 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
   }
 
   Future<int> save() async {
-    var jsonObj = toJson();
-    jsonObj['updated_at'] = DateTime.now().toIso8601String();
-
-    if (id != null) {
-      await AppState.db.update(
-        model,
-        jsonObj,
-        where: "id = ?",
-        whereArgs: [id],
-      );
-      return id!;
-    }
-
-    jsonObj['created_at'] = DateTime.now().toIso8601String();
-    id = await AppState.db.insert(model, jsonObj);
+    final canonical = await SyncTrackStore.save(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+    );
+    _applyStoreRow(canonical);
     return id!;
   }
 
@@ -194,60 +186,84 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
     DateTime syncStartTime, [
     String? newRemoteId,
   ]) async {
-    if (action == LabelSyncAction.delete) {
-      await delete();
-      return true;
-    }
-
-    // Re-fetch from database to check current state
-    final current = await getByLocalId(localId);
-    if (current == null) {
-      // Sync track was deleted, nothing to do
-      return true;
-    }
-
-    // Check if the sync track was modified after sync started
-    // This means the label was changed during sync
-    if (current.updatedAt != null &&
-        current.updatedAt!.isAfter(syncStartTime)) {
-      // Label was modified during sync, don't mark as synced
-      // The new changes will be synced in the next cycle
-      return false;
-    }
-
-    status = LabelSyncStatus.synced;
-    remoteId = newRemoteId ?? remoteId;
-    await save();
-    return true;
+    final transition = await SyncTrackStore.markSyncedIfUnchanged(
+      database: AppState.db,
+      table: model,
+      localId: localId,
+      syncStartTime: syncStartTime,
+      expectedUpdatedAt: updatedAt,
+      newRemoteId: newRemoteId,
+    );
+    _applyStoreRow(transition.row);
+    return transition.applied;
   }
 
   Future<void> markSynced([String? newRemoteId]) async {
-    if (action == LabelSyncAction.delete) {
-      await delete();
-      return;
-    }
-
-    status = LabelSyncStatus.synced;
-    remoteId = newRemoteId ?? remoteId;
-    await save();
+    await markSyncedIfUnchanged(updatedAt ?? DateTime.now(), newRemoteId);
   }
 
   Future<void> markFailed() async {
-    status = LabelSyncStatus.failed;
-    await save();
+    final canonical = await SyncTrackStore.markStatusIfUnchanged(
+      database: AppState.db,
+      table: model,
+      localId: localId,
+      expectedUpdatedAt: updatedAt,
+      status: LabelSyncStatus.failed.name,
+    );
+    if (canonical != null) _applyStoreRow(canonical);
   }
 
   Future<void> setAction(LabelSyncAction newAction) async {
-    action = newAction;
-    status = LabelSyncStatus.pending;
-    await save();
+    final canonical = await SyncTrackStore.setAction(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+      action: newAction.name,
+    );
+    _applyStoreRow(canonical);
+  }
+
+  Future<void> claimRemoteId(String newRemoteId) async {
+    final canonical = await SyncTrackStore.claimRemoteId(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+      expectedRemoteId: remoteId,
+      remoteId: newRemoteId,
+    );
+    _applyStoreRow(canonical);
+  }
+
+  SyncTrackRow _toStoreRow() {
+    return SyncTrackRow(
+      id: id,
+      localId: localId,
+      remoteId: remoteId,
+      action: action.name,
+      status: status.name,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
+
+  void _applyStoreRow(SyncTrackRow? row) {
+    if (row == null) {
+      id = null;
+      return;
+    }
+    id = row.id;
+    remoteId = row.remoteId;
+    action = LabelSyncAction.values.byName(row.action);
+    status = LabelSyncStatus.values.byName(row.status);
+    createdAt = row.createdAt;
+    updatedAt = row.updatedAt;
   }
 }
 
 class _LabelSyncTrackSchema implements ModelSchema<LabelSyncTrack> {
   @override
-  Future<void> createTable(Database db) {
-    return db.execute("""
+  Future<void> createTable(Database db) async {
+    await db.execute("""
       CREATE TABLE IF NOT EXISTS label_sync_track (
         id INTEGER PRIMARY KEY,
         remote_id TEXT,
@@ -258,6 +274,14 @@ class _LabelSyncTrackSchema implements ModelSchema<LabelSyncTrack> {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     """);
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_label_sync_track_local_id '
+      'ON label_sync_track(local_id)',
+    );
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_label_sync_track_remote_id '
+      'ON label_sync_track(remote_id) WHERE remote_id IS NOT NULL',
+    );
   }
 
   @override

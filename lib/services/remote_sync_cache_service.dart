@@ -137,11 +137,14 @@ class RemoteSyncCacheService {
   DateTime? get lastSyncedAt => _metadata?.lastSyncedAt;
 
   /// Update a sync entry in the cache
-  Future<void> updateSync(int localId, PendingRemoteSync updatedSync) async {
+  Future<void> updateSync(
+    String remoteDocId,
+    PendingRemoteSync updatedSync,
+  ) async {
     // Find which page contains this sync
     for (final entry in _pages.entries) {
-      if (entry.value.syncs.containsKey(localId)) {
-        entry.value.syncs[localId] = updatedSync;
+      if (entry.value.syncs.containsKey(remoteDocId)) {
+        entry.value.syncs[remoteDocId] = updatedSync;
         await _savePage(entry.value);
         break;
       }
@@ -151,10 +154,10 @@ class RemoteSyncCacheService {
   }
 
   /// Mark a sync as completed and remove it from the cache
-  Future<void> markCompleted(int localId) async {
+  Future<void> markCompleted(String remoteDocId) async {
     for (final entry in _pages.entries) {
-      if (entry.value.syncs.containsKey(localId)) {
-        entry.value.syncs.remove(localId);
+      if (entry.value.syncs.containsKey(remoteDocId)) {
+        entry.value.syncs.remove(remoteDocId);
 
         // If page is now empty, delete the page file
         if (entry.value.syncs.isEmpty) {
@@ -201,11 +204,11 @@ class RemoteSyncCacheService {
   }
 
   /// Mark a sync as failed
-  Future<void> markFailed(int localId, String error) async {
+  Future<void> markFailed(String remoteDocId, String error) async {
     for (final entry in _pages.entries) {
-      if (entry.value.syncs.containsKey(localId)) {
-        final sync = entry.value.syncs[localId]!;
-        entry.value.syncs[localId] = sync.copyWith(
+      if (entry.value.syncs.containsKey(remoteDocId)) {
+        final sync = entry.value.syncs[remoteDocId]!;
+        entry.value.syncs[remoteDocId] = sync.copyWith(
           status: PendingRemoteSyncStatus.failed,
           retryCount: sync.retryCount + 1,
           lastError: error,
@@ -221,25 +224,24 @@ class RemoteSyncCacheService {
   /// Update a sync entry with new remote data (from real-time listener)
   /// Returns true if the sync was found and updated
   Future<bool> updateRemoteData(
-    int localId,
-    Map<String, dynamic> newRemoteData,
     String remoteDocId,
+    Map<String, dynamic> newRemoteData,
   ) async {
     for (final entry in _pages.entries) {
-      if (entry.value.syncs.containsKey(localId)) {
-        final existingSync = entry.value.syncs[localId]!;
+      if (entry.value.syncs.containsKey(remoteDocId)) {
+        final existingSync = entry.value.syncs[remoteDocId]!;
 
         // If currently in progress, mark it to be re-synced after completion
         if (existingSync.status == PendingRemoteSyncStatus.inProgress) {
           // Update the data but keep status as inProgress
           // The sync logic should check if data changed and re-sync if needed
-          entry.value.syncs[localId] = existingSync.copyWith(
+          entry.value.syncs[remoteDocId] = existingSync.copyWith(
             remoteData: newRemoteData,
           );
         } else {
           // Reset to pending with new data
-          entry.value.syncs[localId] = PendingRemoteSync(
-            localId: localId,
+          entry.value.syncs[remoteDocId] = PendingRemoteSync(
+            localId: existingSync.localId,
             remoteDocId: remoteDocId,
             remoteData: newRemoteData,
             fetchedAt: DateTime.now(),
@@ -252,28 +254,29 @@ class RemoteSyncCacheService {
         _metadata?.updatedAt = DateTime.now();
         await _saveMetadata();
 
-        AppLogger.log("[SYNC] CACHE: Updated remote data for note $localId");
+        AppLogger.log(
+          "[SYNC] CACHE: Updated remote data for note $remoteDocId",
+        );
         return true;
       }
     }
     return false;
   }
 
-  /// Get a sync entry by local ID
-  PendingRemoteSync? getSync(int localId) {
+  /// Get a sync entry by stable Firestore document ID.
+  PendingRemoteSync? getSync(String remoteDocId) {
     for (final page in _pages.values) {
-      if (page.syncs.containsKey(localId)) {
-        return page.syncs[localId];
+      if (page.syncs.containsKey(remoteDocId)) {
+        return page.syncs[remoteDocId];
       }
     }
     return null;
   }
 
   /// Get all pending syncs (status is pending or failed)
-  /// Deduplicates by local_id, keeping only the most recent version per note
+  /// Deduplicates by stable remote ID, keeping the newest version per note.
   List<PendingRemoteSync> getPendingSyncs() {
-    // Use a Map to deduplicate by local_id, keeping the most recent version
-    final Map<int, PendingRemoteSync> deduped = {};
+    final Map<String, PendingRemoteSync> deduped = {};
     int totalBeforeDedup = 0;
 
     for (final page in _pages.values) {
@@ -281,9 +284,9 @@ class RemoteSyncCacheService {
         if (sync.status == PendingRemoteSyncStatus.pending ||
             sync.status == PendingRemoteSyncStatus.failed) {
           totalBeforeDedup++;
-          final existing = deduped[sync.localId];
+          final existing = deduped[sync.remoteDocId];
           if (existing == null) {
-            deduped[sync.localId] = sync;
+            deduped[sync.remoteDocId] = sync;
           } else {
             // Keep the one with the more recent updated_at timestamp
             final existingUpdatedAt = existing.remoteData['updated_at'];
@@ -293,11 +296,11 @@ class RemoteSyncCacheService {
               final existingTime = DateTime.parse(existingUpdatedAt as String);
               final syncTime = DateTime.parse(syncUpdatedAt as String);
               if (syncTime.isAfter(existingTime)) {
-                deduped[sync.localId] = sync;
+                deduped[sync.remoteDocId] = sync;
               }
             } else if (syncUpdatedAt != null) {
               // Prefer the one with a timestamp
-              deduped[sync.localId] = sync;
+              deduped[sync.remoteDocId] = sync;
             }
           }
         }

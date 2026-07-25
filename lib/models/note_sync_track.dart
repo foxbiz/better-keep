@@ -1,5 +1,6 @@
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/services/sync_track_store.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -33,8 +34,12 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
       id: obj['id'],
       localId: obj['local_id'],
       remoteId: obj['remote_id'],
-      createdAt: DateTime.parse(obj['created_at']),
-      updatedAt: DateTime.parse(obj['updated_at']),
+      createdAt: obj['created_at'] == null
+          ? null
+          : DateTime.tryParse(obj['created_at'].toString()),
+      updatedAt: obj['updated_at'] == null
+          ? null
+          : DateTime.tryParse(obj['updated_at'].toString()),
       action: SyncAction.values.byName(obj['action']),
       status: SyncStatus.values.byName(obj['status']),
     );
@@ -147,21 +152,12 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
   }
 
   Future<int> save() async {
-    var jsonObj = toJson();
-    jsonObj['updated_at'] = DateTime.now().toIso8601String();
-
-    if (id != null) {
-      await AppState.db.update(
-        model,
-        jsonObj,
-        where: "id = ?",
-        whereArgs: [id],
-      );
-      return id!;
-    }
-
-    jsonObj['created_at'] = DateTime.now().toIso8601String();
-    id = await AppState.db.insert(model, jsonObj);
+    final canonical = await SyncTrackStore.save(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+    );
+    _applyStoreRow(canonical);
     return id!;
   }
 
@@ -194,82 +190,84 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
     DateTime syncStartTime, [
     String? newRemoteId,
   ]) async {
-    if (action == SyncAction.delete) {
-      await delete();
-      return true;
-    }
-
-    // Re-fetch from database to check current state
-    final current = await getByLocalId(localId);
-    if (current == null) {
-      // Sync track was deleted, nothing to do
-      return true;
-    }
-
-    // Check if the sync track was modified after sync started
-    // This means the note was changed during sync
-    if (current.updatedAt != null &&
-        current.updatedAt!.isAfter(syncStartTime)) {
-      // Note was modified during sync, don't mark as synced
-      // The new changes will be synced in the next cycle
-      return false;
-    }
-
-    status = SyncStatus.synced;
-    remoteId = newRemoteId ?? remoteId;
-    await save();
-    return true;
+    final transition = await SyncTrackStore.markSyncedIfUnchanged(
+      database: AppState.db,
+      table: model,
+      localId: localId,
+      syncStartTime: syncStartTime,
+      expectedUpdatedAt: updatedAt,
+      newRemoteId: newRemoteId,
+    );
+    _applyStoreRow(transition.row);
+    return transition.applied;
   }
 
   Future<void> markSynced([String? newRemoteId]) async {
-    if (action == SyncAction.delete) {
-      await delete();
-      return;
-    }
-
-    status = SyncStatus.synced;
-    remoteId = newRemoteId ?? remoteId;
-    await save();
+    await markSyncedIfUnchanged(updatedAt ?? DateTime.now(), newRemoteId);
   }
 
   Future<void> markFailed() async {
-    status = SyncStatus.failed;
-    await save();
+    final canonical = await SyncTrackStore.markStatusIfUnchanged(
+      database: AppState.db,
+      table: model,
+      localId: localId,
+      expectedUpdatedAt: updatedAt,
+      status: SyncStatus.failed.name,
+    );
+    if (canonical != null) _applyStoreRow(canonical);
   }
 
   Future<void> setAction(SyncAction newAction) async {
-    // Re-read current state from DB to handle race conditions.
-    // This can happen when notes are trashed and deleted quickly - both
-    // notify("updated") and notify("deleted") may run concurrently with
-    // different in-memory objects.
-    if (id != null) {
-      final current = await getByLocalId(localId);
-      if (current != null) {
-        // Prevent downgrading from delete to upload.
-        // Once a note is marked for deletion, it should stay that way.
-        if (current.action == SyncAction.delete &&
-            newAction == SyncAction.upload) {
-          return;
-        }
-        // Update our local state to match DB (preserves remoteId etc.)
-        action = current.action;
-        remoteId = current.remoteId;
-        status = current.status;
-        createdAt = current.createdAt;
-        updatedAt = current.updatedAt;
-      }
-    }
+    final canonical = await SyncTrackStore.setAction(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+      action: newAction.name,
+    );
+    _applyStoreRow(canonical);
+  }
 
-    action = newAction;
-    status = SyncStatus.pending;
-    await save();
+  Future<void> claimRemoteId(String newRemoteId) async {
+    final canonical = await SyncTrackStore.claimRemoteId(
+      database: AppState.db,
+      table: model,
+      incoming: _toStoreRow(),
+      expectedRemoteId: remoteId,
+      remoteId: newRemoteId,
+    );
+    _applyStoreRow(canonical);
+  }
+
+  SyncTrackRow _toStoreRow() {
+    return SyncTrackRow(
+      id: id,
+      localId: localId,
+      remoteId: remoteId,
+      action: action.name,
+      status: status.name,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
+
+  void _applyStoreRow(SyncTrackRow? row) {
+    if (row == null) {
+      id = null;
+      return;
+    }
+    id = row.id;
+    remoteId = row.remoteId;
+    action = SyncAction.values.byName(row.action);
+    status = SyncStatus.values.byName(row.status);
+    createdAt = row.createdAt;
+    updatedAt = row.updatedAt;
   }
 }
 
 class _SyncTrackSchema implements ModelSchema<NoteSyncTrack> {
   @override
-  Future<void> createTable(Database db) {
-    return db.execute("""
+  Future<void> createTable(Database db) async {
+    await db.execute("""
       CREATE TABLE IF NOT EXISTS sync_track (
         id INTEGER PRIMARY KEY,
         remote_id TEXT,
@@ -280,6 +278,14 @@ class _SyncTrackSchema implements ModelSchema<NoteSyncTrack> {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     """);
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_track_local_id '
+      'ON sync_track(local_id)',
+    );
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_track_remote_id '
+      'ON sync_track(remote_id) WHERE remote_id IS NOT NULL',
+    );
   }
 
   @override

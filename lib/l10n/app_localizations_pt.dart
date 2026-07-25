@@ -3136,4 +3136,51 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get rateOnMicrosoftStore => 'Avaliar na Microsoft Store';
+
+  @override
+  String get sortBy => 'Ordenar por';
+
+  @override
+  String get sortCustom => 'Personalizado';
+
+  @override
+  String get sortCreatedNewest => 'Data de criação';
+
+  @override
+  String get sortUpdatedNewest => 'Data de atualização';
+
+  @override
+  String get dragToReorder => 'Pressione e segure para reordenar';
+
+  @override
+  String get moveNoteBefore => 'Mover nota para antes';
+
+  @override
+  String get moveNoteAfter => 'Mover nota para depois';
+
+  @override
+  String get pinnedReorderBoundary =>
+      'As notas fixadas e não fixadas são organizadas separadamente.';
+
+  @override
+  String get reorderSaveFailed =>
+      'Não foi possível salvar a nova ordem das notas. A ordem anterior foi restaurada.';
+
+  @override
+  String get noteDisplayOptions => 'Opções de exibição das notas';
+
+  @override
+  String get noteDisplayOptionsSaveFailed =>
+      'Não foi possível salvar as opções de exibição das notas. Tente novamente.';
+
+  @override
+  String get noteDisplayOptionsSaved => 'Opções de exibição das notas salvas';
+
+  @override
+  String get reorderCustomHint =>
+      'Pressione e segure uma nota e arraste-a para reorganizar.';
+
+  @override
+  String get reorderDateSortHint =>
+      'A reorganização manual não está disponível ao ordenar por data. Escolha Personalizado para reorganizar as notas.';
 }

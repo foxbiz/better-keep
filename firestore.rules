@@ -4,7 +4,9 @@ service cloud.firestore {
     // Helper function to check if user has an active Pro subscription
     // Uses custom claims set by Cloud Functions when subscription is verified
     function isPro() {
-      return request.auth.token.plan == 'pro' 
+      return request.auth != null
+        && request.auth.token.keys().hasAll(['plan', 'planExpiresAt'])
+        && request.auth.token.plan == 'pro'
         && request.auth.token.planExpiresAt != null
         && request.auth.token.planExpiresAt > request.time.toMillis();
     }
@@ -21,6 +23,93 @@ service cloud.firestore {
     function hasValidAttachmentCount() {
       let attachments = request.resource.data.attachments;
       return !('attachments' in request.resource.data) || attachments == null || attachments.size() <= 50;
+    }
+
+    function hasValidNoteSortManifest() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'schema_version',
+          'sort_mode',
+          'revision',
+          'chunk_count',
+          'note_count',
+          'updated_at'
+        ])
+        && data.schema_version == 1
+        && data.sort_mode in ['custom', 'createdNewest', 'updatedNewest']
+        && data.revision is string
+        && data.revision.size() > 0
+        && data.revision.size() <= 64
+        && data.chunk_count is int
+        && data.chunk_count >= 0
+        && data.chunk_count <= 500
+        && data.note_count is int
+        && data.note_count >= 0
+        && data.note_count <= 1000000
+        && (
+          (data.chunk_count == 0 && data.note_count == 0)
+          || (
+            data.chunk_count > 0
+            && data.note_count > (data.chunk_count - 1) * 2000
+            && data.note_count <= data.chunk_count * 2000
+          )
+        )
+        && data.updated_at is timestamp;
+    }
+
+    function hasValidNoteOrderChunk(revision) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['schema_version', 'revision', 'note_ids'])
+        && data.schema_version == 1
+        && data.revision == revision
+        && data.note_ids is list
+        && data.note_ids.size() <= 2000;
+    }
+
+    function hasValidContextOrderManifest(contextId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'schema_version',
+          'context_key',
+          'sort_mode',
+          'revision',
+          'chunk_count',
+          'note_count',
+          'updated_at'
+        ])
+        && data.schema_version == 2
+        && data.context_key == contextId
+        && data.context_key is string
+        && data.context_key.size() > 0
+        && data.context_key.size() <= 512
+        && data.sort_mode in ['custom', 'createdNewest', 'updatedNewest']
+        && data.revision is string
+        && data.revision.size() > 0
+        && data.revision.size() <= 64
+        && data.chunk_count is int
+        && data.chunk_count >= 0
+        && data.chunk_count <= 500
+        && data.note_count is int
+        && data.note_count >= 0
+        && data.note_count <= 1000000
+        && (
+          (data.chunk_count == 0 && data.note_count == 0)
+          || (
+            data.chunk_count > 0
+            && data.note_count > (data.chunk_count - 1) * 2000
+            && data.note_count <= data.chunk_count * 2000
+          )
+        )
+        && data.updated_at is timestamp;
+    }
+
+    function hasValidContextOrderChunk(revision) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['schema_version', 'revision', 'note_ids'])
+        && data.schema_version == 2
+        && data.revision == revision
+        && data.note_ids is list
+        && data.note_ids.size() <= 2000;
     }
 
     // Match any document in the 'users' collection
@@ -59,6 +148,50 @@ service cloud.firestore {
           && (isPro() || resource != null);
       }
 
+      match /preferences/{preferenceId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && isPro()
+          && preferenceId == 'note_sort'
+          && hasValidNoteSortManifest();
+        allow delete: if request.auth != null
+          && request.auth.uid == userId
+          && preferenceId == 'note_sort';
+      }
+
+      match /note_order_snapshots/{revision}/chunks/{chunkId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && isPro()
+          && hasValidNoteOrderChunk(revision);
+        allow delete: if request.auth != null
+          && request.auth.uid == userId
+          && (isPro() || resource != null);
+      }
+
+      match /note_order_contexts/{contextId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && isPro()
+          && hasValidContextOrderManifest(contextId);
+        allow delete: if request.auth != null
+          && request.auth.uid == userId
+          && (isPro() || resource != null);
+      }
+
+      match /note_order_context_snapshots/{revision}/chunks/{chunkId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && isPro()
+          && hasValidContextOrderChunk(revision);
+        allow delete: if request.auth != null
+          && request.auth.uid == userId;
+      }
+
       // Subscription subcollection - read only for owner, write only by Cloud Functions
       match /subscription/{document=**} {
         allow read: if request.auth != null && request.auth.uid == userId;
@@ -71,7 +204,15 @@ service cloud.firestore {
         // Exclude notes, labels, and subscription which have specific rules above
         allow read, write: if request.auth != null 
           && request.auth.uid == userId
-          && !(subcollection in ['notes', 'labels', 'subscription']);
+          && !(subcollection in [
+            'notes',
+            'labels',
+            'subscription',
+            'preferences',
+            'note_order_snapshots',
+            'note_order_contexts',
+            'note_order_context_snapshots'
+          ]);
       }
     }
 

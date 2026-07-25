@@ -2,11 +2,18 @@ import 'package:sqflite/sqflite.dart';
 
 typedef ModelListener<T> = void Function(ModelEvent<T>);
 
+enum ModelChangeOrigin { local, remoteSync, migration }
+
 class ModelEvent<T> {
   final String event;
   final T payload;
+  final ModelChangeOrigin origin;
 
-  const ModelEvent(this.event, this.payload);
+  const ModelEvent(
+    this.event,
+    this.payload, {
+    this.origin = ModelChangeOrigin.local,
+  });
 }
 
 class _ModelEmitter<T> {
@@ -21,10 +28,14 @@ class _ModelEmitter<T> {
     return _listeners.putIfAbsent(event, () => <ModelListener<T>>[]);
   }
 
-  void emit(String event, T payload) {
+  void emit(
+    String event,
+    T payload, {
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  }) {
     final eventListeners = List<ModelListener<T>>.from(_ensure(event));
     final changedListeners = List<ModelListener<T>>.from(_ensure("changed"));
-    final modelEvent = ModelEvent<T>(event, payload);
+    final modelEvent = ModelEvent<T>(event, payload, origin: origin);
 
     for (final listener in eventListeners) {
       listener(modelEvent);
@@ -100,7 +111,11 @@ abstract class BaseModel<T extends BaseModel<T>> {
   }
 
   void notify(String event) async {
-    BaseModel._emitterFor<T>().emit(event, this as T);
+    notifyWithOrigin(event, ModelChangeOrigin.local);
+  }
+
+  void notifyWithOrigin(String event, ModelChangeOrigin origin) {
+    BaseModel._emitterFor<T>().emit(event, this as T, origin: origin);
   }
 
   static void on<T>(String event, ModelListener<T> callback) {

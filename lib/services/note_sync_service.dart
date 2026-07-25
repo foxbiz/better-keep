@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/models/file_sync_track.dart';
+import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/reminder_sync_codec.dart';
 import 'package:better_keep/models/sketch.dart';
@@ -16,6 +17,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/note_encryption.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/initial_hydration_gate.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/remote_sync_cache_service.dart';
@@ -80,6 +82,10 @@ class NoteSyncService {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   StreamSubscription<User?>? _userStreamSubscription;
   bool _initialized = false;
+  final InitialHydrationGate _initialHydration = InitialHydrationGate();
+  final HydrationRetryController _listenerRetry = HydrationRetryController();
+
+  Future<void> get initialHydration => _initialHydration.ready;
 
   /// Track last known E2EE status to detect transitions
   E2EEStatus? _lastKnownE2EEStatus;
@@ -369,8 +375,7 @@ class NoteSyncService {
 
         for (final doc in querySnapshot.docs) {
           final remoteData = doc.data();
-          final localId = remoteData['local_id'] as int;
-          final cachedSync = _syncCache.getSync(localId);
+          final cachedSync = _syncCache.getSync(doc.id);
 
           if (cachedSync == null) continue;
 
@@ -380,18 +385,16 @@ class NoteSyncService {
 
           if (cachedUpdatedAt != remoteUpdatedAt) {
             // Remote has newer data, update cache
-            await _syncCache.updateRemoteData(localId, remoteData, doc.id);
+            await _syncCache.updateRemoteData(doc.id, remoteData);
             updatedCount++;
             AppLogger.log(
-              "[SYNC] REFRESH: Note $localId updated (cached: $cachedUpdatedAt -> remote: $remoteUpdatedAt)",
+              "[SYNC] REFRESH: Note ${doc.id} updated (cached: $cachedUpdatedAt -> remote: $remoteUpdatedAt)",
             );
           }
         }
 
         // Check for deleted notes (docs that no longer exist)
-        final fetchedIds = querySnapshot.docs
-            .map((d) => d.data()['local_id'] as int)
-            .toSet();
+        final fetchedIds = querySnapshot.docs.map((doc) => doc.id).toSet();
 
         for (final docId in batch) {
           final cachedSync = pendingSyncs.cast<PendingRemoteSync?>().firstWhere(
@@ -402,16 +405,15 @@ class NoteSyncService {
           // Skip if no matching sync found in cache
           if (cachedSync == null) continue;
 
-          if (!fetchedIds.contains(cachedSync.localId)) {
+          if (!fetchedIds.contains(cachedSync.remoteDocId)) {
             // Note was deleted on remote, mark cache entry as deleted
             final updatedData = Map<String, dynamic>.from(
               cachedSync.remoteData,
             );
             updatedData['deleted'] = true;
             await _syncCache.updateRemoteData(
-              cachedSync.localId,
-              updatedData,
               cachedSync.remoteDocId,
+              updatedData,
             );
             deletedCount++;
             AppLogger.log(
@@ -593,7 +595,7 @@ class NoteSyncService {
 
   /// Start listening for real-time updates from Firebase
   void _startRemoteListener() {
-    _stopRemoteListener();
+    _stopRemoteListener(cancelRetry: false);
     if (currentUser == null) return;
 
     // Don't listen for remote changes if we can't decrypt them
@@ -613,189 +615,291 @@ class NoteSyncService {
     }
     // Note: On first sync, we filter out deleted notes client-side because
     // Firestore's isNotEqualTo doesn't match documents without the field.
+    final hydrationGeneration = _initialHydration.startAttempt();
 
-    _remoteListener = query.snapshots().listen(
-      (snapshot) async {
-        if (snapshot.docChanges.isEmpty) return;
-
-        // Filter only modified/added documents (not from local changes)
-        final changes = snapshot.docChanges.where(
-          (change) =>
-              change.type == DocumentChangeType.modified ||
-              change.type == DocumentChangeType.added,
-        );
-
-        if (changes.isEmpty) return;
-
-        AppLogger.log(
-          "[SYNC] REALTIME: Received ${changes.length} remote changes",
-        );
-
-        // Track processed note IDs to avoid duplicates in this batch
-        final Set<int> processedIds = {};
-        bool allSyncsSucceeded = true;
-        int syncedCount = 0;
-        int skippedCount = 0;
-
-        for (final change in changes) {
-          final remoteData = change.doc.data();
-          if (remoteData == null) {
-            AppLogger.log("[SYNC] REALTIME: Remote data is null, skipping");
-            skippedCount++;
-            continue;
-          }
-
-          final localId = remoteData['local_id'] as int;
-          final remoteDocId = change.doc.id;
-
-          // Skip if already processed in this batch
-          if (processedIds.contains(localId)) {
-            AppLogger.log(
-              "[SYNC] REALTIME: Note $localId already processed in this batch, skipping",
+    _remoteListener = query
+        .snapshots(includeMetadataChanges: true)
+        .listen(
+          (snapshot) async {
+            _initialHydration.beginWork(
+              hydrationGeneration,
+              isFromCache: snapshot.metadata.isFromCache,
             );
-            skippedCount++;
-            continue;
-          }
-          processedIds.add(localId);
-
-          // Skip if this note is currently being synced (by pull sync or another realtime event)
-          if (syncingIncoming.value.contains(localId)) {
-            AppLogger.log(
-              "[SYNC] REALTIME: Note $localId is already being synced, skipping",
-            );
-            skippedCount++;
-            continue;
-          }
-
-          // Check if this note is in the pending sync cache
-          // If so, update the cache with the new data
-          final wasInCache = await _syncCache.updateRemoteData(
-            localId,
-            remoteData,
-            remoteDocId,
-          );
-          if (wasInCache) {
-            AppLogger.log(
-              "[SYNC] REALTIME: Note $localId updated in cache, will process later",
-            );
-            skippedCount++;
-            // Don't process it now - it will be processed when the cache is processed
-            // But if it's currently in progress, it will be re-synced
-            continue;
-          }
-
-          // Check if this is a deleted note
-          final isDeleted =
-              remoteData['deleted'] == true || remoteData['deleted'] == 1;
-
-          // On first sync, skip deleted notes - there's no point in processing
-          // thousands of deleted notes when we're starting fresh.
-          // Check live state (not captured at listener start) because lastSynced
-          // is updated during the first sync while this listener keeps running.
-          if (AppState.lastSynced == null && isDeleted) {
-            skippedCount++;
-            continue;
-          }
-
-          if (isDeleted) {
-            AppLogger.log(
-              "[SYNC] REALTIME: Note $localId deleted, handling deletion",
-            );
-            _addSyncingIncoming(localId);
+            var hydrationFailed = false;
             try {
-              await _handleRemoteDeletedNote(localId);
-              syncedCount++;
-            } finally {
-              _removeSyncingIncoming(localId);
-            }
-            continue;
-          }
+              if (snapshot.docChanges.isEmpty) return;
 
-          // Check if there's a pending sync for this note - don't overwrite local changes
-          final pendingSync = await NoteSyncTrack.getByLocalId(localId);
-          if (pendingSync != null &&
-              (pendingSync.status == SyncStatus.pending ||
-                  pendingSync.status == SyncStatus.failed)) {
-            AppLogger.log(
-              "[SYNC] REALTIME: Note $localId has pending local changes, skipping",
-            );
-            skippedCount++;
-            continue;
-          }
+              // Filter only modified/added documents (not from local changes)
+              final changes = snapshot.docChanges.where(
+                (change) =>
+                    change.type == DocumentChangeType.modified ||
+                    change.type == DocumentChangeType.added,
+              );
 
-          final localNote = await Note.findById(localId);
+              if (changes.isEmpty) return;
 
-          if (localNote != null && remoteData['updated_at'] != null) {
-            final localUpdatedAt = localNote.updatedAt;
-            final remoteUpdatedAt = DateTime.parse(remoteData['updated_at']);
+              AppLogger.log(
+                "[SYNC] REALTIME: Received ${changes.length} remote changes",
+              );
 
-            // Always re-process notes stuck with decryption_failed content
-            final hasDecryptionError =
-                localNote.content == Note.decryptionFailedContent;
+              // Track processed note IDs to avoid duplicates in this batch
+              final Set<String> processedIds = {};
+              bool allSyncsSucceeded = true;
+              int syncedCount = 0;
+              int skippedCount = 0;
 
-            final equalTimestampBackgroundRepair =
-                !hasDecryptionError &&
-                localUpdatedAt != null &&
-                remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
-                await _needsEqualTimestampBackgroundRepair(
-                  localNote,
-                  remoteData,
+              for (final change in changes) {
+                final remoteData = change.doc.data();
+                if (remoteData == null) {
+                  AppLogger.log(
+                    "[SYNC] REALTIME: Remote data is null, skipping",
+                  );
+                  skippedCount++;
+                  continue;
+                }
+
+                final remoteDocId = change.doc.id;
+                final remoteLocalId = remoteData['local_id'];
+                if (remoteLocalId is! int || remoteLocalId <= 0) {
+                  AppLogger.error(
+                    '[SYNC] Quarantined malformed remote note $remoteDocId',
+                    StateError('local_id must be a positive integer'),
+                  );
+                  skippedCount++;
+                  continue;
+                }
+                final localId = await _resolveIncomingLocalId(
+                  remoteDocId,
+                  remoteLocalId,
                 );
 
-            if (!hasDecryptionError &&
-                localUpdatedAt != null &&
-                (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                    (remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
-                        !equalTimestampBackgroundRepair))) {
-              AppLogger.log(
-                "[SYNC] REALTIME: Note $localId local is newer, skipping",
-              );
-              skippedCount++;
-              continue;
-            }
-          }
+                // Skip if already processed in this batch
+                if (processedIds.contains(remoteDocId)) {
+                  AppLogger.log(
+                    "[SYNC] REALTIME: Note $localId already processed in this batch, skipping",
+                  );
+                  skippedCount++;
+                  continue;
+                }
+                processedIds.add(remoteDocId);
 
-          AppLogger.log("[SYNC] REALTIME: Patching note $localId from remote");
-          _addSyncingIncoming(localId);
-          try {
-            final success = await _patchRemoteNote(remoteData, remoteDocId);
-            if (success) {
-              syncedCount++;
-              AppLogger.log(
-                "[SYNC] REALTIME: Note $localId patched successfully",
-              );
-            } else {
-              allSyncsSucceeded = false;
-              AppLogger.log("[SYNC] REALTIME: Note $localId patch failed");
-            }
-          } finally {
-            _removeSyncingIncoming(localId);
-          }
-        }
+                // Skip if this note is currently being synced (by pull sync or another realtime event)
+                if (syncingIncoming.value.contains(localId)) {
+                  AppLogger.log(
+                    "[SYNC] REALTIME: Note $localId is already being synced, skipping",
+                  );
+                  skippedCount++;
+                  continue;
+                }
 
-        AppLogger.log(
-          "[SYNC] REALTIME COMPLETE: $syncedCount synced, $skippedCount skipped",
+                // Check if this note is in the pending sync cache
+                // If so, update the cache with the new data
+                final wasInCache = await _syncCache.updateRemoteData(
+                  remoteDocId,
+                  remoteData,
+                );
+                if (wasInCache) {
+                  AppLogger.log(
+                    "[SYNC] REALTIME: Note $localId updated in cache, will process later",
+                  );
+                  skippedCount++;
+                  // Don't process it now - it will be processed when the cache is processed
+                  // But if it's currently in progress, it will be re-synced
+                  continue;
+                }
+
+                // Check if this is a deleted note
+                final isDeleted =
+                    remoteData['deleted'] == true || remoteData['deleted'] == 1;
+
+                if (!isDeleted &&
+                    !_hasValidRemoteDate(remoteData['updated_at'])) {
+                  AppLogger.error(
+                    '[SYNC] Quarantined malformed remote note $remoteDocId',
+                    StateError('updated_at must be an ISO-8601 string'),
+                  );
+                  skippedCount++;
+                  continue;
+                }
+                if (!isDeleted &&
+                    !_hasValidRemoteDate(remoteData['created_at'])) {
+                  AppLogger.error(
+                    '[SYNC] Quarantined malformed remote note $remoteDocId',
+                    StateError('created_at must be an ISO-8601 string'),
+                  );
+                  skippedCount++;
+                  continue;
+                }
+
+                // On first sync, skip deleted notes - there's no point in processing
+                // thousands of deleted notes when we're starting fresh.
+                // Check live state (not captured at listener start) because lastSynced
+                // is updated during the first sync while this listener keeps running.
+                if (AppState.lastSynced == null && isDeleted) {
+                  skippedCount++;
+                  continue;
+                }
+
+                if (isDeleted) {
+                  AppLogger.log(
+                    "[SYNC] REALTIME: Note $localId deleted, handling deletion",
+                  );
+                  _addSyncingIncoming(localId);
+                  try {
+                    await _handleRemoteDeletedNote(
+                      localId,
+                      remoteDocId: remoteDocId,
+                    );
+                    syncedCount++;
+                  } finally {
+                    _removeSyncingIncoming(localId);
+                  }
+                  continue;
+                }
+
+                // Check if there's a pending sync for this note - don't overwrite local changes
+                final pendingSync = await NoteSyncTrack.getByLocalId(localId);
+                if (pendingSync != null &&
+                    (pendingSync.status == SyncStatus.pending ||
+                        pendingSync.status == SyncStatus.failed)) {
+                  AppLogger.log(
+                    "[SYNC] REALTIME: Note $localId has pending local changes, skipping",
+                  );
+                  skippedCount++;
+                  continue;
+                }
+
+                final localNote =
+                    await Note.findBySyncId(remoteDocId) ??
+                    await Note.findById(localId);
+
+                if (localNote != null && remoteData['updated_at'] != null) {
+                  final localUpdatedAt = localNote.updatedAt;
+                  final updatedAtValue = remoteData['updated_at'];
+                  final remoteUpdatedAt = updatedAtValue is String
+                      ? DateTime.tryParse(updatedAtValue)
+                      : null;
+                  if (remoteUpdatedAt == null) {
+                    AppLogger.error(
+                      '[SYNC] Quarantined malformed remote note $remoteDocId',
+                      StateError('updated_at must be an ISO-8601 string'),
+                    );
+                    skippedCount++;
+                    continue;
+                  }
+
+                  // Always re-process notes stuck with decryption_failed content
+                  final hasDecryptionError =
+                      localNote.content == Note.decryptionFailedContent;
+
+                  final equalTimestampBackgroundRepair =
+                      !hasDecryptionError &&
+                      localUpdatedAt != null &&
+                      remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
+                      await _needsEqualTimestampBackgroundRepair(
+                        localNote,
+                        remoteData,
+                      );
+
+                  if (!hasDecryptionError &&
+                      localUpdatedAt != null &&
+                      (remoteUpdatedAt.isBefore(localUpdatedAt) ||
+                          (remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
+                              !equalTimestampBackgroundRepair))) {
+                    AppLogger.log(
+                      "[SYNC] REALTIME: Note $localId local is newer, skipping",
+                    );
+                    skippedCount++;
+                    continue;
+                  }
+                }
+
+                AppLogger.log(
+                  "[SYNC] REALTIME: Patching note $localId from remote",
+                );
+                _addSyncingIncoming(localId);
+                try {
+                  final success = await _patchRemoteNote(
+                    remoteData,
+                    remoteDocId,
+                  );
+                  if (success) {
+                    syncedCount++;
+                    AppLogger.log(
+                      "[SYNC] REALTIME: Note $localId patched successfully",
+                    );
+                  } else {
+                    allSyncsSucceeded = false;
+                    AppLogger.log(
+                      "[SYNC] REALTIME: Note $localId patch failed",
+                    );
+                  }
+                } finally {
+                  _removeSyncingIncoming(localId);
+                }
+              }
+
+              AppLogger.log(
+                "[SYNC] REALTIME COMPLETE: $syncedCount synced, $skippedCount skipped",
+              );
+
+              // Only update lastSynced if all syncs succeeded
+              if (allSyncsSucceeded) {
+                AppState.lastSynced = DateTime.now();
+              } else {
+                hydrationFailed = true;
+                AppLogger.log(
+                  "[SYNC] REALTIME: Some syncs failed, not updating lastSynced",
+                );
+              }
+            } catch (error, stackTrace) {
+              hydrationFailed = true;
+              AppLogger.error(
+                '[SYNC] REALTIME hydration attempt failed',
+                error,
+                stackTrace,
+              );
+            } finally {
+              _initialHydration.endWork(
+                hydrationGeneration,
+                failed: hydrationFailed,
+              );
+              if (hydrationFailed) {
+                _restartRemoteListenerAfterFailure(hydrationGeneration);
+              } else if (_initialHydration.isReady) {
+                _listenerRetry.succeeded();
+              }
+            }
+          },
+          onError: (error) {
+            AppLogger.error('[SYNC] REALTIME ERROR', error);
+            _initialHydration.failAttempt(hydrationGeneration);
+            _restartRemoteListenerAfterFailure(hydrationGeneration);
+          },
         );
-
-        // Only update lastSynced if all syncs succeeded
-        if (allSyncsSucceeded) {
-          AppState.lastSynced = DateTime.now();
-        } else {
-          AppLogger.log(
-            "[SYNC] REALTIME: Some syncs failed, not updating lastSynced",
-          );
-        }
-      },
-      onError: (error) {
-        AppLogger.error('[SYNC] REALTIME ERROR', error);
-      },
-    );
 
     AppLogger.log("[SYNC] LISTENER: Started real-time remote listener");
   }
 
   /// Stop listening for real-time updates
-  void _stopRemoteListener() {
+  void _restartRemoteListenerAfterFailure(int generation) {
+    if (!_initialHydration.isCurrent(generation)) return;
+    _listenerRetry.schedule(() {
+      if (_initialized && currentUser != null && _canReceiveSync) {
+        AppLogger.log('[SYNC] Restarting remote listener after failure');
+        _startRemoteListener();
+      }
+    });
+  }
+
+  bool _hasValidRemoteDate(Object? value) {
+    return value == null ||
+        (value is String && DateTime.tryParse(value) != null);
+  }
+
+  void _stopRemoteListener({bool cancelRetry = true}) {
+    if (cancelRetry) _listenerRetry.cancel();
+    _initialHydration.invalidateAttempt();
     try {
       _remoteListener?.cancel();
     } catch (e) {
@@ -819,6 +923,8 @@ class NoteSyncService {
     E2EEService.instance.status.removeListener(_onE2EEStatusChange);
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     _initialized = false;
+    _initialHydration.reset();
+    _listenerRetry.cancel();
     // Clear cached Firestore instance so a fresh one is created after signout/signin
     _firestoreInstance = null;
   }
@@ -1273,12 +1379,21 @@ class NoteSyncService {
             noteData.remove('content');
             noteData.remove('plain_text');
           }
-          final newDocRef = _notesCollection.doc();
+          final stableId = note.syncId ?? const Uuid().v4();
+          if (note.syncId != stableId) {
+            note.syncId = stableId;
+            await AppState.db.update(
+              Note.model,
+              {'sync_id': stableId},
+              where: 'id = ?',
+              whereArgs: [note.id],
+            );
+          }
+          final newDocRef = _notesCollection.doc(stableId);
           batch.set(newDocRef, noteData);
-          sync.remoteId = newDocRef.id;
           // Save remoteId immediately to prevent duplicates if another sync runs
           // before the batch commits and markSynced is called
-          await sync.save();
+          await sync.claimRemoteId(newDocRef.id);
           postCommitActions.add(() async {
             final wasUnchanged = await sync.markSyncedIfUnchanged(
               capturedSyncStartTime,
@@ -1403,7 +1518,7 @@ class NoteSyncService {
     int pageIndex = 0;
     bool hasMore = true;
     int totalDocsFetched = 0;
-    final Set<int> uniqueLocalIds = {}; // Track unique notes across all pages
+    final Set<String> uniqueRemoteIds = {};
     final bool isFirstSync = lastSynced == null;
 
     AppLogger.log(
@@ -1438,7 +1553,7 @@ class NoteSyncService {
       }
 
       // Create pending syncs from fetched documents and track max updated_at
-      final syncs = <int, PendingRemoteSync>{};
+      final syncs = <String, PendingRemoteSync>{};
       DateTime? maxUpdatedAt;
 
       for (final doc in querySnapshot.docs) {
@@ -1466,8 +1581,7 @@ class NoteSyncService {
           "[SYNC] FETCH: Note $localId (doc: ${doc.id}) updated_at: $updatedAtStr",
         );
 
-        // Track unique local IDs across all pages
-        uniqueLocalIds.add(localId);
+        uniqueRemoteIds.add(doc.id);
 
         // Track max updated_at from this page
         if (updatedAtStr != null) {
@@ -1477,7 +1591,7 @@ class NoteSyncService {
           }
         }
 
-        syncs[localId] = PendingRemoteSync(
+        syncs[doc.id] = PendingRemoteSync(
           localId: localId,
           remoteDocId: doc.id,
           remoteData: remoteData,
@@ -1523,14 +1637,14 @@ class NoteSyncService {
     }
 
     // Log fetch complete with deduplication info
-    final dupCount = totalDocsFetched - uniqueLocalIds.length;
+    final dupCount = totalDocsFetched - uniqueRemoteIds.length;
     if (dupCount > 0) {
       AppLogger.log(
-        "[SYNC] FETCH COMPLETE: $totalDocsFetched docs in ${_syncCache.metadata?.totalPages ?? 0} pages -> ${uniqueLocalIds.length} unique notes ($dupCount duplicates)",
+        "[SYNC] FETCH COMPLETE: $totalDocsFetched docs in ${_syncCache.metadata?.totalPages ?? 0} pages -> ${uniqueRemoteIds.length} unique notes ($dupCount duplicates)",
       );
     } else {
       AppLogger.log(
-        "[SYNC] FETCH COMPLETE: ${uniqueLocalIds.length} unique notes in ${_syncCache.metadata?.totalPages ?? 0} pages",
+        "[SYNC] FETCH COMPLETE: ${uniqueRemoteIds.length} unique notes in ${_syncCache.metadata?.totalPages ?? 0} pages",
       );
     }
   }
@@ -1565,18 +1679,23 @@ class NoteSyncService {
     );
 
     // Track processed note IDs to avoid duplicates
-    final Set<int> processedIds = {};
+    final Set<String> processedIds = {};
 
     for (final pendingSync in pendingSyncs) {
-      final localId = pendingSync.localId;
+      final remoteSuggestedId = pendingSync.localId;
       final remoteData = pendingSync.remoteData;
       final remoteDocId = pendingSync.remoteDocId;
+      final localId = await _resolveIncomingLocalId(
+        remoteDocId,
+        remoteSuggestedId,
+      );
+      final remoteTrack = await NoteSyncTrack.getByRemoteId(remoteDocId);
 
       // Skip if already processed in this sync cycle
-      if (processedIds.contains(localId)) {
+      if (processedIds.contains(remoteDocId)) {
         continue;
       }
-      processedIds.add(localId);
+      processedIds.add(remoteDocId);
 
       // Skip if this note is currently being synced (by realtime listener or another sync)
       if (syncingIncoming.value.contains(localId)) {
@@ -1584,7 +1703,7 @@ class NoteSyncService {
           "[SYNC] PROCESS: Note $localId is already being synced, marking complete",
         );
         // Mark as completed since the other sync flow will handle it
-        await _syncCache.markCompleted(localId);
+        await _syncCache.markCompleted(remoteDocId);
         syncedCount++;
         skippedCount++;
         syncProgress.value = (syncedCount, totalCount);
@@ -1599,8 +1718,8 @@ class NoteSyncService {
         // Handle deletion
         _addSyncingIncoming(localId);
         try {
-          await _handleRemoteDeletedNote(localId);
-          await _syncCache.markCompleted(localId);
+          await _handleRemoteDeletedNote(localId, remoteDocId: remoteDocId);
+          await _syncCache.markCompleted(remoteDocId);
           syncedCount++;
           deletedCount++; // Track deleted notes separately
           syncProgress.value = (syncedCount, totalCount);
@@ -1611,7 +1730,8 @@ class NoteSyncService {
       }
 
       // Check if there's a pending sync for this note - don't overwrite local changes
-      final localPendingSync = await NoteSyncTrack.getByLocalId(localId);
+      final localPendingSync =
+          remoteTrack ?? await NoteSyncTrack.getByLocalId(localId);
 
       // If this note has exceeded the retry limit, save it with error content
       // so the user can see it in the retry/delete dialog and take action.
@@ -1628,7 +1748,10 @@ class NoteSyncService {
         );
         // Save the note with decryption error content so the user can see it
         // and decide to retry or delete via the note card dialog.
-        final note = await Note.findById(localId) ?? Note(id: localId);
+        final note =
+            await Note.findById(localId) ??
+            await Note.findBySyncId(remoteDocId) ??
+            Note(id: localId, syncId: remoteDocId);
         // Preserve valid local content — only overwrite if the note has no
         // content or already contains the error marker. This prevents data
         // loss when a newer remote version can't be decrypted (e.g., UMK
@@ -1648,8 +1771,8 @@ class NoteSyncService {
         if (remoteData['updated_at'] != null) {
           note.updatedAt = DateTime.parse(remoteData['updated_at'] as String);
         }
-        await note.save(false);
-        await _syncCache.markCompleted(localId);
+        await note.save(false, ModelChangeOrigin.remoteSync);
+        await _syncCache.markCompleted(remoteDocId);
         _markSyncFailed(localId);
         failedCount++;
         syncProgress.value = (syncedCount + failedCount, totalCount);
@@ -1662,14 +1785,15 @@ class NoteSyncService {
         AppLogger.log(
           "[SYNC] PROCESS: Note $localId skipped - has pending local changes",
         );
-        await _syncCache.markCompleted(localId);
+        await _syncCache.markCompleted(remoteDocId);
         syncedCount++;
         skippedCount++;
         syncProgress.value = (syncedCount, totalCount);
         continue;
       }
 
-      final localNote = await Note.findById(localId);
+      final localNote =
+          await Note.findById(localId) ?? await Note.findBySyncId(remoteDocId);
 
       if (localNote != null && remoteData['updated_at'] != null) {
         final localUpdatedAt = localNote.updatedAt;
@@ -1693,7 +1817,7 @@ class NoteSyncService {
                 (remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
                     !equalTimestampBackgroundRepair))) {
           // Local is newer, skip
-          await _syncCache.markCompleted(localId);
+          await _syncCache.markCompleted(remoteDocId);
           syncedCount++;
           skippedCount++;
           syncProgress.value = (syncedCount, totalCount);
@@ -1704,20 +1828,20 @@ class NoteSyncService {
       _addSyncingIncoming(localId);
       try {
         await _syncCache.updateSync(
-          localId,
+          remoteDocId,
           pendingSync.copyWith(status: PendingRemoteSyncStatus.inProgress),
         );
 
         final success = await _patchRemoteNote(remoteData, remoteDocId);
 
         if (success) {
-          await _syncCache.markCompleted(localId);
+          await _syncCache.markCompleted(remoteDocId);
           syncedCount++;
           syncProgress.value = (syncedCount, totalCount);
           AppLogger.log("[SYNC] PROCESS: Note $localId synced successfully");
         } else {
           await _syncCache.markFailed(
-            localId,
+            remoteDocId,
             "Sync failed (decryption or attachment download)",
           );
           _markSyncFailed(localId);
@@ -1725,7 +1849,7 @@ class NoteSyncService {
           AppLogger.log("[SYNC] PROCESS: Note $localId failed");
         }
       } catch (e) {
-        await _syncCache.markFailed(localId, e.toString());
+        await _syncCache.markFailed(remoteDocId, e.toString());
         _markSyncFailed(localId);
         failedCount++;
         AppLogger.error('[SYNC] PROCESS: Note $localId error', e);
@@ -1762,8 +1886,23 @@ class NoteSyncService {
   }
 
   /// Handle a note that was deleted on remote
-  Future<void> _handleRemoteDeletedNote(int localId) async {
-    final note = await Note.findById(localId);
+  Future<void> _handleRemoteDeletedNote(
+    int localId, {
+    String? remoteDocId,
+  }) async {
+    final remoteTrack = remoteDocId == null
+        ? null
+        : await NoteSyncTrack.getByRemoteId(remoteDocId);
+    final stableNote = remoteDocId == null
+        ? null
+        : await Note.findBySyncId(remoteDocId);
+    final resolvedLocalId = remoteTrack?.localId ?? stableNote?.id ?? localId;
+    final note = remoteDocId == null
+        ? await Note.findById(resolvedLocalId)
+        : stableNote ??
+              (remoteTrack == null
+                  ? null
+                  : await Note.findById(remoteTrack.localId));
     if (note == null) {
       // Note doesn't exist locally, nothing to do
       return;
@@ -1784,13 +1923,37 @@ class NoteSyncService {
     }
 
     // Delete the note sync track
-    final syncTrack = await NoteSyncTrack.getByLocalId(localId);
+    final syncTrack =
+        remoteTrack ?? await NoteSyncTrack.getByLocalId(resolvedLocalId);
     if (syncTrack != null) {
       await syncTrack.delete();
     }
 
-    await note.delete();
-    AppLogger.log("Deleted local note from remote deletion: $localId");
+    await note.delete(trackSync: false, origin: ModelChangeOrigin.remoteSync);
+    AppLogger.log("Deleted local note from remote deletion: $resolvedLocalId");
+  }
+
+  Future<int> _resolveIncomingLocalId(
+    String remoteDocId,
+    int suggestedLocalId,
+  ) async {
+    final tracked = await NoteSyncTrack.getByRemoteId(remoteDocId);
+    if (tracked != null) return tracked.localId;
+    final stableNote = await Note.findBySyncId(remoteDocId);
+    if (stableNote?.id != null) return stableNote!.id!;
+
+    Future<bool> isAvailable(int candidate) async {
+      if (candidate <= 0) return false;
+      if (await Note.findById(candidate) != null) return false;
+      return await NoteSyncTrack.getByLocalId(candidate) == null;
+    }
+
+    if (await isAvailable(suggestedLocalId)) return suggestedLocalId;
+    var candidate = DateTime.now().millisecondsSinceEpoch;
+    while (!await isAvailable(candidate)) {
+      candidate++;
+    }
+    return candidate;
   }
 
   /// Patch a local note with remote data
@@ -1806,7 +1969,7 @@ class NoteSyncService {
     final isDeleted =
         remoteData['deleted'] == true || remoteData['deleted'] == 1;
     if (isDeleted) {
-      await _handleRemoteDeletedNote(localId);
+      await _handleRemoteDeletedNote(localId, remoteDocId: remoteDocId);
       return true;
     }
 
@@ -1825,9 +1988,14 @@ class NoteSyncService {
     final updatedNoteData = await _decryptNoteData(remoteData);
     ReminderSyncCodec.decode(updatedNoteData);
 
+    final tracked = await NoteSyncTrack.getByRemoteId(remoteDocId);
+    final stableNote = await Note.findBySyncId(remoteDocId);
+    final resolvedLocalId = await _resolveIncomingLocalId(remoteDocId, localId);
     final note =
-        await Note.findById(updatedNoteData['local_id'] as int) ??
-        Note(id: updatedNoteData['local_id'] as int);
+        (tracked == null ? null : await Note.findById(tracked.localId)) ??
+        stableNote ??
+        Note(id: resolvedLocalId, syncId: remoteDocId);
+    updatedNoteData['sync_id'] = remoteDocId;
 
     if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
       // Decryption failed — E2EE reported ready but the actual decrypt returned
@@ -1875,17 +2043,21 @@ class NoteSyncService {
     }
     await note.updateFromJson(updatedNoteData);
 
-    var syncTrack = await NoteSyncTrack.getByLocalId(localId);
+    final persistedLocalId = note.id!;
+    var syncTrack =
+        tracked ?? await NoteSyncTrack.getByLocalId(persistedLocalId);
     if (syncTrack == null) {
       syncTrack = NoteSyncTrack(
-        localId: localId,
+        localId: persistedLocalId,
         remoteId: remoteDocId,
         action: SyncAction.upload,
         status: SyncStatus.synced,
       );
       await syncTrack.save();
     } else {
-      syncTrack.remoteId ??= remoteDocId;
+      if (syncTrack.remoteId != remoteDocId) {
+        await syncTrack.claimRemoteId(remoteDocId);
+      }
       syncTrack.status = SyncStatus.synced;
       syncTrack.action = SyncAction.upload;
       await syncTrack.save();

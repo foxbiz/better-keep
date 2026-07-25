@@ -5555,6 +5555,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rate on Microsoft Store'**
   String get rateOnMicrosoftStore;
+
+  /// Tooltip and menu title for note sorting
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by'**
+  String get sortBy;
+
+  /// Manual note ordering option
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get sortCustom;
+
+  /// Newest-created note sorting option
+  ///
+  /// In en, this message translates to:
+  /// **'Date created'**
+  String get sortCreatedNewest;
+
+  /// Most-recently-updated note sorting option
+  ///
+  /// In en, this message translates to:
+  /// **'Date updated'**
+  String get sortUpdatedNewest;
+
+  /// Accessible label for whole-card note reordering
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold to reorder'**
+  String get dragToReorder;
+
+  /// Accessible action to move a note earlier in its section
+  ///
+  /// In en, this message translates to:
+  /// **'Move note before'**
+  String get moveNoteBefore;
+
+  /// Accessible action to move a note later in its section
+  ///
+  /// In en, this message translates to:
+  /// **'Move note after'**
+  String get moveNoteAfter;
+
+  /// Message shown for an invalid cross-section note move
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned and unpinned notes are arranged separately.'**
+  String get pinnedReorderBoundary;
+
+  /// Message shown when manual note ordering cannot be saved
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the new note order. Your previous order was restored.'**
+  String get reorderSaveFailed;
+
+  /// Title and tooltip for configuring note view and sorting
+  ///
+  /// In en, this message translates to:
+  /// **'Note display options'**
+  String get noteDisplayOptions;
+
+  /// Error shown when note display options cannot be saved
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the note display options. Please try again.'**
+  String get noteDisplayOptionsSaveFailed;
+
+  /// Accessibility announcement after note display options are saved
+  ///
+  /// In en, this message translates to:
+  /// **'Note display options saved'**
+  String get noteDisplayOptionsSaved;
+
+  /// Guidance shown when custom note sorting enables manual reordering
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold a note, then drag to rearrange it.'**
+  String get reorderCustomHint;
+
+  /// Guidance explaining why manual reordering is unavailable in date sort modes
+  ///
+  /// In en, this message translates to:
+  /// **'Manual rearranging is unavailable while sorting by date. Choose Custom to rearrange notes.'**
+  String get reorderDateSortHint;
 }
 
 class _AppLocalizationsDelegate
