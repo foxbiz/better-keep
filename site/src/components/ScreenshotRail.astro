@@ -1,0 +1,32 @@
+---
+import { screenshots } from '../data/home';
+---
+
+<section class="home-section screenshots-section" id="screenshots">
+  <div class="container">
+    <div class="section-title">
+      <h2>See it in action</h2>
+      <p>Real Better Keep screens, ordered around the everyday notes workflow.</p>
+    </div>
+    <div class="screenshot-rail" aria-label="Better Keep screenshots">
+      {
+        screenshots.map((screenshot) => (
+          <figure class="screenshot-card">
+            <picture>
+              <source srcset={screenshot.optimizedSrc} type="image/webp" />
+              <img
+                src={screenshot.src}
+                width="1179"
+                height="2556"
+                loading="eager"
+                decoding="async"
+                alt={screenshot.alt}
+              />
+            </picture>
+            <figcaption>{screenshot.caption}</figcaption>
+          </figure>
+        ))
+      }
+    </div>
+  </div>
+</section>

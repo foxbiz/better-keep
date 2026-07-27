@@ -34,6 +34,10 @@ migrate_working_dir/
 /build/
 /coverage/
 /node_modules/
+/site/node_modules/
+/site/.astro/
+/site/dist/
+/site/public/media/screenshots/
 
 # Symbolication related
 app.*.symbols
@@ -48,8 +52,7 @@ app.*.map.json
 /android/keystore.jks
 /android/app/google-services.json
 
-#firebase
-firebase.json
+# Firebase local state and environment-specific runtime configuration
 web/firebase-config.json
 .env
 .firebase/

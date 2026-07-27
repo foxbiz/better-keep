@@ -1,4 +1,5 @@
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/pages/google_keep_import_page.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -90,6 +91,22 @@ class HelpPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.move_to_inbox_outlined),
+              title: const Text('Import from Google Keep'),
+              subtitle: const Text(
+                'Move a Google Takeout archive locally—no upload required.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const GoogleKeepImportPage(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
           Text(
             context.l10n.frequentlyAskedQuestions,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),

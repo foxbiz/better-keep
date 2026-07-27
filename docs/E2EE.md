@@ -54,7 +54,6 @@ Each device has its own X25519 keypair:
   - iOS/macOS: Keychain
   - Android: EncryptedSharedPreferences / Keystore
   - Windows: Windows Credential Store
-  - Linux: libsecret
   - Web: IndexedDB with encryption
 
 - **Public Key**: Stored on Firestore for other devices to use

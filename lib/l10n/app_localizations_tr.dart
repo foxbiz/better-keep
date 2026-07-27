@@ -1460,11 +1460,11 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get openSource => 'Açık Kaynak';
+  String get openSource => 'Kaynak Koduna Erişim';
 
   @override
   String get openSourceDescription =>
-      'Better Keep açık kaynaktır! Kodu görüntüleyin,\nkatkıda bulunun veya GitHub\'da sorun bildirin.';
+      'Kaynak kodu CC BY-NC 4.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.';
 
   @override
   String get frequentlyAskedQuestions => 'Sıkça Sorulan Sorular';

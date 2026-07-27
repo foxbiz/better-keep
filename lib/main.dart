@@ -24,6 +24,7 @@ import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
+import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -460,6 +461,7 @@ class _BetterKeepState extends State<BetterKeep> {
         );
       }
       await Label.fixLabels();
+      await ReviewPromptService.instance.initialize();
       unawaited(SketchPreviewRepairService.runIfNeeded());
       setState(() {
         this.db = db;

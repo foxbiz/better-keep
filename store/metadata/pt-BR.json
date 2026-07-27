@@ -1,0 +1,25 @@
+{
+  "locale": "pt-BR",
+  "reviewStatus": "needs-native-review",
+  "appStore": {
+    "name": "Better Keep: Notas Privadas",
+    "subtitle": "Notas ricas, offline e seguras",
+    "keywords": "lista,lembrete,voz,transcrição,pasta,bloqueio,diário,desenho,organizar,sincronizar,nota",
+    "promotionalText": "Notas privadas com texto rico, uso local, lembretes e sincronização criptografada de ponta a ponta."
+  },
+  "playStore": {
+    "title": "Better Keep: Notas Privadas",
+    "shortDescription": "Notas privadas e offline com texto rico e sincronização criptografada.",
+    "fullDescription": "Escreva com rapidez sem abrir mão de formatação, acesso offline ou privacidade. O Better Keep combina cartões simples com armazenamento local.\n\nUse títulos, listas, checklists, links, imagens, desenhos, gravações de voz e lembretes. Organize tudo com etiquetas, pastas, cores, notas fixadas, arquivo e busca rápida.\n\nVocê pode começar com notas locais sem criar uma conta. Na sincronização opcional, títulos, conteúdo e anexos compatíveis são criptografados no dispositivo. A importação de arquivos compatíveis também é processada localmente.\n\nDisponível para Android, iOS, macOS, Windows e Web. Alguns recursos, como transcrição de voz no dispositivo, variam por plataforma. O código-fonte está disponível sob a licença CC BY-NC 4.0."
+  },
+  "screenshotCopy": [
+    "Suas notas privadas, melhores",
+    "Texto rico sem complicação",
+    "Sincronização criptografada",
+    "Offline em vários dispositivos",
+    "Leve suas notas com você",
+    "Voz transcrita no dispositivo",
+    "Lembretes no ritmo certo",
+    "Pastas, etiquetas e busca rápida"
+  ]
+}

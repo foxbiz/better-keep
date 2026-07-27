@@ -1559,11 +1559,11 @@
 		}
 	},
 
-	"openSource": "Open Source",
-	"@openSource": { "description": "Open source section title" },
+	"openSource": "Source Available",
+	"@openSource": { "description": "Source availability section title" },
 
-	"openSourceDescription": "Better Keep is open source! View the code,\ncontribute, or report issues on GitHub.",
-	"@openSourceDescription": { "description": "Open source description" },
+	"openSourceDescription": "Inspect the source under CC BY-NC 4.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.",
+	"@openSourceDescription": { "description": "Source availability and license description" },
 
 	"frequentlyAskedQuestions": "Frequently Asked Questions",
 	"@frequentlyAskedQuestions": { "description": "FAQ section title" },

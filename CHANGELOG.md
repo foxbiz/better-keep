@@ -5,6 +5,27 @@ All notable changes to Better Keep will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Local-only Google Keep Takeout importer with metadata preservation, duplicate
+  protection, archive safety limits, cancellation, and a shareable report.
+- Ethical native review prompting after sustained use and a successful import,
+  export, or reminder milestone.
+- Static Astro marketing site, focused switching/privacy guides, comparison
+  pages, security documentation, structured data, and privacy-first aggregate
+  acquisition events.
+- Automated visibility, store-copy, Firebase route, external-link, and
+  Lighthouse quality gates.
+
+### Changed
+
+- Flutter Web now lives under `/app/`; the indexable marketing site is served
+  at `/`.
+- Public source licensing and encryption claims now use verified,
+  product-fact-backed wording.
+
 ## [1.0.58] - 2026-04-13
 
 - **Published to iOS App Store**: Better Keep version 1.0.58 is now live on the App Store for iPhone and iPad.

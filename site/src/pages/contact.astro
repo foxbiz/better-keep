@@ -1,0 +1,6 @@
+---
+import PublicDocumentPage from '../components/PublicDocumentPage.astro';
+import { getPublicDocument } from '../data/public-documents';
+---
+
+<PublicDocumentPage document={getPublicDocument('contact')} />

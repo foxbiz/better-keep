@@ -1,0 +1,73 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import {
+  readPublicDocumentContent,
+  type PublicDocument
+} from '../data/public-documents';
+import { product } from '../data/product';
+
+interface Props {
+  document: PublicDocument;
+}
+
+const { document } = Astro.props;
+const content = readPublicDocumentContent(document.sourceFile);
+const canonicalPath = `/${document.slug}`;
+const schemas = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: document.title,
+    description: document.description,
+    url: `${product.siteUrl}${canonicalPath}`,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: product.name,
+      url: product.siteUrl
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: product.publisher
+    }
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Better Keep',
+        item: product.siteUrl
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: document.title,
+        item: `${product.siteUrl}${canonicalPath}`
+      }
+    ]
+  }
+];
+---
+
+<BaseLayout
+  title={document.title}
+  description={document.description}
+  canonicalPath={canonicalPath}
+  schemas={schemas}
+>
+  <article class="document-shell container">
+    <header class="document-header">
+      <p class="eyebrow">{document.eyebrow}</p>
+      <h1>{document.title}</h1>
+      <p>{document.introduction}</p>
+      {
+        document.updatedLabel && (
+          <p class="article-meta">Last updated {document.updatedLabel}</p>
+        )
+      }
+    </header>
+    <div class="document-body" set:html={content} />
+  </article>
+</BaseLayout>

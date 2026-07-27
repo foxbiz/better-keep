@@ -1,0 +1,60 @@
+---
+import { product } from '../data/product';
+import Icon from './Icon.astro';
+
+const platforms = [
+  {
+    label: 'iOS & macOS',
+    icon: 'Apple',
+    href: product.appStoreUrl,
+    analytics: product.analyticsGoals.appStore
+  },
+  {
+    label: 'Android',
+    icon: 'Smartphone',
+    href: product.playStoreUrl,
+    analytics: product.analyticsGoals.playStore
+  },
+  {
+    label: 'Windows',
+    icon: 'MonitorDown',
+    href: product.microsoftStoreUrl
+  },
+  {
+    label: 'Web',
+    icon: 'Globe',
+    href: product.webAppUrl,
+    analytics: product.analyticsGoals.webApp
+  },
+  {
+    label: 'Source',
+    icon: 'CodeXml',
+    href: product.githubUrl,
+    analytics: product.analyticsGoals.github
+  }
+] as const;
+---
+
+<section class="home-section platforms-section" id="platforms">
+  <div class="container">
+    <div class="section-title">
+      <h2>Available everywhere</h2>
+      <p>Use Better Keep on the platforms that are already part of your day.</p>
+    </div>
+    <div class="platform-grid">
+      {
+        platforms.map((platform) => (
+          <a
+            class="platform-card"
+            href={platform.href}
+            rel={platform.href.startsWith('http') ? 'external' : undefined}
+            data-analytics={'analytics' in platform ? platform.analytics : undefined}
+          >
+            <Icon name={platform.icon} size={38} strokeWidth={1.7} />
+            <span>{platform.label}</span>
+          </a>
+        ))
+      }
+    </div>
+  </div>
+</section>

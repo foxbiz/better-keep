@@ -1,0 +1,67 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import CallToAction from '../components/CallToAction.astro';
+import FeatureGrid from '../components/FeatureGrid.astro';
+import HomeHero from '../components/HomeHero.astro';
+import MigrationSection from '../components/MigrationSection.astro';
+import PlatformLinks from '../components/PlatformLinks.astro';
+import ScreenshotRail from '../components/ScreenshotRail.astro';
+import { product } from '../data/product';
+
+const schemas = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: product.publisher,
+    url: product.siteUrl,
+    logo: `${product.siteUrl}/media/logo.png`,
+    sameAs: [product.githubUrl]
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: product.name,
+    url: product.siteUrl,
+    description: product.positioning,
+    publisher: {
+      '@type': 'Organization',
+      name: product.publisher
+    }
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: product.storeName,
+    alternateName: product.name,
+    applicationCategory: 'UtilitiesApplication',
+    operatingSystem: product.platforms.join(', '),
+    description: product.shortDescription,
+    url: product.siteUrl,
+    downloadUrl: [product.appStoreUrl, product.playStoreUrl],
+    author: {
+      '@type': 'Organization',
+      name: product.publisher
+    },
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+      description: 'Free local note-taking with optional paid features'
+    }
+  }
+];
+---
+
+<BaseLayout
+  title="Better Keep Notes — Private, offline notes with richer writing"
+  description="Better Keep is a private, offline-friendly notes app with rich-text editing, optional end-to-end encrypted sync, voice transcription, and a local Google Keep importer."
+  canonicalPath="/"
+  schemas={schemas}
+>
+  <HomeHero />
+  <FeatureGrid />
+  <MigrationSection />
+  <PlatformLinks />
+  <ScreenshotRail />
+  <CallToAction />
+</BaseLayout>

@@ -8,6 +8,7 @@ import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/services/reminder_action_receipt_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
+import 'package:better_keep/services/import/import_fingerprint_store.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -33,6 +34,7 @@ Future<Database> initDatabase() async {
       await LabelSyncTrack.createTable(db);
       await ReminderActionReceiptService.createTable(db);
       await NoteSortService.createTable(db);
+      await ImportFingerprintStore.createTable(db);
       await SyncIdentityMigration.migrate(db);
     },
     onUpgrade: (db, oldVersion, newVersion) async {
@@ -50,6 +52,9 @@ Future<Database> initDatabase() async {
         await SyncIdentityMigration.migrate(db);
       }
       await NoteSortService.upgradeTable(db, oldVersion, newVersion);
+      if (oldVersion < 10) {
+        await ImportFingerprintStore.createTable(db);
+      }
     },
     version: databaseVersion,
   );

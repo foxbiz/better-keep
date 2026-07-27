@@ -1547,11 +1547,11 @@
 		}
 	},
 
-	"openSource": "Açık Kaynak",
-	"@openSource": { "description": "Open source section title" },
+	"openSource": "Kaynak Koduna Erişim",
+	"@openSource": { "description": "Source availability section title" },
 
-	"openSourceDescription": "Better Keep açık kaynaktır! Kodu görüntüleyin,\nkatkıda bulunun veya GitHub'da sorun bildirin.",
-	"@openSourceDescription": { "description": "Open source description" },
+	"openSourceDescription": "Kaynak kodu CC BY-NC 4.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.",
+	"@openSourceDescription": { "description": "Source availability and license description" },
 
 	"frequentlyAskedQuestions": "Sıkça Sorulan Sorular",
 	"@frequentlyAskedQuestions": { "description": "FAQ section title" },

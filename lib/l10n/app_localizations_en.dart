@@ -1455,11 +1455,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get openSource => 'Open Source';
+  String get openSource => 'Source Available';
 
   @override
   String get openSourceDescription =>
-      'Better Keep is open source! View the code,\ncontribute, or report issues on GitHub.';
+      'Inspect the source under CC BY-NC 4.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.';
 
   @override
   String get frequentlyAskedQuestions => 'Frequently Asked Questions';

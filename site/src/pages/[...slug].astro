@@ -1,0 +1,240 @@
+---
+import type { GetStaticPaths } from 'astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import StoreActions from '../components/StoreActions.astro';
+import { pages, type MarketingPage } from '../data/pages';
+import { product } from '../data/product';
+
+export const getStaticPaths = (() =>
+  pages.map((page) => ({
+    params: { slug: page.slug },
+    props: { page }
+  }))) satisfies GetStaticPaths;
+
+interface Props {
+  page: MarketingPage;
+}
+
+const { page } = Astro.props;
+const canonicalPath = `/${page.slug}`;
+const screenshot = (() => {
+  if (page.slug === 'rich-text-notes') {
+    return {
+      src: '/media/screenshots/5-480.webp',
+      alt: 'Better Keep rich-text editor with formatting controls and a checklist'
+    };
+  }
+  if (page.slug === 'voice-notes-transcription') {
+    return {
+      src: '/media/screenshots/6-480.webp',
+      alt: 'Better Keep editor showing a voice recording and its transcription'
+    };
+  }
+  if (page.slug === 'security' || page.slug === 'private-encrypted-notes') {
+    return {
+      src: '/media/screenshots/4-480.webp',
+      alt: 'Better Keep security screen showing encrypted notes and approved devices'
+    };
+  }
+  return {
+    src: '/media/screenshots/2-480.webp',
+    alt:
+      page.slug === 'import/google-keep'
+        ? 'Better Keep card home where locally imported notes become available'
+        : 'Better Keep card-based notes home with labels, colors, and pinned notes'
+  };
+})();
+const breadcrumbs = [
+  {
+    '@type': 'ListItem',
+    position: 1,
+    name: 'Better Keep',
+    item: product.siteUrl
+  },
+  ...page.slug.split('/').map((part, index, parts) => ({
+    '@type': 'ListItem',
+    position: index + 2,
+    name:
+      index === parts.length - 1
+        ? page.title
+        : part.charAt(0).toUpperCase() + part.slice(1),
+    item: `${product.siteUrl}/${parts.slice(0, index + 1).join('/')}`
+  }))
+];
+const schemas: Record<string, unknown>[] = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: page.title,
+    description: page.description,
+    datePublished: product.updatedAt,
+    dateModified: product.updatedAt,
+    mainEntityOfPage: `${product.siteUrl}${canonicalPath}`,
+    author: {
+      '@type': 'Organization',
+      name: product.publisher
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: product.publisher,
+      logo: {
+        '@type': 'ImageObject',
+        url: `${product.siteUrl}/media/logo.png`
+      }
+    }
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbs
+  }
+];
+
+if (page.faqs?.length) {
+  schemas.push({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: page.faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer
+      }
+    }))
+  });
+}
+---
+
+<BaseLayout
+  title={page.title}
+  description={page.description}
+  canonicalPath={canonicalPath}
+  schemas={schemas}
+>
+  <article class="container">
+    <header class="article-header">
+      <p class="eyebrow">{page.eyebrow}</p>
+      <h1>{page.title}</h1>
+      <p class="answer-box">{page.answer}</p>
+      <p class="article-meta">
+        Published and reviewed by {product.publisher} · Updated {product.updatedAt}
+      </p>
+    </header>
+
+    <figure class="article-screenshot">
+      <div>
+        <img
+          src={screenshot.src}
+          width="480"
+          height="1041"
+          loading="eager"
+          decoding="async"
+          fetchpriority="high"
+          alt={screenshot.alt}
+        />
+      </div>
+      <figcaption>Authentic Better Keep interface from the current app.</figcaption>
+    </figure>
+
+    <div class="article-grid">
+      <div class="article-body">
+        {
+          page.sections.map((section) => (
+            <section>
+              <h2>{section.heading}</h2>
+              {section.paragraphs?.map((paragraph) => <p>{paragraph}</p>)}
+              {
+                section.bullets && (
+                  <ul>
+                    {section.bullets.map((bullet) => <li>{bullet}</li>)}
+                  </ul>
+                )
+              }
+            </section>
+          ))
+        }
+
+        {
+          page.comparison && (
+            <section>
+              <h2>At a glance</h2>
+              <div class="comparison-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Consideration</th>
+                      <th>Better Keep</th>
+                      <th>{page.comparison.alternativeLabel}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {page.comparison.rows.map((row) => (
+                      <tr>
+                        <td>{row.subject}</td>
+                        <td>{row.betterKeep}</td>
+                        <td>{row.alternative}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )
+        }
+
+        {
+          page.faqs?.length && (
+            <section class="faq">
+              <h2>Questions people ask</h2>
+              {page.faqs.map((faq) => (
+                <details>
+                  <summary>{faq.question}</summary>
+                  <p>{faq.answer}</p>
+                </details>
+              ))}
+            </section>
+          )
+        }
+
+        {
+          page.sources?.length && (
+            <section>
+              <h2>Sources and further reading</h2>
+              <ul>
+                {page.sources.map((source) => (
+                  <li>
+                    <a href={source.url} rel="external">
+                      {source.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        }
+      </div>
+
+      <aside class="card sidebar-card">
+        <p class="eyebrow">Try Better Keep</p>
+        <h2>Start with local notes.</h2>
+        <p>
+          Add an account only when you want encrypted sync and account-based
+          features.
+        </p>
+        <StoreActions compact={true} />
+      </aside>
+    </div>
+  </article>
+
+  <section class="section container">
+    <div class="cta-band">
+      <div>
+        <p class="eyebrow">Private notes, richer writing</p>
+        <h2>Keep the capture flow. Upgrade everything around it.</h2>
+        <p>Available on {product.platforms.join(', ')}.</p>
+      </div>
+      <StoreActions compact={true} />
+    </div>
+  </section>
+</BaseLayout>

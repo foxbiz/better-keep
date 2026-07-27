@@ -2784,16 +2784,16 @@ abstract class AppLocalizations {
   /// **'Version {version} ({buildNumber})'**
   String version(String version, String buildNumber);
 
-  /// Open source section title
+  /// Source availability section title
   ///
   /// In en, this message translates to:
-  /// **'Open Source'**
+  /// **'Source Available'**
   String get openSource;
 
-  /// Open source description
+  /// Source availability and license description
   ///
   /// In en, this message translates to:
-  /// **'Better Keep is open source! View the code,\ncontribute, or report issues on GitHub.'**
+  /// **'Inspect the source under CC BY-NC 4.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.'**
   String get openSourceDescription;
 
   /// FAQ section title

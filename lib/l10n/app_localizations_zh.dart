@@ -1419,11 +1419,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get openSource => '开源';
+  String get openSource => '源码可查看';
 
   @override
   String get openSourceDescription =>
-      'Better Keep 是开源的！在 GitHub 上查看代码、\n贡献或报告问题。';
+      '源码按 CC BY-NC 4.0 许可提供。由于商业复用受限，应称为源码可查看软件，而不是经 OSI 认可的开源软件。';
 
   @override
   String get frequentlyAskedQuestions => '常见问题';

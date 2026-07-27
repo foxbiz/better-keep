@@ -1,0 +1,51 @@
+---
+import { product } from '../data/product';
+import Icon from './Icon.astro';
+import StoreActions from './StoreActions.astro';
+---
+
+<section class="home-hero">
+  <div class="home-hero__glow" aria-hidden="true"></div>
+  <div class="home-hero__inner container">
+    <div class="home-hero__copy">
+      <h1>Your Notes, <span>Reimagined</span></h1>
+      <p>
+        Private, offline notes with rich-text editing and optional end-to-end
+        encrypted sync—plus a local way to bring your Google Keep archive with
+        you.
+      </p>
+      <StoreActions variant="hero" includeMicrosoft={true} />
+      <p class="platforms-note">
+        Available on <a href="#platforms">{product.platforms.join(', ')}</a>
+      </p>
+      <div class="trust-badges" aria-label="Better Keep trust links">
+        <a
+          class="trust-badge"
+          href={product.githubUrl}
+          rel="external"
+          data-analytics={product.analyticsGoals.github}
+        >
+          <Icon name="Heart" size={15} />
+          Source-available
+        </a>
+        <a class="trust-badge" href="/security">
+          <Icon name="ShieldCheck" size={15} />
+          Security details
+        </a>
+        <a class="trust-badge" href="/import/google-keep">
+          <Icon name="Import" size={15} />
+          Local import
+        </a>
+      </div>
+    </div>
+    <div class="home-hero__visual">
+      <img
+        src="/media/screenshots/2-480.webp"
+        width="480"
+        height="1041"
+        alt="Better Keep notes home with colorful rich-text cards, labels, images, audio, and reminders"
+        fetchpriority="high"
+      />
+    </div>
+  </div>
+</section>

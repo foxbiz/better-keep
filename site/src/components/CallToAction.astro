@@ -1,0 +1,19 @@
+---
+import Icon from './Icon.astro';
+import { product } from '../data/product';
+---
+
+<section class="home-cta">
+  <div class="container home-cta__content">
+    <h2>Start taking better notes today</h2>
+    <p>Begin with local notes. Add encrypted sync only when you need it.</p>
+    <a
+      class="button button--large"
+      href={product.webAppUrl}
+      data-analytics={product.analyticsGoals.webApp}
+    >
+      <Icon name="CirclePlay" size={20} />
+      Open Better Keep
+    </a>
+  </div>
+</section>

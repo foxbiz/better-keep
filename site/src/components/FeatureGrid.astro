@@ -1,0 +1,30 @@
+---
+import { primaryFeatures } from '../data/home';
+import Icon from './Icon.astro';
+---
+
+<section class="home-section features-section" id="features">
+  <div class="container">
+    <div class="section-title">
+      <h2>Why choose Better Keep?</h2>
+      <p>A focused notes app designed for the way you work and think.</p>
+    </div>
+    <div class="feature-grid">
+      {
+        primaryFeatures.map((feature) => (
+          <a class="feature-card" href={feature.href}>
+            <span class={`feature-icon tone-${feature.tone}`}>
+              <Icon name={feature.icon} size={27} strokeWidth={1.9} />
+            </span>
+            <h3>{feature.title}</h3>
+            <p>{feature.description}</p>
+            <span class="text-link">
+              Explore feature
+              <Icon name="ArrowRight" size={16} />
+            </span>
+          </a>
+        ))
+      }
+    </div>
+  </div>
+</section>

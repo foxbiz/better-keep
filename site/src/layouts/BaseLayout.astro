@@ -1,0 +1,114 @@
+---
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { product } from '../data/product';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  canonicalPath?: string;
+  image?: string;
+  schemas?: Record<string, unknown>[];
+  noindex?: boolean;
+}
+
+const {
+  title,
+  description,
+  canonicalPath = Astro.url.pathname,
+  image = '/og.png',
+  schemas = [],
+  noindex = false
+} = Astro.props;
+
+const canonical = new URL(canonicalPath, product.siteUrl).toString();
+const socialImage = new URL(image, product.siteUrl).toString();
+const fullTitle = title.includes('Better Keep')
+  ? title
+  : `${title} | Better Keep`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="theme-color" content="#0b0c10" />
+    <meta name="description" content={description} />
+    <meta name="author" content={product.publisher} />
+    <meta
+      name="robots"
+      content={noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large'}
+    />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="en" href={canonical} />
+    <link rel="alternate" hreflang="x-default" href={canonical} />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/media/logo.png" />
+    <link rel="alternate" type="application/rss+xml" title="Better Keep updates" href="/feed.xml" />
+    <meta name="apple-itunes-app" content="app-id=6759548198, app-argument=betterkeep://" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Better Keep" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={socialImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Better Keep — private notes, richer writing" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImage} />
+    <title>{fullTitle}</title>
+    {
+      schemas.map((schema) => (
+        <script is:inline type="application/ld+json" set:html={JSON.stringify(schema)} />
+      ))
+    }
+    <script
+      is:inline
+      defer
+      data-domain="betterkeep.app"
+      src="https://plausible.io/js/script.js"
+    ></script>
+    <script is:inline>
+      window.plausible =
+        window.plausible ||
+        function () {
+          (window.plausible.q = window.plausible.q || []).push(arguments);
+        };
+
+      document.addEventListener('click', function (event) {
+        const target = event.target instanceof Element
+          ? event.target.closest('[data-analytics]')
+          : null;
+        const name = target && target.getAttribute('data-analytics');
+        if (name) {
+          window.plausible(name, {
+            props: {
+              path: window.location.pathname,
+              placement: target.textContent?.trim() || 'link'
+            }
+          });
+        }
+      });
+
+      const legacyStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+      if (legacyStandalone && window.location.pathname === '/') {
+        window.location.replace('/app/');
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <Header />
+    <main id="main-content">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

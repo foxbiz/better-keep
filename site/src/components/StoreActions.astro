@@ -1,0 +1,87 @@
+---
+import { product } from '../data/product';
+import type { IconName } from '../data/icons';
+import Icon from './Icon.astro';
+
+interface Props {
+  variant?: 'hero' | 'compact';
+  compact?: boolean;
+  includeWeb?: boolean;
+  includeMicrosoft?: boolean;
+}
+
+const {
+  variant = 'compact',
+  compact = false,
+  includeWeb = true,
+  includeMicrosoft = false
+} = Astro.props;
+
+type StoreAction = {
+  title: string;
+  subtitle: string;
+  href: string;
+  icon: IconName;
+  analytics?: string;
+};
+
+const actions: StoreAction[] = [
+  ...(includeWeb
+    ? [
+        {
+          title: 'Web app',
+          subtitle: 'Open in',
+          href: product.webAppUrl,
+          icon: 'Globe' as const,
+          analytics: product.analyticsGoals.webApp
+        }
+      ]
+    : []),
+  {
+    title: 'Google Play',
+    subtitle: 'Get it on',
+    href: product.playStoreUrl,
+    icon: 'Smartphone',
+    analytics: product.analyticsGoals.playStore
+  },
+  ...(includeMicrosoft
+    ? [
+        {
+          title: 'Microsoft Store',
+          subtitle: 'Get it from',
+          href: product.microsoftStoreUrl,
+          icon: 'MonitorDown' as const
+        }
+      ]
+    : []),
+  {
+    title: 'App Store',
+    subtitle: 'Download on',
+    href: product.appStoreUrl,
+    icon: 'Apple',
+    analytics: product.analyticsGoals.appStore
+  }
+];
+---
+
+<div
+  class:list={['store-actions', `store-actions--${variant}`, { 'is-compact': compact }]}
+  aria-label="Get Better Keep"
+>
+  {
+    actions.map((action) => (
+      <a
+        class="store-action"
+        href={action.href}
+        rel={action.href.startsWith('http') ? 'external' : undefined}
+        data-analytics={action.analytics}
+      >
+        <Icon name={action.icon} size={24} strokeWidth={1.8} />
+        <span class="store-action__text">
+          <span class="store-action__subtitle">{action.subtitle}</span>
+          <span class="store-action__title">{action.title}</span>
+        </span>
+      </a>
+    ))
+  }
+</div>

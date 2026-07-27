@@ -1431,11 +1431,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get openSource => '오픈 소스';
+  String get openSource => '소스 공개';
 
   @override
   String get openSourceDescription =>
-      'Better Keep은 오픈 소스입니다! GitHub에서\n코드를 보거나 기여하거나 문제를 보고하세요.';
+      '소스는 CC BY-NC 4.0에 따라 확인할 수 있습니다. 상업적 재사용이 제한되므로 OSI 승인 오픈 소스가 아닌 소스 공개 소프트웨어입니다.';
 
   @override
   String get frequentlyAskedQuestions => '자주 묻는 질문';

@@ -1,0 +1,30 @@
+---
+import { iconComponents, type IconName } from '../data/icons';
+
+interface Props {
+  name: IconName;
+  size?: number;
+  strokeWidth?: number;
+  label?: string;
+  class?: string;
+}
+
+const {
+  name,
+  size = 24,
+  strokeWidth = 2,
+  label,
+  class: className
+} = Astro.props;
+const IconComponent = iconComponents[name];
+---
+
+<IconComponent
+  class={className}
+  width={size}
+  height={size}
+  stroke-width={strokeWidth}
+  aria-hidden={label ? undefined : 'true'}
+  aria-label={label}
+  focusable="false"
+/>

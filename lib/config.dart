@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
-const databaseVersion = 9;
+const databaseVersion = 10;
 const databaseName = "better_keep.db";
 const bigScreenWidthThreshold = 800;
 const appLabel = "Better Keep Notes";

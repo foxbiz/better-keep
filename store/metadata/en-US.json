@@ -1,0 +1,25 @@
+{
+  "locale": "en-US",
+  "reviewStatus": "ready",
+  "appStore": {
+    "name": "Better Keep: Private Notes",
+    "subtitle": "Rich text, offline & encrypted",
+    "keywords": "checklist,reminder,voice,transcription,folder,lock,journal,sketch,organize,sync,writing,memo",
+    "promotionalText": "Private notes with richer writing, local-first capture, reminders, and end-to-end encrypted sync."
+  },
+  "playStore": {
+    "title": "Better Keep: Private Notes",
+    "shortDescription": "Private, offline notes with rich text and end-to-end encrypted sync.",
+    "fullDescription": "Write quickly without giving up rich formatting, offline access, or privacy. Better Keep is a local-first notes app with optional end-to-end encrypted sync.\n\nCAPTURE AND WRITE\n• Create notes, checklists, reminders, sketches, images, and voice recordings\n• Format with headings, emphasis, lists, links, colors, and indentation\n• Transcribe voice notes on supported devices with an on-device Whisper model\n\nORGANIZE WITHOUT THE CLUTTER\n• Pin important notes and arrange them as cards\n• Use labels, folders, colors, archive, trash, and fast search\n• Keep original note timestamps and state during supported local imports\n\nPRIVATE BY DESIGN\n• Start taking local notes without an account\n• Keep writing when the network is unavailable\n• Encrypt note titles, content, and supported attachments before optional sync\n• Review the documented security model and source-available code\n\nAVAILABLE WHERE YOU WRITE\nUse Better Keep on Android, iOS, macOS, Windows, and Web. Local features vary by platform; voice transcription is not available on Web.\n\nBRING YOUR NOTES WITH YOU\nChoose a supported Takeout archive inside Better Keep. Import processing stays on your device, exact repeat imports are skipped by default, and the final report calls out warnings or unsupported items.\n\nThe source is available under CC BY-NC 4.0. Better Keep has no published independent security audit. Download Better Keep and start with a local note today."
+  },
+  "screenshotCopy": [
+    "Your private notes, upgraded",
+    "Rich text without the clutter",
+    "End-to-end encrypted sync",
+    "Works offline across devices",
+    "Bring your notes with you",
+    "Voice notes, transcribed on device",
+    "Reminders that keep up",
+    "Folders, labels and fast search"
+  ]
+}

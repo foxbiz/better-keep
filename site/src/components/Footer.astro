@@ -1,0 +1,57 @@
+---
+import { product } from '../data/product';
+---
+
+<footer class="site-footer">
+  <div class="footer-grid container">
+    <div class="footer-about">
+      <a class="brand" href="/" aria-label="Better Keep home">
+        <img src="/media/logo.png" width="38" height="38" alt="" />
+        <span>Better Keep Notes</span>
+      </a>
+      <p>
+        Private, offline notes with richer writing and optional encrypted sync.
+      </p>
+      <p>
+        Contact:
+        {' '}
+        <a href={`mailto:${product.supportEmail}`}>{product.supportEmail}</a>
+      </p>
+    </div>
+    <div class="footer-links">
+      <strong>Product</strong>
+      <a href={product.webAppUrl}>Launch app</a>
+      <a href="/#features">Features</a>
+      <a href="/#platforms">Platforms</a>
+      <a href="/import/google-keep">Import from Google Keep</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/security">Security</a>
+    </div>
+    <div class="footer-links">
+      <strong>Explore</strong>
+      <a href="/google-keep-alternative">Google Keep alternative</a>
+      <a href="/private-encrypted-notes">Private encrypted notes</a>
+      <a href="/offline-notes-app">Offline notes</a>
+      <a href="/rich-text-notes">Rich-text notes</a>
+      <a href="/changelog">Changelog</a>
+      <a
+        href={product.githubUrl}
+        data-analytics={product.analyticsGoals.github}
+      >
+        Source-available code
+      </a>
+    </div>
+    <div class="footer-links">
+      <strong>Legal & support</strong>
+      <a href="/contact">Contact</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/cancellation-refund">Cancellation and refunds</a>
+      <a href="/delete-user">Delete an account</a>
+    </div>
+  </div>
+  <div class="footer-bottom container">
+    <p>© {new Date().getFullYear()} {product.publisher} All rights reserved.</p>
+    <p>{product.license.label}</p>
+  </div>
+</footer>

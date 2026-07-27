@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:better_keep/components/e2ee_status_card.dart';
@@ -22,6 +23,7 @@ import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -2788,6 +2790,11 @@ class _UserPageState extends State<UserPage> {
       }
     }
 
+    unawaited(
+      ReviewPromptService.instance.recordPositiveMilestone(
+        ReviewMilestone.dataExport,
+      ),
+    );
     return true;
   }
 

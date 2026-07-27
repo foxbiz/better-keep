@@ -1,0 +1,88 @@
+---
+import { product } from '../data/product';
+import Icon from './Icon.astro';
+---
+
+<header class="site-header">
+  <nav class="nav container" aria-label="Primary navigation">
+    <a class="brand" href="/" aria-label="Better Keep home">
+      <img src="/media/logo.png" width="38" height="38" alt="" />
+      <span>Better Keep Notes</span>
+    </a>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/#platforms">Platforms</a>
+      <a href="/google-keep-alternative">Switch from Keep</a>
+      <a href="/security">Security</a>
+      <a
+        class="button nav-launch"
+        href={product.webAppUrl}
+        data-analytics={product.analyticsGoals.webApp}
+      >
+        Launch app
+      </a>
+    </div>
+    <button
+      class="mobile-menu-toggle"
+      type="button"
+      aria-label="Open navigation"
+      aria-expanded="false"
+      aria-controls="mobile-navigation"
+      data-menu-toggle
+    >
+      <span data-menu-open-icon><Icon name="Menu" size={26} /></span>
+      <span data-menu-close-icon hidden><Icon name="X" size={26} /></span>
+    </button>
+  </nav>
+  <div class="mobile-navigation" id="mobile-navigation" data-mobile-navigation hidden>
+    <div class="container mobile-navigation__links">
+      <a href="/#features">Features</a>
+      <a href="/#platforms">Platforms</a>
+      <a href="/google-keep-alternative">Switch from Google Keep</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
+      <a
+        class="button"
+        href={product.webAppUrl}
+        data-analytics={product.analyticsGoals.webApp}
+      >
+        Launch app
+      </a>
+    </div>
+  </div>
+</header>
+
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>('[data-menu-toggle]');
+  const navigation = document.querySelector<HTMLElement>(
+    '[data-mobile-navigation]'
+  );
+  const openIcon = toggle?.querySelector<HTMLElement>('[data-menu-open-icon]');
+  const closeIcon = toggle?.querySelector<HTMLElement>('[data-menu-close-icon]');
+
+  const setMenuOpen = (open: boolean) => {
+    if (!toggle || !navigation || !openIcon || !closeIcon) return;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+    navigation.hidden = !open;
+    openIcon.hidden = open;
+    closeIcon.hidden = !open;
+    document.documentElement.classList.toggle('menu-open', open);
+  };
+
+  toggle?.addEventListener('click', () => {
+    setMenuOpen(toggle.getAttribute('aria-expanded') !== 'true');
+  });
+
+  navigation?.querySelectorAll('a').forEach((link) => {
+    link.addEventListener('click', () => setMenuOpen(false));
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setMenuOpen(false);
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 860) setMenuOpen(false);
+  });
+</script>

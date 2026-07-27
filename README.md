@@ -38,7 +38,7 @@ Available on **Android**, **iOS**, **macOS**, **Windows**, and **Web**.
 - Flutter 3.10+ with a lightweight global `AppState` pub/sub instead of heavy state frameworks.
 - Persistent storage via `sqflite` (and `sqflite_common_ffi` for desktop) with thin model layers in `lib/models`.
 - Rich editor and previews courtesy of `flutter_quill`; read-only rendering reuses the same deltas.
-- Simple XOR + SHA-256 based encryption (`lib/utils/encryption.dart`) for locked notes, keeping secrets out of the database.
+- AES-256-GCM protection for PIN-locked notes, with legacy XOR decryption retained only to migrate older data (`lib/utils/encryption.dart`).
 - Responsive masonry grid (`lib/pages/home/notes.dart`) that adapts to any screen width and remembers scroll position.
 
 ## Screenshots
@@ -138,13 +138,19 @@ flutter build linux --dart-define-from-file=.env
 The app will be at `build/linux/x64/release/bundle/`.
 -->
 
-**Web:**
+**Web app and static marketing site:**
 
 ```bash
-flutter build web --dart-define-from-file=.env
+npm run build:web
 ```
 
-The output will be in `build/web/`. Deploy to any static hosting service.
+This builds the indexable Astro marketing site at `/`, embeds Flutter Web at
+`/app/`, and validates the complete Firebase Hosting artifact in `build/web/`.
+
+## Source license
+
+The repository is **source-available under CC BY-NC 4.0**. The non-commercial
+restriction means it is not described as OSI-approved open source.
 
 ## Project layout
 
