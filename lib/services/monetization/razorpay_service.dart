@@ -7,6 +7,7 @@ import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/services/monetization/user_plan.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
@@ -142,6 +143,11 @@ class RazorpayService {
     final user = AuthService.currentUser;
     if (user == null) {
       return RazorpayPaymentResult.failed('Please sign in first');
+    }
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return RazorpayPaymentResult.failed(
+        'Purchases are unavailable for the managed review account',
+      );
     }
 
     // Use provided currency or get from SubscriptionService
@@ -309,6 +315,7 @@ class RazorpayService {
   Future<bool> cancelSubscription() async {
     final user = AuthService.currentUser;
     if (user == null) return false;
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) return false;
 
     try {
       isLoading.value = true;
@@ -336,6 +343,7 @@ class RazorpayService {
   Future<bool> resumeSubscription() async {
     final user = AuthService.currentUser;
     if (user == null) return false;
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) return false;
 
     try {
       isLoading.value = true;
@@ -361,6 +369,9 @@ class RazorpayService {
 
   /// Restore subscription status from server
   Future<bool> restoreSubscription() async {
+    if (ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      return false;
+    }
     try {
       await PlanService.instance.refreshSubscription();
       return PlanService.instance.currentPlan != UserPlan.free;
@@ -373,6 +384,9 @@ class RazorpayService {
   /// DEBUG ONLY: Delete subscription for testing
   /// This immediately removes the subscription from Firestore
   Future<bool> debugDeleteSubscription() async {
+    if (ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      return false;
+    }
     try {
       isLoading.value = true;
 

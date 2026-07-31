@@ -7,6 +7,7 @@ import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/sketch_preview_generator.dart';
 import 'package:better_keep/services/sketch_strokes_file_service.dart';
 import 'package:better_keep/state.dart';
@@ -110,15 +111,19 @@ class SketchPreviewLocalProgress {
 class SketchPreviewRepairService {
   SketchPreviewRepairService._();
 
-  static const _preferenceKey = 'sketch_preview_renderer_version';
+  static String get _preferenceKey =>
+      FirebaseScopedPreferences.key('sketch_preview_renderer_version');
   // Version 4 regenerates previews which may have been distorted when editor
   // saves independently clamped both axes of an oversized image canvas.
   static const _currentVersion = 4;
-  static const _progressPreferenceKey =
-      'sketch_preview_renderer_v4_repair_progress';
+  static String get _progressPreferenceKey => FirebaseScopedPreferences.key(
+    'sketch_preview_renderer_v4_repair_progress',
+  );
   static const _maxAutomaticFailures = 3;
-  static const _unlockedRepairPreferenceKey =
-      'sketch_preview_renderer_v2_unlocked_note_ids';
+  static String get _unlockedRepairPreferenceKey =>
+      FirebaseScopedPreferences.key(
+        'sketch_preview_renderer_v2_unlocked_note_ids',
+      );
   static bool _running = false;
   static final Set<int> _startupAttemptedNoteIds = {};
 

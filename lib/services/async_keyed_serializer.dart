@@ -25,4 +25,26 @@ class AsyncKeyedSerializer<K> {
   }
 
   bool contains(K key) => _tails.containsKey(key);
+
+  /// Waits until all work currently queued for [key] has completed.
+  ///
+  /// The loop is intentional: another operation may append itself while the
+  /// previously observed tail is still running.
+  Future<void> waitForIdle(K key) async {
+    while (true) {
+      final tail = _tails[key];
+      if (tail == null) return;
+      await tail;
+      if (identical(_tails[key], tail)) {
+        _tails.remove(key);
+        return;
+      }
+    }
+  }
+
+  Future<void> waitForAll() async {
+    while (_tails.isNotEmpty) {
+      await Future.wait<void>(_tails.values.toList(growable: false));
+    }
+  }
 }

@@ -1,17 +1,44 @@
-import * as crypto from "node:crypto";
 import { onRequest } from "firebase-functions/v2/https";
+import { isValidAccountLinkSession } from "../accountLinkSession";
 import {
+	auth,
+	db,
 	facebookAppId,
 	githubClientId,
+	isEmulator,
+	legacyOAuthV1Enabled,
+	oauthStateSecret,
 	twitterClientId,
 	twitterClientSecret,
 } from "../config";
-import type { OAuthState } from "../types";
+import {
+	accountProviderFor,
+	challengeForVerifier,
+	createOpaqueToken,
+	hashOpaqueToken,
+	isAllowedOAuthClientOrigin,
+	isClientTransactionId,
+	isCustomOAuthProvider,
+	isOpaqueToken,
+	OAUTH_STATE_TTL_MS,
+	OAUTH_STATE_AUDIENCE,
+	oauthCookieHeader,
+	originFromReferrer,
+	parseOAuthMode,
+	parseOAuthRedirect,
+	sealOAuthState,
+	type OAuthFlowVersion,
+	type OAuthState,
+} from "../oauthSession";
+import { isProtectedReviewUserRecord } from "../reviewAccess";
+
+const CALLBACK_URL = "https://betterkeep.app/oauth/callback";
 
 /**
- * Start OAuth flow - redirects to provider's authorization page
- * URL: /oauthStart?provider=facebook&redirect=betterkeep&mode=signin
- * For linking: /oauthStart?provider=facebook&redirect=betterkeep&mode=link&uid=USER_UID
+ * Starts a custom OAuth transaction.
+ *
+ * State is encrypted and bound to the browser that initiated the flow. No
+ * anonymous Firestore state document is created.
  */
 export default onRequest(
 	{
@@ -20,89 +47,184 @@ export default onRequest(
 			githubClientId,
 			twitterClientId,
 			twitterClientSecret,
+			...(isEmulator ? [] : [oauthStateSecret]),
 		],
-		cors: true,
 	},
 	async (req, res) => {
-		const provider = req.query.provider as string;
-		const redirect = (req.query.redirect as string) || "betterkeep";
-		const mode = (req.query.mode as "signin" | "link") || "signin";
-		const linkingUserId = req.query.uid as string | undefined;
+		res.set("Cache-Control", "no-store");
+		res.set("Pragma", "no-cache");
+		res.set("Referrer-Policy", "no-referrer");
 
-		if (!provider) {
-			res.status(400).send("Missing provider parameter");
+		if (req.method !== "GET") {
+			res.set("Allow", "GET");
+			res.status(405).send("Method not allowed");
 			return;
 		}
 
-		// For link mode, uid is required
-		if (mode === "link" && !linkingUserId) {
-			res.status(400).send("Missing uid parameter for link mode");
+		const providerValue = req.query.provider;
+		const redirect = parseOAuthRedirect(req.query.redirect);
+		const mode = parseOAuthMode(req.query.mode);
+		const flowVersionValue = req.query.flowVersion;
+		const version: OAuthFlowVersion =
+			flowVersionValue === undefined || flowVersionValue === "" ? 1 : 2;
+
+		if (
+			flowVersionValue !== undefined &&
+			flowVersionValue !== "" &&
+			flowVersionValue !== "2"
+		) {
+			res.status(400).send("Unsupported OAuth flow version");
+			return;
+		}
+		if (version === 1 && !legacyOAuthV1Enabled) {
+			res
+				.status(426)
+				.send("This app version must be updated before using OAuth sign-in");
+			return;
+		}
+		if (!isCustomOAuthProvider(providerValue)) {
+			res.status(400).send("Invalid provider");
+			return;
+		}
+		if (!redirect || !mode) {
+			res.status(400).send("Invalid OAuth redirect or mode");
 			return;
 		}
 
-		const callbackUrl = `https://betterkeep.app/oauth/callback`;
+		let clientOrigin: string | undefined;
+		if (redirect === "popup") {
+			const requestedOrigin =
+				typeof req.query.clientOrigin === "string"
+					? req.query.clientOrigin
+					: undefined;
+			clientOrigin =
+				version === 2
+					? requestedOrigin
+					: (originFromReferrer(req.get("referer"), isEmulator) ?? undefined);
+			if (!isAllowedOAuthClientOrigin(clientOrigin, isEmulator)) {
+				res.status(403).send("OAuth client origin is not allowed");
+				return;
+			}
+		}
 
-		// Create state with provider info for callback
-		const state: OAuthState = { provider, redirect, mode, linkingUserId };
-		const stateStr = Buffer.from(JSON.stringify(state)).toString("base64url");
+		let clientTransactionId: string | undefined;
+		let completionChallenge: string | undefined;
+		if (version === 2) {
+			clientTransactionId =
+				typeof req.query.clientTransactionId === "string"
+					? req.query.clientTransactionId
+					: undefined;
+			completionChallenge =
+				typeof req.query.completionChallenge === "string"
+					? req.query.completionChallenge
+					: undefined;
+			if (
+				!isClientTransactionId(clientTransactionId) ||
+				!isOpaqueToken(completionChallenge)
+			) {
+				res.status(400).send("Invalid OAuth completion challenge");
+				return;
+			}
+		}
 
-		let authUrl: string;
-
-		switch (provider) {
-			case "facebook":
-				authUrl =
-					`https://www.facebook.com/v18.0/dialog/oauth?` +
-					`client_id=${facebookAppId.value()}` +
-					`&redirect_uri=${encodeURIComponent(callbackUrl)}` +
-					`&state=${stateStr}` +
-					`&scope=email,public_profile`;
-				break;
-
-			case "github":
-				authUrl =
-					`https://github.com/login/oauth/authorize?` +
-					`client_id=${githubClientId.value()}` +
-					`&redirect_uri=${encodeURIComponent(callbackUrl)}` +
-					`&state=${stateStr}` +
-					`&scope=read:user,user:email`;
-				break;
-
-			case "twitter": {
-				// Twitter uses OAuth 2.0 PKCE flow
-				// Generate code verifier and challenge
-				const codeVerifier = crypto.randomBytes(32).toString("base64url");
-				const codeChallenge = crypto
-					.createHash("sha256")
-					.update(codeVerifier)
-					.digest("base64url");
-
-				// Store code verifier in state (it's URL-safe base64)
-				const twitterState: OAuthState = {
-					provider,
-					redirect,
-					nonce: codeVerifier,
-					mode,
-					linkingUserId,
-				};
-				const twitterStateStr = Buffer.from(
-					JSON.stringify(twitterState),
-				).toString("base64url");
-
-				authUrl =
-					`https://twitter.com/i/oauth2/authorize?` +
-					`client_id=${twitterClientId.value()}` +
-					`&redirect_uri=${encodeURIComponent(callbackUrl)}` +
-					`&state=${twitterStateStr}` +
-					`&scope=tweet.read%20users.read%20offline.access` +
-					`&response_type=code` +
-					`&code_challenge=${codeChallenge}` +
-					`&code_challenge_method=S256`;
-				break;
+		let linkingUserId: string | undefined;
+		let linkSessionId: string | undefined;
+		if (mode === "link") {
+			const linkToken = req.query.linkToken;
+			if (!isOpaqueToken(linkToken)) {
+				res.status(400).send("Missing account-link authorization");
+				return;
 			}
 
-			default:
-				res.status(400).send(`Unknown provider: ${provider}`);
+			linkSessionId = hashOpaqueToken(linkToken);
+			const linkSession = await db
+				.collection("accountLinkSessions")
+				.doc(linkSessionId)
+				.get();
+			const linkData = linkSession.data();
+			const expectedProvider = accountProviderFor(providerValue);
+			if (
+				!linkSession.exists ||
+				!isValidAccountLinkSession(linkData, {
+					provider: expectedProvider,
+				})
+			) {
+				res
+					.status(403)
+					.send("Account-link authorization is invalid or expired");
 				return;
+			}
+
+			const linkingUser = await auth.getUser(linkData.uid);
+			if (isProtectedReviewUserRecord(linkingUser)) {
+				res.status(403).send("Account linking is unavailable");
+				return;
+			}
+			linkingUserId = linkingUser.uid;
+		}
+
+		const now = Date.now();
+		const browserNonce = createOpaqueToken();
+		const codeVerifier =
+			providerValue === "twitter" ? createOpaqueToken() : undefined;
+		const state: OAuthState = {
+			version,
+			audience: OAUTH_STATE_AUDIENCE,
+			provider: providerValue,
+			redirect,
+			mode,
+			linkingUserId,
+			linkSessionId,
+			codeVerifier,
+			clientOrigin,
+			clientTransactionId,
+			completionChallenge,
+			browserNonce,
+			issuedAt: now,
+			expiresAt: now + OAUTH_STATE_TTL_MS,
+		};
+		const sealedState = await sealOAuthState(state, oauthStateSecret.value());
+
+		res.set("Set-Cookie", oauthCookieHeader(browserNonce));
+		console.info(
+			JSON.stringify({
+				event: "oauth_flow_started",
+				flowVersion: version,
+				provider: providerValue,
+				mode,
+				redirect,
+			}),
+		);
+
+		let authUrl: string;
+		switch (providerValue) {
+			case "facebook":
+				authUrl =
+					"https://www.facebook.com/v18.0/dialog/oauth?" +
+					`client_id=${facebookAppId.value()}` +
+					`&redirect_uri=${encodeURIComponent(CALLBACK_URL)}` +
+					`&state=${encodeURIComponent(sealedState)}` +
+					"&scope=email,public_profile";
+				break;
+			case "github":
+				authUrl =
+					"https://github.com/login/oauth/authorize?" +
+					`client_id=${githubClientId.value()}` +
+					`&redirect_uri=${encodeURIComponent(CALLBACK_URL)}` +
+					`&state=${encodeURIComponent(sealedState)}` +
+					"&scope=read:user,user:email";
+				break;
+			case "twitter":
+				authUrl =
+					"https://twitter.com/i/oauth2/authorize?" +
+					`client_id=${twitterClientId.value()}` +
+					`&redirect_uri=${encodeURIComponent(CALLBACK_URL)}` +
+					`&state=${encodeURIComponent(sealedState)}` +
+					"&scope=tweet.read%20users.read%20offline.access" +
+					"&response_type=code" +
+					`&code_challenge=${challengeForVerifier(codeVerifier as string)}` +
+					"&code_challenge_method=S256";
+				break;
 		}
 
 		res.redirect(authUrl);

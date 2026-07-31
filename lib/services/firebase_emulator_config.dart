@@ -3,43 +3,91 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'firebase_backend.dart';
 import 'firebase_emulator_host.dart';
 
-/// Configuration for Firebase Emulators in debug mode.
+export 'firebase_emulator_host.dart';
+
+/// Selects and configures the Firebase backend used by debug builds.
 ///
-/// Shows a dialog to let the user choose between emulator or live Firebase.
-/// The choice is persisted until app data is cleared or reinstalled.
+/// Firebase SDK emulator routing is process-wide and must be finalized before
+/// Auth, Firestore, Functions, or Storage is otherwise used.
 class FirebaseEmulatorConfig {
-  /// SharedPreferences key for storing the Firebase environment choice
-  static const String _prefsKey = 'debug_firebase_use_emulators';
+  static const String _legacyEnvironmentPrefsKey =
+      'debug_firebase_use_emulators';
+  static const String _environmentPrefsKey = 'debug_firebase_environment';
+  static const String _hostPrefsKey = 'debug_firebase_emulator_host';
+  static const String _googleAuthModePrefsKey =
+      'debug_firebase_google_auth_mode';
+  static const String _runtimeEmulatorHostPrefsKey =
+      'debug_firebase_runtime_emulator_host';
+  static const String _runtimeEmulatorAppNamePrefsKey =
+      'debug_firebase_runtime_emulator_app_name';
+  static const String _definedPhysicalDeviceHost = String.fromEnvironment(
+    'EMULATOR_HOST',
+  );
 
-  /// Whether the app is using emulators (only relevant in debug mode)
-  static bool _useEmulators = false;
-
-  /// Whether the app is using emulators
-  static bool get isUsingEmulators => _useEmulators;
-
-  /// Cached SharedPreferences instance
   static SharedPreferences? _prefs;
-
-  /// True when running on the Android emulator (not a physical device)
   static bool _isAndroidEmulator = false;
-
-  /// True when running on the iOS/macOS simulator (not a physical device)
   static bool _isIOSSimulator = false;
 
-  /// Host machine address used by physical devices on the local network.
-  static const String _physicalDeviceHost = '192.168.0.109';
+  static FirebaseEmulatorSettings get settings {
+    final active = FirebaseBackend.active;
+    return FirebaseEmulatorSettings(
+      environment: active.environment,
+      endpoints: active.endpoints,
+      googleAuthMode: active.googleAuthMode,
+    );
+  }
 
-  /// Detect whether we're running on a simulator/emulator or a physical device.
-  /// Must be called before [connectToEmulators].
+  static FirebaseEnvironment get environment => FirebaseBackend.environment;
+  static bool get isUsingEmulators =>
+      FirebaseBackend.environment == FirebaseEnvironment.emulator;
+  static GoogleEmulatorAuthMode get googleAuthMode =>
+      FirebaseBackend.active.googleAuthMode;
+
+  static FirebaseEmulatorEndpoints get endpoints {
+    final configuredEndpoints = FirebaseBackend.active.endpoints;
+    if (configuredEndpoints == null) {
+      throw StateError('Firebase emulator endpoints are not configured.');
+    }
+    return configuredEndpoints;
+  }
+
+  static bool get isPhysicalDevice {
+    if (kIsWeb) return false;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return !_isAndroidEmulator;
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return !_isIOSSimulator;
+    }
+    return false;
+  }
+
+  static bool get supportsRealGoogleAuthToggle {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows;
+  }
+
+  static String get suggestedPhysicalDeviceHost {
+    final savedHost = _prefs?.getString(_hostPrefsKey)?.trim();
+    if (savedHost != null && savedHost.isNotEmpty) return savedHost;
+    return _definedPhysicalDeviceHost.trim();
+  }
+
+  static void init(SharedPreferences prefs) {
+    _prefs = prefs;
+  }
+
+  /// Detects whether platform-specific loopback aliases can be used.
   static Future<void> initDeviceInfo() async {
     if (kIsWeb) return;
     if (Platform.isAndroid) {
@@ -49,162 +97,185 @@ class FirebaseEmulatorConfig {
       final iosInfo = await DeviceInfoPlugin().iosInfo;
       _isIOSSimulator = !iosInfo.isPhysicalDevice;
     } else if (Platform.isMacOS) {
-      // macOS runs natively on the same machine as the emulators
       _isIOSSimulator = true;
     }
   }
 
-  static String get _host {
+  static GoogleEmulatorAuthMode get savedGoogleAuthMode {
+    final value = _prefs?.getString(_googleAuthModePrefsKey);
+    return value == GoogleEmulatorAuthMode.real.name
+        ? GoogleEmulatorAuthMode.real
+        : GoogleEmulatorAuthMode.mock;
+  }
+
+  static String _resolveHost(String? physicalDeviceHost) {
+    var lanHost = physicalDeviceHost?.trim() ?? suggestedPhysicalDeviceHost;
+    if (isPhysicalDevice) {
+      lanHost = normalizePhysicalFirebaseEmulatorHost(lanHost);
+    }
     return selectFirebaseEmulatorHost(
       isWeb: kIsWeb,
       platform: defaultTargetPlatform,
       isAndroidEmulator: _isAndroidEmulator,
       isAppleSimulator: _isIOSSimulator,
-      physicalDeviceHost: _physicalDeviceHost,
+      physicalDeviceHost: lanHost,
     );
   }
 
-  /// Initialize with SharedPreferences instance
-  static void init(SharedPreferences prefs) {
-    _prefs = prefs;
-  }
+  static Future<void> _saveSettings(FirebaseEmulatorSettings settings) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
 
-  /// Check if user has already made a choice (saved in preferences)
-  static bool get hasSavedChoice {
-    return _prefs?.containsKey(_prefsKey) ?? false;
-  }
-
-  /// Get the saved choice (true = emulator, false = live)
-  static bool? get savedChoice {
-    return _prefs?.getBool(_prefsKey);
-  }
-
-  /// Save the user's choice to SharedPreferences
-  static Future<void> _saveChoice(bool useEmulators) async {
-    await _prefs?.setBool(_prefsKey, useEmulators);
-  }
-
-  /// Shows a dialog to let the user choose between emulator or live Firebase.
-  /// Returns true if emulator was selected, false for live.
-  static Future<bool> showFirebaseSelectionDialog(BuildContext context) async {
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('🔧 Debug Mode'),
-        content: const Text(
-          'Select Firebase environment:\n\n'
-          '• Emulator: Local development with Firebase emulators\n'
-          '• Live: Production Firebase services\n\n'
-          'This choice will be remembered.',
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () => Navigator.of(context).pop(false),
-            icon: const Icon(Icons.cloud, color: Colors.blue),
-            label: const Text('Live'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.of(context).pop(true),
-            icon: const Icon(Icons.computer),
-            label: const Text('Emulator'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
-
-  /// Connect to Firebase Emulators in debug mode.
-  /// Call this after Firebase.initializeApp() and before any Firebase usage.
-  /// In debug mode, this waits for user selection via the UI.
-  static Future<void> configureEmulators() async {
-    if (!kDebugMode) {
-      _useEmulators = false;
-      return;
-    }
-
-    debugPrint(
-      'Firebase Emulators: Debug mode - waiting for user selection...',
-    );
-  }
-
-  /// Actually connects to emulators. Called after user makes their choice.
-  static Future<void> connectToEmulators() async {
-    debugPrint('Firebase Emulators: Connecting (debug mode)');
-    debugPrint('  Auth:      $_host:9099');
-    debugPrint('  Firestore: $_host:8080');
-    debugPrint('  Functions: $_host:5001');
-    debugPrint('  Storage:   $_host:9199');
-
-    // Browsers cannot open raw TCP sockets. The Firebase web SDK performs the
-    // reachability check through its normal HTTP requests instead.
-    if (!kIsWeb) {
-      try {
-        final socket = await Socket.connect(
-          _host,
-          9099,
-          timeout: const Duration(milliseconds: 500),
-        );
-        socket.destroy();
-        debugPrint('Firebase Emulators: Network reachability OK ($_host:9099)');
-      } catch (e) {
-        debugPrint(
-          'Firebase Emulators: NETWORK UNREACHABLE - cannot reach $_host:9099\n'
-          '  Error: $e\n'
-          '  Check: emulators running? firewall? correct IP?',
-        );
-        throw Exception(
-          'Cannot reach emulator at $_host:9099.\n'
-          'Make sure Firebase emulators are running and the host IP is correct.',
-        );
+    // Debug builds ask for the environment on every cold launch. Remove
+    // obsolete saved choices while retaining reusable emulator details.
+    await prefs.remove(_environmentPrefsKey);
+    await prefs.remove(_legacyEnvironmentPrefsKey);
+    if (settings.usesEmulators) {
+      await prefs.setString(
+        _googleAuthModePrefsKey,
+        settings.googleAuthMode.name,
+      );
+      await prefs.remove('debug_firebase_test_identity');
+      if (isPhysicalDevice) {
+        await prefs.setString(_hostPrefsKey, settings.endpoints!.host);
       }
+      await prefs.setString(
+        _runtimeEmulatorHostPrefsKey,
+        settings.endpoints!.host,
+      );
+      await prefs.setString(
+        _runtimeEmulatorAppNamePrefsKey,
+        FirebaseBackend.app.name,
+      );
+    }
+  }
+
+  static Future<void> connectToEmulators({
+    String? physicalDeviceHost,
+    GoogleEmulatorAuthMode googleAuthMode = GoogleEmulatorAuthMode.mock,
+  }) async {
+    if (!kDebugMode) {
+      throw StateError('Firebase emulators are only available in debug mode.');
     }
 
-    // Auth Emulator
-    await FirebaseAuth.instance.useAuthEmulator(_host, 9099);
-    debugPrint('Firebase Emulators: Auth connected');
+    final host = _resolveHost(physicalDeviceHost);
+    final emulatorEndpoints = FirebaseEmulatorEndpoints(host);
+    debugPrint('Firebase Emulators: Connecting');
+    for (final service in emulatorEndpoints.requiredServices.entries) {
+      debugPrint('  ${service.key}: $host:${service.value}');
+    }
 
-    // Firestore Emulator
-    FirebaseFirestore.instance.useFirestoreEmulator(_host, 8080);
-    debugPrint('Firebase Emulators: Firestore connected');
+    // Browsers cannot open raw TCP sockets. Their SDK requests surface an
+    // equivalent error while configuring or making the first request.
+    if (!kIsWeb) {
+      await _verifyRequiredServices(emulatorEndpoints);
+    }
 
-    // Functions Emulator
-    FirebaseFunctions.instance.useFunctionsEmulator(_host, 5001);
-    debugPrint('Firebase Emulators: Functions connected');
+    try {
+      final savedRuntimeHost = _prefs?.getString(_runtimeEmulatorHostPrefsKey);
+      final preferredAppName = savedRuntimeHost == host
+          ? _prefs?.getString(_runtimeEmulatorAppNamePrefsKey)
+          : null;
+      await FirebaseBackend.configureEmulator(
+        endpoints: emulatorEndpoints,
+        googleAuthMode: googleAuthMode,
+        preferredAppName: preferredAppName,
+      );
+    } catch (error) {
+      final discardedAppName =
+          FirebaseBackend.takeLastDiscardedEmulatorAppName();
+      if (discardedAppName != null &&
+          _prefs?.getString(_runtimeEmulatorAppNamePrefsKey) ==
+              discardedAppName) {
+        await _prefs?.remove(_runtimeEmulatorAppNamePrefsKey);
+        await _prefs?.remove(_runtimeEmulatorHostPrefsKey);
+      }
+      throw FirebaseEmulatorRoutingException(error);
+    }
 
-    // Storage Emulator
-    await FirebaseStorage.instance.useStorageEmulator(_host, 9199);
-    debugPrint('Firebase Emulators: Storage connected');
-
-    _useEmulators = true;
-    await _saveChoice(true);
+    try {
+      await _saveSettings(settings);
+    } catch (error) {
+      debugPrint(
+        'Firebase Emulators: Could not save reusable chooser details: $error',
+      );
+    }
     debugPrint('Firebase Emulators: Setup complete');
   }
 
-  /// Called when user selects to use live Firebase (no emulators)
-  static Future<void> useLiveFirebase() async {
-    _useEmulators = false;
-    await _saveChoice(false);
-    debugPrint('Firebase: Using live Firebase services');
+  static Future<void> _verifyRequiredServices(
+    FirebaseEmulatorEndpoints emulatorEndpoints,
+  ) async {
+    final failures = <String, Object>{};
+    await Future.wait(
+      emulatorEndpoints.requiredServices.entries.map((service) async {
+        try {
+          final socket = await Socket.connect(
+            emulatorEndpoints.host,
+            service.value,
+            timeout: const Duration(seconds: 2),
+          );
+          socket.destroy();
+        } catch (error) {
+          failures['${service.key} (${service.value})'] = error;
+        }
+      }),
+    );
+
+    if (failures.isNotEmpty) {
+      throw FirebaseEmulatorUnavailableException(
+        host: emulatorEndpoints.host,
+        failures: failures,
+      );
+    }
   }
 
-  /// Apply the saved choice without showing dialog
-  static Future<void> applySavedChoice() async {
-    final useEmulators = savedChoice ?? false;
-    if (useEmulators) {
-      try {
-        await connectToEmulators();
-      } catch (e) {
-        // Saved choice is no longer valid (emulators unreachable).
-        // Clear it so the selection screen is shown again next launch.
-        await _prefs?.remove(_prefsKey);
-        debugPrint('Firebase: Saved emulator choice failed, cleared: $e');
-        rethrow;
-      }
-    } else {
-      _useEmulators = false;
-      debugPrint('Firebase: Using live Firebase services (from saved choice)');
+  /// Verifies the authenticated Firestore SDK route before cloud services
+  /// start. A raw port check cannot detect an SDK connected to the wrong
+  /// database, host, or project.
+  static Future<void> verifyAuthenticatedFirestore(User user) async {
+    if (!isUsingEmulators) return;
+
+    final projectId = FirebaseBackend.projectId;
+    final host = FirebaseBackend.emulatorHost ?? endpoints.host;
+    final databaseId = FirebaseBackend.databaseId;
+
+    try {
+      await FirebaseBackend.firestore
+          .collection('users')
+          .doc(user.uid)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 10));
+      debugPrint(
+        'Firebase Emulator Firestore probe succeeded: '
+        'project=$projectId database=$databaseId host=$host '
+        'uid=${user.uid} code=ok',
+      );
+    } catch (error) {
+      final code = error is FirebaseException ? error.code : 'unknown';
+      debugPrint(
+        'Firebase Emulator Firestore probe failed: '
+        'project=$projectId database=$databaseId host=$host '
+        'uid=${user.uid} code=$code error=$error',
+      );
+      throw FirebaseEmulatorFirestoreProbeException(
+        projectId: projectId,
+        databaseId: databaseId,
+        host: host,
+        uid: user.uid,
+        code: code,
+        cause: error,
+      );
     }
+  }
+
+  static Future<void> useLiveFirebase() async {
+    FirebaseBackend.configureLive();
+    try {
+      await _saveSettings(settings);
+    } catch (error) {
+      debugPrint('Firebase: Could not update chooser preferences: $error');
+    }
+    debugPrint('Firebase: Using live Firebase services');
   }
 }

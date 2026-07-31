@@ -10,21 +10,36 @@ StreamSubscription<web.MessageEvent>? _messageSubscription;
 Completer<OAuthPopupResult>? _popupCompleter;
 Timer? _popupCheckTimer;
 bool _receivedMessage = false;
+const _oauthCallbackOrigin = 'https://betterkeep.app';
 
-/// Result class to hold token or error message
+String currentOAuthClientOrigin() => web.window.location.origin;
+
+/// Result returned by the browser-bound OAuth popup.
 class OAuthPopupResult {
-  final String? token;
+  final String? completionCode;
+  final String? transactionId;
   final String? error;
   final bool cancelled;
+  final bool linked;
 
-  OAuthPopupResult({this.token, this.error, this.cancelled = false});
+  OAuthPopupResult({
+    this.completionCode,
+    this.transactionId,
+    this.error,
+    this.cancelled = false,
+    this.linked = false,
+  });
 
-  bool get isSuccess => token != null;
+  bool get isSuccess => completionCode != null || linked;
   bool get isError => error != null && !cancelled;
 }
 
-/// Opens OAuth in a popup window and waits for the token via postMessage
-Future<OAuthPopupResult> openOAuthPopup(String url) async {
+/// Opens OAuth in a popup and accepts messages only from that exact window and
+/// the Better Keep callback origin.
+Future<OAuthPopupResult> openOAuthPopup(
+  String url, {
+  required String expectedTransactionId,
+}) async {
   // Close any existing popup
   _popup?.close();
   _messageSubscription?.cancel();
@@ -126,12 +141,15 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
 
   // Listen for postMessage from popup
   _messageSubscription = web.window.onMessage.listen((event) {
-    // Log all messages for debugging
-    AppLogger.log('Received postMessage from origin: ${event.origin}');
+    if (event.origin != _oauthCallbackOrigin || event.source != _popup) {
+      AppLogger.log('Ignored OAuth message from an unexpected source');
+      return;
+    }
 
     // Convert data to a usable format
     String? type;
-    String? token;
+    String? completionCode;
+    String? transactionId;
     String? error;
 
     try {
@@ -141,7 +159,14 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
         // Use js_interop to access JavaScript object properties
         final jsData = data as JSObject;
         type = jsData.getProperty<JSAny?>('type'.toJS)?.dartify()?.toString();
-        token = jsData.getProperty<JSAny?>('token'.toJS)?.dartify()?.toString();
+        completionCode = jsData
+            .getProperty<JSAny?>('completionCode'.toJS)
+            ?.dartify()
+            ?.toString();
+        transactionId = jsData
+            .getProperty<JSAny?>('transactionId'.toJS)
+            ?.dartify()
+            ?.toString();
         error = jsData.getProperty<JSAny?>('error'.toJS)?.dartify()?.toString();
       }
     } catch (e) {
@@ -149,11 +174,12 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
       return;
     }
 
-    AppLogger.log(
-      'Received OAuth message: type=$type, hasToken=${token != null}, error=$error',
-    );
+    if (transactionId != expectedTransactionId) {
+      AppLogger.log('Ignored stale OAuth transaction message');
+      return;
+    }
 
-    if (type == 'oauth_success' && token != null) {
+    if (type == 'oauth_success' && completionCode != null) {
       _receivedMessage = true;
       _popupCheckTimer?.cancel();
       _messageSubscription?.cancel();
@@ -162,7 +188,7 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
       try {
         if (_popup != null) {
           final message = {'type': 'oauth_close'}.jsify();
-          _popup!.postMessage(message, '*'.toJS);
+          _popup!.postMessage(message, _oauthCallbackOrigin.toJS);
         }
       } catch (e) {
         AppLogger.log('Error sending close command: $e');
@@ -172,7 +198,12 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
       _popup?.close();
 
       if (_popupCompleter != null && !_popupCompleter!.isCompleted) {
-        _popupCompleter!.complete(OAuthPopupResult(token: token));
+        _popupCompleter!.complete(
+          OAuthPopupResult(
+            completionCode: completionCode,
+            transactionId: transactionId,
+          ),
+        );
       }
     } else if (type == 'oauth_error') {
       _receivedMessage = true;
@@ -184,7 +215,7 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
       try {
         if (_popup != null) {
           final message = {'type': 'oauth_close'}.jsify();
-          _popup!.postMessage(message, '*'.toJS);
+          _popup!.postMessage(message, _oauthCallbackOrigin.toJS);
         }
       } catch (e) {
         AppLogger.log('Error sending close command: $e');
@@ -215,7 +246,7 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
       try {
         if (_popup != null) {
           final message = {'type': 'oauth_close'}.jsify();
-          _popup!.postMessage(message, '*'.toJS);
+          _popup!.postMessage(message, _oauthCallbackOrigin.toJS);
         }
       } catch (e) {
         AppLogger.log('Error sending close command: $e');
@@ -223,8 +254,9 @@ Future<OAuthPopupResult> openOAuthPopup(String url) async {
 
       _popup?.close();
       if (_popupCompleter != null && !_popupCompleter!.isCompleted) {
-        // Return empty token to indicate success (not an error, not cancelled)
-        _popupCompleter!.complete(OAuthPopupResult(token: 'link_success'));
+        _popupCompleter!.complete(
+          OAuthPopupResult(linked: true, transactionId: transactionId),
+        );
       }
     }
   });

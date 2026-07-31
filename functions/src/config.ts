@@ -3,6 +3,8 @@ import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import type { SubscriptionPlan, SupportedCurrency } from "./types";
 
+export { REVIEW_ACCOUNT_EMAIL } from "./reviewConfig";
+
 export const app = admin.initializeApp();
 
 // Check if running in emulator - emulator only supports default database
@@ -32,6 +34,11 @@ export const githubClientId = defineSecret("GITHUB_CLIENT_ID");
 export const githubClientSecret = defineSecret("GITHUB_CLIENT_SECRET");
 export const twitterClientId = defineSecret("TWITTER_CLIENT_ID");
 export const twitterClientSecret = defineSecret("TWITTER_CLIENT_SECRET");
+// 32 random bytes encoded as base64/base64url. Used only to encrypt the
+// short-lived, browser-bound custom OAuth transaction state.
+export const oauthStateSecret = defineSecret("OAUTH_STATE_SECRET");
+export const legacyOAuthV1Enabled =
+	process.env.OAUTH_LEGACY_V1_ENABLED !== "false";
 
 // Razorpay pricing by currency
 // USD: amounts in cents (100 cents = $1)
@@ -119,9 +126,6 @@ export const IOS_PRODUCT_IDS = {
 	yearly: "pro_yearly",
 } as const;
 
-// Review account email for app store review testing
-export const REVIEW_ACCOUNT_EMAIL = "review@betterkeep.app";
-
 // Trial configuration (can be controlled via environment variables)
 export const TRIAL_ENABLED = process.env.TRIAL_ENABLED === "true";
 export const TRIAL_DAYS = Number.parseInt(process.env.TRIAL_DAYS || "7", 10);
@@ -130,13 +134,3 @@ export const DEBUG_TRIAL_MINUTES =
 	isEmulator && process.env.DEBUG_TRIAL_MINUTES
 		? Number.parseInt(process.env.DEBUG_TRIAL_MINUTES, 10)
 		: null;
-
-/**
- * Allowed provider IDs for account linking
- */
-export const ALLOWED_PROVIDERS = [
-	"google.com",
-	"facebook.com",
-	"github.com",
-	"twitter.com",
-] as const;

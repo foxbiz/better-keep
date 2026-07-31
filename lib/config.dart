@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:better_keep/services/firebase_backend.dart';
 
-const databaseVersion = 9;
+const databaseVersion = 10;
 const databaseName = "better_keep.db";
+String get activeDatabaseName => FirebaseBackend.localDataScope.databaseName;
 const bigScreenWidthThreshold = 800;
 const appLabel = "Better Keep Notes";
 const defaultAlarmSound = "assets/sounds/2.mp3";

@@ -824,9 +824,8 @@ class _NoteCardState extends State<NoteCard>
             snackbar(l10n.syncing);
           } else {
             snackbar(l10n.retryingDecryption);
-            final success = await NoteSyncService().retryDecryptionForNote(
-              widget.note.id!,
-            );
+            final success = await NoteSyncService()
+                .retryFailedRemoteNoteForLocalId(widget.note.id!);
             if (!success && mounted) {
               snackbar(l10n.decryptionFailed);
             }
@@ -1173,11 +1172,39 @@ class _NoteCardState extends State<NoteCard>
                         Icon(Icons.push_pin, size: 14.0, color: secondaryColor),
                       if (_isSyncFailed)
                         Tooltip(
-                          message: context.l10n.syncFailed,
-                          child: Icon(
-                            Icons.sync_problem,
-                            size: 14.0,
-                            color: Colors.red,
+                          message: _syncStatus ?? context.l10n.syncFailed,
+                          child: GestureDetector(
+                            onTap: () async {
+                              final noteId = widget.note.id;
+                              if (noteId == null ||
+                                  NoteSyncService().isSyncing.value) {
+                                return;
+                              }
+                              snackbar(context.l10n.retryingDecryption);
+                              final failure = NoteSyncService()
+                                  .contentFailures
+                                  .value[noteId];
+                              final success = failure == null
+                                  ? await NoteSyncService().refresh().then(
+                                      (_) => !NoteSyncService().syncFailed.value
+                                          .contains(noteId),
+                                    )
+                                  : await NoteSyncService()
+                                        .retryFailedRemoteNoteForLocalId(
+                                          noteId,
+                                        );
+                              if (!mounted) return;
+                              snackbar(
+                                success
+                                    ? context.l10n.syncComplete
+                                    : context.l10n.syncFailed,
+                              );
+                            },
+                            child: Icon(
+                              Icons.sync_problem,
+                              size: 14.0,
+                              color: Colors.red,
+                            ),
                           ),
                         ),
                       if (_isSyncingOutgoing || _isSyncingIncoming)

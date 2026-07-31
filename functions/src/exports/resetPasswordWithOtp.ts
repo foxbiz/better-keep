@@ -3,6 +3,7 @@ import type { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { auth, db } from "../config";
+import { isOperatorManagedPasswordReset } from "../passwordResetPolicy";
 
 const MAX_ATTEMPTS = 5;
 
@@ -44,6 +45,12 @@ export default onCall(async (request: CallableRequest) => {
 	}
 
 	const normalizedEmail = email.toLowerCase().trim();
+	if (isOperatorManagedPasswordReset(normalizedEmail)) {
+		throw new HttpsError(
+			"permission-denied",
+			"This managed account can only be reset by an operator",
+		);
+	}
 	const emailHash = hashEmail(normalizedEmail);
 	const otpDocRef = db.collection("passwordResetOtps").doc(emailHash);
 

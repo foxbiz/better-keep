@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:better_keep/models/cloud_sync_cursor.dart';
 
 /// Represents a remote note document that needs to be synced locally.
 /// This is used to cache fetched remote data for reliable sync with retry support.
@@ -192,9 +193,11 @@ class RemoteSyncCacheMetadata {
   /// Current page being synced
   int currentSyncPage;
 
-  /// Last sync time used for the query - updated as pages are fetched
-  /// This tracks the max updated_at from fetched docs to avoid re-fetching
-  DateTime? lastSyncedAt;
+  /// Exact durable cursor to commit after every cached item is applied.
+  CloudSyncCursor? lastCursor;
+
+  /// Distinguishes durable cursor caches from legacy `updated_at` caches.
+  final int cursorSchemaVersion;
 
   /// Whether all pages have been fetched from Firebase
   bool allPagesFetched;
@@ -211,7 +214,8 @@ class RemoteSyncCacheMetadata {
   RemoteSyncCacheMetadata({
     this.totalPages = 0,
     this.currentSyncPage = 0,
-    this.lastSyncedAt,
+    this.lastCursor,
+    this.cursorSchemaVersion = CloudSyncCheckpoint.schemaVersion,
     this.allPagesFetched = false,
     this.syncComplete = false,
     DateTime? createdAt,
@@ -219,13 +223,20 @@ class RemoteSyncCacheMetadata {
   }) : createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
 
+  /// A cursor is safe to promote only after pagination and local application
+  /// have both completed.
+  bool get isCommitReady => allPagesFetched && syncComplete;
+
   factory RemoteSyncCacheMetadata.fromJson(Map<String, dynamic> json) {
     return RemoteSyncCacheMetadata(
       totalPages: json['total_pages'] as int? ?? 0,
       currentSyncPage: json['current_sync_page'] as int? ?? 0,
-      lastSyncedAt: json['last_synced_at'] != null
-          ? DateTime.parse(json['last_synced_at'] as String)
+      lastCursor: json['last_cursor'] is Map
+          ? CloudSyncCursor.fromJson(
+              Map<String, dynamic>.from(json['last_cursor'] as Map),
+            )
           : null,
+      cursorSchemaVersion: json['cursor_schema_version'] as int? ?? 1,
       allPagesFetched: json['all_pages_fetched'] as bool? ?? false,
       syncComplete: json['sync_complete'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -237,7 +248,8 @@ class RemoteSyncCacheMetadata {
     return {
       'total_pages': totalPages,
       'current_sync_page': currentSyncPage,
-      'last_synced_at': lastSyncedAt?.toIso8601String(),
+      'last_cursor': lastCursor?.toJson(),
+      'cursor_schema_version': cursorSchemaVersion,
       'all_pages_fetched': allPagesFetched,
       'sync_complete': syncComplete,
       'created_at': createdAt.toIso8601String(),

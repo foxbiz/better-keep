@@ -177,10 +177,7 @@ class _AboutPageState extends State<AboutPage> {
                 const SizedBox(height: 12),
                 const Text(
                   'Legal',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(

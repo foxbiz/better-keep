@@ -1,8 +1,5 @@
-import type { ALLOWED_PROVIDERS } from "./config";
-
 // Supported currencies for Razorpay
 export type SupportedCurrency = "USD" | "INR";
-export type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];
 
 /**
  * Configuration for OTP email template
@@ -45,14 +42,6 @@ export interface OtpEmailConfig {
 	securityNote?: string;
 	/** Minutes until expiry (default: 10) */
 	expiresInMinutes?: number;
-}
-
-export interface OAuthState {
-	provider: string;
-	redirect: string;
-	nonce?: string;
-	mode?: "signin" | "link";
-	linkingUserId?: string;
 }
 
 export interface VerifyPurchaseRequest {

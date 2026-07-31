@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { auth, db, emailPassword } from "../config";
-import { getEmailTransporter, sendEmail } from "../utils";
+import { sendEmail } from "../utils";
 
 /**
  * Scheduled function that runs daily at 8:00 AM UTC
@@ -35,8 +35,6 @@ export default onSchedule(
 			failed: 0,
 		};
 
-		// Create transporter once outside the loop for efficiency
-		const transporter = getEmailTransporter(emailPassword.value());
 		const senderEmail = process.env.EMAIL_FROM;
 		const senderName = process.env.EMAIL_NAME;
 
@@ -134,7 +132,7 @@ This is an automated reminder. If you did not schedule this deletion, please sig
           `,
 				};
 
-				await sendEmail(transporter, mailOptions);
+				await sendEmail(mailOptions);
 
 				// Mark reminder as sent
 				await doc.ref.update({

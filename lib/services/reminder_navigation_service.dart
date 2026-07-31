@@ -4,6 +4,7 @@ import 'package:better_keep/dialogs/unlock_note_dialog.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/reminder_session_service.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/utils.dart';
@@ -31,10 +32,26 @@ class ReminderNavigationService {
   ReminderNavigationService._();
 
   static final instance = ReminderNavigationService._();
-  static const _noteIdKey = 'pending_reminder_navigation_note_id';
-  static const _createdAtKey = 'pending_reminder_navigation_created_at';
-  static const _lastActivationKey = 'reminder_navigation_last_activation';
-  static const _lastActivationAtKey = 'reminder_navigation_last_activation_at';
+  static String _noteIdKey(SharedPreferences preferences) =>
+      FirebaseScopedPreferences.keyForPreferences(
+        'pending_reminder_navigation_note_id',
+        preferences,
+      );
+  static String _createdAtKey(SharedPreferences preferences) =>
+      FirebaseScopedPreferences.keyForPreferences(
+        'pending_reminder_navigation_created_at',
+        preferences,
+      );
+  static String _lastActivationKey(SharedPreferences preferences) =>
+      FirebaseScopedPreferences.keyForPreferences(
+        'reminder_navigation_last_activation',
+        preferences,
+      );
+  static String _lastActivationAtKey(SharedPreferences preferences) =>
+      FirebaseScopedPreferences.keyForPreferences(
+        'reminder_navigation_last_activation_at',
+        preferences,
+      );
   static const _maxPendingAge = Duration(minutes: 10);
   static const _maxActivationAge = Duration(seconds: 10);
 
@@ -62,8 +79,10 @@ class ReminderNavigationService {
   Future<void> restorePending() async {
     if (_pending != null) return;
     final prefs = await SharedPreferences.getInstance();
-    final noteId = prefs.getInt(_noteIdKey);
-    final createdAt = DateTime.tryParse(prefs.getString(_createdAtKey) ?? '');
+    final noteId = prefs.getInt(_noteIdKey(prefs));
+    final createdAt = DateTime.tryParse(
+      prefs.getString(_createdAtKey(prefs)) ?? '',
+    );
     if (noteId == null || createdAt == null) {
       await _clearPersisted(prefs);
       return;
@@ -91,8 +110,11 @@ class ReminderNavigationService {
     final pending = _PendingReminderNavigation(noteId, _now);
     _pending = pending;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_noteIdKey, pending.noteId);
-    await prefs.setString(_createdAtKey, pending.createdAt.toIso8601String());
+    await prefs.setInt(_noteIdKey(prefs), pending.noteId);
+    await prefs.setString(
+      _createdAtKey(prefs),
+      pending.createdAt.toIso8601String(),
+    );
     await _log('Reminder navigation queued: noteId=$noteId');
     await flush();
   }
@@ -105,9 +127,9 @@ class ReminderNavigationService {
     final prefs = await SharedPreferences.getInstance();
     final activation =
         '${notificationId ?? 'unknown'}:${occurrenceToken ?? noteId}';
-    final previous = prefs.getString(_lastActivationKey);
+    final previous = prefs.getString(_lastActivationKey(prefs));
     final previousAt = DateTime.tryParse(
-      prefs.getString(_lastActivationAtKey) ?? '',
+      prefs.getString(_lastActivationAtKey(prefs)) ?? '',
     );
     final now = _now;
     final age = previousAt == null ? null : now.difference(previousAt);
@@ -120,8 +142,8 @@ class ReminderNavigationService {
       );
       return;
     }
-    await prefs.setString(_lastActivationKey, activation);
-    await prefs.setString(_lastActivationAtKey, now.toIso8601String());
+    await prefs.setString(_lastActivationKey(prefs), activation);
+    await prefs.setString(_lastActivationAtKey(prefs), now.toIso8601String());
     await open(noteId);
   }
 
@@ -219,13 +241,13 @@ class ReminderNavigationService {
   Future<void> clearForSignOut() async {
     await clear();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_lastActivationKey);
-    await prefs.remove(_lastActivationAtKey);
+    await prefs.remove(_lastActivationKey(prefs));
+    await prefs.remove(_lastActivationAtKey(prefs));
   }
 
   Future<void> _clearPersisted(SharedPreferences prefs) async {
-    await prefs.remove(_noteIdKey);
-    await prefs.remove(_createdAtKey);
+    await prefs.remove(_noteIdKey(prefs));
+    await prefs.remove(_createdAtKey(prefs));
   }
 
   Future<void> _log(String message) {

@@ -7,15 +7,14 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:uuid/uuid.dart';
 
 /// KDF algorithm used for key derivation
@@ -96,17 +95,7 @@ class RecoveryKeyService {
 
   RecoveryKeyService._();
 
-  // Lazy Firestore instance getter to ensure correct databaseId is used
-  // This is important because databaseId depends on FirebaseEmulatorConfig.isUsingEmulators
-  // which may not be set at singleton creation time
-  FirebaseFirestore? _firestoreInstance;
-  FirebaseFirestore get _firestore {
-    _firestoreInstance ??= FirebaseFirestore.instanceFor(
-      app: Firebase.app(),
-      databaseId: DefaultFirebaseOptions.databaseId,
-    );
-    return _firestoreInstance!;
-  }
+  FirebaseFirestore get _firestore => FirebaseBackend.firestore;
 
   final DeviceManager _deviceManager = DeviceManager.instance;
   final E2EESecureStorage _secureStorage = E2EESecureStorage.instance;
@@ -516,7 +505,5 @@ class RecoveryKeyService {
 
   /// Clears cached Firestore instance.
   /// Call this during signout to ensure a fresh instance is created on next signin.
-  void clearFirestoreCache() {
-    _firestoreInstance = null;
-  }
+  void clearFirestoreCache() {}
 }

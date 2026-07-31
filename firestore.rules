@@ -11,6 +11,28 @@ service cloud.firestore {
         && request.auth.token.planExpiresAt > request.time.toMillis();
     }
 
+    function isReviewAccount() {
+      return request.auth != null
+        && (
+          (
+            request.auth.token.keys().hasAll(['appReview'])
+            && request.auth.token.appReview == true
+          )
+          || (
+            request.auth.token.keys().hasAll(['email'])
+            && request.auth.token.email == 'review@betterkeep.app'
+          )
+        );
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isMutableOwner(userId) {
+      return isOwner(userId) && !isReviewAccount();
+    }
+
     // Public statistics - read-only access for user count badges
     // Only Cloud Functions can write via Admin SDK
     match /stats/public {
@@ -23,6 +45,33 @@ service cloud.firestore {
     function hasValidAttachmentCount() {
       let attachments = request.resource.data.attachments;
       return !('attachments' in request.resource.data) || attachments == null || attachments.size() <= 50;
+    }
+
+    // New clients write request.time through a serverTimestamp transform.
+    // Legacy clients may omit the marker or retain the previous value; a
+    // backend trigger stamps those writes after commit.
+    function hasValidSyncCommitMarkerOnCreate() {
+      let data = request.resource.data;
+      return !('sync_committed_at' in data)
+        || (
+          data.sync_committed_at is timestamp
+          && data.sync_committed_at == request.time
+        );
+    }
+
+    function hasValidSyncCommitMarkerOnUpdate() {
+      let data = request.resource.data;
+      return !('sync_committed_at' in data)
+        || (
+          data.sync_committed_at is timestamp
+          && (
+            data.sync_committed_at == request.time
+            || (
+              'sync_committed_at' in resource.data
+              && data.sync_committed_at == resource.data.sync_committed_at
+            )
+          )
+        );
     }
 
     function hasValidNoteSortManifest() {
@@ -116,98 +165,113 @@ service cloud.firestore {
     match /users/{userId} {
       // Allow creating/reading/updating/deleting the user document itself
       // ONLY if the request comes from the authenticated user with that UID
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId);
+      allow write: if isMutableOwner(userId);
 
       // Notes subcollection - requires Pro subscription for writes
       match /notes/{noteId} {
         // Allow reads for all authenticated owners (needed for migration/download)
-        allow read: if request.auth != null && request.auth.uid == userId;
+        allow read: if isMutableOwner(userId);
         
         // Only Pro users can write (create/update) notes to the cloud
         // Also validates attachment count
-        allow create, update: if request.auth != null 
-          && request.auth.uid == userId 
+        allow create: if isMutableOwner(userId)
           && isPro()
-          && hasValidAttachmentCount();
+          && hasValidAttachmentCount()
+          && hasValidSyncCommitMarkerOnCreate();
+        allow update: if isMutableOwner(userId)
+          && isPro()
+          && hasValidAttachmentCount()
+          && hasValidSyncCommitMarkerOnUpdate();
         
         // Allow deletes for Pro users OR if the note exists (cleanup)
         // This allows users to delete their cloud data even after subscription ends
-        allow delete: if request.auth != null 
-          && request.auth.uid == userId 
+        allow delete: if isMutableOwner(userId)
           && (isPro() || resource != null);
       }
 
       // Labels subcollection - same rules as notes
       match /labels/{labelId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null 
-          && request.auth.uid == userId 
-          && isPro();
-        allow delete: if request.auth != null 
-          && request.auth.uid == userId 
+        allow read: if isMutableOwner(userId);
+        allow create: if isMutableOwner(userId)
+          && isPro()
+          && hasValidSyncCommitMarkerOnCreate();
+        allow update: if isMutableOwner(userId)
+          && isPro()
+          && hasValidSyncCommitMarkerOnUpdate();
+        allow delete: if isMutableOwner(userId)
           && (isPro() || resource != null);
       }
 
       match /preferences/{preferenceId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
-          && request.auth.uid == userId
+        allow read: if isMutableOwner(userId);
+        allow create, update: if isMutableOwner(userId)
           && isPro()
           && preferenceId == 'note_sort'
           && hasValidNoteSortManifest();
-        allow delete: if request.auth != null
-          && request.auth.uid == userId
+        allow delete: if isMutableOwner(userId)
           && preferenceId == 'note_sort';
       }
 
       match /note_order_snapshots/{revision}/chunks/{chunkId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
-          && request.auth.uid == userId
+        allow read: if isMutableOwner(userId);
+        allow create, update: if isMutableOwner(userId)
           && isPro()
           && hasValidNoteOrderChunk(revision);
-        allow delete: if request.auth != null
-          && request.auth.uid == userId
+        allow delete: if isMutableOwner(userId)
           && (isPro() || resource != null);
       }
 
       match /note_order_contexts/{contextId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
-          && request.auth.uid == userId
+        allow read: if isMutableOwner(userId);
+        allow create, update: if isMutableOwner(userId)
           && isPro()
           && hasValidContextOrderManifest(contextId);
-        allow delete: if request.auth != null
-          && request.auth.uid == userId
+        allow delete: if isMutableOwner(userId)
           && (isPro() || resource != null);
       }
 
       match /note_order_context_snapshots/{revision}/chunks/{chunkId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
-          && request.auth.uid == userId
+        allow read: if isMutableOwner(userId);
+        allow create, update: if isMutableOwner(userId)
           && isPro()
           && hasValidContextOrderChunk(revision);
-        allow delete: if request.auth != null
-          && request.auth.uid == userId;
+        allow delete: if isMutableOwner(userId);
       }
 
       // Subscription subcollection - read only for owner, write only by Cloud Functions
       match /subscription/{document=**} {
-        allow read: if request.auth != null && request.auth.uid == userId;
+        allow read: if isMutableOwner(userId);
         // Writes are handled by Cloud Functions with admin SDK, so deny client writes
         allow write: if false;
+      }
+
+      // Authentication authorization state is backend-only. Allowing an owner
+      // to write these documents would let a modified client mint its own OTP
+      // or provider-link authorization.
+      match /otpVerification/{document=**} {
+        allow read, write: if false;
+      }
+
+      match /pendingProviderLinks/{document=**} {
+        allow read, write: if false;
+      }
+
+      match /auditLog/{document=**} {
+        allow read, write: if false;
       }
 
       // Other subcollections (settings, preferences, etc.) - allow for owner
       match /{subcollection}/{document=**} {
         // Exclude notes, labels, and subscription which have specific rules above
-        allow read, write: if request.auth != null 
-          && request.auth.uid == userId
+        allow read, write: if isMutableOwner(userId)
           && !(subcollection in [
             'notes',
             'labels',
             'subscription',
+            'otpVerification',
+            'pendingProviderLinks',
+            'auditLog',
             'preferences',
             'note_order_snapshots',
             'note_order_contexts',
@@ -235,13 +299,16 @@ service cloud.firestore {
       allow read: if true;
       
       // Only authenticated owner can create/update/delete shares
-      allow create: if request.auth != null 
+      allow create: if request.auth != null
+        && !isReviewAccount()
         && request.resource.data.owner_uid == request.auth.uid;
       
-      allow update: if request.auth != null 
+      allow update: if request.auth != null
+        && !isReviewAccount()
         && resource.data.owner_uid == request.auth.uid;
       
-      allow delete: if request.auth != null 
+      allow delete: if request.auth != null
+        && !isReviewAccount()
         && resource.data.owner_uid == request.auth.uid;
       
       // Access requests subcollection
@@ -251,14 +318,17 @@ service cloud.firestore {
         allow read: if true;
         
         // Anyone can create a request (to request access)
-        allow create: if request.resource.data.status == 'pending';
+        allow create: if !isReviewAccount()
+          && request.resource.data.status == 'pending';
         
         // Only owner can update (approve/deny)
-        allow update: if request.auth != null 
+        allow update: if request.auth != null
+          && !isReviewAccount()
           && get(/databases/$(database)/documents/shares/$(shareId)).data.owner_uid == request.auth.uid;
         
         // Only owner can delete requests
-        allow delete: if request.auth != null 
+        allow delete: if request.auth != null
+          && !isReviewAccount()
           && get(/databases/$(database)/documents/shares/$(shareId)).data.owner_uid == request.auth.uid;
       }
     }

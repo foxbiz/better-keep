@@ -9,6 +9,7 @@ import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:better_keep/state.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,13 +22,18 @@ void main() {
   final service = NoteSortService();
   const grid = NoteOrderContext.mainGrid();
   const list = NoteOrderContext.mainList();
+  late E2EEStatus originalE2EEStatus;
 
   setUpAll(sqfliteFfiInit);
 
   setUp(() async {
     await service.dispose();
+    originalE2EEStatus = E2EEService.instance.status.value;
+    E2EEService.instance.status.value = E2EEStatus.notInitialized;
     NoteSortService.canReceiveCloudOverride = null;
     NoteSortService.canPushCloudOverride = null;
+    NoteSortService.e2eeReadyOverride = true;
+    NoteSortService.cloudStartOverride = null;
     NoteSortService.cloudRepositoryOverride = null;
     NoteSortService.uploadRetryDelayOverride = null;
     NoteSortService.disposeTimeoutOverride = null;
@@ -45,10 +51,151 @@ void main() {
     await service.dispose();
     NoteSortService.canReceiveCloudOverride = null;
     NoteSortService.canPushCloudOverride = null;
+    NoteSortService.e2eeReadyOverride = null;
+    NoteSortService.cloudStartOverride = null;
     NoteSortService.cloudRepositoryOverride = null;
     NoteSortService.uploadRetryDelayOverride = null;
     NoteSortService.disposeTimeoutOverride = null;
+    E2EEService.instance.status.value = originalE2EEStatus;
     await database.close();
+  });
+
+  test('cloud startup requires a ready E2EE state', () async {
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.e2eeReadyOverride = null;
+    var starts = 0;
+    NoteSortService.cloudStartOverride = () async {
+      starts++;
+    };
+
+    for (final status in const [
+      E2EEStatus.notInitialized,
+      E2EEStatus.notSetUp,
+      E2EEStatus.pendingApproval,
+      E2EEStatus.needsRecovery,
+      E2EEStatus.revoked,
+      E2EEStatus.error,
+    ]) {
+      E2EEService.instance.status.value = status;
+      expect(
+        service.canReceiveCloudForTesting,
+        isFalse,
+        reason: '$status must not permit cloud access',
+      );
+      await service.startCloudSync();
+    }
+
+    expect(starts, 0);
+    await service.dispose();
+    for (final status in const [
+      E2EEStatus.ready,
+      E2EEStatus.verifyingInBackground,
+    ]) {
+      E2EEService.instance.status.value = status;
+      expect(
+        service.canReceiveCloudForTesting,
+        isTrue,
+        reason: '$status must permit cloud access',
+      );
+    }
+  });
+
+  test('E2EE readiness starts Note Sort cloud sync only once', () async {
+    final cloud = _FakeNoteSortCloudRepository();
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.e2eeReadyOverride = null;
+    var starts = 0;
+    NoteSortService.cloudStartOverride = () async {
+      starts++;
+      service.activateCloudRunForTesting();
+    };
+    E2EEService.instance.status.value = E2EEStatus.error;
+
+    E2EEService.instance.status.value = E2EEStatus.ready;
+    await _waitUntil(() => service.hasActiveCloudRunForTesting);
+    E2EEService.instance.status.value = E2EEStatus.verifyingInBackground;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(starts, 1);
+    expect(service.hasActiveCloudRunForTesting, isTrue);
+  });
+
+  test(
+    'losing E2EE readiness invalidates cloud work but keeps local state',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository();
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.e2eeReadyOverride = null;
+      await service.setMode(grid, NoteSortMode.custom);
+      service.activateCloudRunForTesting();
+      final generation = service.cloudGenerationForTesting;
+      final localSnapshot = service.snapshotFor(grid);
+
+      E2EEService.instance.status.value = E2EEStatus.ready;
+      E2EEService.instance.status.value = E2EEStatus.error;
+      await _waitUntil(() => !service.hasActiveCloudRunForTesting);
+
+      expect(service.cloudGenerationForTesting, greaterThan(generation));
+      expect(service.snapshotFor(grid), localSnapshot);
+
+      service.activateCloudRunForTesting();
+      E2EEService.instance.status.value = E2EEStatus.ready;
+      E2EEService.instance.status.value = E2EEStatus.revoked;
+      await _waitUntil(() => !service.hasActiveCloudRunForTesting);
+
+      expect(service.snapshotFor(grid), localSnapshot);
+    },
+  );
+
+  test(
+    'E2EE retry resumes Note Sort cloud sync without reinitializing',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository();
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.e2eeReadyOverride = null;
+      var starts = 0;
+      NoteSortService.cloudStartOverride = () async {
+        starts++;
+        service.activateCloudRunForTesting();
+      };
+      E2EEService.instance.status.value = E2EEStatus.error;
+
+      E2EEService.instance.status.value = E2EEStatus.ready;
+      await _waitUntil(() => service.hasActiveCloudRunForTesting);
+      E2EEService.instance.status.value = E2EEStatus.error;
+      await _waitUntil(() => !service.hasActiveCloudRunForTesting);
+      E2EEService.instance.status.value = E2EEStatus.ready;
+      await _waitUntil(() => starts == 2);
+
+      expect(service.hasActiveCloudRunForTesting, isTrue);
+    },
+  );
+
+  test('disposal removes the E2EE lifecycle listener', () async {
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.e2eeReadyOverride = null;
+    var starts = 0;
+    NoteSortService.cloudStartOverride = () async {
+      starts++;
+    };
+    E2EEService.instance.status.value = E2EEStatus.error;
+
+    // A callback queued just before disposal must not reopen cloud activity.
+    E2EEService.instance.status.value = E2EEStatus.ready;
+    await service.dispose();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(starts, 0);
+    expect(service.hasActiveCloudRunForTesting, isFalse);
+
+    // Disposal must also remove the listener for later status changes.
+    E2EEService.instance.status.value = E2EEStatus.error;
+    E2EEService.instance.status.value = E2EEStatus.ready;
+    await Future<void>.delayed(Duration.zero);
+    expect(starts, 0);
   });
 
   test('creates independent default main contexts', () async {

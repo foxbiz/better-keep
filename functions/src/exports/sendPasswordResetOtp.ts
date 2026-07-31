@@ -5,8 +5,9 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { auth, db, emailPassword } from "../config";
 import { generateOtpEmailHtml, generateOtpEmailText } from "../email_templates";
+import { isOperatorManagedPasswordReset } from "../passwordResetPolicy";
 import type { OtpEmailConfig } from "../types";
-import { generateOtp, getEmailTransporter, sendEmail } from "../utils";
+import { generateOtp, sendEmail } from "../utils";
 
 // Rate limit: max 3 OTP requests per email per hour
 const MAX_REQUESTS_PER_HOUR = 3;
@@ -41,6 +42,15 @@ export default onCall(
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 		if (!emailRegex.test(normalizedEmail)) {
 			throw new HttpsError("invalid-argument", "Invalid email format");
+		}
+
+		if (isOperatorManagedPasswordReset(normalizedEmail)) {
+			return {
+				success: true,
+				message:
+					"If an account exists with this email, you will receive a verification code.",
+				maskedEmail: maskEmail(normalizedEmail),
+			};
 		}
 
 		try {
@@ -115,7 +125,6 @@ export default onCall(
 			});
 
 			// Send email
-			const transporter = getEmailTransporter(emailPassword.value());
 			const senderEmail = process.env.EMAIL_FROM;
 			const senderName = process.env.EMAIL_NAME;
 
@@ -138,7 +147,7 @@ export default onCall(
 				text: generateOtpEmailText(emailConfig),
 			};
 
-			await sendEmail(transporter, mailOptions);
+			await sendEmail(mailOptions);
 
 			console.log(`Password reset OTP sent to: ${normalizedEmail}`);
 

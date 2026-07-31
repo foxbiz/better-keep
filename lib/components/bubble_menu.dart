@@ -265,36 +265,36 @@ class _BubbleMenuState extends State<BubbleMenu>
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-          AnimatedBuilder(
-            animation: _animationController,
-            builder: (context, child) {
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  ..._buildMenuItems(context),
-                  if (_isMenuOpen && _hasMoved)
-                    _buildGhostFab(
-                      fabColor,
-                      fabIconColor,
-                      totalWidth,
-                      totalHeight,
-                    ),
-                ],
-              );
-            },
-          ),
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: GestureDetector(
-              onPanStart: widget.disabled ? null : _handlePanStart,
-              onPanUpdate: widget.disabled ? null : _handlePanUpdate,
-              onPanEnd: widget.disabled ? null : _handlePanEnd,
-              onPanCancel: widget.disabled ? null : _handlePanCancel,
-              behavior: HitTestBehavior.opaque,
-              child: _buildFab(fabColor, fabIconColor),
+            AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ..._buildMenuItems(context),
+                    if (_isMenuOpen && _hasMoved)
+                      _buildGhostFab(
+                        fabColor,
+                        fabIconColor,
+                        totalWidth,
+                        totalHeight,
+                      ),
+                  ],
+                );
+              },
             ),
-          ),
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: GestureDetector(
+                onPanStart: widget.disabled ? null : _handlePanStart,
+                onPanUpdate: widget.disabled ? null : _handlePanUpdate,
+                onPanEnd: widget.disabled ? null : _handlePanEnd,
+                onPanCancel: widget.disabled ? null : _handlePanCancel,
+                behavior: HitTestBehavior.opaque,
+                child: _buildFab(fabColor, fabIconColor),
+              ),
+            ),
           ],
         ),
       ),
@@ -526,7 +526,9 @@ class _BubbleMenuState extends State<BubbleMenu>
                                   ),
                                   if (isHovered)
                                     BoxShadow(
-                                      color: hoveredBgColor.withValues(alpha: 0.4),
+                                      color: hoveredBgColor.withValues(
+                                        alpha: 0.4,
+                                      ),
                                       blurRadius: 16,
                                       spreadRadius: 2,
                                     ),

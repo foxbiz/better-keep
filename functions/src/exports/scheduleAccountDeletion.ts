@@ -1,15 +1,16 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { auth, db, emailPassword } from "../config";
-import { getEmailTransporter, sendEmail } from "../utils";
+import { onNonReviewCall } from "../nonReviewCallable";
+import { sendEmail } from "../utils";
 
 /**
  * HTTP Callable function to schedule account deletion
  * Sets a 30-day grace period before permanent deletion
  * REQUIRES: Valid OTP must be provided in the same request (atomic verification)
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [emailPassword] },
 	async (request: CallableRequest<{ otp: string }>) => {
 		// Ensure user is authenticated
@@ -19,7 +20,6 @@ export default onCall(
 				"User must be signed in to delete account",
 			);
 		}
-
 		const userId = request.auth.uid;
 		const providedOtp = request.data?.otp;
 
@@ -170,7 +170,6 @@ export default onCall(
 			// Send confirmation email with cancellation instructions
 			if (email) {
 				try {
-					const transporter = getEmailTransporter(emailPassword.value());
 					const senderEmail = process.env.EMAIL_FROM;
 					const senderName = process.env.EMAIL_NAME;
 					const deleteDate = deleteAt.toDate().toLocaleDateString("en-US", {
@@ -259,7 +258,7 @@ If you did not request this deletion, please sign in immediately to secure your 
             `,
 					};
 
-					await sendEmail(transporter, mailOptions);
+					await sendEmail(mailOptions);
 					console.log(`Sent deletion confirmation email to ${email}`);
 				} catch (emailError: unknown) {
 					const errorDetails =

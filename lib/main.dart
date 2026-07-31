@@ -4,6 +4,8 @@ import 'package:alarm/alarm.dart';
 import 'package:app_links/app_links.dart';
 import 'package:better_keep/app.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
+import 'package:better_keep/components/firebase_startup_error_view.dart';
+import 'package:better_keep/components/firebase_environment_banner.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/services/app_install_service.dart';
@@ -24,6 +26,7 @@ import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -37,7 +40,11 @@ import 'package:better_keep/utils/db_init.dart'
 import 'package:sqflite/sqflite.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/alarm_id_service.dart';
+import 'package:better_keep/services/firebase_auth_redirect_domain.dart';
+import 'package:better_keep/services/firebase_apple_configuration.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
+import 'package:better_keep/services/firebase_bootstrap_coordinator.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,8 +74,6 @@ void main() async {
   await Future.wait([
     // Alarm init (Android/iOS only)
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) Alarm.init(),
-    // Load alarm ID mappings
-    AlarmIdService.init(prefs: prefsInstance),
     // Load app state (theme, settings, etc.)
     AppState.init(prefs: prefsInstance),
     // Initialize Firebase
@@ -77,42 +82,7 @@ void main() async {
     FirebaseEmulatorConfig.initDeviceInfo(),
   ]);
 
-  // In release mode, no emulator configuration needed
-  // In debug mode, the user will be prompted to select Firebase environment
-  // after the app UI is ready (in _BetterKeepState) if no saved choice exists
   FirebaseEmulatorConfig.init(prefsInstance);
-  if (!kDebugMode) {
-    await FirebaseEmulatorConfig.configureEmulators();
-  }
-
-  // Initialize AuthService (uses cached prefs, deferred token validation)
-  await AuthService.init(prefs: prefsInstance);
-  AppLogger.log(
-    '[Main] AuthService initialized, currentUser: ${AuthService.currentUser?.email}',
-  );
-
-  // TEMPORARILY DISABLED: AppCheck uses AppleAppAttestProvider which only
-  // activates in release mode and is suspected of causing a native crash
-  // when the IAP purchase flow is triggered. AppCheck is NOT enforced on
-  // any backend service (Cloud Functions, Firestore, Storage), so disabling
-  // it has zero security impact. Re-enable after confirming the IAP fix.
-  _activateAppCheckInBackground();
-
-  // Pre-load user avatar for smooth Hero transitions
-  UserAvatar.preloadAvatar();
-
-  // Initialize app install service for web PWA prompts
-  if (kIsWeb) {
-    AppInstallService.instance.init();
-  }
-
-  // For logged-in users, pre-load E2EE cached status before runApp
-  // This allows returning approved users to skip the loading screen
-  if (AuthService.currentUser != null) {
-    await E2EEService.instance.preloadCachedStatus();
-  }
-
-  AppLogger.log('[Main] Starting runApp');
 
   // Catch Flutter framework errors (e.g. RenderFlex overflows, widget errors)
   // and route them to the logger instead of crashing in release builds.
@@ -135,7 +105,75 @@ void main() async {
     return true; // mark as handled — prevents app crash
   };
 
-  runApp(BetterKeep());
+  AppLogger.log('[Main] Starting Firebase bootstrap');
+  runApp(_FirebaseBootstrap(preferences: prefsInstance));
+}
+
+bool shouldPromptForFirebaseEnvironment({required bool isDebugMode}) =>
+    isDebugMode;
+
+Future<void> _finishFirebaseStartup(SharedPreferences preferences) async {
+  await validateActiveAppleFirebaseConfiguration(
+    configuration: FirebaseBackend.active,
+    expectedOptions: DefaultFirebaseOptions.currentPlatform,
+  );
+  FirebaseBackend.lock();
+  await AppState.initializeFirebaseScope(preferences: preferences);
+  await AlarmIdService.init(prefs: preferences);
+
+  // Firebase routing must be final before accessing the native Auth instance.
+  // Explicitly propagate the configured domain because Android and Apple
+  // platforms can auto-create the default Firebase app before Dart starts.
+  configureNativeFirebaseAuthRedirectDomain(
+    isWeb: kIsWeb,
+    platform: defaultTargetPlatform,
+    usesEmulators: FirebaseEmulatorConfig.isUsingEmulators,
+    configuredDomain: DefaultFirebaseOptions.currentPlatform.authDomain,
+    firebaseAuth: FirebaseBackend.auth,
+  );
+
+  // This must be the first AuthService access.
+  await AuthService.init(prefs: preferences);
+  AppLogger.log(
+    '[Main] AuthService initialized, currentUser: ${AuthService.currentUser?.email}',
+  );
+  final authenticatedUser = AuthService.currentUser;
+  if (authenticatedUser != null) {
+    await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(
+      authenticatedUser,
+    );
+  }
+
+  // TEMPORARILY DISABLED: AppCheck uses AppleAppAttestProvider which only
+  // activates in release mode and is suspected of causing a native crash
+  // when the IAP purchase flow is triggered. AppCheck is NOT enforced on
+  // any backend service (Cloud Functions, Firestore, Storage), so disabling
+  // it has zero security impact. Re-enable after confirming the IAP fix.
+  _activateAppCheckInBackground();
+
+  UserAvatar.preloadAvatar();
+  if (kIsWeb) {
+    AppInstallService.instance.init();
+  }
+
+  final currentUser = AuthService.currentUser;
+  final isReviewSession =
+      currentUser != null && await ReviewAccess.authorize(currentUser);
+  if (currentUser != null) {
+    try {
+      ReviewAccess.requireAuthorizedReviewIdentity(
+        currentUser,
+        isReviewSession,
+      );
+    } on ReviewAuthorizationException {
+      await AuthService.signOut();
+      rethrow;
+    }
+  }
+
+  if (currentUser != null && !isReviewSession) {
+    await E2EEService.instance.preloadCachedStatus();
+  }
 }
 
 /// Activates FirebaseAppCheck in the background without blocking app startup.
@@ -165,6 +203,166 @@ void _activateAppCheckInBackground() {
   }
 }
 
+class _FirebaseBootstrap extends StatefulWidget {
+  const _FirebaseBootstrap({required this.preferences});
+
+  final SharedPreferences preferences;
+
+  @override
+  State<_FirebaseBootstrap> createState() => _FirebaseBootstrapState();
+}
+
+class _FirebaseBootstrapState extends State<_FirebaseBootstrap> {
+  bool _isReady = false;
+  bool _isStarting = true;
+  String? _fatalStartupError;
+  bool _canRetryStartup = false;
+  late final FirebaseBootstrapCoordinator _coordinator;
+
+  @override
+  void initState() {
+    super.initState();
+    _coordinator = FirebaseBootstrapCoordinator(
+      initializeServices: () => _finishFirebaseStartup(widget.preferences),
+    );
+    unawaited(_initialize());
+  }
+
+  Future<void> _initialize() async {
+    if (shouldPromptForFirebaseEnvironment(isDebugMode: kDebugMode)) {
+      if (mounted) {
+        setState(() {
+          _isStarting = false;
+        });
+      }
+      return;
+    }
+
+    await _finishStartup(
+      configureBackend: FirebaseEmulatorConfig.useLiveFirebase,
+    );
+  }
+
+  Future<void> _finishStartup({
+    Future<void> Function()? configureBackend,
+  }) async {
+    try {
+      await _coordinator.start(configureBackend: configureBackend);
+    } on FirebaseBootstrapException catch (error) {
+      if (error.stage == FirebaseBootstrapStage.serviceInitialization &&
+          mounted) {
+        setState(() {
+          _fatalStartupError = error.toString();
+          _canRetryStartup = error.canRetryWithoutReconfiguringBackend;
+          _isStarting = false;
+        });
+      }
+      rethrow;
+    }
+    if (mounted) {
+      setState(() {
+        _isReady = true;
+        _isStarting = false;
+        _fatalStartupError = null;
+        _canRetryStartup = false;
+      });
+    }
+  }
+
+  Future<void> _retryStartup() async {
+    setState(() {
+      _fatalStartupError = null;
+      _canRetryStartup = false;
+      _isStarting = true;
+    });
+
+    try {
+      // Backend routing already succeeded before service initialization failed.
+      // Reapplying it after Firebase services were accessed is unsafe.
+      await _finishStartup();
+    } catch (error) {
+      AppLogger.error('[Main] Firebase startup retry failed', error);
+    }
+  }
+
+  Future<void> _selectEnvironment(
+    FirebaseEnvironment environment, {
+    String? physicalDeviceHost,
+    GoogleEmulatorAuthMode googleAuthMode = GoogleEmulatorAuthMode.mock,
+  }) async {
+    await _finishStartup(
+      configureBackend: () {
+        if (environment == FirebaseEnvironment.emulator) {
+          return FirebaseEmulatorConfig.connectToEmulators(
+            physicalDeviceHost: physicalDeviceHost,
+            googleAuthMode: googleAuthMode,
+          );
+        }
+        return FirebaseEmulatorConfig.useLiveFirebase();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isReady) return const BetterKeep();
+
+    if (_fatalStartupError != null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppState.theme,
+        builder: (context, child) => FirebaseEnvironmentBannerFrame(
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: FirebaseStartupErrorView(
+          error: _fatalStartupError!,
+          onRetry: _canRetryStartup ? _retryStartup : null,
+        ),
+      );
+    }
+
+    if (_isStarting) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppState.theme,
+        builder: (context, child) => FirebaseEnvironmentBannerFrame(
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: const _FirebaseBootstrapLoadingScreen(),
+      );
+    }
+
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppState.theme,
+      builder: (context, child) => FirebaseEnvironmentBannerFrame(
+        child: child ?? const SizedBox.shrink(),
+      ),
+      home: FirebaseSelectionScreen(onSelected: _selectEnvironment),
+    );
+  }
+}
+
+class _FirebaseBootstrapLoadingScreen extends StatelessWidget {
+  const _FirebaseBootstrapLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Starting Firebase...'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class BetterKeep extends StatefulWidget {
   const BetterKeep({super.key});
 
@@ -176,9 +374,6 @@ class _BetterKeepState extends State<BetterKeep> {
   Database? db;
   String dbError = "";
 
-  /// Whether Firebase environment has been selected (debug mode only)
-  bool _firebaseConfigured = !kDebugMode;
-
   /// App links for deep linking (OAuth callback)
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _appLinksSubscription;
@@ -189,11 +384,6 @@ class _BetterKeepState extends State<BetterKeep> {
 
     // Initialize deep link handling for OAuth callback
     _initDeepLinks();
-
-    // In debug mode, check for saved Firebase choice and apply it
-    if (kDebugMode) {
-      _initFirebaseConfig();
-    }
 
     _initDb().then((_) async {
       await ReminderCoordinator.instance.init();
@@ -217,15 +407,57 @@ class _BetterKeepState extends State<BetterKeep> {
 
       // Initialize E2EE for already logged-in users, then start sync
       if (AuthService.currentUser != null) {
-        await _initializeSignedInServices();
-        await NoteSyncService().init();
-        LabelSyncService().init();
-        await NoteSortService().startCloudSync();
+        final shouldInitializeStandardSyncServices =
+            await _initializeSignedInServices();
+        if (shouldInitializeStandardSyncServices) {
+          // These services initialize locally even when E2EE is unavailable.
+          // Their readiness listeners start cloud activity after E2EE recovers.
+          await NoteSyncService().init();
+          await LabelSyncService().init();
+          await NoteSortService().startCloudSync();
+        }
       }
     });
   }
 
-  Future<void> _initializeSignedInServices() async {
+  Future<bool> _initializeSignedInServices() async {
+    final user = AuthService.currentUser;
+    if (user == null) return false;
+
+    await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(user);
+
+    var isReviewSession = ReviewAccess.isAuthorizedSessionFor(user);
+    if (!isReviewSession) {
+      try {
+        isReviewSession = await ReviewAccess.authorize(user);
+        ReviewAccess.requireAuthorizedReviewIdentity(user, isReviewSession);
+      } catch (e, stack) {
+        AppLogger.error(
+          '[Main] Review authorization refresh failed; cloud services disabled',
+          e,
+          stack,
+        );
+        if (e is ReviewAuthorizationException) {
+          await AuthService.signOut();
+        }
+        return false;
+      }
+    }
+
+    if (isReviewSession) {
+      try {
+        final authorization = ReviewAccess.authorizationFor(user);
+        if (authorization == null) {
+          throw StateError('Review authorization was not retained');
+        }
+        PlanService.instance.activateReviewSession(authorization);
+        await E2EEService.instance.initializeReviewSession();
+      } catch (e) {
+        AppLogger.error('[Main] Review E2EE initialization error', e);
+      }
+      return false;
+    }
+
     try {
       await E2EEService.instance.initialize();
     } catch (e) {
@@ -237,6 +469,7 @@ class _BetterKeepState extends State<BetterKeep> {
     } catch (e) {
       AppLogger.error('[Main] DeviceApprovalNotificationService init error', e);
     }
+    return true;
   }
 
   /// Initialize deep link handling for OAuth callback
@@ -258,11 +491,25 @@ class _BetterKeepState extends State<BetterKeep> {
 
   /// Handle deep link URI
   void _handleDeepLink(Uri uri) {
-    AppLogger.log('[DeepLink] Received: $uri');
+    // Query parameters can contain OAuth completion codes. Log only the route.
+    AppLogger.log(
+      '[DeepLink] Received: ${uri.scheme}://${uri.host}${uri.path}',
+    );
 
-    // Handle OAuth callback (betterkeep://auth?token=xxx)
+    // Handle OAuth callback (betterkeep://auth?code=xxx&transactionId=xxx)
     if (uri.scheme == 'betterkeep' && uri.host == 'auth') {
-      AuthService.handleOAuthCallback(uri);
+      unawaited(
+        AuthService.handleOAuthCallback(uri).catchError((
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          AppLogger.error(
+            '[DeepLink] OAuth completion failed',
+            error,
+            stackTrace,
+          );
+        }),
+      );
     }
 
     // Handle password reset complete (betterkeep://password-reset-complete?email=xxx)
@@ -342,26 +589,6 @@ class _BetterKeepState extends State<BetterKeep> {
               ),
             ),
           ),
-        ),
-      );
-    }
-
-    // In debug mode, show Firebase selection screen if not configured
-    if (kDebugMode && !_firebaseConfigured) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: AppState.theme,
-        home: _FirebaseSelectionScreen(
-          onSelected: (useEmulators) async {
-            if (useEmulators) {
-              await FirebaseEmulatorConfig.connectToEmulators();
-            } else {
-              await FirebaseEmulatorConfig.useLiveFirebase();
-            }
-            setState(() {
-              _firebaseConfigured = true;
-            });
-          },
         ),
       );
     }
@@ -470,56 +697,65 @@ class _BetterKeepState extends State<BetterKeep> {
       });
     }
   }
-
-  /// Initialize Firebase configuration in debug mode
-  /// If a choice was previously saved, it will be applied automatically.
-  Future<void> _initFirebaseConfig() async {
-    if (!kDebugMode) return;
-
-    // Check if user already made a choice before
-    if (FirebaseEmulatorConfig.hasSavedChoice) {
-      try {
-        await FirebaseEmulatorConfig.applySavedChoice();
-        if (mounted) {
-          setState(() {
-            _firebaseConfigured = true;
-          });
-        }
-      } catch (e) {
-        // Saved emulator choice is no longer valid (emulators not running).
-        // Leave _firebaseConfigured = false so the selection screen is shown.
-        AppLogger.log(
-          '[Main] Saved Firebase choice failed, showing selection screen: $e',
-        );
-      }
-    }
-    // If no saved choice (or saved choice failed), the selection screen will be shown in build()
-  }
 }
 
 /// Firebase environment selection screen for debug mode
-class _FirebaseSelectionScreen extends StatefulWidget {
-  final Future<void> Function(bool useEmulators) onSelected;
+class FirebaseSelectionScreen extends StatefulWidget {
+  final Future<void> Function(
+    FirebaseEnvironment environment, {
+    String? physicalDeviceHost,
+    GoogleEmulatorAuthMode googleAuthMode,
+  })
+  onSelected;
 
-  const _FirebaseSelectionScreen({required this.onSelected});
+  const FirebaseSelectionScreen({super.key, required this.onSelected});
 
   @override
-  State<_FirebaseSelectionScreen> createState() =>
+  State<FirebaseSelectionScreen> createState() =>
       _FirebaseSelectionScreenState();
 }
 
-class _FirebaseSelectionScreenState extends State<_FirebaseSelectionScreen> {
+class _FirebaseSelectionScreenState extends State<FirebaseSelectionScreen> {
   bool _isLoading = false;
   String? _error;
+  late final TextEditingController _hostController;
+  late bool _useRealGoogleAuth;
 
-  Future<void> _handleSelection(bool useEmulators) async {
+  @override
+  void initState() {
+    super.initState();
+    _hostController = TextEditingController(
+      text: FirebaseEmulatorConfig.suggestedPhysicalDeviceHost,
+    );
+    _useRealGoogleAuth =
+        FirebaseEmulatorConfig.savedGoogleAuthMode ==
+        GoogleEmulatorAuthMode.real;
+  }
+
+  @override
+  void dispose() {
+    _hostController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSelection(FirebaseEnvironment environment) async {
     if (_isLoading) return;
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      await widget.onSelected(useEmulators);
+      await widget.onSelected(
+        environment,
+        physicalDeviceHost:
+            environment == FirebaseEnvironment.emulator &&
+                FirebaseEmulatorConfig.isPhysicalDevice
+            ? _hostController.text
+            : null,
+        googleAuthMode: _useRealGoogleAuth
+            ? GoogleEmulatorAuthMode.real
+            : GoogleEmulatorAuthMode.mock,
+      );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -533,83 +769,135 @@ class _FirebaseSelectionScreenState extends State<_FirebaseSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.build_circle, size: 64, color: Colors.orange),
-                const SizedBox(height: 24),
-                Text(
-                  '🔧 Debug Mode',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Select Firebase environment:',
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                if (_isLoading)
-                  const Column(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Configuring Firebase...'),
-                    ],
-                  )
-                else
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: _EnvironmentCard(
-                          icon: Icons.cloud,
-                          iconColor: Colors.blue,
-                          title: 'Live',
-                          subtitle: 'Production Firebase',
-                          onTap: () => _handleSelection(false),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: _EnvironmentCard(
-                          icon: Icons.computer,
-                          iconColor: Colors.orange,
-                          title: 'Emulator',
-                          subtitle: 'Local development',
-                          onTap: () => _handleSelection(true),
-                        ),
-                      ),
-                    ],
-                  ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 12,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.build_circle,
+                      size: 64,
+                      color: Colors.orange,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Text(
-                  'This choice will be remembered.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
+                    const SizedBox(height: 24),
+                    Text(
+                      '🔧 Debug Mode',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Select Firebase environment:',
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    if (FirebaseEmulatorConfig.isPhysicalDevice) ...[
+                      const SizedBox(height: 24),
+                      TextField(
+                        controller: _hostController,
+                        enabled: !_isLoading,
+                        keyboardType: TextInputType.url,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          labelText: 'Computer LAN host',
+                          hintText: '192.168.1.25',
+                          helperText:
+                              'Use the computer IP on the same Wi-Fi. Do not '
+                              'include http:// or a port.',
+                        ),
+                      ),
+                    ],
+                    if (FirebaseEmulatorConfig
+                        .supportsRealGoogleAuthToggle) ...[
+                      const SizedBox(height: 12),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Use real Google OAuth'),
+                        subtitle: const Text(
+                          'Off uses a deterministic google.com test identity. '
+                          'Real OAuth requires internet.',
+                        ),
+                        value: _useRealGoogleAuth,
+                        onChanged: _isLoading
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _useRealGoogleAuth = value;
+                                });
+                              },
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    if (_isLoading)
+                      const Column(
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text('Configuring Firebase...'),
+                        ],
+                      )
+                    else
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: _EnvironmentCard(
+                              icon: Icons.cloud,
+                              iconColor: Colors.blue,
+                              title: 'Live',
+                              subtitle: 'Production Firebase',
+                              onTap: () =>
+                                  _handleSelection(FirebaseEnvironment.live),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: _EnvironmentCard(
+                              icon: Icons.computer,
+                              iconColor: Colors.orange,
+                              title: 'Emulator',
+                              subtitle: 'Local development',
+                              onTap: () => _handleSelection(
+                                FirebaseEnvironment.emulator,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 16),
+                      SelectableText(
+                        _error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    Text(
+                      'Choose an environment on every debug launch. The '
+                      'emulator host and Google OAuth preference are '
+                      'remembered. Emulator mode never falls back to '
+                      'production.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

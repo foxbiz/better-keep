@@ -1,14 +1,14 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import {
 	appStoreSharedSecret,
 	auth,
 	emailPassword,
 	googlePlayCredentials,
 } from "../config";
+import { onNonReviewCall } from "../nonReviewCallable";
 import type { VerifyPurchaseRequest } from "../types";
 import {
-	getEmailTransporter,
 	sendEmail,
 	verifyAppStorePurchase,
 	verifyGooglePlayPurchase,
@@ -23,13 +23,12 @@ import {
  * - Handles app crash recovery
  * - Prevents fraud by server-side verification
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [googlePlayCredentials, appStoreSharedSecret, emailPassword] },
 	async (request: CallableRequest<VerifyPurchaseRequest>) => {
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be signed in");
 		}
-
 		const userId = request.auth.uid;
 		const { productId, purchaseToken, source } = request.data;
 		const verifyTraceId =
@@ -109,7 +108,6 @@ async function sendSubscriptionWelcomeEmail(
 			return;
 		}
 
-		const transporter = getEmailTransporter(emailPassword.value());
 		const senderEmail = process.env.EMAIL_FROM;
 		const senderName = process.env.EMAIL_NAME;
 
@@ -170,7 +168,7 @@ async function sendSubscriptionWelcomeEmail(
       </html>
     `;
 
-		await sendEmail(transporter, {
+		await sendEmail({
 			from: `"${senderName}" <${senderEmail}>`,
 			to: email,
 			subject: "Your Better Keep Notes Pro subscription is now active",

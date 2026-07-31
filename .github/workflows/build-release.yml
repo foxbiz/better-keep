@@ -12,11 +12,71 @@ on:
         default: ''
 
 jobs:
+  release-gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Firebase Node companion
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.23.1'
+
+      - name: Record Firebase Node companion
+        shell: bash
+        run: echo "BETTER_KEEP_FIREBASE_NODE_BIN=$(command -v node)" >> "${GITHUB_ENV}"
+
+      - name: Set up host Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - name: Install Firebase Java companion
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21.0.11'
+
+      - name: Record Firebase Java companion
+        shell: bash
+        run: echo "BETTER_KEEP_FIREBASE_JAVA_HOME=${JAVA_HOME}" >> "${GITHUB_ENV}"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install matched Chrome and ChromeDriver
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          install-chromedriver: true
+
+      - name: Install dependencies and run release checks
+        env:
+          CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROMEDRIVER_BINARY: ${{ steps.setup-chrome.outputs.chromedriver-path }}
+        run: |
+          npm ci
+          npm run ci:functions
+          flutter pub get
+          npm run release:gate
+
   # ============================================
   # Android APK Build
   # ============================================
   build-android:
     name: Build Android APK
+    needs: release-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -77,7 +137,8 @@ jobs:
   # ============================================
   build-windows:
     name: Build Windows
-    runs-on: windows-latest
+    needs: release-gate
+    runs-on: windows-2025-vs2026
     timeout-minutes: 30
 
     steps:
@@ -149,6 +210,7 @@ jobs:
   # ============================================
   build-macos:
     name: Build macOS
+    needs: release-gate
     runs-on: macos-latest
     timeout-minutes: 60
 
@@ -172,6 +234,9 @@ jobs:
       - name: Create .env file
         run: |
           echo '${{ secrets.ENV_FILE }}' > .env
+
+      - name: Verify Apple Firebase configuration
+        run: npm run verify:firebase-apple-macos
 
       - name: Update CocoaPods repo
         run: |
