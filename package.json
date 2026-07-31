@@ -19,6 +19,7 @@
 		"test:windows-build-policy": "node --test test/tool/windows_build_policy_test.mjs",
 		"verify:firebase-apple-macos": "node tool/firebase_apple_config_policy.mjs --env .env --macos-plist macos/Runner/GoogleService-Info.plist --macos-xcconfig macos/Runner/Configs/AppInfo.xcconfig",
 		"test:firebase-apple": "flutter test test/apple_auth_test.dart test/auth_error_messages_test.dart test/firebase_apple_configuration_test.dart test/login_page_apple_auth_test.dart && node --test test/tool/firebase_apple_config_policy_test.mjs",
+		"test:oauth-recovery": "flutter test test/oauth_transaction_test.dart test/recovered_oauth_sign_in_coordinator_test.dart",
 		"analyze:firebase-environment": "flutter analyze",
 		"build:windows": "flutter build windows --release --dart-define-from-file=.env && dart run msix:create --build-windows=false",
 		"build:macos": "flutter build macos --release --dart-define-from-file=.env",
@@ -36,7 +37,7 @@
 		"test:firebase-rules": "./tool/test_firebase_rules.sh",
 		"test:firestore-rules": "npm run test:firebase-rules",
 		"audit:runtime": "npm audit --omit=dev",
-		"release:gate": "npm run audit:runtime && npm run audit:functions && npm run analyze:firebase-environment && npm run test:firebase-runtime && npm run test:windows-build-policy && npm run test:functions && npm run test:firebase-apple && npm run test:client-sync && npm run test:firebase-emulator-config && npm run test:firebase-environment-web && npm run test:firebase-rules && npm run test:firebase-emulator-functions && npm run test:firebase-emulator-review",
+		"release:gate": "npm run audit:runtime && npm run audit:functions && npm run analyze:firebase-environment && npm run test:firebase-runtime && npm run test:windows-build-policy && npm run test:functions && npm run test:oauth-recovery && npm run test:firebase-apple && npm run test:client-sync && npm run test:firebase-emulator-config && npm run test:firebase-environment-web && npm run test:firebase-rules && npm run test:firebase-emulator-functions && npm run test:firebase-emulator-review",
 		"deploy:backend": "node tool/firebase_cli.mjs -- deploy --config firebase.deploy.json --project better-keep-notes --only functions,firestore:better-keep,storage",
 		"firebase:indexes": "node tool/firebase_cli.mjs -- firestore:indexes --project better-keep-notes --database=better-keep"
 	},

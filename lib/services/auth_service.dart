@@ -22,6 +22,7 @@ import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/oauth_transaction.dart';
+import 'package:better_keep/services/recovered_oauth_sign_in_coordinator.dart';
 import 'package:better_keep/services/reminder_session_service.dart';
 import 'package:better_keep/services/reminder_sign_out_cleanup_service.dart';
 import 'package:better_keep/services/review_access.dart';
@@ -127,7 +128,10 @@ class AuthService {
   /// Handle OAuth callback from deep link
   /// Called when the app receives a browser OAuth completion deep link.
   /// or betterkeep://auth?linked=true&provider=xxx
-  static Future<void> handleOAuthCallback(Uri uri) async {
+  static Future<void> handleOAuthCallback(
+    Uri uri, {
+    required Future<void> appServicesReady,
+  }) async {
     if (uri.scheme != 'betterkeep' || uri.host != 'auth') return;
     final transactionId = uri.queryParameters['transactionId'];
     if (transactionId == null) return;
@@ -179,26 +183,44 @@ class AuthService {
 
     final completionCode = uri.queryParameters['code'];
     if (completionCode == null) return;
-    if (_oauthCompleter != null && !_oauthCompleter!.isCompleted) {
-      _oauthCompleter!.complete((
-        transactionId: transactionId,
-        completionCode: completionCode,
-        linked: false,
-      ));
-      return;
-    }
+    final completer = _oauthCompleter;
+    final coordinator = RecoveredOAuthSignInCoordinator<User>(
+      redeemCompletion: (code, storedTransaction) => _redeemOAuthCompletion(
+        completionCode: code,
+        transaction: storedTransaction,
+      ),
+      authenticateWithCustomToken: (customToken) async {
+        final credential = await _auth.signInWithCustomToken(customToken);
+        return credential.user;
+      },
+      finalizeSignIn: (user, provider) => _completeSignIn(user, null, provider),
+      removeTransaction: removeOAuthTransaction,
+      setVerificationState: (value) => isVerifying.value = value,
+      reportSecondaryFailure: (error, stackTrace) {
+        unawaited(
+          AppLogger.error(
+            'OAuth recovery cleanup failed after a primary error',
+            error,
+            stackTrace,
+          ),
+        );
+      },
+    );
 
-    // The app may have been restarted while the browser was open. Complete the
-    // transaction directly so the secure verifier is still useful.
-    try {
-      final customToken = await _redeemOAuthCompletion(
-        completionCode: completionCode,
-        transaction: transaction,
-      );
-      await _auth.signInWithCustomToken(customToken);
-    } finally {
-      await removeOAuthTransaction(transactionId);
-    }
+    await coordinator.completeCallback(
+      transaction: transaction,
+      completionCode: completionCode,
+      appServicesReady: appServicesReady,
+      completeInFlight: completer != null && !completer.isCompleted
+          ? () {
+              completer.complete((
+                transactionId: transactionId,
+                completionCode: completionCode,
+                linked: false,
+              ));
+            }
+          : null,
+    );
   }
 
   static Future<String> _redeemOAuthCompletion({

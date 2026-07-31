@@ -75,14 +75,19 @@ jobs:
         with:
           install-chromedriver: true
 
-      - name: Install Flutter dependencies and run client sync units
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter sources
+        run: npm run analyze:firebase-environment
+
+      - name: Run client policy and unit suites
         env:
           CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
           CHROMEDRIVER_BINARY: ${{ steps.setup-chrome.outputs.chromedriver-path }}
         run: |
-          flutter pub get
           npm run test:windows-build-policy
-          npm run analyze:firebase-environment
+          npm run test:oauth-recovery
           npm run test:client-sync
           npm run test:firebase-emulator-config
           npm run test:firebase-apple

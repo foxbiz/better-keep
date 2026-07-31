@@ -373,6 +373,7 @@ class BetterKeep extends StatefulWidget {
 class _BetterKeepState extends State<BetterKeep> {
   Database? db;
   String dbError = "";
+  late Future<void> _appServicesReady;
 
   /// App links for deep linking (OAuth callback)
   late final AppLinks _appLinks;
@@ -382,42 +383,65 @@ class _BetterKeepState extends State<BetterKeep> {
   void initState() {
     super.initState();
 
+    _startAppServices();
+
     // Initialize deep link handling for OAuth callback
     _initDeepLinks();
+  }
 
-    _initDb().then((_) async {
-      await ReminderCoordinator.instance.init();
-      ReminderCoordinator.instance.attachUiActionListener();
-      await ReminderCoordinator.instance.consumePendingUiActions();
-      await ReminderCoordinator.instance.reconcileAll();
+  void _startAppServices() {
+    final readiness = _initializeAppServices();
+    _appServicesReady = readiness;
+    unawaited(
+      readiness.catchError((Object error, StackTrace stackTrace) async {
+        await AppLogger.error(
+          '[Main] App service initialization failed',
+          error,
+          stackTrace,
+        );
+      }),
+    );
+  }
 
-      // Check notification permission status (read-only, no prompt)
-      ReminderPermissionService().checkAndNotify();
+  Future<void> _initializeAppServices() async {
+    await _initDb();
+    if (db == null) {
+      throw StateError(
+        dbError.isEmpty ? 'Database initialization failed' : dbError,
+      );
+    }
 
-      // Initialize intent handler for opening/sharing files
-      IntentHandlerService.instance.init();
+    await ReminderCoordinator.instance.init();
+    ReminderCoordinator.instance.attachUiActionListener();
+    await ReminderCoordinator.instance.consumePendingUiActions();
+    await ReminderCoordinator.instance.reconcileAll();
 
-      // Initialize subscription service for IAP early (doesn't require auth)
-      // This allows products to load while user is logging in
-      await SubscriptionService.instance.init();
+    // Check notification permission status (read-only, no prompt)
+    ReminderPermissionService().checkAndNotify();
 
-      // Initialize subscription/plan tracking - this sets up auth state listener
-      // so it will react when users sign in/out, even if not currently logged in
-      await PlanService.instance.init();
+    // Initialize intent handler for opening/sharing files
+    IntentHandlerService.instance.init();
 
-      // Initialize E2EE for already logged-in users, then start sync
-      if (AuthService.currentUser != null) {
-        final shouldInitializeStandardSyncServices =
-            await _initializeSignedInServices();
-        if (shouldInitializeStandardSyncServices) {
-          // These services initialize locally even when E2EE is unavailable.
-          // Their readiness listeners start cloud activity after E2EE recovers.
-          await NoteSyncService().init();
-          await LabelSyncService().init();
-          await NoteSortService().startCloudSync();
-        }
+    // Initialize subscription service for IAP early (doesn't require auth)
+    // This allows products to load while user is logging in
+    await SubscriptionService.instance.init();
+
+    // Initialize subscription/plan tracking - this sets up auth state listener
+    // so it will react when users sign in/out, even if not currently logged in
+    await PlanService.instance.init();
+
+    // Initialize E2EE for already logged-in users, then start sync
+    if (AuthService.currentUser != null) {
+      final shouldInitializeStandardSyncServices =
+          await _initializeSignedInServices();
+      if (shouldInitializeStandardSyncServices) {
+        // These services initialize locally even when E2EE is unavailable.
+        // Their readiness listeners start cloud activity after E2EE recovers.
+        await NoteSyncService().init();
+        await LabelSyncService().init();
+        await NoteSortService().startCloudSync();
       }
-    });
+    }
   }
 
   Future<bool> _initializeSignedInServices() async {
@@ -499,10 +523,10 @@ class _BetterKeepState extends State<BetterKeep> {
     // Handle OAuth callback (betterkeep://auth?code=xxx&transactionId=xxx)
     if (uri.scheme == 'betterkeep' && uri.host == 'auth') {
       unawaited(
-        AuthService.handleOAuthCallback(uri).catchError((
-          Object error,
-          StackTrace stackTrace,
-        ) {
+        AuthService.handleOAuthCallback(
+          uri,
+          appServicesReady: _appServicesReady,
+        ).catchError((Object error, StackTrace stackTrace) {
           AppLogger.error(
             '[DeepLink] OAuth completion failed',
             error,
@@ -580,7 +604,7 @@ class _BetterKeepState extends State<BetterKeep> {
                         dbError = "";
                         db = null;
                       });
-                      _initDb();
+                      _startAppServices();
                     },
                     icon: const Icon(Icons.refresh),
                     label: const Text("Retry"),
