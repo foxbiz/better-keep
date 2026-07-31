@@ -127,6 +127,13 @@ before(async () => {
   ).user;
   const token = await reviewUser.getIdTokenResult(true);
   assert.equal(token.claims.appReview, true);
+
+  // Seed the resource under test explicitly instead of depending on the
+  // trial-grant blocking function to populate Firestore during Auth setup.
+  await adminDb.collection("users").doc(reviewUser.uid).set(
+    { email: reviewEmail },
+    { merge: true },
+  );
 });
 
 after(async () => {
