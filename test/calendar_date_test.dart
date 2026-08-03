@@ -10,20 +10,11 @@ void main() {
       ),
       14,
     );
-    expect(
-      calendarDayDelta(DateTime(2026, 3, 15), DateTime(2026, 3, 1)),
-      -14,
-    );
+    expect(calendarDayDelta(DateTime(2026, 3, 15), DateTime(2026, 3, 1)), -14);
   });
 
   test('calendar day delta handles month and leap-year boundaries', () {
-    expect(
-      calendarDayDelta(DateTime(2024, 2, 28), DateTime(2024, 3, 1)),
-      2,
-    );
-    expect(
-      calendarDayDelta(DateTime(2025, 2, 28), DateTime(2025, 3, 1)),
-      1,
-    );
+    expect(calendarDayDelta(DateTime(2024, 2, 28), DateTime(2024, 3, 1)), 2);
+    expect(calendarDayDelta(DateTime(2025, 2, 28), DateTime(2025, 3, 1)), 1);
   });
 }

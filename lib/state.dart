@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/config.dart';
+import 'package:better_keep/models/cloud_sync_cursor.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/motion_preferences.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +38,8 @@ final _defaultState = {
   "alarm_sound": defaultAlarmSound,
   "last_synced_at": DateTime.fromMillisecondsSinceEpoch(0),
   "last_label_synced_at": DateTime.fromMillisecondsSinceEpoch(0),
+  "note_cloud_sync_checkpoint_v2": null,
+  "label_cloud_sync_checkpoint_v2": null,
   "scaffold_messenger_key": GlobalKey<ScaffoldMessengerState>(),
   "navigator_key": GlobalKey<NavigatorState>(),
   "morning_time": const TimeOfDay(hour: 6, minute: 0),
@@ -155,10 +159,6 @@ class AppState {
 
     var alarmSound =
         prefsInstance.getString("alarm_sound") ?? defaultAlarmSound;
-    final lastSyncedAtString = prefsInstance.getString("last_synced_at");
-    final lastLabelSyncedAtString = prefsInstance.getString(
-      "last_label_synced_at",
-    );
     final recentColors =
         prefsInstance
             .getStringList("recent_colors")
@@ -234,14 +234,6 @@ class AppState {
       _state["sketch_pen_color"] = Color(penColorValue);
     }
 
-    if (lastSyncedAtString != null) {
-      _state["last_synced_at"] = DateTime.parse(lastSyncedAtString);
-    }
-
-    if (lastLabelSyncedAtString != null) {
-      _state["last_label_synced_at"] = DateTime.parse(lastLabelSyncedAtString);
-    }
-
     // Load time settings
     final morningHour = prefsInstance.getInt("morning_time_hour") ?? 6;
     final morningMinute = prefsInstance.getInt("morning_time_minute") ?? 0;
@@ -296,6 +288,41 @@ class AppState {
       final parts = localeString.split('_');
       _state["locale"] = Locale(parts[0], parts.length > 1 ? parts[1] : null);
     }
+  }
+
+  /// Loads backend-owned sync state after the Firebase environment is selected.
+  static Future<void> initializeFirebaseScope({
+    SharedPreferences? preferences,
+  }) async {
+    final prefsInstance =
+        preferences ?? _prefs ?? await SharedPreferences.getInstance();
+    _prefs ??= prefsInstance;
+    await FirebaseScopedPreferences.rememberActiveScope(prefsInstance);
+
+    final lastSyncedAtString = prefsInstance.getString(
+      FirebaseScopedPreferences.key("last_synced_at"),
+    );
+    final lastLabelSyncedAtString = prefsInstance.getString(
+      FirebaseScopedPreferences.key("last_label_synced_at"),
+    );
+    _state["last_synced_at"] =
+        DateTime.tryParse(lastSyncedAtString ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    _state["last_label_synced_at"] =
+        DateTime.tryParse(lastLabelSyncedAtString ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    _state["note_cloud_sync_checkpoint_v2"] = _decodeCloudSyncCheckpoint(
+      prefsInstance.getString(
+        FirebaseScopedPreferences.key("note_cloud_sync_checkpoint_v2"),
+      ),
+      "notes",
+    );
+    _state["label_cloud_sync_checkpoint_v2"] = _decodeCloudSyncCheckpoint(
+      prefsInstance.getString(
+        FirebaseScopedPreferences.key("label_cloud_sync_checkpoint_v2"),
+      ),
+      "labels",
+    );
   }
 
   static Object? get(String key) {
@@ -617,9 +644,12 @@ class AppState {
     set("last_synced_at", time);
     _persistToPrefs((p) async {
       if (time != null) {
-        p.setString("last_synced_at", time.toIso8601String());
+        p.setString(
+          FirebaseScopedPreferences.key("last_synced_at"),
+          time.toIso8601String(),
+        );
       } else {
-        p.remove("last_synced_at");
+        p.remove(FirebaseScopedPreferences.key("last_synced_at"));
       }
     });
   }
@@ -632,9 +662,74 @@ class AppState {
     set("last_label_synced_at", time);
     _persistToPrefs((p) async {
       if (time != null) {
-        p.setString("last_label_synced_at", time.toIso8601String());
+        p.setString(
+          FirebaseScopedPreferences.key("last_label_synced_at"),
+          time.toIso8601String(),
+        );
       } else {
-        p.remove("last_label_synced_at");
+        p.remove(FirebaseScopedPreferences.key("last_label_synced_at"));
+      }
+    });
+  }
+
+  static CloudSyncCheckpoint? get noteCloudSyncCheckpoint {
+    return _state["note_cloud_sync_checkpoint_v2"] as CloudSyncCheckpoint?;
+  }
+
+  static set noteCloudSyncCheckpoint(CloudSyncCheckpoint? checkpoint) {
+    _setCloudSyncCheckpoint(
+      stateKey: "note_cloud_sync_checkpoint_v2",
+      preferenceKey: "note_cloud_sync_checkpoint_v2",
+      checkpoint: checkpoint,
+    );
+  }
+
+  static CloudSyncCheckpoint? get labelCloudSyncCheckpoint {
+    return _state["label_cloud_sync_checkpoint_v2"] as CloudSyncCheckpoint?;
+  }
+
+  static set labelCloudSyncCheckpoint(CloudSyncCheckpoint? checkpoint) {
+    _setCloudSyncCheckpoint(
+      stateKey: "label_cloud_sync_checkpoint_v2",
+      preferenceKey: "label_cloud_sync_checkpoint_v2",
+      checkpoint: checkpoint,
+    );
+  }
+
+  static CloudSyncCheckpoint? _decodeCloudSyncCheckpoint(
+    String? encoded,
+    String collectionName,
+  ) {
+    if (encoded == null) return null;
+
+    try {
+      return CloudSyncCheckpoint.fromJson(
+        Map<String, dynamic>.from(jsonDecode(encoded) as Map),
+      );
+    } catch (error) {
+      AppLogger.error(
+        "AppState: Ignoring invalid $collectionName sync checkpoint",
+        error,
+      );
+      return null;
+    }
+  }
+
+  static void _setCloudSyncCheckpoint({
+    required String stateKey,
+    required String preferenceKey,
+    required CloudSyncCheckpoint? checkpoint,
+  }) {
+    set(stateKey, checkpoint);
+    _persistToPrefs((preferences) async {
+      final scopedPreferenceKey = FirebaseScopedPreferences.key(preferenceKey);
+      if (checkpoint == null) {
+        await preferences.remove(scopedPreferenceKey);
+      } else {
+        await preferences.setString(
+          scopedPreferenceKey,
+          jsonEncode(checkpoint.toJson()),
+        );
       }
     });
   }

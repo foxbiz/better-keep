@@ -15,21 +15,22 @@
     import { addDoc, collection, connectFirestoreEmulator, doc, getDoc, getFirestore, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js';
     import { connectStorageEmulator, getDownloadURL, getStorage, ref } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-storage.js';
 
-    const isLocalDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isFirebaseEmulator =
+      window.location.port === '5002' ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1';
 
     // Load Firebase config from JSON file or Firebase Hosting's auto-config
     async function loadFirebaseConfig() {
-      // Try Firebase Hosting's auto-config first (works on Firebase Hosting)
-      if (!isLocalDevelopment) {
-        try {
-          const response = await fetch('/__/firebase/init.json');
-          if (response.ok) {
-            console.log('Loaded Firebase config from hosting');
-            return await response.json();
-          }
-        } catch (e) {
-          // Fall through to JSON file
+      // Firebase Hosting and its emulator both provide auto-config.
+      try {
+        const response = await fetch('/__/firebase/init.json');
+        if (response.ok) {
+          console.log('Loaded Firebase config from hosting');
+          return await response.json();
         }
+      } catch (e) {
+        // Fall through to JSON file for non-Hosting development servers.
       }
 
       // Load from JSON file
@@ -45,15 +46,16 @@
       const app = initializeApp(FIREBASE_CONFIG);
 
       // Use named database in production, default for emulators
-      const databaseId = isLocalDevelopment ? '(default)' : 'better-keep';
+      const databaseId = isFirebaseEmulator ? '(default)' : 'better-keep';
       const db = getFirestore(app, databaseId);
       const storage = getStorage(app);
 
       // Connect to emulators if local
-      if (isLocalDevelopment) {
-        console.log('Running on localhost - connecting to Firebase emulators');
-        connectFirestoreEmulator(db, 'localhost', 8080);
-        connectStorageEmulator(storage, 'localhost', 9199);
+      if (isFirebaseEmulator) {
+        const emulatorHost = window.location.hostname;
+        console.log(`Connecting to Firebase emulators at ${emulatorHost}`);
+        connectFirestoreEmulator(db, emulatorHost, 8080);
+        connectStorageEmulator(storage, emulatorHost, 9199);
       }
 
       // Export to window for use in the rest of the script

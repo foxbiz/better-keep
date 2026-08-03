@@ -1,13 +1,14 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { db } from "../config";
+import { onNonReviewCall } from "../nonReviewCallable";
 
 /**
  * DEBUG ONLY: Delete subscription for testing
  * This immediately removes the subscription from Firestore
  * Only available in emulator environment
  */
-export default onCall(
+export default onNonReviewCall(
 	async (request: CallableRequest<Record<string, never>>) => {
 		// Only allow in emulator
 		if (!process.env.FUNCTIONS_EMULATOR) {
@@ -20,7 +21,6 @@ export default onCall(
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be authenticated");
 		}
-
 		const userId = request.auth.uid;
 
 		console.log(`DEBUG: Deleting subscription for user ${userId}`);

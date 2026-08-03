@@ -1,17 +1,23 @@
 import * as crypto from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { ALLOWED_PROVIDERS, auth, db, emailPassword } from "../config";
+import { HttpsError } from "firebase-functions/v2/https";
+import {
+	ACCOUNT_LINK_PROVIDERS,
+	accountLinkProviderDisplayName,
+	isAccountLinkProvider,
+} from "../accountLinkProviders";
+import { auth, db, emailPassword } from "../config";
 import { generateOtpEmailHtml, generateOtpEmailText } from "../email_templates";
-import type { AllowedProvider, OtpEmailConfig } from "../types";
-import { generateOtp, getEmailTransporter, sendEmail } from "../utils";
+import { onNonReviewCall } from "../nonReviewCallable";
+import type { OtpEmailConfig } from "../types";
+import { generateOtp, sendEmail } from "../utils";
 
 /**
  * HTTP Callable function to request OTP for account linking
  * Sends a 6-digit OTP to the user's primary email to verify they own the account
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [emailPassword] },
 	async (request: CallableRequest<{ provider: string }>) => {
 		if (!request.auth) {
@@ -20,15 +26,14 @@ export default onCall(
 				"User must be signed in to link accounts",
 			);
 		}
-
 		const userId = request.auth.uid;
 		const provider = request.data?.provider;
 
 		// Validate provider
-		if (!provider || !ALLOWED_PROVIDERS.includes(provider as AllowedProvider)) {
+		if (!isAccountLinkProvider(provider)) {
 			throw new HttpsError(
 				"invalid-argument",
-				`Invalid provider. Allowed: ${ALLOWED_PROVIDERS.join(", ")}`,
+				`Invalid provider. Allowed: ${ACCOUNT_LINK_PROVIDERS.join(", ")}`,
 			);
 		}
 
@@ -96,17 +101,9 @@ export default onCall(
 				createdAt: Timestamp.now(),
 			});
 
-			// Get provider display name
-			const providerNames: Record<string, string> = {
-				"google.com": "Google",
-				"facebook.com": "Facebook",
-				"github.com": "GitHub",
-				"twitter.com": "Twitter/X",
-			};
-			const providerName = providerNames[provider] || provider;
+			const providerName = accountLinkProviderDisplayName(provider);
 
 			// Send email
-			const transporter = getEmailTransporter(emailPassword.value());
 			const senderEmail = process.env.EMAIL_FROM;
 			const senderName = process.env.EMAIL_NAME;
 
@@ -127,7 +124,7 @@ export default onCall(
 				text: generateOtpEmailText(emailConfig),
 			};
 
-			await sendEmail(transporter, mailOptions);
+			await sendEmail(mailOptions);
 
 			// Mask email for display
 			const maskedEmail = email.replace(

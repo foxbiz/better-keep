@@ -1,16 +1,17 @@
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { auth, db, emailPassword, REVIEW_ACCOUNT_EMAIL } from "../config";
+import { HttpsError } from "firebase-functions/v2/https";
+import { auth, db, emailPassword } from "../config";
 import { generateOtpEmailHtml, generateOtpEmailText } from "../email_templates";
+import { onNonReviewCall } from "../nonReviewCallable";
 import type { OtpEmailConfig } from "../types";
-import { generateOtp, getEmailTransporter, sendEmail } from "../utils";
+import { generateOtp, sendEmail } from "../utils";
 
 /**
  * HTTP Callable function to send OTP for "start fresh" account reset verification.
  * This is used when a user has no approved devices and wants to reset their account.
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [emailPassword] },
 	async (request: CallableRequest) => {
 		if (!request.auth) {
@@ -19,7 +20,6 @@ export default onCall(
 				"User must be signed in to request OTP",
 			);
 		}
-
 		const userId = request.auth.uid;
 
 		try {
@@ -52,17 +52,6 @@ export default onCall(
 					start + "*".repeat(Math.min(middle.length, 5)) + end,
 			);
 
-			// Review account: skip OTP generation and email sending entirely
-			if (email.toLowerCase() === REVIEW_ACCOUNT_EMAIL) {
-				console.log(`Skipping OTP email for review account ${userId}`);
-				return {
-					success: true,
-					message: "Verification code sent",
-					email: maskedEmail,
-					expiresIn: 600,
-				};
-			}
-
 			// Generate OTP
 			const otp = generateOtp();
 			const expiresAt = Timestamp.fromMillis(
@@ -78,7 +67,6 @@ export default onCall(
 			});
 
 			// Send email
-			const transporter = getEmailTransporter(emailPassword.value());
 			const senderEmail = process.env.EMAIL_FROM;
 			const senderName = process.env.EMAIL_NAME;
 
@@ -100,7 +88,7 @@ export default onCall(
 				text: generateOtpEmailText(emailConfig),
 			};
 
-			await sendEmail(transporter, mailOptions);
+			await sendEmail(mailOptions);
 
 			console.log(`Sent start fresh OTP to user ${userId} (${maskedEmail})`);
 

@@ -26,14 +26,48 @@ void main() {
     final gate = InitialHydrationGate();
     final failedGeneration = gate.startAttempt();
     gate.beginWork(failedGeneration, isFromCache: false);
-    gate.endWork(failedGeneration, failed: true);
+    expect(
+      gate.endWork(failedGeneration, failed: true),
+      HydrationWorkOutcome.retry,
+    );
 
     final healthyGeneration = gate.startAttempt();
     gate.beginWork(healthyGeneration, isFromCache: false);
-    gate.endWork(healthyGeneration);
+    expect(gate.endWork(healthyGeneration), HydrationWorkOutcome.ready);
 
     await gate.ready;
     expect(gate.isReady, isTrue);
+  });
+
+  test('a failed generation cannot be completed by a later snapshot', () async {
+    final gate = InitialHydrationGate();
+    final generation = gate.startAttempt();
+    var resolved = false;
+    gate.ready.then((_) => resolved = true);
+
+    gate.beginWork(generation, isFromCache: false);
+    expect(gate.endWork(generation, failed: true), HydrationWorkOutcome.retry);
+
+    gate.beginWork(generation, isFromCache: false);
+    expect(gate.endWork(generation), HydrationWorkOutcome.retry);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(resolved, isFalse);
+  });
+
+  test('failed generation retries only after queued work drains', () {
+    final gate = InitialHydrationGate();
+    final generation = gate.startAttempt();
+    gate.beginWork(generation, isFromCache: false);
+    gate.beginWork(generation, isFromCache: false);
+
+    expect(
+      gate.endWork(generation, failed: true),
+      HydrationWorkOutcome.pending,
+    );
+    expect(gate.isReady, isFalse);
+    expect(gate.endWork(generation), HydrationWorkOutcome.retry);
+    expect(gate.isReady, isFalse);
   });
 
   test('stale callbacks cannot complete a newer listener generation', () async {
@@ -44,7 +78,7 @@ void main() {
     var resolved = false;
     gate.ready.then((_) => resolved = true);
 
-    gate.endWork(staleGeneration);
+    expect(gate.endWork(staleGeneration), HydrationWorkOutcome.stale);
     await Future<void>.delayed(Duration.zero);
     expect(resolved, isFalse);
 

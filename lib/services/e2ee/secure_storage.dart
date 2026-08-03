@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -215,33 +216,38 @@ class E2EESecureStorage {
 
   // Platform-aware read (with decryption on web)
   Future<String?> _read(String key) async {
+    final scopedKey = _scopedKey(key);
     if (kIsWeb) {
-      final encrypted = _webPrefs?.getString(key);
+      final encrypted = _webPrefs?.getString(scopedKey);
       if (encrypted == null) return null;
       return await _webDecrypt(encrypted);
     }
     try {
-      return await _secureStorage.read(key: key);
+      return await _secureStorage.read(key: scopedKey);
     } catch (e) {
       // Native secure storage can throw on iOS (Keychain errors after backup
       // restore, biometric changes) and Android (KeyStore corruption, OS
       // updates). Return null so callers degrade gracefully instead of
       // crashing the E2EE initialization chain.
-      AppLogger.error('E2EE: Secure storage read failed for key $key', e);
+      AppLogger.error('E2EE: Secure storage read failed for key $scopedKey', e);
       return null;
     }
   }
 
   // Platform-aware write (with encryption on web)
   Future<void> _write(String key, String value) async {
+    final scopedKey = _scopedKey(key);
     if (kIsWeb) {
       final encrypted = await _webEncrypt(value);
-      await _webPrefs?.setString(key, encrypted);
+      await _webPrefs?.setString(scopedKey, encrypted);
     } else {
       try {
-        await _secureStorage.write(key: key, value: value);
+        await _secureStorage.write(key: scopedKey, value: value);
       } catch (e) {
-        AppLogger.error('E2EE: Secure storage write failed for key $key', e);
+        AppLogger.error(
+          'E2EE: Secure storage write failed for key $scopedKey',
+          e,
+        );
         rethrow;
       }
     }
@@ -297,12 +303,16 @@ class E2EESecureStorage {
 
   // Platform-aware delete
   Future<void> _delete(String key) async {
+    final scopedKey = _scopedKey(key);
     if (kIsWeb) {
-      await _webPrefs?.remove(key);
+      await _webPrefs?.remove(scopedKey);
     } else {
-      await _secureStorage.delete(key: key);
+      await _secureStorage.delete(key: scopedKey);
     }
   }
+
+  String _scopedKey(String key) =>
+      FirebaseBackend.localDataScope.secureStorageKey(key);
 }
 
 /// Device information utilities.

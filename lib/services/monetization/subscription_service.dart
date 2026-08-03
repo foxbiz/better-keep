@@ -9,6 +9,7 @@ import 'package:better_keep/services/country_detection_service.dart';
 import 'package:better_keep/services/monetization/google_play_product_selector.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
@@ -199,6 +200,12 @@ Expected IDs: ${ProductIds.all}
     }
     _initialized = true;
     AppLogger.log('SubscriptionService: Initializing...');
+    if (ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      AppLogger.log(
+        'SubscriptionService: Managed review session, store services disabled',
+      );
+      return;
+    }
 
     if (kIsWeb) {
       AppLogger.log(
@@ -641,6 +648,8 @@ Expected IDs: ${ProductIds.all}
   /// This is called on init to recover subscription state
   Future<void> _checkPendingPurchases() async {
     try {
+      if (_skipPurchaseRestoreForReviewSession()) return;
+
       // On Android, we can restore purchases to check for active subscriptions
       if (Platform.isAndroid) {
         AppLogger.log('SubscriptionService: Checking for pending purchases...');
@@ -661,6 +670,8 @@ Expected IDs: ${ProductIds.all}
   /// timeout fires if no restored purchases arrive from the store (e.g. user has
   /// no prior purchases on this account).
   Future<bool> restoreAndWaitForPurchases() async {
+    if (_skipPurchaseRestoreForReviewSession()) return false;
+
     if (!_iapAvailable) return false;
 
     // If a restore is already in progress, wait for it rather than starting a new one
@@ -699,6 +710,16 @@ Expected IDs: ${ProductIds.all}
     }
   }
 
+  bool _skipPurchaseRestoreForReviewSession() {
+    if (!ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      return false;
+    }
+    AppLogger.log(
+      'SubscriptionService: Skipping purchase restoration for review session',
+    );
+    return true;
+  }
+
   /// Verify purchase with backend
   ///
   /// This calls the Cloud Function which:
@@ -711,6 +732,12 @@ Expected IDs: ${ProductIds.all}
       final user = AuthService.currentUser;
       if (user == null) {
         return VerifyPurchaseResult(valid: false, error: 'User not signed in');
+      }
+      if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+        return VerifyPurchaseResult(
+          valid: false,
+          error: 'Purchases are unavailable for the managed review account',
+        );
       }
 
       final serverVerificationData =
@@ -1136,6 +1163,11 @@ Expected IDs: ${ProductIds.all}
     if (user == null) {
       return PurchaseResult.failed('Please sign in first');
     }
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return PurchaseResult.failed(
+        'Purchases are unavailable for the managed review account',
+      );
+    }
 
     // For web/desktop, use Razorpay
     if (usesRazorpay) {
@@ -1475,6 +1507,11 @@ Expected IDs: ${ProductIds.all}
 
   /// Restore previous purchases (for mobile platforms)
   Future<RestoreResult> restorePurchases() async {
+    if (ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      return RestoreResult.failed(
+        'Purchase restoration is unavailable for the managed review account',
+      );
+    }
     if (usesRazorpay) {
       // For web/desktop with Razorpay, just refresh from Firebase
       await PlanService.instance.refreshSubscription();
@@ -1510,7 +1547,11 @@ Expected IDs: ${ProductIds.all}
     if (user == null) {
       return CancelResult.failed('Please sign in first');
     }
-
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return CancelResult.failed(
+        'Subscription changes are unavailable for the managed review account',
+      );
+    }
     final subscriptionStatus = PlanService.instance.status;
 
     // For Razorpay subscriptions, cancel via API (regardless of current platform)
@@ -1631,6 +1672,11 @@ Expected IDs: ${ProductIds.all}
     final user = AuthService.currentUser;
     if (user == null) {
       return CancelResult.failed('Please sign in first');
+    }
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return CancelResult.failed(
+        'Subscription changes are unavailable for the managed review account',
+      );
     }
 
     if (!usesRazorpay) {

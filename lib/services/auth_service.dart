@@ -3,19 +3,29 @@ import 'dart:async';
 import 'package:alarm/alarm.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/config.dart';
-import 'package:better_keep/firebase_options.dart';
+import 'package:better_keep/services/apple_auth.dart';
+import 'package:better_keep/services/alarm_id_service.dart';
+import 'package:better_keep/services/connected_provider_lifecycle.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/cloud_functions_helper.dart';
+import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/firebase_apple_configuration.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
+import 'package:better_keep/services/firebase_emulator_google_auth.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/label_sync_service.dart';
+import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
+import 'package:better_keep/services/oauth_transaction.dart';
+import 'package:better_keep/services/recovered_oauth_sign_in_coordinator.dart';
 import 'package:better_keep/services/reminder_session_service.dart';
 import 'package:better_keep/services/reminder_sign_out_cleanup_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/desktop_auth_service.dart';
@@ -23,7 +33,6 @@ import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -35,8 +44,24 @@ import 'package:better_keep/services/web_oauth_stub.dart'
     if (dart.library.html) 'package:better_keep/services/web_oauth.dart'
     as web_oauth;
 
+typedef _NativeAppleAuthorization = ({
+  AuthorizationCredentialAppleID appleCredential,
+  OAuthCredential firebaseCredential,
+});
+
+typedef _AppleSignInResult = ({
+  UserCredential userCredential,
+  AuthorizationCredentialAppleID? appleCredential,
+});
+
+typedef _OAuthCallbackResult = ({
+  String transactionId,
+  String? completionCode,
+  bool linked,
+});
+
 class AuthService {
-  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static FirebaseAuth get _auth => FirebaseBackend.auth;
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   /// Expose FirebaseAuth instance for email verification operations
@@ -47,7 +72,8 @@ class AuthService {
   static const String? _serverClientId = null;
 
   // Completer for OAuth callback
-  static Completer<String>? _oauthCompleter;
+  static Completer<_OAuthCallbackResult>? _oauthCompleter;
+  static String? _pendingOAuthTransactionId;
 
   static Stream<User?> get userStream => _auth.userChanges();
   static User? get currentUser => _auth.currentUser;
@@ -91,17 +117,34 @@ class AuthService {
         ),
       );
     }
+    final transactionId = _pendingOAuthTransactionId;
+    if (transactionId != null) {
+      unawaited(removeOAuthTransaction(transactionId));
+    }
     _oauthCompleter = null;
+    _pendingOAuthTransactionId = null;
   }
 
   /// Handle OAuth callback from deep link
-  /// Called when app receives betterkeep://auth?token=xxx or betterkeep://auth?cancelled=true
+  /// Called when the app receives a browser OAuth completion deep link.
   /// or betterkeep://auth?linked=true&provider=xxx
-  static Future<void> handleOAuthCallback(Uri uri) async {
+  static Future<void> handleOAuthCallback(
+    Uri uri, {
+    required Future<void> appServicesReady,
+  }) async {
     if (uri.scheme != 'betterkeep' || uri.host != 'auth') return;
+    final transactionId = uri.queryParameters['transactionId'];
+    if (transactionId == null) return;
+    final transaction = await readOAuthTransaction(transactionId);
+    if (transaction == null) return;
+    if (_pendingOAuthTransactionId != null &&
+        _pendingOAuthTransactionId != transactionId) {
+      return;
+    }
 
     // Check if cancelled
     if (uri.queryParameters['cancelled'] == 'true') {
+      await removeOAuthTransaction(transactionId);
       if (_oauthCompleter != null && !_oauthCompleter!.isCompleted) {
         _oauthCompleter!.completeError(
           FirebaseAuthException(
@@ -116,6 +159,7 @@ class AuthService {
     // Check for error
     final error = uri.queryParameters['error'];
     if (error != null) {
+      await removeOAuthTransaction(transactionId);
       if (_oauthCompleter != null && !_oauthCompleter!.isCompleted) {
         _oauthCompleter!.completeError(
           FirebaseAuthException(code: 'oauth-error', message: error),
@@ -126,20 +170,76 @@ class AuthService {
 
     // Check for successful link
     if (uri.queryParameters['linked'] == 'true') {
+      await removeOAuthTransaction(transactionId);
       if (_oauthCompleter != null && !_oauthCompleter!.isCompleted) {
-        // Complete with a marker value to indicate link success
-        _oauthCompleter!.complete('link_success');
+        _oauthCompleter!.complete((
+          transactionId: transactionId,
+          completionCode: null,
+          linked: true,
+        ));
       }
       return;
     }
 
-    // Standard sign-in with token
-    final token = uri.queryParameters['token'];
-    if (token != null &&
-        _oauthCompleter != null &&
-        !_oauthCompleter!.isCompleted) {
-      _oauthCompleter!.complete(token);
+    final completionCode = uri.queryParameters['code'];
+    if (completionCode == null) return;
+    final completer = _oauthCompleter;
+    final coordinator = RecoveredOAuthSignInCoordinator<User>(
+      redeemCompletion: (code, storedTransaction) => _redeemOAuthCompletion(
+        completionCode: code,
+        transaction: storedTransaction,
+      ),
+      authenticateWithCustomToken: (customToken) async {
+        final credential = await _auth.signInWithCustomToken(customToken);
+        return credential.user;
+      },
+      finalizeSignIn: (user, provider) => _completeSignIn(user, null, provider),
+      removeTransaction: removeOAuthTransaction,
+      setVerificationState: (value) => isVerifying.value = value,
+      reportSecondaryFailure: (error, stackTrace) {
+        unawaited(
+          AppLogger.error(
+            'OAuth recovery cleanup failed after a primary error',
+            error,
+            stackTrace,
+          ),
+        );
+      },
+    );
+
+    await coordinator.completeCallback(
+      transaction: transaction,
+      completionCode: completionCode,
+      appServicesReady: appServicesReady,
+      completeInFlight: completer != null && !completer.isCompleted
+          ? () {
+              completer.complete((
+                transactionId: transactionId,
+                completionCode: completionCode,
+                linked: false,
+              ));
+            }
+          : null,
+    );
+  }
+
+  static Future<String> _redeemOAuthCompletion({
+    required String completionCode,
+    required OAuthTransaction transaction,
+  }) async {
+    final result = await callCloudFunction('redeemOAuthCompletion', {
+      'code': completionCode,
+      'verifier': transaction.verifier,
+    });
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final customToken = data['customToken'];
+    if (customToken is! String || customToken.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'oauth-completion-invalid',
+        message: 'The sign-in completion was invalid or expired.',
+      );
     }
+    return customToken;
   }
 
   /// Sign in using web OAuth flow
@@ -150,67 +250,47 @@ class AuthService {
     Function(String)? onStatusChange,
   }) async {
     onStatusChange?.call("Opening $provider login...");
+    final transaction = await createOAuthTransaction(
+      provider: provider,
+      mode: 'signin',
+    );
+    _pendingOAuthTransactionId = transaction.id;
+    final authUrl = _buildCustomOAuthUrl(
+      provider: provider,
+      transaction: transaction,
+    );
 
-    // Generate a random state for security
-    final state = DateTime.now().millisecondsSinceEpoch.toString();
-
-    if (kIsWeb) {
-      // Web: Use popup window with postMessage callback
-      final authUrl =
-          'https://betterkeep.app/oauth/start?provider=$provider&redirect=popup&state=$state';
-
-      onStatusChange?.call("Waiting for sign-in...");
-
-      final result = await web_oauth.openOAuthPopup(authUrl);
-
-      // Debug logging
-      AppLogger.log(
-        'OAuth result: token=${result.token != null}, error=${result.error}, cancelled=${result.cancelled}, isError=${result.isError}',
-      );
-
-      // Check for errors first (error message takes priority)
-      if (result.error != null && result.error!.isNotEmpty) {
-        throw FirebaseAuthException(
-          code: 'oauth-error',
-          message: result.error!,
+    try {
+      late String completionCode;
+      if (kIsWeb) {
+        onStatusChange?.call("Waiting for sign-in...");
+        final result = await web_oauth.openOAuthPopup(
+          authUrl.toString(),
+          expectedTransactionId: transaction.id,
         );
-      }
-
-      // Check for cancellation or no token
-      if (result.cancelled || result.token == null) {
-        throw FirebaseAuthException(
-          code: 'cancelled',
-          message: 'Sign-in was cancelled or popup was blocked',
-        );
-      }
-
-      onStatusChange?.call("Completing sign-in...");
-
-      // Sign in with custom token
-      final userCredential = await _auth.signInWithCustomToken(result.token!);
-      return userCredential;
-    } else {
-      // Mobile: Use in-app browser with deep link callback
-      _oauthCompleter = Completer<String>();
-
-      final authUrl = Uri.parse(
-        'https://betterkeep.app/oauth/start?provider=$provider&redirect=betterkeep&state=$state',
-      );
-
-      // Use in-app browser (Chrome Custom Tabs on Android, SFSafariViewController on iOS)
-      if (!await launchUrl(authUrl, mode: LaunchMode.inAppBrowserView)) {
-        _oauthCompleter = null;
-        throw FirebaseAuthException(
-          code: 'launch-failed',
-          message: 'Could not open authentication page',
-        );
-      }
-
-      onStatusChange?.call("Waiting for sign-in...");
-
-      // Wait for callback with timeout
-      try {
-        final customToken = await _oauthCompleter!.future.timeout(
+        if (result.error != null && result.error!.isNotEmpty) {
+          throw FirebaseAuthException(
+            code: 'oauth-error',
+            message: result.error!,
+          );
+        }
+        if (result.cancelled || result.completionCode == null) {
+          throw FirebaseAuthException(
+            code: 'cancelled',
+            message: 'Sign-in was cancelled or popup was blocked',
+          );
+        }
+        completionCode = result.completionCode!;
+      } else {
+        _oauthCompleter = Completer<_OAuthCallbackResult>();
+        if (!await launchUrl(authUrl, mode: LaunchMode.inAppBrowserView)) {
+          throw FirebaseAuthException(
+            code: 'launch-failed',
+            message: 'Could not open authentication page',
+          );
+        }
+        onStatusChange?.call("Waiting for sign-in...");
+        final callback = await _oauthCompleter!.future.timeout(
           const Duration(minutes: 5),
           onTimeout: () {
             throw FirebaseAuthException(
@@ -219,21 +299,62 @@ class AuthService {
             );
           },
         );
+        if (callback.transactionId != transaction.id ||
+            callback.completionCode == null) {
+          throw FirebaseAuthException(
+            code: 'oauth-completion-invalid',
+            message: 'The sign-in completion did not match this request.',
+          );
+        }
+        completionCode = callback.completionCode!;
+      }
 
-        onStatusChange?.call("Completing sign-in...");
-
-        // Sign in with custom token
-        final userCredential = await _auth.signInWithCustomToken(customToken);
-        return userCredential;
-      } finally {
-        _oauthCompleter = null;
+      onStatusChange?.call("Completing sign-in...");
+      final customToken = await _redeemOAuthCompletion(
+        completionCode: completionCode,
+        transaction: transaction,
+      );
+      return await _auth.signInWithCustomToken(customToken);
+    } finally {
+      await removeOAuthTransaction(transaction.id);
+      _oauthCompleter = null;
+      if (_pendingOAuthTransactionId == transaction.id) {
+        _pendingOAuthTransactionId = null;
       }
     }
+  }
+
+  static Uri _buildCustomOAuthUrl({
+    required String provider,
+    required OAuthTransaction transaction,
+    String mode = 'signin',
+    String? linkToken,
+  }) {
+    return Uri.https('betterkeep.app', '/oauth/start', {
+      'provider': provider,
+      'redirect': kIsWeb ? 'popup' : 'betterkeep',
+      'mode': mode,
+      'linkToken': ?linkToken,
+      'flowVersion': '2',
+      'completionChallenge': transaction.challenge,
+      'clientTransactionId': transaction.id,
+      if (kIsWeb) 'clientOrigin': web_oauth.currentOAuthClientOrigin(),
+    });
   }
 
   /// Initialize AuthService with optional pre-loaded SharedPreferences for faster startup.
   /// Token validation is deferred to background to not block app startup.
   static Future<void> init({SharedPreferences? prefs}) async {
+    try {
+      await purgeExpiredOAuthTransactions();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to clear expired OAuth transactions',
+        error,
+        stackTrace,
+      );
+    }
+
     // Start GoogleSignIn initialization (doesn't need to complete before continuing)
     Future<void>? googleSignInFuture;
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
@@ -262,16 +383,30 @@ class AuthService {
         }
       }
     }
-    final email = prefsInstance.getString('user_email');
-    final uid = prefsInstance.getString('user_uid');
+    final email = prefsInstance.getString(
+      FirebaseScopedPreferences.key('user_email'),
+    );
+    final uid = prefsInstance.getString(
+      FirebaseScopedPreferences.key('user_uid'),
+    );
 
     if (email != null) {
       _cachedProfile = {
         'email': email,
-        'displayName': prefsInstance.getString('user_displayName') ?? '',
-        'photoURL': prefsInstance.getString('user_photoURL') ?? '',
+        'displayName':
+            prefsInstance.getString(
+              FirebaseScopedPreferences.key('user_displayName'),
+            ) ??
+            '',
+        'photoURL':
+            prefsInstance.getString(
+              FirebaseScopedPreferences.key('user_photoURL'),
+            ) ??
+            '',
       };
-      _localPhotoPath = prefsInstance.getString('user_local_photo');
+      _localPhotoPath = prefsInstance.getString(
+        FirebaseScopedPreferences.key('user_local_photo'),
+      );
 
       // Download profile image in background (don't block startup)
       if (_cachedProfile!['photoURL']!.isNotEmpty) {
@@ -413,6 +548,7 @@ class AuthService {
       } else if (user == null) {
         // User logged out - stop the listener
         _stopTokenRevocationListener();
+        ReviewAccess.clear();
       }
     });
 
@@ -498,7 +634,10 @@ class AuthService {
         await fs.writeBytes(filePath, bytes);
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_local_photo', filePath);
+        await prefs.setString(
+          FirebaseScopedPreferences.key('user_local_photo'),
+          filePath,
+        );
         _localPhotoPath = filePath;
       }
     } catch (e, stackTrace) {
@@ -527,7 +666,19 @@ class AuthService {
 
       UserCredential userCredential;
 
-      if (kIsWeb) {
+      if (FirebaseEmulatorConfig.isUsingEmulators &&
+          FirebaseEmulatorConfig.googleAuthMode ==
+              GoogleEmulatorAuthMode.mock) {
+        onStatusChange?.call(
+          "Emulator mode: signing in with a Google test identity...",
+        );
+        AppLogger.log(
+          '[Auth] Emulator mode: using deterministic google.com credential',
+        );
+        userCredential = await _auth.signInWithCredential(
+          FirebaseEmulatorGoogleAuth.credential(),
+        );
+      } else if (kIsWeb) {
         // Web: Use signInWithPopup
         GoogleAuthProvider googleProvider = GoogleAuthProvider();
         googleProvider.addScope('email');
@@ -544,40 +695,6 @@ class AuthService {
         );
 
         userCredential = await _auth.signInWithCredential(credential);
-      } else if (FirebaseEmulatorConfig.isUsingEmulators) {
-        // Emulator mode: native Google Sign-In always goes to real Google servers
-        // and cannot be intercepted by the emulator. Use a fixed test account instead.
-        onStatusChange?.call("Emulator mode: signing in with test account...");
-        AppLogger.log(
-          '[Auth] Emulator mode: bypassing native Google OAuth, using test account',
-        );
-        const testEmail = 'test.google@emulator.dev';
-        const testPassword = 'EmulatorTest123!';
-        try {
-          userCredential = await _auth.signInWithEmailAndPassword(
-            email: testEmail,
-            password: testPassword,
-          );
-          AppLogger.log(
-            '[Auth] Emulator: signed in with existing test account',
-          );
-        } on FirebaseAuthException catch (e) {
-          if (e.code == 'user-not-found' ||
-              e.code == 'invalid-credential' ||
-              e.code == 'INVALID_LOGIN_CREDENTIALS') {
-            AppLogger.log(
-              '[Auth] Emulator: test account not found, creating it...',
-            );
-            userCredential = await _auth.createUserWithEmailAndPassword(
-              email: testEmail,
-              password: testPassword,
-            );
-            AppLogger.log('[Auth] Emulator: test account created');
-          } else {
-            AppLogger.error('[Auth] Emulator test sign-in failed', e);
-            rethrow;
-          }
-        }
       } else {
         // Android/iOS/macOS: Use native google_sign_in
         if (!_googleSignIn.supportsAuthenticate()) {
@@ -616,6 +733,7 @@ class AuthService {
   static Future<UserCredential?> signInWithApple({
     Function(String)? onStatusChange,
   }) async {
+    var failureStage = 'preparation';
     try {
       isVerifying.value = true;
       await _ensureNetworkEnabled();
@@ -629,26 +747,51 @@ class AuthService {
 
       onStatusChange?.call("Signing in with Apple...");
 
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
+      final result = await runAppleAuthFlow<_AppleSignInResult>(
+        flow: appleAuthFlowFor(isWeb: kIsWeb, platform: defaultTargetPlatform),
+        webPopup: () async {
+          failureStage = 'firebase-provider';
+          onStatusChange?.call("Logging in...");
+          return (
+            userCredential: await _auth.signInWithPopup(
+              buildAppleAuthProvider(),
+            ),
+            appleCredential: null,
+          );
+        },
+        firebaseProvider: () async {
+          failureStage = 'firebase-provider';
+          onStatusChange?.call("Logging in...");
+          return (
+            userCredential: await _auth.signInWithProvider(
+              buildAppleAuthProvider(),
+            ),
+            appleCredential: null,
+          );
+        },
+        nativeCredential: () async {
+          failureStage = 'apple-authorization';
+          final authorization = await _requestNativeAppleAuthorization();
+          failureStage = 'firebase-credential-exchange';
+          onStatusChange?.call("Logging in...");
+          return (
+            userCredential: await _auth.signInWithCredential(
+              authorization.firebaseCredential,
+            ),
+            appleCredential: authorization.appleCredential,
+          );
+        },
       );
 
-      onStatusChange?.call("Logging in...");
-
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: appleCredential.identityToken,
-        accessToken: appleCredential.authorizationCode,
-      );
-
-      final userCredential = await _auth.signInWithCredential(oauthCredential);
+      final userCredential = result.userCredential;
+      final appleCredential = result.appleCredential;
 
       // Apple only returns the name on first sign-in, so update the profile
-      if (userCredential.user != null && appleCredential.givenName != null) {
+      if (userCredential.user != null &&
+          (appleCredential?.givenName != null ||
+              appleCredential?.familyName != null)) {
         final displayName =
-            '${appleCredential.givenName ?? ''} ${appleCredential.familyName ?? ''}'
+            '${appleCredential?.givenName ?? ''} ${appleCredential?.familyName ?? ''}'
                 .trim();
         if (displayName.isNotEmpty) {
           await userCredential.user!.updateDisplayName(displayName);
@@ -656,16 +799,42 @@ class AuthService {
       }
 
       if (userCredential.user != null) {
+        failureStage = 'post-login-initialization';
         await _completeSignIn(userCredential.user!, onStatusChange, 'apple');
       }
 
       return userCredential;
     } catch (e, stackTrace) {
-      AppLogger.error('Error signing in with Apple', e, stackTrace);
+      final diagnosticContext = await activeAppleFirebaseDiagnosticContext();
+      await AppLogger.error(
+        'Error signing in with Apple at $failureStage ($diagnosticContext)',
+        e,
+        stackTrace,
+      );
       rethrow;
     } finally {
       isVerifying.value = false;
     }
+  }
+
+  static Future<_NativeAppleAuthorization>
+  _requestNativeAppleAuthorization() async {
+    final nonce = AppleNonce.generate();
+    final appleCredential = await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: nonce.hashed,
+    );
+
+    return (
+      appleCredential: appleCredential,
+      firebaseCredential: buildNativeAppleFirebaseCredential(
+        appleCredential: appleCredential,
+        rawNonce: nonce.raw,
+      ),
+    );
   }
 
   /// Sign in with Facebook
@@ -983,11 +1152,7 @@ class AuthService {
     }
 
     try {
-      // Use the named database
-      final firestore = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
-      );
+      final firestore = FirebaseBackend.firestore;
       final userDoc = await firestore.collection('users').doc(user.uid).get();
 
       if (userDoc.exists) {
@@ -1070,12 +1235,20 @@ class AuthService {
 
   /// Link Google account to current user
   /// Security: Requires user to authenticate with Google, proving ownership
-  static Future<void> linkWithGoogle() async {
+  static Future<void> linkWithGoogle({required String linkToken}) async {
     final user = currentUser;
     if (user == null) throw Exception('No user signed in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Connected accounts',
+    );
 
     try {
-      if (kIsWeb) {
+      if (FirebaseEmulatorConfig.isUsingEmulators &&
+          FirebaseEmulatorConfig.googleAuthMode ==
+              GoogleEmulatorAuthMode.mock) {
+        await user.linkWithCredential(FirebaseEmulatorGoogleAuth.credential());
+      } else if (kIsWeb) {
         GoogleAuthProvider googleProvider = GoogleAuthProvider();
         googleProvider.addScope('email');
         await user.linkWithPopup(googleProvider);
@@ -1099,6 +1272,10 @@ class AuthService {
         );
         await user.linkWithCredential(credential);
       }
+      await _confirmNativeAccountLink(
+        provider: 'google.com',
+        linkToken: linkToken,
+      );
       AppLogger.log('Successfully linked Google account');
     } catch (e, stackTrace) {
       AppLogger.error('Error linking Google account', e, stackTrace);
@@ -1108,44 +1285,51 @@ class AuthService {
 
   /// Link Facebook account to current user using OAuth flow
   /// Security: User must authenticate with Facebook, proving ownership
-  static Future<void> linkWithFacebook() async {
-    await _linkWithWebOAuth(provider: 'facebook');
+  static Future<void> linkWithFacebook({required String linkToken}) async {
+    await _linkWithWebOAuth(provider: 'facebook', linkToken: linkToken);
   }
 
   /// Link GitHub account to current user using OAuth flow
   /// Security: User must authenticate with GitHub, proving ownership
-  static Future<void> linkWithGitHub() async {
-    await _linkWithWebOAuth(provider: 'github');
+  static Future<void> linkWithGitHub({required String linkToken}) async {
+    await _linkWithWebOAuth(provider: 'github', linkToken: linkToken);
   }
 
   /// Link Twitter/X account to current user using OAuth flow
   /// Security: User must authenticate with Twitter, proving ownership
-  static Future<void> linkWithTwitter() async {
-    await _linkWithWebOAuth(provider: 'twitter');
+  static Future<void> linkWithTwitter({required String linkToken}) async {
+    await _linkWithWebOAuth(provider: 'twitter', linkToken: linkToken);
   }
 
   /// Link Apple account to current user
   /// Security: User must authenticate with Apple, proving ownership
-  static Future<void> linkWithApple() async {
+  static Future<void> linkWithApple({required String linkToken}) async {
     final user = currentUser;
     if (user == null) throw Exception('No user signed in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Connected accounts',
+    );
 
     try {
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
+      await runAppleAuthFlow<void>(
+        flow: appleAuthFlowFor(isWeb: kIsWeb, platform: defaultTargetPlatform),
+        webPopup: () async {
+          await user.linkWithPopup(buildAppleAuthProvider());
+        },
+        firebaseProvider: () async {
+          await user.linkWithProvider(buildAppleAuthProvider());
+        },
+        nativeCredential: () async {
+          final authorization = await _requestNativeAppleAuthorization();
+          await user.linkWithCredential(authorization.firebaseCredential);
+        },
       );
 
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: appleCredential.identityToken,
-        accessToken: appleCredential.authorizationCode,
+      await _confirmNativeAccountLink(
+        provider: 'apple.com',
+        linkToken: linkToken,
       );
-
-      await user.linkWithCredential(oauthCredential);
-
-      addLinkedProvider('apple.com');
       AppLogger.log('Successfully linked Apple account');
     } catch (e, stackTrace) {
       AppLogger.error('Error linking Apple account', e, stackTrace);
@@ -1154,66 +1338,57 @@ class AuthService {
   }
 
   /// Internal method to link account using custom OAuth flow
-  static Future<void> _linkWithWebOAuth({required String provider}) async {
+  static Future<void> _linkWithWebOAuth({
+    required String provider,
+    required String linkToken,
+  }) async {
     final user = currentUser;
     if (user == null) throw Exception('No user signed in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Connected accounts',
+    );
 
     AppLogger.log('Starting $provider OAuth link flow for user ${user.uid}');
+    final transaction = await createOAuthTransaction(
+      provider: provider,
+      mode: 'link',
+    );
+    _pendingOAuthTransactionId = transaction.id;
+    final authUrl = _buildCustomOAuthUrl(
+      provider: provider,
+      transaction: transaction,
+      mode: 'link',
+      linkToken: linkToken,
+    );
 
-    if (kIsWeb) {
-      // Web: Use popup window with postMessage callback
-      final authUrl =
-          'https://betterkeep.app/oauth/start?provider=$provider&redirect=popup&mode=link&uid=${user.uid}';
-
-      final result = await web_oauth.openOAuthPopup(authUrl);
-
-      // Debug logging
-      AppLogger.log(
-        'OAuth link result: token=${result.token != null}, error=${result.error}, cancelled=${result.cancelled}',
-      );
-
-      // For link mode, we don't get a token, we check for link_success message type
-      // The popup handler in web_oauth.dart needs to handle 'oauth_link_success' type
-
-      // Check for errors first
-      if (result.error != null && result.error!.isNotEmpty) {
-        throw FirebaseAuthException(
-          code: 'oauth-error',
-          message: result.error!,
+    try {
+      if (kIsWeb) {
+        final result = await web_oauth.openOAuthPopup(
+          authUrl.toString(),
+          expectedTransactionId: transaction.id,
         );
-      }
-
-      // Check for cancellation
-      if (result.cancelled) {
-        throw FirebaseAuthException(
-          code: 'cancelled',
-          message: 'Account linking was cancelled',
-        );
-      }
-
-      // Add provider to local cache so UI updates immediately
-      addLinkedProvider('$provider.com');
-      AppLogger.log('Successfully linked $provider account via OAuth');
-    } else {
-      // Mobile: Use in-app browser with deep link callback
-      _oauthCompleter = Completer<String>();
-
-      final authUrl = Uri.parse(
-        'https://betterkeep.app/oauth/start?provider=$provider&redirect=betterkeep&mode=link&uid=${user.uid}',
-      );
-
-      // Use in-app browser
-      if (!await launchUrl(authUrl, mode: LaunchMode.inAppBrowserView)) {
-        _oauthCompleter = null;
-        throw FirebaseAuthException(
-          code: 'launch-failed',
-          message: 'Could not open authentication page',
-        );
-      }
-
-      // Wait for callback with timeout
-      try {
-        await _oauthCompleter!.future.timeout(
+        if (result.error != null && result.error!.isNotEmpty) {
+          throw FirebaseAuthException(
+            code: 'oauth-error',
+            message: result.error!,
+          );
+        }
+        if (result.cancelled || !result.linked) {
+          throw FirebaseAuthException(
+            code: 'cancelled',
+            message: 'Account linking was cancelled',
+          );
+        }
+      } else {
+        _oauthCompleter = Completer<_OAuthCallbackResult>();
+        if (!await launchUrl(authUrl, mode: LaunchMode.inAppBrowserView)) {
+          throw FirebaseAuthException(
+            code: 'launch-failed',
+            message: 'Could not open authentication page',
+          );
+        }
+        final callback = await _oauthCompleter!.future.timeout(
           const Duration(minutes: 5),
           onTimeout: () {
             throw FirebaseAuthException(
@@ -1222,21 +1397,45 @@ class AuthService {
             );
           },
         );
+        if (callback.transactionId != transaction.id || !callback.linked) {
+          throw FirebaseAuthException(
+            code: 'oauth-completion-invalid',
+            message: 'The account-link completion did not match this request.',
+          );
+        }
+      }
 
-        // Add provider to local cache so UI updates immediately
-        addLinkedProvider('$provider.com');
-        AppLogger.log('Successfully linked $provider account via OAuth');
-      } finally {
-        _oauthCompleter = null;
+      addLinkedProvider('$provider.com');
+      AppLogger.log('Successfully linked $provider account via OAuth');
+    } finally {
+      await removeOAuthTransaction(transaction.id);
+      _oauthCompleter = null;
+      if (_pendingOAuthTransactionId == transaction.id) {
+        _pendingOAuthTransactionId = null;
       }
     }
   }
 
+  static Future<void> _confirmNativeAccountLink({
+    required String provider,
+    required String linkToken,
+  }) async {
+    await callCloudFunction('confirmAccountLink', {
+      'provider': provider,
+      'linkToken': linkToken,
+    });
+    addLinkedProvider(provider);
+  }
+
   /// Unlink a provider from current user
-  /// Removes the provider from Firestore linkedProviders
+  /// Removes the provider from Firebase Auth and Firestore metadata.
   static Future<void> unlinkProvider(String providerId) async {
     final user = currentUser;
     if (user == null) throw Exception('No user signed in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Connected accounts',
+    );
 
     // Convert provider ID to Firestore key format
     String firestoreKey;
@@ -1258,17 +1457,22 @@ class AuthService {
     }
 
     try {
-      // Remove from Firestore
-      final firestore = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
+      final firestore = FirebaseBackend.firestore;
+      await unlinkConnectedProvider(
+        providerId: providerId,
+        firebaseProviderIds: user.providerData.map((info) => info.providerId),
+        removeMetadata: () async {
+          await firestore.collection('users').doc(user.uid).update({
+            'linkedProviders.$firestoreKey': FieldValue.delete(),
+          });
+        },
+        clearCachedProvider: () {
+          _firestoreLinkedProviders.remove(providerId);
+        },
+        unlinkFirebaseProvider: (linkedProviderId) async {
+          await user.unlink(linkedProviderId);
+        },
       );
-      await firestore.collection('users').doc(user.uid).update({
-        'linkedProviders.$firestoreKey': FieldValue.delete(),
-      });
-
-      // Remove from local cache
-      _firestoreLinkedProviders.remove(providerId);
 
       AppLogger.log('Successfully unlinked provider: $providerId');
     } catch (e, stackTrace) {
@@ -1312,7 +1516,6 @@ class AuthService {
         await user.getIdToken(true);
       }
     } catch (e, stackTrace) {
-      // Log but don't fail sign-in if claims setup fails
       AppLogger.error(
         "[SIGN_IN] Failed to set emulator test claims",
         e,
@@ -1340,24 +1543,40 @@ class AuthService {
 
       // Set Pro claims in emulator mode for testing
       await _setEmulatorProClaims(user, onStatusChange);
+      onStatusChange?.call("Checking Firestore emulator...");
+      await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(user);
 
-      await _ensureUserExists(user, onStatusChange, provider);
-      // Load Firestore linked providers into cache
-      await refreshLinkedProviders();
-      // Start PlanService subscription listener (deferred from auth state change)
-      await PlanService.instance.startSubscriptionListener();
-      // Initialize E2EE after successful login
-      onStatusChange?.call("Initializing encryption...");
-      await E2EEService.instance.initialize();
-      // Guard: user may have cancelled/signed-out during the long async ops above
-      if (currentUser == null) return;
-      // Initialize device approval notifications
-      await DeviceApprovalNotificationService().init();
-      // Initialize sync services after E2EE is ready
-      // This prevents Firestore connections before E2EE initialization completes
-      await NoteSyncService().init();
-      LabelSyncService().init();
-      await NoteSortService().startCloudSync();
+      final isReviewSession = await ReviewAccess.authorize(user);
+      ReviewAccess.requireAuthorizedReviewIdentity(user, isReviewSession);
+
+      if (isReviewSession) {
+        onStatusChange?.call("Preparing review session...");
+        final reviewAuthorization = ReviewAccess.authorizationFor(user);
+        if (reviewAuthorization == null) {
+          throw StateError('Review authorization was not retained');
+        }
+        PlanService.instance.activateReviewSession(reviewAuthorization);
+        await E2EEService.instance.initializeReviewSession();
+      } else {
+        await _ensureUserExists(user, onStatusChange, provider);
+        // Load Firestore linked providers into cache
+        await refreshLinkedProviders();
+        // Start PlanService subscription listener (deferred from auth state change)
+        await PlanService.instance.startSubscriptionListener();
+        // Initialize E2EE after successful login
+        onStatusChange?.call("Initializing encryption...");
+        await E2EEService.instance.initialize();
+        // Guard: user may have cancelled/signed-out during the long async ops above
+        if (currentUser == null) return;
+        // Initialize device approval notifications
+        await DeviceApprovalNotificationService().init();
+        // Initialize sync services after E2EE is ready
+        // This prevents Firestore connections before E2EE initialization completes
+        await NoteSyncService().init();
+        await LabelSyncService().init();
+        await NoteSortService().startCloudSync();
+      }
+
       // Clear sign-in progress flag on success
       final canUseE2EEStorage =
           !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
@@ -1385,13 +1604,9 @@ class AuthService {
     Function(String)? onStatusChange,
     String provider,
   ) async {
-    // Use the named database
-    final firestore = FirebaseFirestore.instanceFor(
-      app: Firebase.app(),
-      databaseId: DefaultFirebaseOptions.databaseId,
-    );
+    final firestore = FirebaseBackend.firestore;
     AppLogger.log(
-      "AuthService using databaseId: ${DefaultFirebaseOptions.databaseId}",
+      "AuthService using databaseId: ${FirebaseBackend.databaseId}",
     );
     final userRef = firestore.collection('users').doc(user.uid);
 
@@ -1478,10 +1693,22 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         final fs = await fileSystem();
 
-        await prefs.setString('user_email', user.email ?? '');
-        await prefs.setString('user_displayName', user.displayName ?? '');
-        await prefs.setString('user_photoURL', user.photoURL ?? '');
-        await prefs.setString('user_uid', user.uid);
+        await prefs.setString(
+          FirebaseScopedPreferences.key('user_email'),
+          user.email ?? '',
+        );
+        await prefs.setString(
+          FirebaseScopedPreferences.key('user_displayName'),
+          user.displayName ?? '',
+        );
+        await prefs.setString(
+          FirebaseScopedPreferences.key('user_photoURL'),
+          user.photoURL ?? '',
+        );
+        await prefs.setString(
+          FirebaseScopedPreferences.key('user_uid'),
+          user.uid,
+        );
 
         _cachedProfile = {
           'email': user.email ?? '',
@@ -1490,12 +1717,17 @@ class AuthService {
         };
 
         if (user.photoURL != null) {
-          final savedUrl = prefs.getString('user_photoURL_downloaded');
+          final savedUrl = prefs.getString(
+            FirebaseScopedPreferences.key('user_photoURL_downloaded'),
+          );
           if (savedUrl != user.photoURL ||
               _localPhotoPath == null ||
               !await fs.exists(_localPhotoPath!)) {
             await _downloadProfileImage(user.photoURL!, uid: user.uid);
-            await prefs.setString('user_photoURL_downloaded', user.photoURL!);
+            await prefs.setString(
+              FirebaseScopedPreferences.key('user_photoURL_downloaded'),
+              user.photoURL!,
+            );
           }
         }
 
@@ -1534,10 +1766,7 @@ class AuthService {
     _stopTokenRevocationListener();
     _currentUserId = userId;
 
-    final firestore = FirebaseFirestore.instanceFor(
-      app: Firebase.app(),
-      databaseId: DefaultFirebaseOptions.databaseId,
-    );
+    final firestore = FirebaseBackend.firestore;
 
     _tokenRevocationSubscription = firestore
         .collection('users')
@@ -1596,10 +1825,7 @@ class AuthService {
     if (_currentUserId == null || _cachedTokenAuthTime == null) return;
 
     try {
-      final firestore = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
-      );
+      final firestore = FirebaseBackend.firestore;
 
       final doc = await firestore.collection('users').doc(_currentUserId).get();
       if (doc.exists) {
@@ -1621,10 +1847,7 @@ class AuthService {
   /// Ensures Firestore network is enabled (may have been left disabled after signout)
   static Future<void> _ensureNetworkEnabled() async {
     try {
-      final firestore = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
-      );
+      final firestore = FirebaseBackend.firestore;
       await firestore.enableNetwork();
     } catch (e) {
       AppLogger.error('Error enabling Firestore network: $e');
@@ -1666,13 +1889,13 @@ class AuthService {
 
       // Stop sync service listeners BEFORE signing out to prevent permission errors
       try {
-        NoteSyncService().dispose();
+        await NoteSyncService().dispose();
       } catch (e) {
         AppLogger.error('Error disposing NoteSyncService: $e');
       }
 
       try {
-        LabelSyncService().dispose();
+        await LabelSyncService().dispose();
       } catch (e) {
         AppLogger.error('Error disposing LabelSyncService: $e');
       }
@@ -1707,13 +1930,19 @@ class AuthService {
         AppLogger.error('Error disposing E2EE service: $e');
       }
 
+      try {
+        await clearActiveOAuthTransactions();
+      } catch (e) {
+        AppLogger.error(
+          'Error clearing active Firebase OAuth transactions during signout',
+          e,
+        );
+      }
+
       // Wait for pending Firestore writes and disable network before signing out
       // This prevents permission-denied errors from in-flight operations after auth is cleared
       try {
-        final firestore = FirebaseFirestore.instanceFor(
-          app: Firebase.app(),
-          databaseId: DefaultFirebaseOptions.databaseId,
-        );
+        final firestore = FirebaseBackend.firestore;
         // Wait for any pending writes to complete (with timeout)
         await firestore.waitForPendingWrites().timeout(
           const Duration(seconds: 3),
@@ -1736,17 +1965,18 @@ class AuthService {
       try {
         await AppState.db.close();
         // Clear Database
-        await deleteDatabase(databaseName);
+        await deleteDatabase(await activeDatabasePath());
       } catch (e) {
         AppLogger.error('Error closing/deleting database: $e');
       }
 
-      // Clear SharedPreferences (but preserve has_launched_before to prevent
-      // the fresh-install detection from clearing a valid Keychain session
-      // on the next app start)
+      // Clear only the selected environment's account preferences. Global UI
+      // choices, Firebase chooser details, and the inactive backend stay intact.
       try {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.clear();
+        await FirebaseScopedPreferences.clearActiveAccountPreferences(prefs);
+        LocalDataEncryption.resetScopedPreferenceCache();
+        await AlarmIdService.resetForScopeChange(prefs: prefs);
         await prefs.setBool('has_launched_before', true);
       } catch (e) {
         AppLogger.error('Error clearing SharedPreferences: $e');
@@ -1768,6 +1998,7 @@ class AuthService {
 
       // Reset session invalid flag
       sessionInvalid.value = false;
+      ReviewAccess.clear();
 
       // Reset App State
       try {
@@ -1783,10 +2014,7 @@ class AuthService {
       // 2. clearPersistence() requires terminate() first, which breaks re-login
       // Security rules will prevent access to old cached data from other users
       try {
-        final firestore = FirebaseFirestore.instanceFor(
-          app: Firebase.app(),
-          databaseId: DefaultFirebaseOptions.databaseId,
-        );
+        final firestore = FirebaseBackend.firestore;
         await firestore.enableNetwork().timeout(
           const Duration(seconds: 2),
           onTimeout: () {
@@ -1817,7 +2045,9 @@ class AuthService {
       // normal signed-out flow even if some cleanup steps were best-effort.
       try {
         await _auth.signOut();
+        ReviewAccess.clear();
       } catch (authError) {
+        ReviewAccess.clear();
         AppLogger.error(
           'Error signing out from Firebase after cleanup failure',
           authError,
@@ -1845,7 +2075,7 @@ class AuthService {
       AppLogger.log('Clearing file system directory: $directory');
       final files = await fs.list(directory);
       for (final file in files) {
-        final filePath = join(directory, file);
+        final filePath = isAbsolute(file) ? file : join(directory, file);
         try {
           final isDir = await fs.isDirectory(filePath);
           AppLogger.log('Deleting ${isDir ? "directory" : "file"}: $filePath');

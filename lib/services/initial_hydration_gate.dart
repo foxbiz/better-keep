@@ -4,6 +4,8 @@ import 'package:better_keep/services/retry_controller.dart';
 
 typedef HydrationRetryController = ExponentialBackoffRetryController;
 
+enum HydrationWorkOutcome { stale, pending, ready, retry }
+
 /// Resolves once one listener generation has fully processed a server-backed
 /// snapshot without a retryable failure.
 class InitialHydrationGate {
@@ -26,6 +28,7 @@ class InitialHydrationGate {
   }
 
   bool isCurrent(int generation) => generation == _generation;
+  bool isFailed(int generation) => isCurrent(generation) && _failed;
 
   void beginWork(int generation, {required bool isFromCache}) {
     if (!isCurrent(generation)) return;
@@ -33,11 +36,17 @@ class InitialHydrationGate {
     if (!isFromCache) _serverObserved = true;
   }
 
-  void endWork(int generation, {bool failed = false}) {
-    if (!isCurrent(generation)) return;
+  HydrationWorkOutcome endWork(int generation, {bool failed = false}) {
+    if (!isCurrent(generation)) return HydrationWorkOutcome.stale;
     if (failed) _failed = true;
     if (_activeWork > 0) _activeWork--;
+    if (_failed) {
+      return _activeWork == 0
+          ? HydrationWorkOutcome.retry
+          : HydrationWorkOutcome.pending;
+    }
     _tryComplete();
+    return isReady ? HydrationWorkOutcome.ready : HydrationWorkOutcome.pending;
   }
 
   void failAttempt(int generation) {

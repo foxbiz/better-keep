@@ -1,11 +1,11 @@
-import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:better_keep/pages/email_login_page.dart';
+import 'package:better_keep/services/apple_auth.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:better_keep/state.dart';
@@ -231,67 +231,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
       }
     } catch (e) {
-      // Extract user-friendly message from exception
-      String errorMessage = 'Sign in failed. Please try again.';
+      final errorMessage = resolveSignInErrorMessage(
+        provider: provider,
+        error: e,
+      );
       String? actionText;
       VoidCallback? onAction;
-      final errorStr = e.toString().toLowerCase();
-
-      if (errorStr.contains('account-exists-with-different-credential') ||
-          errorStr.contains('email-already-in-use')) {
-        errorMessage =
-            'This email is already linked to another account. Try signing in with a different method (Google, Facebook, etc.) or use the Connected Accounts feature to link providers.';
-      } else if (errorStr.contains('user-not-found')) {
-        errorMessage =
-            'No account found with this email. Please sign up first.';
-      } else if (errorStr.contains('wrong-password') ||
-          errorStr.contains('invalid-credential')) {
-        errorMessage =
-            'Invalid credentials. Please check your password and try again.';
-      } else if (errorStr.contains('user-disabled')) {
-        errorMessage =
-            'This account has been disabled. Please contact support.';
-      } else if (errorStr.contains('too-many-requests')) {
-        errorMessage = 'Too many failed attempts. Please try again later.';
-      } else if (errorStr.contains('network') || errorStr.contains('timeout')) {
-        errorMessage = 'Network error. Please check your internet connection.';
-      } else if (errorStr.contains('cancelled') ||
-          errorStr.contains('canceled') ||
-          errorStr.contains('popup-closed') ||
-          errorStr.contains('user-cancelled')) {
-        errorMessage = 'Sign in was cancelled.';
-      } else if (errorStr.contains('permission-denied')) {
-        errorMessage = 'Permission denied. Please contact support.';
-      } else if (errorStr.contains('unavailable')) {
-        errorMessage =
-            'Service temporarily unavailable. Please try again later.';
-      } else if (errorStr.contains('internal-error')) {
-        // Cloud Function error - could be Twitter user without email or other backend issue
-        errorMessage =
-            'Sign in failed. This might happen if your account doesn\'t have an email associated. Please try another sign-in method.';
-      } else if (errorStr.contains('web-context-cancelled')) {
-        errorMessage = 'Sign in window was closed. Please try again.';
-      } else if (errorStr.contains('insecure') || errorStr.contains('https')) {
-        errorMessage =
-            'Please use HTTPS for secure sign in. Go to https://betterkeep.app';
-        if (kIsWeb) {
-          actionText = 'Open HTTPS';
-          onAction = () {
-            launchUrl(
-              Uri.parse('https://betterkeep.app'),
-              webOnlyWindowName: '_self',
-            );
-          };
-        }
-      } else if (e is FirebaseAuthException) {
-        // Handle any other Firebase Auth exceptions
-        errorMessage = e.message ?? 'Authentication failed. Please try again.';
-      } else if (e is Exception) {
-        // Extract message from Exception
-        final msg = e.toString().replaceFirst('Exception: ', '');
-        if (msg.length < 150) {
-          errorMessage = msg;
-        }
+      if (kIsWeb && isInsecureSignInError(e)) {
+        actionText = 'Open HTTPS';
+        onAction = () {
+          launchUrl(
+            Uri.parse('https://betterkeep.app'),
+            webOnlyWindowName: '_self',
+          );
+        };
       }
 
       // Use global key because this widget might be unmounted if auth state changed
@@ -787,13 +740,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          Text(
-                            context.l10n.continueWithGoogle,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              letterSpacing: 0.3,
+                          Flexible(
+                            child: Text(
+                              context.l10n.continueWithGoogle,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                letterSpacing: 0.3,
+                              ),
                             ),
                           ),
                         ],
@@ -803,7 +759,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               ),
             ), // ConstrainedBox (Google)
-            if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) ...[
+            if (supportsAppleAuth(
+              isWeb: kIsWeb,
+              platform: defaultTargetPlatform,
+            )) ...[
               const SizedBox(height: 12),
               // Apple Sign-In button (equally prominent per App Store guideline 4.8)
               ConstrainedBox(
@@ -839,20 +798,29 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             SizedBox(
                               width: 24,
                               height: 24,
-                              child: Icon(
-                                Icons.apple,
-                                size: 24,
-                                color: isDark ? Colors.black : Colors.white,
+                              child: Transform.scale(
+                                key: const ValueKey(
+                                  'appleSignInIconOpticalScale',
+                                ),
+                                scale: 1.4,
+                                child: Icon(
+                                  Icons.apple,
+                                  size: 24,
+                                  color: isDark ? Colors.black : Colors.white,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 16),
-                            Text(
-                              context.l10n.continueWithApple,
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.black : Colors.white,
-                                letterSpacing: 0.3,
+                            Flexible(
+                              child: Text(
+                                context.l10n.continueWithApple,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.black : Colors.white,
+                                  letterSpacing: 0.3,
+                                ),
                               ),
                             ),
                           ],

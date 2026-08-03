@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import {
 	DEFAULT_CURRENCY,
 	db,
@@ -8,6 +8,7 @@ import {
 	razorpayKeyId,
 	razorpayKeySecret,
 } from "../config";
+import { onNonReviewCall } from "../nonReviewCallable";
 import type { SupportedCurrency } from "../types";
 import { razorpayRequest } from "../utils";
 
@@ -15,7 +16,7 @@ import { razorpayRequest } from "../utils";
  * Create a Razorpay subscription for the user
  * Called from web/desktop clients
  */
-export default onCall(
+export default onNonReviewCall(
 	{
 		secrets: [razorpayKeyId, razorpayKeySecret],
 		cors: true,
@@ -30,7 +31,6 @@ export default onCall(
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be authenticated");
 		}
-
 		const userId = request.auth.uid;
 		const { yearly } = request.data;
 		// Use provided currency or default to USD

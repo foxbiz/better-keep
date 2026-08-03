@@ -22,6 +22,7 @@ import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -39,6 +40,11 @@ class UserPage extends StatefulWidget {
 }
 
 class _UserPageState extends State<UserPage> {
+  bool get _isManagedReview => !ReviewAccess.allows(
+    AuthService.currentUser,
+    ReviewCapability.accountManagement,
+  );
+
   bool _isLoading = true;
   int _totalNotes = 0;
   int _upcomingReminders = 0;
@@ -70,9 +76,13 @@ class _UserPageState extends State<UserPage> {
   @override
   void initState() {
     _fetchStats();
-    _fetchE2EEInfo();
-    _fetchLinkedProviders();
-    _initShareService();
+    if (!_isManagedReview) {
+      _fetchE2EEInfo();
+      _fetchLinkedProviders();
+      _initShareService();
+    } else {
+      _isLoadingDevices = false;
+    }
     NoteSyncService().isSyncing.addListener(_onSyncChange);
     E2EEService.instance.status.addListener(_onE2EEStatusChange);
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
@@ -218,38 +228,31 @@ class _UserPageState extends State<UserPage> {
 
                       const SizedBox(height: 32),
 
-                      // Subscription Section
-                      _buildSubscriptionSection(context),
-
-                      const SizedBox(height: 32),
-
-                      // Connected Accounts Section
-                      _buildConnectedPlatformsSection(context),
-
-                      const SizedBox(height: 32),
-
-                      // E2EE Section
-                      E2EEStatusCard(
-                        status: E2EEService.instance.status.value,
-                        approvedDeviceCount: _devices
-                            .where((device) => device.isApproved)
-                            .length,
-                        hasRecoveryKey: _hasRecoveryKey,
-                        onManageRecoveryKey: _manageRecoveryKey,
-                        onSetupE2ee: _setupE2EE,
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Device Management (show if E2EE is set up, loading, or has error)
-                      if (_devices.isNotEmpty ||
-                          _isLoadingDevices ||
-                          _devicesError != null)
-                        _buildDeviceSection(context),
-
-                      const SizedBox(height: 32),
-                      // Danger Zone
-                      _buildDangerZone(context),
+                      if (!_isManagedReview) ...[
+                        // Subscription Section
+                        _buildSubscriptionSection(context),
+                        const SizedBox(height: 32),
+                        // Connected Accounts Section
+                        _buildConnectedPlatformsSection(context),
+                        const SizedBox(height: 32),
+                        // E2EE Section
+                        E2EEStatusCard(
+                          status: E2EEService.instance.status.value,
+                          approvedDeviceCount: _devices
+                              .where((device) => device.isApproved)
+                              .length,
+                          hasRecoveryKey: _hasRecoveryKey,
+                          onManageRecoveryKey: _manageRecoveryKey,
+                          onSetupE2ee: _setupE2EE,
+                        ),
+                        const SizedBox(height: 32),
+                        if (_devices.isNotEmpty ||
+                            _isLoadingDevices ||
+                            _devicesError != null)
+                          _buildDeviceSection(context),
+                        const SizedBox(height: 32),
+                        _buildDangerZone(context),
+                      ],
                     ],
                   ],
                 ),
@@ -266,17 +269,17 @@ class _UserPageState extends State<UserPage> {
     UserAvatar.invalidateCache();
     await UserAvatar.preloadAvatar();
 
-    // Force validate subscription with backend (bypasses rate limiting)
-    await PlanService.instance.forceValidateSubscription();
-
-    // Refresh linked providers from Firestore
-    await AuthService.refreshLinkedProviders();
+    if (!_isManagedReview) {
+      // Force validate subscription with backend (bypasses rate limiting)
+      await PlanService.instance.forceValidateSubscription();
+      await AuthService.refreshLinkedProviders();
+    }
 
     // Refresh stats
     await _fetchStats();
 
     // Refresh E2EE info (devices, pending approvals, recovery key status)
-    await _fetchE2EEInfo();
+    if (!_isManagedReview) await _fetchE2EEInfo();
 
     if (mounted) {
       setState(() {}); // Force rebuild to update avatar and linked accounts
@@ -1814,6 +1817,7 @@ class _UserPageState extends State<UserPage> {
           verifyFunctionParams: {'provider': providerId},
         ),
       );
+      if (!mounted) return;
 
       // User cancelled or verification failed
       if (otpResult == null || !otpResult.success) {
@@ -1822,9 +1826,13 @@ class _UserPageState extends State<UserPage> {
         }
         return;
       }
+      final linkToken = otpResult.data?['linkToken'] as String?;
+      if (linkToken == null || linkToken.isEmpty) {
+        snackbar(context.l10n.verificationFailedTryAgain, Colors.red);
+        return;
+      }
 
       // Step 3: OTP verified, now perform the OAuth linking
-      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -1849,19 +1857,19 @@ class _UserPageState extends State<UserPage> {
       // and stores the link in Firestore upon success
       switch (providerName.toLowerCase()) {
         case 'google':
-          await AuthService.linkWithGoogle();
+          await AuthService.linkWithGoogle(linkToken: linkToken);
           break;
         case 'facebook':
-          await AuthService.linkWithFacebook();
+          await AuthService.linkWithFacebook(linkToken: linkToken);
           break;
         case 'github':
-          await AuthService.linkWithGitHub();
+          await AuthService.linkWithGitHub(linkToken: linkToken);
           break;
         case 'apple':
-          await AuthService.linkWithApple();
+          await AuthService.linkWithApple(linkToken: linkToken);
           break;
         case 'twitter':
-          await AuthService.linkWithTwitter();
+          await AuthService.linkWithTwitter(linkToken: linkToken);
           break;
       }
 

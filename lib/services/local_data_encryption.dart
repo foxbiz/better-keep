@@ -15,6 +15,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
@@ -48,6 +49,27 @@ class LocalDataEncryption {
 
   LocalDataEncryption._();
 
+  /// Clears preferences cached for the previous signed-in account/scope.
+  ///
+  /// The parsed application key is process-wide and intentionally retained.
+  static void resetScopedPreferenceCache() {
+    _notesEnabledCache = null;
+    _filesEnabledCache = null;
+  }
+
+  @visibleForTesting
+  static void primeScopedPreferenceCacheForTesting({
+    bool? notesEnabled,
+    bool? filesEnabled,
+  }) {
+    _notesEnabledCache = notesEnabled;
+    _filesEnabledCache = filesEnabled;
+  }
+
+  @visibleForTesting
+  static (bool?, bool?) get scopedPreferenceCacheForTesting =>
+      (_notesEnabledCache, _filesEnabledCache);
+
   /// Whether local data encryption is available (key is configured).
   static bool get isAvailable {
     return _localDataKeyHex.isNotEmpty && _localDataKeyHex.length == 64;
@@ -78,7 +100,10 @@ class LocalDataEncryption {
     if (_notesEnabledCache != null) return _notesEnabledCache!;
     final prefs = await SharedPreferences.getInstance();
     _notesEnabledCache =
-        prefs.getBool('local_encryption_notes_enabled') ?? false;
+        prefs.getBool(
+          FirebaseScopedPreferences.key('local_encryption_notes_enabled'),
+        ) ??
+        false;
     return _notesEnabledCache!;
   }
 
@@ -86,7 +111,10 @@ class LocalDataEncryption {
   Future<void> setNotesEnabled(bool enabled) async {
     if (!isAvailable) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('local_encryption_notes_enabled', enabled);
+    await prefs.setBool(
+      FirebaseScopedPreferences.key('local_encryption_notes_enabled'),
+      enabled,
+    );
     _notesEnabledCache = enabled;
   }
 
@@ -97,7 +125,10 @@ class LocalDataEncryption {
     if (_filesEnabledCache != null) return _filesEnabledCache!;
     final prefs = await SharedPreferences.getInstance();
     _filesEnabledCache =
-        prefs.getBool('local_encryption_files_enabled') ?? false;
+        prefs.getBool(
+          FirebaseScopedPreferences.key('local_encryption_files_enabled'),
+        ) ??
+        false;
     return _filesEnabledCache!;
   }
 
@@ -105,7 +136,10 @@ class LocalDataEncryption {
   Future<void> setFilesEnabled(bool enabled) async {
     if (!isAvailable) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('local_encryption_files_enabled', enabled);
+    await prefs.setBool(
+      FirebaseScopedPreferences.key('local_encryption_files_enabled'),
+      enabled,
+    );
     _filesEnabledCache = enabled;
   }
 

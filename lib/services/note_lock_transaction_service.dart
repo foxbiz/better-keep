@@ -5,6 +5,7 @@ import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
@@ -138,7 +139,8 @@ class NoteLockJournalRecord {
 /// Local-only journal used to resolve an interrupted lock operation without
 /// storing a PIN, plaintext note content, or stroke payloads.
 class NoteLockJournal {
-  static const preferenceKey = 'pending_note_lock_transactions_v1';
+  static String get preferenceKey =>
+      FirebaseScopedPreferences.key('pending_note_lock_transactions_v1');
   static Future<void> _mutationQueue = Future<void>.value();
 
   final SharedPreferences preferences;
@@ -290,7 +292,9 @@ class NoteLockRemovalJournalRecord {
 /// Local-only journal for interrupted permanent lock-removal transactions.
 /// It deliberately stores paths and digests only, never PINs or file contents.
 class NoteLockRemovalJournal {
-  static const preferenceKey = 'pending_note_lock_removal_transactions_v1';
+  static String get preferenceKey => FirebaseScopedPreferences.key(
+    'pending_note_lock_removal_transactions_v1',
+  );
   static Future<void> _mutationQueue = Future<void>.value();
 
   final SharedPreferences preferences;

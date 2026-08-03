@@ -15,9 +15,10 @@ const DATABASE_ID = 'better-keep';
 
 // Emulator configuration for local development
 const EMULATOR_CONFIG = {
-  firestoreHost: 'localhost',
+  get host() {
+    return window.location.hostname;
+  },
   firestorePort: 8080,
-  storageHost: 'localhost',
   storagePort: 9199,
   hostingPort: 5002
 };
@@ -26,7 +27,8 @@ const EMULATOR_CONFIG = {
  * Detect if running in local development mode
  */
 function isLocalDevelopment() {
-  return window.location.hostname === 'localhost' ||
+  return window.location.port === String(EMULATOR_CONFIG.hostingPort) ||
+    window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1';
 }
 
@@ -83,9 +85,9 @@ async function initializeFirebaseApp() {
 
   // Connect to emulators if in local development
   if (isLocal) {
-    console.log('Running on localhost - connecting to Firebase emulators');
-    db.useEmulator(EMULATOR_CONFIG.firestoreHost, EMULATOR_CONFIG.firestorePort);
-    storage.useEmulator(EMULATOR_CONFIG.storageHost, EMULATOR_CONFIG.storagePort);
+    console.log(`Connecting to Firebase emulators at ${EMULATOR_CONFIG.host}`);
+    db.useEmulator(EMULATOR_CONFIG.host, EMULATOR_CONFIG.firestorePort);
+    storage.useEmulator(EMULATOR_CONFIG.host, EMULATOR_CONFIG.storagePort);
   }
 
   return { db, storage, config };

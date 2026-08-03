@@ -55,6 +55,15 @@
             overflow: hidden;
         }
 
+        /*
+         * Firebase Auth adds its own fixed emulator warning on web. Better Keep's
+         * FirebaseEnvironmentBanner is the authoritative cross-platform status
+         * indicator, so hide only the SDK's redundant main-app warning.
+         */
+        .firebase-emulator-warning {
+            display: none !important;
+        }
+
         #app-loader {
             position: fixed;
             inset: 0;

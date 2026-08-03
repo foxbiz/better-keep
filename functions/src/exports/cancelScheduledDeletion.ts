@@ -1,14 +1,15 @@
 import { FieldValue } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { auth, db, emailPassword } from "../config";
-import { getEmailTransporter, sendEmail } from "../utils";
+import { onNonReviewCall } from "../nonReviewCallable";
+import { sendEmail } from "../utils";
 
 /**
  * HTTP Callable function to cancel a scheduled deletion
  * Called when user signs back in before the 30-day grace period ends
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [emailPassword] },
 	async (request: CallableRequest) => {
 		console.log("cancelScheduledDeletion called");
@@ -21,7 +22,6 @@ export default onCall(
 				"User must be signed in to cancel deletion",
 			);
 		}
-
 		const userId = request.auth.uid;
 		console.log(`cancelScheduledDeletion: Processing for user ${userId}`);
 
@@ -69,7 +69,6 @@ export default onCall(
 			// Send cancellation confirmation email
 			if (email) {
 				try {
-					const transporter = getEmailTransporter(emailPassword.value());
 					const senderEmail = process.env.EMAIL_FROM;
 					const senderName = process.env.EMAIL_NAME;
 
@@ -127,7 +126,7 @@ If you did not sign in or did not expect this email, please secure your account 
             `,
 					};
 
-					await sendEmail(transporter, mailOptions);
+					await sendEmail(mailOptions);
 					console.log(`Sent deletion cancellation email to ${email}`);
 				} catch (emailError) {
 					console.error(`Failed to send cancellation email: ${emailError}`);

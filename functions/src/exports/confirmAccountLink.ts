@@ -1,133 +1,150 @@
-import * as crypto from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
-import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { ALLOWED_PROVIDERS, db } from "../config";
-import type { AllowedProvider } from "../types";
+import { HttpsError } from "firebase-functions/v2/https";
+import { isAccountLinkProvider } from "../accountLinkProviders";
+import { auth, db } from "../config";
+import {
+	type AuthenticatedCallableRequest,
+	onNonReviewCall,
+} from "../nonReviewCallable";
+import {
+	EPHEMERAL_DOCUMENT_RETENTION_MS,
+	hashOpaqueToken,
+	isOpaqueToken,
+} from "../oauthSession";
 
 /**
- * HTTP Callable function to confirm account link after OAuth
- * Validates the link token is still valid (proves OTP was verified)
+ * Consumes the OTP-issued link session after a native Firebase provider link.
  */
-export default onCall(
-	async (request: CallableRequest<{ linkToken: string; provider: string }>) => {
-		if (!request.auth) {
-			throw new HttpsError(
-				"unauthenticated",
-				"User must be signed in to confirm account link",
-			);
-		}
-
-		const userId = request.auth.uid;
+export default onNonReviewCall(
+	async (
+		request: AuthenticatedCallableRequest<{
+			linkToken: string;
+			provider: string;
+		}>,
+	) => {
+		const caller = request.auth;
 		const linkToken = request.data?.linkToken;
 		const provider = request.data?.provider;
 
-		if (!linkToken || typeof linkToken !== "string") {
+		if (!isOpaqueToken(linkToken)) {
 			throw new HttpsError("invalid-argument", "Link token is required");
 		}
-
-		if (!provider || !ALLOWED_PROVIDERS.includes(provider as AllowedProvider)) {
+		if (!isAccountLinkProvider(provider)) {
 			throw new HttpsError("invalid-argument", "Invalid provider");
 		}
 
+		const sessionRef = db
+			.collection("accountLinkSessions")
+			.doc(hashOpaqueToken(linkToken));
+		const userRef = db.collection("users").doc(caller.uid);
+		const otpRef = userRef.collection("otpVerification").doc("accountLink");
+		const auditRef = userRef
+			.collection("auditLog")
+			.doc(`account-link-${sessionRef.id}`);
+		const pendingRef = userRef.collection("pendingProviderLinks").doc(provider);
+		const now = Timestamp.now();
+
 		try {
-			const userRef = db.collection("users").doc(userId);
-			const otpRef = userRef.collection("otpVerification").doc("accountLink");
-			const otpDoc = await otpRef.get();
-
-			if (!otpDoc.exists) {
-				throw new HttpsError(
-					"permission-denied",
-					"No verified session found. Please start over.",
-				);
-			}
-
-			const otpData = otpDoc.data();
-			if (!otpData?.verified) {
-				throw new HttpsError(
-					"permission-denied",
-					"OTP not verified. Please start over.",
-				);
-			}
-
-			const now = Timestamp.now();
-
-			// Check if link token expired
+			const existingSession = await sessionRef.get();
+			const existingData = existingSession.data();
 			if (
-				otpData.linkTokenExpires &&
-				otpData.linkTokenExpires.toMillis() < now.toMillis()
+				!existingSession.exists ||
+				existingData?.uid !== caller.uid ||
+				existingData?.provider !== provider
 			) {
-				await otpRef.delete();
-				throw new HttpsError(
-					"deadline-exceeded",
-					"Link session expired. Please start over.",
-				);
-			}
-
-			// Check provider matches
-			if (otpData.provider !== provider) {
-				throw new HttpsError(
-					"invalid-argument",
-					"Provider mismatch. Please start over.",
-				);
-			}
-
-			// Verify link token
-			const providedTokenHash = crypto
-				.createHash("sha256")
-				.update(linkToken)
-				.digest("hex");
-
-			if (otpData.linkTokenHash !== providedTokenHash) {
-				await otpRef.delete();
 				throw new HttpsError(
 					"permission-denied",
-					"Invalid link token. Please start over.",
+					"Account-link authorization is invalid",
+				);
+			}
+			if (existingData.status === "confirmed") {
+				return {
+					success: true,
+					message: "Account linked successfully!",
+				};
+			}
+			if (existingData.status !== "native_authorized") {
+				throw new HttpsError(
+					"permission-denied",
+					"Account-link authorization was not used by Firebase Authentication",
 				);
 			}
 
-			// Everything valid! Clean up OTP document
-			await otpRef.delete();
+			const userRecord = await auth.getUser(caller.uid);
+			if (
+				!userRecord.providerData.some(
+					(entry) => entry.providerId === provider,
+				)
+			) {
+				throw new HttpsError(
+					"failed-precondition",
+					"The provider has not been linked in Firebase Authentication",
+				);
+			}
 
-			// Store the linked provider in user document
-			// Note: We don't have providerUid here since linking is done client-side via Firebase SDK
-			// The providerUid will be added on first login with this provider
-			await userRef.set(
-				{
-					linkedProviders: {
-						[provider.replace(".com", "")]: {
-							linkedAt: now,
-							linkedVia: "otp_verification",
+			await db.runTransaction(async (transaction) => {
+				const session = await transaction.get(sessionRef);
+				const data = session.data();
+				if (
+					!session.exists ||
+					data?.uid !== caller.uid ||
+					data?.provider !== provider
+				) {
+					throw new HttpsError(
+						"permission-denied",
+						"Account-link authorization is invalid",
+					);
+				}
+				if (data.status === "confirmed") return;
+				if (data.status !== "native_authorized") {
+					throw new HttpsError(
+						"permission-denied",
+						"Account-link authorization was not used by Firebase Authentication",
+					);
+				}
+
+				transaction.set(
+					userRef,
+					{
+						linkedProviders: {
+							[provider.replace(".com", "")]: {
+								linkedAt: now,
+								linkedVia: "native_oauth_link",
+							},
 						},
 					},
-				},
-				{ merge: true },
-			);
-
-			// Log the successful link for audit
-			await userRef.collection("auditLog").add({
-				action: "account_linked",
-				provider: provider,
-				timestamp: now,
-				success: true,
+					{ merge: true },
+				);
+				transaction.set(auditRef, {
+					action: "account_linked",
+					provider,
+					timestamp: now,
+					success: true,
+					sessionId: sessionRef.id,
+				});
+				transaction.update(sessionRef, {
+					status: "confirmed",
+					confirmedAt: now,
+					consumedAt: now,
+					deleteAfter: Timestamp.fromMillis(
+						now.toMillis() + EPHEMERAL_DOCUMENT_RETENTION_MS,
+					),
+				});
+				transaction.delete(otpRef);
+				transaction.delete(pendingRef);
 			});
-
-			console.log(
-				`Account link confirmed for user ${userId}, provider ${provider}`,
-			);
-
-			return {
-				success: true,
-				message: "Account linked successfully!",
-			};
 		} catch (error) {
-			console.error(`Error confirming account link for ${userId}:`, error);
-
-			if (error instanceof HttpsError) {
-				throw error;
-			}
-
+			if (error instanceof HttpsError) throw error;
+			console.error("Account-link confirmation failed", {
+				provider,
+				error: error instanceof Error ? error.message : "unknown",
+			});
 			throw new HttpsError("internal", "Failed to confirm account link");
 		}
+
+		return {
+			success: true,
+			message: "Account linked successfully!",
+		};
 	},
 );

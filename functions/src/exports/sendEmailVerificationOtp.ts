@@ -1,16 +1,17 @@
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { auth, db, emailPassword } from "../config";
 import { generateOtpEmailHtml, generateOtpEmailText } from "../email_templates";
+import { onNonReviewCall } from "../nonReviewCallable";
 import type { OtpEmailConfig } from "../types";
-import { generateOtp, getEmailTransporter, sendEmail } from "../utils";
+import { generateOtp, sendEmail } from "../utils";
 
 /**
  * HTTP Callable function to send OTP for email verification.
  * Used during signup when user needs to verify their email address.
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [emailPassword] },
 	async (request: CallableRequest) => {
 		if (!request.auth) {
@@ -19,7 +20,6 @@ export default onCall(
 				"User must be signed in to request OTP",
 			);
 		}
-
 		const userId = request.auth.uid;
 
 		try {
@@ -69,7 +69,6 @@ export default onCall(
 			});
 
 			// Send email
-			const transporter = getEmailTransporter(emailPassword.value());
 			const senderEmail = process.env.EMAIL_FROM;
 			const senderName = process.env.EMAIL_NAME;
 
@@ -91,7 +90,7 @@ export default onCall(
 				text: generateOtpEmailText(emailConfig),
 			};
 
-			await sendEmail(transporter, mailOptions);
+			await sendEmail(mailOptions);
 
 			// Mask email for display
 			const maskedEmail = email.replace(

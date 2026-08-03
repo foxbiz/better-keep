@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
+import 'package:better_keep/components/firebase_environment_banner.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/pages/account_recovery_page.dart';
@@ -18,6 +20,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/monetization/razorpay_web.dart'
     if (dart.library.io) 'package:better_keep/services/monetization/razorpay_stub.dart'
     as razorpay_platform;
@@ -106,13 +109,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       AuthService.checkTokenRevocationOnResume();
       // Refresh subscription status when app comes to foreground
       // Also validate with backend to catch cancelled subscriptions
-      if (AuthService.currentUser != null) {
+      final currentUser = AuthService.currentUser;
+      if (currentUser != null) {
         PlanService.instance.refreshSubscription(validateWithBackend: true);
         // On iOS, also restore purchases to pick up subscription changes
         // made in the App Store management page (cancel / re-subscribe).
         // restorePurchases sends a fresh receipt to the server which reads
         // the current auto_renew_status from Apple.
-        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        if (!ReviewAccess.isAuthorizedSessionFor(currentUser) &&
+            !kIsWeb &&
+            defaultTargetPlatform == TargetPlatform.iOS) {
           unawaited(SubscriptionService.instance.restoreAndWaitForPurchases());
         }
       }
@@ -573,12 +579,15 @@ class _BannerLayout extends StatelessWidget {
       listenable: Listenable.merge([
         AuthService.sessionInvalid,
         SessionInvalidBanner.isDismissed,
+        FirebaseBackend.configuration,
       ]),
       builder: (context, _) {
+        final hasEnvironmentBanner =
+            kDebugMode && FirebaseBackend.configuration.value != null;
         final hasSessionBanner =
             AuthService.sessionInvalid.value &&
             !SessionInvalidBanner.isDismissed.value;
-        final hasBanner = hasSessionBanner;
+        final hasBanner = hasEnvironmentBanner || hasSessionBanner;
 
         final appChild = hasBanner
             ? MediaQuery.removePadding(
@@ -590,8 +599,15 @@ class _BannerLayout extends StatelessWidget {
 
         return Column(
           children: [
-            const OpenInAppBanner(),
-            const SessionInvalidBanner(),
+            const FirebaseEnvironmentBanner(),
+            MediaQuery.removePadding(
+              context: context,
+              removeTop: hasEnvironmentBanner,
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [OpenInAppBanner(), SessionInvalidBanner()],
+              ),
+            ),
             Expanded(child: appChild),
           ],
         );
