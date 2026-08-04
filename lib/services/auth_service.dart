@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:alarm/alarm.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/config.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/apple_auth.dart';
 import 'package:better_keep/services/alarm_id_service.dart';
 import 'package:better_keep/services/connected_provider_lifecycle.dart';
@@ -247,9 +248,9 @@ class AuthService {
   /// On mobile: Opens in-app browser and waits for deep link callback
   static Future<UserCredential> _signInWithWebOAuth({
     required String provider,
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
-    onStatusChange?.call("Opening $provider login...");
+    onStatusChange?.call(AuthProgress.startingSignIn);
     final transaction = await createOAuthTransaction(
       provider: provider,
       mode: 'signin',
@@ -263,7 +264,7 @@ class AuthService {
     try {
       late String completionCode;
       if (kIsWeb) {
-        onStatusChange?.call("Waiting for sign-in...");
+        onStatusChange?.call(AuthProgress.waitingForSignIn);
         final result = await web_oauth.openOAuthPopup(
           authUrl.toString(),
           expectedTransactionId: transaction.id,
@@ -289,7 +290,7 @@ class AuthService {
             message: 'Could not open authentication page',
           );
         }
-        onStatusChange?.call("Waiting for sign-in...");
+        onStatusChange?.call(AuthProgress.waitingForSignIn);
         final callback = await _oauthCompleter!.future.timeout(
           const Duration(minutes: 5),
           onTimeout: () {
@@ -309,7 +310,7 @@ class AuthService {
         completionCode = callback.completionCode!;
       }
 
-      onStatusChange?.call("Completing sign-in...");
+      onStatusChange?.call(AuthProgress.signingIn);
       final customToken = await _redeemOAuthCompletion(
         completionCode: completionCode,
         transaction: transaction,
@@ -646,7 +647,7 @@ class AuthService {
   }
 
   static Future<UserCredential?> signInWithGoogle({
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
     try {
       isVerifying.value = true;
@@ -669,9 +670,7 @@ class AuthService {
       if (FirebaseEmulatorConfig.isUsingEmulators &&
           FirebaseEmulatorConfig.googleAuthMode ==
               GoogleEmulatorAuthMode.mock) {
-        onStatusChange?.call(
-          "Emulator mode: signing in with a Google test identity...",
-        );
+        onStatusChange?.call(AuthProgress.signingIn);
         AppLogger.log(
           '[Auth] Emulator mode: using deterministic google.com credential',
         );
@@ -685,10 +684,10 @@ class AuthService {
         userCredential = await _auth.signInWithPopup(googleProvider);
       } else if (Platform.isWindows || Platform.isLinux) {
         // Windows/Linux: Use custom loopback flow
-        onStatusChange?.call("Opening browser for sign in...");
+        onStatusChange?.call(AuthProgress.startingSignIn);
         final tokens = await DesktopAuthService.signIn();
 
-        onStatusChange?.call("Logging in...");
+        onStatusChange?.call(AuthProgress.signingIn);
         final OAuthCredential credential = GoogleAuthProvider.credential(
           idToken: tokens['idToken'],
           accessToken: tokens['accessToken'],
@@ -704,7 +703,7 @@ class AuthService {
         final GoogleSignInAccount googleUser = await _googleSignIn
             .authenticate();
 
-        onStatusChange?.call("Logging in...");
+        onStatusChange?.call(AuthProgress.signingIn);
 
         final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
@@ -731,7 +730,7 @@ class AuthService {
 
   /// Sign in with Apple
   static Future<UserCredential?> signInWithApple({
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
     var failureStage = 'preparation';
     try {
@@ -745,13 +744,13 @@ class AuthService {
         await E2EESecureStorage.instance.setSignInProgress(true);
       }
 
-      onStatusChange?.call("Signing in with Apple...");
+      onStatusChange?.call(AuthProgress.signingIn);
 
       final result = await runAppleAuthFlow<_AppleSignInResult>(
         flow: appleAuthFlowFor(isWeb: kIsWeb, platform: defaultTargetPlatform),
         webPopup: () async {
           failureStage = 'firebase-provider';
-          onStatusChange?.call("Logging in...");
+          onStatusChange?.call(AuthProgress.signingIn);
           return (
             userCredential: await _auth.signInWithPopup(
               buildAppleAuthProvider(),
@@ -761,7 +760,7 @@ class AuthService {
         },
         firebaseProvider: () async {
           failureStage = 'firebase-provider';
-          onStatusChange?.call("Logging in...");
+          onStatusChange?.call(AuthProgress.signingIn);
           return (
             userCredential: await _auth.signInWithProvider(
               buildAppleAuthProvider(),
@@ -773,7 +772,7 @@ class AuthService {
           failureStage = 'apple-authorization';
           final authorization = await _requestNativeAppleAuthorization();
           failureStage = 'firebase-credential-exchange';
-          onStatusChange?.call("Logging in...");
+          onStatusChange?.call(AuthProgress.signingIn);
           return (
             userCredential: await _auth.signInWithCredential(
               authorization.firebaseCredential,
@@ -839,7 +838,7 @@ class AuthService {
 
   /// Sign in with Facebook
   static Future<UserCredential?> signInWithFacebook({
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
     try {
       isVerifying.value = true;
@@ -875,7 +874,7 @@ class AuthService {
 
   /// Sign in with GitHub
   static Future<UserCredential?> signInWithGitHub({
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
     try {
       isVerifying.value = true;
@@ -911,7 +910,7 @@ class AuthService {
 
   /// Sign in with Twitter/X
   static Future<UserCredential?> signInWithTwitter({
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
     try {
       isVerifying.value = true;
@@ -950,7 +949,7 @@ class AuthService {
   static Future<UserCredential?> signUpWithEmail({
     required String email,
     required String password,
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
     try {
       isVerifying.value = true;
@@ -963,7 +962,7 @@ class AuthService {
         await E2EESecureStorage.instance.setSignInProgress(true);
       }
 
-      onStatusChange?.call("Creating account...");
+      onStatusChange?.call(AuthProgress.creatingAccount);
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -975,7 +974,7 @@ class AuthService {
         if (canUseE2EEStorage) {
           await E2EESecureStorage.instance.setSignInProgress(false);
         }
-        onStatusChange?.call("Account created!");
+        onStatusChange?.call(AuthProgress.verifying);
       }
 
       return userCredential;
@@ -992,11 +991,11 @@ class AuthService {
   static Future<UserCredential?> signInWithEmail({
     required String email,
     required String password,
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   }) async {
     try {
       isVerifying.value = true;
-      onStatusChange?.call("Verifying credentials...");
+      onStatusChange?.call(AuthProgress.verifying);
 
       // Ensure Firestore network is enabled (may have been left disabled after signout)
       await _ensureNetworkEnabled();
@@ -1007,13 +1006,13 @@ class AuthService {
 
       if (canUseE2EEStorage) {
         await E2EESecureStorage.instance.init();
-        onStatusChange?.call("Starting sign-in...");
+        onStatusChange?.call(AuthProgress.startingSignIn);
         await E2EESecureStorage.instance.setSignInProgress(true);
       } else {
-        onStatusChange?.call("Starting sign-in...");
+        onStatusChange?.call(AuthProgress.startingSignIn);
       }
 
-      onStatusChange?.call("Signing in...");
+      onStatusChange?.call(AuthProgress.signingIn);
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -1027,7 +1026,7 @@ class AuthService {
         if (user != null && !user.emailVerified) {
           // Email not verified - keep user signed in
           // app.dart will show EmailVerificationPage
-          onStatusChange?.call("Email verification required...");
+          onStatusChange?.call(AuthProgress.verifying);
           if (canUseE2EEStorage) {
             await E2EESecureStorage.instance.setSignInProgress(false);
           }
@@ -1486,12 +1485,12 @@ class AuthService {
   /// so we need to manually set Pro claims via a Cloud Function.
   static Future<void> _setEmulatorProClaims(
     User user,
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
   ) async {
     if (!FirebaseEmulatorConfig.isUsingEmulators) return;
 
     AppLogger.log("[SIGN_IN] Emulator mode detected, setting Pro claims...");
-    onStatusChange?.call("Setting up emulator test claims...");
+    onStatusChange?.call(AuthProgress.checkingAccount);
 
     try {
       AppLogger.log("[SIGN_IN] Calling setEmulatorTestClaims function...");
@@ -1527,13 +1526,13 @@ class AuthService {
   /// Common sign-in completion logic
   static Future<void> _completeSignIn(
     User user,
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
     String provider,
   ) async {
     try {
       // Force token refresh to ensure Firestore has the latest auth state
       // This fixes permission-denied errors on web after OAuth sign-in
-      onStatusChange?.call("Verifying authentication...");
+      onStatusChange?.call(AuthProgress.verifying);
       await user.getIdToken(true);
 
       // Small delay to allow token propagation (especially on web)
@@ -1543,14 +1542,14 @@ class AuthService {
 
       // Set Pro claims in emulator mode for testing
       await _setEmulatorProClaims(user, onStatusChange);
-      onStatusChange?.call("Checking Firestore emulator...");
+      onStatusChange?.call(AuthProgress.checkingAccount);
       await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(user);
 
       final isReviewSession = await ReviewAccess.authorize(user);
       ReviewAccess.requireAuthorizedReviewIdentity(user, isReviewSession);
 
       if (isReviewSession) {
-        onStatusChange?.call("Preparing review session...");
+        onStatusChange?.call(AuthProgress.checkingAccount);
         final reviewAuthorization = ReviewAccess.authorizationFor(user);
         if (reviewAuthorization == null) {
           throw StateError('Review authorization was not retained');
@@ -1564,7 +1563,7 @@ class AuthService {
         // Start PlanService subscription listener (deferred from auth state change)
         await PlanService.instance.startSubscriptionListener();
         // Initialize E2EE after successful login
-        onStatusChange?.call("Initializing encryption...");
+        onStatusChange?.call(AuthProgress.protectingNotes);
         await E2EEService.instance.initialize();
         // Guard: user may have cancelled/signed-out during the long async ops above
         if (currentUser == null) return;
@@ -1601,7 +1600,7 @@ class AuthService {
 
   static Future<void> _ensureUserExists(
     User user,
-    Function(String)? onStatusChange,
+    ValueChanged<AuthProgress>? onStatusChange,
     String provider,
   ) async {
     final firestore = FirebaseBackend.firestore;
@@ -1615,11 +1614,7 @@ class AuthService {
       try {
         attempts++;
 
-        if (attempts > 1) {
-          onStatusChange?.call("Verifying user profile (Attempt $attempts)...");
-        } else {
-          onStatusChange?.call("Verifying user profile...");
-        }
+        onStatusChange?.call(AuthProgress.checkingAccount);
 
         // We remove Source.server to allow the SDK to optimize,
         // but we still expect a connection for the first login.
@@ -1631,7 +1626,7 @@ class AuthService {
           "[AUTH] Fetched user document for UID: ${user.uid}, exists: ${doc.exists}",
         );
         if (!doc.exists) {
-          onStatusChange?.call("Registering new user...");
+          onStatusChange?.call(AuthProgress.checkingAccount);
           await userRef
               .set({
                 'email': user.email,
@@ -1647,7 +1642,7 @@ class AuthService {
           // Check if user had scheduled deletion and cancel it via Cloud Function
           final data = doc.data();
           if (data != null && data['scheduledDeletion'] != null) {
-            onStatusChange?.call("Cancelling scheduled deletion...");
+            onStatusChange?.call(AuthProgress.checkingAccount);
             AppLogger.log(
               "[AUTH] Found scheduled deletion, calling cancelScheduledDeletion Cloud Function",
             );
@@ -1739,20 +1734,10 @@ class AuthService {
         if (attempts >= 3 || e.toString().contains("permission-denied")) {
           AppLogger.error('Error creating/updating user profile', e);
 
-          String message = "Failed to connect to database.";
-          if (e.toString().contains("unavailable")) {
-            message =
-                "Database Unavailable. Please check:\n1. Your internet connection.\n2. If the Firestore Database is created in the Firebase Console.\n3. If a firewall is blocking the connection.";
-          } else if (e.toString().contains("permission-denied")) {
-            message = "Permission Denied. Check Firestore Security Rules.";
-          } else {
-            message = "Error: $e";
-          }
-
-          throw Exception(message);
+          throw StateError('Account initialization failed');
         }
 
-        onStatusChange?.call("Connection failed. Retrying...");
+        onStatusChange?.call(AuthProgress.checkingAccount);
         await Future.delayed(const Duration(seconds: 2));
       }
     }

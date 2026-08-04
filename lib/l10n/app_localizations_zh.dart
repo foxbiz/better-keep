@@ -12,6 +12,282 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get unableToStartApp => '无法启动 Better Keep';
+
+  @override
+  String get startupRetryMessage => '打开应用时出现问题。请重试。';
+
+  @override
+  String get startupRestartMessage => '打开应用时出现问题。请关闭并重新打开应用后重试。';
+
+  @override
+  String get accountNotFound => '未找到使用此电子邮件的账户。';
+
+  @override
+  String get invalidCredentials => '电子邮件或密码不正确。请重试。';
+
+  @override
+  String get accountDisabled => '此账户当前不可用。请联系支持人员。';
+
+  @override
+  String get paymentInProgress => '正在付款';
+
+  @override
+  String get completePaymentInBrowser => '请在浏览器中完成付款。完成后，此消息会自动关闭。';
+
+  @override
+  String get legal => '法律信息';
+
+  @override
+  String get termsOfUse => '使用条款';
+
+  @override
+  String get privacyPolicy => '隐私政策';
+
+  @override
+  String get appLogoSemantics => 'Better Keep 应用徽标';
+
+  @override
+  String get selectColor => '选择颜色';
+
+  @override
+  String get unsupportedTextFile => '不支持此文件类型。请选择 .txt 或 .md 文件。';
+
+  @override
+  String get sharedFileEmpty => '此文件为空。';
+
+  @override
+  String get fileNotFound => '找不到此文件。';
+
+  @override
+  String get fileTooLarge => '此文件太大。请选择小于 5 MB 的文件。';
+
+  @override
+  String get couldNotReadFile => '无法读取此文件。请尝试其他文件。';
+
+  @override
+  String get couldNotOpenFile => '无法打开此文件。请重试。';
+
+  @override
+  String get noteSaved => '笔记已保存';
+
+  @override
+  String get untitled => '无标题';
+
+  @override
+  String get failedToExportNote => '无法导出笔记。请重试。';
+
+  @override
+  String get failedToCopyNote => '无法复制笔记。请重试。';
+
+  @override
+  String get failedToDeleteSketch => '无法删除绘图。请重试。';
+
+  @override
+  String get lockedNoteReminder => '已锁定笔记的提醒';
+
+  @override
+  String get notesReminder => 'Better Keep 笔记提醒';
+
+  @override
+  String get blankPage => '空白';
+
+  @override
+  String get linedPage => '横线';
+
+  @override
+  String get doubleLinedPage => '双横线';
+
+  @override
+  String get gridPage => '方格';
+
+  @override
+  String get dotGridPage => '点阵';
+
+  @override
+  String get dataExportTitle => 'Better Keep 数据导出';
+
+  @override
+  String get dataExportShareText => '我的 Better Keep 数据导出';
+
+  @override
+  String get noteReminders => '笔记提醒';
+
+  @override
+  String get noteRemindersDescription => '笔记的定时提醒';
+
+  @override
+  String get deviceApproval => '设备批准';
+
+  @override
+  String get deviceApprovalDescription => '设备批准请求通知';
+
+  @override
+  String get newDeviceApprovalRequest => '新的设备批准请求';
+
+  @override
+  String deviceWantsAccess(String deviceName, String platform) {
+    return '$deviceName（$platform）想要访问你的笔记';
+  }
+
+  @override
+  String get sharedText => '共享文本';
+
+  @override
+  String get sharedFile => '共享文件';
+
+  @override
+  String get user => '用户';
+
+  @override
+  String get thirtyDaysFromNow => '30 天后';
+
+  @override
+  String get helpRequestSubject => 'Better Keep - 帮助请求';
+
+  @override
+  String get faqCreateNoteQuestion => '如何新建笔记？';
+
+  @override
+  String get faqCreateNoteAnswer => '点击主屏幕底部的 + 按钮。你可以添加文本、图片、音频等内容。';
+
+  @override
+  String get faqShortcutsQuestion => '如何使用快捷方式？';
+
+  @override
+  String get faqShortcutsAnswer =>
+      '长按 + 按钮可显示图片、音频、绘图或待办事项快捷方式。滑动到所需选项后松开。轻点则会打开空白笔记。';
+
+  @override
+  String get faqLabelsQuestion => '如何使用标签整理笔记？';
+
+  @override
+  String get faqLabelsAnswer => '打开笔记并点击标签图标即可添加或创建标签。你可以从侧边菜单按标签筛选笔记。';
+
+  @override
+  String get faqReminderQuestion => '如何设置提醒？';
+
+  @override
+  String get faqReminderAnswer => '打开笔记并点击提醒图标，然后选择日期和时间。';
+
+  @override
+  String get faqArchiveDeleteQuestion => '如何归档或删除笔记？';
+
+  @override
+  String get faqArchiveDeleteAnswer =>
+      '长按笔记进行选择，然后使用归档或删除操作。删除的笔记会先移到回收站，并可在回收站中永久删除。';
+
+  @override
+  String get faqThemeQuestion => '如何更改应用主题？';
+
+  @override
+  String get faqThemeAnswer => '打开设置并选择你喜欢的主题选项。';
+
+  @override
+  String get faqSyncQuestion => '如何在设备间同步笔记？';
+
+  @override
+  String get faqSyncAnswer => '登录后即可在你的所有设备上安全同步笔记。';
+
+  @override
+  String get faqReminderTimesQuestion => '如何设置上午、下午和晚上的时间？';
+
+  @override
+  String get faqReminderTimesAnswer => '打开设置并选择提醒时间设置，即可调整这些时间。';
+
+  @override
+  String get faqAlarmSoundQuestion => '如何更改闹钟声音？';
+
+  @override
+  String get faqAlarmSoundAnswer => '打开设置，选择闹钟声音，然后从可用声音中选择。';
+
+  @override
+  String get faqSecurityQuestion => '我的数据安全吗？';
+
+  @override
+  String get faqSecurityAnswer => '你的笔记会被安全存储。启用同步保护后，端到端加密会保护同步的数据。';
+
+  @override
+  String get faqApproveDeviceQuestion => '如何批准新设备？';
+
+  @override
+  String get faqApproveDeviceAnswer =>
+      '在已批准的设备上打开 Better Keep。在个人资料中查看等待批准的设备，然后批准或拒绝请求。';
+
+  @override
+  String get faqDeleteAccountQuestion => '如何删除我的账户？';
+
+  @override
+  String get faqDeleteAccountAnswer =>
+      '打开个人资料并选择删除账户。完成电子邮件验证后，账户将在 30 天后删除，并在所有设备上退出登录。';
+
+  @override
+  String get faqCancelDeletionQuestion => '可以取消删除账户吗？';
+
+  @override
+  String get faqCancelDeletionAnswer => '可以。在 30 天内重新登录，即可取消计划的删除并恢复账户访问。';
+
+  @override
+  String get faqDeletionEffectsQuestion => '删除账户后会怎样？';
+
+  @override
+  String get faqDeletionEffectsAnswer =>
+      '所有设备会立即退出登录。30 天后，你的笔记、附件、标签和个人数据将被永久删除且无法恢复。';
+
+  @override
+  String get faqExportBeforeDeletionQuestion => '删除账户前可以导出数据吗？';
+
+  @override
+  String get faqExportBeforeDeletionAnswer =>
+      '可以。计划删除后，你可以导出数据。请在 30 天期限结束前下载。';
+
+  @override
+  String get iosAppAvailable =>
+      'Better Keep 已在 App Store 上架。下载应用即可使用通知、小组件等功能。';
+
+  @override
+  String get openAppStore => '打开 App Store';
+
+  @override
+  String get tasks => '任务';
+
+  @override
+  String get unknown => '未知';
+
+  @override
+  String get exportAttachments => '附件';
+
+  @override
+  String get created => '创建时间';
+
+  @override
+  String get updated => '更新时间';
+
+  @override
+  String get oneTime => '一次';
+
+  @override
+  String get lockedExportExplanation =>
+      '这些笔记已锁定。受保护的内容会保留在此导出中，并且只能使用原 PIN 打开。';
+
+  @override
+  String dataExportReadme(String exportedAt) {
+    return 'Better Keep - 数据导出\n\n此归档包含导出的笔记、标签、附件和导出信息。可打开的笔记也会以 Markdown 文件提供。已锁定的笔记仍受保护，需要原 PIN 才能打开。\n\n如需帮助，请联系 contact@betterkeep.app。\n\n导出时间：$exportedAt';
+  }
+
+  @override
+  String get paymentSuccessful => '付款成功';
+
+  @override
+  String get paymentSuccessfulReturn => '你可以关闭此窗口并返回 Better Keep。';
+
+  @override
+  String get paymentCancelledClose => '付款已取消。你可以关闭此窗口。';
+
+  @override
+  String get appleSignInVerificationFailed => '无法验证 Apple 登录。请重试。';
+
+  @override
   String get reminderType => '提醒类型';
 
   @override
@@ -1978,6 +2254,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get webBrowser => '网页浏览器';
+
+  @override
+  String get unknownDevice => '未知设备';
 
   @override
   String get debugDeleteSubscription => '调试：删除订阅';

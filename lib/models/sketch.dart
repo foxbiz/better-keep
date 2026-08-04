@@ -12,14 +12,6 @@ enum SketchTool {
   highlighter,
   eraser;
 
-  String get displayName => switch (this) {
-    SketchTool.pen => 'Pen',
-    SketchTool.pencil => 'Pencil',
-    SketchTool.brush => 'Brush',
-    SketchTool.highlighter => 'Highlighter',
-    SketchTool.eraser => 'Eraser',
-  };
-
   IconData get icon => switch (this) {
     SketchTool.pen => CustomIcons.pen,
     SketchTool.pencil => CustomIcons.pencil,
@@ -40,14 +32,6 @@ enum PagePattern {
   doubleLine,
   grid,
   dotGrid;
-
-  String get displayName => switch (this) {
-    PagePattern.blank => 'Blank',
-    PagePattern.singleLine => 'Lined',
-    PagePattern.doubleLine => 'Double Lined',
-    PagePattern.grid => 'Grid',
-    PagePattern.dotGrid => 'Dot Grid',
-  };
 
   IconData get icon => switch (this) {
     PagePattern.blank => CustomIcons.fileEmpty,

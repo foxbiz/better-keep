@@ -114,6 +114,534 @@ abstract class AppLocalizations {
   /// **'Better Keep'**
   String get appTitle;
 
+  /// Title shown when the app cannot finish starting
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to start Better Keep'**
+  String get unableToStartApp;
+
+  /// Retryable startup failure guidance
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong while opening the app. Please try again.'**
+  String get startupRetryMessage;
+
+  /// Non-retryable startup failure guidance
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong while opening the app. Close and reopen it to try again.'**
+  String get startupRestartMessage;
+
+  /// Sign-in error when an account does not exist
+  ///
+  /// In en, this message translates to:
+  /// **'No account was found with this email.'**
+  String get accountNotFound;
+
+  /// Sign-in error for invalid credentials
+  ///
+  /// In en, this message translates to:
+  /// **'The email or password is incorrect. Please try again.'**
+  String get invalidCredentials;
+
+  /// Sign-in error for a disabled account
+  ///
+  /// In en, this message translates to:
+  /// **'This account is unavailable. Please contact support.'**
+  String get accountDisabled;
+
+  /// Title shown while browser payment is underway
+  ///
+  /// In en, this message translates to:
+  /// **'Payment in progress'**
+  String get paymentInProgress;
+
+  /// Instructions for a browser-based payment
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the payment in your browser. This message will close automatically when you are finished.'**
+  String get completePaymentInBrowser;
+
+  /// No description provided for @legal.
+  ///
+  /// In en, this message translates to:
+  /// **'Legal'**
+  String get legal;
+
+  /// No description provided for @termsOfUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of Use'**
+  String get termsOfUse;
+
+  /// No description provided for @privacyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get privacyPolicy;
+
+  /// No description provided for @appLogoSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep app logo'**
+  String get appLogoSemantics;
+
+  /// No description provided for @selectColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Select color'**
+  String get selectColor;
+
+  /// No description provided for @unsupportedTextFile.
+  ///
+  /// In en, this message translates to:
+  /// **'This file type isn’t supported. Choose a .txt or .md file.'**
+  String get unsupportedTextFile;
+
+  /// No description provided for @sharedFileEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is empty.'**
+  String get sharedFileEmpty;
+
+  /// No description provided for @fileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'This file could not be found.'**
+  String get fileNotFound;
+
+  /// No description provided for @fileTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is too large. Choose a file smaller than 5 MB.'**
+  String get fileTooLarge;
+
+  /// No description provided for @couldNotReadFile.
+  ///
+  /// In en, this message translates to:
+  /// **'This file could not be read. Please try another file.'**
+  String get couldNotReadFile;
+
+  /// No description provided for @couldNotOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'This file could not be opened. Please try again.'**
+  String get couldNotOpenFile;
+
+  /// No description provided for @noteSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Note saved'**
+  String get noteSaved;
+
+  /// No description provided for @untitled.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled'**
+  String get untitled;
+
+  /// No description provided for @failedToExportNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t export the note. Please try again.'**
+  String get failedToExportNote;
+
+  /// No description provided for @failedToCopyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t copy the note. Please try again.'**
+  String get failedToCopyNote;
+
+  /// No description provided for @failedToDeleteSketch.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t delete the sketch. Please try again.'**
+  String get failedToDeleteSketch;
+
+  /// No description provided for @lockedNoteReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder for a locked note'**
+  String get lockedNoteReminder;
+
+  /// No description provided for @notesReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep note reminder'**
+  String get notesReminder;
+
+  /// No description provided for @blankPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Blank'**
+  String get blankPage;
+
+  /// No description provided for @linedPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Lined'**
+  String get linedPage;
+
+  /// No description provided for @doubleLinedPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Double lined'**
+  String get doubleLinedPage;
+
+  /// No description provided for @gridPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Grid'**
+  String get gridPage;
+
+  /// No description provided for @dotGridPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Dot grid'**
+  String get dotGridPage;
+
+  /// No description provided for @dataExportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep data export'**
+  String get dataExportTitle;
+
+  /// No description provided for @dataExportShareText.
+  ///
+  /// In en, this message translates to:
+  /// **'My Better Keep data export'**
+  String get dataExportShareText;
+
+  /// No description provided for @noteReminders.
+  ///
+  /// In en, this message translates to:
+  /// **'Note reminders'**
+  String get noteReminders;
+
+  /// No description provided for @noteRemindersDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Time-sensitive reminders for notes'**
+  String get noteRemindersDescription;
+
+  /// No description provided for @deviceApproval.
+  ///
+  /// In en, this message translates to:
+  /// **'Device approval'**
+  String get deviceApproval;
+
+  /// No description provided for @deviceApprovalDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications for device approval requests'**
+  String get deviceApprovalDescription;
+
+  /// No description provided for @newDeviceApprovalRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'New device approval request'**
+  String get newDeviceApprovalRequest;
+
+  /// No description provided for @deviceWantsAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} ({platform}) wants to access your notes'**
+  String deviceWantsAccess(String deviceName, String platform);
+
+  /// No description provided for @sharedText.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared text'**
+  String get sharedText;
+
+  /// No description provided for @sharedFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared file'**
+  String get sharedFile;
+
+  /// No description provided for @user.
+  ///
+  /// In en, this message translates to:
+  /// **'User'**
+  String get user;
+
+  /// No description provided for @thirtyDaysFromNow.
+  ///
+  /// In en, this message translates to:
+  /// **'30 days from now'**
+  String get thirtyDaysFromNow;
+
+  /// No description provided for @helpRequestSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep - Help request'**
+  String get helpRequestSubject;
+
+  /// No description provided for @faqCreateNoteQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I create a new note?'**
+  String get faqCreateNoteQuestion;
+
+  /// No description provided for @faqCreateNoteAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the + button at the bottom of the home screen. You can add text, images, audio, and more.'**
+  String get faqCreateNoteAnswer;
+
+  /// No description provided for @faqShortcutsQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I use quick shortcuts?'**
+  String get faqShortcutsQuestion;
+
+  /// No description provided for @faqShortcutsAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold the + button to reveal shortcuts for an image, audio, sketch, or to-do. Slide to the shortcut you want and release. A quick tap opens a blank note.'**
+  String get faqShortcutsAnswer;
+
+  /// No description provided for @faqLabelsQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I organize notes with labels?'**
+  String get faqLabelsQuestion;
+
+  /// No description provided for @faqLabelsAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a note and tap the label icon to add or create labels. You can filter notes by label from the side menu.'**
+  String get faqLabelsAnswer;
+
+  /// No description provided for @faqReminderQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I set a reminder?'**
+  String get faqReminderQuestion;
+
+  /// No description provided for @faqReminderAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a note and tap the reminder icon to choose a date and time.'**
+  String get faqReminderAnswer;
+
+  /// No description provided for @faqArchiveDeleteQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I archive or delete notes?'**
+  String get faqArchiveDeleteQuestion;
+
+  /// No description provided for @faqArchiveDeleteAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold a note to select it, then use the archive or delete action. Deleted notes move to Trash first and can be permanently deleted there.'**
+  String get faqArchiveDeleteAnswer;
+
+  /// No description provided for @faqThemeQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I change the app theme?'**
+  String get faqThemeQuestion;
+
+  /// No description provided for @faqThemeAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings and choose the theme options you prefer.'**
+  String get faqThemeAnswer;
+
+  /// No description provided for @faqSyncQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I sync notes across devices?'**
+  String get faqSyncQuestion;
+
+  /// No description provided for @faqSyncAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to securely sync your notes across your devices.'**
+  String get faqSyncAnswer;
+
+  /// No description provided for @faqReminderTimesQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I set morning, afternoon, and evening times?'**
+  String get faqReminderTimesQuestion;
+
+  /// No description provided for @faqReminderTimesAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings and choose Reminder Time Settings to customize those times.'**
+  String get faqReminderTimesAnswer;
+
+  /// No description provided for @faqAlarmSoundQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I change the alarm sound?'**
+  String get faqAlarmSoundQuestion;
+
+  /// No description provided for @faqAlarmSoundAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings, select Alarm Sound, and choose one of the available sounds.'**
+  String get faqAlarmSoundAnswer;
+
+  /// No description provided for @faqSecurityQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Is my data secure?'**
+  String get faqSecurityQuestion;
+
+  /// No description provided for @faqSecurityAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Your notes are stored securely. When sync protection is enabled, end-to-end encryption protects your synced data.'**
+  String get faqSecurityAnswer;
+
+  /// No description provided for @faqApproveDeviceQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I approve a new device?'**
+  String get faqApproveDeviceQuestion;
+
+  /// No description provided for @faqApproveDeviceAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Better Keep on an already approved device. In your profile, review Devices Waiting for Approval, then approve or deny the request.'**
+  String get faqApproveDeviceAnswer;
+
+  /// No description provided for @faqDeleteAccountQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I delete my account?'**
+  String get faqDeleteAccountQuestion;
+
+  /// No description provided for @faqDeleteAccountAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open your profile and choose Delete Account. After email verification, deletion is scheduled for 30 days later and your devices are signed out.'**
+  String get faqDeleteAccountAnswer;
+
+  /// No description provided for @faqCancelDeletionQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Can I cancel account deletion?'**
+  String get faqCancelDeletionQuestion;
+
+  /// No description provided for @faqCancelDeletionAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes. Sign back in within 30 days to cancel the scheduled deletion and restore access to your account.'**
+  String get faqCancelDeletionAnswer;
+
+  /// No description provided for @faqDeletionEffectsQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'What happens when I delete my account?'**
+  String get faqDeletionEffectsQuestion;
+
+  /// No description provided for @faqDeletionEffectsAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Your devices are signed out immediately. After 30 days, your notes, attachments, labels, and personal data are permanently deleted and cannot be recovered.'**
+  String get faqDeletionEffectsAnswer;
+
+  /// No description provided for @faqExportBeforeDeletionQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Can I export my data before deleting my account?'**
+  String get faqExportBeforeDeletionQuestion;
+
+  /// No description provided for @faqExportBeforeDeletionAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes. After scheduling deletion, you can export your data. Download it before the 30-day period ends.'**
+  String get faqExportBeforeDeletionAnswer;
+
+  /// No description provided for @iosAppAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep is available on the App Store. Get the app for notifications, widgets, and more.'**
+  String get iosAppAvailable;
+
+  /// No description provided for @openAppStore.
+  ///
+  /// In en, this message translates to:
+  /// **'Open App Store'**
+  String get openAppStore;
+
+  /// No description provided for @tasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get tasks;
+
+  /// No description provided for @unknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get unknown;
+
+  /// No description provided for @exportAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachments'**
+  String get exportAttachments;
+
+  /// No description provided for @created.
+  ///
+  /// In en, this message translates to:
+  /// **'Created'**
+  String get created;
+
+  /// No description provided for @updated.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated'**
+  String get updated;
+
+  /// No description provided for @oneTime.
+  ///
+  /// In en, this message translates to:
+  /// **'One time'**
+  String get oneTime;
+
+  /// No description provided for @lockedExportExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'These notes are locked. Their protected content is preserved in this export and can only be opened with the original PIN.'**
+  String get lockedExportExplanation;
+
+  /// No description provided for @dataExportReadme.
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep - Data Export\n\nThis archive contains your exported notes, labels, attachments, and export details. Notes you can open are also provided as Markdown files. Locked notes remain protected and require their original PIN.\n\nFor help, contact contact@betterkeep.app.\n\nExported on: {exportedAt}'**
+  String dataExportReadme(String exportedAt);
+
+  /// No description provided for @paymentSuccessful.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment successful'**
+  String get paymentSuccessful;
+
+  /// No description provided for @paymentSuccessfulReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'You can close this window and return to Better Keep.'**
+  String get paymentSuccessfulReturn;
+
+  /// No description provided for @paymentCancelledClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment was cancelled. You can close this window.'**
+  String get paymentCancelledClose;
+
+  /// No description provided for @appleSignInVerificationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple sign-in could not be verified. Please try again.'**
+  String get appleSignInVerificationFailed;
+
   /// No description provided for @reminderType.
   ///
   /// In en, this message translates to:
@@ -3749,6 +4277,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Web Browser'**
   String get webBrowser;
+
+  /// Fallback name for an unidentified device
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown device'**
+  String get unknownDevice;
 
   /// Debug delete subscription button
   ///

@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:better_keep/pages/email_login_page.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/apple_auth.dart';
 import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:better_keep/state.dart';
@@ -22,7 +24,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool _isLoading = false;
-  String _statusMessage = "";
+  AuthProgress? _statusProgress;
   String _version = '';
 
   late final AnimationController _logoController;
@@ -175,7 +177,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _handleSignIn(String provider) async {
     setState(() {
       _isLoading = true;
-      _statusMessage = context.l10n.startingSignIn;
+      _statusProgress = AuthProgress.startingSignIn;
     });
     try {
       dynamic credential;
@@ -189,35 +191,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               }
 
               AppLogger.log("[AUTH] Google sign-in status: $status");
-              setState(() => _statusMessage = status);
+              setState(() => _statusProgress = status);
             },
           );
           break;
         case 'apple':
           credential = await AuthService.signInWithApple(
             onStatusChange: (status) {
-              if (mounted) setState(() => _statusMessage = status);
+              if (mounted) setState(() => _statusProgress = status);
             },
           );
           break;
         case 'facebook':
           credential = await AuthService.signInWithFacebook(
             onStatusChange: (status) {
-              if (mounted) setState(() => _statusMessage = status);
+              if (mounted) setState(() => _statusProgress = status);
             },
           );
           break;
         case 'github':
           credential = await AuthService.signInWithGitHub(
             onStatusChange: (status) {
-              if (mounted) setState(() => _statusMessage = status);
+              if (mounted) setState(() => _statusProgress = status);
             },
           );
           break;
         case 'twitter':
           credential = await AuthService.signInWithTwitter(
             onStatusChange: (status) {
-              if (mounted) setState(() => _statusMessage = status);
+              if (mounted) setState(() => _statusProgress = status);
             },
           );
           break;
@@ -231,14 +233,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
       }
     } catch (e) {
-      final errorMessage = resolveSignInErrorMessage(
-        provider: provider,
-        error: e,
-      );
+      AppLogger.error('[Auth] Sign-in failed', e);
+      final l10n = currentAppLocalizations();
+      final failure = resolveSignInFailure(provider: provider, error: e);
+      final errorMessage = failure.localized(l10n);
       String? actionText;
       VoidCallback? onAction;
       if (kIsWeb && isInsecureSignInError(e)) {
-        actionText = 'Open HTTPS';
+        actionText = l10n.open;
         onAction = () {
           launchUrl(
             Uri.parse('https://betterkeep.app'),
@@ -353,8 +355,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: Text(
-            _statusMessage,
-            key: ValueKey(_statusMessage),
+            (_statusProgress ?? AuthProgress.startingSignIn).localized(
+              context.l10n,
+            ),
+            key: ValueKey(_statusProgress),
             style: TextStyle(
               fontSize: 16,
               color: Theme.of(
@@ -370,7 +374,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             AuthService.cancelPendingOAuth();
             setState(() {
               _isLoading = false;
-              _statusMessage = '';
+              _statusProgress = null;
             });
           },
           icon: const Icon(Icons.close),
@@ -535,7 +539,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: context.l10n.dismiss,
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, animation, secondaryAnimation) {
@@ -993,7 +997,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           width: size,
           height: size,
           fit: BoxFit.cover,
-          semanticLabel: 'Better Keep app logo',
+          semanticLabel: context.l10n.appLogoSemantics,
         ),
       ),
     );

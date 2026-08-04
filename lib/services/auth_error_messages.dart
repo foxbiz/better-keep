@@ -1,78 +1,118 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
-String resolveSignInErrorMessage({
+enum AuthFailureKind {
+  appleVerification,
+  accountExists,
+  accountNotFound,
+  invalidCredentials,
+  accountDisabled,
+  tooManyRequests,
+  network,
+  cancelled,
+  permissionDenied,
+  unavailable,
+  missingEmail,
+  windowClosed,
+  insecureConnection,
+  unknown,
+}
+
+enum VerificationFailureKind {
+  invalidCode,
+  tooManyRequests,
+  network,
+  signInRequired,
+  unknown,
+}
+
+VerificationFailureKind resolveVerificationFailure(
+  Object error, {
+  bool codeWasSubmitted = false,
+}) {
+  if (error is! FirebaseFunctionsException) {
+    return VerificationFailureKind.unknown;
+  }
+
+  return switch (error.code) {
+    'invalid-argument' || 'not-found' || 'failed-precondition'
+        when codeWasSubmitted =>
+      VerificationFailureKind.invalidCode,
+    'resource-exhausted' => VerificationFailureKind.tooManyRequests,
+    'unavailable' || 'deadline-exceeded' => VerificationFailureKind.network,
+    'unauthenticated' ||
+    'permission-denied' => VerificationFailureKind.signInRequired,
+    _ => VerificationFailureKind.unknown,
+  };
+}
+
+AuthFailureKind resolveSignInFailure({
   required String provider,
   required Object error,
 }) {
-  final normalized = _normalizedAuthError(error);
+  if (error is GoogleSignInException &&
+      error.code == GoogleSignInExceptionCode.canceled) {
+    return AuthFailureKind.cancelled;
+  }
+  if (error is SignInWithAppleAuthorizationException &&
+      error.code == AuthorizationErrorCode.canceled) {
+    return AuthFailureKind.cancelled;
+  }
+  if (error is! FirebaseAuthException) return AuthFailureKind.unknown;
+  final code = error.code;
 
-  if (provider == 'apple' && normalized.contains('invalid-credential')) {
-    return 'Apple sign-in could not be verified. Please restart the app and '
-        'try signing in with Apple again.';
+  if (provider == 'apple' && code == 'invalid-credential') {
+    return AuthFailureKind.appleVerification;
   }
-  if (normalized.contains('account-exists-with-different-credential') ||
-      normalized.contains('email-already-in-use')) {
-    return 'This email is already linked to another account. Try signing in '
-        'with a different method (Google, Facebook, etc.) or use the Connected '
-        'Accounts feature to link providers.';
+  if (code == 'account-exists-with-different-credential' ||
+      code == 'email-already-in-use') {
+    return AuthFailureKind.accountExists;
   }
-  if (normalized.contains('user-not-found')) {
-    return 'No account found with this email. Please sign up first.';
+  if (code == 'user-not-found') {
+    return AuthFailureKind.accountNotFound;
   }
-  if (normalized.contains('wrong-password') ||
-      normalized.contains('invalid-credential')) {
-    return 'Invalid credentials. Please check your password and try again.';
+  if (code == 'wrong-password' || code == 'invalid-credential') {
+    return AuthFailureKind.invalidCredentials;
   }
-  if (normalized.contains('user-disabled')) {
-    return 'This account has been disabled. Please contact support.';
+  if (code == 'user-disabled') {
+    return AuthFailureKind.accountDisabled;
   }
-  if (normalized.contains('too-many-requests')) {
-    return 'Too many failed attempts. Please try again later.';
+  if (code == 'too-many-requests') {
+    return AuthFailureKind.tooManyRequests;
   }
-  if (normalized.contains('network') || normalized.contains('timeout')) {
-    return 'Network error. Please check your internet connection.';
+  if (code == 'network-request-failed' ||
+      code == 'timeout' ||
+      code == 'deadline-exceeded') {
+    return AuthFailureKind.network;
   }
-  if (normalized.contains('cancelled') ||
-      normalized.contains('canceled') ||
-      normalized.contains('popup-closed') ||
-      normalized.contains('user-cancelled')) {
-    return 'Sign in was cancelled.';
+  if (code == 'cancelled' ||
+      code == 'popup-closed-by-user' ||
+      code == 'user-cancelled') {
+    return AuthFailureKind.cancelled;
   }
-  if (normalized.contains('permission-denied')) {
-    return 'Permission denied. Please contact support.';
+  if (code == 'permission-denied') {
+    return AuthFailureKind.permissionDenied;
   }
-  if (normalized.contains('unavailable')) {
-    return 'Service temporarily unavailable. Please try again later.';
+  if (code == 'unavailable' || code == 'launch-failed') {
+    return AuthFailureKind.unavailable;
   }
-  if (normalized.contains('internal-error')) {
-    return 'Sign in failed. This might happen if your account does not have '
-        'an email associated. Please try another sign-in method.';
+  if (code == 'internal-error') {
+    return AuthFailureKind.missingEmail;
   }
-  if (normalized.contains('web-context-cancelled')) {
-    return 'Sign in window was closed. Please try again.';
+  if (code == 'web-context-cancelled') {
+    return AuthFailureKind.windowClosed;
   }
-  if (normalized.contains('insecure') || normalized.contains('https')) {
-    return 'Please use HTTPS for secure sign in. Go to '
-        'https://betterkeep.app';
+  if (code == 'operation-not-supported-in-this-environment' ||
+      code == 'web-storage-unsupported') {
+    return AuthFailureKind.insecureConnection;
   }
-  if (error is FirebaseAuthException) {
-    return error.message ?? 'Authentication failed. Please try again.';
-  }
-  if (error is Exception) {
-    final message = error.toString().replaceFirst('Exception: ', '');
-    if (message.length < 150) return message;
-  }
-  return 'Sign in failed. Please try again.';
+  return AuthFailureKind.unknown;
 }
 
 bool isInsecureSignInError(Object error) {
-  final normalized = _normalizedAuthError(error);
-  return normalized.contains('insecure') || normalized.contains('https');
-}
-
-String _normalizedAuthError(Object error) {
-  if (error is FirebaseAuthException) {
-    return '${error.code} ${error.message ?? ''}'.toLowerCase();
-  }
-  return error.toString().toLowerCase();
+  return error is FirebaseAuthException &&
+      (error.code == 'operation-not-supported-in-this-environment' ||
+          error.code == 'web-storage-unsupported');
 }

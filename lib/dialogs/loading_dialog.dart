@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 
 /// Configuration for the loading dialog
@@ -20,7 +21,7 @@ class LoadingDialogConfig {
     required this.message,
     this.showCancelAfter = const Duration(seconds: 5),
     this.timeout = const Duration(seconds: 30),
-    this.timeoutMessage = 'This is taking longer than expected.',
+    required this.timeoutMessage,
   });
 }
 
@@ -28,14 +29,12 @@ class LoadingDialogConfig {
 class LoadingDialogResult<T> {
   final bool success;
   final T? data;
-  final String? error;
   final bool cancelled;
   final bool timedOut;
 
   const LoadingDialogResult({
     required this.success,
     this.data,
-    this.error,
     this.cancelled = false,
     this.timedOut = false,
   });
@@ -49,8 +48,8 @@ class LoadingDialogResult<T> {
   factory LoadingDialogResult.timedOut() =>
       const LoadingDialogResult(success: false, timedOut: true);
 
-  factory LoadingDialogResult.failed(String error) =>
-      LoadingDialogResult(success: false, error: error);
+  factory LoadingDialogResult.failed() =>
+      const LoadingDialogResult(success: false);
 }
 
 /// Shows a loading dialog that can be cancelled and has a timeout.
@@ -120,7 +119,8 @@ Future<LoadingDialogResult<T>> showLoadingDialog<T>({
         completer.complete(LoadingDialogResult.successful(result));
       }
     }
-  } catch (e) {
+  } catch (error, stackTrace) {
+    AppLogger.error('Loading dialog operation failed', error, stackTrace);
     // Cancel the timeout timer
     timeoutTimer.cancel();
 
@@ -131,7 +131,7 @@ Future<LoadingDialogResult<T>> showLoadingDialog<T>({
         Navigator.of(context).pop();
       }
       if (!completer.isCompleted) {
-        completer.complete(LoadingDialogResult.failed(e.toString()));
+        completer.complete(LoadingDialogResult.failed());
       }
     }
   }

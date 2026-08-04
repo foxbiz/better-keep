@@ -1,13 +1,33 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
-class FirebaseStartupErrorView extends StatelessWidget {
-  const FirebaseStartupErrorView({
-    super.key,
-    required this.error,
-    this.onRetry,
-  });
+/// A localized, implementation-agnostic loading screen used before the main
+/// application shell is ready.
+class AppStartupLoadingView extends StatelessWidget {
+  const AppStartupLoadingView({super.key});
 
-  final String error;
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(context.l10n.gettingReady),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A localized startup failure screen that deliberately keeps diagnostics out
+/// of user-visible copy. Callers are responsible for logging the root cause.
+class AppStartupErrorView extends StatelessWidget {
+  const AppStartupErrorView({super.key, this.onRetry});
+
   final VoidCallback? onRetry;
 
   @override
@@ -25,28 +45,25 @@ class FirebaseStartupErrorView extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.error_outline,
                       size: 64,
-                      color: Colors.red,
+                      color: Theme.of(context).colorScheme.error,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Firebase startup failed',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.unableToStartApp,
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
+                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 12),
-                    SelectableText(error, textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     Text(
                       retry == null
-                          ? 'Restart the app before changing Firebase '
-                                'environments.'
-                          : 'Check your connection, then retry. Your local data '
-                                'has not been changed.',
+                          ? context.l10n.startupRestartMessage
+                          : context.l10n.startupRetryMessage,
                       textAlign: TextAlign.center,
                     ),
                     if (retry != null) ...[
@@ -54,7 +71,7 @@ class FirebaseStartupErrorView extends StatelessWidget {
                       FilledButton.icon(
                         onPressed: retry,
                         icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
+                        label: Text(context.l10n.retry),
                       ),
                     ],
                   ],

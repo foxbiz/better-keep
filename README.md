@@ -97,10 +97,17 @@ All configurations automatically load environment variables from `.env` via `--d
 **Using the terminal:**
 
 ```bash
-flutter run --dart-define-from-file=.env
+npm run dev android
+npm run dev ios
+npm run dev macos
+npm run dev web
+npm run dev windows
 ```
 
-- Use `flutter run -d windows`, `flutter run -d macos`, `flutter run -d ios`, etc. to target a specific platform.
+- Run `npm run dev` to list the supported platforms.
+- Android and iOS automatically use the only matching device or prompt when
+  several are connected. Override the choice with
+  `npm run dev android -- -d <device-id>`.
 - Desktop builds require `sqflite_common_ffi`; the app auto-initializes it on Windows/macOS.
 
 ### Firebase emulator testing
@@ -119,7 +126,7 @@ Install both the root and Functions dependencies once:
 
 ```bash
 npm install
-npm run install:functions
+npm run functions install
 ```
 
 The repository wrappers discover the exact companion runtimes and use them only
@@ -133,8 +140,8 @@ Database, or Storage.
 NVM and SDKMAN installations are discovered automatically. CI or non-standard
 installations can provide absolute paths with
 `BETTER_KEEP_FIREBASE_NODE_BIN` and `BETTER_KEEP_FIREBASE_JAVA_HOME`.
-Use `npm run firebase:runtime-check` or
-`npm run firebase:emulator-runtime-check` to see the selected host and Firebase
+Use `npm run firebase runtime-check` or
+`npm run firebase emulator-runtime-check` to see the selected host and Firebase
 runtimes.
 
 For a physical Android or iOS device, set `EMULATOR_HOST` in `.env` to the
@@ -143,7 +150,7 @@ set `EMULATOR_HOST` only when the emulators run on another computer. Then start
 the complete emulator suite:
 
 ```bash
-npm run firebase-emulators
+npm run firebase emulators
 ```
 
 The tracked `firebase.emulators.json` binds Auth (`9099`), Firestore (`8080`),
@@ -182,30 +189,30 @@ review account using `docs/GOOGLE_PLAY_REVIEW_ACCOUNT.md`.
 Run the emulator configuration tests with:
 
 ```bash
-npm run test:firebase-emulator-config
+npm test firebase-emulator-config
 ```
 
 Run the Functions cleanup and trigger tests in isolated Firestore and Storage
 emulators with:
 
 ```bash
-npm run test:firebase-emulator-functions
+npm test firebase-emulator-functions
 ```
 
 Run the Firestore and Storage security-rules suite together, then exercise the
 managed review token directly against Auth, Functions, Firestore, and Storage:
 
 ```bash
-npm run test:firebase-rules
-npm run test:firebase-emulator-review
+npm test firebase-rules
+npm test firebase-emulator-review
 ```
 
 With the emulators running, exercise Auth, Functions, Firestore, Storage, and
 Hosting from a connected Android target:
 
 ```bash
-npm run test:firebase-emulator-android -- -d <device-id>
-npm run test:firebase-environment-android -- -d <device-id>
+npm test firebase-emulator-android -- -d <device-id>
+npm test firebase-environment-android -- -d <device-id>
 ```
 
 ### Building the app
@@ -259,10 +266,38 @@ The app will be at `build/linux/x64/release/bundle/`.
 **Web:**
 
 ```bash
-flutter build web --dart-define-from-file=.env
+npm run build web
 ```
 
-The output will be in `build/web/`. Deploy to any static hosting service.
+The output will be in `build/web/`. Build and deploy it to Firebase Hosting with:
+
+```bash
+npm run deploy hosting
+```
+
+The Hosting deployment always rebuilds the web application first.
+
+### Checks and release gate
+
+Use the grouped checks for analysis, dependency auditing, and the secret-backed
+Apple Firebase configuration:
+
+```bash
+npm run check analyze
+npm run check audit
+npm run check apple-config
+```
+
+Run `npm run check` to list the available checks. The Apple configuration check
+requires `.env` and `macos/Runner/GoogleService-Info.plist`.
+
+Run the complete portable release gate with:
+
+```bash
+npm run release
+```
+
+Use `npm run release help` to display its fail-fast sequence without running it.
 
 ## Project layout
 
@@ -364,11 +399,11 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
 
 1.  Install the host and companion runtimes described in
     **Firebase emulator testing**, then run `npm install` and
-    `npm run install:functions`.
+    `npm run functions install`.
 2.  Install the matching global Firebase CLI for FlutterFire CLI discovery:
     `npm install -g firebase-tools@15.24.0`. Repository scripts still invoke
     only the pinned local CLI.
-3.  Log in: `npm run firebase:login`
+3.  Log in: `npm run firebase login`
 4.  Activate FlutterFire CLI: `dart pub global activate flutterfire_cli`
 5.  Configure the app:
 

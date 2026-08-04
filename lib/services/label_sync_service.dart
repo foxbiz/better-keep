@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:better_keep/models/cloud_sync_cursor.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/label_sync_track.dart';
@@ -47,7 +48,9 @@ class LabelSyncService {
   FirebaseFirestore get _firestore => FirebaseBackend.firestore;
 
   final ValueNotifier<bool> isSyncing = ValueNotifier(false);
-  final ValueNotifier<String> statusMessage = ValueNotifier("");
+  final ValueNotifier<SyncProgress> syncStatus = ValueNotifier(
+    SyncProgress.idle,
+  );
 
   /// Tracks label IDs currently being synced (outgoing push)
   final ValueNotifier<Set<int>> syncingOutgoing = ValueNotifier({});
@@ -604,7 +607,7 @@ class LabelSyncService {
 
     try {
       isSyncing.value = true;
-      statusMessage.value = "Refreshing labels...";
+      syncStatus.value = const SyncProgress(SyncPhase.checkingForUpdates);
       AppLogger.log("[LABEL_SYNC] Manual refresh started...");
 
       // Note: _startRemoteListener() is NOT called here.
@@ -621,18 +624,18 @@ class LabelSyncService {
       // Always pull remote changes (available to all users)
       await _pullRemoteChanges();
 
-      statusMessage.value = "Label Refresh Complete";
+      syncStatus.value = const SyncProgress(SyncPhase.complete);
       AppLogger.log("[LABEL_SYNC] Manual refresh complete");
     } on FirestoreDocumentFetchException catch (e, stack) {
-      statusMessage.value = "Could not download label documents";
+      syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('LabelSync: Firestore document fetch failed', e, stack);
     } catch (e, stack) {
-      statusMessage.value = "Label Refresh Failed while applying content";
+      syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('LabelSync: Refresh Failed', e, stack);
     } finally {
       isSyncing.value = false;
       Future.delayed(const Duration(seconds: 2), () {
-        if (!isSyncing.value) statusMessage.value = "";
+        if (!isSyncing.value) syncStatus.value = SyncProgress.idle;
       });
     }
   }
@@ -657,22 +660,22 @@ class LabelSyncService {
 
     try {
       isSyncing.value = true;
-      statusMessage.value = "Syncing labels...";
+      syncStatus.value = const SyncProgress(SyncPhase.syncing);
       AppLogger.log(
         "[LABEL_SYNC] Syncing ${pendingSyncs.length} local changes...",
       );
 
       await _pushLocalChangesWithPending(pendingSyncs);
 
-      statusMessage.value = "Label Sync Complete";
+      syncStatus.value = const SyncProgress(SyncPhase.complete);
       AppLogger.log("[LABEL_SYNC] Sync Complete");
     } catch (e, stack) {
-      statusMessage.value = "Label Sync Failed";
+      syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('LabelSync: Sync Failed', e, stack);
     } finally {
       isSyncing.value = false;
       Future.delayed(const Duration(seconds: 2), () {
-        if (!isSyncing.value) statusMessage.value = "";
+        if (!isSyncing.value) syncStatus.value = SyncProgress.idle;
       });
     }
   }
@@ -681,7 +684,7 @@ class LabelSyncService {
     List<LabelSyncTrack> pendingSyncs,
   ) async {
     if (pendingSyncs.isEmpty) return;
-    statusMessage.value = "Pushing label changes...";
+    syncStatus.value = const SyncProgress(SyncPhase.savingChanges);
 
     WriteBatch batch = _firestore.batch();
     int batchCount = 0;
@@ -897,7 +900,7 @@ class LabelSyncService {
   }
 
   Future<void> _performRemotePull() async {
-    statusMessage.value = "Pulling label changes...";
+    syncStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
     final checkpointCommit = StagedCheckpoint<CloudSyncCheckpoint>(
       commit: (value) => AppState.labelCloudSyncCheckpoint = value,
     );

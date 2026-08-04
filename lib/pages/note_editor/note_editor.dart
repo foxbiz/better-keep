@@ -2110,8 +2110,9 @@ class _NoteEditorState extends State<NoteEditor>
         try {
           insertPlainTextIntoController(_controller, text);
           snackbar(context.l10n.pastedAsPlainText, Colors.green);
-        } catch (e) {
-          snackbar(context.l10n.failedToPaste(e.toString()), Colors.red);
+        } catch (error, stackTrace) {
+          AppLogger.error('Failed to paste plain text', error, stackTrace);
+          snackbar(context.l10n.somethingWentWrongTryAgain, Colors.red);
         }
         break;
 
@@ -2134,11 +2135,13 @@ class _NoteEditorState extends State<NoteEditor>
           try {
             insertDocumentIntoController(_controller, document);
             snackbar(context.l10n.contentInserted, Colors.green);
-          } catch (e) {
-            snackbar(
-              context.l10n.failedToInsertContent(e.toString()),
-              Colors.red,
+          } catch (error, stackTrace) {
+            AppLogger.error(
+              'Failed to insert pasted content',
+              error,
+              stackTrace,
             );
+            snackbar(context.l10n.somethingWentWrongTryAgain, Colors.red);
           }
         }
         break;
@@ -2222,10 +2225,11 @@ class _NoteEditorState extends State<NoteEditor>
                       if (context.mounted) {
                         snackbar(context.l10n.noteLocked, Colors.green);
                       }
-                    } catch (e) {
+                    } catch (error, stackTrace) {
+                      AppLogger.error('Failed to lock note', error, stackTrace);
                       if (context.mounted) {
                         snackbar(
-                          context.l10n.failedToLockNote(e.toString()),
+                          context.l10n.somethingWentWrongTryAgain,
                           Colors.red,
                         );
                       }
@@ -2242,10 +2246,15 @@ class _NoteEditorState extends State<NoteEditor>
                       if (context.mounted) {
                         snackbar(context.l10n.lockRemoved, Colors.green);
                       }
-                    } catch (e) {
+                    } catch (error, stackTrace) {
+                      AppLogger.error(
+                        'Failed to remove note lock',
+                        error,
+                        stackTrace,
+                      );
                       if (context.mounted) {
                         snackbar(
-                          context.l10n.failedToRemoveLock(e.toString()),
+                          context.l10n.somethingWentWrongTryAgain,
                           Colors.red,
                         );
                       }
@@ -2322,12 +2331,15 @@ class _NoteEditorState extends State<NoteEditor>
                     _note.password!.isNotEmpty) {
                   try {
                     await duplicatedNote.lock(_note.password!);
-                  } catch (e) {
+                  } catch (error, stackTrace) {
+                    AppLogger.error(
+                      'Duplicated note could not be locked',
+                      error,
+                      stackTrace,
+                    );
                     if (context.mounted) {
                       snackbar(
-                        context.l10n.noteDuplicatedButFailedToLock(
-                          e.toString(),
-                        ),
+                        context.l10n.somethingWentWrongTryAgain,
                         Colors.orange,
                       );
                     }

@@ -6,6 +6,7 @@ import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -478,10 +479,11 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
             context,
           ).showSnackBar(SnackBar(content: Text(l10n.linkRevoked)));
         }
-      } catch (e) {
+      } catch (error, stackTrace) {
+        AppLogger.error('Failed to revoke share link', error, stackTrace);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.failedToRevoke(e.toString()))),
+            SnackBar(content: Text(l10n.somethingWentWrongTryAgain)),
           );
         }
       }
@@ -782,20 +784,11 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
           _isCreatingLink = false;
         });
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to create share link', error, stackTrace);
       if (mounted) {
-        // Extract user-friendly error message
-        String errorMessage = e.toString();
-        if (errorMessage.contains('Exception:')) {
-          errorMessage = errorMessage.replaceFirst('Exception:', '').trim();
-        }
-        if (errorMessage.contains('unauthorized') ||
-            errorMessage.contains('permission')) {
-          errorMessage =
-              'Storage permission denied. Please try again or contact support.';
-        }
         setState(() {
-          _error = errorMessage;
+          _error = context.l10n.somethingWentWrongTryAgain;
           _isCreatingLink = false;
         });
       }

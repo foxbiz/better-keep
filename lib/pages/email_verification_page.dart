@@ -4,6 +4,8 @@ import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/otp_input_field.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -74,9 +76,10 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
         });
       }
     } on FirebaseFunctionsException catch (e) {
+      AppLogger.error('Email verification code request failed', e);
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? context.l10n.failedSendVerificationCode;
+          _errorMessage = resolveVerificationFailure(e).localized(context.l10n);
         });
       }
     } catch (e) {
@@ -142,9 +145,13 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
         }
       }
     } on FirebaseFunctionsException catch (e) {
+      AppLogger.error('Email verification failed', e);
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? context.l10n.verificationFailed;
+          _errorMessage = resolveVerificationFailure(
+            e,
+            codeWasSubmitted: true,
+          ).localized(context.l10n);
         });
         // Clear OTP field on error
         _otpController.clear();

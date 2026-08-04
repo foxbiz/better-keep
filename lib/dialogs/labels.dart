@@ -203,7 +203,7 @@ class _LabelsState extends State<Labels> {
       bool isSelected = selectedLabels.contains(label.name);
       return ListTile(
         leading: isSelected ? Icon(Icons.check) : Icon(Icons.label),
-        title: Text(label.name),
+        title: Text(label.displayName(context.l10n)),
         onTap: () {
           if (selectedLabels.contains(label.name)) {
             selectedLabels.remove(label.name);
@@ -222,13 +222,15 @@ class _LabelsState extends State<Labels> {
     return ListTile(
       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       leading: Icon(label.isSystem ? Icons.lock_outline : Icons.label),
-      title: Text(label.name),
+      title: Text(label.displayName(context.l10n)),
       onTap: label.isSystem
           ? null
           : () async {
               final newName = await prompt(
                 context,
-                title: context.l10n.editLabelName(label.name),
+                title: context.l10n.editLabelName(
+                  label.displayName(context.l10n),
+                ),
                 placeholder: context.l10n.enterNewName,
                 currentText: label.name,
               );
@@ -247,7 +249,9 @@ class _LabelsState extends State<Labels> {
                 var confirmation = await showDeleteDialog(
                   context,
                   title: context.l10n.deleteLabel,
-                  message: context.l10n.deleteLabelConfirmation(label.name),
+                  message: context.l10n.deleteLabelConfirmation(
+                    label.displayName(context.l10n),
+                  ),
                 );
                 if (confirmation == true) {
                   label.delete();

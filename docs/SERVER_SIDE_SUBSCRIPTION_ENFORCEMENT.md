@@ -135,13 +135,13 @@ Future<void> _refreshAuthTokenForUpdatedClaims() async {
 1. **Build Cloud Functions:**
 
    ```bash
-   npm run build:functions
+   npm run functions build
    ```
 
 2. **Deploy Cloud Functions and Security Rules:**
 
    ```bash
-   npm run deploy:backend
+   npm run deploy backend
    ```
 
 3. **Test the implementation:**
@@ -172,7 +172,7 @@ The migration script is located at `functions/src/migrations/migrateSubscription
 
 ```bash
 # 1. From the repository root, authenticate with the pinned Firebase CLI
-npm run firebase:login
+npm run firebase login
 
 # 2. Navigate to the Functions package
 cd functions

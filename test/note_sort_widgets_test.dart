@@ -53,9 +53,10 @@ void main() {
     );
 
     expect(find.byIcon(Icons.tune), findsOneWidget);
+    expect(find.byTooltip('Note display options · Custom'), findsOneWidget);
     expect(
-      find.byTooltip('Note display options · Date updated'),
-      findsOneWidget,
+      find.byKey(const ValueKey('note-sort-non-default-indicator')),
+      findsNothing,
     );
     await tester.tap(find.byKey(const ValueKey('note-display-options-button')));
     await tester.pumpAndSettle();
@@ -78,10 +79,7 @@ void main() {
     expect(find.byType(RadioGroup<NoteSortMode>), findsOneWidget);
     expect(find.byType(RadioListTile<NoteSortMode>), findsNWidgets(3));
     expect(
-      find.text(
-        'Manual rearranging is unavailable while sorting by date. '
-        'Choose Custom to rearrange notes.',
-      ),
+      find.text('Press and hold a note, then drag to rearrange it.'),
       findsOneWidget,
     );
     expect(
@@ -94,19 +92,21 @@ void main() {
     await tester.tap(find.widgetWithText(RadioListTile<NoteViewMode>, 'List'));
     await tester.pump();
     await tester.tap(
-      find.widgetWithText(RadioListTile<NoteSortMode>, 'Custom'),
+      find.widgetWithText(RadioListTile<NoteSortMode>, 'Date created'),
     );
     await tester.pump();
-    expect(find.text('Press and hold to reorder'), findsNothing);
     expect(
-      find.text('Press and hold a note, then drag to rearrange it.'),
+      find.text(
+        'Manual rearranging is unavailable while sorting by date. '
+        'Choose Custom to rearrange notes.',
+      ),
       findsOneWidget,
     );
 
     expect(AppState.notesViewMode, NoteViewMode.grid);
     expect(
       service.snapshotFor(const NoteOrderContext.mainGrid()).mode,
-      NoteSortMode.updatedNewest,
+      NoteSortMode.custom,
     );
     expect(persistedMode, isNull);
 
@@ -114,9 +114,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(viewModeDuringPersistence, NoteViewMode.grid);
-    expect(persistedMode, NoteSortMode.custom);
+    expect(persistedMode, NoteSortMode.createdNewest);
     expect(AppState.notesViewMode, NoteViewMode.list);
-    expect(callbackMode, NoteSortMode.custom);
+    expect(callbackMode, NoteSortMode.createdNewest);
     expect(find.byType(AlertDialog), findsNothing);
   });
 
@@ -136,7 +136,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(RadioListTile<NoteViewMode>, 'List'));
     await tester.tap(
-      find.widgetWithText(RadioListTile<NoteSortMode>, 'Custom'),
+      find.widgetWithText(RadioListTile<NoteSortMode>, 'Date created'),
     );
     await tester.pump();
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
@@ -146,7 +146,7 @@ void main() {
     expect(AppState.notesViewMode, NoteViewMode.grid);
     expect(
       service.snapshotFor(const NoteOrderContext.mainGrid()).mode,
-      NoteSortMode.updatedNewest,
+      NoteSortMode.custom,
     );
     expect(find.byType(AlertDialog), findsNothing);
   });
@@ -183,7 +183,7 @@ void main() {
             find.byType(RadioGroup<NoteSortMode>),
           )
           .groupValue,
-      NoteSortMode.updatedNewest,
+      NoteSortMode.custom,
     );
 
     await tester.tap(find.widgetWithText(RadioListTile<NoteViewMode>, 'List'));
@@ -210,7 +210,7 @@ void main() {
     expect(persistedMode, NoteSortMode.custom);
     expect(
       service.snapshotFor(const NoteOrderContext.mainGrid()).mode,
-      NoteSortMode.updatedNewest,
+      NoteSortMode.custom,
     );
     expect(AppState.notesViewMode, NoteViewMode.list);
   });
@@ -230,6 +230,49 @@ void main() {
     expect(find.byType(RadioListTile<NoteViewMode>), findsNothing);
     expect(find.byType(RadioGroup<NoteSortMode>), findsOneWidget);
     expect(find.byType(RadioListTile<NoteSortMode>), findsNWidgets(3));
+  });
+
+  testWidgets('sort indicator appears only for a non-default Home sort', (
+    tester,
+  ) async {
+    const grid = NoteOrderContext.mainGrid();
+    final defaultSnapshot = service.snapshotFor(grid);
+    await tester.pumpWidget(
+      _app(
+        const NoteDisplayOptionsButton(key: ValueKey('default-sort-button')),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('note-sort-non-default-indicator')),
+      findsNothing,
+    );
+
+    service.snapshots.value = Map.unmodifiable({
+      ...service.snapshots.value,
+      grid.key: defaultSnapshot.copyWith(mode: NoteSortMode.updatedNewest),
+    });
+    await tester.pumpWidget(
+      _app(const NoteDisplayOptionsButton(key: ValueKey('date-sort-button'))),
+    );
+
+    expect(
+      find.byKey(const ValueKey('note-sort-non-default-indicator')),
+      findsOneWidget,
+    );
+
+    service.snapshots.value = Map.unmodifiable({
+      ...service.snapshots.value,
+      grid.key: defaultSnapshot,
+    });
+    await tester.pumpWidget(
+      _app(const NoteDisplayOptionsButton(key: ValueKey('custom-sort-button'))),
+    );
+
+    expect(
+      find.byKey(const ValueKey('note-sort-non-default-indicator')),
+      findsNothing,
+    );
   });
 
   testWidgets('non-reorderable feeds do not expose Custom', (tester) async {
@@ -270,7 +313,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(RadioListTile<NoteViewMode>, 'List'));
     await tester.tap(
-      find.widgetWithText(RadioListTile<NoteSortMode>, 'Custom'),
+      find.widgetWithText(RadioListTile<NoteSortMode>, 'Date created'),
     );
     await tester.pump();
 

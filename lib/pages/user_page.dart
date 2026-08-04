@@ -8,10 +8,12 @@ import 'package:better_keep/dialogs/otp_dialog.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/share_link.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/pages/setup_recovery_key_page.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -26,8 +28,12 @@ import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/device_localizations.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
@@ -144,7 +150,8 @@ class _UserPageState extends State<UserPage> {
     final user = AuthService.currentUser;
     final cached = AuthService.cachedProfile;
 
-    final displayName = user?.displayName ?? cached?['displayName'] ?? 'User';
+    final displayName =
+        user?.displayName ?? cached?['displayName'] ?? context.l10n.user;
     final email = user?.email ?? cached?['email'];
 
     return Scaffold(
@@ -373,7 +380,7 @@ class _UserPageState extends State<UserPage> {
     }
 
     if (!context.mounted) {
-      snackbar("Cancelled sign out - context no longer mounted", Colors.red);
+      AppLogger.log('Sign out cancelled because its page was disposed');
       return;
     }
 
@@ -490,14 +497,15 @@ class _UserPageState extends State<UserPage> {
       if (context.mounted) {
         Navigator.of(context).pop();
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to sign out', error, stackTrace);
       if (context.mounted) {
         setState(() {
           _isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.l10n.errorSigningOut(e.toString())),
+            content: Text(context.l10n.somethingWentWrongTryAgain),
             backgroundColor: Colors.red,
           ),
         );
@@ -615,7 +623,7 @@ class _UserPageState extends State<UserPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  request.deviceName,
+                  localizedDeviceName(context.l10n, request.deviceName),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
@@ -759,7 +767,7 @@ class _UserPageState extends State<UserPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  request.deviceName,
+                  localizedDeviceName(context.l10n, request.deviceName),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
@@ -806,10 +814,11 @@ class _UserPageState extends State<UserPage> {
           context,
         ).showSnackBar(SnackBar(content: Text(context.l10n.accessApproved)));
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to approve share request', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedToApprove(e.toString()))),
+          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
         );
       }
     } finally {
@@ -826,10 +835,11 @@ class _UserPageState extends State<UserPage> {
           context,
         ).showSnackBar(SnackBar(content: Text(context.l10n.accessDenied)));
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to deny share request', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedToDeny(e.toString()))),
+          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
         );
       }
     } finally {
@@ -955,7 +965,7 @@ class _UserPageState extends State<UserPage> {
                           const SizedBox(height: 4),
                           Text(
                             context.l10n.subscriptionCancelledInfo(
-                              _formatDate(status.expiresAt),
+                              _formatDate(context, status.expiresAt),
                             ),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onTertiaryContainer,
@@ -1186,7 +1196,7 @@ class _UserPageState extends State<UserPage> {
                   const SizedBox(height: 8),
                   Text(
                     context.l10n.expiresOnDaysLeft(
-                      _formatDate(status.expiresAt!),
+                      _formatDate(context, status.expiresAt!),
                       status.daysUntilExpiration,
                     ),
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -1219,7 +1229,7 @@ class _UserPageState extends State<UserPage> {
               context,
               Icons.event,
               context.l10n.expires,
-              _formatDate(status.expiresAt!),
+              _formatDate(context, status.expiresAt!),
             ),
           ],
         ],
@@ -1279,23 +1289,9 @@ class _UserPageState extends State<UserPage> {
     );
   }
 
-  String _formatDate(DateTime? date) {
-    if (date == null) return 'Unknown';
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  String _formatDate(BuildContext context, DateTime? date) {
+    if (date == null) return context.l10n.unknown;
+    return MaterialLocalizations.of(context).formatMediumDate(date);
   }
 
   Future<void> _handleSubscribe(BuildContext context) async {
@@ -1795,15 +1791,12 @@ class _UserPageState extends State<UserPage> {
         return;
       }
       if (!loadingResult.success) {
-        snackbar(
-          loadingResult.error ?? context.l10n.failedSendCode,
-          Colors.red,
-        );
+        snackbar(context.l10n.failedSendCode, Colors.red);
         return;
       }
 
       final maskedEmail =
-          loadingResult.data?['email'] as String? ?? 'your email';
+          loadingResult.data?['email'] as String? ?? context.l10n.yourEmail;
 
       // Step 2: Show OTP verification dialog
       final otpResult = await showOtpDialog(
@@ -1908,39 +1901,29 @@ class _UserPageState extends State<UserPage> {
           errorMessage = context.l10n.providerAlreadyLinked(providerName);
           break;
         case 'resource-exhausted':
-          errorMessage = e.message ?? context.l10n.pleaseWaitBeforeRequesting;
+          errorMessage = context.l10n.pleaseWaitBeforeRequesting;
           break;
         case 'deadline-exceeded':
           errorMessage = context.l10n.sessionExpired_;
           break;
         default:
-          errorMessage = e.message ?? context.l10n.failedLinkAccount;
+          errorMessage = context.l10n.failedLinkAccount;
       }
 
+      AppLogger.error('Account link request failed', e);
       if (mounted) snackbar(errorMessage, Colors.red);
-    } catch (e) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
 
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
 
-      String errorMessage = context.l10n.failedLinkAccount;
-      final errorStr = e.toString();
-
-      if (errorStr.contains('credential-already-in-use')) {
-        errorMessage = context.l10n.providerLinkedToAnother(providerName);
-      } else if (errorStr.contains('provider-already-linked')) {
-        errorMessage = context.l10n.providerAlreadyLinked(providerName);
-      } else if (errorStr.contains('email-already-in-use')) {
-        errorMessage = context.l10n.emailAlreadyInUse;
-      } else if (errorStr.contains('cancelled') ||
-          errorStr.contains('canceled')) {
-        errorMessage = context.l10n.linkingCancelled;
-      } else if (e is Exception) {
-        final msg = errorStr.replaceFirst('Exception: ', '');
-        if (msg.length < 100) errorMessage = msg;
-      }
+      AppLogger.error('Account linking failed', error, stackTrace);
+      final errorMessage = resolveSignInFailure(
+        provider: providerId,
+        error: error,
+      ).localized(context.l10n);
 
       if (mounted) {
         snackbar(errorMessage, Colors.red);
@@ -1989,18 +1972,10 @@ class _UserPageState extends State<UserPage> {
           Colors.green,
         );
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to unlink account provider', error, stackTrace);
       if (mounted) {
-        String errorMessage = context.l10n.failedUnlinkAccount;
-        final errorStr = e.toString();
-
-        if (errorStr.contains('Cannot unlink')) {
-          errorMessage = context.l10n.cannotUnlinkOnlyMethod;
-        } else if (e is Exception) {
-          final msg = errorStr.replaceFirst('Exception: ', '');
-          if (msg.length < 100) errorMessage = msg;
-        }
-        snackbar(errorMessage, Colors.red);
+        snackbar(context.l10n.failedUnlinkAccount, Colors.red);
       }
     }
   }
@@ -2261,7 +2236,7 @@ class _UserPageState extends State<UserPage> {
     }
 
     return UserDeviceTile(
-      name: device.name,
+      name: localizedDeviceName(context.l10n, device.name),
       subtitle: _formatDeviceSubtitle(device),
       platformIcon: platformIcon,
       isPending: isPending,
@@ -2306,7 +2281,7 @@ class _UserPageState extends State<UserPage> {
       case 'linux':
         return 'Linux';
       case 'web':
-        return 'Web Browser';
+        return context.l10n.webBrowser;
       default:
         return platform;
     }
@@ -2358,12 +2333,15 @@ class _UserPageState extends State<UserPage> {
             );
           }
         }
-      } catch (e) {
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to enable protected-note sync',
+          error,
+          stackTrace,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.failedEnableE2EE(e.toString())),
-            ),
+            SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
           );
         }
       }
@@ -2454,12 +2432,11 @@ class _UserPageState extends State<UserPage> {
           context,
         ).showSnackBar(SnackBar(content: Text(context.l10n.deviceApproved_)));
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to approve device', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedApproveDevice(e.toString())),
-          ),
+          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
         );
       }
     } finally {
@@ -2477,12 +2454,11 @@ class _UserPageState extends State<UserPage> {
       // Cancel the notification for this device
       await DeviceApprovalNotificationService().cancelNotification(deviceId);
       _successfulDeletionCount++;
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to remove device', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedRemoveDevice(e.toString())),
-          ),
+          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
         );
       }
     } finally {
@@ -2512,7 +2488,11 @@ class _UserPageState extends State<UserPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(context.l10n.removeDevice_),
-        content: Text(context.l10n.removeDeviceConfirmation(device.name)),
+        content: Text(
+          context.l10n.removeDeviceConfirmation(
+            localizedDeviceName(context.l10n, device.name),
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -2585,16 +2565,20 @@ class _UserPageState extends State<UserPage> {
           _devicesError = null;
         });
       }
-    } catch (e) {
-      // Check if it's a network error
-      final errorMessage = e.toString().toLowerCase();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load protected-note devices',
+        error,
+        stackTrace,
+      );
       final isNetworkError =
-          errorMessage.contains('network') ||
-          errorMessage.contains('internet') ||
-          errorMessage.contains('socket') ||
-          errorMessage.contains('connection') ||
-          errorMessage.contains('host') ||
-          errorMessage.contains('unavailable');
+          error is SocketException ||
+          (error is FirebaseException &&
+              const {
+                'network-request-failed',
+                'unavailable',
+                'deadline-exceeded',
+              }.contains(error.code));
 
       if (mounted) {
         setState(() {
@@ -2715,11 +2699,11 @@ class _UserPageState extends State<UserPage> {
                 },
               ),
               const SizedBox(height: 8),
-              ValueListenableBuilder<String>(
-                valueListenable: exportService.status,
+              ValueListenableBuilder<ExportPhase>(
+                valueListenable: exportService.exportStatus,
                 builder: (context, status, _) {
                   return Text(
-                    status,
+                    status.localized(context.l10n),
                     style: Theme.of(context).textTheme.bodySmall,
                     textAlign: TextAlign.center,
                   );
@@ -2835,7 +2819,7 @@ class _UserPageState extends State<UserPage> {
     if (!loadingResult.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(loadingResult.error ?? context.l10n.failedSendCode),
+          content: Text(context.l10n.failedSendCode),
           backgroundColor: Colors.red,
         ),
       );
@@ -3016,15 +3000,15 @@ class _UserPageState extends State<UserPage> {
 
       deleteAt = result.data['deleteAt'] as String?;
       setState(() => _isLoading = false);
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to schedule account deletion', error, stackTrace);
       if (mounted) {
         setState(() => _isLoading = false);
-        String errorMessage = context.l10n.failedScheduleDeletion;
-        if (e is FirebaseFunctionsException) {
-          errorMessage = e.message ?? errorMessage;
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(context.l10n.failedScheduleDeletion),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       return;
@@ -3039,7 +3023,7 @@ class _UserPageState extends State<UserPage> {
       builder: (context) {
         final deleteDate = deleteAt != null
             ? DateTime.parse(deleteAt).toLocal().toString().split(' ')[0]
-            : "30 days from now";
+            : context.l10n.thirtyDaysFromNow;
         return AlertDialog(
           icon: Icon(
             Icons.check_circle,
@@ -3087,7 +3071,7 @@ class _UserPageState extends State<UserPage> {
     if (mounted) {
       final deleteDate = deleteAt != null
           ? DateTime.parse(deleteAt).toLocal().toString().split(' ')[0]
-          : "30 days from now";
+          : context.l10n.thirtyDaysFromNow;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

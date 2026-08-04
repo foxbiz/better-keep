@@ -36,13 +36,13 @@ required; do not run the reset script against the emulator without them.
 From the repository root:
 
 ```sh
-npm run release:gate
-npm run test:firebase-rules
-npm run test:firebase-emulator-functions
-npm run test:firebase-emulator-review
+npm run release
+npm test firebase-rules
+npm test firebase-emulator-functions
+npm test firebase-emulator-review
 flutter analyze
 flutter test
-npm run test:functions
+npm test functions
 ```
 
 The Android debug and release builds must also succeed before distributing the
@@ -61,9 +61,9 @@ Deploy Functions and both rulesets before releasing the app or distributing
 the review password:
 
 ```sh
-npm run build:functions
-npm run deploy:backend
-npm run firebase:indexes
+npm run functions build
+npm run deploy backend
+npm run firebase indexes
 ```
 
 Before deploying Functions for the first time, provision a 32-byte OAuth state
@@ -177,7 +177,7 @@ full audit reported 19 development-only advisories (3 moderate, 16 high) in the
 Firebase CLI dependency tree, while the release gate remained clean:
 
 ```sh
-npm run release:gate
+npm run release
 # found 0 vulnerabilities
 ```
 
@@ -191,8 +191,7 @@ The Functions package pins patched, Node 22-compatible transitive releases for
 clean:
 
 ```sh
-npm audit --omit=dev
-npm run audit:functions
+npm run check audit
 # found 0 vulnerabilities
 ```
 

@@ -67,9 +67,9 @@ jobs:
           CHROMEDRIVER_BINARY: ${{ steps.setup-chrome.outputs.chromedriver-path }}
         run: |
           npm ci
-          npm run ci:functions
+          npm run functions ci
           flutter pub get
-          npm run release:gate
+          npm run release
 
   # ============================================
   # Android APK Build
@@ -236,7 +236,7 @@ jobs:
           echo '${{ secrets.ENV_FILE }}' > .env
 
       - name: Verify Apple Firebase configuration
-        run: npm run verify:firebase-apple-macos
+        run: npm run check apple-config
 
       - name: Update CocoaPods repo
         run: |

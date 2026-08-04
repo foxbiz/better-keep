@@ -5,8 +5,7 @@
 library;
 
 import 'dart:convert';
-import 'dart:typed_data';
-
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -15,6 +14,7 @@ import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 /// KDF algorithm used for key derivation
@@ -24,6 +24,14 @@ enum KdfAlgorithm {
 
   /// PBKDF2 with SHA-256 - used on web platform
   pbkdf2,
+}
+
+enum RecoveryKeyFailureKind { incorrectPassphrase }
+
+class RecoveryKeyException implements Exception {
+  const RecoveryKeyException(this.kind);
+
+  final RecoveryKeyFailureKind kind;
 }
 
 /// Recovery key data stored in Firestore.
@@ -285,7 +293,9 @@ class RecoveryKeyService {
     // Verify current passphrase first
     final isValid = await verifyPassphrase(currentPassphrase);
     if (!isValid) {
-      throw StateError('Current passphrase is incorrect');
+      throw const RecoveryKeyException(
+        RecoveryKeyFailureKind.incorrectPassphrase,
+      );
     }
 
     await createRecoveryKey(newPassphrase, hint: hint);
@@ -303,7 +313,9 @@ class RecoveryKeyService {
     // Verify current passphrase first
     final isValid = await verifyPassphrase(currentPassphrase);
     if (!isValid) {
-      throw StateError('Current passphrase is incorrect');
+      throw const RecoveryKeyException(
+        RecoveryKeyFailureKind.incorrectPassphrase,
+      );
     }
 
     await _recoveryKeyRef.delete();
@@ -319,12 +331,12 @@ class RecoveryKeyService {
   /// Throws [UnsupportedError] if trying to recover Argon2id key on web.
   Future<bool> recoverWithPassphrase(
     String passphrase, {
-    Function(String)? onStatusChange,
+    ValueChanged<RecoveryProgress>? onStatusChange,
   }) async {
     if (_currentUser == null) throw StateError('User not logged in');
 
     AppLogger.log('E2EE: Attempting recovery with passphrase');
-    onStatusChange?.call('Fetching recovery data...');
+    onStatusChange?.call(RecoveryProgress.checkingAccount);
 
     // Get recovery key data
     final doc = await _recoveryKeyRef.get();
@@ -337,7 +349,7 @@ class RecoveryKeyService {
     final salt = base64Decode(recoveryData.salt);
 
     try {
-      onStatusChange?.call('Decrypting recovery key...');
+      onStatusChange?.call(RecoveryProgress.verifying);
       // Try to decrypt with the appropriate algorithm(s)
       final umk = await _tryDecryptWithAlgorithms(
         passphrase,
@@ -350,7 +362,7 @@ class RecoveryKeyService {
         return false;
       }
 
-      onStatusChange?.call('Registering device...');
+      onStatusChange?.call(RecoveryProgress.addingDevice);
       // Now we need to register this device with the recovered UMK
       await _registerDeviceWithRecoveredUMK(
         umk,
@@ -371,10 +383,10 @@ class RecoveryKeyService {
   /// Registers a new device using a recovered UMK.
   Future<void> _registerDeviceWithRecoveredUMK(
     Uint8List umk, {
-    Function(String)? onStatusChange,
+    ValueChanged<RecoveryProgress>? onStatusChange,
   }) async {
     AppLogger.log('E2EE: Registering device with recovered UMK');
-    onStatusChange?.call('Setting up encryption keys...');
+    onStatusChange?.call(RecoveryProgress.protectingNotes);
 
     // Check if there's an existing pending device that needs to be cleaned up
     final existingDeviceId = await _secureStorage.getDeviceId();
@@ -395,7 +407,7 @@ class RecoveryKeyService {
       await _secureStorage.clearAll();
     }
 
-    onStatusChange?.call('Generating device keys...');
+    onStatusChange?.call(RecoveryProgress.protectingNotes);
     // Generate device keypair
     final keyPair = await KeyExchange.generateKeyPair();
 
@@ -416,7 +428,7 @@ class RecoveryKeyService {
     final deviceName = await DeviceInfo.getDeviceName();
     final platform = DeviceInfo.getCurrentPlatform();
 
-    onStatusChange?.call('Saving device to cloud...');
+    onStatusChange?.call(RecoveryProgress.addingDevice);
     // Store device document in Firestore FIRST
     // This ensures we don't have local keys without a server record
     await _userRef.collection('devices').doc(deviceId).set({
@@ -431,7 +443,7 @@ class RecoveryKeyService {
       'recovered': true, // Mark as recovered device
     });
 
-    onStatusChange?.call('Saving encryption keys locally...');
+    onStatusChange?.call(RecoveryProgress.protectingNotes);
     // Store device info locally AFTER Firestore write succeeds
     await _secureStorage.storeDevicePrivateKey(keyPair.privateKey);
     await _secureStorage.storeDevicePublicKey(keyPair.publicKey);
@@ -441,7 +453,7 @@ class RecoveryKeyService {
     // Update device manager state - set both the cached UMK and the flag
     _deviceManager.setCachedUMK(umk);
 
-    onStatusChange?.call('Completing setup...');
+    onStatusChange?.call(RecoveryProgress.almostThere);
     // Start listening for status changes and pending approvals
     await _deviceManager.startListeningForCurrentDevice();
 

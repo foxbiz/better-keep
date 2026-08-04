@@ -4,6 +4,8 @@ import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/export_data_service.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -65,14 +67,9 @@ class NoteExportService {
     }
   }
 
-  /// Get format display name
-  String getFormatName(ExportFormat format) {
-    return format.name[0].toUpperCase() + format.name.substring(1);
-  }
-
   /// Sanitize filename for saving
   String sanitizeFileName(String name) {
-    if (name.isEmpty) return 'untitled';
+    if (name.isEmpty) name = currentAppLocalizations().untitled;
     return name
         .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
         .replaceAll(RegExp(r'\s+'), '_')
@@ -89,7 +86,8 @@ class NoteExportService {
   ) async {
     try {
       final content = getExportContent(note, controller, format);
-      final fileName = sanitizeFileName(note.title ?? 'Untitled');
+      final l10n = currentAppLocalizations();
+      final fileName = sanitizeFileName(note.title ?? l10n.untitled);
       final ext = getFileExtension(format);
       final mimeType = getMimeType(format);
       final contentBytes = utf8.encode(content);
@@ -116,8 +114,9 @@ class NoteExportService {
       await SharePlus.instance.share(
         ShareParams(files: [XFile(filePath)], title: '$fileName$ext'),
       );
-    } catch (e) {
-      snackbar('Failed to save: $e', Colors.red);
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to export note', error, stackTrace);
+      snackbar(currentAppLocalizations().failedToExportNote, Colors.red);
     }
   }
 
@@ -130,10 +129,10 @@ class NoteExportService {
     try {
       final content = getExportContent(note, controller, format);
       await Clipboard.setData(ClipboardData(text: content));
-      final formatName = getFormatName(format);
-      snackbar('Copied as $formatName', Colors.green);
-    } catch (e) {
-      snackbar('Failed to copy: $e', Colors.red);
+      snackbar(currentAppLocalizations().copiedToClipboard, Colors.green);
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to copy exported note', error, stackTrace);
+      snackbar(currentAppLocalizations().failedToCopyNote, Colors.red);
     }
   }
 }

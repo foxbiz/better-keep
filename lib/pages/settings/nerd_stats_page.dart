@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show compute, kDebugMode;
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:better_keep/services/file_system.dart';
@@ -339,8 +340,8 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                 const Divider(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: NoteSyncService().statusMessage,
+                  child: ValueListenableBuilder<SyncProgress>(
+                    valueListenable: NoteSyncService().syncStatus,
                     builder: (context, status, child) {
                       if (status.isEmpty) return const SizedBox.shrink();
                       return Card(
@@ -348,7 +349,7 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Text(
-                            "Status: $status",
+                            "Status: ${status.phase.name}",
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),

@@ -28,13 +28,13 @@ void main() {
     ReminderDeliveryState state, {
     ReminderType type = ReminderType.notification,
     int rowId = 1,
-    String? message,
+    ReminderDeliveryReason? reason,
   }) => ReminderUpdateResult(
     rowId: rowId,
     savedReminder: rowId < 0
         ? null
         : Reminder(dateTime: DateTime(2026, 7, 20, 10), type: type),
-    delivery: ReminderScheduleResult(state, message: message),
+    delivery: ReminderScheduleResult(state, reason: reason),
   );
 
   testWidgets('shows localized scheduled feedback', (tester) async {
@@ -106,7 +106,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('failed feedback preserves a specific scheduling message', (
+  testWidgets('failed feedback maps a stable reason to localized guidance', (
     tester,
   ) async {
     await pumpHost(tester);
@@ -118,12 +118,17 @@ void main() {
       hostContext,
       result(
         ReminderDeliveryState.failed,
-        message: 'Timezone could not be resolved.',
+        reason: ReminderDeliveryReason.timeZoneUnavailable,
       ),
     );
     await tester.pump();
 
-    expect(find.text('Timezone could not be resolved.'), findsOneWidget);
+    expect(
+      find.text(
+        "Reminder saved, but this device's timezone could not be resolved. Check the device time settings and try again.",
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('does not show stale or unpersisted feedback', (tester) async {

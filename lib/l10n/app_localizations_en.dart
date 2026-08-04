@@ -12,6 +12,309 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get unableToStartApp => 'Unable to start Better Keep';
+
+  @override
+  String get startupRetryMessage =>
+      'Something went wrong while opening the app. Please try again.';
+
+  @override
+  String get startupRestartMessage =>
+      'Something went wrong while opening the app. Close and reopen it to try again.';
+
+  @override
+  String get accountNotFound => 'No account was found with this email.';
+
+  @override
+  String get invalidCredentials =>
+      'The email or password is incorrect. Please try again.';
+
+  @override
+  String get accountDisabled =>
+      'This account is unavailable. Please contact support.';
+
+  @override
+  String get paymentInProgress => 'Payment in progress';
+
+  @override
+  String get completePaymentInBrowser =>
+      'Complete the payment in your browser. This message will close automatically when you are finished.';
+
+  @override
+  String get legal => 'Legal';
+
+  @override
+  String get termsOfUse => 'Terms of Use';
+
+  @override
+  String get privacyPolicy => 'Privacy Policy';
+
+  @override
+  String get appLogoSemantics => 'Better Keep app logo';
+
+  @override
+  String get selectColor => 'Select color';
+
+  @override
+  String get unsupportedTextFile =>
+      'This file type isn’t supported. Choose a .txt or .md file.';
+
+  @override
+  String get sharedFileEmpty => 'This file is empty.';
+
+  @override
+  String get fileNotFound => 'This file could not be found.';
+
+  @override
+  String get fileTooLarge =>
+      'This file is too large. Choose a file smaller than 5 MB.';
+
+  @override
+  String get couldNotReadFile =>
+      'This file could not be read. Please try another file.';
+
+  @override
+  String get couldNotOpenFile =>
+      'This file could not be opened. Please try again.';
+
+  @override
+  String get noteSaved => 'Note saved';
+
+  @override
+  String get untitled => 'Untitled';
+
+  @override
+  String get failedToExportNote =>
+      'Couldn’t export the note. Please try again.';
+
+  @override
+  String get failedToCopyNote => 'Couldn’t copy the note. Please try again.';
+
+  @override
+  String get failedToDeleteSketch =>
+      'Couldn’t delete the sketch. Please try again.';
+
+  @override
+  String get lockedNoteReminder => 'Reminder for a locked note';
+
+  @override
+  String get notesReminder => 'Better Keep note reminder';
+
+  @override
+  String get blankPage => 'Blank';
+
+  @override
+  String get linedPage => 'Lined';
+
+  @override
+  String get doubleLinedPage => 'Double lined';
+
+  @override
+  String get gridPage => 'Grid';
+
+  @override
+  String get dotGridPage => 'Dot grid';
+
+  @override
+  String get dataExportTitle => 'Better Keep data export';
+
+  @override
+  String get dataExportShareText => 'My Better Keep data export';
+
+  @override
+  String get noteReminders => 'Note reminders';
+
+  @override
+  String get noteRemindersDescription => 'Time-sensitive reminders for notes';
+
+  @override
+  String get deviceApproval => 'Device approval';
+
+  @override
+  String get deviceApprovalDescription =>
+      'Notifications for device approval requests';
+
+  @override
+  String get newDeviceApprovalRequest => 'New device approval request';
+
+  @override
+  String deviceWantsAccess(String deviceName, String platform) {
+    return '$deviceName ($platform) wants to access your notes';
+  }
+
+  @override
+  String get sharedText => 'Shared text';
+
+  @override
+  String get sharedFile => 'Shared file';
+
+  @override
+  String get user => 'User';
+
+  @override
+  String get thirtyDaysFromNow => '30 days from now';
+
+  @override
+  String get helpRequestSubject => 'Better Keep - Help request';
+
+  @override
+  String get faqCreateNoteQuestion => 'How do I create a new note?';
+
+  @override
+  String get faqCreateNoteAnswer =>
+      'Tap the + button at the bottom of the home screen. You can add text, images, audio, and more.';
+
+  @override
+  String get faqShortcutsQuestion => 'How do I use quick shortcuts?';
+
+  @override
+  String get faqShortcutsAnswer =>
+      'Press and hold the + button to reveal shortcuts for an image, audio, sketch, or to-do. Slide to the shortcut you want and release. A quick tap opens a blank note.';
+
+  @override
+  String get faqLabelsQuestion => 'How do I organize notes with labels?';
+
+  @override
+  String get faqLabelsAnswer =>
+      'Open a note and tap the label icon to add or create labels. You can filter notes by label from the side menu.';
+
+  @override
+  String get faqReminderQuestion => 'How do I set a reminder?';
+
+  @override
+  String get faqReminderAnswer =>
+      'Open a note and tap the reminder icon to choose a date and time.';
+
+  @override
+  String get faqArchiveDeleteQuestion => 'How do I archive or delete notes?';
+
+  @override
+  String get faqArchiveDeleteAnswer =>
+      'Press and hold a note to select it, then use the archive or delete action. Deleted notes move to Trash first and can be permanently deleted there.';
+
+  @override
+  String get faqThemeQuestion => 'How do I change the app theme?';
+
+  @override
+  String get faqThemeAnswer =>
+      'Open Settings and choose the theme options you prefer.';
+
+  @override
+  String get faqSyncQuestion => 'How do I sync notes across devices?';
+
+  @override
+  String get faqSyncAnswer =>
+      'Sign in to securely sync your notes across your devices.';
+
+  @override
+  String get faqReminderTimesQuestion =>
+      'How do I set morning, afternoon, and evening times?';
+
+  @override
+  String get faqReminderTimesAnswer =>
+      'Open Settings and choose Reminder Time Settings to customize those times.';
+
+  @override
+  String get faqAlarmSoundQuestion => 'How do I change the alarm sound?';
+
+  @override
+  String get faqAlarmSoundAnswer =>
+      'Open Settings, select Alarm Sound, and choose one of the available sounds.';
+
+  @override
+  String get faqSecurityQuestion => 'Is my data secure?';
+
+  @override
+  String get faqSecurityAnswer =>
+      'Your notes are stored securely. When sync protection is enabled, end-to-end encryption protects your synced data.';
+
+  @override
+  String get faqApproveDeviceQuestion => 'How do I approve a new device?';
+
+  @override
+  String get faqApproveDeviceAnswer =>
+      'Open Better Keep on an already approved device. In your profile, review Devices Waiting for Approval, then approve or deny the request.';
+
+  @override
+  String get faqDeleteAccountQuestion => 'How do I delete my account?';
+
+  @override
+  String get faqDeleteAccountAnswer =>
+      'Open your profile and choose Delete Account. After email verification, deletion is scheduled for 30 days later and your devices are signed out.';
+
+  @override
+  String get faqCancelDeletionQuestion => 'Can I cancel account deletion?';
+
+  @override
+  String get faqCancelDeletionAnswer =>
+      'Yes. Sign back in within 30 days to cancel the scheduled deletion and restore access to your account.';
+
+  @override
+  String get faqDeletionEffectsQuestion =>
+      'What happens when I delete my account?';
+
+  @override
+  String get faqDeletionEffectsAnswer =>
+      'Your devices are signed out immediately. After 30 days, your notes, attachments, labels, and personal data are permanently deleted and cannot be recovered.';
+
+  @override
+  String get faqExportBeforeDeletionQuestion =>
+      'Can I export my data before deleting my account?';
+
+  @override
+  String get faqExportBeforeDeletionAnswer =>
+      'Yes. After scheduling deletion, you can export your data. Download it before the 30-day period ends.';
+
+  @override
+  String get iosAppAvailable =>
+      'Better Keep is available on the App Store. Get the app for notifications, widgets, and more.';
+
+  @override
+  String get openAppStore => 'Open App Store';
+
+  @override
+  String get tasks => 'Tasks';
+
+  @override
+  String get unknown => 'Unknown';
+
+  @override
+  String get exportAttachments => 'Attachments';
+
+  @override
+  String get created => 'Created';
+
+  @override
+  String get updated => 'Updated';
+
+  @override
+  String get oneTime => 'One time';
+
+  @override
+  String get lockedExportExplanation =>
+      'These notes are locked. Their protected content is preserved in this export and can only be opened with the original PIN.';
+
+  @override
+  String dataExportReadme(String exportedAt) {
+    return 'Better Keep - Data Export\n\nThis archive contains your exported notes, labels, attachments, and export details. Notes you can open are also provided as Markdown files. Locked notes remain protected and require their original PIN.\n\nFor help, contact contact@betterkeep.app.\n\nExported on: $exportedAt';
+  }
+
+  @override
+  String get paymentSuccessful => 'Payment successful';
+
+  @override
+  String get paymentSuccessfulReturn =>
+      'You can close this window and return to Better Keep.';
+
+  @override
+  String get paymentCancelledClose =>
+      'Payment was cancelled. You can close this window.';
+
+  @override
+  String get appleSignInVerificationFailed =>
+      'Apple sign-in could not be verified. Please try again.';
+
+  @override
   String get reminderType => 'Reminder type';
 
   @override
@@ -2043,6 +2346,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get webBrowser => 'Web Browser';
+
+  @override
+  String get unknownDevice => 'Unknown device';
 
   @override
   String get debugDeleteSubscription => 'DEBUG: Delete Subscription';

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:better_keep/services/monetization/razorpay_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -189,6 +190,7 @@ Future<RazorpayPaymentResult> _openHostedCheckout({
         final status = queryParams['status'];
 
         AppLogger.log('RazorpayStub: Received callback with status: $status');
+        final l10n = currentAppLocalizations();
 
         // Send success response page
         request.response
@@ -198,10 +200,10 @@ Future<RazorpayPaymentResult> _openHostedCheckout({
             _generateResultHtml(
               success: status == 'success',
               message: status == 'success'
-                  ? 'Payment successful! You can close this window and return to the app.'
+                  ? l10n.paymentSuccessfulReturn
                   : status == 'cancelled'
-                  ? 'Payment cancelled. You can close this window.'
-                  : queryParams['message'] ?? 'Payment failed.',
+                  ? l10n.paymentCancelledClose
+                  : l10n.somethingWentWrongTryAgain,
             ),
           );
         await request.response.close();
@@ -293,25 +295,22 @@ void _showWaitingDialog() {
     context: context,
     barrierDismissible: false,
     builder: (context) => AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          SizedBox(
+          const SizedBox(
             width: 24,
             height: 24,
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          SizedBox(width: 16),
-          Text('Payment in Progress'),
+          const SizedBox(width: 16),
+          Text(context.l10n.paymentInProgress),
         ],
       ),
-      content: const Text(
-        'Please complete the payment in your browser.\n\n'
-        'This dialog will close automatically once the payment is complete.',
-      ),
+      content: Text(context.l10n.completePaymentInBrowser),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
       ],
     ),
@@ -331,16 +330,19 @@ void _dismissWaitingDialog() {
 
 /// Generate result HTML page shown after payment
 String _generateResultHtml({required bool success, required String message}) {
+  final l10n = currentAppLocalizations();
   final color = success ? '#4CAF50' : '#f44336';
   final icon = success ? '✓' : '✕';
-  final title = success ? 'Payment Successful!' : 'Payment Failed';
+  final title = success ? l10n.paymentSuccessful : l10n.paymentFailed;
+  final safeTitle = _escapeHtml(title);
+  final safeMessage = _escapeHtml(message);
 
   return '''
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>$title</title>
+  <title>$safeTitle</title>
   <style>
     body {
       margin: 0;
@@ -382,8 +384,8 @@ String _generateResultHtml({required bool success, required String message}) {
 <body>
   <div class="container">
     <div class="icon">$icon</div>
-    <h1>$title</h1>
-    <p>$message</p>
+    <h1>$safeTitle</h1>
+    <p>$safeMessage</p>
   </div>
   <script>
     // Try to close the window after a delay
@@ -411,6 +413,16 @@ String _generateCheckoutHtml({
   final description = _escapeJs(params['description'] ?? '');
   final email = _escapeJs(params['email'] ?? '');
   final theme = _escapeJs(params['theme'] ?? '#FFA726');
+  final l10n = currentAppLocalizations();
+  final paymentTitle = _escapeHtml(l10n.paymentInProgress);
+  final gettingReady = _escapeHtml(l10n.gettingReady);
+  final gettingReadyMarkupJs = _escapeJs(
+    '<p>${_escapeHtml(l10n.gettingReady)}</p>',
+  );
+  final paymentFailed = _escapeHtml(l10n.paymentFailed);
+  final genericFailure = _escapeHtml(l10n.somethingWentWrongTryAgain);
+  final retry = _escapeHtml(l10n.retry);
+  final genericFailureJs = _escapeJs(l10n.somethingWentWrongTryAgain);
 
   final isSubscription = type == 'subscription';
 
@@ -420,7 +432,7 @@ String _generateCheckoutHtml({
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment - ${_escapeHtml(params['name'] ?? 'Better Keep')}</title>
+  <title>$paymentTitle - ${_escapeHtml(params['name'] ?? 'Better Keep')}</title>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
     body {
@@ -520,18 +532,18 @@ String _generateCheckoutHtml({
   <div class="container">
     <div class="logo">📝</div>
     <h1>Better Keep Notes</h1>
-    <p class="subtitle">Secure Payment</p>
+    <p class="subtitle">$paymentTitle</p>
     <div class="test-badge">⚠️ TEST MODE</div>
 
     <div class="loading" id="loading">
       <div class="spinner"></div>
-      <p>Opening payment window...</p>
+      <p>$gettingReady</p>
     </div>
 
     <div class="error" id="error" style="display: none;">
-      <h2>Payment Error</h2>
-      <p id="error-message">Something went wrong.</p>
-      <button class="btn" onclick="location.reload()">Try Again</button>
+      <h2>$paymentFailed</h2>
+      <p id="error-message">$genericFailure</p>
+      <button class="btn" onclick="location.reload()">$retry</button>
     </div>
   </div>
 
@@ -609,12 +621,12 @@ String _generateCheckoutHtml({
       });
 
       setTimeout(() => {
-        document.getElementById('loading').innerHTML = '<p>Razorpay checkout should open automatically.</p>';
+        document.getElementById('loading').innerHTML = '$gettingReadyMarkupJs';
         rzp.open();
       }, 500);
 
     } catch (e) {
-      showError(e.message || 'Failed to initialize payment');
+      showError('$genericFailureJs');
     }
   </script>
 </body>

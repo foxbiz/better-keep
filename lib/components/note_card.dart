@@ -7,6 +7,7 @@ import 'package:better_keep/components/note_image_grid.dart';
 import 'package:better_keep/dialogs/unlock_note_dialog.dart';
 import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/note_recording.dart';
@@ -17,6 +18,7 @@ import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
@@ -412,7 +414,7 @@ class _NoteCardState extends State<NoteCard>
   bool _isSyncingOutgoing = false;
   bool _isSyncingIncoming = false;
   bool _isSyncFailed = false;
-  String? _syncStatus;
+  SyncProgress? _syncStatus;
   bool _reorderGestureMoved = false;
   final NoteCardBodyCache _bodyCache = NoteCardBodyCache();
   QuillController? get _controller => _bodyCache.controller;
@@ -1172,7 +1174,9 @@ class _NoteCardState extends State<NoteCard>
                         Icon(Icons.push_pin, size: 14.0, color: secondaryColor),
                       if (_isSyncFailed)
                         Tooltip(
-                          message: _syncStatus ?? context.l10n.syncFailed,
+                          message:
+                              _syncStatus?.localized(context.l10n) ??
+                              context.l10n.syncFailed,
                           child: GestureDetector(
                             onTap: () async {
                               final noteId = widget.note.id;
@@ -1215,7 +1219,7 @@ class _NoteCardState extends State<NoteCard>
                     Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
-                        _syncStatus!,
+                        _syncStatus!.localized(context.l10n),
                         style: TextStyle(
                           fontSize: 9,
                           color: Colors.blue,

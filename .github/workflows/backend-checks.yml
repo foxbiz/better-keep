@@ -61,7 +61,7 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          npm run ci:functions
+          npm run functions ci
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -79,30 +79,31 @@ jobs:
         run: flutter pub get
 
       - name: Analyze Flutter sources
-        run: npm run analyze:firebase-environment
+        run: npm run check analyze
 
       - name: Run client policy and unit suites
         env:
           CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
           CHROMEDRIVER_BINARY: ${{ steps.setup-chrome.outputs.chromedriver-path }}
         run: |
-          npm run test:windows-build-policy
-          npm run test:oauth-recovery
-          npm run test:client-sync
-          npm run test:firebase-emulator-config
-          npm run test:firebase-apple
-          npm run test:firebase-environment-web
+          npm test windows-build-policy
+          npm test localization
+          npm test oauth-recovery
+          npm test client-sync
+          npm test firebase-emulator-config
+          npm test firebase-apple
+          npm test firebase-environment-web
 
       - name: Validate runtime and Functions
         run: |
           node --version
           java -version
-          npm run firebase:runtime-check
-          npm run firebase:emulator-runtime-check
-          npm run test:firebase-runtime
-          npm run test:functions
-          npm run audit:runtime
-          npm run audit:functions
+          npm run firebase runtime-check
+          npm run firebase emulator-runtime-check
+          node --test test/tool/build_tasks_test.mjs test/tool/check_tasks_test.mjs test/tool/deploy_tasks_test.mjs test/tool/dev_tasks_test.mjs test/tool/firebase_tasks_test.mjs test/tool/functions_tasks_test.mjs test/tool/process_runner_test.mjs test/tool/release_tasks_test.mjs test/tool/test_tasks_test.mjs
+          npm test firebase-runtime
+          npm test functions
+          npm run check audit
 
       - name: Run emulator suites without legacy runtime warnings
         shell: bash
@@ -110,9 +111,9 @@ jobs:
           set -euo pipefail
           runtime_log="${RUNNER_TEMP}/firebase-emulator-runtime.log"
           {
-            npm run test:firebase-rules
-            npm run test:firebase-emulator-functions
-            npm run test:firebase-emulator-review
+            npm test firebase-rules
+            npm test firebase-emulator-functions
+            npm test firebase-emulator-review
           } 2>&1 | tee "${runtime_log}"
 
           if grep -E 'DEP0169|Unsafe::arrayBaseOffset' "${runtime_log}"; then

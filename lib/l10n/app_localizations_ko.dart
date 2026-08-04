@@ -12,6 +12,289 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get unableToStartApp => 'Better Keep을 시작할 수 없습니다';
+
+  @override
+  String get startupRetryMessage => '앱을 여는 중 문제가 발생했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get startupRestartMessage => '앱을 여는 중 문제가 발생했습니다. 앱을 닫았다가 다시 열어 주세요.';
+
+  @override
+  String get accountNotFound => '이 이메일로 등록된 계정을 찾을 수 없습니다.';
+
+  @override
+  String get invalidCredentials => '이메일 또는 비밀번호가 올바르지 않습니다. 다시 시도해 주세요.';
+
+  @override
+  String get accountDisabled => '이 계정을 사용할 수 없습니다. 지원팀에 문의해 주세요.';
+
+  @override
+  String get paymentInProgress => '결제 진행 중';
+
+  @override
+  String get completePaymentInBrowser =>
+      '브라우저에서 결제를 완료해 주세요. 완료되면 이 메시지가 자동으로 닫힙니다.';
+
+  @override
+  String get legal => '법적 고지';
+
+  @override
+  String get termsOfUse => '이용 약관';
+
+  @override
+  String get privacyPolicy => '개인정보 처리방침';
+
+  @override
+  String get appLogoSemantics => 'Better Keep 앱 로고';
+
+  @override
+  String get selectColor => '색상 선택';
+
+  @override
+  String get unsupportedTextFile =>
+      '지원하지 않는 파일 형식입니다. .txt 또는 .md 파일을 선택해 주세요.';
+
+  @override
+  String get sharedFileEmpty => '이 파일은 비어 있습니다.';
+
+  @override
+  String get fileNotFound => '파일을 찾을 수 없습니다.';
+
+  @override
+  String get fileTooLarge => '파일이 너무 큽니다. 5MB보다 작은 파일을 선택해 주세요.';
+
+  @override
+  String get couldNotReadFile => '파일을 읽을 수 없습니다. 다른 파일을 시도해 주세요.';
+
+  @override
+  String get couldNotOpenFile => '파일을 열 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get noteSaved => '메모가 저장되었습니다';
+
+  @override
+  String get untitled => '제목 없음';
+
+  @override
+  String get failedToExportNote => '메모를 내보낼 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get failedToCopyNote => '메모를 복사할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get failedToDeleteSketch => '스케치를 삭제할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get lockedNoteReminder => '잠긴 메모 알림';
+
+  @override
+  String get notesReminder => 'Better Keep 메모 알림';
+
+  @override
+  String get blankPage => '빈 페이지';
+
+  @override
+  String get linedPage => '줄';
+
+  @override
+  String get doubleLinedPage => '이중 줄';
+
+  @override
+  String get gridPage => '격자';
+
+  @override
+  String get dotGridPage => '점 격자';
+
+  @override
+  String get dataExportTitle => 'Better Keep 데이터 내보내기';
+
+  @override
+  String get dataExportShareText => '내 Better Keep 데이터 내보내기';
+
+  @override
+  String get noteReminders => '메모 알림';
+
+  @override
+  String get noteRemindersDescription => '메모의 시간 지정 알림';
+
+  @override
+  String get deviceApproval => '기기 승인';
+
+  @override
+  String get deviceApprovalDescription => '기기 승인 요청 알림';
+
+  @override
+  String get newDeviceApprovalRequest => '새 기기 승인 요청';
+
+  @override
+  String deviceWantsAccess(String deviceName, String platform) {
+    return '$deviceName($platform)에서 메모에 접근하려고 합니다';
+  }
+
+  @override
+  String get sharedText => '공유된 텍스트';
+
+  @override
+  String get sharedFile => '공유된 파일';
+
+  @override
+  String get user => '사용자';
+
+  @override
+  String get thirtyDaysFromNow => '지금부터 30일 후';
+
+  @override
+  String get helpRequestSubject => 'Better Keep - 도움 요청';
+
+  @override
+  String get faqCreateNoteQuestion => '새 메모는 어떻게 만드나요?';
+
+  @override
+  String get faqCreateNoteAnswer =>
+      '홈 화면 아래의 + 버튼을 누르세요. 텍스트, 이미지, 오디오 등을 추가할 수 있습니다.';
+
+  @override
+  String get faqShortcutsQuestion => '빠른 바로가기는 어떻게 사용하나요?';
+
+  @override
+  String get faqShortcutsAnswer =>
+      '+ 버튼을 길게 누르면 이미지, 오디오, 스케치, 할 일 바로가기가 표시됩니다. 원하는 항목으로 밀고 손을 떼세요. 짧게 누르면 빈 메모가 열립니다.';
+
+  @override
+  String get faqLabelsQuestion => '라벨로 메모를 정리하려면 어떻게 하나요?';
+
+  @override
+  String get faqLabelsAnswer =>
+      '메모를 열고 라벨 아이콘을 눌러 라벨을 추가하거나 만드세요. 사이드 메뉴에서 라벨별로 메모를 필터링할 수 있습니다.';
+
+  @override
+  String get faqReminderQuestion => '알림은 어떻게 설정하나요?';
+
+  @override
+  String get faqReminderAnswer => '메모를 열고 알림 아이콘을 눌러 날짜와 시간을 선택하세요.';
+
+  @override
+  String get faqArchiveDeleteQuestion => '메모를 보관하거나 삭제하려면 어떻게 하나요?';
+
+  @override
+  String get faqArchiveDeleteAnswer =>
+      '메모를 길게 눌러 선택한 다음 보관 또는 삭제를 누르세요. 삭제된 메모는 먼저 휴지통으로 이동하며 그곳에서 영구 삭제할 수 있습니다.';
+
+  @override
+  String get faqThemeQuestion => '앱 테마는 어떻게 변경하나요?';
+
+  @override
+  String get faqThemeAnswer => '설정을 열고 원하는 테마 옵션을 선택하세요.';
+
+  @override
+  String get faqSyncQuestion => '기기 간에 메모를 동기화하려면 어떻게 하나요?';
+
+  @override
+  String get faqSyncAnswer => '로그인하면 모든 기기에서 메모를 안전하게 동기화할 수 있습니다.';
+
+  @override
+  String get faqReminderTimesQuestion => '아침, 오후, 저녁 시간은 어떻게 설정하나요?';
+
+  @override
+  String get faqReminderTimesAnswer => '설정에서 알림 시간 설정을 선택하여 시간을 조정하세요.';
+
+  @override
+  String get faqAlarmSoundQuestion => '알람 소리는 어떻게 변경하나요?';
+
+  @override
+  String get faqAlarmSoundAnswer => '설정에서 알람 소리를 선택한 다음 사용 가능한 소리를 고르세요.';
+
+  @override
+  String get faqSecurityQuestion => '내 데이터는 안전한가요?';
+
+  @override
+  String get faqSecurityAnswer =>
+      '메모는 안전하게 저장됩니다. 동기화 보호를 켜면 종단간 암호화로 동기화된 데이터를 보호합니다.';
+
+  @override
+  String get faqApproveDeviceQuestion => '새 기기는 어떻게 승인하나요?';
+
+  @override
+  String get faqApproveDeviceAnswer =>
+      '이미 승인된 기기에서 Better Keep을 여세요. 프로필의 승인 대기 중인 기기를 확인한 다음 요청을 승인하거나 거부하세요.';
+
+  @override
+  String get faqDeleteAccountQuestion => '계정은 어떻게 삭제하나요?';
+
+  @override
+  String get faqDeleteAccountAnswer =>
+      '프로필을 열고 계정 삭제를 선택하세요. 이메일 확인 후 30일 뒤 삭제가 예약되며 모든 기기에서 로그아웃됩니다.';
+
+  @override
+  String get faqCancelDeletionQuestion => '계정 삭제를 취소할 수 있나요?';
+
+  @override
+  String get faqCancelDeletionAnswer =>
+      '네. 30일 이내에 다시 로그인하면 예약된 삭제가 취소되고 계정 접근이 복원됩니다.';
+
+  @override
+  String get faqDeletionEffectsQuestion => '계정을 삭제하면 어떻게 되나요?';
+
+  @override
+  String get faqDeletionEffectsAnswer =>
+      '모든 기기에서 즉시 로그아웃됩니다. 30일 뒤 메모, 첨부 파일, 라벨, 개인 데이터가 영구 삭제되며 복구할 수 없습니다.';
+
+  @override
+  String get faqExportBeforeDeletionQuestion => '계정을 삭제하기 전에 데이터를 내보낼 수 있나요?';
+
+  @override
+  String get faqExportBeforeDeletionAnswer =>
+      '네. 삭제 예약 후 데이터를 내보낼 수 있습니다. 30일이 끝나기 전에 다운로드하세요.';
+
+  @override
+  String get iosAppAvailable =>
+      'Better Keep은 App Store에서 받을 수 있습니다. 알림, 위젯 등을 이용해 보세요.';
+
+  @override
+  String get openAppStore => 'App Store 열기';
+
+  @override
+  String get tasks => '할 일';
+
+  @override
+  String get unknown => '알 수 없음';
+
+  @override
+  String get exportAttachments => '첨부 파일';
+
+  @override
+  String get created => '생성';
+
+  @override
+  String get updated => '수정';
+
+  @override
+  String get oneTime => '한 번';
+
+  @override
+  String get lockedExportExplanation =>
+      '이 메모는 잠겨 있습니다. 보호된 내용은 내보내기에 보존되며 원래 PIN으로만 열 수 있습니다.';
+
+  @override
+  String dataExportReadme(String exportedAt) {
+    return 'Better Keep - 데이터 내보내기\n\n이 압축 파일에는 내보낸 메모, 라벨, 첨부 파일 및 내보내기 정보가 포함됩니다. 열 수 있는 메모는 Markdown 파일로도 제공됩니다. 잠긴 메모는 계속 보호되며 원래 PIN이 필요합니다.\n\n도움이 필요하면 contact@betterkeep.app으로 문의하세요.\n\n내보낸 날짜: $exportedAt';
+  }
+
+  @override
+  String get paymentSuccessful => '결제가 완료되었습니다';
+
+  @override
+  String get paymentSuccessfulReturn => '이 창을 닫고 Better Keep으로 돌아갈 수 있습니다.';
+
+  @override
+  String get paymentCancelledClose => '결제가 취소되었습니다. 이 창을 닫아도 됩니다.';
+
+  @override
+  String get appleSignInVerificationFailed =>
+      'Apple 로그인을 확인할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
   String get reminderType => '리마인더 유형';
 
   @override
@@ -1997,6 +2280,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get webBrowser => '웹 브라우저';
+
+  @override
+  String get unknownDevice => '알 수 없는 기기';
 
   @override
   String get debugDeleteSubscription => '디버그: 구독 삭제';

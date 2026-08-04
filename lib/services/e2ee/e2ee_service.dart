@@ -5,6 +5,7 @@
 library;
 
 import 'package:better_keep/services/async_initialization_gate.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/note_encryption.dart';
@@ -62,8 +63,8 @@ class E2EEService {
     E2EEStatus.notInitialized,
   );
 
-  /// Detailed status message for UI display during initialization.
-  final ValueNotifier<String> statusMessage = ValueNotifier('');
+  /// Semantic progress for UI display during initialization.
+  final ValueNotifier<ProtectionProgress?> statusProgress = ValueNotifier(null);
 
   /// Notifier to indicate recovery key setup is needed (after fresh E2EE setup).
   final ValueNotifier<bool> needsRecoveryKeySetup = ValueNotifier(false);
@@ -72,8 +73,9 @@ class E2EEService {
   /// Used by sync progress widget to show verification status.
   final ValueNotifier<bool> isVerifyingInBackground = ValueNotifier(false);
 
-  /// Message shown during background verification.
-  final ValueNotifier<String> backgroundVerificationMessage = ValueNotifier('');
+  /// Semantic progress shown during background verification.
+  final ValueNotifier<ProtectionProgress?> backgroundVerificationProgress =
+      ValueNotifier(null);
 
   /// Tracks whether status change listeners have been registered.
   bool _listenersRegistered = false;
@@ -121,7 +123,7 @@ class E2EEService {
         // This allows app.dart to show Home right away
         status.value = E2EEStatus.verifyingInBackground;
         isVerifyingInBackground.value = true;
-        backgroundVerificationMessage.value = 'Verifying encryption...';
+        backgroundVerificationProgress.value = ProtectionProgress.verifying;
         return true;
       }
 
@@ -167,7 +169,7 @@ class E2EEService {
         return;
       }
 
-      statusMessage.value = 'Getting ready...';
+      statusProgress.value = ProtectionProgress.gettingReady;
 
       // Initialize secure storage
       await _secureStorage.init();
@@ -176,14 +178,14 @@ class E2EEService {
       final wasInterrupted = await _secureStorage.wasSignInInterrupted();
       if (wasInterrupted) {
         AppLogger.log('E2EE: Detected interrupted sign-in, cleaning up...');
-        statusMessage.value = 'Resuming setup...';
+        statusProgress.value = ProtectionProgress.gettingReady;
         // Clear the flag and any partial state
         await _secureStorage.setSignInProgress(false);
         await _secureStorage.clearDeviceStatus();
         // Continue with fresh initialization
       }
 
-      statusMessage.value = 'Checking your account...';
+      statusProgress.value = ProtectionProgress.checkingAccount;
 
       // Check if this device has keys first (before using cached status)
       final hasKeys = await _secureStorage.hasDeviceKeys();
@@ -200,7 +202,8 @@ class E2EEService {
               // This allows immediate access to notes while we verify with server
               status.value = E2EEStatus.verifyingInBackground;
               isVerifyingInBackground.value = true;
-              backgroundVerificationMessage.value = 'Verifying encryption...';
+              backgroundVerificationProgress.value =
+                  ProtectionProgress.verifying;
               // Initialize device manager to load cached UMK
               await _deviceManager.init();
               // Continue verification in background
@@ -219,13 +222,13 @@ class E2EEService {
       // If no keys, keep notInitialized - will be set after registration
 
       // Initialize device manager
-      statusMessage.value = 'Connecting...';
+      statusProgress.value = ProtectionProgress.connecting;
       await _deviceManager.init();
 
       if (!hasKeys) {
         // New device - need to register
         AppLogger.log('E2EE: New device, checking if E2EE is set up...');
-        statusMessage.value = 'Preparing your account...';
+        statusProgress.value = ProtectionProgress.checkingAccount;
 
         // Check if E2EE is set up for this user (any devices exist)
         final isFirst = await _deviceManager.isFirstDevice();
@@ -246,7 +249,7 @@ class E2EEService {
 
           // Truly first device with no recovery key - set up fresh E2EE
           AppLogger.log('E2EE: First device, automatically setting up E2EE...');
-          statusMessage.value = 'Securing your account...';
+          statusProgress.value = ProtectionProgress.protectingNotes;
           await _setupE2EE();
           return;
         }
@@ -282,7 +285,7 @@ class E2EEService {
 
         // Different device - register this device and wait for approval
         AppLogger.log('E2EE: Registering new device...');
-        statusMessage.value = 'Adding this device...';
+        statusProgress.value = ProtectionProgress.addingDevice;
         await _deviceManager.registerNewDevice();
         status.value = E2EEStatus.pendingApproval;
         await _secureStorage.cacheDeviceStatus('pending');
@@ -291,14 +294,14 @@ class E2EEService {
       }
 
       // Device has keys - check if device still exists on server
-      statusMessage.value = 'Verifying...';
+      statusProgress.value = ProtectionProgress.verifying;
       final existsOnServer = await _deviceManager.deviceExistsOnServer();
 
       if (!existsOnServer) {
         // Device was deleted from server (user cleared Firestore data)
         // Clear local data and treat as fresh start
         AppLogger.log('E2EE: Device not found on server, clearing local data');
-        statusMessage.value = 'Updating account...';
+        statusProgress.value = ProtectionProgress.checkingAccount;
         await _deviceManager.clearLocalData();
 
         // Check if this would be the first device again
@@ -308,7 +311,7 @@ class E2EEService {
           AppLogger.log(
             'E2EE: First device after reset, automatically setting up E2EE...',
           );
-          statusMessage.value = 'Securing your account...';
+          statusProgress.value = ProtectionProgress.protectingNotes;
           await _setupE2EE();
         } else {
           // Devices exist - check if any are approved
@@ -335,7 +338,7 @@ class E2EEService {
               await _secureStorage.cacheDeviceStatus('needs_recovery');
             } else {
               // Different device - needs re-registration
-              statusMessage.value = 'Adding this device...';
+              statusProgress.value = ProtectionProgress.addingDevice;
               await _deviceManager.registerNewDevice();
               status.value = E2EEStatus.pendingApproval;
               await _secureStorage.cacheDeviceStatus('pending');
@@ -347,7 +350,7 @@ class E2EEService {
       }
 
       // Device exists - check status
-      statusMessage.value = 'Almost there...';
+      statusProgress.value = ProtectionProgress.almostThere;
       final isRevoked = await _deviceManager.isDeviceRevoked();
 
       if (isRevoked) {
@@ -419,7 +422,7 @@ class E2EEService {
   Future<void> _initializeReviewSession() async {
     try {
       AppLogger.log('E2EE: Initializing isolated review session');
-      statusMessage.value = 'Preparing review session...';
+      statusProgress.value = ProtectionProgress.gettingReady;
       await _secureStorage.init();
       await _deviceManager.initializeLocalReviewDevice();
       await _secureStorage.cacheDeviceStatus('approved');
@@ -427,8 +430,8 @@ class E2EEService {
 
       needsRecoveryKeySetup.value = false;
       isVerifyingInBackground.value = false;
-      backgroundVerificationMessage.value = '';
-      statusMessage.value = '';
+      backgroundVerificationProgress.value = null;
+      statusProgress.value = null;
       status.value = E2EEStatus.ready;
 
       AppLogger.log('E2EE: Isolated review session ready');
@@ -477,13 +480,13 @@ class E2EEService {
     _performBackgroundVerification()
         .then((_) {
           isVerifyingInBackground.value = false;
-          backgroundVerificationMessage.value = '';
+          backgroundVerificationProgress.value = null;
           AppLogger.log('E2EE: Background verification completed');
         })
         .catchError((e, stack) {
           AppLogger.error('E2EE: Background verification error', e, stack);
           isVerifyingInBackground.value = false;
-          backgroundVerificationMessage.value = '';
+          backgroundVerificationProgress.value = null;
           // Don't change status to error - user can still access cached notes
           // The error will be caught on next sync attempt
         });
@@ -492,7 +495,7 @@ class E2EEService {
   /// Performs the actual background verification.
   Future<void> _performBackgroundVerification() async {
     try {
-      backgroundVerificationMessage.value = 'Checking encryption status...';
+      backgroundVerificationProgress.value = ProtectionProgress.checkingAccount;
 
       // Check if device still exists on server
       final existsOnServer = await _deviceManager.deviceExistsOnServer();
@@ -508,7 +511,7 @@ class E2EEService {
         return;
       }
 
-      backgroundVerificationMessage.value = 'Verifying device...';
+      backgroundVerificationProgress.value = ProtectionProgress.verifying;
 
       // Check if device is still approved
       final isRevoked = await _deviceManager.isDeviceRevoked();
@@ -651,10 +654,10 @@ class E2EEService {
       AppLogger.error('E2EE: Error clearing secure storage during dispose', e);
     }
 
-    statusMessage.value = '';
+    statusProgress.value = null;
     needsRecoveryKeySetup.value = false;
     isVerifyingInBackground.value = false;
-    backgroundVerificationMessage.value = '';
+    backgroundVerificationProgress.value = null;
     status.value = E2EEStatus.notInitialized;
     // Reset initialization guard to allow re-init for new user
     resetInitialization();
@@ -676,7 +679,7 @@ class E2EEService {
 
     // Reset status
     status.value = E2EEStatus.notInitialized;
-    statusMessage.value = '';
+    statusProgress.value = null;
 
     // Reset initialization guard before re-initializing
     resetInitialization();

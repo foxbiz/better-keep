@@ -129,7 +129,7 @@ class ReminderCoordinator {
       await _cancelUnlocked(noteId);
       return const ReminderScheduleResult(
         ReminderDeliveryState.unsupported,
-        message: 'Reminder delivery is disabled while signed out.',
+        reason: ReminderDeliveryReason.signedOut,
       );
     }
 
@@ -139,7 +139,7 @@ class ReminderCoordinator {
       if (!reminder.isSupportedType) {
         return const ReminderScheduleResult(
           ReminderDeliveryState.unsupported,
-          message: 'This reminder type is not supported by this app version.',
+          reason: ReminderDeliveryReason.unsupportedType,
         );
       }
 
@@ -150,8 +150,7 @@ class ReminderCoordinator {
         if (!granted && _isDeliverySupported(reminder.type)) {
           return const ReminderScheduleResult(
             ReminderDeliveryState.permissionDenied,
-            message:
-                'Reminder saved, but permission is required to schedule it.',
+            reason: ReminderDeliveryReason.permissionRequired,
           );
         }
       }
@@ -174,9 +173,9 @@ class ReminderCoordinator {
       AppLogger.error('Failed to schedule reminder', error, stackTrace);
       return ReminderScheduleResult(
         ReminderDeliveryState.failed,
-        message: error is ReminderTimeZoneException
-            ? _l10n.reminderTimeZoneUnavailable
-            : _l10n.reminderScheduleFailed,
+        reason: error is ReminderTimeZoneException
+            ? ReminderDeliveryReason.timeZoneUnavailable
+            : null,
         error: error,
       );
     }
@@ -278,8 +277,7 @@ class ReminderCoordinator {
     if (!notifications.supportsScheduling) {
       return const ReminderScheduleResult(
         ReminderDeliveryState.unsupported,
-        message:
-            'Saved and synced. Scheduled notifications are not available on this platform.',
+        reason: ReminderDeliveryReason.notificationUnsupportedPlatform,
       );
     }
     final hasPermission = await ReminderPermissionService().hasPermissions(
@@ -291,7 +289,7 @@ class ReminderCoordinator {
     if (!hasPermission) {
       return const ReminderScheduleResult(
         ReminderDeliveryState.permissionDenied,
-        message: 'Saved, but notification permission is required.',
+        reason: ReminderDeliveryReason.permissionRequired,
       );
     }
 
@@ -303,7 +301,7 @@ class ReminderCoordinator {
     if (plan.capacityExceededNoteIds.contains(noteId)) {
       return ReminderScheduleResult(
         ReminderDeliveryState.capacityExceeded,
-        message: _l10n.reminderCapacityExceeded,
+        reason: ReminderDeliveryReason.capacityExceeded,
       );
     }
     if (plan.pastDueNoteIds.contains(noteId)) {
@@ -409,19 +407,19 @@ class ReminderCoordinator {
     if (!isAlarmSupported) {
       return const ReminderScheduleResult(
         ReminderDeliveryState.unsupported,
-        message: 'Saved and synced. It will become an alarm on Android or iOS.',
+        reason: ReminderDeliveryReason.alarmUnsupportedPlatform,
       );
     }
     if (note.reminder!.isAllDay) {
       return const ReminderScheduleResult(
         ReminderDeliveryState.unsupported,
-        message: 'Alarms require a specific time.',
+        reason: ReminderDeliveryReason.alarmRequiresSpecificTime,
       );
     }
     if (!await ReminderPermissionService().hasPermissions(ReminderType.alarm)) {
       return const ReminderScheduleResult(
         ReminderDeliveryState.permissionDenied,
-        message: 'Saved, but alarm permission is required.',
+        reason: ReminderDeliveryReason.permissionRequired,
       );
     }
 

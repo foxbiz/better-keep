@@ -2,26 +2,14 @@ import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/monetization_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Map a [PurchaseResult] message to a localized string.
-/// Falls back to the raw service message if no match is found.
+/// Provider diagnostics are deliberately never shown to the user.
 String _localizedPurchaseMessage(BuildContext context, PurchaseResult result) {
-  final msg = result.message;
-  if (msg.contains('restored')) return context.l10n.subscriptionRestored;
-  if (msg.contains('already have')) {
-    return context.l10n.subscriptionAlreadyActive;
-  }
-  if (msg.contains('activated')) return context.l10n.subscriptionActivated;
-  if (msg.contains('cancelled') || msg.contains('canceled')) {
-    return context.l10n.purchaseCancelled;
-  }
-  if (msg.contains('Payment failed') || msg.contains('payment failed')) {
-    return context.l10n.paymentFailed;
-  }
-  if (result.isFailed) return context.l10n.somethingWentWrongTryAgain;
-  return msg;
+  return result.outcome.localized(context.l10n);
 }
 
 /// Shows the paywall as a full-screen page.
@@ -68,7 +56,7 @@ void showUpgradePrompt(
       content: Text(message),
       duration: const Duration(seconds: 4),
       action: SnackBarAction(
-        label: 'Upgrade',
+        label: context.l10n.upgrade,
         onPressed: () => showPaywall(context, feature: feature),
       ),
     ),
@@ -832,7 +820,10 @@ class _PaywallPageState extends State<PaywallPage> {
         final error = SubscriptionService.instance.lastPurchaseError;
         if (error != null && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(error), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text(error.localized(context.l10n)),
+              backgroundColor: Colors.red,
+            ),
           );
           SubscriptionService.instance.clearLastPurchaseError();
         }
@@ -1252,7 +1243,7 @@ class _LegalLinks extends StatelessWidget {
             Uri.parse('https://betterkeep.app/terms'),
             mode: LaunchMode.externalApplication,
           ),
-          child: Text('Terms of Use', style: linkStyle),
+          child: Text(context.l10n.termsOfUse, style: linkStyle),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1268,7 +1259,7 @@ class _LegalLinks extends StatelessWidget {
             Uri.parse('https://betterkeep.app/privacy'),
             mode: LaunchMode.externalApplication,
           ),
-          child: Text('Privacy Policy', style: linkStyle),
+          child: Text(context.l10n.privacyPolicy, style: linkStyle),
         ),
       ],
     );

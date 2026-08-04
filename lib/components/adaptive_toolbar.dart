@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 
@@ -53,7 +54,9 @@ class _AdaptiveToolbarState extends State<AdaptiveToolbar> {
     icon: Icon(
       isGridMode ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
     ),
-    tooltip: isGridMode ? 'Collapse toolbar' : 'Expand toolbar',
+    tooltip: isGridMode
+        ? context.l10n.collapseToolbar
+        : context.l10n.expandToolbar,
     onPressed: () {
       AppState.setToolbarGridMode(widget.key.toString(), !isGridMode);
     },

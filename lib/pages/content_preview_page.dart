@@ -4,6 +4,7 @@ import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/markdown_converter.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:flutter/material.dart';
@@ -187,9 +188,10 @@ class _ContentPreviewPageState extends State<ContentPreviewPage> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => NoteEditor(note: note)),
       );
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to import shared content', error, stackTrace);
       if (!mounted) return;
-      _showError(context.l10n.failedToImport(e.toString()));
+      _showError(context.l10n.somethingWentWrongTryAgain);
       setState(() => _isProcessing = false);
     }
   }

@@ -9,6 +9,7 @@ import 'package:better_keep/services/whisper/whisper.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart'
     show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
@@ -569,12 +570,17 @@ class _SettingsState extends State<Settings> {
                           ? sound.substring('assets/'.length)
                           : sound;
                       await _audioPlayer.play(AssetSource(assetPath));
-                    } catch (e) {
+                    } catch (error, stackTrace) {
+                      AppLogger.error(
+                        'Failed to preview reminder sound',
+                        error,
+                        stackTrace,
+                      );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              context.l10n.errorPlayingSound(e.toString()),
+                              context.l10n.somethingWentWrongTryAgain,
                             ),
                           ),
                         );
@@ -745,11 +751,16 @@ class _SettingsState extends State<Settings> {
               ),
             );
           }
-        } catch (e) {
+        } catch (error, stackTrace) {
+          AppLogger.error(
+            'Failed to update local note protection',
+            error,
+            stackTrace,
+          );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(context.l10n.errorEncryptingNotes(e.toString())),
+                content: Text(context.l10n.somethingWentWrongTryAgain),
                 behavior: SnackBarBehavior.floating,
                 backgroundColor: Colors.orange,
               ),

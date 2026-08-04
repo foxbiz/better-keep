@@ -2,16 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:better_keep/config.dart';
-import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/services/reminder_notification_registration.dart';
 import 'package:better_keep/services/reminder_notification_plan.dart';
 import 'package:better_keep/services/reminder_occurrence.dart';
 import 'package:better_keep/services/reminder_time_zone_resolver.dart';
-import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -27,7 +25,6 @@ class LocalNotificationService {
   static final instance = LocalNotificationService._();
 
   static const reminderChannelId = 'note_reminders_v1';
-  static const reminderChannelName = 'Note reminders';
   static const reminderCategoryId = 'note_reminder';
   static const markDoneActionId = 'mark_done';
   static const smallIcon = 'ic_stat_better_keep';
@@ -42,6 +39,8 @@ class LocalNotificationService {
   tz.Location? _timeZoneLocation;
   Object? _timeZoneError;
   String _markDoneLabel = 'Mark as Done';
+  String _reminderChannelName = 'Better Keep';
+  String _reminderChannelDescription = 'Better Keep';
   bool _pluginInitialized = false;
 
   bool get supportsScheduling {
@@ -91,15 +90,10 @@ class LocalNotificationService {
     if (!supportsScheduling) return;
     await _configureTimeZone();
 
-    final requestedLocale =
-        AppState.locale ?? WidgetsBinding.instance.platformDispatcher.locale;
-    final locale =
-        AppLocalizations.supportedLocales.any(
-          (supported) => supported.languageCode == requestedLocale.languageCode,
-        )
-        ? Locale(requestedLocale.languageCode)
-        : const Locale('en');
-    _markDoneLabel = lookupAppLocalizations(locale).markAsDone;
+    final l10n = currentAppLocalizations();
+    _markDoneLabel = l10n.markAsDone;
+    _reminderChannelName = l10n.noteReminders;
+    _reminderChannelDescription = l10n.noteRemindersDescription;
 
     final categories = <DarwinNotificationCategory>[
       DarwinNotificationCategory(
@@ -143,10 +137,10 @@ class LocalNotificationService {
             AndroidFlutterLocalNotificationsPlugin
           >()
           ?.createNotificationChannel(
-            const AndroidNotificationChannel(
+            AndroidNotificationChannel(
               reminderChannelId,
-              reminderChannelName,
-              description: 'Time-sensitive reminders for notes',
+              _reminderChannelName,
+              description: _reminderChannelDescription,
               importance: Importance.high,
               playSound: true,
               enableVibration: true,
@@ -305,8 +299,8 @@ class LocalNotificationService {
     );
     final androidDetails = AndroidNotificationDetails(
       reminderChannelId,
-      reminderChannelName,
-      channelDescription: 'Time-sensitive reminders for notes',
+      _reminderChannelName,
+      channelDescription: _reminderChannelDescription,
       icon: smallIcon,
       importance: Importance.high,
       priority: Priority.high,
@@ -506,11 +500,12 @@ class LocalNotificationService {
     if (!supportsDeviceApprovalNotifications || !_pluginInitialized) {
       return false;
     }
-    const details = NotificationDetails(
+    final l10n = currentAppLocalizations();
+    final details = NotificationDetails(
       android: AndroidNotificationDetails(
         'device_approval',
-        'Device Approval',
-        channelDescription: 'Notifications for device approval requests',
+        l10n.deviceApproval,
+        channelDescription: l10n.deviceApprovalDescription,
         icon: smallIcon,
         importance: Importance.high,
         priority: Priority.high,
