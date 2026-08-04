@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readdirSync, readFileSync} from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import {resolveTestTask} from "../../tool/test_tasks.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const localizationDirectory = path.join(repositoryRoot, "lib/l10n");
@@ -87,12 +88,19 @@ test("ARB catalogs have matching, unique message keys", () => {
 	}
 });
 
-test("push and pull request checks run the localization suite", () => {
+test("the release workflow runs the release suite with localization coverage", () => {
 	const workflow = readFileSync(
-		path.join(repositoryRoot, ".github/workflows/backend-checks.yml"),
+		path.join(repositoryRoot, ".github/workflows/build-release.yml"),
 		"utf8",
 	);
-	assert.match(workflow, /^\s*npm test localization\s*$/m);
+	assert.match(workflow, /^\s*npm run release\s*$/m);
+	assert.ok(
+		resolveTestTask(["release"]).operations.some(
+			(operation) =>
+				operation.command === "node" &&
+				operation.args.includes("test/tool/localization_policy_test.mjs"),
+		),
+	);
 });
 
 test("production presentation APIs do not contain hard-coded natural language", () => {

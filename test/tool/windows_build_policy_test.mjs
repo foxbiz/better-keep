@@ -13,11 +13,6 @@ const readRepositoryFile = (...segments) =>
 const pubspec = readRepositoryFile("pubspec.yaml");
 const pubspecLock = readRepositoryFile("pubspec.lock");
 const windowsCmake = readRepositoryFile("windows", "CMakeLists.txt");
-const backendChecksWorkflow = readRepositoryFile(
-	".github",
-	"workflows",
-	"backend-checks.yml",
-);
 const buildReleaseWorkflow = readRepositoryFile(
 	".github",
 	"workflows",
@@ -88,41 +83,33 @@ test("permission_handler_windows removes only its obsolete coroutine option", ()
 	);
 });
 
-test("Windows verification and release builds use Visual Studio 2026", () => {
-	const verificationJob = extractWorkflowJob(
-		backendChecksWorkflow,
-		"windows-build",
-	);
+test("the Windows release job uses Visual Studio 2026 and validates its build", () => {
 	const releaseJob = extractWorkflowJob(buildReleaseWorkflow, "build-windows");
 
-	for (const [name, job] of [
-		["backend verification", verificationJob],
-		["release", releaseJob],
-	]) {
-		assert.match(
-			job,
-			/runs-on:\s+windows-2025-vs2026/,
-			`${name} must use the explicit Visual Studio 2026 image`,
-		);
-		assert.match(job, /run:\s+flutter pub get/);
-		assert.match(job, /flutter build windows --release/);
-	}
-	assert.doesNotMatch(verificationJob, /secrets\./);
+	assert.match(releaseJob, /runs-on:\s+windows-2025-vs2026/);
+	assert.match(releaseJob, /uses:\s+actions\/setup-node@v6/);
+	assert.match(releaseJob, /run:\s+npm ci/);
 	assert.match(
-		verificationJob,
+		releaseJob,
+		/node --test test\/tool\/process_runner_test\.mjs test\/tool\/build_tasks_test\.mjs/,
+	);
+	assert.match(releaseJob, /run:\s+flutter pub get/);
+	assert.match(releaseJob, /flutter build windows --release/);
+	assert.match(
+		releaseJob,
 		/build\/windows\/x64\/plugins\/gal\/gal_plugin\.vcxproj/,
 	);
 	assert.match(
-		verificationJob,
+		releaseJob,
 		/build\/windows\/x64\/plugins\/permission_handler_windows\/permission_handler_windows_plugin\.vcxproj/,
 	);
 	assert.match(
-		verificationJob,
+		releaseJob,
 		/Select-String -Path \$project -Pattern "\/await" -SimpleMatch -Quiet/,
 	);
 });
 
-test("Windows policy runs in backend checks and the release gate", () => {
+test("Windows policy runs in the portable release gate", () => {
 	const policyOperation = resolveTestTask(["windows-build-policy"]).operations[0];
 	assert.deepEqual(policyOperation, {
 		args: ["--test", "test/tool/windows_build_policy_test.mjs"],
@@ -141,5 +128,4 @@ test("Windows policy runs in backend checks and the release gate", () => {
 		args: ["release"],
 		type: "test",
 	});
-	assert.match(backendChecksWorkflow, /npm test windows-build-policy/);
 });

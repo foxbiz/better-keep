@@ -51,7 +51,7 @@ test("builds Flutter web before deploying only Hosting", () => {
 			"--",
 			"deploy",
 			"--config",
-			"firebase.json",
+			"firebase.deploy.json",
 			"--project",
 			"better-keep-notes",
 			"--only",
@@ -63,7 +63,7 @@ test("builds Flutter web before deploying only Hosting", () => {
 });
 
 test("production Hosting serves the compiled web build with required rewrites", () => {
-	const config = JSON.parse(readFileSync("firebase.json", "utf8"));
+	const config = JSON.parse(readFileSync("firebase.deploy.json", "utf8"));
 	assert.equal(config.hosting.public, "build/web");
 	assert.deepEqual(config.hosting.rewrites, [
 		{source: "/s/**", destination: "/s/index.html"},

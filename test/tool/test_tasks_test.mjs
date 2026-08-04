@@ -103,6 +103,7 @@ test("release expands suites in the established order and excludes devices", () 
 		"dev_tasks_test.mjs",
 		"firebase_tasks_test.mjs",
 		"functions_tasks_test.mjs",
+		"git_hooks_policy_test.mjs",
 		"process_runner_test.mjs",
 		"release_tasks_test.mjs",
 		"test_tasks_test.mjs",

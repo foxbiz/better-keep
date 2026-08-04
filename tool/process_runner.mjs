@@ -1,5 +1,5 @@
-import {spawn} from "node:child_process";
 import {constants as osConstants} from "node:os";
+import crossSpawn from "cross-spawn";
 
 export function childExitCode(code, signal) {
 	if (Number.isInteger(code)) {
@@ -18,7 +18,7 @@ function runSpawnedProcess({
 	env,
 	buildResult,
 	onChild,
-	spawnImplementation = spawn,
+	spawnImplementation = crossSpawn,
 	signalHost = process,
 	stdio,
 }) {
@@ -56,11 +56,27 @@ function runSpawnedProcess({
 			signalHost.on?.(signal, handler);
 		}
 
-		child.once("error", (error) => settle(() => reject(error)));
+		child.once("error", (error) =>
+			settle(() => reject(actionableProcessStartError(command, error))),
+		);
 		child.once("exit", (code, signal) =>
 			settle(() => resolve(buildResult(code, signal))),
 		);
 	});
+}
+
+export function actionableProcessStartError(command, error) {
+	if (error?.code !== "ENOENT") {
+		return error;
+	}
+	const actionableError = new Error(
+		`Command "${command}" was not found. Verify "${command} --version" works ` +
+			"in this terminal and ensure its installation directory is on PATH " +
+			"(Path on Windows).",
+		{cause: error},
+	);
+	actionableError.code = error.code;
+	return actionableError;
 }
 
 export function runChildProcess({
@@ -68,7 +84,7 @@ export function runChildProcess({
 	args,
 	cwd,
 	env,
-	spawnImplementation = spawn,
+	spawnImplementation = crossSpawn,
 	signalHost = process,
 }) {
 	return runSpawnedProcess({
@@ -88,7 +104,7 @@ export function runChildProcessWithOutput({
 	args,
 	cwd,
 	env,
-	spawnImplementation = spawn,
+	spawnImplementation = crossSpawn,
 	signalHost = process,
 }) {
 	let stdout = "";

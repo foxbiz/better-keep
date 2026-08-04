@@ -248,10 +248,13 @@ The app will be at `build/macos/Build/Products/Release/better_keep.app`.
 **Windows:**
 
 ```bash
-flutter build windows --dart-define-from-file=.env
+npm run build windows
 ```
 
-The app will be at `build/windows/x64/runner/Release/`.
+Run `flutter --version` from the same terminal first so Flutter is available on
+Windows `Path`. The command builds the release application, then creates its
+MSIX package. The unpackaged app will be at
+`build/windows/x64/runner/Release/`.
 
 <!-- Linux build disabled - Firebase doesn't support Linux yet
 **Linux:**
@@ -297,7 +300,22 @@ Run the complete portable release gate with:
 npm run release
 ```
 
+The gate requires `flutter` and `npm` on `Path`. Its browser acceptance stage
+also requires Google Chrome plus a version-matched `chromedriver` executable.
+Download matching releases from the [Chrome for Testing availability
+dashboard](https://googlechromelabs.github.io/chrome-for-testing/).
+
 Use `npm run release help` to display its fail-fast sequence without running it.
+
+Enable the tracked local commit gate once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Every `git commit` then runs the complete release gate and stops if any check
+fails. For an exceptional commit that must bypass the gate, use
+`git commit --no-verify` and run `npm run release` manually as soon as possible.
 
 ## Project layout
 
