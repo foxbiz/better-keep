@@ -145,6 +145,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install task-runner dependencies
+        run: npm ci
+
+      - name: Verify Windows command shims and build sequencing
+        run: node --test test/tool/process_runner_test.mjs test/tool/build_tasks_test.mjs
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -160,6 +172,23 @@ jobs:
 
       - name: Build Windows
         run: flutter build windows --release --dart-define-from-file=.env
+
+      - name: Reject legacy coroutine flags
+        shell: pwsh
+        run: |
+          $pluginProjects = @(
+            "build/windows/x64/plugins/gal/gal_plugin.vcxproj",
+            "build/windows/x64/plugins/permission_handler_windows/permission_handler_windows_plugin.vcxproj"
+          )
+
+          foreach ($project in $pluginProjects) {
+            if (-not (Test-Path $project)) {
+              throw "Expected generated plugin project was not found: $project"
+            }
+            if (Select-String -Path $project -Pattern "/await" -SimpleMatch -Quiet) {
+              throw "Legacy /await compiler option remains in $project"
+            }
+          }
 
       - name: Create Windows Installer with Inno Setup
         run: |

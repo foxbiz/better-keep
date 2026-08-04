@@ -39,7 +39,7 @@ const targets = {
 			"--",
 			"deploy",
 			"--config",
-			"firebase.json",
+			"firebase.deploy.json",
 			"--project",
 			projectId,
 			"--only",

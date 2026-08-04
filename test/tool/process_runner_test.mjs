@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import {EventEmitter} from "node:events";
+import {mkdtemp, rm, writeFile} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import {delimiter, join} from "node:path";
 import test from "node:test";
-import {runChildProcessWithOutput} from "../../tool/process_runner.mjs";
+import {
+	actionableProcessStartError,
+	runChildProcessWithOutput,
+} from "../../tool/process_runner.mjs";
 
 function createChild() {
 	const child = new EventEmitter();
@@ -76,3 +82,66 @@ test("captured processes forward signals and remove host listeners", async () =>
 	assert.equal(signalHost.listenerCount("SIGINT"), 0);
 	assert.equal(signalHost.listenerCount("SIGTERM"), 0);
 });
+
+test("missing commands report actionable terminal and Path guidance", async () => {
+	const originalError = Object.assign(new Error("spawn flutter ENOENT"), {
+		code: "ENOENT",
+	});
+	const actionableError = actionableProcessStartError("flutter", originalError);
+	assert.equal(actionableError.code, "ENOENT");
+	assert.equal(actionableError.cause, originalError);
+	assert.match(actionableError.message, /flutter --version/);
+	assert.match(actionableError.message, /PATH \(Path on Windows\)/);
+
+	const unchangedError = new Error("permission denied");
+	assert.equal(actionableProcessStartError("flutter", unchangedError), unchangedError);
+
+	const child = createChild();
+	const resultPromise = runChildProcessWithOutput({
+		args: ["build", "windows"],
+		command: "flutter",
+		cwd: ".",
+		env: {},
+		spawnImplementation: () => {
+			queueMicrotask(() => child.emit("error", originalError));
+			return child;
+		},
+	});
+	await assert.rejects(resultPromise, /flutter --version/);
+});
+
+test(
+	"real Windows adapter launches command shims without corrupting arguments",
+	{skip: process.platform !== "win32"},
+	async (context) => {
+		const fixtureDirectory = await mkdtemp(
+			join(tmpdir(), "better-keep-command-shim-"),
+		);
+		context.after(() => rm(fixtureDirectory, {force: true, recursive: true}));
+		await writeFile(
+			join(fixtureDirectory, "capture.cjs"),
+			"process.stdout.write(JSON.stringify(process.argv.slice(2)));\n",
+		);
+		await writeFile(
+			join(fixtureDirectory, "better-keep-command.cmd"),
+			'@echo off\r\nnode "%~dp0capture.cjs" %*\r\n',
+		);
+
+		const pathKey =
+			Object.keys(process.env).find((name) => name.toLowerCase() === "path") ??
+			"Path";
+		const environment = {...process.env};
+		environment[pathKey] = `${fixtureDirectory}${delimiter}${environment[pathKey] ?? ""}`;
+		const arguments_ = ["value with spaces & symbols", "plain"];
+		const result = await runChildProcessWithOutput({
+			args: arguments_,
+			command: "better-keep-command",
+			cwd: fixtureDirectory,
+			env: environment,
+		});
+
+		assert.equal(result.exitCode, 0);
+		assert.equal(result.stderr, "");
+		assert.deepEqual(JSON.parse(result.stdout), arguments_);
+	},
+);

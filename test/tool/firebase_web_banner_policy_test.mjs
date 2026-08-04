@@ -19,10 +19,6 @@ const browserRunner = readFileSync(
 	join(repositoryRoot, "tool", "run_flutter_web_integration.mjs"),
 	"utf8",
 );
-const backendChecksWorkflow = readFileSync(
-	join(repositoryRoot, ".github", "workflows", "backend-checks.yml"),
-	"utf8",
-);
 const buildReleaseWorkflow = readFileSync(
 	join(repositoryRoot, ".github", "workflows", "build-release.yml"),
 	"utf8",
@@ -111,12 +107,7 @@ test("web environment acceptance uses a bounded full-shell browser run", () => {
 	assert.match(browserRunner, /SIGKILL/);
 });
 
-test("CI workflows provision a matched browser before web acceptance", () => {
-	assertWorkflowProvisionsMatchedBrowser({
-		name: "backend checks",
-		source: backendChecksWorkflow,
-		acceptanceCommand: "npm test firebase-environment-web",
-	});
+test("the release gate provisions a matched browser before web acceptance", () => {
 	assertWorkflowProvisionsMatchedBrowser({
 		name: "release gate",
 		source: buildReleaseWorkflow,

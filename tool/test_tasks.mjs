@@ -205,6 +205,7 @@ const suites = {
 			"test/tool/dev_tasks_test.mjs",
 			"test/tool/firebase_tasks_test.mjs",
 			"test/tool/functions_tasks_test.mjs",
+			"test/tool/git_hooks_policy_test.mjs",
 			"test/tool/process_runner_test.mjs",
 			"test/tool/release_tasks_test.mjs",
 			"test/tool/test_tasks_test.mjs",
