@@ -25,7 +25,19 @@ export default beforeUserSignedIn(
 		// If you experience cold start issues with Google sign-in, add: minInstances: 1
 	},
 	async (event) => {
-		if (!isAllowedReviewSignIn(event.data, event.eventType)) {
+		const user = event.data;
+		if (!user) {
+			console.error("Sign-in blocking event is missing user data", {
+				eventId: event.eventId,
+				eventType: event.eventType,
+			});
+			throw new HttpsError(
+				"internal",
+				"Missing user data for sign-in authorization",
+			);
+		}
+
+		if (!isAllowedReviewSignIn(user, event.eventType)) {
 			throw new HttpsError(
 				"permission-denied",
 				"The managed review account only supports password sign-in",
@@ -50,7 +62,7 @@ export default beforeUserSignedIn(
 
 		try {
 			return await grantTrialIfEligible({
-				user: event.data,
+				user,
 				persistCustomClaims: false,
 			});
 		} catch (error) {

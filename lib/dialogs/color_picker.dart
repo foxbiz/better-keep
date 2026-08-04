@@ -24,13 +24,13 @@ Future<Color?> colorPicker(
 }
 
 class AppColorPickerDialog extends StatefulWidget {
-  final String title;
+  final String? title;
   final Color? currentColor;
   final ValueChanged<Color> onColorSelected;
 
   const AppColorPickerDialog({
     super.key,
-    this.title = 'Select Color',
+    this.title,
     this.currentColor,
     required this.onColorSelected,
   });
@@ -67,7 +67,7 @@ class _AppColorPickerDialogState extends State<AppColorPickerDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.title,
+                widget.title ?? context.l10n.selectColor,
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,

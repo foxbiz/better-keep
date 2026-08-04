@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:flutter/material.dart';
 
 /// A floating widget that shows sync progress at the bottom of the screen.
@@ -131,25 +133,18 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
                     builder: (context, progress, child) {
                       final (syncedCount, totalCount) = progress;
 
-                      return ValueListenableBuilder<String>(
-                        valueListenable: syncService.statusMessage,
-                        builder: (context, statusMessage, child) {
-                          // Also listen to E2EE background message
-                          return ValueListenableBuilder<String>(
+                      return ValueListenableBuilder<SyncProgress>(
+                        valueListenable: syncService.syncStatus,
+                        builder: (context, syncStatus, child) {
+                          return ValueListenableBuilder<ProtectionProgress?>(
                             valueListenable:
-                                e2eeService.backgroundVerificationMessage,
-                            builder: (context, e2eeMessage, child) {
-                              // Determine effective status message
-                              // E2EE verification takes priority when active
-                              final effectiveMessage =
-                                  isVerifyingE2EE && e2eeMessage.isNotEmpty
-                                  ? e2eeMessage
-                                  : statusMessage;
-
+                                e2eeService.backgroundVerificationProgress,
+                            builder: (context, protectionProgress, child) {
                               // Check if there's meaningful content to show
                               final hasContent =
                                   totalCount > 0 ||
-                                  effectiveMessage.isNotEmpty ||
+                                  !syncStatus.isEmpty ||
+                                  protectionProgress != null ||
                                   (failedSet.isNotEmpty && !isSyncing) ||
                                   isVerifyingE2EE;
 
@@ -179,9 +174,14 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
                                         child: _SyncProgressCard(
                                           syncedCount: syncedCount,
                                           totalCount: totalCount,
-                                          statusMessage: effectiveMessage,
+                                          syncStatus: syncStatus,
+                                          protectionProgress:
+                                              protectionProgress,
                                           isSyncing: isSyncing,
-                                          failedCount: failedSet.length,
+                                          failedCount:
+                                              syncStatus.failedCount > 0
+                                              ? syncStatus.failedCount
+                                              : failedSet.length,
                                           isVerifyingE2EE: isVerifyingE2EE,
                                         ),
                                       ),
@@ -208,7 +208,8 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
 class _SyncProgressCard extends StatefulWidget {
   final int syncedCount;
   final int totalCount;
-  final String statusMessage;
+  final SyncProgress syncStatus;
+  final ProtectionProgress? protectionProgress;
   final bool isSyncing;
   final int failedCount;
   final bool isVerifyingE2EE;
@@ -216,7 +217,8 @@ class _SyncProgressCard extends StatefulWidget {
   const _SyncProgressCard({
     required this.syncedCount,
     required this.totalCount,
-    required this.statusMessage,
+    required this.syncStatus,
+    required this.protectionProgress,
     required this.isSyncing,
     required this.failedCount,
     this.isVerifyingE2EE = false,
@@ -277,15 +279,16 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
 
   int get syncedCount => widget.syncedCount;
   int get totalCount => widget.totalCount;
-  String get statusMessage => widget.statusMessage;
+  SyncProgress get syncStatus => widget.syncStatus;
+  ProtectionProgress? get protectionProgress => widget.protectionProgress;
   bool get isSyncing => widget.isSyncing;
   int get failedCount => widget.failedCount;
   bool get isVerifyingE2EE => widget.isVerifyingE2EE;
 
   /// Determines the message type based on current state
   _MessageType get _messageType {
-    if (hasFailed) return _MessageType.error;
-    if (statusMessage.contains('Complete')) return _MessageType.success;
+    if (hasFailed || syncStatus.isFailure) return _MessageType.error;
+    if (syncStatus.isSuccess) return _MessageType.success;
     return _MessageType.info;
   }
 
@@ -393,14 +396,17 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
   }
 
   String _buildStatusText(BuildContext context) {
-    if (hasFailed && statusMessage.isEmpty) {
+    if (isVerifyingE2EE && protectionProgress != null) {
+      return protectionProgress!.localized(context.l10n);
+    }
+    if (hasFailed && syncStatus.isEmpty) {
       return context.l10n.syncFailedCount(failedCount);
     }
     if (hasProgress) {
       return "$syncedCount/$totalCount";
     }
-    if (statusMessage.isNotEmpty) {
-      return statusMessage;
+    if (!syncStatus.isEmpty) {
+      return syncStatus.localized(context.l10n);
     }
     // This case shouldn't be reached since widget won't show without content
     return "";

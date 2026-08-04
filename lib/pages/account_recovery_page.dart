@@ -84,11 +84,11 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
         );
       }
     } catch (e) {
-      AppLogger.log('AccountRecoveryPage: Error requesting approval: $e');
+      AppLogger.error('AccountRecoveryPage: Error requesting approval', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(context.l10n.somethingWentWrongTryAgain),
             backgroundColor: Colors.red,
           ),
         );
@@ -386,9 +386,7 @@ class _StartFreshConfirmationPageState
     if (!loadingResult.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            loadingResult.error ?? context.l10n.failedToSendVerificationCode,
-          ),
+          content: Text(context.l10n.failedToSendVerificationCode),
           backgroundColor: Colors.red,
         ),
       );
@@ -459,17 +457,17 @@ class _StartFreshConfirmationPageState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.message ?? context.l10n.failedToResetAccount),
+            content: Text(context.l10n.failedToResetAccount),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      AppLogger.error('StartFresh: Error', e);
+    } catch (error, stackTrace) {
+      AppLogger.error('StartFresh: Error', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.l10n.failedToResetAccountError(e.toString())),
+            content: Text(context.l10n.failedToResetAccount),
             backgroundColor: Colors.red,
           ),
         );

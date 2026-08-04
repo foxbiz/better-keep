@@ -1,10 +1,12 @@
 import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 void main() {
-  test('Apple invalid credential receives Apple-specific guidance', () {
-    final message = resolveSignInErrorMessage(
+  test('Apple invalid credential resolves to a stable failure kind', () {
+    final failure = resolveSignInFailure(
       provider: 'apple',
       error: FirebaseAuthException(
         code: 'invalid-credential',
@@ -12,12 +14,11 @@ void main() {
       ),
     );
 
-    expect(message, contains('Apple sign-in could not be verified'));
-    expect(message, isNot(contains('password')));
+    expect(failure, AuthFailureKind.appleVerification);
   });
 
   test('password invalid credential keeps password guidance', () {
-    final message = resolveSignInErrorMessage(
+    final failure = resolveSignInFailure(
       provider: 'password',
       error: FirebaseAuthException(
         code: 'invalid-credential',
@@ -25,14 +26,54 @@ void main() {
       ),
     );
 
-    expect(
-      message,
-      'Invalid credentials. Please check your password and try again.',
-    );
+    expect(failure, AuthFailureKind.invalidCredentials);
   });
 
-  test('provider errors retain Firebase messages when no policy matches', () {
-    final message = resolveSignInErrorMessage(
+  test('native Google cancellation resolves to cancelled', () {
+    final failure = resolveSignInFailure(
+      provider: 'google',
+      error: const GoogleSignInException(
+        code: GoogleSignInExceptionCode.canceled,
+      ),
+    );
+
+    expect(failure, AuthFailureKind.cancelled);
+  });
+
+  test('native Apple cancellation resolves to cancelled', () {
+    final failure = resolveSignInFailure(
+      provider: 'apple',
+      error: const SignInWithAppleAuthorizationException(
+        code: AuthorizationErrorCode.canceled,
+        message: 'The authorization request was cancelled.',
+      ),
+    );
+
+    expect(failure, AuthFailureKind.cancelled);
+  });
+
+  test('non-cancellation provider exceptions remain generic', () {
+    final googleFailure = resolveSignInFailure(
+      provider: 'google',
+      error: const GoogleSignInException(
+        code: GoogleSignInExceptionCode.providerConfigurationError,
+        description: 'Sensitive provider details',
+      ),
+    );
+    final appleFailure = resolveSignInFailure(
+      provider: 'apple',
+      error: const SignInWithAppleAuthorizationException(
+        code: AuthorizationErrorCode.failed,
+        message: 'Sensitive provider details',
+      ),
+    );
+
+    expect(googleFailure, AuthFailureKind.unknown);
+    expect(appleFailure, AuthFailureKind.unknown);
+  });
+
+  test('unknown provider errors never expose provider messages', () {
+    final failure = resolveSignInFailure(
       provider: 'apple',
       error: FirebaseAuthException(
         code: 'operation-not-allowed',
@@ -40,6 +81,6 @@ void main() {
       ),
     );
 
-    expect(message, 'Apple sign-in is disabled.');
+    expect(failure, AuthFailureKind.unknown);
   });
 }

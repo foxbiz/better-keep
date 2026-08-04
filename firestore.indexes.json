@@ -1,5 +1,66 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "scheduledDeletion.reminderSent",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduledDeletion.reminderAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "notes",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "umk_version",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "shares",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expires_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "shares",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        {
+          "fieldPath": "owner_uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
   "fieldOverrides": [
     {
       "collectionGroup": "accountLinkSessions",

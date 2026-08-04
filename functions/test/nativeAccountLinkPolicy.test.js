@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+	authorizeNativeAccountLink,
 	newNativeProviderLink,
 } = require("../lib/nativeAccountLinkPolicy");
 
@@ -66,5 +67,15 @@ test("detects only a new Google or Apple provider link", () => {
 			}),
 		),
 		null,
+	);
+});
+
+test("handles missing auth user data defensively", async () => {
+	const eventWithoutUser = event({ data: undefined });
+
+	assert.equal(newNativeProviderLink(eventWithoutUser), null);
+	await assert.rejects(
+		authorizeNativeAccountLink(eventWithoutUser, "google.com"),
+		/Missing auth user data/,
 	);
 });

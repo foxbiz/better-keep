@@ -3,6 +3,8 @@ import {readFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import test from "node:test";
 import {fileURLToPath} from "node:url";
+import {resolveReleaseTask} from "../../tool/release_tasks.mjs";
+import {resolveTestTask} from "../../tool/test_tasks.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const readRepositoryFile = (...segments) =>
@@ -21,8 +23,6 @@ const buildReleaseWorkflow = readRepositoryFile(
 	"workflows",
 	"build-release.yml",
 );
-const packageJson = JSON.parse(readRepositoryFile("package.json"));
-
 function extractWorkflowJob(source, jobName) {
 	const marker = `\n  ${jobName}:\n`;
 	const start = source.indexOf(marker);
@@ -123,11 +123,23 @@ test("Windows verification and release builds use Visual Studio 2026", () => {
 });
 
 test("Windows policy runs in backend checks and the release gate", () => {
-	const policyCommand = "npm run test:windows-build-policy";
-	assert.equal(
-		packageJson.scripts["test:windows-build-policy"],
-		"node --test test/tool/windows_build_policy_test.mjs",
+	const policyOperation = resolveTestTask(["windows-build-policy"]).operations[0];
+	assert.deepEqual(policyOperation, {
+		args: ["--test", "test/tool/windows_build_policy_test.mjs"],
+		command: "node",
+		environment: {},
+		type: "process",
+	});
+	assert.ok(
+		resolveTestTask(["release"]).operations.some(
+			(operation) =>
+				operation.command === policyOperation.command &&
+				operation.args.includes("test/tool/windows_build_policy_test.mjs"),
+		),
 	);
-	assert.match(packageJson.scripts["release:gate"], new RegExp(policyCommand));
-	assert.match(backendChecksWorkflow, new RegExp(policyCommand));
+	assert.deepEqual(resolveReleaseTask([]).stages.at(-1), {
+		args: ["release"],
+		type: "test",
+	});
+	assert.match(backendChecksWorkflow, /npm test windows-build-policy/);
 });

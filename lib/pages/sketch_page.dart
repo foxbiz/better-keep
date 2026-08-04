@@ -183,6 +183,15 @@ class _SketchPageOperationQueue {
 
 enum _SketchSaveResult { saved, unchanged, cancelled }
 
+String _localizedPagePattern(BuildContext context, PagePattern pattern) =>
+    switch (pattern) {
+      PagePattern.blank => context.l10n.blankPage,
+      PagePattern.singleLine => context.l10n.linedPage,
+      PagePattern.doubleLine => context.l10n.doubleLinedPage,
+      PagePattern.grid => context.l10n.gridPage,
+      PagePattern.dotGrid => context.l10n.dotGridPage,
+    };
+
 class _StaleSketchSave implements Exception {
   const _StaleSketchSave();
 }
@@ -886,7 +895,7 @@ class _SketchPageState extends State<SketchPage>
       _saveGenerations.restore(deletedSketch);
       AppLogger.error('Failed to delete sketch', error, stackTrace);
       if (mounted) {
-        snackbar('Failed to delete sketch', Colors.red);
+        snackbar(context.l10n.failedToDeleteSketch, Colors.red);
       }
     } finally {
       if (mounted) setState(() => _isDeleting = false);
@@ -1630,7 +1639,10 @@ class _SketchPageState extends State<SketchPage>
                                                 ),
                                                 const SizedBox(width: 12),
                                                 Text(
-                                                  pattern.displayName,
+                                                  _localizedPagePattern(
+                                                    context,
+                                                    pattern,
+                                                  ),
                                                   style: isSelected
                                                       ? TextStyle(
                                                           color: Theme.of(
@@ -2280,7 +2292,7 @@ class _SketchPageState extends State<SketchPage>
     } catch (error, stackTrace) {
       AppLogger.error('Error saving sketch', error, stackTrace);
       if (mounted) {
-        snackbar(context.l10n.errorSavingSketch(error.toString()), Colors.red);
+        snackbar(context.l10n.failedToSaveSketch, Colors.red);
       }
       return false;
     }
@@ -2354,10 +2366,11 @@ class _SketchPageState extends State<SketchPage>
           SnackBar(content: Text(context.l10n.failedToSaveSketch)),
         );
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to export sketch', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.errorSavingSketch(e.toString()))),
+          SnackBar(content: Text(context.l10n.failedToSaveSketch)),
         );
       }
     }

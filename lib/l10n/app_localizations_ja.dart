@@ -12,6 +12,289 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get unableToStartApp => 'Better Keep を起動できません';
+
+  @override
+  String get startupRetryMessage => 'アプリを開く際に問題が発生しました。もう一度お試しください。';
+
+  @override
+  String get startupRestartMessage => 'アプリを開く際に問題が発生しました。アプリを閉じて、もう一度開いてください。';
+
+  @override
+  String get accountNotFound => 'このメールアドレスのアカウントは見つかりませんでした。';
+
+  @override
+  String get invalidCredentials => 'メールアドレスまたはパスワードが正しくありません。もう一度お試しください。';
+
+  @override
+  String get accountDisabled => 'このアカウントは利用できません。サポートにお問い合わせください。';
+
+  @override
+  String get paymentInProgress => 'お支払い手続き中';
+
+  @override
+  String get completePaymentInBrowser =>
+      'ブラウザでお支払いを完了してください。完了すると、このメッセージは自動的に閉じます。';
+
+  @override
+  String get legal => '法的情報';
+
+  @override
+  String get termsOfUse => '利用規約';
+
+  @override
+  String get privacyPolicy => 'プライバシーポリシー';
+
+  @override
+  String get appLogoSemantics => 'Better Keep アプリのロゴ';
+
+  @override
+  String get selectColor => '色を選択';
+
+  @override
+  String get unsupportedTextFile =>
+      'このファイル形式には対応していません。.txt または .md ファイルを選択してください。';
+
+  @override
+  String get sharedFileEmpty => 'このファイルは空です。';
+
+  @override
+  String get fileNotFound => 'ファイルが見つかりませんでした。';
+
+  @override
+  String get fileTooLarge => 'ファイルが大きすぎます。5 MB 未満のファイルを選択してください。';
+
+  @override
+  String get couldNotReadFile => 'ファイルを読み込めませんでした。別のファイルをお試しください。';
+
+  @override
+  String get couldNotOpenFile => 'ファイルを開けませんでした。もう一度お試しください。';
+
+  @override
+  String get noteSaved => 'メモを保存しました';
+
+  @override
+  String get untitled => '無題';
+
+  @override
+  String get failedToExportNote => 'メモを書き出せませんでした。もう一度お試しください。';
+
+  @override
+  String get failedToCopyNote => 'メモをコピーできませんでした。もう一度お試しください。';
+
+  @override
+  String get failedToDeleteSketch => 'スケッチを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get lockedNoteReminder => 'ロックされたメモのリマインダー';
+
+  @override
+  String get notesReminder => 'Better Keep メモのリマインダー';
+
+  @override
+  String get blankPage => '白紙';
+
+  @override
+  String get linedPage => '罫線';
+
+  @override
+  String get doubleLinedPage => '二重罫線';
+
+  @override
+  String get gridPage => '方眼';
+
+  @override
+  String get dotGridPage => 'ドット方眼';
+
+  @override
+  String get dataExportTitle => 'Better Keep データの書き出し';
+
+  @override
+  String get dataExportShareText => 'Better Keep のデータ書き出し';
+
+  @override
+  String get noteReminders => 'メモのリマインダー';
+
+  @override
+  String get noteRemindersDescription => 'メモの時間指定リマインダー';
+
+  @override
+  String get deviceApproval => 'デバイスの承認';
+
+  @override
+  String get deviceApprovalDescription => 'デバイス承認リクエストの通知';
+
+  @override
+  String get newDeviceApprovalRequest => '新しいデバイスの承認リクエスト';
+
+  @override
+  String deviceWantsAccess(String deviceName, String platform) {
+    return '$deviceName（$platform）がメモへのアクセスを求めています';
+  }
+
+  @override
+  String get sharedText => '共有テキスト';
+
+  @override
+  String get sharedFile => '共有ファイル';
+
+  @override
+  String get user => 'ユーザー';
+
+  @override
+  String get thirtyDaysFromNow => '30日後';
+
+  @override
+  String get helpRequestSubject => 'Better Keep - ヘルプのお願い';
+
+  @override
+  String get faqCreateNoteQuestion => '新しいメモを作成するには？';
+
+  @override
+  String get faqCreateNoteAnswer =>
+      'ホーム画面下部の + ボタンをタップします。テキスト、画像、音声などを追加できます。';
+
+  @override
+  String get faqShortcutsQuestion => 'クイックショートカットの使い方は？';
+
+  @override
+  String get faqShortcutsAnswer =>
+      '+ ボタンを長押しすると、画像、音声、スケッチ、ToDo のショートカットが表示されます。使う項目までスライドして指を離してください。短くタップすると空のメモが開きます。';
+
+  @override
+  String get faqLabelsQuestion => 'ラベルでメモを整理するには？';
+
+  @override
+  String get faqLabelsAnswer =>
+      'メモを開いてラベルアイコンをタップし、ラベルを追加または作成します。サイドメニューからラベルで絞り込めます。';
+
+  @override
+  String get faqReminderQuestion => 'リマインダーを設定するには？';
+
+  @override
+  String get faqReminderAnswer => 'メモを開いてリマインダーアイコンをタップし、日付と時刻を選択します。';
+
+  @override
+  String get faqArchiveDeleteQuestion => 'メモをアーカイブまたは削除するには？';
+
+  @override
+  String get faqArchiveDeleteAnswer =>
+      'メモを長押しして選択し、アーカイブまたは削除を選びます。削除したメモはまずゴミ箱に移動し、ゴミ箱から完全に削除できます。';
+
+  @override
+  String get faqThemeQuestion => 'アプリのテーマを変更するには？';
+
+  @override
+  String get faqThemeAnswer => '設定を開き、お好みのテーマを選択してください。';
+
+  @override
+  String get faqSyncQuestion => '複数のデバイスでメモを同期するには？';
+
+  @override
+  String get faqSyncAnswer => 'サインインすると、デバイス間でメモを安全に同期できます。';
+
+  @override
+  String get faqReminderTimesQuestion => '朝・昼・夜の時刻を設定するには？';
+
+  @override
+  String get faqReminderTimesAnswer => '設定の「リマインダー時刻設定」から各時刻を変更できます。';
+
+  @override
+  String get faqAlarmSoundQuestion => 'アラーム音を変更するには？';
+
+  @override
+  String get faqAlarmSoundAnswer => '設定で「アラーム音」を選び、利用可能な音から選択します。';
+
+  @override
+  String get faqSecurityQuestion => 'データは安全ですか？';
+
+  @override
+  String get faqSecurityAnswer =>
+      'メモは安全に保存されます。同期保護を有効にすると、エンドツーエンド暗号化によって同期データが保護されます。';
+
+  @override
+  String get faqApproveDeviceQuestion => '新しいデバイスを承認するには？';
+
+  @override
+  String get faqApproveDeviceAnswer =>
+      '承認済みのデバイスで Better Keep を開きます。プロフィールの承認待ちデバイスを確認し、リクエストを承認または拒否してください。';
+
+  @override
+  String get faqDeleteAccountQuestion => 'アカウントを削除するには？';
+
+  @override
+  String get faqDeleteAccountAnswer =>
+      'プロフィールを開いて「アカウントを削除」を選びます。メール確認後、30日後の削除が予約され、すべてのデバイスからサインアウトします。';
+
+  @override
+  String get faqCancelDeletionQuestion => 'アカウント削除を取り消せますか？';
+
+  @override
+  String get faqCancelDeletionAnswer =>
+      'はい。30日以内に再度サインインすると、予約された削除が取り消され、アカウントを再び利用できます。';
+
+  @override
+  String get faqDeletionEffectsQuestion => 'アカウントを削除するとどうなりますか？';
+
+  @override
+  String get faqDeletionEffectsAnswer =>
+      'すべてのデバイスからすぐにサインアウトします。30日後、メモ、添付ファイル、ラベル、個人データは完全に削除され、復元できません。';
+
+  @override
+  String get faqExportBeforeDeletionQuestion => 'アカウント削除前にデータを書き出せますか？';
+
+  @override
+  String get faqExportBeforeDeletionAnswer =>
+      'はい。削除を予約した後にデータを書き出せます。30日間が終了する前にダウンロードしてください。';
+
+  @override
+  String get iosAppAvailable =>
+      'Better Keep は App Store で入手できます。通知やウィジェットなどをご利用いただけます。';
+
+  @override
+  String get openAppStore => 'App Storeを開く';
+
+  @override
+  String get tasks => 'タスク';
+
+  @override
+  String get unknown => '不明';
+
+  @override
+  String get exportAttachments => '添付ファイル';
+
+  @override
+  String get created => '作成日';
+
+  @override
+  String get updated => '更新日';
+
+  @override
+  String get oneTime => '1回のみ';
+
+  @override
+  String get lockedExportExplanation =>
+      'これらのメモはロックされています。保護された内容はこの書き出しに保持されており、元のPINでのみ開けます。';
+
+  @override
+  String dataExportReadme(String exportedAt) {
+    return 'Better Keep - データ書き出し\n\nこのアーカイブには、書き出したメモ、ラベル、添付ファイル、書き出し情報が含まれます。開けるメモはMarkdownファイルとしても保存されています。ロックされたメモは保護されたままで、元のPINが必要です。\n\nお問い合わせ: contact@betterkeep.app\n\n書き出し日時: $exportedAt';
+  }
+
+  @override
+  String get paymentSuccessful => 'お支払いが完了しました';
+
+  @override
+  String get paymentSuccessfulReturn => 'このウィンドウを閉じて Better Keep に戻ることができます。';
+
+  @override
+  String get paymentCancelledClose => 'お支払いはキャンセルされました。このウィンドウを閉じることができます。';
+
+  @override
+  String get appleSignInVerificationFailed =>
+      'Appleでのサインインを確認できませんでした。もう一度お試しください。';
+
+  @override
   String get reminderType => 'リマインダーの種類';
 
   @override
@@ -2002,6 +2285,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get webBrowser => 'ウェブブラウザ';
 
   @override
+  String get unknownDevice => '不明なデバイス';
+
+  @override
   String get debugDeleteSubscription => 'デバッグ: サブスクリプションを削除';
 
   @override
@@ -2750,7 +3036,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get search => '検索';
 
   @override
-  String get todo => 'Todo';
+  String get todo => 'タスク';
 
   @override
   String get audioNote => '音声ノート';

@@ -54,23 +54,37 @@ class ReminderScheduleResultPresenter {
         ? colors.onErrorContainer
         : colors.onTertiaryContainer;
 
-    final message = switch (delivery.state) {
-      ReminderDeliveryState.scheduled => l10n.reminderSet,
-      ReminderDeliveryState.unsupported =>
-        reminder.type == ReminderType.alarm
-            ? l10n.alarmUnsupportedPlatform
-            : reminder.type == ReminderType.notification
-            ? l10n.notificationUnsupportedPlatform
-            : delivery.message ?? l10n.reminderScheduleFailed,
-      ReminderDeliveryState.permissionDenied =>
+    final message = switch (delivery.reason) {
+      ReminderDeliveryReason.notificationUnsupportedPlatform =>
+        l10n.notificationUnsupportedPlatform,
+      ReminderDeliveryReason.alarmUnsupportedPlatform =>
+        l10n.alarmUnsupportedPlatform,
+      ReminderDeliveryReason.permissionRequired =>
         l10n.reminderSavedPermissionRequired,
-      ReminderDeliveryState.pastDue => l10n.reminderSavedAlreadyDue,
-      ReminderDeliveryState.capacityExceeded => l10n.reminderCapacityExceeded,
-      ReminderDeliveryState.failed =>
-        delivery.message ?? l10n.reminderScheduleFailed,
-      ReminderDeliveryState.superseded => throw StateError(
-        'Superseded reminder feedback must not be presented',
-      ),
+      ReminderDeliveryReason.timeZoneUnavailable =>
+        l10n.reminderTimeZoneUnavailable,
+      ReminderDeliveryReason.alarmRequiresSpecificTime =>
+        l10n.alarmRequiresSpecificTime,
+      ReminderDeliveryReason.capacityExceeded => l10n.reminderCapacityExceeded,
+      ReminderDeliveryReason.signedOut ||
+      ReminderDeliveryReason.unsupportedType => l10n.reminderScheduleFailed,
+      null => switch (delivery.state) {
+        ReminderDeliveryState.scheduled => l10n.reminderSet,
+        ReminderDeliveryState.unsupported =>
+          reminder.type == ReminderType.alarm
+              ? l10n.alarmUnsupportedPlatform
+              : reminder.type == ReminderType.notification
+              ? l10n.notificationUnsupportedPlatform
+              : l10n.reminderScheduleFailed,
+        ReminderDeliveryState.permissionDenied =>
+          l10n.reminderSavedPermissionRequired,
+        ReminderDeliveryState.pastDue => l10n.reminderSavedAlreadyDue,
+        ReminderDeliveryState.capacityExceeded => l10n.reminderCapacityExceeded,
+        ReminderDeliveryState.failed => l10n.reminderScheduleFailed,
+        ReminderDeliveryState.superseded => throw StateError(
+          'Superseded reminder feedback must not be presented',
+        ),
+      },
     };
     final action = delivery.state == ReminderDeliveryState.permissionDenied
         ? SnackBarAction(

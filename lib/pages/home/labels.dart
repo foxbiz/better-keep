@@ -120,7 +120,7 @@ class _LabelsState extends State<Labels> {
                 ),
                 child: FilterChip(
                   selected: isSelected,
-                  label: Text(label.name),
+                  label: Text(label.displayName(context.l10n)),
                   onSelected: (selected) {
                     setState(() {
                       if (selected) {

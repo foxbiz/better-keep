@@ -3,6 +3,7 @@ import {readFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import test from "node:test";
 import {fileURLToPath} from "node:url";
+import {resolveTestTask} from "../../tool/test_tasks.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const mainWebShell = readFileSync(join(repositoryRoot, "web", "index.html"), "utf8");
@@ -13,9 +14,6 @@ const resetPasswordPage = readFileSync(
 const sharedNotePage = readFileSync(
 	join(repositoryRoot, "web", "s", "index.html"),
 	"utf8",
-);
-const packageJson = JSON.parse(
-	readFileSync(join(repositoryRoot, "package.json"), "utf8"),
 );
 const browserRunner = readFileSync(
 	join(repositoryRoot, "tool", "run_flutter_web_integration.mjs"),
@@ -92,9 +90,17 @@ test("standalone Firebase web pages retain the SDK warning", () => {
 });
 
 test("web environment acceptance uses a bounded full-shell browser run", () => {
-	const command = packageJson.scripts["test:firebase-environment-web"];
-	assert.match(command, /node tool\/run_flutter_web_integration\.mjs/);
-	assert.doesNotMatch(command, /flutter test --platform chrome/);
+	const task = resolveTestTask(["firebase-environment-web"]);
+	assert.deepEqual(task.operations.at(-1), {
+		args: ["tool/run_flutter_web_integration.mjs"],
+		command: "node",
+		environment: {},
+		type: "process",
+	});
+	assert.doesNotMatch(
+		JSON.stringify(task.operations),
+		/flutter test --platform chrome/,
+	);
 
 	assert.match(browserRunner, /"-d",\s*"web-server"/);
 	assert.match(browserRunner, /"--web-hostname=127\.0\.0\.1"/);
@@ -109,11 +115,11 @@ test("CI workflows provision a matched browser before web acceptance", () => {
 	assertWorkflowProvisionsMatchedBrowser({
 		name: "backend checks",
 		source: backendChecksWorkflow,
-		acceptanceCommand: "npm run test:firebase-environment-web",
+		acceptanceCommand: "npm test firebase-environment-web",
 	});
 	assertWorkflowProvisionsMatchedBrowser({
 		name: "release gate",
 		source: buildReleaseWorkflow,
-		acceptanceCommand: "npm run release:gate",
+		acceptanceCommand: "npm run release",
 	});
 });

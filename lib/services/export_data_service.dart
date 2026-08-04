@@ -3,12 +3,14 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:better_keep/models/label.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -33,8 +35,10 @@ class ExportDataService {
   /// Export progress callback
   ValueNotifier<double> progress = ValueNotifier(0.0);
 
-  /// Export status message
-  ValueNotifier<String> status = ValueNotifier('');
+  /// Typed export status; presentation text is resolved by the UI.
+  final ValueNotifier<ExportPhase> exportStatus = ValueNotifier(
+    ExportPhase.idle,
+  );
 
   /// Convert a single note to Markdown format (public API)
   /// This can be used to export individual notes
@@ -46,18 +50,19 @@ class ExportDataService {
   /// Returns the path to the exported ZIP file, or null if export failed
   Future<String?> exportAllData({
     bool includeAttachments = true,
-    Function(String)? onStatus,
+    ValueChanged<ExportPhase>? onStatus,
   }) async {
     try {
+      final l10n = currentAppLocalizations();
       progress.value = 0.0;
-      status.value = 'Preparing export...';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.preparing;
+      onStatus?.call(exportStatus.value);
 
       final archive = Archive();
 
       // 1. Export notes
-      status.value = 'Exporting notes...';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.notes;
+      onStatus?.call(exportStatus.value);
       progress.value = 0.1;
 
       final allNotes = await Note.get(NoteType.all);
@@ -78,13 +83,15 @@ class ExportDataService {
       final unlockedNotes = notes.where((n) => !n.locked).toList();
 
       // Export unlocked notes as individual Markdown files
-      status.value = 'Exporting notes as Markdown...';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.notes;
+      onStatus?.call(exportStatus.value);
 
       for (final note in unlockedNotes) {
         try {
           final markdown = _noteToMarkdown(note);
-          final fileName = _sanitizeFileName(note.title ?? 'Untitled');
+          final fileName = _sanitizeFileName(
+            note.title ?? currentAppLocalizations().untitled,
+          );
           final notePath = 'notes/${note.id}_$fileName.md';
           final markdownBytes = utf8.encode(markdown);
           archive.addFile(_createArchiveFile(notePath, markdownBytes));
@@ -103,8 +110,7 @@ class ExportDataService {
           'version': '1.0',
           'noteCount': lockedNotes.length,
           'notes': lockedNotesJson,
-          'note':
-              'These notes are PIN-locked. The content is encrypted and cannot be exported as Markdown.',
+          'note': l10n.lockedExportExplanation,
         });
         final lockedJsonBytes = utf8.encode(lockedJsonString);
         archive.addFile(
@@ -128,8 +134,8 @@ class ExportDataService {
       progress.value = 0.2;
 
       // 2. Export labels
-      status.value = 'Exporting labels...';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.labels;
+      onStatus?.call(exportStatus.value);
 
       final labels = await Label.get();
       final labelsJson = labels.map((label) => label.toJson()).toList();
@@ -147,8 +153,8 @@ class ExportDataService {
 
       // 3. Export attachments if requested
       if (includeAttachments) {
-        status.value = 'Exporting attachments...';
-        onStatus?.call(status.value);
+        exportStatus.value = ExportPhase.attachments;
+        onStatus?.call(exportStatus.value);
 
         int totalAttachments = 0;
         for (final note in notes) {
@@ -189,8 +195,8 @@ class ExportDataService {
       progress.value = 0.8;
 
       // 4. Add metadata file
-      status.value = 'Creating export package...';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.packaging;
+      onStatus?.call(exportStatus.value);
 
       final user = AuthService.currentUser;
       final metadataJson = const JsonEncoder.withIndent('  ').convert({
@@ -206,46 +212,7 @@ class ExportDataService {
       archive.addFile(_createArchiveFile('metadata.json', metadataBytes));
 
       // Add a README file
-      final readme =
-          '''
-Better Keep Notes - Data Export
-================================
-
-This archive contains your exported data from Better Keep Notes.
-
-Contents:
-- metadata.json: Export information and statistics
-- notes/: Folder containing your notes
-  - *.md: Unlocked notes exported as Markdown files
-  - locked_notes.json: PIN-locked notes (encrypted, cannot be read without PIN)
-- notes.json: All notes in JSON format (for backup/import)
-- labels.json: All your labels in JSON format
-- attachments/: Folder containing all note attachments (images, audio, sketches)
-
-Notes Format:
-Unlocked notes are exported as Markdown (.md) files for easy reading.
-Each Markdown file includes:
-- Title as heading
-- Labels as tags
-- Creation/update timestamps
-- Note content with formatting
-- Links to attachments (relative paths)
-
-Locked Notes:
-PIN-locked notes cannot be decrypted without the original PIN.
-They are exported as JSON with encrypted content in locked_notes.json.
-
-Attachments:
-Attachments are organized in folders by note ID:
-- attachments/note_<id>/<filename>
-
-Attachments in Markdown files are linked with relative paths:
-- ../attachments/note_<id>/<filename>
-
-For support or questions, contact: contact@betterkeep.app
-
-Exported on: ${DateTime.now().toIso8601String()}
-''';
+      final readme = l10n.dataExportReadme(DateTime.now().toIso8601String());
       final readmeBytes = utf8.encode(readme);
       archive.addFile(_createArchiveFile('README.txt', readmeBytes));
 
@@ -257,8 +224,8 @@ Exported on: ${DateTime.now().toIso8601String()}
       );
 
       // 5. Encode the archive to ZIP
-      status.value = 'Compressing data...';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.compressing;
+      onStatus?.call(exportStatus.value);
 
       // Use STORE level (no compression) for maximum compatibility
       final encoder = ZipEncoder();
@@ -268,8 +235,8 @@ Exported on: ${DateTime.now().toIso8601String()}
       }
 
       // 6. Save the ZIP file
-      status.value = 'Saving export file...';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.saving;
+      onStatus?.call(exportStatus.value);
 
       final fileName =
           'better_keep_export_${DateTime.now().millisecondsSinceEpoch}.zip';
@@ -286,14 +253,14 @@ Exported on: ${DateTime.now().toIso8601String()}
       }
 
       progress.value = 1.0;
-      status.value = 'Export complete!';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.complete;
+      onStatus?.call(exportStatus.value);
 
       return exportPath;
     } catch (e, stackTrace) {
       AppLogger.error('Error exporting data', e, stackTrace);
-      status.value = 'Export failed: $e';
-      onStatus?.call(status.value);
+      exportStatus.value = ExportPhase.failed;
+      onStatus?.call(exportStatus.value);
       return null;
     }
   }
@@ -308,8 +275,8 @@ Exported on: ${DateTime.now().toIso8601String()}
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(filePath)],
-        title: 'Better Keep Notes Export',
-        text: 'My Better Keep Notes data export',
+        title: currentAppLocalizations().dataExportTitle,
+        text: currentAppLocalizations().dataExportShareText,
       ),
     );
   }
@@ -504,7 +471,7 @@ Exported on: ${DateTime.now().toIso8601String()}
 
   /// Sanitize a string for use as a filename
   String _sanitizeFileName(String name) {
-    if (name.isEmpty) return 'untitled';
+    if (name.isEmpty) name = currentAppLocalizations().untitled;
     // Remove or replace invalid filename characters
     return name
         .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
@@ -517,6 +484,7 @@ Exported on: ${DateTime.now().toIso8601String()}
   /// Convert a Note to Markdown format
   String _noteToMarkdown(Note note, {bool includeMetadata = true}) {
     final buffer = StringBuffer();
+    final l10n = currentAppLocalizations();
 
     // Content - convert Quill Delta to Markdown (main content first)
     if (note.content != null && note.content!.isNotEmpty) {
@@ -526,14 +494,18 @@ Exported on: ${DateTime.now().toIso8601String()}
       } catch (e) {
         // Fallback to plain text if delta parsing fails
         // Add title as heading if using plain text fallback
-        final title = note.title?.isNotEmpty == true ? note.title! : 'Untitled';
+        final title = note.title?.isNotEmpty == true
+            ? note.title!
+            : l10n.untitled;
         buffer.writeln('# $title');
         buffer.writeln();
         buffer.writeln(note.plainText ?? '');
       }
     } else {
       // No content, just add title
-      final title = note.title?.isNotEmpty == true ? note.title! : 'Untitled';
+      final title = note.title?.isNotEmpty == true
+          ? note.title!
+          : l10n.untitled;
       buffer.writeln('# $title');
       buffer.writeln();
     }
@@ -548,7 +520,7 @@ Exported on: ${DateTime.now().toIso8601String()}
       buffer.writeln();
       buffer.writeln('---');
       buffer.writeln();
-      buffer.writeln('## Attachments');
+      buffer.writeln('## ${l10n.exportAttachments}');
       buffer.writeln();
 
       for (final attachment in note.attachments) {
@@ -561,23 +533,23 @@ Exported on: ${DateTime.now().toIso8601String()}
             buffer.writeln();
             break;
           case AttachmentType.sketch:
-            buffer.writeln('![Sketch: $fileName]($relativePath)');
+            buffer.writeln('![${l10n.sketch}: $fileName]($relativePath)');
             buffer.writeln();
             break;
           case AttachmentType.audio:
             final recording = attachment.recording!;
-            buffer.writeln('🎵 **Audio:** [$fileName]($relativePath)');
+            buffer.writeln('🎵 **${l10n.audio}:** [$fileName]($relativePath)');
             if (recording.title?.isNotEmpty == true) {
-              buffer.writeln('  - Title: ${recording.title}');
+              buffer.writeln('  - ${l10n.title}: ${recording.title}');
             }
             if (recording.length > 0) {
               final duration = Duration(milliseconds: recording.length);
               buffer.writeln(
-                '  - Duration: ${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
+                '  - ${l10n.duration}: ${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
               );
             }
             if (recording.transcript?.isNotEmpty == true) {
-              buffer.writeln('  - Transcript: ${recording.transcript}');
+              buffer.writeln('  - ${l10n.transcript}: ${recording.transcript}');
             }
             buffer.writeln();
             break;
@@ -599,22 +571,22 @@ Exported on: ${DateTime.now().toIso8601String()}
           .where((l) => l.isNotEmpty)
           .join(', ');
       if (cleanLabels.isNotEmpty) {
-        metadata.add('Labels: $cleanLabels');
+        metadata.add('${l10n.labels}: $cleanLabels');
       }
     }
     if (note.createdAt != null) {
-      metadata.add('Created: ${note.createdAt!.toIso8601String()}');
+      metadata.add('${l10n.created}: ${note.createdAt!.toIso8601String()}');
     }
     if (note.updatedAt != null) {
-      metadata.add('Updated: ${note.updatedAt!.toIso8601String()}');
+      metadata.add('${l10n.updated}: ${note.updatedAt!.toIso8601String()}');
     }
-    if (note.pinned) metadata.add('📌 Pinned');
-    if (note.archived) metadata.add('📦 Archived');
-    if (note.trashed) metadata.add('🗑️ Trashed');
+    if (note.pinned) metadata.add('📌 ${l10n.pinnedNotes}');
+    if (note.archived) metadata.add('📦 ${l10n.archivedNotes}');
+    if (note.trashed) metadata.add('🗑️ ${l10n.trash}');
     if (note.reminder != null) {
       final reminder = note.reminder!;
       metadata.add(
-        '⏰ Reminder (${reminder.type.name}, ${reminder.repeat}): '
+        '⏰ ${l10n.reminder} (${_localizedReminderType(reminder.type)}, ${_localizedRepeat(reminder.repeat)}): '
         '${_formatReminderForExport(reminder)}',
       );
     }
@@ -630,7 +602,28 @@ Exported on: ${DateTime.now().toIso8601String()}
     final year = date.year.toString().padLeft(4, '0');
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
-    return '$year-$month-$day (All day)';
+    return '$year-$month-$day (${currentAppLocalizations().allDay})';
+  }
+
+  String _localizedReminderType(ReminderType type) {
+    final l10n = currentAppLocalizations();
+    return switch (type) {
+      ReminderType.notification => l10n.notificationReminder,
+      ReminderType.alarm => l10n.alarmReminder,
+      ReminderType.unsupported => l10n.reminder,
+    };
+  }
+
+  String _localizedRepeat(String repeat) {
+    final l10n = currentAppLocalizations();
+    return switch (repeat) {
+      Reminder.repeatDaily => l10n.daily,
+      Reminder.repeatWeekly => l10n.weekly,
+      Reminder.repeatMonthly => l10n.monthly,
+      Reminder.repeatYearly => l10n.yearly,
+      Reminder.repeatOnce => l10n.oneTime,
+      _ => l10n.never,
+    };
   }
 
   /// Convert Quill Delta JSON to Markdown

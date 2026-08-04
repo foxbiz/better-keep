@@ -327,10 +327,15 @@ Multiple pre-built dark and light themes in `lib/themes/`. `ThemeRegistry` maps 
 flutter pub get
 
 # Run the app (requires .env file)
-flutter run --dart-define-from-file=.env
+npm run dev <android|ios|macos|web|windows>
+# Android/iOS auto-select a single matching device and prompt for multiple devices.
+# Override with: npm run dev android -- -d <device-id>
 
 # Static analysis
-flutter analyze
+npm run check analyze
+
+# Root and Cloud Functions production dependency audits
+npm run check audit
 
 # Tests
 flutter test
@@ -339,18 +344,21 @@ flutter test
 dart format lib test
 
 # Firebase emulators (requires Node.js)
-npm run firebase-emulators
+npm run firebase emulators
 
 # Build Cloud Functions
-npm run build:functions
+npm run functions build
 
 # Platform builds (all require .env)
-npm run build:android     # flutter build appbundle --release
-npm run build:ios         # flutter build ios --release
-npm run build:macos       # flutter build macos --release
-npm run build:windows     # flutter build windows --release + MSIX
-npm run build:web         # flutter build web --release
-npm run build:icons       # Generate custom icon font
+npm run build android     # flutter build appbundle --release
+npm run build ios         # flutter build ios --release
+npm run build macos       # flutter build macos --release
+npm run build windows     # flutter build windows --release + MSIX
+npm run build web         # flutter build web --release
+npm run build icons       # Generate custom icon font
+
+# Complete portable release gate
+npm run release
 ```
 
 ---

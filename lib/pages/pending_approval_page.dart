@@ -9,6 +9,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 
 /// Page shown when a device is pending approval or has been revoked.
@@ -193,10 +194,11 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
         );
         setState(() {});
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to request device reapproval', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedReapproval(e.toString()))),
+          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
         );
       }
     } finally {

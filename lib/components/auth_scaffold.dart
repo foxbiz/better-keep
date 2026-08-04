@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -173,7 +174,7 @@ class _AuthScaffoldState extends State<AuthScaffold>
           width: size,
           height: size,
           fit: BoxFit.cover,
-          semanticLabel: 'Better Keep app logo',
+          semanticLabel: context.l10n.appLogoSemantics,
         ),
       ),
     );

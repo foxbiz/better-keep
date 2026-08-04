@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:better_keep/components/otp_input_field.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -126,9 +128,10 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         });
       }
     } on FirebaseFunctionsException catch (e) {
+      AppLogger.error('Password reset code request failed', e);
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? context.l10n.failedSendVerificationCode;
+          _errorMessage = resolveVerificationFailure(e).localized(context.l10n);
         });
       }
     } catch (e) {
@@ -192,9 +195,13 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         });
       }
     } on FirebaseFunctionsException catch (e) {
+      AppLogger.error('Password reset code verification failed', e);
       if (mounted) {
         setState(() {
-          _errorMessage = e.message ?? context.l10n.invalidVerificationCode;
+          _errorMessage = resolveVerificationFailure(
+            e,
+            codeWasSubmitted: true,
+          ).localized(context.l10n);
         });
         _otpController.clear();
         _otpFocusNode.requestFocus();
@@ -256,13 +263,12 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         Navigator.of(context).pop();
       }
     } on FirebaseFunctionsException catch (e) {
+      AppLogger.error('Password reset failed', e);
       if (mounted) {
-        final errorMessage = e.message ?? 'Password reset failed';
+        final failure = resolveVerificationFailure(e, codeWasSubmitted: true);
+        final errorMessage = failure.localized(context.l10n);
 
-        // If OTP is invalid or expired, go back to OTP step
-        if (errorMessage.contains('expired') ||
-            errorMessage.contains('Invalid verification') ||
-            errorMessage.contains('not found')) {
+        if (failure == VerificationFailureKind.invalidCode) {
           setState(() {
             _isLoading = false;
             _errorMessage = errorMessage;

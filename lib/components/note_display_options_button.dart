@@ -91,6 +91,9 @@ class NoteDisplayOptionsButton extends StatelessWidget {
     final activeMode = activeContext == null
         ? null
         : NoteSortService().snapshotFor(activeContext).mode;
+    final defaultMode = activeContext == null
+        ? null
+        : NoteSortService.defaultSortModeFor(activeContext);
     final modeLabel = activeMode == null
         ? null
         : _sortLabel(context, activeMode);
@@ -112,8 +115,9 @@ class NoteDisplayOptionsButton extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             const Icon(Icons.tune),
-            if (activeMode == NoteSortMode.custom)
+            if (activeMode != null && activeMode != defaultMode)
               PositionedDirectional(
+                key: const ValueKey('note-sort-non-default-indicator'),
                 end: -2,
                 bottom: -2,
                 child: DecoratedBox(

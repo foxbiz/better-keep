@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:alarm/alarm.dart';
 import 'package:app_links/app_links.dart';
 import 'package:better_keep/app.dart';
-import 'package:better_keep/components/auth_scaffold.dart';
-import 'package:better_keep/components/firebase_startup_error_view.dart';
+import 'package:better_keep/components/app_startup_view.dart';
 import 'package:better_keep/components/firebase_environment_banner.dart';
 import 'package:better_keep/components/user_avatar.dart';
+import 'package:better_keep/l10n/app_localization_config.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/audio_playback_source_service.dart';
@@ -30,6 +30,7 @@ import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -215,7 +216,7 @@ class _FirebaseBootstrap extends StatefulWidget {
 class _FirebaseBootstrapState extends State<_FirebaseBootstrap> {
   bool _isReady = false;
   bool _isStarting = true;
-  String? _fatalStartupError;
+  bool _hasFatalStartupError = false;
   bool _canRetryStartup = false;
   late final FirebaseBootstrapCoordinator _coordinator;
 
@@ -248,11 +249,18 @@ class _FirebaseBootstrapState extends State<_FirebaseBootstrap> {
   }) async {
     try {
       await _coordinator.start(configureBackend: configureBackend);
-    } on FirebaseBootstrapException catch (error) {
-      if (error.stage == FirebaseBootstrapStage.serviceInitialization &&
-          mounted) {
+    } on FirebaseBootstrapException catch (error, stackTrace) {
+      await AppLogger.error(
+        '[Main] App startup failed during ${error.stage.name}',
+        error.cause,
+        stackTrace,
+      );
+      final shouldShowFatalError =
+          error.stage == FirebaseBootstrapStage.serviceInitialization ||
+          !kDebugMode;
+      if (shouldShowFatalError && mounted) {
         setState(() {
-          _fatalStartupError = error.toString();
+          _hasFatalStartupError = true;
           _canRetryStartup = error.canRetryWithoutReconfiguringBackend;
           _isStarting = false;
         });
@@ -263,7 +271,7 @@ class _FirebaseBootstrapState extends State<_FirebaseBootstrap> {
       setState(() {
         _isReady = true;
         _isStarting = false;
-        _fatalStartupError = null;
+        _hasFatalStartupError = false;
         _canRetryStartup = false;
       });
     }
@@ -271,7 +279,7 @@ class _FirebaseBootstrapState extends State<_FirebaseBootstrap> {
 
   Future<void> _retryStartup() async {
     setState(() {
-      _fatalStartupError = null;
+      _hasFatalStartupError = false;
       _canRetryStartup = false;
       _isStarting = true;
     });
@@ -280,8 +288,8 @@ class _FirebaseBootstrapState extends State<_FirebaseBootstrap> {
       // Backend routing already succeeded before service initialization failed.
       // Reapplying it after Firebase services were accessed is unsafe.
       await _finishStartup();
-    } catch (error) {
-      AppLogger.error('[Main] Firebase startup retry failed', error);
+    } catch (error, stackTrace) {
+      AppLogger.error('[Main] App startup retry failed', error, stackTrace);
     }
   }
 
@@ -307,60 +315,47 @@ class _FirebaseBootstrapState extends State<_FirebaseBootstrap> {
   Widget build(BuildContext context) {
     if (_isReady) return const BetterKeep();
 
-    if (_fatalStartupError != null) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: AppState.theme,
-        builder: (context, child) => FirebaseEnvironmentBannerFrame(
-          child: child ?? const SizedBox.shrink(),
-        ),
-        home: FirebaseStartupErrorView(
-          error: _fatalStartupError!,
+    if (_hasFatalStartupError) {
+      return _buildLocalizedStartupApp(
+        frameEnvironmentBanner: true,
+        home: AppStartupErrorView(
           onRetry: _canRetryStartup ? _retryStartup : null,
         ),
       );
     }
 
     if (_isStarting) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: AppState.theme,
-        builder: (context, child) => FirebaseEnvironmentBannerFrame(
-          child: child ?? const SizedBox.shrink(),
-        ),
-        home: const _FirebaseBootstrapLoadingScreen(),
+      return _buildLocalizedStartupApp(
+        frameEnvironmentBanner: true,
+        home: const AppStartupLoadingView(),
       );
     }
 
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppState.theme,
-      builder: (context, child) => FirebaseEnvironmentBannerFrame(
-        child: child ?? const SizedBox.shrink(),
-      ),
+    return _buildLocalizedStartupApp(
+      frameEnvironmentBanner: true,
       home: FirebaseSelectionScreen(onSelected: _selectEnvironment),
     );
   }
 }
 
-class _FirebaseBootstrapLoadingScreen extends StatelessWidget {
-  const _FirebaseBootstrapLoadingScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Starting Firebase...'),
-          ],
-        ),
-      ),
-    );
-  }
+MaterialApp _buildLocalizedStartupApp({
+  required Widget home,
+  bool frameEnvironmentBanner = false,
+}) {
+  return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: AppState.theme,
+    locale: AppState.locale,
+    localizationsDelegates: betterKeepLocalizationDelegates,
+    supportedLocales: betterKeepSupportedLocales,
+    onGenerateTitle: (context) => context.l10n.appTitle,
+    builder: frameEnvironmentBanner
+        ? (context, child) => FirebaseEnvironmentBannerFrame(
+            child: child ?? const SizedBox.shrink(),
+          )
+        : null,
+    home: home,
+  );
 }
 
 class BetterKeep extends StatefulWidget {
@@ -372,7 +367,7 @@ class BetterKeep extends StatefulWidget {
 
 class _BetterKeepState extends State<BetterKeep> {
   Database? db;
-  String dbError = "";
+  bool _databaseStartupFailed = false;
   late Future<void> _appServicesReady;
 
   /// App links for deep linking (OAuth callback)
@@ -406,9 +401,7 @@ class _BetterKeepState extends State<BetterKeep> {
   Future<void> _initializeAppServices() async {
     await _initDb();
     if (db == null) {
-      throw StateError(
-        dbError.isEmpty ? 'Database initialization failed' : dbError,
-      );
+      throw StateError('Database initialization failed');
     }
 
     await ReminderCoordinator.instance.init();
@@ -548,9 +541,7 @@ class _BetterKeepState extends State<BetterKeep> {
         if (context != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text(
-                'Password reset successful! Please sign in with your new password.',
-              ),
+              content: Text(context.l10n.passwordResetSuccess),
               backgroundColor: Colors.green.shade700,
               duration: const Duration(seconds: 5),
             ),
@@ -569,88 +560,22 @@ class _BetterKeepState extends State<BetterKeep> {
 
   @override
   Widget build(BuildContext context) {
-    if (dbError.isNotEmpty) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "Unable to start Better Keep",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "There was a problem initializing the database. "
-                    "Please try restarting the app or reinstalling if the issue persists.",
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Technical details: $dbError",
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        dbError = "";
-                        db = null;
-                      });
-                      _startAppServices();
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text("Retry"),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    if (_databaseStartupFailed) {
+      return _buildLocalizedStartupApp(
+        home: AppStartupErrorView(
+          onRetry: () {
+            setState(() {
+              _databaseStartupFailed = false;
+              db = null;
+            });
+            _startAppServices();
+          },
         ),
       );
     }
 
     if (db == null) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: AppState.theme,
-        home: AuthScaffold(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 200,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    minHeight: 6,
-                    backgroundColor: AppState.theme.colorScheme.primary
-                        .withValues(alpha: 0.2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Starting...',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppState.theme.colorScheme.onSurface.withValues(
-                    alpha: 0.7,
-                  ),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildLocalizedStartupApp(home: const AppStartupLoadingView());
     }
 
     return App();
@@ -715,10 +640,17 @@ class _BetterKeepState extends State<BetterKeep> {
       setState(() {
         this.db = db;
       });
-    } catch (e) {
-      setState(() {
-        dbError = e.toString();
-      });
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '[Main] Local app data initialization failed',
+        error,
+        stackTrace,
+      );
+      if (mounted) {
+        setState(() {
+          _databaseStartupFailed = true;
+        });
+      }
     }
   }
 }

@@ -7,11 +7,14 @@ import { EPHEMERAL_DOCUMENT_RETENTION_MS } from "./oauthSession";
 const NATIVE_LINK_PROVIDERS = new Set(["google.com", "apple.com"]);
 
 export function newNativeProviderLink(event: AuthBlockingEvent): string | null {
+	const user = event.data;
+	if (!user) return null;
+
 	const provider =
 		event.credential?.providerId ?? event.additionalUserInfo?.providerId;
 	if (!provider || !NATIVE_LINK_PROVIDERS.has(provider)) return null;
 	if (event.additionalUserInfo?.isNewUser === true) return null;
-	if (event.data.providerData?.some((entry) => entry.providerId === provider)) {
+	if (user.providerData?.some((entry) => entry.providerId === provider)) {
 		return null;
 	}
 	return provider;
@@ -21,7 +24,11 @@ export async function authorizeNativeAccountLink(
 	event: AuthBlockingEvent,
 	provider: string,
 ): Promise<void> {
-	const userRef = db.collection("users").doc(event.data.uid);
+	const user = event.data;
+	if (!user) throw new Error("Missing auth user data");
+
+	const uid = user.uid;
+	const userRef = db.collection("users").doc(uid);
 	const pendingRef = userRef.collection("pendingProviderLinks").doc(provider);
 	const nowMs = Date.now();
 
@@ -32,7 +39,7 @@ export async function authorizeNativeAccountLink(
 		if (
 			!pending.exists ||
 			typeof sessionId !== "string" ||
-			pendingData?.uid !== event.data.uid ||
+			pendingData?.uid !== uid ||
 			pendingData?.provider !== provider ||
 			!pendingData.authorizationExpiresAt ||
 			pendingData.authorizationExpiresAt.toMillis() <= nowMs
@@ -49,7 +56,7 @@ export async function authorizeNativeAccountLink(
 			!session.exists ||
 			!sessionData ||
 			sessionData.status !== "issued" ||
-			sessionData.uid !== event.data.uid ||
+			sessionData.uid !== uid ||
 			sessionData.provider !== provider ||
 			!expiresAt ||
 			expiresAt.toMillis() <= nowMs

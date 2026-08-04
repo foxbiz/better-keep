@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/cloud_sync_cursor.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/models/file_sync_track.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/note.dart';
@@ -160,11 +161,10 @@ class NoteSyncService {
   /// Cache service for managing pending remote syncs
   final RemoteSyncCacheService _syncCache = RemoteSyncCacheService();
 
-  /// Total automatic content attempts allowed for one remote revision.
-  static const int _maxSyncRetries = 5;
-
   final ValueNotifier<bool> isSyncing = ValueNotifier(false);
-  final ValueNotifier<String> statusMessage = ValueNotifier("");
+  final ValueNotifier<SyncProgress> syncStatus = ValueNotifier(
+    SyncProgress.idle,
+  );
 
   /// Tracks sync progress: (syncedCount, totalCount)
   final ValueNotifier<(int, int)> syncProgress = ValueNotifier((0, 0));
@@ -177,7 +177,7 @@ class NoteSyncService {
 
   /// Tracks detailed sync status per note (for debug mode display)
   /// Key: noteId, Value: status message
-  final ValueNotifier<Map<int, String>> noteStatus = ValueNotifier({});
+  final ValueNotifier<Map<int, SyncProgress>> noteStatus = ValueNotifier({});
 
   /// Tracks notes that failed to sync
   final ValueNotifier<Set<int>> syncFailed = ValueNotifier({});
@@ -191,7 +191,7 @@ class NoteSyncService {
   CollectionReference<Map<String, dynamic>> get _notesCollection =>
       _cloudRepository.notes(currentUser!.uid);
 
-  void _setNoteStatus(int noteId, String status) {
+  void _setNoteStatus(int noteId, SyncProgress status) {
     noteStatus.value = {...noteStatus.value, noteId: status};
   }
 
@@ -221,7 +221,7 @@ class NoteSyncService {
       contentFailures.value,
       entry,
     );
-    _setNoteStatus(entry.localId, _contentFailureStatus(entry));
+    _setNoteStatus(entry.localId, const SyncProgress(SyncPhase.failed));
     _publishSyncFailures();
   }
 
@@ -420,7 +420,7 @@ class NoteSyncService {
     try {
       isSyncing.value = true;
       await _stopRemoteListener(cancelRetry: false);
-      statusMessage.value = "Resuming sync...";
+      syncStatus.value = const SyncProgress(SyncPhase.resuming);
       AppLogger.log(
         "[SYNC] RESUME START: $pendingCount pending syncs from cache (age: ${cacheAge}min)",
       );
@@ -439,7 +439,7 @@ class NoteSyncService {
       );
       switch (disposition) {
         case RemoteSyncResumeDisposition.commitDurable:
-          statusMessage.value = "Sync Complete";
+          syncStatus.value = const SyncProgress(SyncPhase.complete);
           AppState.noteCloudSyncCheckpoint = CloudSyncCheckpoint(
             bootstrapped: true,
             cursor: metadata?.lastCursor,
@@ -453,7 +453,7 @@ class NoteSyncService {
           // A cache created by an older app has no exact safe cursor. Its
           // contents were applied, then a one-time reconciliation establishes
           // the new checkpoint without risking a skipped write.
-          statusMessage.value = "Restarting sync...";
+          syncStatus.value = const SyncProgress(SyncPhase.restarting);
           await _syncCache.clear();
           AppState.noteCloudSyncCheckpoint = null;
           scheduleReconciliation = true;
@@ -463,7 +463,7 @@ class NoteSyncService {
           );
           break;
         case RemoteSyncResumeDisposition.restartIncomplete:
-          statusMessage.value = "Restarting sync...";
+          syncStatus.value = const SyncProgress(SyncPhase.restarting);
           final legacyCache =
               metadata?.cursorSchemaVersion !=
               CloudSyncCheckpoint.schemaVersion;
@@ -485,7 +485,7 @@ class NoteSyncService {
           break;
       }
     } catch (e, stack) {
-      statusMessage.value = "Sync Failed";
+      syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.log("[SYNC] RESUME FAILED: $e\n$stack");
     } finally {
       isSyncing.value = false;
@@ -498,7 +498,7 @@ class NoteSyncService {
       Future.delayed(const Duration(seconds: 2), () {
         // Only clear status message if no failed syncs
         if (!isSyncing.value && syncFailed.value.isEmpty) {
-          statusMessage.value = "";
+          syncStatus.value = SyncProgress.idle;
         }
       });
     }
@@ -519,7 +519,7 @@ class NoteSyncService {
     AppLogger.log(
       "[SYNC] REFRESH START: Checking ${pendingSyncs.length} cached notes for updates from Firebase",
     );
-    statusMessage.value = "Checking for updates...";
+    syncStatus.value = const SyncProgress(SyncPhase.checkingForUpdates);
 
     int updatedCount = 0;
     int deletedCount = 0;
@@ -792,15 +792,11 @@ class NoteSyncService {
     }
     _publishSyncFailures();
     for (final entry in entries) {
-      _setNoteStatus(entry.localId, _contentFailureStatus(entry));
+      _setNoteStatus(entry.localId, const SyncProgress(SyncPhase.failed));
       if (entry.state == RemoteContentRetryState.waiting) {
         _scheduleContentRetry(entry);
       }
     }
-  }
-
-  String _contentFailureStatus(RemoteContentRetryEntry entry) {
-    return remoteContentFailureStatus(entry, maxAttempts: _maxSyncRetries);
   }
 
   Future<bool> _showContentFailureSummary(String userId) async {
@@ -819,15 +815,20 @@ class NoteSyncService {
         )
         .length;
     if (attachmentCount > 0 && decryptionCount == 0) {
-      statusMessage.value =
-          '$attachmentCount note attachment'
-          '${attachmentCount == 1 ? '' : 's'} failed to download';
+      syncStatus.value = SyncProgress(
+        SyncPhase.failed,
+        failedCount: attachmentCount,
+      );
     } else if (decryptionCount > 0 && attachmentCount == 0) {
-      statusMessage.value =
-          '$decryptionCount note'
-          '${decryptionCount == 1 ? '' : 's'} failed to decrypt';
+      syncStatus.value = SyncProgress(
+        SyncPhase.failed,
+        failedCount: decryptionCount,
+      );
     } else {
-      statusMessage.value = '${failures.length} notes have content sync errors';
+      syncStatus.value = SyncProgress(
+        SyncPhase.failed,
+        failedCount: failures.length,
+      );
     }
     return true;
   }
@@ -1542,7 +1543,7 @@ class NoteSyncService {
 
     try {
       isSyncing.value = true;
-      statusMessage.value = "Refreshing...";
+      syncStatus.value = const SyncProgress(SyncPhase.syncing);
       final currentLastSynced = AppState.lastSynced;
       AppLogger.log(
         "[SYNC] REFRESH START: Manual refresh triggered (lastSynced: ${currentLastSynced?.toIso8601String() ?? 'null'})",
@@ -1571,7 +1572,7 @@ class NoteSyncService {
         currentUser!.uid,
       );
       if (failedSyncs.isEmpty && !hasContentFailures) {
-        statusMessage.value = "Refresh Complete";
+        syncStatus.value = const SyncProgress(SyncPhase.complete);
         AppLogger.log("[SYNC] REFRESH COMPLETE: All syncs successful");
       } else {
         final activeFailures = failedSyncs.where(
@@ -1583,17 +1584,17 @@ class NoteSyncService {
         );
       }
     } on FirestoreDocumentFetchException catch (e, stack) {
-      statusMessage.value = "Could not download note documents";
+      syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('[SYNC] FIRESTORE DOCUMENT FETCH FAILED', e, stack);
     } catch (e, stack) {
-      statusMessage.value = "Refresh Failed while applying note content";
+      syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('[SYNC] REFRESH FAILED', e, stack);
     } finally {
       isSyncing.value = false;
       Future.delayed(const Duration(seconds: 2), () {
         // Only clear status message if no failed syncs
         if (!isSyncing.value && syncFailed.value.isEmpty) {
-          statusMessage.value = "";
+          syncStatus.value = SyncProgress.idle;
         }
       });
     }
@@ -1623,23 +1624,23 @@ class NoteSyncService {
 
     try {
       isSyncing.value = true;
-      statusMessage.value = "Syncing...";
+      syncStatus.value = const SyncProgress(SyncPhase.syncing);
       AppLogger.log(
         "[SYNC] PUSH START: ${pendingSyncs.length} local changes to sync",
       );
 
       await _pushLocalChangesWithPending(pendingSyncs);
 
-      statusMessage.value = "Sync Complete";
+      syncStatus.value = const SyncProgress(SyncPhase.complete);
       AppLogger.log("[SYNC] PUSH COMPLETE: Local changes synced");
     } catch (e, stack) {
-      statusMessage.value = "Sync Failed";
+      syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('[SYNC] PUSH FAILED', e, stack);
     } finally {
       isSyncing.value = false;
       // Clear message after delay
       Future.delayed(const Duration(seconds: 2), () {
-        if (!isSyncing.value) statusMessage.value = "";
+        if (!isSyncing.value) syncStatus.value = SyncProgress.idle;
       });
     }
   }
@@ -1649,7 +1650,7 @@ class NoteSyncService {
     List<NoteSyncTrack> pendingSyncs,
   ) async {
     if (pendingSyncs.isEmpty) return;
-    statusMessage.value = "Saving changes...";
+    syncStatus.value = const SyncProgress(SyncPhase.savingChanges);
 
     AppLogger.log(
       "[SYNC] PUSH: Starting push of ${pendingSyncs.length} local changes",
@@ -2020,7 +2021,7 @@ class NoteSyncService {
   }
 
   Future<void> _performRemotePull() async {
-    statusMessage.value = "Getting updates...";
+    syncStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
     final checkpointCommit = StagedCheckpoint<CloudSyncCheckpoint>(
       commit: (value) => AppState.noteCloudSyncCheckpoint = value,
     );
@@ -2123,7 +2124,7 @@ class NoteSyncService {
     required CloudSyncCheckpoint? checkpoint,
     required bool isBootstrap,
   }) async {
-    statusMessage.value = "Fetching updates...";
+    syncStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
 
     DocumentSnapshot<Map<String, dynamic>>? lastDocument;
     int pageIndex = 0;
@@ -2267,7 +2268,7 @@ class NoteSyncService {
     final activeNotes = pendingSyncs.length - deletedNotes.length;
 
     syncProgress.value = (syncedCount, totalCount);
-    statusMessage.value = "Syncing notes...";
+    syncStatus.value = const SyncProgress(SyncPhase.syncing);
     AppLogger.log(
       "[SYNC] PROCESS START: $totalCount cached syncs ($activeNotes active, ${deletedNotes.length} deleted)",
     );
@@ -2447,7 +2448,10 @@ class NoteSyncService {
         (s) => s.remoteData['deleted'] != true && s.remoteData['deleted'] != 1,
       );
       if (activeFailures.isNotEmpty) {
-        statusMessage.value = "${activeFailures.length} notes failed to sync";
+        syncStatus.value = SyncProgress(
+          SyncPhase.failed,
+          failedCount: activeFailures.length,
+        );
       }
     }
 
@@ -3123,8 +3127,8 @@ class NoteSyncService {
           }
         }
 
-        statusMessage.value = "Uploading media...";
-        _setNoteStatus(note.id!, "Uploading media...");
+        syncStatus.value = const SyncProgress(SyncPhase.uploadingMedia);
+        _setNoteStatus(note.id!, const SyncProgress(SyncPhase.uploadingMedia));
         await fileRef.putData(bytes);
         remoteUrl = await fileRef.getDownloadURL();
       } catch (e) {
@@ -3138,8 +3142,11 @@ class NoteSyncService {
         final fileRef = userStorageRef.child(fileName);
 
         try {
-          statusMessage.value = "Uploading media...";
-          _setNoteStatus(note.id!, "Uploading media...");
+          syncStatus.value = const SyncProgress(SyncPhase.uploadingMedia);
+          _setNoteStatus(
+            note.id!,
+            const SyncProgress(SyncPhase.uploadingMedia),
+          );
 
           final plainBytes = await readEncryptedBytes(src);
           uploadContentHash = FileSyncTrack.computeHash(plainBytes);

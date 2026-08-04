@@ -199,8 +199,8 @@ void main() {
   });
 
   test('creates independent default main contexts', () async {
-    expect(service.snapshotFor(grid).mode, NoteSortMode.updatedNewest);
-    expect(service.snapshotFor(list).mode, NoteSortMode.updatedNewest);
+    expect(service.snapshotFor(grid).mode, NoteSortMode.custom);
+    expect(service.snapshotFor(list).mode, NoteSortMode.custom);
 
     final rows = await database.query(NoteSortService.tableName);
     expect(rows, hasLength(2));
@@ -208,6 +208,62 @@ void main() {
       'main:grid',
       'main:list',
     });
+  });
+
+  test('missing in-memory contexts use their context defaults', () {
+    service.snapshots.value = const {};
+
+    expect(service.snapshotFor(grid).mode, NoteSortMode.custom);
+    expect(service.snapshotFor(list).mode, NoteSortMode.custom);
+    expect(
+      service.snapshotFor(const NoteOrderContext.pinned()).mode,
+      NoteSortMode.updatedNewest,
+    );
+    expect(
+      service.snapshotFor(NoteOrderContext.system('archived')).mode,
+      NoteSortMode.updatedNewest,
+    );
+  });
+
+  test('missing persisted Home context is created as custom', () async {
+    await database.delete(
+      NoteSortService.positionTableName,
+      where: 'context_key = ?',
+      whereArgs: [grid.key],
+    );
+    await database.delete(
+      NoteSortService.operationTableName,
+      where: 'context_key = ?',
+      whereArgs: [grid.key],
+    );
+    await database.delete(
+      NoteSortService.tableName,
+      where: 'context_key = ?',
+      whereArgs: [grid.key],
+    );
+    service.snapshots.value = Map.unmodifiable({
+      for (final entry in service.snapshots.value.entries)
+        if (entry.key != grid.key) entry.key: entry.value,
+    });
+
+    final created = await service.ensureContext(grid, visibleNotes: const []);
+
+    expect(created.mode, NoteSortMode.custom);
+    final rows = await database.query(
+      NoteSortService.tableName,
+      columns: ['sort_mode'],
+      where: 'context_key = ?',
+      whereArgs: [grid.key],
+    );
+    expect(rows.single['sort_mode'], NoteSortMode.custom.name);
+  });
+
+  test('saved Home sort mode overrides the default', () async {
+    await service.setMode(grid, NoteSortMode.updatedNewest);
+    await service.dispose();
+    await service.init();
+
+    expect(service.snapshotFor(grid).mode, NoteSortMode.updatedNewest);
   });
 
   test('context keys round-trip and label names are not identities', () {
@@ -365,6 +421,7 @@ void main() {
   );
 
   test('custom mode seeds from updated-first order using stable IDs', () async {
+    await service.setMode(grid, NoteSortMode.updatedNewest);
     await _insertNote(database, id: 1, updatedAt: DateTime.utc(2026, 7, 20));
     await _insertNote(database, id: 2, updatedAt: DateTime.utc(2026, 7, 22));
     await _insertNote(
@@ -408,7 +465,7 @@ void main() {
       'note-1',
       'note-2',
     ]);
-    expect(service.snapshotFor(list).mode, NoteSortMode.updatedNewest);
+    expect(service.snapshotFor(list).mode, NoteSortMode.custom);
     expect(service.snapshotFor(list).orderedNoteIds, isEmpty);
   });
 

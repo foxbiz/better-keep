@@ -7,19 +7,16 @@
 		"test": "npm run build && npm run typecheck:scripts && node --test test/reminderStateResolver.test.js test/reviewAccess.test.js test/reviewCallableContract.test.js test/operationsConfig.test.js test/reviewResetPolicy.test.js test/reviewAccountReset.test.js test/passwordResetPolicy.test.js test/customClaims.test.js test/accountLinkProviders.test.js test/oauthSession.test.js test/oauthResponse.test.js test/accountLinkSession.test.js test/nativeAccountLinkPolicy.test.js test/syncCommitStamp.test.js test/emailDelivery.test.js",
 		"test:emulator": "npm run build && node --test test/reminderStateResolver.emulator.test.js test/reviewAccountCleanup.emulator.test.js test/accountLinkSession.emulator.test.js test/nativeAccountLinkPolicy.emulator.test.js test/oauthCompletion.emulator.test.js test/syncCommitStamp.emulator.test.js",
 		"build:watch": "tsc --watch",
-		"serve": "npm --prefix .. run functions:serve",
-		"shell": "npm --prefix .. run functions:shell",
+		"serve": "npm --prefix .. run functions serve",
+		"shell": "npm --prefix .. run functions shell",
 		"start": "npm run shell",
-		"deploy": "npm --prefix .. run deploy:backend",
-		"logs": "npm --prefix .. run functions:logs"
+		"deploy": "npm --prefix .. run deploy backend",
+		"logs": "npm --prefix .. run functions logs"
 	},
 	"main": "lib/index.js",
-	"engines": {
-		"node": "22"
-	},
 	"dependencies": {
 		"firebase-admin": "^12.0.0",
-		"firebase-functions": "^5.0.0",
+		"firebase-functions": "^7.3.2",
 		"googleapis": "^144.0.0",
 		"jose": "^5.9.6",
 		"nodemailer": "^9.0.1"

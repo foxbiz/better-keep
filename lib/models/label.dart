@@ -1,4 +1,5 @@
 import 'package:better_keep/models/base_model.dart';
+import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/state.dart';
@@ -28,6 +29,15 @@ class Label extends BaseModel<Label> {
   int? notesCount;
   DateTime? createdAt;
   DateTime? updatedAt;
+
+  String displayName(AppLocalizations l10n) {
+    if (!isSystem) return name;
+    return switch (name) {
+      sharedTextLabelName => l10n.sharedText,
+      sharedFileLabelName => l10n.sharedFile,
+      _ => name,
+    };
+  }
 
   static Future<void> createTable(Database db) {
     return _schema.createTable(db);

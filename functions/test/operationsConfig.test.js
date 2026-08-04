@@ -5,7 +5,7 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "../..");
 
-test("production deploy config and dual runtimes stay pinned", () => {
+test("production deploy config and Firebase runtimes stay pinned", () => {
 	const config = JSON.parse(
 		fs.readFileSync(path.join(root, "firebase.deploy.json"), "utf8"),
 	);
@@ -15,26 +15,22 @@ test("production deploy config and dual runtimes stay pinned", () => {
 	const rootPackage = JSON.parse(
 		fs.readFileSync(path.join(root, "package.json"), "utf8"),
 	);
-	const functionsPackage = JSON.parse(
-		fs.readFileSync(path.join(root, "functions/package.json"), "utf8"),
-	);
 	assert.equal(config.functions.source, "functions");
 	assert.equal(config.functions.runtime, "nodejs22");
 	assert.equal(emulatorConfig.functions.runtime, "nodejs22");
 	assert.equal(rootPackage.engines.node, "22.x || 24.x");
-	assert.equal(functionsPackage.engines.node, "22");
 	assert.equal(
 		fs.readFileSync(path.join(root, ".nvmrc"), "utf8").trim(),
 		"24.18.0",
 	);
 	assert.equal(fs.existsSync(path.join(root, ".sdkmanrc")), false);
 	assert.match(
-		rootPackage.scripts["build:functions"],
-		/tool\/functions_runtime\.mjs/,
+		rootPackage.scripts.functions,
+		/tool\/functions_tasks\.mjs/,
 	);
 	assert.match(
-		rootPackage.scripts["deploy:backend"],
-		/tool\/firebase_cli\.mjs/,
+		rootPackage.scripts.deploy,
+		/tool\/deploy_tasks\.mjs/,
 	);
 	assert.equal(
 		fs.readFileSync(path.join(root, ".npmrc"), "utf8").trim(),

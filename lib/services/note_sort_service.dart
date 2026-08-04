@@ -36,6 +36,7 @@ class NoteSortService {
   static const int legacyCloudSchemaVersion = 1;
   static const int cloudChunkSize = 2000;
   static const int maxCloudChunks = 500;
+  static const NoteSortMode defaultHomeSortMode = NoteSortMode.custom;
 
   static const String legacyTableName = 'note_sort_state';
   static const String tableName = 'note_sort_context';
@@ -327,7 +328,7 @@ class NoteSortService {
       ]) {
         await txn.insert(tableName, {
           'context_key': context.key,
-          'sort_mode': (mode ?? NoteSortMode.updatedNewest).name,
+          'sort_mode': (mode ?? defaultHomeSortMode).name,
           'revision': revision,
           'base_revision': null,
           'updated_at': updatedAt,
@@ -408,10 +409,15 @@ class NoteSortService {
     return snapshots.value[context.key] ?? _defaultSnapshot(context);
   }
 
+  static NoteSortMode defaultSortModeFor(NoteOrderContext context) =>
+      context.kind == NoteOrderContextKind.main
+      ? defaultHomeSortMode
+      : NoteSortMode.updatedNewest;
+
   NoteOrderSnapshot _defaultSnapshot(NoteOrderContext context) =>
       NoteOrderSnapshot(
         context: context,
-        mode: NoteSortMode.updatedNewest,
+        mode: defaultSortModeFor(context),
         orderedNoteIds: const [],
         revision: const Uuid().v4(),
         updatedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -434,7 +440,7 @@ class NoteSortService {
     if (existing != null) return existing;
 
     final notes = visibleNotes?.toList() ?? await _loadNotesForContext(context);
-    final legacyMode = await _legacyMode();
+    final legacyMode = await _legacyMode(context);
     final legacyPositions = await _legacyStablePositions();
     notes.sort(_compareSeedOrder);
     final ids = notes.map(_stableId).whereType<String>().toList(growable: true);
@@ -472,14 +478,15 @@ class NoteSortService {
     return mutation(current);
   });
 
-  Future<NoteSortMode> _legacyMode() async {
+  Future<NoteSortMode> _legacyMode(NoteOrderContext context) async {
+    final defaultMode = defaultSortModeFor(context);
     final rows = await AppState.db.query(legacyTableName, limit: 1);
-    if (rows.isEmpty) return NoteSortMode.updatedNewest;
+    if (rows.isEmpty) return defaultMode;
     final name = rows.first['sort_mode'] as String?;
     return NoteSortMode.values
             .where((candidate) => candidate.name == name)
             .firstOrNull ??
-        NoteSortMode.updatedNewest;
+        defaultMode;
   }
 
   Future<Map<String, int>> _legacyStablePositions() async {
