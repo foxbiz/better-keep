@@ -132,18 +132,16 @@ Future<void> _refreshAuthTokenForUpdatedClaims() async {
 
 ## Deployment Steps
 
-1. **Deploy Cloud Functions first:**
+1. **Build Cloud Functions:**
 
    ```bash
-   cd functions
-   npm run build
-   firebase deploy --only functions
+   npm run functions build
    ```
 
-2. **Deploy Security Rules:**
+2. **Deploy Cloud Functions and Security Rules:**
 
    ```bash
-   firebase deploy --only firestore:rules,storage
+   npm run deploy backend
    ```
 
 3. **Test the implementation:**
@@ -173,11 +171,11 @@ The migration script is located at `functions/src/migrations/migrateSubscription
 **To run it:**
 
 ```bash
-# 1. Navigate to the functions directory
-cd functions
+# 1. From the repository root, authenticate with the pinned Firebase CLI
+npm run firebase login
 
-# 2. Make sure you're authenticated with Firebase
-firebase login
+# 2. Navigate to the Functions package
+cd functions
 
 # 3. Set the Google Application Credentials (use your service account key)
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your-service-account-key.json"

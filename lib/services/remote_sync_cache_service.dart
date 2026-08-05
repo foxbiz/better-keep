@@ -1,20 +1,55 @@
 import 'dart:convert';
 
+import 'package:better_keep/models/cloud_sync_cursor.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/remote_document_revision.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
+
+typedef RemoteSyncFileSystemProvider = Future<FileSystem> Function();
+
+enum RemoteSyncResumeDisposition {
+  retainPending,
+  commitDurable,
+  reconcileLegacy,
+  restartIncomplete,
+}
+
+RemoteSyncResumeDisposition classifyRemoteSyncResume({
+  required RemoteSyncCacheMetadata? metadata,
+  required bool hasRemainingEntries,
+}) {
+  if (hasRemainingEntries) {
+    return RemoteSyncResumeDisposition.retainPending;
+  }
+  if (metadata?.isCommitReady != true) {
+    return RemoteSyncResumeDisposition.restartIncomplete;
+  }
+  if (metadata!.cursorSchemaVersion == CloudSyncCheckpoint.schemaVersion) {
+    return RemoteSyncResumeDisposition.commitDurable;
+  }
+  return RemoteSyncResumeDisposition.reconcileLegacy;
+}
 
 /// Service for managing the cache of pending remote syncs.
 /// This persists pending syncs to JSON files organized by pages,
 /// allowing sync to resume after app restart and reducing Firebase reads.
 class RemoteSyncCacheService {
-  RemoteSyncCacheService._internal();
+  RemoteSyncCacheService._internal({
+    RemoteSyncFileSystemProvider? fileSystemProvider,
+  }) : _fileSystemProvider = fileSystemProvider ?? fileSystem;
 
   factory RemoteSyncCacheService() => _instance;
 
   static final RemoteSyncCacheService _instance =
       RemoteSyncCacheService._internal();
+
+  @visibleForTesting
+  RemoteSyncCacheService.forTesting(this._fileSystemProvider);
+
+  final RemoteSyncFileSystemProvider _fileSystemProvider;
 
   /// Page size for fetching notes from Firebase
   static const int pageSize = 20;
@@ -39,7 +74,7 @@ class RemoteSyncCacheService {
 
   /// Get cache directory path
   Future<String> _getCacheDir() async {
-    final fs = await fileSystem();
+    final fs = await _fileSystemProvider();
     final cacheDir = await fs.cacheDir;
     return path.join(cacheDir, _cacheDir);
   }
@@ -50,11 +85,13 @@ class RemoteSyncCacheService {
 
     try {
       await _loadMetadata();
-      if (_metadata != null && !_metadata!.syncComplete) {
+      if (_metadata != null && !_metadata!.isCommitReady) {
         await _loadAllPages();
+        _recomputeCompletionState();
+        await _saveMetadata();
         AppLogger.log(
           "[SYNC] CACHE: Loaded ${_pages.length} pages with "
-          "${_getTotalPendingCount()} pending syncs",
+          "${_getTotalRemainingCount()} remaining syncs",
         );
       }
       _initialized = true;
@@ -67,18 +104,18 @@ class RemoteSyncCacheService {
   }
 
   /// Get total count of pending syncs across all pages
-  int _getTotalPendingCount() {
+  int _getTotalRemainingCount() {
     int count = 0;
     for (final page in _pages.values) {
-      count += page.pendingCount;
+      count += page.syncs.length;
     }
     return count;
   }
 
   /// Check if there are pending syncs that need to be processed
   bool get hasPendingSyncs {
-    if (_metadata == null || _metadata!.syncComplete) return false;
-    return _getTotalPendingCount() > 0;
+    if (_metadata == null || _metadata!.isCommitReady) return false;
+    return _getTotalRemainingCount() > 0;
   }
 
   /// Get the current metadata
@@ -88,9 +125,11 @@ class RemoteSyncCacheService {
   Map<int, PendingRemoteSyncPage> get pages => Map.unmodifiable(_pages);
 
   /// Start a new sync session - clears existing cache and prepares for new sync
-  Future<RemoteSyncCacheMetadata> startNewSync(DateTime? lastSyncedAt) async {
+  Future<RemoteSyncCacheMetadata> startNewSync(
+    CloudSyncCursor? startingCursor,
+  ) async {
     await clear();
-    final metadata = RemoteSyncCacheMetadata(lastSyncedAt: lastSyncedAt);
+    final metadata = RemoteSyncCacheMetadata(lastCursor: startingCursor);
     _metadata = metadata;
     await _saveMetadata();
     AppLogger.log("[SYNC] CACHE: Started new sync session");
@@ -98,10 +137,11 @@ class RemoteSyncCacheService {
   }
 
   /// Add a new page of syncs to the cache
-  /// [maxUpdatedAt] is the max updated_at from this page, used to update lastSyncedAt
+  /// [maxCursor] is the greatest exact cloud cursor safe to commit once all
+  /// cached entries have been applied locally.
   Future<void> addPage(
     PendingRemoteSyncPage page, {
-    DateTime? maxUpdatedAt,
+    CloudSyncCursor? maxCursor,
   }) async {
     if (_metadata == null) {
       AppLogger.log(
@@ -113,17 +153,11 @@ class RemoteSyncCacheService {
     _metadata!.totalPages = _pages.length;
     _metadata!.updatedAt = DateTime.now();
 
-    // Update lastSyncedAt to the max updated_at from fetched docs
-    // This prevents re-fetching same notes on next sync
-    if (maxUpdatedAt != null) {
-      if (_metadata!.lastSyncedAt == null ||
-          maxUpdatedAt.isAfter(_metadata!.lastSyncedAt!)) {
-        _metadata!.lastSyncedAt = maxUpdatedAt;
-      }
-    }
-
-    if (!page.hasMore) {
-      _metadata!.allPagesFetched = true;
+    if (maxCursor != null) {
+      final current = _metadata!.lastCursor;
+      _metadata!.lastCursor = current == null
+          ? maxCursor
+          : current.max(maxCursor);
     }
 
     await _savePage(page);
@@ -133,8 +167,20 @@ class RemoteSyncCacheService {
     );
   }
 
-  /// Get the lastSyncedAt timestamp from cache metadata
-  DateTime? get lastSyncedAt => _metadata?.lastSyncedAt;
+  CloudSyncCursor? get lastCursor => _metadata?.lastCursor;
+
+  /// Records that the pagination loop reached its terminal result normally.
+  ///
+  /// This is deliberately separate from [addPage] so a crash after persisting
+  /// the last observed page cannot make an interrupted fetch commit-ready.
+  Future<void> markAllPagesFetched() async {
+    final metadata = _metadata;
+    if (metadata == null) return;
+    metadata.allPagesFetched = true;
+    metadata.updatedAt = DateTime.now();
+    _recomputeCompletionState();
+    await _saveMetadata();
+  }
 
   /// Update a sync entry in the cache
   Future<void> updateSync(
@@ -153,10 +199,34 @@ class RemoteSyncCacheService {
     await _saveMetadata();
   }
 
-  /// Mark a sync as completed and remove it from the cache
-  Future<void> markCompleted(String remoteDocId) async {
+  /// Marks a sync completed only if the cache still contains the revision that
+  /// was processed.
+  ///
+  /// A listener can replace an in-progress entry with a newer revision. In
+  /// that case the newer data is restored to pending instead of being removed
+  /// by completion of the older operation.
+  Future<bool> completeIfCurrentRevision(
+    String remoteDocId,
+    String processedRevision,
+  ) async {
     for (final entry in _pages.entries) {
-      if (entry.value.syncs.containsKey(remoteDocId)) {
+      final current = entry.value.syncs[remoteDocId];
+      if (current != null) {
+        final currentRevision = remoteDocumentRevision(
+          current.remoteData,
+          remoteDocId,
+        );
+        if (currentRevision != processedRevision) {
+          entry.value.syncs[remoteDocId] = current.copyWith(
+            status: PendingRemoteSyncStatus.pending,
+          );
+          await _savePage(entry.value);
+          _metadata?.updatedAt = DateTime.now();
+          _recomputeCompletionState();
+          await _saveMetadata();
+          return false;
+        }
+
         entry.value.syncs.remove(remoteDocId);
 
         // If page is now empty, delete the page file
@@ -171,27 +241,36 @@ class RemoteSyncCacheService {
     }
     _metadata?.updatedAt = DateTime.now();
 
-    // Check if all syncs are complete
-    if (_metadata?.allPagesFetched == true && _getTotalPendingCount() == 0) {
-      _metadata!.syncComplete = true;
-      AppLogger.log("[SYNC] CACHE: All syncs completed!");
-    }
+    _recomputeCompletionState();
     await _saveMetadata();
+    return true;
   }
 
-  /// Mark the sync session as complete
-  /// Used when there are no notes to process (empty fetch)
-  Future<void> markSyncComplete() async {
-    if (_metadata != null) {
-      _metadata!.syncComplete = true;
-      await _saveMetadata();
+  /// Compatibility helper for non-racing call sites.
+  Future<void> markCompleted(String remoteDocId) async {
+    final current = getSync(remoteDocId);
+    if (current == null) return;
+    await completeIfCurrentRevision(
+      remoteDocId,
+      remoteDocumentRevision(current.remoteData, remoteDocId),
+    );
+  }
+
+  void _recomputeCompletionState() {
+    final metadata = _metadata;
+    if (metadata == null) return;
+    final wasComplete = metadata.syncComplete;
+    metadata.syncComplete =
+        metadata.allPagesFetched && _getTotalRemainingCount() == 0;
+    if (!wasComplete && metadata.syncComplete) {
+      AppLogger.log("[SYNC] CACHE: All syncs completed!");
     }
   }
 
   /// Delete a page file from disk
   Future<void> _deletePageFile(int pageIndex) async {
     try {
-      final fs = await fileSystem();
+      final fs = await _fileSystemProvider();
       final cacheDir = await _getCacheDir();
       final pagePath = path.join(cacheDir, 'page_$pageIndex.json');
       if (await fs.exists(pagePath)) {
@@ -335,7 +414,7 @@ class RemoteSyncCacheService {
     String? cacheDirPath;
 
     try {
-      final fs = await fileSystem();
+      final fs = await _fileSystemProvider();
       final cacheDir = await _getCacheDir();
       cacheDirPath = cacheDir;
 
@@ -369,7 +448,7 @@ class RemoteSyncCacheService {
       'cacheDir': cacheDirPath,
       'metadata': _metadata?.toJson(),
       'pageCount': _pages.length,
-      'pendingCount': _getTotalPendingCount(),
+      'pendingCount': _getTotalRemainingCount(),
       'hasPendingSyncs': hasPendingSyncs,
       'files': files,
     };
@@ -377,7 +456,7 @@ class RemoteSyncCacheService {
 
   /// Clear the entire cache
   Future<void> clear() async {
-    final fs = await fileSystem();
+    final fs = await _fileSystemProvider();
     final cacheDir = await _getCacheDir();
 
     try {
@@ -397,7 +476,7 @@ class RemoteSyncCacheService {
 
   /// Load metadata from disk
   Future<void> _loadMetadata() async {
-    final fs = await fileSystem();
+    final fs = await _fileSystemProvider();
     final cacheDir = await _getCacheDir();
     final metadataPath = path.join(cacheDir, _metadataFile);
 
@@ -423,7 +502,7 @@ class RemoteSyncCacheService {
   Future<void> _loadAllPages() async {
     if (_metadata == null) return;
 
-    final fs = await fileSystem();
+    final fs = await _fileSystemProvider();
     final cacheDir = await _getCacheDir();
 
     for (int i = 0; i < _metadata!.totalPages; i++) {
@@ -433,6 +512,14 @@ class RemoteSyncCacheService {
           final content = await fs.readString(pagePath);
           final json = jsonDecode(content) as Map<String, dynamic>;
           final page = PendingRemoteSyncPage.fromJson(json);
+          page.syncs.removeWhere(
+            (_, sync) => sync.status == PendingRemoteSyncStatus.completed,
+          );
+          for (final sync in page.syncs.values) {
+            if (sync.status == PendingRemoteSyncStatus.inProgress) {
+              sync.status = PendingRemoteSyncStatus.pending;
+            }
+          }
           _pages[i] = page;
         }
       } catch (e) {
@@ -455,7 +542,7 @@ class RemoteSyncCacheService {
     _isWriting = true;
 
     try {
-      final fs = await fileSystem();
+      final fs = await _fileSystemProvider();
       final cacheDir = await _getCacheDir();
       final filePath = path.join(cacheDir, fileName);
 

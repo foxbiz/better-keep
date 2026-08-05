@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:flutter/material.dart';
 
 /// Dialog for setting up or updating a recovery passphrase.
@@ -224,7 +226,7 @@ class _RecoverWithPassphraseDialogState
   bool _setAsPrimaryDevice = false;
   String? _hint;
   String? _error;
-  String? _statusMessage;
+  RecoveryProgress? _statusProgress;
 
   @override
   void initState() {
@@ -245,9 +247,9 @@ class _RecoverWithPassphraseDialogState
     }
   }
 
-  void _updateStatus(String message) {
+  void _updateStatus(RecoveryProgress progress) {
     if (mounted) {
-      setState(() => _statusMessage = message);
+      setState(() => _statusProgress = progress);
     }
   }
 
@@ -261,7 +263,7 @@ class _RecoverWithPassphraseDialogState
     setState(() {
       _isLoading = true;
       _error = null;
-      _statusMessage = l10n.verifyingPassphrase;
+      _statusProgress = RecoveryProgress.verifying;
     });
 
     try {
@@ -283,7 +285,7 @@ class _RecoverWithPassphraseDialogState
       if (success) {
         // If user wants to set this device as primary, revoke other devices
         if (_setAsPrimaryDevice) {
-          _updateStatus(l10n.settingAsPrimaryDevice);
+          _updateStatus(RecoveryProgress.almostThere);
           try {
             await DeviceManager.instance.setCurrentDeviceAsPrimary();
           } catch (e, stack) {
@@ -296,7 +298,7 @@ class _RecoverWithPassphraseDialogState
           }
         }
 
-        _updateStatus(l10n.finalizing);
+        _updateStatus(RecoveryProgress.almostThere);
         // Cache the device status as approved
         await E2EESecureStorage.instance.cacheDeviceStatus('approved');
 
@@ -332,7 +334,7 @@ class _RecoverWithPassphraseDialogState
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _statusMessage = null;
+          _statusProgress = null;
         });
       }
     }
@@ -418,7 +420,7 @@ class _RecoverWithPassphraseDialogState
                 const SizedBox(height: 16),
               ],
               // Show status message during recovery
-              if (_isLoading && _statusMessage != null) ...[
+              if (_isLoading && _statusProgress != null) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -438,7 +440,7 @@ class _RecoverWithPassphraseDialogState
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          _statusMessage!,
+                          _statusProgress!.localized(context.l10n),
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: colorScheme.primary),
                         ),
@@ -633,7 +635,8 @@ class _UpdateRecoveryKeyDialogState extends State<UpdateRecoveryKeyDialog> {
       AppLogger.error('Update recovery key failed', e, stack);
       if (mounted) {
         setState(() {
-          if (e.toString().contains('incorrect')) {
+          if (e is RecoveryKeyException &&
+              e.kind == RecoveryKeyFailureKind.incorrectPassphrase) {
             _error = context.l10n.currentPassphraseIncorrect;
           } else {
             _error = context.l10n.somethingWentWrongTryAgain;
@@ -845,7 +848,8 @@ class _RemoveRecoveryKeyDialogState extends State<RemoveRecoveryKeyDialog> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          if (e.toString().contains('incorrect')) {
+          if (e is RecoveryKeyException &&
+              e.kind == RecoveryKeyFailureKind.incorrectPassphrase) {
             _error = context.l10n.passphraseIncorrect;
           } else {
             _error = context.l10n.somethingWentWrongTryAgain;

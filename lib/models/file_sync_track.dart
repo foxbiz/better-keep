@@ -171,9 +171,7 @@ class _FileSyncTrackSchema implements ModelSchema<FileSyncTrack> {
   Future<void> upgradeTable(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 4) {
       // Add content_hash column (added in DB version 4)
-      final columns = await db.rawQuery(
-        "PRAGMA table_info('file_sync_track')",
-      );
+      final columns = await db.rawQuery("PRAGMA table_info('file_sync_track')");
       final hasContentHash = columns.any((c) => c['name'] == 'content_hash');
       if (!hasContentHash) {
         await db.execute(

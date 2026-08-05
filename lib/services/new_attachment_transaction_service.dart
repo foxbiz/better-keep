@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
@@ -101,7 +102,8 @@ class NewAttachmentTransactionRecord {
 /// Local-only path journal. It never contains attachment bytes, note content,
 /// or a PIN.
 class NewAttachmentTransactionJournal {
-  static const preferenceKey = 'pending_new_attachment_transactions_v1';
+  static String get preferenceKey =>
+      FirebaseScopedPreferences.key('pending_new_attachment_transactions_v1');
   static Future<void> _tail = Future<void>.value();
 
   final SharedPreferences preferences;
@@ -211,7 +213,8 @@ class PendingAttachmentSourceCleanupRecord {
 /// Local-only cleanup intent for caller-owned attachment sources. It contains
 /// paths only, never attachment bytes, note content, or authentication data.
 class PendingAttachmentSourceCleanupJournal {
-  static const preferenceKey = 'pending_attachment_source_cleanup_v1';
+  static String get preferenceKey =>
+      FirebaseScopedPreferences.key('pending_attachment_source_cleanup_v1');
   static Future<void> _tail = Future<void>.value();
 
   final SharedPreferences preferences;

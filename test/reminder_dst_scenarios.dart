@@ -16,14 +16,8 @@ void main() {
   setUpAll(() {
     // This dedicated suite must be launched through tool/test_reminder_dst.sh.
     // Failing here is intentional: running in UTC would provide false coverage.
-    expect(
-      DateTime(2026, 1, 1).timeZoneOffset,
-      const Duration(hours: -5),
-    );
-    expect(
-      DateTime(2026, 7, 1).timeZoneOffset,
-      const Duration(hours: -4),
-    );
+    expect(DateTime(2026, 1, 1).timeZoneOffset, const Duration(hours: -5));
+    expect(DateTime(2026, 7, 1).timeZoneOffset, const Duration(hours: -4));
   });
 
   group('America/New_York recurrence', () {

@@ -1,13 +1,14 @@
 import { FieldValue } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { db, emailPassword, razorpayKeyId, razorpayKeySecret } from "../config";
+import { onNonReviewCall } from "../nonReviewCallable";
 import { razorpayRequest, sendRazorpaySubscriptionEmail } from "../utils";
 
 /**
  * Resume a cancelled Razorpay subscription
  */
-export default onCall(
+export default onNonReviewCall(
 	{
 		secrets: [razorpayKeyId, razorpayKeySecret, emailPassword],
 	},
@@ -15,7 +16,6 @@ export default onCall(
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be authenticated");
 		}
-
 		const userId = request.auth.uid;
 
 		console.log(`Resuming Razorpay subscription for user ${userId}`);
@@ -99,7 +99,14 @@ export default onCall(
 				// Send resume email
 				const expiryDate =
 					subData.expiresAt?.toDate() || subData.expiryDate?.toDate();
-				await sendRazorpaySubscriptionEmail(userId, "resumed", expiryDate);
+				try {
+					await sendRazorpaySubscriptionEmail(userId, "resumed", expiryDate);
+				} catch (emailError) {
+					console.error(
+						`Subscription resumed, but resume email failed for ${userId}:`,
+						emailError,
+					);
+				}
 
 				return { success: true };
 			}

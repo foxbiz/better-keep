@@ -4,13 +4,14 @@ This document describes how the Connected Accounts feature works in Better Keep,
 
 ## Overview
 
-Connected Accounts allows users to link multiple authentication providers (Google, Facebook, GitHub, Twitter/X) to their Better Keep account. Once linked, users can sign in using any of their connected accounts to access the same data.
+Connected Accounts allows users to link multiple authentication providers (Google, Apple, Facebook, GitHub, Twitter/X) to their Better Keep account. Once linked, users can sign in using any of their connected accounts to access the same data.
 
 ## Supported Providers
 
 | Provider ID | Display Name | Scopes Requested |
 |-------------|--------------|------------------|
 | `google.com` | Google | `email` |
+| `apple.com` | Apple | `email`, `name` |
 | `facebook.com` | Facebook | `email`, `public_profile` |
 | `github.com` | GitHub | `read:user`, `user:email` |
 | `twitter.com` | X (Twitter) | (default) |
@@ -67,6 +68,14 @@ Links a Google account. Platform-specific handling:
 - **Web:** Uses `user.linkWithPopup(GoogleAuthProvider())`
 - **Windows/Linux:** Uses `DesktopAuthService.signIn()` to get tokens, then `user.linkWithCredential()`
 - **Android/iOS/macOS:** Uses native `google_sign_in` package, then `user.linkWithCredential()`
+
+#### `linkWithApple()`
+Links an Apple account using the shared Apple authentication policy:
+
+- **Web:** Uses `user.linkWithPopup(AppleAuthProvider())`
+- **Android/Windows:** Uses `user.linkWithProvider(AppleAuthProvider())`
+- **iOS/macOS:** Uses a nonce-protected native Apple credential, then `user.linkWithCredential()`
+- **Linux/Fuchsia:** Unsupported
 
 #### `linkWithFacebook()`
 Links a Facebook account.
@@ -310,6 +319,11 @@ For each provider to work, it must be enabled in Firebase Console:
    - **Facebook:** Requires Facebook App ID and Secret
    - **GitHub:** Requires GitHub OAuth App credentials
    - **Twitter:** Requires Twitter API Key and Secret
+   - **Apple:** Requires an Apple Services ID, Team ID, private key, and key ID
+
+For web authentication, authorize `betterkeep.app` in Firebase and configure
+the Apple Services ID with `betterkeep.app` plus the return URL
+`https://betterkeep.app/__/auth/handler`.
 
 ---
 
@@ -320,7 +334,9 @@ The Email provider (`password`) has `onLink: null` because linking email/passwor
 
 ### Platform Differences
 - **Web:** Uses popup-based authentication (`linkWithPopup`)
-- **Mobile/Desktop:** Uses redirect-based authentication (`linkWithProvider` or `linkWithCredential`)
+- **Android/Windows:** Uses Firebase provider authentication (`linkWithProvider`)
+- **iOS/macOS:** Uses native credentials (`linkWithCredential`)
+- **Linux/Fuchsia:** Unsupported
 
 ### Logging
 All linking operations are logged via `AppLogger`:

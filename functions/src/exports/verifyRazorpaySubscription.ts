@@ -1,15 +1,17 @@
 import * as crypto from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { db, emailPassword, razorpayKeySecret } from "../config";
+import { wasEmailDelivered } from "../emailDelivery";
+import { onNonReviewCall } from "../nonReviewCallable";
 import { sendRazorpaySubscriptionEmail, setSubscriptionClaims } from "../utils";
 
 /**
  * Verify Razorpay subscription payment
  * Called after successful payment on client
  */
-export default onCall(
+export default onNonReviewCall(
 	{
 		secrets: [razorpayKeySecret, emailPassword],
 	},
@@ -23,7 +25,6 @@ export default onCall(
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be authenticated");
 		}
-
 		const userId = request.auth.uid;
 		const { subscriptionId, paymentId, signature } = request.data;
 
@@ -115,8 +116,21 @@ export default onCall(
 			// transient mailer failure doesn't permanently suppress the welcome email.
 			const alreadySentWelcome = paymentData.welcomeEmailSent === true;
 			if (!alreadySentWelcome) {
-				await sendRazorpaySubscriptionEmail(userId, "welcome", expiryDate);
-				await paymentDoc.ref.update({ welcomeEmailSent: true });
+				try {
+					const delivery = await sendRazorpaySubscriptionEmail(
+						userId,
+						"welcome",
+						expiryDate,
+					);
+					if (wasEmailDelivered(delivery)) {
+						await paymentDoc.ref.update({ welcomeEmailSent: true });
+					}
+				} catch (emailError) {
+					console.error(
+						`Subscription activated, but welcome email failed for ${userId}:`,
+						emailError,
+					);
+				}
 			}
 
 			return { success: true, expiryDate: expiryDate.toISOString() };

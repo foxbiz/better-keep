@@ -190,9 +190,12 @@ class _AboutPageState extends State<AboutPage> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Legal',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                Text(
+                  context.l10n.legal,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
@@ -206,7 +209,7 @@ class _AboutPageState extends State<AboutPage> {
                     }
                   },
                   icon: const Icon(Icons.description_outlined),
-                  label: const Text('Terms of Use'),
+                  label: Text(context.l10n.termsOfUse),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
@@ -220,7 +223,7 @@ class _AboutPageState extends State<AboutPage> {
                     }
                   },
                   icon: const Icon(Icons.privacy_tip_outlined),
-                  label: const Text('Privacy Policy'),
+                  label: Text(context.l10n.privacyPolicy),
                 ),
               ],
             ),

@@ -9,7 +9,7 @@ publish-ready without a human reviewer changing that state.
 Run:
 
 ```bash
-npm run test:store
+npm test store
 ```
 
 ## Creative production
@@ -35,7 +35,7 @@ verified.
 
 - Export the previous 28 days into `operations/baseline-template.csv`.
 - Connect Search Console and Bing Webmaster Tools and submit `/sitemap.xml`.
-- After a production deploy, run `npm run submit:indexnow` to notify IndexNow
+- After a production deploy, run `npm run deploy indexnow` to notify IndexNow
   using the public key served at `/indexnow-key.txt`.
 - Configure Plausible goals for the five names in the product-facts file.
 - Create one Play Store Listing Experiment at a time.

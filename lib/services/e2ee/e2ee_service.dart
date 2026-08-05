@@ -4,15 +4,15 @@
 /// It manages initialization, key management, and encryption operations.
 library;
 
-import 'dart:async';
-
+import 'package:better_keep/services/async_initialization_gate.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/note_encryption.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/config.dart' show demoAccountEmail;
 import 'package:flutter/foundation.dart';
 
 /// E2EE status for the current device.
@@ -63,8 +63,8 @@ class E2EEService {
     E2EEStatus.notInitialized,
   );
 
-  /// Detailed status message for UI display during initialization.
-  final ValueNotifier<String> statusMessage = ValueNotifier('');
+  /// Semantic progress for UI display during initialization.
+  final ValueNotifier<ProtectionProgress?> statusProgress = ValueNotifier(null);
 
   /// Notifier to indicate recovery key setup is needed (after fresh E2EE setup).
   final ValueNotifier<bool> needsRecoveryKeySetup = ValueNotifier(false);
@@ -73,15 +73,14 @@ class E2EEService {
   /// Used by sync progress widget to show verification status.
   final ValueNotifier<bool> isVerifyingInBackground = ValueNotifier(false);
 
-  /// Message shown during background verification.
-  final ValueNotifier<String> backgroundVerificationMessage = ValueNotifier('');
+  /// Semantic progress shown during background verification.
+  final ValueNotifier<ProtectionProgress?> backgroundVerificationProgress =
+      ValueNotifier(null);
 
   /// Tracks whether status change listeners have been registered.
   bool _listenersRegistered = false;
 
-  /// Completer to guard against concurrent initialize() calls.
-  /// Multiple callers will receive the same Future.
-  Completer<void>? _initCompleter;
+  final AsyncInitializationGate _initializationGate = AsyncInitializationGate();
 
   /// Gets the device manager for device operations.
   DeviceManager get deviceManager => _deviceManager;
@@ -124,7 +123,7 @@ class E2EEService {
         // This allows app.dart to show Home right away
         status.value = E2EEStatus.verifyingInBackground;
         isVerifyingInBackground.value = true;
-        backgroundVerificationMessage.value = 'Verifying encryption...';
+        backgroundVerificationProgress.value = ProtectionProgress.verifying;
         return true;
       }
 
@@ -136,14 +135,6 @@ class E2EEService {
     }
   }
 
-  /// Checks if the current user is the demo account (for Google Play review testing).
-  /// Demo accounts bypass device authorization for easier testing.
-  bool get _isDemoAccount {
-    final email = AuthService.currentUser?.email;
-    return email != null &&
-        email.toLowerCase() == demoAccountEmail.toLowerCase();
-  }
-
   /// Initializes E2EE for the current user.
   ///
   /// This should be called after user login.
@@ -152,17 +143,15 @@ class E2EEService {
   /// while they can immediately access their notes.
   ///
   /// This method is idempotent - concurrent calls return the same Future.
-  Future<void> initialize() async {
-    // Guard against concurrent initialization
-    // If already initializing, return the same Future
-    if (_initCompleter != null) {
-      AppLogger.log(
-        'E2EE: Initialize already in progress, returning existing Future',
-      );
-      return _initCompleter!.future;
+  Future<void> initialize() {
+    if (ReviewAccess.isAuthorizedSessionFor(AuthService.currentUser)) {
+      return initializeReviewSession();
     }
-    _initCompleter = Completer<void>();
 
+    return _initializationGate.run(_initializeStandardSession);
+  }
+
+  Future<void> _initializeStandardSession() async {
     try {
       AppLogger.log('E2EE: Initializing...');
 
@@ -177,11 +166,10 @@ class E2EEService {
         await _deviceManager.init();
         // Continue verification in background
         _verifyApprovedStatusInBackground();
-        _initCompleter?.complete();
         return;
       }
 
-      statusMessage.value = 'Getting ready...';
+      statusProgress.value = ProtectionProgress.gettingReady;
 
       // Initialize secure storage
       await _secureStorage.init();
@@ -190,14 +178,14 @@ class E2EEService {
       final wasInterrupted = await _secureStorage.wasSignInInterrupted();
       if (wasInterrupted) {
         AppLogger.log('E2EE: Detected interrupted sign-in, cleaning up...');
-        statusMessage.value = 'Resuming setup...';
+        statusProgress.value = ProtectionProgress.gettingReady;
         // Clear the flag and any partial state
         await _secureStorage.setSignInProgress(false);
         await _secureStorage.clearDeviceStatus();
         // Continue with fresh initialization
       }
 
-      statusMessage.value = 'Checking your account...';
+      statusProgress.value = ProtectionProgress.checkingAccount;
 
       // Check if this device has keys first (before using cached status)
       final hasKeys = await _secureStorage.hasDeviceKeys();
@@ -214,12 +202,12 @@ class E2EEService {
               // This allows immediate access to notes while we verify with server
               status.value = E2EEStatus.verifyingInBackground;
               isVerifyingInBackground.value = true;
-              backgroundVerificationMessage.value = 'Verifying encryption...';
+              backgroundVerificationProgress.value =
+                  ProtectionProgress.verifying;
               // Initialize device manager to load cached UMK
               await _deviceManager.init();
               // Continue verification in background
               _verifyApprovedStatusInBackground();
-              _initCompleter?.complete();
               return;
             case 'pending':
               status.value = E2EEStatus.pendingApproval;
@@ -234,13 +222,13 @@ class E2EEService {
       // If no keys, keep notInitialized - will be set after registration
 
       // Initialize device manager
-      statusMessage.value = 'Connecting...';
+      statusProgress.value = ProtectionProgress.connecting;
       await _deviceManager.init();
 
       if (!hasKeys) {
         // New device - need to register
         AppLogger.log('E2EE: New device, checking if E2EE is set up...');
-        statusMessage.value = 'Preparing your account...';
+        statusProgress.value = ProtectionProgress.checkingAccount;
 
         // Check if E2EE is set up for this user (any devices exist)
         final isFirst = await _deviceManager.isFirstDevice();
@@ -256,15 +244,13 @@ class E2EEService {
             );
             status.value = E2EEStatus.needsRecovery;
             await _secureStorage.cacheDeviceStatus('needs_recovery');
-            _initCompleter?.complete();
             return;
           }
 
           // Truly first device with no recovery key - set up fresh E2EE
           AppLogger.log('E2EE: First device, automatically setting up E2EE...');
-          statusMessage.value = 'Securing your account...';
-          await setupE2EE();
-          _initCompleter?.complete();
+          statusProgress.value = ProtectionProgress.protectingNotes;
+          await _setupE2EE();
           return;
         }
 
@@ -273,22 +259,11 @@ class E2EEService {
 
         if (!hasApproved) {
           // No approved devices - user needs to recover or start fresh
-          // Exception: Demo account gets auto-setup for testing purposes
-          if (_isDemoAccount) {
-            AppLogger.log(
-              'E2EE: Demo account detected, auto-setting up E2EE...',
-            );
-            statusMessage.value = 'Setting up demo account...';
-            await setupE2EE();
-            _initCompleter?.complete();
-            return;
-          }
           AppLogger.log(
             'E2EE: No approved devices exist, user needs recovery or fresh start',
           );
           status.value = E2EEStatus.needsRecovery;
           await _secureStorage.cacheDeviceStatus('needs_recovery');
-          _initCompleter?.complete();
           return;
         }
 
@@ -300,57 +275,33 @@ class E2EEService {
         if (matchesPrimary) {
           // Device name matches primary - likely same physical device
           // Show recovery page instead of requiring approval from another device
-          // Exception: Demo account gets auto-setup for testing purposes
-          if (_isDemoAccount) {
-            AppLogger.log(
-              'E2EE: Demo account detected, clearing old devices and starting fresh...',
-            );
-            statusMessage.value = 'Setting up demo account...';
-            await _deviceManager.clearAllDevices();
-            await setupE2EE();
-            _initCompleter?.complete();
-            return;
-          }
           AppLogger.log(
             'E2EE: Device name matches primary device, showing recovery page',
           );
           status.value = E2EEStatus.needsRecovery;
           await _secureStorage.cacheDeviceStatus('needs_recovery');
-          _initCompleter?.complete();
           return;
         }
 
         // Different device - register this device and wait for approval
-        // Exception: Demo account gets auto-setup (clears existing and starts fresh)
-        if (_isDemoAccount) {
-          AppLogger.log(
-            'E2EE: Demo account detected on new device, clearing old devices and starting fresh...',
-          );
-          statusMessage.value = 'Setting up demo account...';
-          await _deviceManager.clearAllDevices();
-          await setupE2EE();
-          _initCompleter?.complete();
-          return;
-        }
         AppLogger.log('E2EE: Registering new device...');
-        statusMessage.value = 'Adding this device...';
+        statusProgress.value = ProtectionProgress.addingDevice;
         await _deviceManager.registerNewDevice();
         status.value = E2EEStatus.pendingApproval;
         await _secureStorage.cacheDeviceStatus('pending');
         listenForStatusChanges();
-        _initCompleter?.complete();
         return;
       }
 
       // Device has keys - check if device still exists on server
-      statusMessage.value = 'Verifying...';
+      statusProgress.value = ProtectionProgress.verifying;
       final existsOnServer = await _deviceManager.deviceExistsOnServer();
 
       if (!existsOnServer) {
         // Device was deleted from server (user cleared Firestore data)
         // Clear local data and treat as fresh start
         AppLogger.log('E2EE: Device not found on server, clearing local data');
-        statusMessage.value = 'Updating account...';
+        statusProgress.value = ProtectionProgress.checkingAccount;
         await _deviceManager.clearLocalData();
 
         // Check if this would be the first device again
@@ -360,24 +311,14 @@ class E2EEService {
           AppLogger.log(
             'E2EE: First device after reset, automatically setting up E2EE...',
           );
-          statusMessage.value = 'Securing your account...';
-          await setupE2EE();
+          statusProgress.value = ProtectionProgress.protectingNotes;
+          await _setupE2EE();
         } else {
           // Devices exist - check if any are approved
           final hasApproved = await _deviceManager.hasApprovedDevices();
 
           if (!hasApproved) {
             // No approved devices - user needs to recover or start fresh
-            // Exception: Demo account gets auto-setup for testing purposes
-            if (_isDemoAccount) {
-              AppLogger.log(
-                'E2EE: Demo account detected after reset, auto-setting up E2EE...',
-              );
-              statusMessage.value = 'Setting up demo account...';
-              await setupE2EE();
-              _initCompleter?.complete();
-              return;
-            }
             AppLogger.log(
               'E2EE: No approved devices after reset, user needs recovery',
             );
@@ -390,17 +331,6 @@ class E2EEService {
 
             if (matchesPrimary) {
               // Device name matches primary - likely same physical device
-              // Exception: Demo account gets auto-setup for testing purposes
-              if (_isDemoAccount) {
-                AppLogger.log(
-                  'E2EE: Demo account detected (matches primary) after reset, clearing and starting fresh...',
-                );
-                statusMessage.value = 'Setting up demo account...';
-                await _deviceManager.clearAllDevices();
-                await setupE2EE();
-                _initCompleter?.complete();
-                return;
-              }
               AppLogger.log(
                 'E2EE: Device name matches primary after reset, showing recovery',
               );
@@ -408,18 +338,7 @@ class E2EEService {
               await _secureStorage.cacheDeviceStatus('needs_recovery');
             } else {
               // Different device - needs re-registration
-              // Exception: Demo account gets auto-setup (clears existing and starts fresh)
-              if (_isDemoAccount) {
-                AppLogger.log(
-                  'E2EE: Demo account detected on new device after reset, clearing and starting fresh...',
-                );
-                statusMessage.value = 'Setting up demo account...';
-                await _deviceManager.clearAllDevices();
-                await setupE2EE();
-                _initCompleter?.complete();
-                return;
-              }
-              statusMessage.value = 'Adding this device...';
+              statusProgress.value = ProtectionProgress.addingDevice;
               await _deviceManager.registerNewDevice();
               status.value = E2EEStatus.pendingApproval;
               await _secureStorage.cacheDeviceStatus('pending');
@@ -427,12 +346,11 @@ class E2EEService {
             }
           }
         }
-        _initCompleter?.complete();
         return;
       }
 
       // Device exists - check status
-      statusMessage.value = 'Almost there...';
+      statusProgress.value = ProtectionProgress.almostThere;
       final isRevoked = await _deviceManager.isDeviceRevoked();
 
       if (isRevoked) {
@@ -441,7 +359,6 @@ class E2EEService {
         status.value = E2EEStatus.revoked;
         await _secureStorage.cacheDeviceStatus('revoked');
         _deviceManager.setRevokedFlag();
-        _initCompleter?.complete();
         return;
       }
 
@@ -453,16 +370,12 @@ class E2EEService {
         status.value = E2EEStatus.pendingApproval;
         await _secureStorage.cacheDeviceStatus('pending');
         listenForStatusChanges();
-        _initCompleter?.complete();
         return;
       }
 
       if (!isApproved) {
         // Should not happen if device exists, but handle gracefully
-        AppLogger.log('E2EE: Device in unknown state');
-        status.value = E2EEStatus.error;
-        _initCompleter?.complete();
-        return;
+        throw StateError('Device has an unknown E2EE approval state');
       }
 
       // Device is approved - check if UMK is available
@@ -472,7 +385,6 @@ class E2EEService {
         await _secureStorage.cacheDeviceStatus('approved');
         // Listen for status changes (revocation, etc.)
         listenForStatusChanges();
-        _initCompleter?.complete();
         return;
       }
 
@@ -484,18 +396,49 @@ class E2EEService {
         await _secureStorage.cacheDeviceStatus('approved');
         // Listen for status changes (revocation, etc.)
         listenForStatusChanges();
-        _initCompleter?.complete();
         return;
       }
 
-      AppLogger.log('E2EE: Could not unlock UMK');
-      status.value = E2EEStatus.error;
-      _initCompleter?.complete();
+      throw StateError('Could not unlock the user master key');
     } catch (e, stack) {
       AppLogger.error('E2EE: Initialization error', e, stack);
       status.value = E2EEStatus.error;
-      _initCompleter?.completeError(e, stack);
-      _initCompleter = null; // Allow retry on error
+      rethrow;
+    }
+  }
+
+  /// Initializes an isolated, local-only E2EE session for app review.
+  ///
+  /// [ReviewAccess.authorize] must have verified the Firebase-signed claim
+  /// before this method is called.
+  Future<void> initializeReviewSession() {
+    if (!ReviewAccess.isAuthorizedSessionFor(AuthService.currentUser)) {
+      throw StateError('Review session is not authorized');
+    }
+
+    return _initializationGate.run(_initializeReviewSession);
+  }
+
+  Future<void> _initializeReviewSession() async {
+    try {
+      AppLogger.log('E2EE: Initializing isolated review session');
+      statusProgress.value = ProtectionProgress.gettingReady;
+      await _secureStorage.init();
+      await _deviceManager.initializeLocalReviewDevice();
+      await _secureStorage.cacheDeviceStatus('approved');
+      await _secureStorage.setSignInProgress(false);
+
+      needsRecoveryKeySetup.value = false;
+      isVerifyingInBackground.value = false;
+      backgroundVerificationProgress.value = null;
+      statusProgress.value = null;
+      status.value = E2EEStatus.ready;
+
+      AppLogger.log('E2EE: Isolated review session ready');
+    } catch (e, stack) {
+      AppLogger.error('E2EE: Review session initialization error', e, stack);
+      status.value = E2EEStatus.error;
+      rethrow;
     }
   }
 
@@ -504,24 +447,28 @@ class E2EEService {
   /// Creates UMK and registers this device as the first approved device.
   Future<bool> setupE2EE() async {
     try {
-      AppLogger.log('E2EE: Setting up E2EE for first device...');
-
-      // Generate and store device keys, create UMK
-      await _deviceManager.registerFirstDevice();
-
-      status.value = E2EEStatus.ready;
-      await _secureStorage.cacheDeviceStatus('approved');
-
-      // Flag that recovery key setup is needed
-      needsRecoveryKeySetup.value = true;
-
-      AppLogger.log('E2EE: Setup complete');
-      return true;
+      return await _setupE2EE();
     } catch (e, stack) {
       AppLogger.error('E2EE: Setup error', e, stack);
       status.value = E2EEStatus.error;
-      return false;
+      rethrow;
     }
+  }
+
+  Future<bool> _setupE2EE() async {
+    AppLogger.log('E2EE: Setting up E2EE for first device...');
+
+    // Generate and store device keys, create UMK
+    await _deviceManager.registerFirstDevice();
+
+    status.value = E2EEStatus.ready;
+    await _secureStorage.cacheDeviceStatus('approved');
+
+    // Flag that recovery key setup is needed
+    needsRecoveryKeySetup.value = true;
+
+    AppLogger.log('E2EE: Setup complete');
+    return true;
   }
 
   /// Verifies approved status in background for returning users.
@@ -533,13 +480,13 @@ class E2EEService {
     _performBackgroundVerification()
         .then((_) {
           isVerifyingInBackground.value = false;
-          backgroundVerificationMessage.value = '';
+          backgroundVerificationProgress.value = null;
           AppLogger.log('E2EE: Background verification completed');
         })
         .catchError((e, stack) {
           AppLogger.error('E2EE: Background verification error', e, stack);
           isVerifyingInBackground.value = false;
-          backgroundVerificationMessage.value = '';
+          backgroundVerificationProgress.value = null;
           // Don't change status to error - user can still access cached notes
           // The error will be caught on next sync attempt
         });
@@ -548,7 +495,7 @@ class E2EEService {
   /// Performs the actual background verification.
   Future<void> _performBackgroundVerification() async {
     try {
-      backgroundVerificationMessage.value = 'Checking encryption status...';
+      backgroundVerificationProgress.value = ProtectionProgress.checkingAccount;
 
       // Check if device still exists on server
       final existsOnServer = await _deviceManager.deviceExistsOnServer();
@@ -564,7 +511,7 @@ class E2EEService {
         return;
       }
 
-      backgroundVerificationMessage.value = 'Verifying device...';
+      backgroundVerificationProgress.value = ProtectionProgress.verifying;
 
       // Check if device is still approved
       final isRevoked = await _deviceManager.isDeviceRevoked();
@@ -657,7 +604,7 @@ class E2EEService {
   /// Resets the initialization guard.
   /// Call this on sign-out to allow re-initialization for a new user.
   void resetInitialization() {
-    _initCompleter = null;
+    _initializationGate.reset();
     AppLogger.log('E2EE: Initialization guard reset');
   }
 
@@ -669,15 +616,22 @@ class E2EEService {
       _listenersRegistered = false;
     }
 
-    try {
-      await _deviceManager.deleteCurrentDevice().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {
-          AppLogger.log('E2EE: Timeout deleting current device during dispose');
-        },
-      );
-    } catch (e) {
-      AppLogger.error('E2EE: Error deleting current device during dispose', e);
+    if (!ReviewAccess.isAuthorizedSessionFor(AuthService.currentUser)) {
+      try {
+        await _deviceManager.deleteCurrentDevice().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            AppLogger.log(
+              'E2EE: Timeout deleting current device during dispose',
+            );
+          },
+        );
+      } catch (e) {
+        AppLogger.error(
+          'E2EE: Error deleting current device during dispose',
+          e,
+        );
+      }
     }
 
     try {
@@ -700,9 +654,10 @@ class E2EEService {
       AppLogger.error('E2EE: Error clearing secure storage during dispose', e);
     }
 
-    statusMessage.value = '';
+    statusProgress.value = null;
+    needsRecoveryKeySetup.value = false;
     isVerifyingInBackground.value = false;
-    backgroundVerificationMessage.value = '';
+    backgroundVerificationProgress.value = null;
     status.value = E2EEStatus.notInitialized;
     // Reset initialization guard to allow re-init for new user
     resetInitialization();
@@ -724,7 +679,7 @@ class E2EEService {
 
     // Reset status
     status.value = E2EEStatus.notInitialized;
-    statusMessage.value = '';
+    statusProgress.value = null;
 
     // Reset initialization guard before re-initializing
     resetInitialization();

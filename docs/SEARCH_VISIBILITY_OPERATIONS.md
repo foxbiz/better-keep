@@ -10,8 +10,8 @@ The remaining work depends on owner access to analytics and store consoles.
 2. Create a Plausible site for `betterkeep.app` and define these custom goals:
    `store_click_ios`, `store_click_android`, `open_web_app`, `github_click`, and
    `keep_import_guide_start`.
-3. Run `npm run build:web`, `npm run test:search`,
-   `npm run test:lighthouse`, and the Firebase hosting route test.
+3. Run `npm run build web`, `npm test search`, `npm test lighthouse`, and
+   `npm test hosting` against the running Firebase Hosting emulator.
 4. Review `site/src/data/product-facts.json` whenever a platform, cipher,
    license, price, or public URL changes.
 
@@ -21,7 +21,7 @@ The remaining work depends on owner access to analytics and store consoles.
    unknown URL in production.
 2. Add the domain property to Google Search Console and submit `/sitemap.xml`.
 3. Add the site to Bing Webmaster Tools, submit the same sitemap, then run
-   `npm run submit:indexnow`.
+   `npm run deploy indexnow`.
 4. Inspect the homepage and `/google-keep-alternative` in the URL inspection
    tools. Do not request indexing for `/app/`, auth, checkout, reset, or shared
    note routes.

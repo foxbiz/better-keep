@@ -6,23 +6,21 @@ import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/services/reminder_action_receipt_service.dart';
+import 'package:better_keep/services/remote_content_retry_ledger.dart';
 import 'package:better_keep/services/note_sort_service.dart';
+import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:better_keep/services/import/import_fingerprint_store.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 Future<Database> initDatabase() async {
-  String dbPath;
-  if (!kIsWeb && Platform.isWindows) {
-    final appSupportDir = await getApplicationSupportDirectory();
-    dbPath = p.join(appSupportDir.path, databaseName);
-  } else {
-    dbPath = databaseName;
-  }
+  final dbPath = await activeDatabasePath();
 
   final db = await openDatabase(
     dbPath,
@@ -35,6 +33,7 @@ Future<Database> initDatabase() async {
       await ReminderActionReceiptService.createTable(db);
       await NoteSortService.createTable(db);
       await ImportFingerprintStore.createTable(db);
+      await RemoteContentRetryLedger.createTable(db);
       await SyncIdentityMigration.migrate(db);
     },
     onUpgrade: (db, oldVersion, newVersion) async {
@@ -52,13 +51,41 @@ Future<Database> initDatabase() async {
         await SyncIdentityMigration.migrate(db);
       }
       await NoteSortService.upgradeTable(db, oldVersion, newVersion);
-      if (oldVersion < 10) {
-        await ImportFingerprintStore.createTable(db);
-      }
+      await upgradeMergedFeatureTables(db, oldVersion, newVersion);
     },
     version: databaseVersion,
   );
 
   AppState.db = db;
   return db;
+}
+
+/// Reconciles the two different schemas that existed at database version 10.
+///
+/// The SEO line added import fingerprints while main added the remote retry
+/// ledger. Version 11 idempotently creates both so an installation upgraded
+/// through either history reaches the same schema.
+Future<void> upgradeMergedFeatureTables(
+  Database db,
+  int oldVersion,
+  int newVersion,
+) async {
+  await RemoteContentRetryLedger.upgradeTable(db, oldVersion, newVersion);
+  if (oldVersion < 11 && newVersion >= 11) {
+    await ImportFingerprintStore.createTable(db);
+    await RemoteContentRetryLedger.createTable(db);
+  }
+}
+
+Future<String> activeDatabasePath() async {
+  final databaseName = FirebaseBackend.isConfigured
+      ? activeDatabaseName
+      : FirebaseScopedPreferences.scopeForPreferences(
+          await SharedPreferences.getInstance(),
+        ).databaseName;
+  if (!kIsWeb && Platform.isWindows) {
+    final appSupportDir = await getApplicationSupportDirectory();
+    return p.join(appSupportDir.path, databaseName);
+  }
+  return databaseName;
 }

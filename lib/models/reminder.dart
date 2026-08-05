@@ -14,11 +14,22 @@ enum ReminderDeliveryState {
   failed,
 }
 
+enum ReminderDeliveryReason {
+  signedOut,
+  unsupportedType,
+  notificationUnsupportedPlatform,
+  alarmUnsupportedPlatform,
+  permissionRequired,
+  timeZoneUnavailable,
+  alarmRequiresSpecificTime,
+  capacityExceeded,
+}
+
 class ReminderScheduleResult {
-  const ReminderScheduleResult(this.state, {this.message, this.error});
+  const ReminderScheduleResult(this.state, {this.reason, this.error});
 
   final ReminderDeliveryState state;
-  final String? message;
+  final ReminderDeliveryReason? reason;
   final Object? error;
 
   bool get isScheduled => state == ReminderDeliveryState.scheduled;

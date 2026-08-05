@@ -3,14 +3,16 @@ import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/pages/about_page.dart';
 import 'package:better_keep/pages/help_page.dart';
 import 'package:better_keep/pages/settings/nerd_stats_page.dart';
+import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/whisper/whisper.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform;
+    show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 
@@ -497,6 +499,47 @@ class _SettingsState extends State<Settings> {
               showPage(context, const NerdStatsPage());
             },
           ),
+          if (kDebugMode)
+            ListTile(
+              leading: const Icon(Icons.dns_outlined),
+              title: const Text('Firebase environment'),
+              subtitle: Text(
+                FirebaseEmulatorConfig.isUsingEmulators
+                    ? 'Emulator · '
+                          '${FirebaseEmulatorConfig.endpoints.host} · '
+                          '${FirebaseEmulatorConfig.googleAuthMode.name} Google'
+                    : 'Live Firebase',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _showFirebaseEnvironmentDialog,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showFirebaseEnvironmentDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Firebase environment'),
+        content: Text(
+          FirebaseEmulatorConfig.isUsingEmulators
+              ? 'This process is connected to the emulator at '
+                    '${FirebaseEmulatorConfig.endpoints.host}.\n\n'
+                    'Firebase routing cannot be changed safely after startup. '
+                    'You will choose the environment again on the next debug '
+                    'launch.'
+              : 'This process is connected to live Firebase.\n\n'
+                    'Firebase routing cannot be changed safely after startup. '
+                    'You will choose the environment again on the next debug '
+                    'launch.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
@@ -527,12 +570,17 @@ class _SettingsState extends State<Settings> {
                           ? sound.substring('assets/'.length)
                           : sound;
                       await _audioPlayer.play(AssetSource(assetPath));
-                    } catch (e) {
+                    } catch (error, stackTrace) {
+                      AppLogger.error(
+                        'Failed to preview reminder sound',
+                        error,
+                        stackTrace,
+                      );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              context.l10n.errorPlayingSound(e.toString()),
+                              context.l10n.somethingWentWrongTryAgain,
                             ),
                           ),
                         );
@@ -703,11 +751,16 @@ class _SettingsState extends State<Settings> {
               ),
             );
           }
-        } catch (e) {
+        } catch (error, stackTrace) {
+          AppLogger.error(
+            'Failed to update local note protection',
+            error,
+            stackTrace,
+          );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(context.l10n.errorEncryptingNotes(e.toString())),
+                content: Text(context.l10n.somethingWentWrongTryAgain),
                 behavior: SnackBarBehavior.floating,
                 backgroundColor: Colors.orange,
               ),

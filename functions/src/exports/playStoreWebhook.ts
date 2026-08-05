@@ -8,7 +8,6 @@ import {
 	googlePlayCredentials,
 } from "../config";
 import {
-	getEmailTransporter,
 	getPlayDeveloperApi,
 	sendEmail,
 	setSubscriptionClaims,
@@ -312,7 +311,6 @@ async function sendSubscriptionNotificationEmail(
 			return;
 		}
 
-		const transporter = getEmailTransporter(emailPassword.value());
 		const senderEmail = process.env.EMAIL_FROM;
 		const senderName = process.env.EMAIL_NAME;
 
@@ -430,7 +428,7 @@ async function sendSubscriptionNotificationEmail(
 		const replyTo =
 			notificationType === 3 ? "feedback@betterkeep.app" : undefined;
 
-		await sendEmail(transporter, {
+		await sendEmail({
 			from: `"${senderName}" <${senderEmail}>`,
 			replyTo: replyTo,
 			to: email,

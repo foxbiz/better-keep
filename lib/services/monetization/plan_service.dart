@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/auth_service.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/monetization/entitlements.dart';
 import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/services/monetization/subscription_status.dart';
 import 'package:better_keep/services/monetization/user_plan.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -57,7 +58,8 @@ class PlanService {
   static const Duration _backendValidationCooldown = Duration(minutes: 5);
 
   // Keys for local storage
-  static const String _cacheKey = 'subscription_cache';
+  static String get _cacheKey =>
+      FirebaseScopedPreferences.key('subscription_cache');
 
   /// Get current subscription status
   SubscriptionStatus get status => _subscriptionStatus.value;
@@ -85,12 +87,17 @@ class PlanService {
     if (_initialized) return;
 
     try {
-      // Load cached subscription
-      await _loadCachedSubscription();
-
-      // If user is logged in, start listening for subscription changes
       final user = AuthService.currentUser;
-      if (user != null) {
+      final reviewAuthorization = ReviewAccess.authorizationFor(user);
+      if (reviewAuthorization != null) {
+        activateReviewSession(reviewAuthorization);
+      } else {
+        // Review sessions must never inherit an ordinary account's cached plan.
+        await _loadCachedSubscription();
+      }
+
+      // If an ordinary user is logged in, start listening for changes.
+      if (user != null && reviewAuthorization == null) {
         await _startSubscriptionListener(user.uid);
 
         // Validate subscription with backend (async, don't block init)
@@ -101,10 +108,15 @@ class PlanService {
       // Listen for auth changes to start/stop subscription listener
       // But defer starting the listener if we're in the middle of sign-in
       // to avoid Firestore connection conflicts
-      _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((
+      _authStateSubscription = FirebaseBackend.auth.authStateChanges().listen((
         user,
       ) {
         if (user != null) {
+          final reviewAuthorization = ReviewAccess.authorizationFor(user);
+          if (reviewAuthorization != null) {
+            activateReviewSession(reviewAuthorization);
+            return;
+          }
           // If we're in the middle of sign-in, defer starting the listener
           // _completeSignIn will handle this after auth is fully complete
           if (AuthService.isVerifying.value) {
@@ -172,6 +184,8 @@ class PlanService {
   /// This is called async and doesn't block the app
   /// Rate-limited to avoid excessive API calls
   Future<void> _validateSubscriptionWithBackend({bool force = false}) async {
+    if (ReviewAccess.isAuthorizedSessionFor(AuthService.currentUser)) return;
+
     // Only validate if user appears to have a paid subscription
     if (!isPaid) return;
 
@@ -276,10 +290,37 @@ class PlanService {
   /// Call this after sign-in is complete to avoid Firestore connection conflicts.
   Future<void> startSubscriptionListener() async {
     final user = AuthService.currentUser;
-    if (user != null) {
+    if (user != null && !ReviewAccess.isAuthorizedSessionFor(user)) {
       await _startSubscriptionListener(user.uid);
       _validateSubscriptionWithBackend();
     }
+  }
+
+  /// Applies the review account's signed subscription claims locally.
+  ///
+  /// Review sessions intentionally avoid Firestore subscription listeners and
+  /// the ordinary account cache, while still receiving paid UI entitlements.
+  void activateReviewSession(ReviewAuthorization authorization) {
+    _stopSubscriptionListener();
+
+    if (authorization.hasActivePro()) {
+      _setSubscription(
+        SubscriptionStatus(
+          plan: UserPlan.pro,
+          expiresAt: authorization.planExpiresAt,
+          purchasePlatform: 'review',
+          willAutoRenew: false,
+        ),
+        refreshAuthToken: false,
+      );
+      AppLogger.log('PlanService: Activated signed review Pro entitlement');
+      return;
+    }
+
+    _setSubscription(SubscriptionStatus.free, refreshAuthToken: false);
+    AppLogger.error(
+      'PlanService: Review authorization is missing an active Pro claim',
+    );
   }
 
   /// Start listening for subscription changes from Firebase
@@ -287,10 +328,7 @@ class PlanService {
     _stopSubscriptionListener();
 
     try {
-      final db = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
-      );
+      final db = FirebaseBackend.firestore;
       final docRef = db
           .collection('users')
           .doc(uid)
@@ -298,7 +336,7 @@ class PlanService {
           .doc('status');
 
       AppLogger.log(
-        'PlanService: Fetching subscription for user $uid from database: ${DefaultFirebaseOptions.databaseId}',
+        'PlanService: Fetching subscription for user $uid from database: ${FirebaseBackend.databaseId}',
       );
 
       // First, fetch from server to ensure fresh data (bypasses cache)
@@ -365,7 +403,10 @@ class PlanService {
   }
 
   /// Set the subscription and update entitlements
-  void _setSubscription(SubscriptionStatus status) {
+  void _setSubscription(
+    SubscriptionStatus status, {
+    bool refreshAuthToken = true,
+  }) {
     final oldPlan = _subscriptionStatus.value.effectivePlan;
     final newPlan = status.effectivePlan;
 
@@ -377,8 +418,27 @@ class PlanService {
 
     // If plan changed, refresh the Firebase Auth token to get updated custom claims
     // Custom claims are set by Cloud Functions when subscription changes
-    if (oldPlan != newPlan) {
+    if (refreshAuthToken && oldPlan != newPlan) {
       _refreshAuthTokenForUpdatedClaims();
+    }
+  }
+
+  Future<void> _refreshReviewSession(User user) async {
+    try {
+      final authorized = await ReviewAccess.refreshAuthorization(user);
+      final authorization = ReviewAccess.authorizationFor(user);
+      if (authorized && authorization != null) {
+        activateReviewSession(authorization);
+      } else {
+        _setSubscription(SubscriptionStatus.free, refreshAuthToken: false);
+        AppLogger.error('PlanService: Review authorization is no longer valid');
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'PlanService: Could not refresh signed review entitlement',
+        error,
+        stackTrace,
+      );
     }
   }
 
@@ -412,14 +472,16 @@ class PlanService {
       return;
     }
 
+    if (ReviewAccess.isAuthorizedSessionFor(user)) {
+      await _refreshReviewSession(user);
+      return;
+    }
+
     // First, do a local expiry check (no network call)
     _checkExpiryAndUpdateEntitlements();
 
     try {
-      final db = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
-      );
+      final db = FirebaseBackend.firestore;
       final docRef = db
           .collection('users')
           .doc(user.uid)
@@ -461,6 +523,11 @@ class PlanService {
       return;
     }
 
+    if (ReviewAccess.isAuthorizedSessionFor(user)) {
+      await _refreshReviewSession(user);
+      return;
+    }
+
     // Clear local cache first
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cacheKey);
@@ -468,10 +535,7 @@ class PlanService {
 
     // Reload from Firestore (bypass cache - fetch from server)
     try {
-      final db = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: DefaultFirebaseOptions.databaseId,
-      );
+      final db = FirebaseBackend.firestore;
       final docRef = db
           .collection('users')
           .doc(user.uid)

@@ -5,7 +5,7 @@ enum PromptType { text, password, number, email, url }
 
 Future<String?> prompt(
   BuildContext context, {
-  String title = 'Prompt',
+  required String title,
   String? message,
   String? placeholder,
   String? currentText,

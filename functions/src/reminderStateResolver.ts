@@ -47,12 +47,7 @@ export function detectLegacyReminderTransition(
 ): LegacyReminderTransition | null {
 	if (isDeepStrictEqual(before.reminder, after.reminder)) return null;
 	if (!isDeepStrictEqual(before.reminder_v2, after.reminder_v2)) return null;
-	if (
-		!isDeepStrictEqual(
-			before.reminder_state_v3,
-			after.reminder_state_v3,
-		)
-	) {
+	if (!isDeepStrictEqual(before.reminder_state_v3, after.reminder_state_v3)) {
 		return null;
 	}
 	return {

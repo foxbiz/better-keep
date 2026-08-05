@@ -45,4 +45,33 @@ void main() {
     blocked.complete();
     await first;
   });
+
+  test('waitForIdle includes work appended behind the observed tail', () async {
+    final serializer = AsyncKeyedSerializer<String>();
+    final releaseFirst = Completer<void>();
+    final releaseSecond = Completer<void>();
+    final events = <String>[];
+
+    serializer.run<void>('listener', () async {
+      events.add('first');
+      await releaseFirst.future;
+    });
+    final idle = serializer.waitForIdle('listener');
+    serializer.run<void>('listener', () async {
+      events.add('second');
+      await releaseSecond.future;
+    });
+
+    releaseFirst.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(events, ['first', 'second']);
+    var idleCompleted = false;
+    idle.then((_) => idleCompleted = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(idleCompleted, isFalse);
+
+    releaseSecond.complete();
+    await idle;
+    expect(serializer.contains('listener'), isFalse);
+  });
 }

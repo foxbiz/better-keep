@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AlarmIdService {
-  static const String _storageKey = 'alarm_id_map';
+  static String get _storageKey =>
+      FirebaseScopedPreferences.key('alarm_id_map');
   static Map<String, int> _alarmIdMap = {};
 
   /// Cached SharedPreferences instance for reuse
@@ -12,6 +15,7 @@ class AlarmIdService {
   /// Initialize with optional pre-loaded SharedPreferences for faster startup
   static Future<void> init({SharedPreferences? prefs}) async {
     _prefs = prefs ?? await SharedPreferences.getInstance();
+    _alarmIdMap = {};
     final String? storedMap = _prefs!.getString(_storageKey);
     if (storedMap != null) {
       try {
@@ -21,6 +25,13 @@ class AlarmIdService {
       }
     }
   }
+
+  static Future<void> resetForScopeChange({SharedPreferences? prefs}) =>
+      init(prefs: prefs);
+
+  @visibleForTesting
+  static Map<String, int> get alarmIdMapForTesting =>
+      Map.unmodifiable(_alarmIdMap);
 
   static Future<int> getAlarmId(int noteId) async {
     final String key = noteId.toString();

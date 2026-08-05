@@ -12,6 +12,318 @@ class AppLocalizationsId extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get unableToStartApp => 'Tidak dapat memulai Better Keep';
+
+  @override
+  String get startupRetryMessage =>
+      'Terjadi masalah saat membuka aplikasi. Silakan coba lagi.';
+
+  @override
+  String get startupRestartMessage =>
+      'Terjadi masalah saat membuka aplikasi. Tutup lalu buka kembali aplikasi untuk mencoba lagi.';
+
+  @override
+  String get accountNotFound =>
+      'Tidak ada akun yang ditemukan dengan email ini.';
+
+  @override
+  String get invalidCredentials =>
+      'Email atau kata sandi salah. Silakan coba lagi.';
+
+  @override
+  String get accountDisabled =>
+      'Akun ini tidak tersedia. Silakan hubungi dukungan.';
+
+  @override
+  String get paymentInProgress => 'Pembayaran sedang diproses';
+
+  @override
+  String get completePaymentInBrowser =>
+      'Selesaikan pembayaran di browser Anda. Pesan ini akan tertutup otomatis setelah selesai.';
+
+  @override
+  String get legal => 'Hukum';
+
+  @override
+  String get termsOfUse => 'Ketentuan Penggunaan';
+
+  @override
+  String get privacyPolicy => 'Kebijakan Privasi';
+
+  @override
+  String get appLogoSemantics => 'Logo aplikasi Better Keep';
+
+  @override
+  String get selectColor => 'Pilih warna';
+
+  @override
+  String get unsupportedTextFile =>
+      'Jenis file ini tidak didukung. Pilih file .txt atau .md.';
+
+  @override
+  String get sharedFileEmpty => 'File ini kosong.';
+
+  @override
+  String get fileNotFound => 'File ini tidak ditemukan.';
+
+  @override
+  String get fileTooLarge =>
+      'File ini terlalu besar. Pilih file yang lebih kecil dari 5 MB.';
+
+  @override
+  String get couldNotReadFile => 'File ini tidak dapat dibaca. Coba file lain.';
+
+  @override
+  String get couldNotOpenFile =>
+      'File ini tidak dapat dibuka. Silakan coba lagi.';
+
+  @override
+  String get noteSaved => 'Catatan disimpan';
+
+  @override
+  String get untitled => 'Tanpa judul';
+
+  @override
+  String get failedToExportNote =>
+      'Catatan tidak dapat diekspor. Silakan coba lagi.';
+
+  @override
+  String get failedToCopyNote =>
+      'Catatan tidak dapat disalin. Silakan coba lagi.';
+
+  @override
+  String get failedToDeleteSketch =>
+      'Sketsa tidak dapat dihapus. Silakan coba lagi.';
+
+  @override
+  String get lockedNoteReminder => 'Pengingat untuk catatan terkunci';
+
+  @override
+  String get notesReminder => 'Pengingat catatan Better Keep';
+
+  @override
+  String get blankPage => 'Kosong';
+
+  @override
+  String get linedPage => 'Bergaris';
+
+  @override
+  String get doubleLinedPage => 'Garis ganda';
+
+  @override
+  String get gridPage => 'Kotak-kotak';
+
+  @override
+  String get dotGridPage => 'Titik-titik';
+
+  @override
+  String get dataExportTitle => 'Ekspor data Better Keep';
+
+  @override
+  String get dataExportShareText => 'Ekspor data Better Keep saya';
+
+  @override
+  String get noteReminders => 'Pengingat catatan';
+
+  @override
+  String get noteRemindersDescription =>
+      'Pengingat berbatas waktu untuk catatan';
+
+  @override
+  String get deviceApproval => 'Persetujuan perangkat';
+
+  @override
+  String get deviceApprovalDescription =>
+      'Notifikasi permintaan persetujuan perangkat';
+
+  @override
+  String get newDeviceApprovalRequest =>
+      'Permintaan persetujuan perangkat baru';
+
+  @override
+  String deviceWantsAccess(String deviceName, String platform) {
+    return '$deviceName ($platform) ingin mengakses catatan Anda';
+  }
+
+  @override
+  String get sharedText => 'Teks dibagikan';
+
+  @override
+  String get sharedFile => 'File dibagikan';
+
+  @override
+  String get user => 'Pengguna';
+
+  @override
+  String get thirtyDaysFromNow => '30 hari dari sekarang';
+
+  @override
+  String get helpRequestSubject => 'Better Keep - Permintaan bantuan';
+
+  @override
+  String get faqCreateNoteQuestion => 'Bagaimana cara membuat catatan baru?';
+
+  @override
+  String get faqCreateNoteAnswer =>
+      'Ketuk tombol + di bagian bawah layar utama. Anda dapat menambahkan teks, gambar, audio, dan lainnya.';
+
+  @override
+  String get faqShortcutsQuestion =>
+      'Bagaimana cara menggunakan pintasan cepat?';
+
+  @override
+  String get faqShortcutsAnswer =>
+      'Tekan dan tahan tombol + untuk menampilkan pintasan gambar, audio, sketsa, atau tugas. Geser ke pilihan yang diinginkan lalu lepaskan. Ketukan singkat membuka catatan kosong.';
+
+  @override
+  String get faqLabelsQuestion =>
+      'Bagaimana cara mengatur catatan dengan label?';
+
+  @override
+  String get faqLabelsAnswer =>
+      'Buka catatan lalu ketuk ikon label untuk menambah atau membuat label. Catatan dapat difilter berdasarkan label dari menu samping.';
+
+  @override
+  String get faqReminderQuestion => 'Bagaimana cara mengatur pengingat?';
+
+  @override
+  String get faqReminderAnswer =>
+      'Buka catatan lalu ketuk ikon pengingat untuk memilih tanggal dan waktu.';
+
+  @override
+  String get faqArchiveDeleteQuestion =>
+      'Bagaimana cara mengarsipkan atau menghapus catatan?';
+
+  @override
+  String get faqArchiveDeleteAnswer =>
+      'Tekan dan tahan catatan untuk memilihnya, lalu gunakan tindakan arsipkan atau hapus. Catatan yang dihapus masuk ke Sampah terlebih dahulu dan dapat dihapus permanen dari sana.';
+
+  @override
+  String get faqThemeQuestion => 'Bagaimana cara mengubah tema aplikasi?';
+
+  @override
+  String get faqThemeAnswer =>
+      'Buka Pengaturan lalu pilih opsi tema yang Anda sukai.';
+
+  @override
+  String get faqSyncQuestion =>
+      'Bagaimana cara menyinkronkan catatan antarperangkat?';
+
+  @override
+  String get faqSyncAnswer =>
+      'Masuk untuk menyinkronkan catatan dengan aman di semua perangkat Anda.';
+
+  @override
+  String get faqReminderTimesQuestion =>
+      'Bagaimana cara mengatur waktu pagi, siang, dan malam?';
+
+  @override
+  String get faqReminderTimesAnswer =>
+      'Buka Pengaturan lalu pilih Pengaturan Waktu Pengingat untuk menyesuaikannya.';
+
+  @override
+  String get faqAlarmSoundQuestion => 'Bagaimana cara mengubah suara alarm?';
+
+  @override
+  String get faqAlarmSoundAnswer =>
+      'Buka Pengaturan, pilih Suara Alarm, lalu pilih salah satu suara yang tersedia.';
+
+  @override
+  String get faqSecurityQuestion => 'Apakah data saya aman?';
+
+  @override
+  String get faqSecurityAnswer =>
+      'Catatan Anda disimpan dengan aman. Saat perlindungan sinkronisasi aktif, enkripsi ujung ke ujung melindungi data yang disinkronkan.';
+
+  @override
+  String get faqApproveDeviceQuestion =>
+      'Bagaimana cara menyetujui perangkat baru?';
+
+  @override
+  String get faqApproveDeviceAnswer =>
+      'Buka Better Keep di perangkat yang sudah disetujui. Di profil, tinjau perangkat yang menunggu persetujuan lalu setujui atau tolak permintaan.';
+
+  @override
+  String get faqDeleteAccountQuestion => 'Bagaimana cara menghapus akun saya?';
+
+  @override
+  String get faqDeleteAccountAnswer =>
+      'Buka profil lalu pilih Hapus Akun. Setelah verifikasi email, penghapusan dijadwalkan 30 hari kemudian dan semua perangkat akan keluar.';
+
+  @override
+  String get faqCancelDeletionQuestion =>
+      'Dapatkah saya membatalkan penghapusan akun?';
+
+  @override
+  String get faqCancelDeletionAnswer =>
+      'Ya. Masuk kembali dalam 30 hari untuk membatalkan penghapusan terjadwal dan memulihkan akses akun.';
+
+  @override
+  String get faqDeletionEffectsQuestion =>
+      'Apa yang terjadi saat saya menghapus akun?';
+
+  @override
+  String get faqDeletionEffectsAnswer =>
+      'Semua perangkat langsung keluar. Setelah 30 hari, catatan, lampiran, label, dan data pribadi Anda dihapus permanen dan tidak dapat dipulihkan.';
+
+  @override
+  String get faqExportBeforeDeletionQuestion =>
+      'Dapatkah saya mengekspor data sebelum menghapus akun?';
+
+  @override
+  String get faqExportBeforeDeletionAnswer =>
+      'Ya. Setelah menjadwalkan penghapusan, Anda dapat mengekspor data. Unduh sebelum masa 30 hari berakhir.';
+
+  @override
+  String get iosAppAvailable =>
+      'Better Keep tersedia di App Store. Dapatkan aplikasinya untuk notifikasi, widget, dan lainnya.';
+
+  @override
+  String get openAppStore => 'Buka App Store';
+
+  @override
+  String get tasks => 'Tugas';
+
+  @override
+  String get unknown => 'Tidak diketahui';
+
+  @override
+  String get exportAttachments => 'Lampiran';
+
+  @override
+  String get created => 'Dibuat';
+
+  @override
+  String get updated => 'Diperbarui';
+
+  @override
+  String get oneTime => 'Satu kali';
+
+  @override
+  String get lockedExportExplanation =>
+      'Catatan ini terkunci. Konten terlindungnya tetap tersimpan dalam ekspor ini dan hanya dapat dibuka dengan PIN asli.';
+
+  @override
+  String dataExportReadme(String exportedAt) {
+    return 'Better Keep - Ekspor Data\n\nArsip ini berisi catatan, label, lampiran, dan detail ekspor Anda. Catatan yang dapat dibuka juga tersedia sebagai file Markdown. Catatan terkunci tetap terlindung dan memerlukan PIN asli.\n\nUntuk bantuan, hubungi contact@betterkeep.app.\n\nDiekspor pada: $exportedAt';
+  }
+
+  @override
+  String get paymentSuccessful => 'Pembayaran berhasil';
+
+  @override
+  String get paymentSuccessfulReturn =>
+      'Anda dapat menutup jendela ini dan kembali ke Better Keep.';
+
+  @override
+  String get paymentCancelledClose =>
+      'Pembayaran dibatalkan. Anda dapat menutup jendela ini.';
+
+  @override
+  String get appleSignInVerificationFailed =>
+      'Masuk dengan Apple tidak dapat diverifikasi. Silakan coba lagi.';
+
+  @override
   String get reminderType => 'Jenis pengingat';
 
   @override
@@ -2057,6 +2369,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get webBrowser => 'Browser Web';
 
   @override
+  String get unknownDevice => 'Perangkat tidak dikenal';
+
+  @override
   String get debugDeleteSubscription => 'DEBUG: Hapus Langganan';
 
   @override
@@ -3144,4 +3459,98 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       'Pengaturan ulang manual tidak tersedia saat mengurutkan berdasarkan tanggal. Pilih Kustom untuk mengatur ulang catatan.';
+
+  @override
+  String get googleKeepImportTitle => 'Impor dari Google Keep';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Pindahkan arsip Google Takeout secara lokal—tanpa perlu mengunggah.';
+
+  @override
+  String get googleKeepImportPrivacyTitle =>
+      'Arsip Anda tetap berada di perangkat ini';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'Better Keep memvalidasi dan mengonversi arsip Google Takeout secara lokal. ZIP tidak diunggah ke layanan konversi. Catatan hanya masuk ke alur sinkronisasi opsional setelah impor berhasil disimpan.';
+
+  @override
+  String get googleKeepImportBeforeStart => 'Sebelum memulai';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Buka Google Takeout dan pilih hanya Keep.\n2. Buat dan unduh ekspor.\n3. Pilih ZIP di bawah. Impor ulang yang sama akan dilewati secara default.';
+
+  @override
+  String get googleKeepChooseZip => 'Pilih ZIP Takeout';
+
+  @override
+  String get googleKeepChooseFolder => 'Pilih folder Keep yang diekstrak';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions =>
+      'Buka petunjuk Google Takeout';
+
+  @override
+  String get googleKeepCancelImport => 'Batalkan impor';
+
+  @override
+  String get googleKeepImportCancelled =>
+      'Impor dibatalkan. Tidak ada catatan yang disimpan.';
+
+  @override
+  String get googleKeepImportFailed =>
+      'Impor gagal. Periksa pilihan Anda dan coba lagi.';
+
+  @override
+  String get googleKeepImportReportTitle =>
+      'Laporan impor Google Keep Better Keep';
+
+  @override
+  String get googleKeepImportValidating => 'Memvalidasi arsip Google Takeout…';
+
+  @override
+  String get googleKeepImportParsing => 'Membaca catatan Google Keep…';
+
+  @override
+  String get googleKeepImportPreparingAttachments =>
+      'Menyiapkan lampiran yang diimpor…';
+
+  @override
+  String get googleKeepImportSaving => 'Menyimpan catatan yang diimpor…';
+
+  @override
+  String get googleKeepImportStarting => 'Memulai impor…';
+
+  @override
+  String get googleKeepImportComplete => 'Impor selesai';
+
+  @override
+  String get googleKeepSafetyLimits => 'Batas keamanan';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'File ZIP dibatasi hingga 100 MB terkompresi, 500 MB setelah diekstrak, 20.000 file, dan 50 MB per file. Jalur yang tidak aman, tautan simbolis, dan arsip yang rusak ditolak sebelum catatan disimpan.';
+
+  @override
+  String get googleKeepImported => 'Diimpor';
+
+  @override
+  String get googleKeepSkipped => 'Dilewati';
+
+  @override
+  String get googleKeepWarnings => 'Peringatan';
+
+  @override
+  String get googleKeepUnsupported => 'Tidak didukung';
+
+  @override
+  String get googleKeepFailed => 'Gagal';
+
+  @override
+  String get googleKeepReviewDetails => 'Tinjau detail impor';
+
+  @override
+  String get googleKeepShareReport => 'Bagikan laporan lengkap';
 }

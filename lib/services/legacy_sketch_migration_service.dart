@@ -5,6 +5,7 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -350,7 +351,8 @@ class LegacySketchMigrationJournalRecord {
 }
 
 class LegacySketchMigrationJournal {
-  static const preferenceKey = 'pending_legacy_sketch_migrations_v1';
+  static String get preferenceKey =>
+      FirebaseScopedPreferences.key('pending_legacy_sketch_migrations_v1');
   static Future<void> _mutationQueue = Future<void>.value();
 
   final SharedPreferences preferences;

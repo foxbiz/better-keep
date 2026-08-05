@@ -4,20 +4,33 @@ library;
 
 import 'dart:async';
 
+String currentOAuthClientOrigin() => '';
+
 /// Result class to hold token or error message (stub)
 class OAuthPopupResult {
-  final String? token;
+  final String? completionCode;
+  final String? transactionId;
   final String? error;
   final bool cancelled;
+  final bool linked;
 
-  OAuthPopupResult({this.token, this.error, this.cancelled = false});
+  OAuthPopupResult({
+    this.completionCode,
+    this.transactionId,
+    this.error,
+    this.cancelled = false,
+    this.linked = false,
+  });
 
-  bool get isSuccess => token != null;
+  bool get isSuccess => completionCode != null || linked;
   bool get isError => error != null && !cancelled;
 }
 
 /// Opens OAuth popup - stub for non-web (does nothing)
-Future<OAuthPopupResult> openOAuthPopup(String url) async {
+Future<OAuthPopupResult> openOAuthPopup(
+  String url, {
+  required String expectedTransactionId,
+}) async {
   // Not supported on non-web platforms
   return OAuthPopupResult(
     cancelled: true,

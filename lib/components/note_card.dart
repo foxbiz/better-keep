@@ -7,6 +7,7 @@ import 'package:better_keep/components/note_image_grid.dart';
 import 'package:better_keep/dialogs/unlock_note_dialog.dart';
 import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/note_recording.dart';
@@ -18,6 +19,7 @@ import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:better_keep/utils/utils.dart';
@@ -413,7 +415,7 @@ class _NoteCardState extends State<NoteCard>
   bool _isSyncingOutgoing = false;
   bool _isSyncingIncoming = false;
   bool _isSyncFailed = false;
-  String? _syncStatus;
+  SyncProgress? _syncStatus;
   bool _reorderGestureMoved = false;
   final NoteCardBodyCache _bodyCache = NoteCardBodyCache();
   QuillController? get _controller => _bodyCache.controller;
@@ -825,9 +827,8 @@ class _NoteCardState extends State<NoteCard>
             snackbar(l10n.syncing);
           } else {
             snackbar(l10n.retryingDecryption);
-            final success = await NoteSyncService().retryDecryptionForNote(
-              widget.note.id!,
-            );
+            final success = await NoteSyncService()
+                .retryFailedRemoteNoteForLocalId(widget.note.id!);
             if (!success && mounted) {
               snackbar(l10n.decryptionFailed);
             }
@@ -1174,11 +1175,41 @@ class _NoteCardState extends State<NoteCard>
                         Icon(Icons.push_pin, size: 14.0, color: secondaryColor),
                       if (_isSyncFailed)
                         Tooltip(
-                          message: context.l10n.syncFailed,
-                          child: Icon(
-                            Icons.sync_problem,
-                            size: 14.0,
-                            color: Colors.red,
+                          message:
+                              _syncStatus?.localized(context.l10n) ??
+                              context.l10n.syncFailed,
+                          child: GestureDetector(
+                            onTap: () async {
+                              final noteId = widget.note.id;
+                              if (noteId == null ||
+                                  NoteSyncService().isSyncing.value) {
+                                return;
+                              }
+                              snackbar(context.l10n.retryingDecryption);
+                              final failure = NoteSyncService()
+                                  .contentFailures
+                                  .value[noteId];
+                              final success = failure == null
+                                  ? await NoteSyncService().refresh().then(
+                                      (_) => !NoteSyncService().syncFailed.value
+                                          .contains(noteId),
+                                    )
+                                  : await NoteSyncService()
+                                        .retryFailedRemoteNoteForLocalId(
+                                          noteId,
+                                        );
+                              if (!mounted) return;
+                              snackbar(
+                                success
+                                    ? context.l10n.syncComplete
+                                    : context.l10n.syncFailed,
+                              );
+                            },
+                            child: Icon(
+                              Icons.sync_problem,
+                              size: 14.0,
+                              color: Colors.red,
+                            ),
                           ),
                         ),
                       if (_isSyncingOutgoing || _isSyncingIncoming)
@@ -1189,7 +1220,7 @@ class _NoteCardState extends State<NoteCard>
                     Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
-                        _syncStatus!,
+                        _syncStatus!.localized(context.l10n),
                         style: TextStyle(
                           fontSize: 9,
                           color: Colors.blue,

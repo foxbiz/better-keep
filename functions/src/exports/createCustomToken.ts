@@ -1,12 +1,13 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { auth } from "../config";
+import { onNonReviewCall } from "../nonReviewCallable";
 
 /**
  * Creates a custom token for a user who authenticated via web OAuth
  * This allows the mobile app to sign in after web-based OAuth
  */
-export default onCall(async (request: CallableRequest) => {
+export default onNonReviewCall(async (request: CallableRequest) => {
 	// User must be authenticated (they just signed in via web OAuth)
 	if (!request.auth) {
 		throw new HttpsError(
@@ -14,7 +15,6 @@ export default onCall(async (request: CallableRequest) => {
 			"User must be signed in to get a custom token",
 		);
 	}
-
 	const uid = request.auth.uid;
 
 	try {

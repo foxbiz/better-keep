@@ -2,24 +2,24 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:better_keep/config.dart' show demoAccountEmail;
-import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/services/async_keyed_serializer.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/initial_hydration_gate.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/retry_controller.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
@@ -36,6 +36,7 @@ class NoteSortService {
   static const int legacyCloudSchemaVersion = 1;
   static const int cloudChunkSize = 2000;
   static const int maxCloudChunks = 500;
+  static const NoteSortMode defaultHomeSortMode = NoteSortMode.custom;
 
   static const String legacyTableName = 'note_sort_state';
   static const String tableName = 'note_sort_context';
@@ -56,6 +57,12 @@ class NoteSortService {
   static bool? canReceiveCloudOverride;
 
   @visibleForTesting
+  static bool? e2eeReadyOverride;
+
+  @visibleForTesting
+  static Future<void> Function()? cloudStartOverride;
+
+  @visibleForTesting
   static NoteSortCloudRepository? cloudRepositoryOverride;
 
   @visibleForTesting
@@ -74,7 +81,6 @@ class NoteSortService {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   Timer? _cloudWriteTimer;
   Future<void>? _activeUpload;
-  FirebaseFirestore? _firestoreInstance;
   Timer? _cleanupTimer;
   bool _initialized = false;
   final InitialHydrationGate _remoteHydration = InitialHydrationGate();
@@ -87,13 +93,7 @@ class NoteSortService {
   final Map<String, int> _remoteChunkCounts = {};
   final Set<String> _remoteContextKeys = {};
 
-  FirebaseFirestore get _firestore {
-    _firestoreInstance ??= FirebaseFirestore.instanceFor(
-      app: Firebase.app(),
-      databaseId: DefaultFirebaseOptions.databaseId,
-    );
-    return _firestoreInstance!;
-  }
+  FirebaseFirestore get _firestore => FirebaseBackend.firestore;
 
   CollectionReference<Map<String, dynamic>> _contextCollectionRef(
     _NoteSortCloudSession session,
@@ -123,12 +123,13 @@ class NoteSortService {
       .doc(index.toString().padLeft(6, '0'));
 
   bool get _canReceiveCloud {
+    if (!(e2eeReadyOverride ?? E2EEService.instance.isReady)) return false;
     if (canReceiveCloudOverride != null) return canReceiveCloudOverride!;
     try {
       final user = AuthService.currentUser;
       return user != null &&
           !AuthService.sessionInvalid.value &&
-          user.email?.toLowerCase() != demoAccountEmail.toLowerCase();
+          !ReviewAccess.isAuthorizedSessionFor(user);
     } catch (_) {
       return false;
     }
@@ -327,7 +328,7 @@ class NoteSortService {
       ]) {
         await txn.insert(tableName, {
           'context_key': context.key,
-          'sort_mode': (mode ?? NoteSortMode.updatedNewest).name,
+          'sort_mode': (mode ?? defaultHomeSortMode).name,
           'revision': revision,
           'base_revision': null,
           'updated_at': updatedAt,
@@ -352,6 +353,32 @@ class NoteSortService {
     await _migrateLegacyLocalState(AppState.db);
     await _loadSnapshots();
     Note.on('changed', _handleNoteEvent);
+    E2EEService.instance.status.addListener(_handleE2EEStatusChange);
+  }
+
+  void _handleE2EEStatusChange() {
+    if (E2EEService.instance.isReady) {
+      unawaited(
+        startCloudSync().catchError((Object error, StackTrace stackTrace) {
+          AppLogger.error(
+            '[NOTE_SORT] Failed to start cloud sync after E2EE became ready',
+            error,
+            stackTrace,
+          );
+        }),
+      );
+      return;
+    }
+
+    unawaited(
+      _stopCloudSync().catchError((Object error, StackTrace stackTrace) {
+        AppLogger.error(
+          '[NOTE_SORT] Failed to stop cloud sync after E2EE became unavailable',
+          error,
+          stackTrace,
+        );
+      }),
+    );
   }
 
   Future<void> _loadSnapshots() async {
@@ -382,10 +409,15 @@ class NoteSortService {
     return snapshots.value[context.key] ?? _defaultSnapshot(context);
   }
 
+  static NoteSortMode defaultSortModeFor(NoteOrderContext context) =>
+      context.kind == NoteOrderContextKind.main
+      ? defaultHomeSortMode
+      : NoteSortMode.updatedNewest;
+
   NoteOrderSnapshot _defaultSnapshot(NoteOrderContext context) =>
       NoteOrderSnapshot(
         context: context,
-        mode: NoteSortMode.updatedNewest,
+        mode: defaultSortModeFor(context),
         orderedNoteIds: const [],
         revision: const Uuid().v4(),
         updatedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -408,7 +440,7 @@ class NoteSortService {
     if (existing != null) return existing;
 
     final notes = visibleNotes?.toList() ?? await _loadNotesForContext(context);
-    final legacyMode = await _legacyMode();
+    final legacyMode = await _legacyMode(context);
     final legacyPositions = await _legacyStablePositions();
     notes.sort(_compareSeedOrder);
     final ids = notes.map(_stableId).whereType<String>().toList(growable: true);
@@ -446,14 +478,15 @@ class NoteSortService {
     return mutation(current);
   });
 
-  Future<NoteSortMode> _legacyMode() async {
+  Future<NoteSortMode> _legacyMode(NoteOrderContext context) async {
+    final defaultMode = defaultSortModeFor(context);
     final rows = await AppState.db.query(legacyTableName, limit: 1);
-    if (rows.isEmpty) return NoteSortMode.updatedNewest;
+    if (rows.isEmpty) return defaultMode;
     final name = rows.first['sort_mode'] as String?;
     return NoteSortMode.values
             .where((candidate) => candidate.name == name)
             .firstOrNull ??
-        NoteSortMode.updatedNewest;
+        defaultMode;
   }
 
   Future<Map<String, int>> _legacyStablePositions() async {
@@ -884,7 +917,13 @@ class NoteSortService {
 
   Future<void> startCloudSync() async {
     await init();
+    if (!_initialized) return;
     if (_cloudRun != null || !_canReceiveCloud) return;
+    final startOverride = cloudStartOverride;
+    if (startOverride != null) {
+      await startOverride();
+      return;
+    }
     final user = AuthService.currentUser;
     if (user == null) return;
     final firestore = _firestore;
@@ -1733,6 +1772,20 @@ class NoteSortService {
     await _uploadDirtyContexts(run);
   }
 
+  @visibleForTesting
+  bool get canReceiveCloudForTesting => _canReceiveCloud;
+
+  @visibleForTesting
+  bool get hasActiveCloudRunForTesting => _cloudRun != null;
+
+  @visibleForTesting
+  int get cloudGenerationForTesting => _nextCloudGeneration;
+
+  @visibleForTesting
+  void activateCloudRunForTesting() {
+    _cloudRunForTesting();
+  }
+
   Future<void> _migrateLegacyCloudIfNeeded(_NoteSortCloudRun run) async {
     if (!_isCurrentCloudRun(run) || run.legacyMigrationAttempted) return;
     run.legacyMigrationAttempted = true;
@@ -1951,21 +2004,35 @@ class NoteSortService {
     return ids.length == noteCount ? List.unmodifiable(ids) : null;
   }
 
-  Future<void> dispose() async {
+  Future<void> _stopCloudSync() async {
     final run = _cloudRun;
     _cloudRun = null;
     _nextCloudGeneration++;
     run?.uploadRetry.cancel();
-    Note.off('changed', _handleNoteEvent);
     PlanService.instance.statusNotifier.removeListener(_handlePlanChange);
     _cloudWriteTimer?.cancel();
     _cloudWriteTimer = null;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
-    await _remoteListener?.cancel();
+    final remoteListener = _remoteListener;
     _remoteListener = null;
     _remoteListenerRetry.cancel();
     _remoteHydration.reset();
+    _activeUpload = null;
+    _deferredRemote.clear();
+    _remoteChunkCounts.clear();
+    _remoteContextKeys.clear();
+
+    if (remoteListener != null) {
+      await remoteListener.cancel();
+    }
+  }
+
+  Future<void> dispose() async {
+    E2EEService.instance.status.removeListener(_handleE2EEStatusChange);
+    Note.off('changed', _handleNoteEvent);
+    _initialized = false;
+    await _stopCloudSync();
     final tasks = _cloudTasks.toList();
     if (tasks.isNotEmpty) {
       try {
@@ -1983,13 +2050,7 @@ class NoteSortService {
       }
     }
     _cloudTasks.clear();
-    _activeUpload = null;
-    _firestoreInstance = null;
-    _initialized = false;
     _activeDragContexts.clear();
-    _deferredRemote.clear();
-    _remoteChunkCounts.clear();
-    _remoteContextKeys.clear();
     snapshots.value = const {};
   }
 }

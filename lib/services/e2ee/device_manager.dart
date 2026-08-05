@@ -6,15 +6,14 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:better_keep/config.dart' show demoAccountEmail;
-import 'package:better_keep/firebase_options.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
+import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
@@ -189,17 +188,7 @@ class DeviceManager {
 
   DeviceManager._();
 
-  // Lazy Firestore instance getter to ensure correct databaseId is used
-  // This is important because databaseId depends on FirebaseEmulatorConfig.isUsingEmulators
-  // which may not be set at singleton creation time
-  FirebaseFirestore? _firestoreInstance;
-  FirebaseFirestore get _firestore {
-    _firestoreInstance ??= FirebaseFirestore.instanceFor(
-      app: Firebase.app(),
-      databaseId: DefaultFirebaseOptions.databaseId,
-    );
-    return _firestoreInstance!;
-  }
+  FirebaseFirestore get _firestore => FirebaseBackend.firestore;
 
   final E2EESecureStorage _secureStorage = E2EESecureStorage.instance;
   final Uuid _uuid = const Uuid();
@@ -631,6 +620,44 @@ class DeviceManager {
     _listenForPendingApprovals();
   }
 
+  /// Creates or restores encryption material for the isolated review session.
+  ///
+  /// Review keys are intentionally local-only. No device document is created,
+  /// no existing device is modified, and no approval listener is started.
+  Future<void> initializeLocalReviewDevice() async {
+    if (_currentUser == null) throw StateError('User not logged in');
+    if (!ReviewAccess.isAuthorizedSessionFor(_currentUser)) {
+      throw StateError('Review session is not authorized');
+    }
+
+    await _secureStorage.init();
+
+    final hasKeys = await _secureStorage.hasDeviceKeys();
+    final cachedUMK = await _secureStorage.getCachedUMK();
+    if (hasKeys && cachedUMK != null) {
+      _cachedUMK = cachedUMK;
+      hasUMK.value = true;
+      AppLogger.log('E2EE: Restored local review encryption keys');
+      return;
+    }
+
+    // Remove partial local state before creating a consistent key set.
+    await clearLocalData();
+
+    final keyPair = await KeyExchange.generateKeyPair();
+    final umk = generateUserMasterKey();
+    final deviceId = _uuid.v4();
+
+    await _secureStorage.storeDevicePrivateKey(keyPair.privateKey);
+    await _secureStorage.storeDevicePublicKey(keyPair.publicKey);
+    await _secureStorage.storeDeviceId(deviceId);
+    await _secureStorage.cacheUnwrappedUMK(umk);
+
+    _cachedUMK = umk;
+    hasUMK.value = true;
+    AppLogger.log('E2EE: Created local-only review encryption keys');
+  }
+
   /// Registers a new device and requests approval from an existing device.
   ///
   /// The device will be in pending state until approved by another device.
@@ -689,11 +716,8 @@ class DeviceManager {
         // We need to update the device with new keys since we don't have the old private key
         final keyPair = await KeyExchange.generateKeyPair();
 
-        // Update the device document with new public key
-        // Skip device details for review account to avoid policy issues
-        final isReview =
-            _currentUser?.email?.toLowerCase() ==
-            demoAccountEmail.toLowerCase();
+        // Update the device document with new public key.
+        final isReview = ReviewAccess.isAuthorizedSessionFor(_currentUser);
         await _devicesCollection.doc(existingPendingId).update({
           'public_key': keyPair.publicKeyBase64,
           'created_at': DateTime.now().toIso8601String(),
@@ -728,9 +752,8 @@ class DeviceManager {
     // Generate device ID
     final deviceId = _uuid.v4();
 
-    // Get device details (skip for review account to avoid policy issues)
-    final isReviewAccount =
-        _currentUser?.email?.toLowerCase() == demoAccountEmail.toLowerCase();
+    // Get device details (skip for the authorized review session).
+    final isReviewAccount = ReviewAccess.isAuthorizedSessionFor(_currentUser);
     final deviceDetails = isReviewAccount
         ? <String, String?>{}
         : await DeviceInfo.getDeviceDetails();
@@ -998,7 +1021,6 @@ class DeviceManager {
     _approvalSubscription = null;
     _pendingApprovalsSubscription = null;
     // Clear cached Firestore instance so a fresh one is created after signout/signin
-    _firestoreInstance = null;
   }
 
   /// Wraps UMK for a device using its public key.

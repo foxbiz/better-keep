@@ -65,9 +65,22 @@ The app requires environment variables defined in a `.env` file. Create one at t
 # FIREBASE_API_KEY=your_api_key
 # FIREBASE_PROJECT_ID=your_project_id
 #
+# Optional per-platform Firebase Auth domain override. Hosted OAuth callbacks
+# default to the branded betterkeep.app domain.
+# ANDROID_AUTH_DOMAIN=betterkeep.app
+# IOS_AUTH_DOMAIN=betterkeep.app
+# MACOS_AUTH_DOMAIN=betterkeep.app
+# WEB_AUTH_DOMAIN=betterkeep.app
+# WINDOWS_AUTH_DOMAIN=betterkeep.app
+#
 # Web storage encryption key (64-char hex string, 256 bits)
 # Generate with: openssl rand -hex 32
 # WEB_STORAGE_KEY=<your-64-char-hex-key>
+#
+# Required for physical Android/iOS devices in emulator mode.
+# Optional remote/LAN override for desktop clients; same-machine desktop
+# clients default to 127.0.0.1.
+# EMULATOR_HOST=192.168.1.25
 ```
 
 **Using VS Code:**
@@ -84,11 +97,123 @@ All configurations automatically load environment variables from `.env` via `--d
 **Using the terminal:**
 
 ```bash
-flutter run --dart-define-from-file=.env
+npm run dev android
+npm run dev ios
+npm run dev macos
+npm run dev web
+npm run dev windows
 ```
 
-- Use `flutter run -d windows`, `flutter run -d macos`, `flutter run -d ios`, etc. to target a specific platform.
+- Run `npm run dev` to list the supported platforms.
+- Android and iOS automatically use the only matching device or prompt when
+  several are connected. Override the choice with
+  `npm run dev android -- -d <device-id>`.
 - Desktop builds require `sqflite_common_ffi`; the app auto-initializes it on Windows/macOS.
+
+### Firebase emulator testing
+
+Normal repository development uses Node `24.18.0` LTS. Firebase Functions and
+the Firebase CLI use a companion Node `22.23.1`, while Java-backed emulators use
+companion Temurin Java `21.0.11`. Install all three runtimes once:
+
+```bash
+nvm install 24.18.0
+nvm install 22.23.1
+sdk install java 21.0.11-tem
+```
+
+Install both the root and Functions dependencies once:
+
+```bash
+npm install
+npm run functions install
+```
+
+The repository wrappers discover the exact companion runtimes and use them only
+for their child processes. Your active Node and Java versions are not changed,
+and normal commands do not require `nvm use 22.23.1`, `sdk use`, or `sdk env`.
+The wrappers fail with installation-only remediation if a companion is missing,
+and invoke the locally pinned `firebase-tools`, never an accidental global CLI.
+Java is selected only for emulator commands that start Firestore, Realtime
+Database, or Storage.
+
+NVM and SDKMAN installations are discovered automatically. CI or non-standard
+installations can provide absolute paths with
+`BETTER_KEEP_FIREBASE_NODE_BIN` and `BETTER_KEEP_FIREBASE_JAVA_HOME`.
+Use `npm run firebase runtime-check` or
+`npm run firebase emulator-runtime-check` to see the selected host and Firebase
+runtimes.
+
+For a physical Android or iOS device, set `EMULATOR_HOST` in `.env` to the
+computer's current LAN address. Desktop clients use `127.0.0.1` by default;
+set `EMULATOR_HOST` only when the emulators run on another computer. Then start
+the complete emulator suite:
+
+```bash
+npm run firebase emulators
+```
+
+The tracked `firebase.emulators.json` binds Auth (`9099`), Firestore (`8080`),
+Functions (`5001`), Hosting (`5002`), Storage (`9199`), and the Emulator UI
+(`4000`) to the LAN. Only run this command on a trusted network because Firebase
+emulators do not protect local data like production services.
+
+On every debug launch, select **Emulator** or **Live**. The chooser remembers
+the emulator host and Google OAuth preference, but always asks which Firebase
+environment to use before dependent services initialize. Android emulators
+automatically use `10.0.2.2`; Apple simulators and same-machine desktop clients
+use `127.0.0.1`; physical devices require the editable `EMULATOR_HOST` value.
+Desktop clients can also use `EMULATOR_HOST` as a remote/LAN override. A
+physical device and the computer must be on the same Wi-Fi, and the host
+firewall/router must allow the ports above. The app checks every required
+service and reports the exact unavailable ports without falling back to
+production.
+
+After routing succeeds, every debug screen shows a red **LIVE FIREBASE** or
+amber **EMULATOR** ribbon. Tap it for the committed app name, project, database,
+service endpoints, and local-data scope. Settings shows the same routing as
+read-only status; changing environments requires the next debug restart.
+
+Live retains the legacy `better_keep.db`, file roots, preferences, and secure
+storage keys. Emulator uses `better_keep_emulator.db` plus isolated file,
+preference, E2EE, and OAuth namespaces, so the first emulator launch starts
+with a clean local cache. After installing this routing change, fully stop the
+old app process once before testing because its default native Firebase app may
+already have been routed to emulators.
+
+Google login uses a deterministic `google.com` emulator identity by default, so
+it works without internet. Enable **Use real Google OAuth** in the chooser only
+when testing the external Google flow. Prepare and test the email/password
+review account using `docs/GOOGLE_PLAY_REVIEW_ACCOUNT.md`.
+
+Run the emulator configuration tests with:
+
+```bash
+npm test firebase-emulator-config
+```
+
+Run the Functions cleanup and trigger tests in isolated Firestore and Storage
+emulators with:
+
+```bash
+npm test firebase-emulator-functions
+```
+
+Run the Firestore and Storage security-rules suite together, then exercise the
+managed review token directly against Auth, Functions, Firestore, and Storage:
+
+```bash
+npm test firebase-rules
+npm test firebase-emulator-review
+```
+
+With the emulators running, exercise Auth, Functions, Firestore, Storage, and
+Hosting from a connected Android target:
+
+```bash
+npm test firebase-emulator-android -- -d <device-id>
+npm test firebase-environment-android -- -d <device-id>
+```
 
 ### Building the app
 
@@ -123,10 +248,13 @@ The app will be at `build/macos/Build/Products/Release/better_keep.app`.
 **Windows:**
 
 ```bash
-flutter build windows --dart-define-from-file=.env
+npm run build windows
 ```
 
-The app will be at `build/windows/x64/runner/Release/`.
+Run `flutter --version` from the same terminal first so Flutter is available on
+Windows `Path`. The command builds the release application, then creates its
+MSIX package. The unpackaged app will be at
+`build/windows/x64/runner/Release/`.
 
 <!-- Linux build disabled - Firebase doesn't support Linux yet
 **Linux:**
@@ -141,11 +269,55 @@ The app will be at `build/linux/x64/release/bundle/`.
 **Web app and static marketing site:**
 
 ```bash
-npm run build:web
+npm run build web
 ```
 
 This builds the indexable Astro marketing site at `/`, embeds Flutter Web at
 `/app/`, and validates the complete Firebase Hosting artifact in `build/web/`.
+Deploy that artifact to Firebase Hosting with:
+
+```bash
+npm run deploy hosting
+```
+
+The Hosting deployment always rebuilds the web application first.
+
+### Checks and release gate
+
+Use the grouped checks for analysis, dependency auditing, and the secret-backed
+Apple Firebase configuration:
+
+```bash
+npm run check analyze
+npm run check audit
+npm run check apple-config
+```
+
+Run `npm run check` to list the available checks. The Apple configuration check
+requires `.env` and `macos/Runner/GoogleService-Info.plist`.
+
+Run the complete portable release gate with:
+
+```bash
+npm run release
+```
+
+The gate requires `flutter` and `npm` on `Path`. Its browser acceptance stage
+also requires Google Chrome plus a version-matched `chromedriver` executable.
+Download matching releases from the [Chrome for Testing availability
+dashboard](https://googlechromelabs.github.io/chrome-for-testing/).
+
+Use `npm run release help` to display its fail-fast sequence without running it.
+
+Enable the tracked local commit gate once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Every `git commit` then runs the complete release gate and stops if any check
+fails. For an exceptional commit that must bypass the gate, use
+`git commit --no-verify` and run `npm run release` manually as soon as possible.
 
 ## Source license
 
@@ -250,10 +422,15 @@ To ensure data integrity across devices, the app uses a timestamp-based conflict
 
 This project uses Firebase for sync and authentication. Since `firebase_options.dart` is git-ignored for security, you must configure your own Firebase project:
 
-1.  Install the Firebase CLI: `npm install -g firebase-tools`
-2.  Log in: `firebase login`
-3.  Activate FlutterFire CLI: `dart pub global activate flutterfire_cli`
-4.  Configure the app:
+1.  Install the host and companion runtimes described in
+    **Firebase emulator testing**, then run `npm install` and
+    `npm run functions install`.
+2.  Install the matching global Firebase CLI for FlutterFire CLI discovery:
+    `npm install -g firebase-tools@15.24.0`. Repository scripts still invoke
+    only the pinned local CLI.
+3.  Log in: `npm run firebase login`
+4.  Activate FlutterFire CLI: `dart pub global activate flutterfire_cli`
+5.  Configure the app:
 
     ```bash
     flutterfire configure
@@ -263,7 +440,7 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
     - Select the platforms you want to support (Android, iOS, Web, macOS, Windows).
     - This will generate `lib/firebase_options.dart`.
 
-5.  Enable **Authentication** (Google Sign-In) and **Firestore Database** in your Firebase Console.
+6.  Enable **Authentication** (Google Sign-In) and **Firestore Database** in your Firebase Console.
 
 - `flutter pub get` – install dependencies.
 - `flutter analyze` – static analysis.

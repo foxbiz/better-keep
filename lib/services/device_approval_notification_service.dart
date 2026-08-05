@@ -5,6 +5,8 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/local_notification_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/device_localizations.dart';
 
 /// Service to show local notifications for incoming device approval requests
 class DeviceApprovalNotificationService {
@@ -87,15 +89,18 @@ class DeviceApprovalNotificationService {
   }
 
   Future<bool> _showApprovalNotification(DeviceApprovalRequest request) async {
-    final platformName = _formatPlatform(request.platform);
-
     // Use device ID hash as notification ID to avoid duplicates
     final notificationId = _notificationId(request.deviceId);
+    final l10n = currentAppLocalizations();
+    final platformName = _formatPlatform(request.platform, l10n.webBrowser);
 
     final shown = await LocalNotificationService.instance.showDeviceApproval(
       id: notificationId,
-      title: 'New Device Approval Request',
-      body: '${request.deviceName} ($platformName) wants to access your notes',
+      title: l10n.newDeviceApprovalRequest,
+      body: l10n.deviceWantsAccess(
+        localizedDeviceName(l10n, request.deviceName),
+        platformName,
+      ),
       payload: request.deviceId,
     );
     if (!shown) {
@@ -130,7 +135,7 @@ class DeviceApprovalNotificationService {
     return hash == 0 ? 1 : hash;
   }
 
-  String _formatPlatform(String platform) {
+  String _formatPlatform(String platform, String localizedWebBrowser) {
     switch (platform) {
       case 'android':
         return 'Android';
@@ -143,7 +148,7 @@ class DeviceApprovalNotificationService {
       case 'linux':
         return 'Linux';
       case 'web':
-        return 'Web';
+        return localizedWebBrowser;
       default:
         return platform;
     }

@@ -172,8 +172,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         if (info.isIOS) {
           icon = Icons.apple;
           title = context.l10n.installBetterKeep;
-          message = info.promptMessage;
-          actionLabel = info.installButtonLabel;
+          message = context.l10n.iosAppAvailable;
+          actionLabel = context.l10n.openAppStore;
           onAction = () {
             Navigator.pop(context);
             launchUrl(
@@ -1157,7 +1157,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     // Create content with title and empty unchecked checkbox
     // Format: Title + header attribute, then newline with unchecked list attribute
     final contentJson = json.encode([
-      {'insert': 'Tasks'},
+      {'insert': context.l10n.tasks},
       {
         'insert': '\n',
         'attributes': {'header': 1},
@@ -1168,7 +1168,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       },
     ]);
 
-    final note = _createNewNote(title: 'Tasks', content: contentJson);
+    final note = _createNewNote(
+      title: context.l10n.tasks,
+      content: contentJson,
+    );
 
     await note.save();
 

@@ -2,11 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'firebase_backend.dart';
 import 'firebase_emulator_config.dart';
 
 const _defaultRegion = 'us-central1';
@@ -32,20 +31,20 @@ Future<CloudFunctionResult> callCloudFunction(
 ]) async {
   // On web and non-Apple/Windows platforms, use the standard SDK.
   if (kIsWeb || !(Platform.isIOS || Platform.isMacOS || Platform.isWindows)) {
-    final functions = region == _defaultRegion
-        ? FirebaseFunctions.instance
-        : FirebaseFunctions.instanceFor(app: Firebase.app(), region: region);
+    final functions = FirebaseBackend.functions(region: region);
     final result = await functions.httpsCallable(functionName).call(data ?? {});
     return CloudFunctionResult(result.data);
   }
 
   // On Apple native platforms: Direct HTTPS call to avoid native SDK crash
-  final projectId = Firebase.app().options.projectId;
+  final projectId = FirebaseBackend.projectId;
 
   final String baseUrl;
   if (kDebugMode && FirebaseEmulatorConfig.isUsingEmulators) {
-    // Use emulator in debug mode
-    baseUrl = 'http://localhost:5001/$projectId/$region';
+    baseUrl = FirebaseEmulatorConfig.endpoints.functionsBaseUrl(
+      projectId: projectId,
+      region: region,
+    );
   } else {
     baseUrl = 'https://$region-$projectId.cloudfunctions.net';
   }
@@ -53,7 +52,7 @@ Future<CloudFunctionResult> callCloudFunction(
   final url = Uri.parse('$baseUrl/$functionName');
 
   // Get auth token
-  final user = FirebaseAuth.instance.currentUser;
+  final user = FirebaseBackend.auth.currentUser;
   final idToken = user != null ? await user.getIdToken() : null;
 
   final headers = <String, String>{'Content-Type': 'application/json'};

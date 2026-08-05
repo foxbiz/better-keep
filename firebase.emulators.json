@@ -1,0 +1,190 @@
+{
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "hosting": {
+    "public": "build/web",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.emulators.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "Content-Security-Policy",
+            "value": "frame-ancestors 'none'"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          }
+        ]
+      },
+      {
+        "source": "/app/**",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
+        "source": "/auth{,.html,/**}",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
+        "source": "/reset-password{,.html,/**}",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
+        "source": "/desktop-checkout{,.html,/**}",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
+        "source": "/s/**",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
+        "source": "/_astro/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/flutter_service_worker.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/app/flutter_service_worker.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ],
+    "redirects": [
+      {
+        "source": "/welcome{,.html}",
+        "destination": "/",
+        "type": 301
+      },
+      {
+        "source": "/encryption{,.html}",
+        "destination": "/security",
+        "type": 301
+      },
+      {
+        "source": "/open-source{,.html}",
+        "destination": "/source-available-notes",
+        "type": 301
+      },
+      {
+        "source": "/self-host{,.html}",
+        "destination": "/source-available-notes",
+        "type": 301
+      },
+      {
+        "source": "/faqs{,.html}",
+        "destination": "/google-keep-alternative",
+        "type": 301
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/oauth/start",
+        "function": "oauthStart"
+      },
+      {
+        "source": "/oauth/callback",
+        "function": "oauthCallback"
+      },
+      {
+        "source": "/s/**",
+        "destination": "/s/index.html"
+      },
+      {
+        "source": "/app/**",
+        "destination": "/app/index.html"
+      }
+    ]
+  },
+  "emulators": {
+    "auth": {
+      "host": "0.0.0.0",
+      "port": 9099
+    },
+    "firestore": {
+      "host": "0.0.0.0",
+      "port": 8080
+    },
+    "functions": {
+      "host": "0.0.0.0",
+      "port": 5001
+    },
+    "hosting": {
+      "host": "0.0.0.0",
+      "port": 5002
+    },
+    "storage": {
+      "host": "0.0.0.0",
+      "port": 9199
+    },
+    "ui": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 4000
+    },
+    "singleProjectMode": true
+  }
+}

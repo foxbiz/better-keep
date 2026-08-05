@@ -58,31 +58,6 @@ class AppInstallInfo {
     // Don't show empty prompts for macOS/Linux without PWA support
     return hasNativeApp || isIOS || canInstallPWA;
   }
-
-  /// Get the appropriate action label
-  String get installButtonLabel {
-    if (isIOS) return 'Open App Store';
-    if (hasNativeApp) return 'Get App';
-    if (canInstallPWA) return 'Install App';
-    return 'Install App';
-  }
-
-  /// Get the prompt message based on platform
-  String get promptMessage {
-    if (isIOS) {
-      return 'Get Better Keep from the App Store for the best experience!';
-    }
-    if (isAndroid) {
-      return 'Get Better Keep from Google Play for the best experience!';
-    }
-    if (isWindows) {
-      return 'Get Better Keep from Microsoft Store for the best experience!';
-    }
-    if (canInstallPWA) {
-      return 'Install Better Keep for quick access and offline support!';
-    }
-    return 'Install Better Keep for the best experience!';
-  }
 }
 
 @JS('BetterKeepInstall')

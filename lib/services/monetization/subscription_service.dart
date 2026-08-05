@@ -9,6 +9,7 @@ import 'package:better_keep/services/country_detection_service.dart';
 import 'package:better_keep/services/monetization/google_play_product_selector.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
@@ -132,8 +133,8 @@ class SubscriptionService {
     RazorpayCurrency.usd,
   );
 
-  // Last purchase error (for showing to user)
-  String? _lastPurchaseError;
+  // Stable purchase outcome for UI. Provider diagnostics are logged separately.
+  PurchaseOutcome? _lastPurchaseError;
 
   // Completer for restore purchases flow
   Completer<bool>? _restoreCompleter;
@@ -144,8 +145,8 @@ class SubscriptionService {
   // redundant and causes duplicate emails + unnecessary Cloud Function calls.
   bool _restoredIosReceiptVerified = false;
 
-  /// Get last purchase error message
-  String? get lastPurchaseError => _lastPurchaseError;
+  /// Get the last purchase failure category.
+  PurchaseOutcome? get lastPurchaseError => _lastPurchaseError;
 
   /// Clear last purchase error
   void clearLastPurchaseError() => _lastPurchaseError = null;
@@ -199,6 +200,12 @@ Expected IDs: ${ProductIds.all}
     }
     _initialized = true;
     AppLogger.log('SubscriptionService: Initializing...');
+    if (ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      AppLogger.log(
+        'SubscriptionService: Managed review session, store services disabled',
+      );
+      return;
+    }
 
     if (kIsWeb) {
       AppLogger.log(
@@ -479,7 +486,7 @@ Expected IDs: ${ProductIds.all}
               }
             } else if (verifyResult.isLinkedToOtherAccount) {
               // Subscription belongs to another account
-              _lastPurchaseError = verifyResult.error;
+              _lastPurchaseError = PurchaseOutcome.failed;
               AppLogger.log(
                 'SubscriptionService: Subscription linked to another account',
               );
@@ -492,7 +499,7 @@ Expected IDs: ${ProductIds.all}
                   'SubscriptionService: Restored purchase verification failed - ${verifyResult.error}',
                 );
               } else {
-                _lastPurchaseError = verifyResult.error;
+                _lastPurchaseError = PurchaseOutcome.failed;
               }
             }
 
@@ -514,9 +521,7 @@ Expected IDs: ${ProductIds.all}
               purchase.error,
             );
             // Set user-friendly error message
-            _lastPurchaseError = _getFriendlyErrorMessage(
-              purchase.error?.message,
-            );
+            _lastPurchaseError = PurchaseOutcome.failed;
             if (purchase.pendingCompletePurchase) {
               try {
                 await _iap.completePurchase(purchase);
@@ -641,6 +646,8 @@ Expected IDs: ${ProductIds.all}
   /// This is called on init to recover subscription state
   Future<void> _checkPendingPurchases() async {
     try {
+      if (_skipPurchaseRestoreForReviewSession()) return;
+
       // On Android, we can restore purchases to check for active subscriptions
       if (Platform.isAndroid) {
         AppLogger.log('SubscriptionService: Checking for pending purchases...');
@@ -661,6 +668,8 @@ Expected IDs: ${ProductIds.all}
   /// timeout fires if no restored purchases arrive from the store (e.g. user has
   /// no prior purchases on this account).
   Future<bool> restoreAndWaitForPurchases() async {
+    if (_skipPurchaseRestoreForReviewSession()) return false;
+
     if (!_iapAvailable) return false;
 
     // If a restore is already in progress, wait for it rather than starting a new one
@@ -699,6 +708,16 @@ Expected IDs: ${ProductIds.all}
     }
   }
 
+  bool _skipPurchaseRestoreForReviewSession() {
+    if (!ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      return false;
+    }
+    AppLogger.log(
+      'SubscriptionService: Skipping purchase restoration for review session',
+    );
+    return true;
+  }
+
   /// Verify purchase with backend
   ///
   /// This calls the Cloud Function which:
@@ -711,6 +730,12 @@ Expected IDs: ${ProductIds.all}
       final user = AuthService.currentUser;
       if (user == null) {
         return VerifyPurchaseResult(valid: false, error: 'User not signed in');
+      }
+      if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+        return VerifyPurchaseResult(
+          valid: false,
+          error: 'Purchases are unavailable for the managed review account',
+        );
       }
 
       final serverVerificationData =
@@ -1134,7 +1159,16 @@ Expected IDs: ${ProductIds.all}
 
     final user = AuthService.currentUser;
     if (user == null) {
-      return PurchaseResult.failed('Please sign in first');
+      return PurchaseResult.failed(
+        'Please sign in first',
+        outcome: PurchaseOutcome.signInRequired,
+      );
+    }
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return PurchaseResult.failed(
+        'Purchases are unavailable for the managed review account',
+        outcome: PurchaseOutcome.unavailable,
+      );
     }
 
     // For web/desktop, use Razorpay
@@ -1174,6 +1208,7 @@ Expected IDs: ${ProductIds.all}
             );
             return PurchaseResult.success(
               'Your subscription has been restored!',
+              outcome: PurchaseOutcome.restored,
             );
           }
         }
@@ -1210,10 +1245,12 @@ Expected IDs: ${ProductIds.all}
           if (existingCheck.restored) {
             return PurchaseResult.success(
               'Your subscription has been restored!',
+              outcome: PurchaseOutcome.restored,
             );
           }
           return PurchaseResult.success(
             'You already have an active subscription.',
+            outcome: PurchaseOutcome.alreadyActive,
           );
         }
       }
@@ -1248,11 +1285,17 @@ Expected IDs: ${ProductIds.all}
       final result = await razorpayService.purchaseSubscription(yearly: yearly);
 
       if (result.success) {
-        return PurchaseResult.success('Subscription activated successfully!');
+        return PurchaseResult.success(
+          'Subscription activated successfully!',
+          outcome: PurchaseOutcome.activated,
+        );
       } else if (result.cancelled) {
-        return PurchaseResult.failed('Purchase was cancelled');
+        return PurchaseResult.failed(
+          'Purchase was cancelled',
+          outcome: PurchaseOutcome.cancelled,
+        );
       } else {
-        _lastPurchaseError = result.error;
+        _lastPurchaseError = PurchaseOutcome.failed;
         return PurchaseResult.failed(result.error ?? 'Payment failed');
       }
     } finally {
@@ -1313,12 +1356,16 @@ Expected IDs: ${ProductIds.all}
     if (!_iapAvailable) {
       return PurchaseResult.failed(
         'In-app purchases not available on this device',
+        outcome: PurchaseOutcome.unavailable,
       );
     }
 
     final user = AuthService.currentUser;
     if (user == null) {
-      return PurchaseResult.failed('Please sign in first');
+      return PurchaseResult.failed(
+        'Please sign in first',
+        outcome: PurchaseOutcome.signInRequired,
+      );
     }
 
     // If products are empty, try to reload them
@@ -1344,6 +1391,7 @@ Expected IDs: ${ProductIds.all}
       } catch (_) {
         return PurchaseResult.failed(
           'This product is not available yet. Please make sure the app is updated and try again.',
+          outcome: PurchaseOutcome.unavailable,
         );
       }
     }
@@ -1400,6 +1448,7 @@ Expected IDs: ${ProductIds.all}
           isLoading.value = false;
           return PurchaseResult.failed(
             'Subscription plan not available. Please try again later.',
+            outcome: PurchaseOutcome.unavailable,
           );
         }
 
@@ -1475,6 +1524,11 @@ Expected IDs: ${ProductIds.all}
 
   /// Restore previous purchases (for mobile platforms)
   Future<RestoreResult> restorePurchases() async {
+    if (ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser)) {
+      return RestoreResult.failed(
+        'Purchase restoration is unavailable for the managed review account',
+      );
+    }
     if (usesRazorpay) {
       // For web/desktop with Razorpay, just refresh from Firebase
       await PlanService.instance.refreshSubscription();
@@ -1510,7 +1564,11 @@ Expected IDs: ${ProductIds.all}
     if (user == null) {
       return CancelResult.failed('Please sign in first');
     }
-
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return CancelResult.failed(
+        'Subscription changes are unavailable for the managed review account',
+      );
+    }
     final subscriptionStatus = PlanService.instance.status;
 
     // For Razorpay subscriptions, cancel via API (regardless of current platform)
@@ -1632,6 +1690,11 @@ Expected IDs: ${ProductIds.all}
     if (user == null) {
       return CancelResult.failed('Please sign in first');
     }
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return CancelResult.failed(
+        'Subscription changes are unavailable for the managed review account',
+      );
+    }
 
     if (!usesRazorpay) {
       return CancelResult.failed(
@@ -1668,18 +1731,31 @@ Expected IDs: ${ProductIds.all}
 /// Result of a purchase attempt
 class PurchaseResult {
   final PurchaseResultStatus status;
-  final String message;
+  final PurchaseOutcome outcome;
+  final String diagnosticMessage;
 
-  PurchaseResult._(this.status, this.message);
+  PurchaseResult._(this.status, this.outcome, this.diagnosticMessage);
 
-  factory PurchaseResult.success(String message) =>
-      PurchaseResult._(PurchaseResultStatus.success, message);
+  factory PurchaseResult.success(
+    String diagnosticMessage, {
+    PurchaseOutcome outcome = PurchaseOutcome.activated,
+  }) => PurchaseResult._(
+    PurchaseResultStatus.success,
+    outcome,
+    diagnosticMessage,
+  );
 
-  factory PurchaseResult.pending(String message) =>
-      PurchaseResult._(PurchaseResultStatus.pending, message);
+  factory PurchaseResult.pending(String diagnosticMessage) => PurchaseResult._(
+    PurchaseResultStatus.pending,
+    PurchaseOutcome.pending,
+    diagnosticMessage,
+  );
 
-  factory PurchaseResult.failed(String message) =>
-      PurchaseResult._(PurchaseResultStatus.failed, message);
+  factory PurchaseResult.failed(
+    String diagnosticMessage, {
+    PurchaseOutcome outcome = PurchaseOutcome.failed,
+  }) =>
+      PurchaseResult._(PurchaseResultStatus.failed, outcome, diagnosticMessage);
 
   bool get isSuccess => status == PurchaseResultStatus.success;
   bool get isPending => status == PurchaseResultStatus.pending;
@@ -1688,35 +1764,59 @@ class PurchaseResult {
 
 enum PurchaseResultStatus { success, pending, failed }
 
+enum PurchaseOutcome {
+  activated,
+  restored,
+  alreadyActive,
+  cancelled,
+  pending,
+  signInRequired,
+  unavailable,
+  failed,
+}
+
 /// Result of a restore attempt
 class RestoreResult {
-  final bool isSuccess;
-  final String message;
+  final SubscriptionActionOutcome outcome;
+  final String diagnosticMessage;
 
-  RestoreResult._(this.isSuccess, this.message);
+  RestoreResult._(this.outcome, this.diagnosticMessage);
 
-  factory RestoreResult.success(String message) =>
-      RestoreResult._(true, message);
+  factory RestoreResult.success(String diagnosticMessage) =>
+      RestoreResult._(SubscriptionActionOutcome.success, diagnosticMessage);
 
-  factory RestoreResult.failed(String message) =>
-      RestoreResult._(false, message);
+  factory RestoreResult.failed(
+    String diagnosticMessage, {
+    SubscriptionActionOutcome outcome = SubscriptionActionOutcome.failed,
+  }) => RestoreResult._(outcome, diagnosticMessage);
+
+  bool get isSuccess => outcome == SubscriptionActionOutcome.success;
 }
 
 /// Result of a cancellation attempt
 class CancelResult {
   final CancelStatus status;
-  final String message;
+  final SubscriptionActionOutcome outcome;
+  final String diagnosticMessage;
 
-  CancelResult._(this.status, this.message);
+  CancelResult._(this.status, this.outcome, this.diagnosticMessage);
 
-  factory CancelResult.success(String message) =>
-      CancelResult._(CancelStatus.success, message);
+  factory CancelResult.success(String diagnosticMessage) => CancelResult._(
+    CancelStatus.success,
+    SubscriptionActionOutcome.success,
+    diagnosticMessage,
+  );
 
-  factory CancelResult.pending(String message) =>
-      CancelResult._(CancelStatus.pending, message);
+  factory CancelResult.pending(String diagnosticMessage) => CancelResult._(
+    CancelStatus.pending,
+    SubscriptionActionOutcome.pending,
+    diagnosticMessage,
+  );
 
-  factory CancelResult.failed(String message) =>
-      CancelResult._(CancelStatus.failed, message);
+  factory CancelResult.failed(
+    String diagnosticMessage, {
+    SubscriptionActionOutcome outcome = SubscriptionActionOutcome.failed,
+  }) => CancelResult._(CancelStatus.failed, outcome, diagnosticMessage);
 
   bool get isSuccess => status == CancelStatus.success;
   bool get isPending => status == CancelStatus.pending;
@@ -1724,3 +1824,12 @@ class CancelResult {
 }
 
 enum CancelStatus { success, pending, failed }
+
+enum SubscriptionActionOutcome {
+  success,
+  pending,
+  signInRequired,
+  unavailable,
+  notFound,
+  failed,
+}

@@ -44,8 +44,7 @@ bool isReminderOccurrence(
   if (elapsedDays < 0) return false;
   return switch (reminder.repeat) {
     Reminder.repeatDaily => true,
-    Reminder.repeatWeekly =>
-      elapsedDays % DateTime.daysPerWeek == 0,
+    Reminder.repeatWeekly => elapsedDays % DateTime.daysPerWeek == 0,
     Reminder.repeatMonthly =>
       dueAt.day ==
           anchor.day.clamp(1, DateTime(dueAt.year, dueAt.month + 1, 0).day),

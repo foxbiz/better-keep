@@ -12,6 +12,309 @@ class AppLocalizationsTr extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get unableToStartApp => 'Better Keep başlatılamadı';
+
+  @override
+  String get startupRetryMessage =>
+      'Uygulama açılırken bir sorun oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get startupRestartMessage =>
+      'Uygulama açılırken bir sorun oluştu. Tekrar denemek için uygulamayı kapatıp yeniden açın.';
+
+  @override
+  String get accountNotFound =>
+      'Bu e-posta adresiyle eşleşen bir hesap bulunamadı.';
+
+  @override
+  String get invalidCredentials =>
+      'E-posta veya parola hatalı. Lütfen tekrar deneyin.';
+
+  @override
+  String get accountDisabled =>
+      'Bu hesap kullanılamıyor. Lütfen destek ekibiyle iletişime geçin.';
+
+  @override
+  String get paymentInProgress => 'Ödeme devam ediyor';
+
+  @override
+  String get completePaymentInBrowser =>
+      'Ödemeyi tarayıcınızda tamamlayın. İşlem bittiğinde bu ileti otomatik olarak kapanır.';
+
+  @override
+  String get legal => 'Yasal';
+
+  @override
+  String get termsOfUse => 'Kullanım Koşulları';
+
+  @override
+  String get privacyPolicy => 'Gizlilik Politikası';
+
+  @override
+  String get appLogoSemantics => 'Better Keep uygulama logosu';
+
+  @override
+  String get selectColor => 'Renk seç';
+
+  @override
+  String get unsupportedTextFile =>
+      'Bu dosya türü desteklenmiyor. Bir .txt veya .md dosyası seçin.';
+
+  @override
+  String get sharedFileEmpty => 'Bu dosya boş.';
+
+  @override
+  String get fileNotFound => 'Bu dosya bulunamadı.';
+
+  @override
+  String get fileTooLarge =>
+      'Bu dosya çok büyük. 5 MB\'tan küçük bir dosya seçin.';
+
+  @override
+  String get couldNotReadFile => 'Bu dosya okunamadı. Başka bir dosya deneyin.';
+
+  @override
+  String get couldNotOpenFile => 'Bu dosya açılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get noteSaved => 'Not kaydedildi';
+
+  @override
+  String get untitled => 'Başlıksız';
+
+  @override
+  String get failedToExportNote =>
+      'Not dışa aktarılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get failedToCopyNote => 'Not kopyalanamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get failedToDeleteSketch => 'Çizim silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get lockedNoteReminder => 'Kilitli not hatırlatıcısı';
+
+  @override
+  String get notesReminder => 'Better Keep not hatırlatıcısı';
+
+  @override
+  String get blankPage => 'Boş';
+
+  @override
+  String get linedPage => 'Çizgili';
+
+  @override
+  String get doubleLinedPage => 'Çift çizgili';
+
+  @override
+  String get gridPage => 'Kareli';
+
+  @override
+  String get dotGridPage => 'Noktalı';
+
+  @override
+  String get dataExportTitle => 'Better Keep veri dışa aktarımı';
+
+  @override
+  String get dataExportShareText => 'Better Keep veri dışa aktarımım';
+
+  @override
+  String get noteReminders => 'Not hatırlatıcıları';
+
+  @override
+  String get noteRemindersDescription =>
+      'Notlar için zamana duyarlı hatırlatıcılar';
+
+  @override
+  String get deviceApproval => 'Cihaz onayı';
+
+  @override
+  String get deviceApprovalDescription =>
+      'Cihaz onay istekleri için bildirimler';
+
+  @override
+  String get newDeviceApprovalRequest => 'Yeni cihaz onay isteği';
+
+  @override
+  String deviceWantsAccess(String deviceName, String platform) {
+    return '$deviceName ($platform) notlarınıza erişmek istiyor';
+  }
+
+  @override
+  String get sharedText => 'Paylaşılan metin';
+
+  @override
+  String get sharedFile => 'Paylaşılan dosya';
+
+  @override
+  String get user => 'Kullanıcı';
+
+  @override
+  String get thirtyDaysFromNow => '30 gün sonra';
+
+  @override
+  String get helpRequestSubject => 'Better Keep - Yardım isteği';
+
+  @override
+  String get faqCreateNoteQuestion => 'Yeni bir not nasıl oluşturulur?';
+
+  @override
+  String get faqCreateNoteAnswer =>
+      'Ana ekranın altındaki + düğmesine dokunun. Metin, resim, ses ve daha fazlasını ekleyebilirsiniz.';
+
+  @override
+  String get faqShortcutsQuestion => 'Hızlı kısayollar nasıl kullanılır?';
+
+  @override
+  String get faqShortcutsAnswer =>
+      'Resim, ses, çizim veya yapılacak kısayollarını görmek için + düğmesini basılı tutun. İstediğiniz seçeneğe kaydırıp bırakın. Kısa dokunuş boş bir not açar.';
+
+  @override
+  String get faqLabelsQuestion => 'Notlar etiketlerle nasıl düzenlenir?';
+
+  @override
+  String get faqLabelsAnswer =>
+      'Bir notu açıp etiket simgesine dokunarak etiket ekleyin veya oluşturun. Yan menüden notları etikete göre filtreleyebilirsiniz.';
+
+  @override
+  String get faqReminderQuestion => 'Hatırlatıcı nasıl ayarlanır?';
+
+  @override
+  String get faqReminderAnswer =>
+      'Bir notu açıp hatırlatıcı simgesine dokunarak tarih ve saat seçin.';
+
+  @override
+  String get faqArchiveDeleteQuestion =>
+      'Notlar nasıl arşivlenir veya silinir?';
+
+  @override
+  String get faqArchiveDeleteAnswer =>
+      'Bir notu seçmek için basılı tutun, ardından arşivle veya sil işlemini kullanın. Silinen notlar önce Çöp Kutusu\'na taşınır ve oradan kalıcı olarak silinebilir.';
+
+  @override
+  String get faqThemeQuestion => 'Uygulama teması nasıl değiştirilir?';
+
+  @override
+  String get faqThemeAnswer =>
+      'Ayarlar\'ı açıp tercih ettiğiniz tema seçeneklerini belirleyin.';
+
+  @override
+  String get faqSyncQuestion => 'Notlar cihazlar arasında nasıl eşitlenir?';
+
+  @override
+  String get faqSyncAnswer =>
+      'Notlarınızı tüm cihazlarınızda güvenle eşitlemek için oturum açın.';
+
+  @override
+  String get faqReminderTimesQuestion =>
+      'Sabah, öğleden sonra ve akşam saatleri nasıl ayarlanır?';
+
+  @override
+  String get faqReminderTimesAnswer =>
+      'Ayarlar\'ı açıp Hatırlatıcı Zaman Ayarları\'ndan bu saatleri düzenleyin.';
+
+  @override
+  String get faqAlarmSoundQuestion => 'Alarm sesi nasıl değiştirilir?';
+
+  @override
+  String get faqAlarmSoundAnswer =>
+      'Ayarlar\'ı açın, Alarm Sesi\'ni seçin ve kullanılabilir seslerden birini belirleyin.';
+
+  @override
+  String get faqSecurityQuestion => 'Verilerim güvende mi?';
+
+  @override
+  String get faqSecurityAnswer =>
+      'Notlarınız güvenli biçimde saklanır. Eşitleme koruması etkin olduğunda uçtan uca şifreleme, eşitlenen verilerinizi korur.';
+
+  @override
+  String get faqApproveDeviceQuestion => 'Yeni bir cihaz nasıl onaylanır?';
+
+  @override
+  String get faqApproveDeviceAnswer =>
+      'Better Keep\'i daha önce onaylanmış bir cihazda açın. Profilinizde onay bekleyen cihazları inceleyip isteği onaylayın veya reddedin.';
+
+  @override
+  String get faqDeleteAccountQuestion => 'Hesabımı nasıl silebilirim?';
+
+  @override
+  String get faqDeleteAccountAnswer =>
+      'Profilinizi açıp Hesabı Sil\'i seçin. E-posta doğrulamasından sonra silme işlemi 30 gün sonrasına zamanlanır ve cihazlarınızın oturumu kapatılır.';
+
+  @override
+  String get faqCancelDeletionQuestion =>
+      'Hesap silme işlemini iptal edebilir miyim?';
+
+  @override
+  String get faqCancelDeletionAnswer =>
+      'Evet. Zamanlanmış silme işlemini iptal etmek ve hesabınıza erişimi geri almak için 30 gün içinde yeniden oturum açın.';
+
+  @override
+  String get faqDeletionEffectsQuestion => 'Hesabımı sildiğimde ne olur?';
+
+  @override
+  String get faqDeletionEffectsAnswer =>
+      'Tüm cihazlardaki oturumunuz hemen kapatılır. 30 gün sonra notlarınız, ekleriniz, etiketleriniz ve kişisel verileriniz kalıcı olarak silinir ve kurtarılamaz.';
+
+  @override
+  String get faqExportBeforeDeletionQuestion =>
+      'Hesabımı silmeden önce verilerimi dışa aktarabilir miyim?';
+
+  @override
+  String get faqExportBeforeDeletionAnswer =>
+      'Evet. Silme işlemini zamanladıktan sonra verilerinizi dışa aktarabilirsiniz. 30 günlük süre bitmeden indirin.';
+
+  @override
+  String get iosAppAvailable =>
+      'Better Keep App Store\'da kullanılabilir. Bildirimler, araç takımları ve daha fazlası için uygulamayı edinin.';
+
+  @override
+  String get openAppStore => 'App Store\'u Aç';
+
+  @override
+  String get tasks => 'Görevler';
+
+  @override
+  String get unknown => 'Bilinmiyor';
+
+  @override
+  String get exportAttachments => 'Ekler';
+
+  @override
+  String get created => 'Oluşturuldu';
+
+  @override
+  String get updated => 'Güncellendi';
+
+  @override
+  String get oneTime => 'Bir kez';
+
+  @override
+  String get lockedExportExplanation =>
+      'Bu notlar kilitlidir. Korunan içerikleri bu dışa aktarımda saklanır ve yalnızca özgün PIN ile açılabilir.';
+
+  @override
+  String dataExportReadme(String exportedAt) {
+    return 'Better Keep - Veri Dışa Aktarımı\n\nBu arşiv dışa aktarılan notlarınızı, etiketlerinizi, eklerinizi ve dışa aktarım ayrıntılarını içerir. Açılabilen notlar Markdown dosyaları olarak da sunulur. Kilitli notlar korunmaya devam eder ve özgün PIN\'lerini gerektirir.\n\nYardım için contact@betterkeep.app adresine yazın.\n\nDışa aktarım tarihi: $exportedAt';
+  }
+
+  @override
+  String get paymentSuccessful => 'Ödeme başarılı';
+
+  @override
+  String get paymentSuccessfulReturn =>
+      'Bu pencereyi kapatıp Better Keep\'e dönebilirsiniz.';
+
+  @override
+  String get paymentCancelledClose =>
+      'Ödeme iptal edildi. Bu pencereyi kapatabilirsiniz.';
+
+  @override
+  String get appleSignInVerificationFailed =>
+      'Apple ile oturum açma doğrulanamadı. Lütfen tekrar deneyin.';
+
+  @override
   String get reminderType => 'Hatırlatıcı türü';
 
   @override
@@ -2054,6 +2357,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get webBrowser => 'Web Tarayıcısı';
 
   @override
+  String get unknownDevice => 'Bilinmeyen cihaz';
+
+  @override
   String get debugDeleteSubscription => 'DEBUG: Aboneliği Sil';
 
   @override
@@ -3157,4 +3463,98 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       'Tarihe göre sıralarken elle yeniden düzenleme kullanılamaz. Notları yeniden düzenlemek için Özel\'i seçin.';
+
+  @override
+  String get googleKeepImportTitle => 'Google Keep\'ten içe aktar';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Google Takeout arşivini yüklemeden yerel olarak taşıyın.';
+
+  @override
+  String get googleKeepImportPrivacyTitle => 'Arşiviniz bu cihazda kalır';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'Better Keep, Google Takeout arşivini yerel olarak doğrular ve dönüştürür. ZIP dosyasını bir dönüştürme hizmetine yüklemez. Notlar yalnızca içe aktarma başarıyla kaydedildikten sonra normal isteğe bağlı eşitleme akışına girer.';
+
+  @override
+  String get googleKeepImportBeforeStart => 'Başlamadan önce';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Google Takeout\'u açın ve yalnızca Keep\'i seçin.\n2. Dışa aktarımı oluşturup indirin.\n3. Aşağıdan ZIP\'i seçin. Aynı içerik varsayılan olarak yeniden içe aktarılmaz.';
+
+  @override
+  String get googleKeepChooseZip => 'Takeout ZIP\'ini seç';
+
+  @override
+  String get googleKeepChooseFolder => 'Çıkarılmış Keep klasörünü seç';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions =>
+      'Google Takeout talimatlarını aç';
+
+  @override
+  String get googleKeepCancelImport => 'İçe aktarmayı iptal et';
+
+  @override
+  String get googleKeepImportCancelled =>
+      'İçe aktarma iptal edildi. Hiçbir not kaydedilmedi.';
+
+  @override
+  String get googleKeepImportFailed =>
+      'İçe aktarma başarısız oldu. Seçiminizi kontrol edip tekrar deneyin.';
+
+  @override
+  String get googleKeepImportReportTitle =>
+      'Better Keep Google Keep içe aktarma raporu';
+
+  @override
+  String get googleKeepImportValidating =>
+      'Google Takeout arşivi doğrulanıyor…';
+
+  @override
+  String get googleKeepImportParsing => 'Google Keep notları okunuyor…';
+
+  @override
+  String get googleKeepImportPreparingAttachments =>
+      'İçe aktarılan ekler hazırlanıyor…';
+
+  @override
+  String get googleKeepImportSaving => 'İçe aktarılan notlar kaydediliyor…';
+
+  @override
+  String get googleKeepImportStarting => 'İçe aktarma başlatılıyor…';
+
+  @override
+  String get googleKeepImportComplete => 'İçe aktarma tamamlandı';
+
+  @override
+  String get googleKeepSafetyLimits => 'Güvenlik sınırları';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'ZIP dosyaları sıkıştırılmış olarak 100 MB, açılmış olarak 500 MB, 20.000 dosya ve dosya başına 50 MB ile sınırlıdır. Güvenli olmayan yollar, sembolik bağlantılar ve bozuk arşivler notlar kaydedilmeden önce reddedilir.';
+
+  @override
+  String get googleKeepImported => 'İçe aktarıldı';
+
+  @override
+  String get googleKeepSkipped => 'Atlandı';
+
+  @override
+  String get googleKeepWarnings => 'Uyarılar';
+
+  @override
+  String get googleKeepUnsupported => 'Desteklenmiyor';
+
+  @override
+  String get googleKeepFailed => 'Başarısız';
+
+  @override
+  String get googleKeepReviewDetails => 'İçe aktarma ayrıntılarını incele';
+
+  @override
+  String get googleKeepShareReport => 'Tam raporu paylaş';
 }

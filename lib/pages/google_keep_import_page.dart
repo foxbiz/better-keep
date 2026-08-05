@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:better_keep/services/import/google_keep_import_service.dart';
 import 'package:better_keep/services/import/keep_import_models.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -34,7 +36,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
 
   Future<void> _chooseZip() async {
     final selection = await FilePicker.pickFiles(
-      dialogTitle: 'Choose a Google Takeout ZIP',
+      dialogTitle: context.l10n.googleKeepChooseZip,
       type: FileType.custom,
       allowedExtensions: const ['zip'],
       withData: kIsWeb,
@@ -54,7 +56,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
 
   Future<void> _chooseDirectory() async {
     final directory = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose the extracted Google Keep folder',
+      dialogTitle: context.l10n.googleKeepChooseFolder,
     );
     if (directory == null) return;
     await _runImport(
@@ -91,10 +93,13 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
       }
     } on KeepImportCancelled {
       if (mounted) {
-        setState(() => _error = 'Import cancelled. No notes were saved.');
+        setState(() => _error = context.l10n.googleKeepImportCancelled);
       }
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+    } catch (error, stackTrace) {
+      AppLogger.error('Google Keep import failed', error, stackTrace);
+      if (mounted) {
+        setState(() => _error = context.l10n.googleKeepImportFailed);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -114,17 +119,27 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
     if (report == null) return;
     await SharePlus.instance.share(
       ShareParams(
-        title: 'Better Keep Google Keep import report',
+        title: context.l10n.googleKeepImportReportTitle,
         text: report.toShareText(),
       ),
     );
   }
 
+  String _progressMessage(BuildContext context) => switch (_progress?.phase) {
+    KeepImportPhase.validating => context.l10n.googleKeepImportValidating,
+    KeepImportPhase.parsing => context.l10n.googleKeepImportParsing,
+    KeepImportPhase.preparingAttachments =>
+      context.l10n.googleKeepImportPreparingAttachments,
+    KeepImportPhase.saving => context.l10n.googleKeepImportSaving,
+    KeepImportPhase.complete => context.l10n.googleKeepImportComplete,
+    null => context.l10n.googleKeepImportStarting,
+  };
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Import from Google Keep')),
+      appBar: AppBar(title: Text(context.l10n.googleKeepImportTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -140,7 +155,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Your archive stays on this device',
+                          context.l10n.googleKeepImportPrivacyTitle,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
@@ -148,40 +163,32 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Better Keep validates and converts the Google Takeout archive locally. '
-                    'It does not upload the ZIP to a conversion service. Notes only enter '
-                    'the normal optional sync flow after the import commits successfully.',
-                  ),
+                  Text(context.l10n.googleKeepImportPrivacyDescription),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            'Before you start',
+            context.l10n.googleKeepImportBeforeStart,
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '1. Open Google Takeout and select only Keep.\n'
-            '2. Create and download the export.\n'
-            '3. Choose the ZIP below. Exact re-imports are skipped by default.',
-          ),
+          Text(context.l10n.googleKeepImportInstructions),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _importing ? null : _chooseZip,
             icon: const Icon(Icons.archive_outlined),
-            label: const Text('Choose Takeout ZIP'),
+            label: Text(context.l10n.googleKeepChooseZip),
           ),
           if (!kIsWeb) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _importing ? null : _chooseDirectory,
               icon: const Icon(Icons.folder_open),
-              label: const Text('Choose extracted Keep folder'),
+              label: Text(context.l10n.googleKeepChooseFolder),
             ),
           ],
           const SizedBox(height: 8),
@@ -193,7 +200,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
             },
             icon: const Icon(Icons.open_in_new),
-            label: const Text('Open Google Takeout instructions'),
+            label: Text(context.l10n.googleKeepOpenTakeoutInstructions),
           ),
           if (_importing || _progress != null) ...[
             const SizedBox(height: 24),
@@ -204,7 +211,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _progress?.message ?? 'Starting import…',
+                      _progressMessage(context),
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
@@ -214,7 +221,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
                       TextButton.icon(
                         onPressed: _cancellationToken?.cancel,
                         icon: const Icon(Icons.close),
-                        label: const Text('Cancel import'),
+                        label: Text(context.l10n.googleKeepCancelImport),
                       ),
                     ],
                   ],
@@ -241,17 +248,13 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
           ],
           const SizedBox(height: 24),
           Text(
-            'Safety limits',
+            context.l10n.googleKeepSafetyLimits,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'ZIP files are limited to 100 MB compressed, 500 MB expanded, '
-            '20,000 files, and 50 MB per file. Unsafe paths, symbolic links, '
-            'and malformed archives are rejected before notes are saved.',
-          ),
+          Text(context.l10n.googleKeepSafetyDescription),
         ],
       ),
     );
@@ -267,11 +270,27 @@ class _ImportSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final counts = [
-      ('Imported', report.imported, Icons.check_circle_outline),
-      ('Skipped', report.skipped, Icons.skip_next_outlined),
-      ('Warnings', report.warnings, Icons.warning_amber_outlined),
-      ('Unsupported', report.unsupported, Icons.block_outlined),
-      ('Failed', report.failed, Icons.error_outline),
+      (
+        context.l10n.googleKeepImported,
+        report.imported,
+        Icons.check_circle_outline,
+      ),
+      (
+        context.l10n.googleKeepSkipped,
+        report.skipped,
+        Icons.skip_next_outlined,
+      ),
+      (
+        context.l10n.googleKeepWarnings,
+        report.warnings,
+        Icons.warning_amber_outlined,
+      ),
+      (
+        context.l10n.googleKeepUnsupported,
+        report.unsupported,
+        Icons.block_outlined,
+      ),
+      (context.l10n.googleKeepFailed, report.failed, Icons.error_outline),
     ];
     return Card(
       child: Padding(
@@ -280,7 +299,7 @@ class _ImportSummary extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Import complete',
+              context.l10n.googleKeepImportComplete,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -302,7 +321,7 @@ class _ImportSummary extends StatelessWidget {
               const SizedBox(height: 16),
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
-                title: const Text('Review import details'),
+                title: Text(context.l10n.googleKeepReviewDetails),
                 children: report.issues
                     .take(100)
                     .map(
@@ -326,7 +345,7 @@ class _ImportSummary extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onShare,
               icon: const Icon(Icons.ios_share),
-              label: const Text('Share full report'),
+              label: Text(context.l10n.googleKeepShareReport),
             ),
           ],
         ),

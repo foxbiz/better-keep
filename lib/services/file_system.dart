@@ -10,8 +10,20 @@ import 'file_system_stub.dart'
     if (dart.library.html) 'web_file_system.dart'
     if (dart.library.io) 'file_system_io.dart'
     as impl;
+import 'firebase_backend.dart';
+import 'scoped_file_system.dart';
 
 export 'file_system_base.dart';
 
 /// Obtain the platform-appropriate [FileSystem] implementation.
-Future<FileSystem> fileSystem() => impl.createFileSystem();
+Future<FileSystem> fileSystem() async {
+  final base = await impl.createFileSystem();
+  if (!FirebaseBackend.isConfigured ||
+      !FirebaseBackend.localDataScope.isEmulator) {
+    return base;
+  }
+  return ScopedFileSystem(
+    base,
+    directoryName: FirebaseBackend.localDataScope.fileDirectoryName,
+  );
+}

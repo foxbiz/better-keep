@@ -2,11 +2,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import { verifyAppleJws } from "../appleJwsVerify";
 import { auth, db, emailPassword } from "../config";
-import {
-	getEmailTransporter,
-	sendEmail,
-	setSubscriptionClaims,
-} from "../utils";
+import { sendEmail, setSubscriptionClaims } from "../utils";
 
 type JwtPayload = Record<string, unknown>;
 
@@ -461,7 +457,6 @@ async function sendAppStoreNotificationEmail(
 			return;
 		}
 
-		const transporter = getEmailTransporter(emailPassword.value());
 		const senderEmail = process.env.EMAIL_FROM;
 		const senderName = process.env.EMAIL_NAME;
 
@@ -565,7 +560,7 @@ async function sendAppStoreNotificationEmail(
 			</html>
 		`;
 
-		await sendEmail(transporter, {
+		await sendEmail({
 			from: `"${senderName}" <${senderEmail}>`,
 			replyTo,
 			to: email,

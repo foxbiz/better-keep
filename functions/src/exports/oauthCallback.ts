@@ -1,21 +1,38 @@
 import type * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { consumeAccountLinkSession } from "../accountLinkSession";
 import {
 	auth,
-	DEBUG_TRIAL_MINUTES,
 	db,
 	facebookAppId,
 	facebookAppSecret,
 	githubClientId,
 	githubClientSecret,
-	TRIAL_DAYS,
-	TRIAL_ENABLED,
+	isEmulator,
+	legacyOAuthV1Enabled,
+	oauthStateSecret,
 	twitterClientId,
 	twitterClientSecret,
 } from "../config";
-import type { OAuthState } from "../types";
-import { sendTrialWelcomeEmail } from "../utils";
+import { createOAuthCompletion } from "../oauthCompletion";
+import {
+	clearOAuthCookieHeader,
+	openOAuthState,
+	readOAuthBrowserNonce,
+	timingSafeStringEqual,
+	type OAuthState,
+} from "../oauthSession";
+import {
+	renderOAuthMobileRedirect,
+	renderOAuthPopup,
+	type RenderedOAuthHtml,
+} from "../oauthResponse";
+import {
+	isProtectedReviewUserRecord,
+	isReviewAccountEmail,
+} from "../reviewAccess";
+import { grantTrialIfEligible } from "../trialGrant";
 
 /**
  * OAuth callback - exchanges code for tokens and creates Firebase user
@@ -30,109 +47,92 @@ export default onRequest(
 			githubClientSecret,
 			twitterClientId,
 			twitterClientSecret,
+			...(isEmulator ? [] : [oauthStateSecret]),
 		],
-		cors: true,
 	},
 	async (req, res) => {
-		const code = req.query.code as string;
-		const stateStr = req.query.state as string;
-		const error = req.query.error as string;
+		res.set("Cache-Control", "no-store");
+		res.set("Pragma", "no-cache");
+		res.set("Referrer-Policy", "no-referrer");
 
-		// Helper function to send error based on mode (popup vs redirect)
+		if (req.method !== "GET") {
+			res.set("Allow", "GET");
+			res.status(405).send("Method not allowed");
+			return;
+		}
+
+		const code =
+			typeof req.query.code === "string" ? req.query.code : undefined;
+		const sealedState =
+			typeof req.query.state === "string" ? req.query.state : undefined;
+		const error =
+			typeof req.query.error === "string" ? req.query.error : undefined;
+
+		const sendHtml = (rendered: RenderedOAuthHtml, status = 200) => {
+			res.set("Content-Security-Policy", rendered.contentSecurityPolicy);
+			res.set("X-Content-Type-Options", "nosniff");
+			res.status(status).type("html").send(rendered.html);
+		};
+
 		const sendError = (errorMsg: string, state?: OAuthState) => {
-			const isPopup = state?.redirect === "popup";
-			const htmlSafeError = errorMsg
-				.replace(/&/g, "&amp;")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;")
-				.replace(/"/g, "&quot;");
-			const jsSafeError = errorMsg
-				.replace(/\\/g, "\\\\")
-				.replace(/'/g, "\\'")
-				.replace(/\n/g, "\\n");
-
-			if (isPopup) {
-				res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Sign In Failed - Better Keep</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0;
-    }
-    .container {
-      background: white;
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      max-width: 400px;
-    }
-    h1 { color: #D32F2F; margin-bottom: 16px; }
-    p { color: #666; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>✗ Sign In Failed</h1>
-    <p>${htmlSafeError}</p>
-  </div>
-  <script>
-    if (window.opener) {
-      var attempts = 0;
-      var maxAttempts = 20;
-      var interval = setInterval(function() {
-        attempts++;
-        console.log('Sending oauth_error message, attempt ' + attempts);
-        window.opener.postMessage({
-          type: 'oauth_error',
-          error: '${jsSafeError}'
-        }, '*');
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
-        }
-      }, 500);
-      window.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'oauth_close') {
-          clearInterval(interval);
-          window.close();
-        }
-      });
-    }
-  </script>
-</body>
-</html>
-        `);
-			} else if (state?.redirect && state.redirect !== "popup") {
-				// Mobile deep link mode
-				res.redirect(
-					`${state.redirect}://auth?error=${encodeURIComponent(errorMsg)}`,
+			if (state?.redirect === "popup" && state.clientOrigin) {
+				sendHtml(
+					renderOAuthPopup({
+						title: "Sign In Failed - Better Keep",
+						heading: "Sign In Failed",
+						message: errorMsg,
+						success: false,
+						targetOrigin: state.clientOrigin,
+						payload: {
+							type: "oauth_error",
+							error: errorMsg,
+							transactionId: state.clientTransactionId,
+						},
+					}),
+					400,
+				);
+			} else if (state?.redirect === "betterkeep") {
+				const query = new URLSearchParams({
+					error: errorMsg,
+					...(state.clientTransactionId
+						? { transactionId: state.clientTransactionId }
+						: {}),
+				});
+				sendHtml(
+					renderOAuthMobileRedirect({
+						title: "Sign In Failed - Better Keep",
+						heading: "Sign In Failed",
+						message: errorMsg,
+						success: false,
+						redirectUrl: `betterkeep://auth?${query.toString()}`,
+					}),
+					400,
 				);
 			} else {
-				// Fallback to web page
-				res.redirect(
-					`https://betterkeep.app/auth.html?error=${encodeURIComponent(errorMsg)}`,
-				);
+				res.status(400).type("text").send("OAuth authentication failed");
 			}
 		};
 
-		// Try to parse state first to determine mode
 		let state: OAuthState | undefined;
-		if (stateStr) {
+		if (sealedState) {
 			try {
-				state = JSON.parse(Buffer.from(stateStr, "base64url").toString());
+				const opened = await openOAuthState(
+					sealedState,
+					oauthStateSecret.value(),
+				);
+				const cookieNonce = readOAuthBrowserNonce(req.get("cookie"));
+				if (
+					!cookieNonce ||
+					!timingSafeStringEqual(cookieNonce, opened.browserNonce)
+				) {
+					throw new Error("OAuth browser binding mismatch");
+				}
+				state = opened;
 			} catch {
-				// State parsing failed, will use fallback error handling
+				state = undefined;
 			}
 		}
+		res.set("Set-Cookie", clearOAuthCookieHeader());
 
 		// Handle OAuth errors (user denied, etc.)
 		if (error) {
@@ -142,13 +142,17 @@ export default onRequest(
 			return;
 		}
 
-		if (!code || !stateStr) {
+		if (!code || !sealedState) {
 			sendError("Missing authorization code", state);
 			return;
 		}
 
 		if (!state) {
 			sendError("Invalid state");
+			return;
+		}
+		if (state.version === 1 && !legacyOAuthV1Enabled) {
+			sendError("Update Better Keep to complete OAuth sign-in", state);
 			return;
 		}
 
@@ -273,7 +277,7 @@ export default onRequest(
 
 				case "twitter": {
 					// Exchange code for access token using PKCE
-					const codeVerifier = state.nonce;
+					const codeVerifier = state.codeVerifier;
 					if (!codeVerifier) {
 						throw new Error("Missing code verifier");
 					}
@@ -344,55 +348,18 @@ export default onRequest(
 			}
 
 			// Handle LINK mode differently from SIGNIN mode
-			if (state.mode === "link" && state.linkingUserId) {
+			if (state.mode === "link" && state.linkingUserId && state.linkSessionId) {
 				// LINK MODE: User is already signed in, just link the provider
 
 				// Verify the linking user exists
+				let linkingUser: admin.auth.UserRecord;
 				try {
-					await auth.getUser(state.linkingUserId);
+					linkingUser = await auth.getUser(state.linkingUserId);
 				} catch {
 					throw new Error("User not found. Please sign in again.");
 				}
-
-				// SECURITY: Verify OTP was verified before allowing link
-				// This prevents bypassing OTP by directly calling OAuth URL
-				const otpRef = db
-					.collection("users")
-					.doc(state.linkingUserId)
-					.collection("otpVerification")
-					.doc("accountLink");
-				const otpDoc = await otpRef.get();
-
-				if (!otpDoc.exists) {
-					throw new Error(
-						"Account link not authorized. Please verify your email first.",
-					);
-				}
-
-				const otpData = otpDoc.data();
-				if (!otpData?.verified) {
-					throw new Error(
-						"Account link not authorized. Please complete email verification first.",
-					);
-				}
-
-				// Check OTP was verified for the same provider
-				if (otpData.provider !== `${state.provider}.com`) {
-					throw new Error(
-						"Provider mismatch. Please start the linking process again.",
-					);
-				}
-
-				// Check link token hasn't expired (2 minute window after OTP verification)
-				const now = Timestamp.now();
-				if (
-					otpData.linkTokenExpires &&
-					otpData.linkTokenExpires.toMillis() < now.toMillis()
-				) {
-					await otpRef.delete();
-					throw new Error(
-						"Link authorization expired. Please verify your email again.",
-					);
+				if (isProtectedReviewUserRecord(linkingUser)) {
+					throw new Error("Account linking is unavailable");
 				}
 
 				// Check if this OAuth account is already linked to a different user
@@ -415,10 +382,8 @@ export default onRequest(
 				}
 
 				// Check if provider is already linked to this user
-				const userDoc = await db
-					.collection("users")
-					.doc(state.linkingUserId)
-					.get();
+				const userRef = db.collection("users").doc(state.linkingUserId);
+				const userDoc = await userRef.get();
 				const linkedProviders = userDoc.data()?.linkedProviders || {};
 				const existingProviderData = linkedProviders[state.provider];
 
@@ -432,114 +397,88 @@ export default onRequest(
 					);
 				}
 
-				// Store the linked provider in Firestore
-				await db
-					.collection("users")
-					.doc(state.linkingUserId)
-					.set(
-						{
-							linkedProviders: {
-								[state.provider]: {
-									providerUid: userInfo.id,
-									linkedAt: FieldValue.serverTimestamp(),
-									linkedVia: "oauth_link",
+				const otpRef = userRef.collection("otpVerification").doc("accountLink");
+				const auditRef = userRef.collection("auditLog").doc();
+				const linkSessionRef = db
+					.collection("accountLinkSessions")
+					.doc(state.linkSessionId);
+
+				// Consume the one-time authorization and commit link metadata
+				// atomically so neither can succeed without the other.
+				await consumeAccountLinkSession({
+					db,
+					sessionRef: linkSessionRef,
+					expectation: {
+						uid: state.linkingUserId,
+						provider: `${state.provider}.com`,
+					},
+					consumedAt: Timestamp.now(),
+					onConsume: (transaction) => {
+						transaction.set(
+							userRef,
+							{
+								linkedProviders: {
+									[state.provider]: {
+										providerUid: userInfo.id,
+										linkedAt: FieldValue.serverTimestamp(),
+										linkedVia: "oauth_link",
+									},
 								},
 							},
-						},
-						{ merge: true },
-					);
+							{ merge: true },
+						);
+						transaction.set(auditRef, {
+							action: "account_linked",
+							provider: state.provider,
+							providerUid: userInfo.id,
+							timestamp: FieldValue.serverTimestamp(),
+							success: true,
+						});
+						transaction.delete(otpRef);
+					},
+				});
 
-				// Log the successful link for audit
-				await db
-					.collection("users")
-					.doc(state.linkingUserId)
-					.collection("auditLog")
-					.add({
-						action: "account_linked",
+				console.info(
+					JSON.stringify({
+						event: "oauth_account_linked",
+						flowVersion: state.version,
 						provider: state.provider,
-						providerUid: userInfo.id,
-						timestamp: FieldValue.serverTimestamp(),
-						success: true,
-					});
-
-				// Clean up OTP verification doc after successful link
-				await otpRef.delete();
-
-				console.log(
-					`Account linked via OAuth for user ${state.linkingUserId}, provider ${state.provider}`,
+						redirect: state.redirect,
+					}),
 				);
 
-				// Return success (no token needed - user is already signed in)
-				if (state.redirect === "popup") {
-					res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Account Linked - Better Keep</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0;
-    }
-    .container {
-      background: white;
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      max-width: 400px;
-    }
-    h1 { color: #2E7D32; margin-bottom: 16px; }
-    p { color: #666; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>✓ Account Linked</h1>
-    <p id="status">Completing...</p>
-  </div>
-  <script>
-    if (window.opener) {
-      var attempts = 0;
-      var maxAttempts = 20;
-      var interval = setInterval(function() {
-        attempts++;
-        console.log('Sending oauth_link_success message, attempt ' + attempts);
-        window.opener.postMessage({
-          type: 'oauth_link_success',
-          provider: '${state.provider}'
-        }, '*');
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
-          document.getElementById('status').textContent = 'Please close this window manually.';
-        }
-      }, 500);
-      window.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'oauth_close') {
-          clearInterval(interval);
-          window.close();
-        }
-      });
-    } else {
-      document.querySelector('.container').innerHTML = 
-        '<h1>✓ Account Linked</h1>' +
-        '<p>Please close this window and return to Better Keep.</p>';
-    }
-  </script>
-</body>
-</html>
-          `);
+				if (state.redirect === "popup" && state.clientOrigin) {
+					sendHtml(
+						renderOAuthPopup({
+							title: "Account Linked - Better Keep",
+							heading: "Account Linked",
+							message: "You can return to Better Keep.",
+							success: true,
+							targetOrigin: state.clientOrigin,
+							payload: {
+								type: "oauth_link_success",
+								provider: state.provider,
+								transactionId: state.clientTransactionId,
+							},
+						}),
+					);
 				} else {
-					// Mobile deep link mode
-					const redirectUrl = `${state.redirect}://auth?linked=true&provider=${state.provider}`;
-					res.redirect(redirectUrl);
+					const query = new URLSearchParams({
+						linked: "true",
+						provider: state.provider,
+						...(state.clientTransactionId
+							? { transactionId: state.clientTransactionId }
+							: {}),
+					});
+					sendHtml(
+						renderOAuthMobileRedirect({
+							title: "Account Linked - Better Keep",
+							heading: "Account Linked",
+							message: "Returning to Better Keep…",
+							success: true,
+							redirectUrl: `betterkeep://auth?${query.toString()}`,
+						}),
+					);
 				}
 				return;
 			}
@@ -576,6 +515,15 @@ export default onRequest(
 				} catch {
 					existingUser = null;
 				}
+			}
+
+			if (
+				isReviewAccountEmail(userInfo.email) ||
+				isProtectedReviewUserRecord(existingUser)
+			) {
+				throw new Error(
+					"The managed review account only supports password sign-in.",
+				);
 			}
 
 			if (existingUser) {
@@ -672,320 +620,97 @@ export default onRequest(
 						{ merge: true },
 					);
 
-				// Grant trial for new users (blocking functions don't trigger for custom token auth)
-				// This replicates the logic from grantTrialOnFirstSignIn
-				if (TRIAL_ENABLED) {
-					const email = userInfo.email?.trim()?.toLowerCase() || null;
-					const emailKey = email || `no-email-${firebaseUser.uid}`;
-					const trialRef = db.collection("trialUsage").doc(emailKey);
-					const subscriptionRef = db
-						.collection("users")
-						.doc(firebaseUser.uid)
-						.collection("subscription")
-						.doc("status");
-
-					// Check if email already used trial (for users who deleted and re-registered)
-					const trialDoc = await trialRef.get();
-					if (!trialDoc.exists) {
-						// Calculate trial expiry
-						const trialExpiresAt = new Date();
-						if (DEBUG_TRIAL_MINUTES !== null) {
-							trialExpiresAt.setMinutes(
-								trialExpiresAt.getMinutes() + DEBUG_TRIAL_MINUTES,
-							);
-						} else {
-							trialExpiresAt.setDate(trialExpiresAt.getDate() + TRIAL_DAYS);
-						}
-
-						console.log(
-							`Granting trial to new OAuth user ${firebaseUser.uid}, expires ${trialExpiresAt.toISOString()}`,
-						);
-
-						// Write trial data in parallel
-						await Promise.all([
-							// Mark trial as used
-							trialRef.set({
-								userId: firebaseUser.uid,
-								email: email || "none",
-								trialStartedAt: Timestamp.now(),
-								trialExpiresAt: Timestamp.fromDate(trialExpiresAt),
-								createdAt: Timestamp.now(),
-							}),
-							// Create trial subscription
-							subscriptionRef.set({
-								plan: "pro",
-								source: "trial",
-								expiresAt: Timestamp.fromDate(trialExpiresAt),
-								billingPeriod: "trial",
-								willAutoRenew: false,
-								trialStartedAt: Timestamp.now(),
-								updatedAt: Timestamp.now(),
-							}),
-						]);
-
-						// Set custom claims for trial
-						await auth.setCustomUserClaims(firebaseUser.uid, {
-							plan: "pro",
-							planExpiresAt: trialExpiresAt.getTime(),
-						});
-
-						console.log(`Trial granted to OAuth user ${firebaseUser.uid}`);
-
-						// Send trial welcome email in background (don't block OAuth flow)
-						if (email) {
-							sendTrialWelcomeEmail(
-								email,
-								userInfo.name || "there",
-								trialExpiresAt,
-							).catch((e) => console.error(`Trial email send failed: ${e}`));
-						}
-					} else {
-						console.log(
-							`Email ${emailKey} already used trial, skipping for OAuth user ${firebaseUser.uid}`,
-						);
-					}
-				}
-			}
-
-			// Create custom token
-			const customToken = await auth.createCustomToken(firebaseUser.uid);
-
-			// Handle different redirect modes
-			if (state.redirect === "popup") {
-				// Web popup mode: Use postMessage to send token back to opener
-				res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In Successful - Better Keep</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0;
-    }
-    .container {
-      background: white;
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      max-width: 400px;
-    }
-    h1 { color: #2E7D32; margin-bottom: 16px; }
-    p { color: #666; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>✓ Sign In Successful</h1>
-    <p id="status">Completing sign-in...</p>
-  </div>
-  <script>
-    // Send token to opener window via postMessage
-    if (window.opener) {
-      // Send message repeatedly until parent acknowledges or timeout
-      var attempts = 0;
-      var maxAttempts = 20; // 10 seconds max
-      var interval = setInterval(function() {
-        attempts++;
-        console.log('Sending oauth_success message, attempt ' + attempts);
-        window.opener.postMessage({
-          type: 'oauth_success',
-          token: '${customToken}',
-          provider: '${state.provider}'
-        }, '*'); // Use * to allow any origin since Flutter web might be on localhost
-        
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
-          document.getElementById('status').textContent = 'Please close this window manually.';
-        }
-      }, 500);
-      
-      // Listen for close command from parent
-      window.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'oauth_close') {
-          console.log('Received close command from parent');
-          clearInterval(interval);
-          window.close();
-        }
-      });
-    } else {
-      // Fallback: Show manual instructions
-      document.querySelector('.container').innerHTML = 
-        '<h1>✓ Sign In Successful</h1>' +
-        '<p>Please close this window and return to Better Keep.</p>';
-    }
-  </script>
-</body>
-</html>
-        `);
-			} else {
-				// Mobile deep link mode: Redirect to app
-				const redirectUrl = `${state.redirect}://auth?token=${encodeURIComponent(customToken)}&provider=${state.provider}`;
-
-				// Send HTML that tries to redirect and shows a button as fallback
-				res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In Successful - Better Keep</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0;
-    }
-    .container {
-      background: white;
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      max-width: 400px;
-    }
-    h1 { color: #2E7D32; margin-bottom: 16px; }
-    p { color: #666; margin-bottom: 16px; }
-    .hint { color: #999; font-size: 14px; margin-top: 16px; }
-    .btn {
-      background: #6750A4;
-      color: white;
-      border: none;
-      padding: 14px 28px;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>✓ Sign In Successful</h1>
-    <p>Redirecting back to Better Keep...</p>
-    <a href="${redirectUrl}" class="btn">Open Better Keep</a>
-    <p class="hint">You can close this tab after the app opens.</p>
-  </div>
-  <script>
-    window.location.href = "${redirectUrl}";
-  </script>
-</body>
-</html>
-        `);
-			}
-		} catch (e) {
-			console.error("OAuth callback error:", e);
-			const errorMsg = e instanceof Error ? e.message : "Authentication failed";
-
-			// Escape error message for HTML and JavaScript
-			const htmlSafeError = errorMsg
-				.replace(/&/g, "&amp;")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;")
-				.replace(/"/g, "&quot;");
-			const jsSafeError = errorMsg
-				.replace(/\\/g, "\\\\")
-				.replace(/'/g, "\\'")
-				.replace(/"/g, '\\"');
-
-			// Try to get state from query to determine if this was a popup request
-			const stateParam = req.query.state as string | undefined;
-			let isPopup = false;
-			if (stateParam) {
-				try {
-					const state = JSON.parse(
-						Buffer.from(stateParam, "base64").toString("utf-8"),
-					);
-					isPopup = state.redirect === "popup";
-				} catch {
-					// Ignore parse errors
-				}
-			}
-
-			if (isPopup) {
-				// Send error via postMessage
-				res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Sign In Failed - Better Keep</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0;
-    }
-    .container {
-      background: white;
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      max-width: 400px;
-    }
-    h1 { color: #D32F2F; margin-bottom: 16px; }
-    p { color: #666; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>✗ Sign In Failed</h1>
-    <p>${htmlSafeError}</p>
-  </div>
-  <script>
-    if (window.opener) {
-      // Send error message repeatedly until parent acknowledges or timeout
-      var attempts = 0;
-      var maxAttempts = 20; // 10 seconds max
-      var interval = setInterval(function() {
-        attempts++;
-        console.log('Sending oauth_error message, attempt ' + attempts);
-        window.opener.postMessage({
-          type: 'oauth_error',
-          error: '${jsSafeError}'
-        }, '*'); // Use * to allow any origin since Flutter web might be on localhost
-        
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
-        }
-      }, 500);
-      
-      // Listen for close command from parent
-      window.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'oauth_close') {
-          console.log('Received close command from parent');
-          clearInterval(interval);
-          window.close();
-        }
-      });
-    }
-  </script>
-</body>
-</html>
-        `);
-			} else {
-				res.redirect(
-					`https://betterkeep.app/auth.html?error=${encodeURIComponent(errorMsg)}`,
+				await grantTrialIfEligible({
+					user: firebaseUser,
+					persistCustomClaims: true,
+				}).catch((error) =>
+					console.error(
+						"OAuth trial grant failed without blocking sign-in",
+						error,
+					),
 				);
 			}
+
+			let popupPayload: Record<string, unknown>;
+			let mobileQuery: URLSearchParams;
+			if (state.version === 2) {
+				const completionCode = await createOAuthCompletion({
+					uid: firebaseUser.uid,
+					provider: state.provider,
+					challenge: state.completionChallenge as string,
+					clientTransactionId: state.clientTransactionId as string,
+				});
+				popupPayload = {
+					type: "oauth_success",
+					completionCode,
+					provider: state.provider,
+					transactionId: state.clientTransactionId,
+				};
+				mobileQuery = new URLSearchParams({
+					code: completionCode,
+					provider: state.provider,
+					transactionId: state.clientTransactionId as string,
+				});
+			} else {
+				// Compatibility path for already released clients. This path is
+				// intentionally isolated and must be removed at the v1 sunset.
+				const customToken = await auth.createCustomToken(firebaseUser.uid);
+				popupPayload = {
+					type: "oauth_success",
+					token: customToken,
+					provider: state.provider,
+				};
+				mobileQuery = new URLSearchParams({
+					token: customToken,
+					provider: state.provider,
+				});
+			}
+
+			console.info(
+				JSON.stringify({
+					event: "oauth_flow_completed",
+					flowVersion: state.version,
+					provider: state.provider,
+					mode: state.mode,
+					redirect: state.redirect,
+				}),
+			);
+
+			if (state.redirect === "popup" && state.clientOrigin) {
+				sendHtml(
+					renderOAuthPopup({
+						title: "Sign In Successful - Better Keep",
+						heading: "Sign In Successful",
+						message: "Completing sign-in…",
+						success: true,
+						targetOrigin: state.clientOrigin,
+						payload: popupPayload,
+					}),
+				);
+			} else {
+				sendHtml(
+					renderOAuthMobileRedirect({
+						title: "Sign In Successful - Better Keep",
+						heading: "Sign In Successful",
+						message: "Returning to Better Keep…",
+						success: true,
+						redirectUrl: `betterkeep://auth?${mobileQuery.toString()}`,
+					}),
+				);
+			}
+		} catch (error) {
+			console.error(
+				JSON.stringify({
+					event: "oauth_flow_failed",
+					flowVersion: state.version,
+					provider: state.provider,
+					mode: state.mode,
+					redirect: state.redirect,
+				}),
+			);
+			const errorMsg =
+				error instanceof Error ? error.message : "Authentication failed";
+			sendError(errorMsg, state);
 		}
 	},
 );

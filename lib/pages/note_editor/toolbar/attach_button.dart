@@ -216,7 +216,7 @@ class _AttachButtonState extends State<AttachButton> {
             children: [
               ListTile(
                 leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
+                title: Text(context.l10n.camera),
                 onTap: () {
                   Navigator.pop(context);
                   _pickImage(ImageSource.camera);
@@ -224,7 +224,7 @@ class _AttachButtonState extends State<AttachButton> {
               ),
               ListTile(
                 leading: const Icon(Icons.image),
-                title: const Text('Gallery'),
+                title: Text(context.l10n.gallery),
                 onTap: () {
                   Navigator.pop(context);
                   _pickImage(ImageSource.gallery);

@@ -12,6 +12,311 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appTitle => 'Better Keep';
 
   @override
+  String get unableToStartApp => 'Não foi possível iniciar o Better Keep';
+
+  @override
+  String get startupRetryMessage =>
+      'Ocorreu um problema ao abrir o app. Tente novamente.';
+
+  @override
+  String get startupRestartMessage =>
+      'Ocorreu um problema ao abrir o app. Feche e abra o app novamente para tentar de novo.';
+
+  @override
+  String get accountNotFound => 'Nenhuma conta foi encontrada com este e-mail.';
+
+  @override
+  String get invalidCredentials =>
+      'O e-mail ou a senha está incorreto. Tente novamente.';
+
+  @override
+  String get accountDisabled =>
+      'Esta conta não está disponível. Entre em contato com o suporte.';
+
+  @override
+  String get paymentInProgress => 'Pagamento em andamento';
+
+  @override
+  String get completePaymentInBrowser =>
+      'Conclua o pagamento no navegador. Esta mensagem será fechada automaticamente quando você terminar.';
+
+  @override
+  String get legal => 'Informações legais';
+
+  @override
+  String get termsOfUse => 'Termos de Uso';
+
+  @override
+  String get privacyPolicy => 'Política de Privacidade';
+
+  @override
+  String get appLogoSemantics => 'Logotipo do app Better Keep';
+
+  @override
+  String get selectColor => 'Selecionar cor';
+
+  @override
+  String get unsupportedTextFile =>
+      'Este tipo de arquivo não é compatível. Escolha um arquivo .txt ou .md.';
+
+  @override
+  String get sharedFileEmpty => 'Este arquivo está vazio.';
+
+  @override
+  String get fileNotFound => 'Este arquivo não foi encontrado.';
+
+  @override
+  String get fileTooLarge =>
+      'Este arquivo é muito grande. Escolha um arquivo menor que 5 MB.';
+
+  @override
+  String get couldNotReadFile =>
+      'Não foi possível ler este arquivo. Tente outro arquivo.';
+
+  @override
+  String get couldNotOpenFile =>
+      'Não foi possível abrir este arquivo. Tente novamente.';
+
+  @override
+  String get noteSaved => 'Nota salva';
+
+  @override
+  String get untitled => 'Sem título';
+
+  @override
+  String get failedToExportNote =>
+      'Não foi possível exportar a nota. Tente novamente.';
+
+  @override
+  String get failedToCopyNote =>
+      'Não foi possível copiar a nota. Tente novamente.';
+
+  @override
+  String get failedToDeleteSketch =>
+      'Não foi possível excluir o desenho. Tente novamente.';
+
+  @override
+  String get lockedNoteReminder => 'Lembrete de uma nota bloqueada';
+
+  @override
+  String get notesReminder => 'Lembrete de nota do Better Keep';
+
+  @override
+  String get blankPage => 'Em branco';
+
+  @override
+  String get linedPage => 'Com linhas';
+
+  @override
+  String get doubleLinedPage => 'Linhas duplas';
+
+  @override
+  String get gridPage => 'Grade';
+
+  @override
+  String get dotGridPage => 'Grade pontilhada';
+
+  @override
+  String get dataExportTitle => 'Exportação de dados do Better Keep';
+
+  @override
+  String get dataExportShareText => 'Minha exportação de dados do Better Keep';
+
+  @override
+  String get noteReminders => 'Lembretes de notas';
+
+  @override
+  String get noteRemindersDescription => 'Lembretes com horário para notas';
+
+  @override
+  String get deviceApproval => 'Aprovação de dispositivo';
+
+  @override
+  String get deviceApprovalDescription =>
+      'Notificações de pedidos de aprovação de dispositivo';
+
+  @override
+  String get newDeviceApprovalRequest =>
+      'Novo pedido de aprovação de dispositivo';
+
+  @override
+  String deviceWantsAccess(String deviceName, String platform) {
+    return '$deviceName ($platform) quer acessar suas notas';
+  }
+
+  @override
+  String get sharedText => 'Texto compartilhado';
+
+  @override
+  String get sharedFile => 'Arquivo compartilhado';
+
+  @override
+  String get user => 'Usuário';
+
+  @override
+  String get thirtyDaysFromNow => 'daqui a 30 dias';
+
+  @override
+  String get helpRequestSubject => 'Better Keep - Pedido de ajuda';
+
+  @override
+  String get faqCreateNoteQuestion => 'Como criar uma nova nota?';
+
+  @override
+  String get faqCreateNoteAnswer =>
+      'Toque no botão + na parte inferior da tela inicial. Você pode adicionar texto, imagens, áudio e muito mais.';
+
+  @override
+  String get faqShortcutsQuestion => 'Como usar os atalhos rápidos?';
+
+  @override
+  String get faqShortcutsAnswer =>
+      'Mantenha o botão + pressionado para ver atalhos de imagem, áudio, desenho ou tarefa. Deslize até a opção desejada e solte. Um toque rápido abre uma nota em branco.';
+
+  @override
+  String get faqLabelsQuestion => 'Como organizar notas com etiquetas?';
+
+  @override
+  String get faqLabelsAnswer =>
+      'Abra uma nota e toque no ícone de etiqueta para adicionar ou criar etiquetas. Você pode filtrar as notas por etiqueta no menu lateral.';
+
+  @override
+  String get faqReminderQuestion => 'Como definir um lembrete?';
+
+  @override
+  String get faqReminderAnswer =>
+      'Abra uma nota e toque no ícone de lembrete para escolher uma data e um horário.';
+
+  @override
+  String get faqArchiveDeleteQuestion => 'Como arquivar ou excluir notas?';
+
+  @override
+  String get faqArchiveDeleteAnswer =>
+      'Mantenha uma nota pressionada para selecioná-la e use a ação de arquivar ou excluir. As notas excluídas vão primeiro para a Lixeira e podem ser apagadas definitivamente lá.';
+
+  @override
+  String get faqThemeQuestion => 'Como mudar o tema do app?';
+
+  @override
+  String get faqThemeAnswer =>
+      'Abra as Configurações e escolha as opções de tema que preferir.';
+
+  @override
+  String get faqSyncQuestion => 'Como sincronizar notas entre dispositivos?';
+
+  @override
+  String get faqSyncAnswer =>
+      'Entre na sua conta para sincronizar suas notas com segurança em todos os dispositivos.';
+
+  @override
+  String get faqReminderTimesQuestion =>
+      'Como definir os horários da manhã, tarde e noite?';
+
+  @override
+  String get faqReminderTimesAnswer =>
+      'Abra as Configurações e selecione Configurações de Horário dos Lembretes para ajustar esses horários.';
+
+  @override
+  String get faqAlarmSoundQuestion => 'Como mudar o som do alarme?';
+
+  @override
+  String get faqAlarmSoundAnswer =>
+      'Abra as Configurações, selecione Som do Alarme e escolha um dos sons disponíveis.';
+
+  @override
+  String get faqSecurityQuestion => 'Meus dados estão seguros?';
+
+  @override
+  String get faqSecurityAnswer =>
+      'Suas notas são armazenadas com segurança. Quando a proteção da sincronização está ativada, a criptografia de ponta a ponta protege os dados sincronizados.';
+
+  @override
+  String get faqApproveDeviceQuestion => 'Como aprovar um novo dispositivo?';
+
+  @override
+  String get faqApproveDeviceAnswer =>
+      'Abra o Better Keep em um dispositivo já aprovado. No perfil, veja os dispositivos aguardando aprovação e aprove ou negue o pedido.';
+
+  @override
+  String get faqDeleteAccountQuestion => 'Como excluir minha conta?';
+
+  @override
+  String get faqDeleteAccountAnswer =>
+      'Abra o perfil e escolha Excluir Conta. Depois da verificação por e-mail, a exclusão será agendada para 30 dias e seus dispositivos sairão da conta.';
+
+  @override
+  String get faqCancelDeletionQuestion => 'Posso cancelar a exclusão da conta?';
+
+  @override
+  String get faqCancelDeletionAnswer =>
+      'Sim. Entre novamente em até 30 dias para cancelar a exclusão agendada e recuperar o acesso à conta.';
+
+  @override
+  String get faqDeletionEffectsQuestion =>
+      'O que acontece quando excluo minha conta?';
+
+  @override
+  String get faqDeletionEffectsAnswer =>
+      'Seus dispositivos saem da conta imediatamente. Após 30 dias, notas, anexos, etiquetas e dados pessoais são excluídos definitivamente e não podem ser recuperados.';
+
+  @override
+  String get faqExportBeforeDeletionQuestion =>
+      'Posso exportar meus dados antes de excluir a conta?';
+
+  @override
+  String get faqExportBeforeDeletionAnswer =>
+      'Sim. Depois de agendar a exclusão, você pode exportar seus dados. Baixe-os antes do fim do período de 30 dias.';
+
+  @override
+  String get iosAppAvailable =>
+      'O Better Keep está disponível na App Store. Baixe o app para ter notificações, widgets e muito mais.';
+
+  @override
+  String get openAppStore => 'Abrir App Store';
+
+  @override
+  String get tasks => 'Tarefas';
+
+  @override
+  String get unknown => 'Desconhecido';
+
+  @override
+  String get exportAttachments => 'Anexos';
+
+  @override
+  String get created => 'Criada';
+
+  @override
+  String get updated => 'Atualizada';
+
+  @override
+  String get oneTime => 'Uma vez';
+
+  @override
+  String get lockedExportExplanation =>
+      'Estas notas estão bloqueadas. O conteúdo protegido é preservado nesta exportação e só pode ser aberto com o PIN original.';
+
+  @override
+  String dataExportReadme(String exportedAt) {
+    return 'Better Keep - Exportação de Dados\n\nEste arquivo contém suas notas, etiquetas, anexos e informações da exportação. As notas que podem ser abertas também são fornecidas como arquivos Markdown. Notas bloqueadas permanecem protegidas e exigem o PIN original.\n\nPara obter ajuda, entre em contato com contact@betterkeep.app.\n\nExportado em: $exportedAt';
+  }
+
+  @override
+  String get paymentSuccessful => 'Pagamento concluído';
+
+  @override
+  String get paymentSuccessfulReturn =>
+      'Você pode fechar esta janela e voltar ao Better Keep.';
+
+  @override
+  String get paymentCancelledClose =>
+      'O pagamento foi cancelado. Você pode fechar esta janela.';
+
+  @override
+  String get appleSignInVerificationFailed =>
+      'Não foi possível verificar o início de sessão com a Apple. Tente novamente.';
+
+  @override
   String get reminderType => 'Tipo de lembrete';
 
   @override
@@ -2068,6 +2373,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get webBrowser => 'Navegador web';
 
   @override
+  String get unknownDevice => 'Dispositivo desconhecido';
+
+  @override
   String get debugDeleteSubscription => 'DEBUG: Excluir assinatura';
 
   @override
@@ -3183,4 +3491,99 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       'A reorganização manual não está disponível ao ordenar por data. Escolha Personalizado para reorganizar as notas.';
+
+  @override
+  String get googleKeepImportTitle => 'Importar do Google Keep';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Mova um arquivo do Google Takeout localmente, sem precisar enviá-lo.';
+
+  @override
+  String get googleKeepImportPrivacyTitle =>
+      'Seu arquivo permanece neste dispositivo';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'O Better Keep valida e converte o arquivo do Google Takeout localmente. O ZIP não é enviado a um serviço de conversão. As notas só entram no fluxo normal de sincronização opcional depois que a importação é salva com sucesso.';
+
+  @override
+  String get googleKeepImportBeforeStart => 'Antes de começar';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Abra o Google Takeout e selecione apenas o Keep.\n2. Crie e baixe a exportação.\n3. Escolha o ZIP abaixo. Reimportações idênticas são ignoradas por padrão.';
+
+  @override
+  String get googleKeepChooseZip => 'Escolher ZIP do Takeout';
+
+  @override
+  String get googleKeepChooseFolder => 'Escolher pasta do Keep extraída';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions =>
+      'Abrir instruções do Google Takeout';
+
+  @override
+  String get googleKeepCancelImport => 'Cancelar importação';
+
+  @override
+  String get googleKeepImportCancelled =>
+      'Importação cancelada. Nenhuma nota foi salva.';
+
+  @override
+  String get googleKeepImportFailed =>
+      'A importação falhou. Verifique sua seleção e tente novamente.';
+
+  @override
+  String get googleKeepImportReportTitle =>
+      'Relatório de importação do Google Keep no Better Keep';
+
+  @override
+  String get googleKeepImportValidating =>
+      'Validando o arquivo do Google Takeout…';
+
+  @override
+  String get googleKeepImportParsing => 'Lendo notas do Google Keep…';
+
+  @override
+  String get googleKeepImportPreparingAttachments =>
+      'Preparando anexos importados…';
+
+  @override
+  String get googleKeepImportSaving => 'Salvando notas importadas…';
+
+  @override
+  String get googleKeepImportStarting => 'Iniciando importação…';
+
+  @override
+  String get googleKeepImportComplete => 'Importação concluída';
+
+  @override
+  String get googleKeepSafetyLimits => 'Limites de segurança';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'Os arquivos ZIP são limitados a 100 MB compactados, 500 MB expandidos, 20.000 arquivos e 50 MB por arquivo. Caminhos inseguros, links simbólicos e arquivos malformados são rejeitados antes que as notas sejam salvas.';
+
+  @override
+  String get googleKeepImported => 'Importadas';
+
+  @override
+  String get googleKeepSkipped => 'Ignoradas';
+
+  @override
+  String get googleKeepWarnings => 'Avisos';
+
+  @override
+  String get googleKeepUnsupported => 'Não compatíveis';
+
+  @override
+  String get googleKeepFailed => 'Falhas';
+
+  @override
+  String get googleKeepReviewDetails => 'Revisar detalhes da importação';
+
+  @override
+  String get googleKeepShareReport => 'Compartilhar relatório completo';
 }

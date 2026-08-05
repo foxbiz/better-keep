@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
+import 'package:better_keep/components/firebase_environment_banner.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/config.dart';
+import 'package:better_keep/l10n/app_localization_config.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/pages/account_recovery_page.dart';
 import 'package:better_keep/pages/email_verification_page.dart';
 import 'package:better_keep/pages/home/home.dart';
@@ -18,6 +22,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/monetization/razorpay_web.dart'
     if (dart.library.io) 'package:better_keep/services/monetization/razorpay_stub.dart'
     as razorpay_platform;
@@ -25,13 +30,12 @@ import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_quill/flutter_quill.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:better_keep/l10n/app_localizations.dart';
 
 class App extends StatefulWidget {
   const App({super.key});
@@ -106,13 +110,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       AuthService.checkTokenRevocationOnResume();
       // Refresh subscription status when app comes to foreground
       // Also validate with backend to catch cancelled subscriptions
-      if (AuthService.currentUser != null) {
+      final currentUser = AuthService.currentUser;
+      if (currentUser != null) {
         PlanService.instance.refreshSubscription(validateWithBackend: true);
         // On iOS, also restore purchases to pick up subscription changes
         // made in the App Store management page (cancel / re-subscribe).
         // restorePurchases sends a fresh receipt to the server which reads
         // the current auto_renew_status from Apple.
-        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        if (!ReviewAccess.isAuthorizedSessionFor(currentUser) &&
+            !kIsWeb &&
+            defaultTargetPlatform == TargetPlatform.iOS) {
           unawaited(SubscriptionService.instance.restoreAndWaitForPurchases());
         }
       }
@@ -159,23 +166,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         navigatorKey: AppState.navigatorKey,
         scaffoldMessengerKey: AppState.scaffoldMessengerKey,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          FlutterQuillLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('en'),
-          Locale('ja'),
-          Locale('ko'),
-          Locale('id'),
-          Locale('pt', 'BR'),
-          Locale('zh'),
-        ],
+        localizationsDelegates: betterKeepLocalizationDelegates,
+        supportedLocales: betterKeepSupportedLocales,
         locale: _locale,
-        title: 'Better Keep',
+        onGenerateTitle: (context) => context.l10n.appTitle,
         theme: themeData,
         builder: (context, child) {
           // Keep MediaQuery consumers, such as animated images, aligned with
@@ -273,14 +267,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                               ),
                               const SizedBox(height: 24),
                               Text(
-                                'Encryption Error',
+                                context.l10n.somethingWentWrong,
                                 style: Theme.of(context).textTheme.headlineSmall
                                     ?.copyWith(fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'Unable to initialize encryption. Your notes cannot be accessed without encryption.',
+                                context.l10n.somethingWentWrongTryAgain,
                                 style: Theme.of(context).textTheme.bodyLarge
                                     ?.copyWith(
                                       color: Theme.of(
@@ -305,7 +299,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                   }
                                 },
                                 icon: const Icon(Icons.refresh),
-                                label: const Text('Retry'),
+                                label: Text(context.l10n.retry),
                               ),
                               const SizedBox(height: 16),
                               TextButton.icon(
@@ -318,16 +312,15 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                         color: Colors.orange,
                                         size: 32,
                                       ),
-                                      title: const Text('Sign Out'),
-                                      content: const Text(
-                                        'Are you sure you want to sign out?\n\n'
-                                        'You will need to sign in again to access your notes.',
+                                      title: Text(context.l10n.signOut),
+                                      content: Text(
+                                        context.l10n.signOutConfirmation,
                                       ),
                                       actions: [
                                         TextButton(
                                           onPressed: () =>
                                               Navigator.of(context).pop(false),
-                                          child: const Text('Cancel'),
+                                          child: Text(context.l10n.cancel),
                                         ),
                                         FilledButton(
                                           onPressed: () =>
@@ -335,7 +328,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                           style: FilledButton.styleFrom(
                                             backgroundColor: Colors.orange,
                                           ),
-                                          child: const Text('Sign Out'),
+                                          child: Text(context.l10n.signOut),
                                         ),
                                       ],
                                     ),
@@ -349,7 +342,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                   }
                                 },
                                 icon: const Icon(Icons.logout),
-                                label: const Text('Sign Out'),
+                                label: Text(context.l10n.signOut),
                               ),
                               const SizedBox(height: 8),
                               TextButton(
@@ -357,7 +350,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                   // Mark session as invalid to allow access to local notes
                                   AuthService.sessionInvalid.value = true;
                                 },
-                                child: const Text('Continue Offline'),
+                                child: Text(context.l10n.continueOffline),
                               ),
                             ],
                           ),
@@ -480,7 +473,7 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          'Verifying Account',
+          context.l10n.checkingAccountStatus,
           style: Theme.of(
             context,
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -500,11 +493,13 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
           ),
         ),
         const SizedBox(height: 24),
-        ValueListenableBuilder<String>(
-          valueListenable: E2EEService.instance.statusMessage,
-          builder: (context, message, child) {
+        ValueListenableBuilder<ProtectionProgress?>(
+          valueListenable: E2EEService.instance.statusProgress,
+          builder: (context, progress, child) {
             return Text(
-              message.isNotEmpty ? message : "Setting up encryption...",
+              (progress ?? ProtectionProgress.gettingReady).localized(
+                context.l10n,
+              ),
               style: TextStyle(
                 fontSize: 16,
                 color: Theme.of(
@@ -518,7 +513,7 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
         if (_showTimeoutOptions) ...[
           const SizedBox(height: 32),
           Text(
-            'Taking longer than expected?',
+            context.l10n.takingTooLongTryAgain,
             style: TextStyle(
               fontSize: 14,
               color: Theme.of(
@@ -533,13 +528,13 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
               OutlinedButton.icon(
                 onPressed: _retryInitialization,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Retry'),
+                label: Text(context.l10n.retry),
               ),
               const SizedBox(width: 16),
               TextButton.icon(
                 onPressed: _signOutSafely,
                 icon: const Icon(Icons.logout, size: 18),
-                label: const Text('Sign Out'),
+                label: Text(context.l10n.signOut),
               ),
             ],
           ),
@@ -548,7 +543,7 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
             onPressed: () {
               AuthService.sessionInvalid.value = true;
             },
-            child: const Text('Continue Offline'),
+            child: Text(context.l10n.continueOffline),
           ),
         ],
       ],
@@ -573,12 +568,15 @@ class _BannerLayout extends StatelessWidget {
       listenable: Listenable.merge([
         AuthService.sessionInvalid,
         SessionInvalidBanner.isDismissed,
+        FirebaseBackend.configuration,
       ]),
       builder: (context, _) {
+        final hasEnvironmentBanner =
+            kDebugMode && FirebaseBackend.configuration.value != null;
         final hasSessionBanner =
             AuthService.sessionInvalid.value &&
             !SessionInvalidBanner.isDismissed.value;
-        final hasBanner = hasSessionBanner;
+        final hasBanner = hasEnvironmentBanner || hasSessionBanner;
 
         final appChild = hasBanner
             ? MediaQuery.removePadding(
@@ -590,8 +588,15 @@ class _BannerLayout extends StatelessWidget {
 
         return Column(
           children: [
-            const OpenInAppBanner(),
-            const SessionInvalidBanner(),
+            const FirebaseEnvironmentBanner(),
+            MediaQuery.removePadding(
+              context: context,
+              removeTop: hasEnvironmentBanner,
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [OpenInAppBanner(), SessionInvalidBanner()],
+              ),
+            ),
             Expanded(child: appChild),
           ],
         );

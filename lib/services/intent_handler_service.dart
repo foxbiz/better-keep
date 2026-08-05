@@ -5,6 +5,7 @@ import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/pages/content_preview_page.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -122,24 +123,22 @@ class IntentHandlerService {
         // Check if it's a text or markdown file (by extension or mime type)
         if (!_isTextOrMarkdownFile(path, mimeType)) {
           AppLogger.log('[IntentHandler] Skipping non-text file: $path');
-          _showError(
-            'Unsupported file type. Only .txt and .md files are supported.',
-          );
+          _showFileError(_SharedFileFailure.unsupportedType);
           continue;
         }
 
         // Read file content
         final result = await _readFile(path);
-        if (result.error != null) {
-          AppLogger.log('[IntentHandler] ${result.error}: $path');
-          _showError(result.error!);
+        if (result.failure != null) {
+          AppLogger.log('[IntentHandler] ${result.failure!.name}: $path');
+          _showFileError(result.failure!);
           continue;
         }
 
         final fileContent = result.content;
         if (fileContent == null || fileContent.isEmpty) {
           AppLogger.log('[IntentHandler] File is empty: $path');
-          _showError('The file is empty.');
+          _showFileError(_SharedFileFailure.empty);
           continue;
         }
 
@@ -156,7 +155,7 @@ class IntentHandlerService {
         );
       } catch (e) {
         AppLogger.error('[IntentHandler] Error processing file', e);
-        _showError('An error occurred while opening the file.');
+        _showFileError(_SharedFileFailure.openFailed);
       }
     }
   }
@@ -195,13 +194,13 @@ class IntentHandlerService {
       );
 
       // Show confirmation
-      _showSuccess('Note saved');
+      _showSuccess(currentAppLocalizations().noteSaved);
     } catch (e) {
       AppLogger.error(
         '[IntentHandler] Error creating note from shared text',
         e,
       );
-      _showError('Failed to save note.');
+      _showError(currentAppLocalizations().failedSaveNote);
     }
   }
 
@@ -242,21 +241,21 @@ class IntentHandlerService {
     try {
       final file = File(path);
       if (!await file.exists()) {
-        return _FileReadResult(error: 'File not found.');
+        return const _FileReadResult(failure: _SharedFileFailure.notFound);
       }
 
       // Check file size (limit to 5MB for safety)
       final fileSize = await file.length();
       if (fileSize > 5 * 1024 * 1024) {
         AppLogger.log('[IntentHandler] File too large: $fileSize bytes');
-        return _FileReadResult(error: 'File is too large (max 5MB).');
+        return const _FileReadResult(failure: _SharedFileFailure.tooLarge);
       }
 
       final content = await file.readAsString();
       return _FileReadResult(content: content);
     } catch (e) {
       AppLogger.error('[IntentHandler] Error reading file: $path', e);
-      return _FileReadResult(error: 'Could not read the file.');
+      return const _FileReadResult(failure: _SharedFileFailure.readFailed);
     }
   }
 
@@ -272,6 +271,19 @@ class IntentHandlerService {
         ),
       );
     }
+  }
+
+  void _showFileError(_SharedFileFailure failure) {
+    final l10n = currentAppLocalizations();
+    final message = switch (failure) {
+      _SharedFileFailure.unsupportedType => l10n.unsupportedTextFile,
+      _SharedFileFailure.empty => l10n.sharedFileEmpty,
+      _SharedFileFailure.notFound => l10n.fileNotFound,
+      _SharedFileFailure.tooLarge => l10n.fileTooLarge,
+      _SharedFileFailure.readFailed => l10n.couldNotReadFile,
+      _SharedFileFailure.openFailed => l10n.couldNotOpenFile,
+    };
+    _showError(message);
   }
 
   /// Show success message to user
@@ -309,7 +321,7 @@ class IntentHandlerService {
       );
     } else {
       AppLogger.log('[IntentHandler] Cannot navigate - context not available');
-      _showError('Could not open the file. Please try again.');
+      _showFileError(_SharedFileFailure.openFailed);
     }
   }
 
@@ -322,7 +334,16 @@ class IntentHandlerService {
 /// Result class for file reading operation
 class _FileReadResult {
   final String? content;
-  final String? error;
+  final _SharedFileFailure? failure;
 
-  _FileReadResult({this.content, this.error});
+  const _FileReadResult({this.content, this.failure});
+}
+
+enum _SharedFileFailure {
+  unsupportedType,
+  empty,
+  notFound,
+  tooLarge,
+  readFailed,
+  openFailed,
 }

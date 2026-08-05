@@ -1,8 +1,12 @@
 import 'package:better_keep/config.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/pages/password_reset_page.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,7 +28,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
   bool _isSignUp = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  String _statusMessage = "";
+  AuthProgress? _statusProgress;
 
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
@@ -96,9 +100,9 @@ class _EmailLoginPageState extends State<EmailLoginPage>
 
     setState(() {
       _isLoading = true;
-      _statusMessage = _isSignUp
-          ? context.l10n.creatingAccount
-          : context.l10n.signingIn;
+      _statusProgress = _isSignUp
+          ? AuthProgress.creatingAccount
+          : AuthProgress.signingIn;
     });
 
     try {
@@ -107,7 +111,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
           email: _emailController.text.trim(),
           password: _passwordController.text,
           onStatusChange: (status) {
-            if (mounted) setState(() => _statusMessage = status);
+            if (mounted) setState(() => _statusProgress = status);
           },
         );
         // Signup successful - app.dart will automatically show EmailVerificationPage
@@ -121,7 +125,7 @@ class _EmailLoginPageState extends State<EmailLoginPage>
           email: _emailController.text.trim(),
           password: _passwordController.text,
           onStatusChange: (status) {
-            if (mounted) setState(() => _statusMessage = status);
+            if (mounted) setState(() => _statusProgress = status);
           },
         );
 
@@ -132,38 +136,13 @@ class _EmailLoginPageState extends State<EmailLoginPage>
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }
-    } catch (e) {
-      String errorMessage = 'Authentication failed. Please try again.';
-      final errorStr = e.toString().toLowerCase();
-
-      if (errorStr.contains('user-not-found')) {
-        errorMessage =
-            'No account found with this email. Please sign up first.';
-      } else if (errorStr.contains('wrong-password') ||
-          errorStr.contains('invalid-credential')) {
-        errorMessage = 'Incorrect password or email. Please try again.';
-      } else if (errorStr.contains('email-already-in-use')) {
-        errorMessage =
-            'An account already exists with this email. Try signing in or use a different sign-in method.';
-      } else if (errorStr.contains('weak-password')) {
-        errorMessage =
-            'Password is too weak. Use at least 6 characters with letters and numbers.';
-      } else if (errorStr.contains('invalid-email')) {
-        errorMessage = 'Please enter a valid email address.';
-      } else if (errorStr.contains('user-disabled')) {
-        errorMessage =
-            'This account has been disabled. Please contact support.';
-      } else if (errorStr.contains('network') || errorStr.contains('timeout')) {
-        errorMessage = 'Network error. Please check your internet connection.';
-      } else if (errorStr.contains('too-many-requests')) {
-        errorMessage =
-            'Too many failed attempts. Please wait a few minutes and try again.';
-      } else if (errorStr.contains('internal-error')) {
-        errorMessage = 'Server error. Please try again later.';
-      } else if (e is Exception) {
-        final msg = e.toString().replaceFirst('Exception: ', '');
-        if (msg.length < 150) errorMessage = msg;
-      }
+    } catch (e, stackTrace) {
+      AppLogger.error('[Auth] Email authentication failed', e, stackTrace);
+      final l10n = currentAppLocalizations();
+      final errorMessage = resolveSignInFailure(
+        provider: 'password',
+        error: e,
+      ).localized(l10n);
 
       AppState.scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
@@ -239,7 +218,9 @@ class _EmailLoginPageState extends State<EmailLoginPage>
                 const CircularProgressIndicator(),
                 const SizedBox(height: 24),
                 Text(
-                  _statusMessage,
+                  (_statusProgress ?? AuthProgress.signingIn).localized(
+                    context.l10n,
+                  ),
                   style: TextStyle(
                     fontSize: 16,
                     color: colorScheme.onSurface.withValues(alpha: 0.7),

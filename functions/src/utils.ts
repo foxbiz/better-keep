@@ -16,6 +16,8 @@ import {
 	isEmulator,
 	SUBSCRIPTION_PLANS,
 } from "./config";
+import { mergeSubscriptionClaims } from "./customClaims";
+import { deliverEmail, type EmailDeliveryResult } from "./emailDelivery";
 import type { AppStoreJWSTransactionPayload } from "./types";
 
 /**
@@ -32,20 +34,15 @@ export async function setSubscriptionClaims(
 	expiresAt: Date | null,
 ): Promise<void> {
 	try {
+		const user = await auth.getUser(userId);
+		const claims = mergeSubscriptionClaims(user.customClaims, plan, expiresAt);
+		await auth.setCustomUserClaims(userId, claims);
+
 		if (plan === "pro" && expiresAt) {
-			await auth.setCustomUserClaims(userId, {
-				plan: "pro",
-				planExpiresAt: expiresAt.getTime(),
-			});
 			console.log(
 				`Set Pro claims for user ${userId}, expires ${expiresAt.toISOString()}`,
 			);
 		} else {
-			// Clear claims for free users
-			await auth.setCustomUserClaims(userId, {
-				plan: "free",
-				planExpiresAt: null,
-			});
 			console.log(`Cleared Pro claims for user ${userId} (now free)`);
 		}
 	} catch (error) {
@@ -96,23 +93,12 @@ export function getEmailTransporter(password: string) {
  * In emulator mode, emails are logged instead of being sent
  */
 export async function sendEmail(
-	transporter: nodemailer.Transporter,
 	mailOptions: nodemailer.SendMailOptions,
-): Promise<void> {
-	if (isEmulator) {
-		console.log("📧 [EMULATOR] Email would be sent:");
-		console.log("  From:", mailOptions.from);
-		console.log("  To:", mailOptions.to);
-		console.log("  Subject:", mailOptions.subject);
-		console.log(
-			"  Text preview:",
-			typeof mailOptions.text === "string"
-				? `${mailOptions.text.substring(0, 200)}...`
-				: "(HTML only)",
-		);
-		return;
-	}
-	await transporter.sendMail(mailOptions);
+): Promise<EmailDeliveryResult> {
+	return deliverEmail(mailOptions, {
+		isEmulator,
+		createTransporter: () => getEmailTransporter(emailPassword.value()),
+	});
 }
 
 /**
@@ -134,7 +120,6 @@ export async function sendTrialWelcomeEmail(
 	displayName: string,
 	expiresAt: Date,
 ): Promise<void> {
-	const transporter = getEmailTransporter(emailPassword.value());
 	const senderEmail = process.env.EMAIL_FROM;
 	const senderName = process.env.EMAIL_NAME;
 
@@ -206,7 +191,7 @@ Better Keep by Foxbiz Software Pvt. Ltd.
     `,
 	};
 
-	await sendEmail(transporter, mailOptions);
+	await sendEmail(mailOptions);
 }
 
 /**
@@ -402,68 +387,66 @@ export async function sendRazorpaySubscriptionEmail(
 	userId: string,
 	type: "welcome" | "cancelled" | "resumed" | "renewed" | "expired",
 	expiryDate?: Date | null,
-): Promise<void> {
-	try {
-		const userRecord = await auth.getUser(userId);
-		const email = userRecord.email;
+): Promise<EmailDeliveryResult | "skipped"> {
+	const userRecord = await auth.getUser(userId);
+	const email = userRecord.email;
 
-		if (!email) {
-			console.warn(`No email found for user ${userId}`);
-			return;
-		}
+	if (!email) {
+		console.warn(`No email found for user ${userId}`);
+		return "skipped";
+	}
 
-		const transporter = getEmailTransporter(emailPassword.value());
-		const senderEmail = process.env.EMAIL_FROM;
-		const senderName = process.env.EMAIL_NAME;
+	const senderEmail = process.env.EMAIL_FROM;
+	const senderName = process.env.EMAIL_NAME;
 
-		let subject = "";
-		let heading = "";
-		let message = "";
-		let ctaText = "";
-		let ctaUrl = "";
+	let subject = "";
+	let heading = "";
+	let message = "";
+	let ctaText = "";
+	let ctaUrl = "";
 
-		const expiryStr = expiryDate ? expiryDate.toLocaleDateString() : "N/A";
+	const expiryStr = expiryDate ? expiryDate.toLocaleDateString() : "N/A";
 
-		switch (type) {
-			case "welcome":
-				subject = "Welcome to Better Keep Notes Pro! 🎉";
-				heading = "Welcome to Better Keep Notes Pro";
-				message = `Thank you for subscribing! Your account has been upgraded and you now have access to all Pro features including unlimited locked notes, real-time encrypted sync, and priority support.\n\nYour subscription will renew on ${expiryStr}.`;
-				ctaText = "Open Better Keep Notes";
-				ctaUrl = "https://betterkeep.app";
-				break;
-			case "cancelled":
-				subject = "Your Better Keep Notes subscription has been cancelled";
-				heading = "Subscription Cancelled";
-				message = `Your subscription has been cancelled. You'll continue to have Pro access until ${expiryStr}, after which you'll be switched to the free plan.\n\nYou can resume your subscription anytime before it expires to keep your Pro benefits.`;
-				ctaText = "Resume Subscription";
-				ctaUrl = "https://betterkeep.app";
-				break;
-			case "resumed":
-				subject = "Your Better Keep Notes subscription has been resumed";
-				heading = "Subscription Resumed";
-				message = `Great news! Your subscription has been resumed and will renew automatically on ${expiryStr}. You'll continue to enjoy all Pro features.`;
-				ctaText = "Open Better Keep Notes";
-				ctaUrl = "https://betterkeep.app";
-				break;
-			case "renewed":
-				subject = "Your Better Keep Notes subscription has been renewed";
-				heading = "Subscription Renewed";
-				message = `Your Pro subscription has been renewed successfully. Your next billing date is ${expiryStr}. Thank you for your continued support!`;
-				ctaText = "Open Better Keep Notes";
-				ctaUrl = "https://betterkeep.app";
-				break;
-			case "expired":
-				subject = "Your Better Keep Notes Pro subscription has expired";
-				heading = "Subscription Expired";
-				message =
-					"Your Pro subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain access to Pro features.";
-				ctaText = "Resubscribe to Pro";
-				ctaUrl = "https://betterkeep.app";
-				break;
-		}
+	switch (type) {
+		case "welcome":
+			subject = "Welcome to Better Keep Notes Pro! 🎉";
+			heading = "Welcome to Better Keep Notes Pro";
+			message = `Thank you for subscribing! Your account has been upgraded and you now have access to all Pro features including unlimited locked notes, real-time encrypted sync, and priority support.\n\nYour subscription will renew on ${expiryStr}.`;
+			ctaText = "Open Better Keep Notes";
+			ctaUrl = "https://betterkeep.app";
+			break;
+		case "cancelled":
+			subject = "Your Better Keep Notes subscription has been cancelled";
+			heading = "Subscription Cancelled";
+			message = `Your subscription has been cancelled. You'll continue to have Pro access until ${expiryStr}, after which you'll be switched to the free plan.\n\nYou can resume your subscription anytime before it expires to keep your Pro benefits.`;
+			ctaText = "Resume Subscription";
+			ctaUrl = "https://betterkeep.app";
+			break;
+		case "resumed":
+			subject = "Your Better Keep Notes subscription has been resumed";
+			heading = "Subscription Resumed";
+			message = `Great news! Your subscription has been resumed and will renew automatically on ${expiryStr}. You'll continue to enjoy all Pro features.`;
+			ctaText = "Open Better Keep Notes";
+			ctaUrl = "https://betterkeep.app";
+			break;
+		case "renewed":
+			subject = "Your Better Keep Notes subscription has been renewed";
+			heading = "Subscription Renewed";
+			message = `Your Pro subscription has been renewed successfully. Your next billing date is ${expiryStr}. Thank you for your continued support!`;
+			ctaText = "Open Better Keep Notes";
+			ctaUrl = "https://betterkeep.app";
+			break;
+		case "expired":
+			subject = "Your Better Keep Notes Pro subscription has expired";
+			heading = "Subscription Expired";
+			message =
+				"Your Pro subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain access to Pro features.";
+			ctaText = "Resubscribe to Pro";
+			ctaUrl = "https://betterkeep.app";
+			break;
+	}
 
-		const htmlContent = `
+	const htmlContent = `
 			<!DOCTYPE html>
 			<html>
 			<head>
@@ -494,21 +477,18 @@ export async function sendRazorpaySubscriptionEmail(
 			</html>
 		`;
 
-		await sendEmail(transporter, {
-			from: `"${senderName}" <${senderEmail}>`,
-			to: email,
-			subject: subject,
-			html: htmlContent,
-			text: `${heading}\n\n${message}\n\n${ctaText}: ${ctaUrl}\n\nBetter Keep Notes by Foxbiz Software Pvt. Ltd.`,
-		});
+	const result = await sendEmail({
+		from: `"${senderName}" <${senderEmail}>`,
+		to: email,
+		subject: subject,
+		html: htmlContent,
+		text: `${heading}\n\n${message}\n\n${ctaText}: ${ctaUrl}\n\nBetter Keep Notes by Foxbiz Software Pvt. Ltd.`,
+	});
 
-		console.log(`Sent Razorpay ${type} email to ${email}`);
-	} catch (error) {
-		console.error(
-			`Failed to send Razorpay subscription email to user ${userId}:`,
-			error,
-		);
-	}
+	console.log(
+		`${result === "logged" ? "Logged" : "Sent"} Razorpay ${type} email to ${email}`,
+	);
+	return result;
 }
 /**
  * Helper function to make Razorpay API requests

@@ -142,7 +142,7 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
                       minWidth: 32,
                       minHeight: 32,
                     ),
-                    tooltip: 'Dismiss',
+                    tooltip: context.l10n.dismiss,
                   ),
                 ],
               ),

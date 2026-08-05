@@ -1,7 +1,6 @@
 import type * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import {
 	ANDROID_PACKAGE_NAME,
 	appStoreSharedSecret,
@@ -9,6 +8,10 @@ import {
 	googlePlayCredentials,
 	IOS_PRODUCT_IDS,
 } from "../config";
+import {
+	type AuthenticatedCallableRequest,
+	onNonReviewCall,
+} from "../nonReviewCallable";
 import type { CheckSubscriptionRequest } from "../types";
 import {
 	getPlayDeveloperApi,
@@ -20,13 +23,9 @@ import {
  * Check if user already has an active subscription before making a new purchase.
  * Also attempts to recover/restore any existing subscription.
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [googlePlayCredentials, appStoreSharedSecret] },
-	async (request: CallableRequest<CheckSubscriptionRequest>) => {
-		if (!request.auth) {
-			throw new HttpsError("unauthenticated", "User must be signed in");
-		}
-
+	async (request: AuthenticatedCallableRequest<CheckSubscriptionRequest>) => {
 		const userId = request.auth.uid;
 		console.log(`Checking existing subscription for user ${userId}`);
 

@@ -1,15 +1,22 @@
 import * as crypto from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { ALLOWED_PROVIDERS, db } from "../config";
-import type { AllowedProvider } from "../types";
+import { HttpsError } from "firebase-functions/v2/https";
+import { isAccountLinkProvider } from "../accountLinkProviders";
+import { db } from "../config";
+import { onNonReviewCall } from "../nonReviewCallable";
+import {
+	ACCOUNT_LINK_SESSION_TTL_MS,
+	createOpaqueToken,
+	EPHEMERAL_DOCUMENT_RETENTION_MS,
+	hashOpaqueToken,
+} from "../oauthSession";
 
 /**
  * HTTP Callable function to verify OTP for account linking
- * Returns a short-lived link token that must be used within 2 minutes
+ * Returns a one-time link authorization that must be used within 10 minutes.
  */
-export default onCall(
+export default onNonReviewCall(
 	async (request: CallableRequest<{ otp: string; provider: string }>) => {
 		if (!request.auth) {
 			throw new HttpsError(
@@ -17,7 +24,6 @@ export default onCall(
 				"User must be signed in to verify OTP",
 			);
 		}
-
 		const userId = request.auth.uid;
 		const providedOtp = request.data?.otp;
 		const provider = request.data?.provider;
@@ -26,99 +32,158 @@ export default onCall(
 			throw new HttpsError("invalid-argument", "Verification code is required");
 		}
 
-		if (!provider || !ALLOWED_PROVIDERS.includes(provider as AllowedProvider)) {
+		if (!isAccountLinkProvider(provider)) {
 			throw new HttpsError("invalid-argument", "Invalid provider");
 		}
 
 		try {
 			const userRef = db.collection("users").doc(userId);
 			const otpRef = userRef.collection("otpVerification").doc("accountLink");
-			const otpDoc = await otpRef.get();
-
-			if (!otpDoc.exists) {
-				throw new HttpsError(
-					"not-found",
-					"No verification code found. Please request a new one.",
-				);
-			}
-
-			const otpData = otpDoc.data();
-			if (!otpData) {
-				throw new HttpsError(
-					"not-found",
-					"No verification code found. Please request a new one.",
-				);
-			}
-
 			const now = Timestamp.now();
-
-			// Check if expired
-			if (otpData.expiresAt.toMillis() < now.toMillis()) {
-				await otpRef.delete();
-				throw new HttpsError(
-					"deadline-exceeded",
-					"Verification code has expired. Please request a new one.",
-				);
-			}
-
-			// Check provider matches
-			if (otpData.provider !== provider) {
-				throw new HttpsError(
-					"invalid-argument",
-					"Provider mismatch. Please request a new code for this provider.",
-				);
-			}
-
-			// Check attempts (max 5)
-			if (otpData.attempts >= 5) {
-				await otpRef.delete();
-				throw new HttpsError(
-					"resource-exhausted",
-					"Too many attempts. Please request a new code.",
-				);
-			}
-
-			// Verify OTP by comparing hashes
 			const providedOtpHash = crypto
 				.createHash("sha256")
 				.update(providedOtp)
 				.digest("hex");
-
-			if (otpData.otpHash !== providedOtpHash) {
-				await otpRef.update({
-					attempts: FieldValue.increment(1),
-				});
-
-				const remainingAttempts = 4 - otpData.attempts;
-				throw new HttpsError(
-					"permission-denied",
-					`Invalid code. ${remainingAttempts} attempt${
-						remainingAttempts !== 1 ? "s" : ""
-					} remaining.`,
-				);
-			}
-
-			// OTP verified! Generate a one-time link token
-			const linkToken = crypto.randomBytes(32).toString("hex");
-			const linkTokenHash = crypto
-				.createHash("sha256")
-				.update(linkToken)
-				.digest("hex");
+			const linkToken = createOpaqueToken();
+			const linkTokenHash = hashOpaqueToken(linkToken);
 			const linkTokenExpires = Timestamp.fromMillis(
-				Date.now() + 2 * 60 * 1000, // 2 minutes to complete OAuth
+				Date.now() + ACCOUNT_LINK_SESSION_TTL_MS,
+			);
+			const linkSessionRef = db
+				.collection("accountLinkSessions")
+				.doc(linkTokenHash);
+			const isNativeProvider =
+				provider === "google.com" || provider === "apple.com";
+			const pendingLinkRef = userRef
+				.collection("pendingProviderLinks")
+				.doc(provider);
+			const deleteAfter = Timestamp.fromMillis(
+				Date.now() + EPHEMERAL_DOCUMENT_RETENTION_MS,
 			);
 
-			// Store verified status with link token
-			await otpRef.set({
-				verified: true,
-				verifiedAt: now,
-				linkTokenHash: linkTokenHash,
-				linkTokenExpires: linkTokenExpires,
-				provider: provider,
-			});
+			const outcome = await db.runTransaction(async (transaction) => {
+				const otpDoc = await transaction.get(otpRef);
+				const existingPending = isNativeProvider
+					? await transaction.get(pendingLinkRef)
+					: null;
+				const otpData = otpDoc.data();
+				if (!otpDoc.exists || !otpData) {
+					return {
+						code: "not-found" as const,
+						message: "No verification code found. Please request a new one.",
+					};
+				}
+				if (otpData.verified || otpData.linkTokenHash) {
+					return {
+						code: "failed-precondition" as const,
+						message:
+							"This verification code was already used. Please request a new one.",
+					};
+				}
+				if (
+					!otpData.expiresAt ||
+					typeof otpData.expiresAt.toMillis !== "function"
+				) {
+					transaction.delete(otpRef);
+					return {
+						code: "failed-precondition" as const,
+						message: "Invalid verification state. Please request a new code.",
+					};
+				}
+				if (otpData.expiresAt.toMillis() < now.toMillis()) {
+					transaction.delete(otpRef);
+					return {
+						code: "deadline-exceeded" as const,
+						message: "Verification code has expired. Please request a new one.",
+					};
+				}
+				if (otpData.provider !== provider) {
+					return {
+						code: "invalid-argument" as const,
+						message:
+							"Provider mismatch. Please request a new code for this provider.",
+					};
+				}
 
-			console.log(
-				`Account link OTP verified for user ${userId}, provider ${provider}`,
+				const attempts =
+					typeof otpData.attempts === "number" ? otpData.attempts : 0;
+				if (attempts >= 5) {
+					transaction.delete(otpRef);
+					return {
+						code: "resource-exhausted" as const,
+						message: "Too many attempts. Please request a new code.",
+					};
+				}
+				if (otpData.otpHash !== providedOtpHash) {
+					transaction.update(otpRef, {
+						attempts: FieldValue.increment(1),
+					});
+					const remainingAttempts = 4 - attempts;
+					return {
+						code: "permission-denied" as const,
+						message: `Invalid code. ${remainingAttempts} attempt${
+							remainingAttempts !== 1 ? "s" : ""
+						} remaining.`,
+					};
+				}
+
+				transaction.set(
+					otpRef,
+					{
+						verified: true,
+						verifiedAt: now,
+						linkTokenHash,
+						linkTokenExpires,
+						provider,
+					},
+					{ merge: true },
+				);
+				transaction.set(linkSessionRef, {
+					uid: userId,
+					provider,
+					status: "issued",
+					createdAt: now,
+					authorizationExpiresAt: linkTokenExpires,
+					expiresAt: linkTokenExpires,
+					deleteAfter,
+					consumedAt: null,
+				});
+				const previousSessionId = existingPending?.data()?.sessionId;
+				if (
+					typeof previousSessionId === "string" &&
+					previousSessionId !== linkTokenHash
+				) {
+					transaction.set(
+						db.collection("accountLinkSessions").doc(previousSessionId),
+						{
+							status: "superseded",
+							supersededAt: now,
+							deleteAfter,
+						},
+						{ merge: true },
+					);
+				}
+				if (isNativeProvider) {
+					transaction.set(pendingLinkRef, {
+						uid: userId,
+						provider,
+						sessionId: linkTokenHash,
+						createdAt: now,
+						authorizationExpiresAt: linkTokenExpires,
+						deleteAfter,
+					});
+				}
+				return null;
+			});
+			if (outcome) {
+				throw new HttpsError(outcome.code, outcome.message);
+			}
+
+			console.info(
+				JSON.stringify({
+					event: "account_link_authorization_issued",
+					provider,
+				}),
 			);
 
 			return {
@@ -126,10 +191,13 @@ export default onCall(
 				message: "Verification successful. Complete the linking now.",
 				linkToken: linkToken,
 				provider: provider,
-				tokenExpiresIn: 120, // 2 minutes to complete OAuth
+				tokenExpiresIn: 600,
 			};
 		} catch (error) {
-			console.error(`Error verifying account link OTP for ${userId}:`, error);
+			console.error("Account-link OTP verification failed", {
+				provider,
+				code: error instanceof HttpsError ? error.code : "internal",
+			});
 
 			if (error instanceof HttpsError) {
 				throw error;

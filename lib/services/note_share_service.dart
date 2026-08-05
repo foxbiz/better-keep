@@ -13,13 +13,13 @@ import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart' as crypto;
 import 'package:better_keep/services/export_data_service.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
-import 'package:better_keep/firebase_options.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cryptography/cryptography.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -115,29 +115,21 @@ class NoteShareService {
   factory NoteShareService() => _instance;
   NoteShareService._internal();
 
-  // Lazy Firestore instance getter to ensure correct databaseId is used
-  FirebaseFirestore? _firestoreInstance;
-  FirebaseFirestore get _firestore {
-    if (_firestoreInstance == null) {
-      final dbId = DefaultFirebaseOptions.databaseId;
-      AppLogger.log(
-        'NoteShareService: Creating Firestore instance with databaseId: $dbId',
-      );
-      _firestoreInstance = FirebaseFirestore.instanceFor(
-        app: Firebase.app(),
-        databaseId: dbId,
-      );
-    }
-    return _firestoreInstance!;
-  }
+  FirebaseFirestore get _firestore => FirebaseBackend.firestore;
 
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  FirebaseStorage get _storage => FirebaseBackend.storage;
+
+  static String _sharePreferenceKey(String prefix, String shareId) =>
+      FirebaseScopedPreferences.key('${prefix}_$shareId');
+
+  static String get _shareExpiryPrefix =>
+      FirebaseScopedPreferences.key('share_expires_');
 
   /// Base URL for share links - uses hosting emulator in debug mode
   String get _shareBaseUrl {
     if (kDebugMode && FirebaseEmulatorConfig.isUsingEmulators) {
       // Use Firebase Hosting emulator which serves static files like web/s/index.html
-      return 'http://localhost:5002/s';
+      return '${FirebaseEmulatorConfig.endpoints.hostingBaseUrl}/s';
     }
     return 'https://betterkeep.app/s';
   }
@@ -162,7 +154,7 @@ class NoteShareService {
   /// Initialize the service and start listening for pending requests
   Future<void> init() async {
     final user = AuthService.currentUser;
-    if (user == null) return;
+    if (user == null || ReviewAccess.isCloudMutationBlockedFor(user)) return;
 
     _listenForPendingRequests();
     _listenForActiveShares();
@@ -173,7 +165,6 @@ class NoteShareService {
     _pendingRequestsSubscription?.cancel();
     _activeSharesSubscription?.cancel();
     // Clear cached Firestore instance so a fresh one is created after signout/signin
-    _firestoreInstance = null;
   }
 
   /// Get existing active share link for a note (if any)
@@ -232,12 +223,15 @@ class NoteShareService {
     final prefs = await SharedPreferences.getInstance();
 
     // Store the key
-    final keyStored = await prefs.setString('share_key_$shareId', shareKey);
+    final keyStored = await prefs.setString(
+      _sharePreferenceKey('share_key', shareId),
+      shareKey,
+    );
     AppLogger.log('NoteShareService: Key stored: $keyStored');
 
     // Store expiration timestamp
     final expiryStored = await prefs.setInt(
-      'share_expires_$shareId',
+      _sharePreferenceKey('share_expires', shareId),
       expiresAt.millisecondsSinceEpoch,
     );
     AppLogger.log(
@@ -246,7 +240,10 @@ class NoteShareService {
 
     // Store the full URL for quick access
     final fullUrl = '$_shareBaseUrl/$shareId#$shareKey';
-    final urlStored = await prefs.setString('share_url_$shareId', fullUrl);
+    final urlStored = await prefs.setString(
+      _sharePreferenceKey('share_url', shareId),
+      fullUrl,
+    );
     AppLogger.log('NoteShareService: URL stored: $urlStored ($fullUrl)');
 
     AppLogger.log(
@@ -254,9 +251,15 @@ class NoteShareService {
     );
 
     // Verify storage immediately
-    final verifyKey = prefs.getString('share_key_$shareId');
-    final verifyExpiry = prefs.getInt('share_expires_$shareId');
-    final verifyUrl = prefs.getString('share_url_$shareId');
+    final verifyKey = prefs.getString(
+      _sharePreferenceKey('share_key', shareId),
+    );
+    final verifyExpiry = prefs.getInt(
+      _sharePreferenceKey('share_expires', shareId),
+    );
+    final verifyUrl = prefs.getString(
+      _sharePreferenceKey('share_url', shareId),
+    );
     AppLogger.log(
       'NoteShareService: Verify - key: ${verifyKey != null}, expiry: $verifyExpiry, url: ${verifyUrl != null}',
     );
@@ -273,14 +276,14 @@ class NoteShareService {
       final now = DateTime.now().millisecondsSinceEpoch;
 
       for (final key in keys) {
-        if (key.startsWith('share_expires_')) {
+        if (key.startsWith(_shareExpiryPrefix)) {
           final expiresAt = prefs.getInt(key);
           if (expiresAt != null && expiresAt < now) {
             // Extract share ID and remove all related keys
-            final shareId = key.replaceFirst('share_expires_', '');
-            await prefs.remove('share_key_$shareId');
-            await prefs.remove('share_expires_$shareId');
-            await prefs.remove('share_url_$shareId');
+            final shareId = key.replaceFirst(_shareExpiryPrefix, '');
+            await prefs.remove(_sharePreferenceKey('share_key', shareId));
+            await prefs.remove(_sharePreferenceKey('share_expires', shareId));
+            await prefs.remove(_sharePreferenceKey('share_url', shareId));
             AppLogger.log(
               'NoteShareService: Cleaned up expired share key for $shareId',
             );
@@ -300,20 +303,22 @@ class NoteShareService {
     final prefs = await SharedPreferences.getInstance();
 
     // Check if expired
-    final expiresAt = prefs.getInt('share_expires_$shareId');
+    final expiresAt = prefs.getInt(
+      _sharePreferenceKey('share_expires', shareId),
+    );
     if (expiresAt != null &&
         expiresAt < DateTime.now().millisecondsSinceEpoch) {
       // Clean up expired entry
-      await prefs.remove('share_key_$shareId');
-      await prefs.remove('share_expires_$shareId');
-      await prefs.remove('share_url_$shareId');
+      await prefs.remove(_sharePreferenceKey('share_key', shareId));
+      await prefs.remove(_sharePreferenceKey('share_expires', shareId));
+      await prefs.remove(_sharePreferenceKey('share_url', shareId));
       AppLogger.log(
         'NoteShareService: Share key for $shareId has expired, removed',
       );
       return null;
     }
 
-    final key = prefs.getString('share_key_$shareId');
+    final key = prefs.getString(_sharePreferenceKey('share_key', shareId));
     AppLogger.log(
       'NoteShareService: Retrieved share key for $shareId: ${key != null ? 'found' : 'not found'}',
     );
@@ -328,20 +333,22 @@ class NoteShareService {
     AppLogger.log('NoteShareService: getStoredShareUrl for $shareId');
 
     // Check if expired
-    final expiresAt = prefs.getInt('share_expires_$shareId');
+    final expiresAt = prefs.getInt(
+      _sharePreferenceKey('share_expires', shareId),
+    );
     AppLogger.log('NoteShareService: Expiry timestamp: $expiresAt');
 
     if (expiresAt != null &&
         expiresAt < DateTime.now().millisecondsSinceEpoch) {
       // Clean up expired entry
-      await prefs.remove('share_key_$shareId');
-      await prefs.remove('share_expires_$shareId');
-      await prefs.remove('share_url_$shareId');
+      await prefs.remove(_sharePreferenceKey('share_key', shareId));
+      await prefs.remove(_sharePreferenceKey('share_expires', shareId));
+      await prefs.remove(_sharePreferenceKey('share_url', shareId));
       AppLogger.log('NoteShareService: Share expired, cleaned up');
       return null;
     }
 
-    final url = prefs.getString('share_url_$shareId');
+    final url = prefs.getString(_sharePreferenceKey('share_url', shareId));
     AppLogger.log(
       'NoteShareService: Stored URL: ${url != null ? 'found' : 'not found'}',
     );
@@ -371,6 +378,10 @@ class NoteShareService {
     if (user == null) {
       throw StateError('User not logged in');
     }
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Cloud link sharing',
+    );
 
     AppLogger.log('NoteShareService: Creating share link for note ${note.id}');
 
@@ -542,7 +553,7 @@ class NoteShareService {
     final fs = await fileSystem();
 
     // Debug: Check auth status before upload
-    final user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseBackend.auth.currentUser;
     AppLogger.log(
       'NoteShareService: Upload auth check - user: ${user?.uid}, isAnonymous: ${user?.isAnonymous}',
     );
@@ -683,6 +694,10 @@ class NoteShareService {
   Future<void> revokeShareLink(String shareId) async {
     final user = AuthService.currentUser;
     if (user == null) throw StateError('User not logged in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Cloud link sharing',
+    );
 
     final doc = await _sharesCollection.doc(shareId).get();
     if (!doc.exists) throw StateError('Share not found');
@@ -705,6 +720,7 @@ class NoteShareService {
   Future<void> revokeAllSharesForNote(String noteId) async {
     final user = AuthService.currentUser;
     if (user == null) return;
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) return;
 
     try {
       final query = await _sharesCollection
@@ -747,6 +763,10 @@ class NoteShareService {
   Future<void> deleteShareLink(String shareId) async {
     final user = AuthService.currentUser;
     if (user == null) throw StateError('User not logged in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Cloud link sharing',
+    );
 
     final doc = await _sharesCollection.doc(shareId).get();
     if (!doc.exists) return;
@@ -816,6 +836,10 @@ class NoteShareService {
     required String deviceName,
     required String platform,
   }) async {
+    ReviewAccess.ensureCloudMutationAllowed(
+      AuthService.currentUser,
+      operation: 'Share access requests',
+    );
     final requestId = const Uuid().v4();
 
     final request = ShareAccessRequest(
@@ -842,6 +866,10 @@ class NoteShareService {
   Future<void> approveRequest(String shareId, String requestId) async {
     final user = AuthService.currentUser;
     if (user == null) throw StateError('User not logged in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Share access requests',
+    );
 
     // Verify ownership
     final shareDoc = await _sharesCollection.doc(shareId).get();
@@ -871,6 +899,10 @@ class NoteShareService {
   Future<void> denyRequest(String shareId, String requestId) async {
     final user = AuthService.currentUser;
     if (user == null) throw StateError('User not logged in');
+    ReviewAccess.ensureCloudMutationAllowed(
+      user,
+      operation: 'Share access requests',
+    );
 
     // Verify ownership
     final shareDoc = await _sharesCollection.doc(shareId).get();

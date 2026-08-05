@@ -1,17 +1,18 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import {
 	appStoreSharedSecret,
 	googlePlayCredentials,
 	IOS_PRODUCT_IDS,
 	SUBSCRIPTION_PRODUCT_ID,
 } from "../config";
+import { onNonReviewCall } from "../nonReviewCallable";
 import { verifyAppStorePurchase, verifyGooglePlayPurchase } from "../utils";
 
 /**
  * Restore subscription from a purchase token (for app crash recovery)
  */
-export default onCall(
+export default onNonReviewCall(
 	{ secrets: [googlePlayCredentials, appStoreSharedSecret] },
 	async (
 		request: CallableRequest<{
@@ -23,7 +24,6 @@ export default onCall(
 		if (!request.auth) {
 			throw new HttpsError("unauthenticated", "User must be signed in");
 		}
-
 		const userId = request.auth.uid;
 		const { purchaseToken, source = "play_store", productId } = request.data;
 

@@ -1,5 +1,6 @@
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 
@@ -90,12 +91,11 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
       if (mounted) {
         Navigator.of(context).pop(true);
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to save recovery key', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedSaveRecoveryKey(e.toString())),
-          ),
+          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
         );
         setState(() => _isLoading = false);
       }

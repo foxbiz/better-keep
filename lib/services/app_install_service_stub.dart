@@ -36,12 +36,6 @@ class AppInstallInfo {
 
   /// Whether we should show the first-time install prompt
   bool get shouldShowInstallPrompt => false;
-
-  /// Get the appropriate action label
-  String get installButtonLabel => 'Install App';
-
-  /// Get the prompt message based on platform
-  String get promptMessage => 'Install Better Keep for the best experience!';
 }
 
 /// Stub implementation for non-web platforms

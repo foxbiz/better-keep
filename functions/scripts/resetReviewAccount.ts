@@ -1,182 +1,252 @@
 /**
- * Local admin script to reset the review account before each app store review.
+ * Idempotently prepares the managed Google Play review account.
  *
- * Usage:
- *   cd functions
- *   npx tsx scripts/resetReviewAccount.ts <password>
+ * Dry-run is the default:
+ *   npx tsx scripts/resetReviewAccount.ts
  *
- * What it does:
- *   - Creates the review account if it doesn't exist, or resets it
- *   - Sets the password to the supplied value
- *   - Sets emailVerified: true
- *   - Deletes all notes, files, devices, approval requests, recovery key, OTPs
- *   - Grants a fresh trial subscription
- *   - Resets trial usage so grantTrialOnFirstSignIn works on next sign-in
- *
- * Prerequisites:
- *   - GOOGLE_APPLICATION_CREDENTIALS env var set, or run from a machine with
- *     Firebase default credentials (e.g. after `firebase login`)
- *   - Alternatively, set FIREBASE_PROJECT_ID env var
+ * Production execution requires explicit targets, ADC and confirmation:
+ *   npx tsx scripts/resetReviewAccount.ts \
+ *     --execute --project=better-keep-notes --database=better-keep
  */
 
+import * as fs from "node:fs";
+import * as readline from "node:readline/promises";
 import * as admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+import {
+	REVIEW_ACCESS_CLAIM,
+	REVIEW_ACCOUNT_EMAIL,
+} from "../src/reviewConfig";
+import {
+	cleanupReviewAccountData,
+	inspectReviewAccountData,
+	type ReviewAccountCleanupResult,
+} from "../src/reviewAccountCleanup";
+import {
+	executeReviewAccountReset,
+	type ReviewResetIdentity,
+} from "../src/reviewAccountReset";
+import {
+	resolveReviewResetTarget,
+	REVIEW_RESET_DATABASE_ID,
+	REVIEW_RESET_PROJECT_ID,
+} from "../src/reviewResetPolicy";
 
-// Keep in sync with REVIEW_ACCOUNT_EMAIL in src/config.ts
-const REVIEW_ACCOUNT_EMAIL = "review@betterkeep.app";
-const TRIAL_DAYS = 30;
+const REVIEW_ENTITLEMENT_DAYS = 3650;
 
-const password = process.argv[2];
-if (!password || password.length < 6) {
-	console.error("Usage: npx tsx scripts/resetReviewAccount.ts <password>");
-	console.error("Password must be at least 6 characters.");
-	process.exit(1);
+function emptyCleanup(): ReviewAccountCleanupResult {
+	return {
+		deletedSubscriptions: 0,
+		deletedPayments: 0,
+		deletedShares: 0,
+		deletedAccountLinkSessions: 0,
+		deletedOAuthStates: 0,
+		deletedOAuthCompletions: 0,
+		deletedUserStorageFiles: 0,
+		deletedShareStorageFiles: 0,
+	};
 }
 
-const app = admin.initializeApp({
-	projectId: "better-keep-notes",
-	storageBucket: "better-keep-notes.firebasestorage.app",
-});
+function printCleanup(label: string, cleanup: ReviewAccountCleanupResult): void {
+	console.log(label);
+	console.log(`  Linked subscriptions: ${cleanup.deletedSubscriptions}`);
+	console.log(`  Payment records: ${cleanup.deletedPayments}`);
+	console.log(`  Owned shares: ${cleanup.deletedShares}`);
+	console.log(`  Account-link sessions: ${cleanup.deletedAccountLinkSessions}`);
+	console.log(`  Legacy OAuth states: ${cleanup.deletedOAuthStates}`);
+	console.log(`  OAuth completions: ${cleanup.deletedOAuthCompletions}`);
+	console.log(`  User storage files: ${cleanup.deletedUserStorageFiles}`);
+	console.log(`  Share storage files: ${cleanup.deletedShareStorageFiles}`);
+}
 
-// Use the named database in production, default in emulator
-const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
-const databaseId = isEmulator ? "(default)" : "better-keep";
-const db = admin.firestore(app);
-db.settings({ databaseId });
-const auth = admin.auth();
-const storage = admin.storage();
+function resetIdentity(user: admin.auth.UserRecord): ReviewResetIdentity {
+	return {
+		uid: user.uid,
+		providerIds: user.providerData.map((provider) => provider.providerId),
+	};
+}
 
-async function main() {
-	console.log(`Resetting review account: ${REVIEW_ACCOUNT_EMAIL}`);
-
-	// Find or create the review account
-	let uid: string;
-	try {
-		const user = await auth.getUserByEmail(REVIEW_ACCOUNT_EMAIL);
-		uid = user.uid;
-		console.log(`Found existing account: ${uid}`);
-	} catch {
-		const user = await auth.createUser({
-			email: REVIEW_ACCOUNT_EMAIL,
-			password,
-			emailVerified: true,
-		});
-		uid = user.uid;
-		console.log(`Created new account: ${uid}`);
+async function confirmProductionTarget(): Promise<void> {
+	if (!process.stdin.isTTY) {
+		throw new Error("Production execution requires an interactive terminal");
 	}
-
-	// Reset password and ensure emailVerified
-	await auth.updateUser(uid, { password, emailVerified: true });
-	console.log("Password reset and emailVerified set to true");
-
-	const userRef = db.collection("users").doc(uid);
-
-	// Delete all notes
-	const notesSnapshot = await userRef.collection("notes").get();
-	if (!notesSnapshot.empty) {
-		const batchSize = 400;
-		for (let i = 0; i < notesSnapshot.docs.length; i += batchSize) {
-			const batch = db.batch();
-			for (const doc of notesSnapshot.docs.slice(i, i + batchSize)) {
-				batch.delete(doc.ref);
-			}
-			await batch.commit();
-		}
-	}
-	console.log(`Deleted ${notesSnapshot.size} notes`);
-
-	// Delete all storage files
-	try {
-		const bucket = storage.bucket();
-		const [files] = await bucket.getFiles({ prefix: `users/${uid}/` });
-		for (const file of files) {
-			await file.delete();
-		}
-		console.log(`Deleted ${files.length} storage files`);
-	} catch (e) {
-		console.warn("Storage deletion issue:", e);
-	}
-
-	// Delete all devices
-	const devicesSnapshot = await userRef.collection("devices").get();
-	if (!devicesSnapshot.empty) {
-		const batch = db.batch();
-		for (const doc of devicesSnapshot.docs) batch.delete(doc.ref);
-		await batch.commit();
-	}
-	console.log(`Deleted ${devicesSnapshot.size} devices`);
-
-	// Delete pending approval requests
-	const approvalsSnapshot = await userRef.collection("approvalRequests").get();
-	if (!approvalsSnapshot.empty) {
-		const batch = db.batch();
-		for (const doc of approvalsSnapshot.docs) batch.delete(doc.ref);
-		await batch.commit();
-	}
-
-	// Clear recovery key
-	await userRef
-		.collection("e2ee")
-		.doc("recovery_key")
-		.delete()
-		.catch(() => {});
-
-	// Clear OTP docs
-	const otpSnapshot = await userRef.collection("otpVerification").get();
-	if (!otpSnapshot.empty) {
-		const batch = db.batch();
-		for (const doc of otpSnapshot.docs) batch.delete(doc.ref);
-		await batch.commit();
-	}
-
-	// Grant fresh trial subscription
-	const trialExpiresAt = new Date();
-	trialExpiresAt.setDate(trialExpiresAt.getDate() + TRIAL_DAYS);
-
-	await userRef
-		.collection("subscription")
-		.doc("status")
-		.set({
-			plan: "pro",
-			source: "trial",
-			expiresAt: admin.firestore.Timestamp.fromDate(trialExpiresAt),
-			billingPeriod: "trial",
-			willAutoRenew: false,
-			trialStartedAt: admin.firestore.Timestamp.now(),
-			updatedAt: admin.firestore.Timestamp.now(),
-		});
-
-	// Set custom claims for pro access
-	await auth.setCustomUserClaims(uid, {
-		plan: "pro",
-		planExpiresAt: trialExpiresAt.getTime(),
+	const prompt = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
 	});
+	try {
+		const expected = `${REVIEW_RESET_PROJECT_ID}/${REVIEW_RESET_DATABASE_ID}`;
+		const answer = await prompt.question(
+			`Type ${expected} to execute the review reset: `,
+		);
+		if (answer.trim() !== expected) {
+			throw new Error("Target confirmation did not match");
+		}
+	} finally {
+		prompt.close();
+	}
+}
 
-	// Ensure user document exists
-	await userRef.set(
-		{
-			email: REVIEW_ACCOUNT_EMAIL,
-			createdAt: admin.firestore.Timestamp.now(),
-			lastSeen: admin.firestore.Timestamp.now(),
+async function main(): Promise<void> {
+	const execute = process.argv.includes("--execute");
+	const target = resolveReviewResetTarget({
+		execute,
+		arguments: process.argv.slice(2),
+		environment: process.env,
+		loadCredentialProjectId: (credentialPath) => {
+			const credential = JSON.parse(
+				fs.readFileSync(credentialPath, "utf8"),
+			) as { project_id?: string };
+			return credential.project_id;
 		},
-		{ merge: true },
+	});
+	const { isEmulator, databaseId } = target;
+	const password = process.env.REVIEW_ACCOUNT_PASSWORD;
+	if (execute && (!password || password.length < 12)) {
+		throw new Error(
+			"REVIEW_ACCOUNT_PASSWORD must be set and contain at least 12 characters",
+		);
+	}
+
+	console.log(`Mode: ${execute ? "EXECUTE" : "DRY RUN"}`);
+	console.log(`Project: ${target.projectId}`);
+	console.log(`Database: ${databaseId}`);
+	console.log(`Bucket: ${target.storageBucket}`);
+	console.log(`Environment: ${isEmulator ? "emulator" : "production"}`);
+
+	if (execute && !isEmulator) {
+		await confirmProductionTarget();
+	}
+
+	const app = admin.initializeApp({
+		projectId: target.projectId,
+		storageBucket: target.storageBucket,
+	});
+	const db = getFirestore(app, databaseId);
+	const auth = admin.auth(app);
+	const bucket = admin.storage(app).bucket(target.storageBucket);
+	if (bucket.name !== target.storageBucket) {
+		throw new Error("Resolved Storage bucket does not match the target");
+	}
+
+	let existingUser: admin.auth.UserRecord | null = null;
+	try {
+		existingUser = await auth.getUserByEmail(REVIEW_ACCOUNT_EMAIL);
+	} catch (error: unknown) {
+		if ((error as { code?: string }).code !== "auth/user-not-found") {
+			throw error;
+		}
+	}
+
+	const preview = existingUser
+		? await inspectReviewAccountData({
+				db,
+				bucket,
+				uid: existingUser.uid,
+				email: REVIEW_ACCOUNT_EMAIL,
+			})
+		: emptyCleanup();
+	printCleanup("Planned cleanup:", preview);
+	console.log(
+		existingUser
+			? `Existing review UID will be retained: ${existingUser.uid}`
+			: "A disabled review identity will be created before preparation",
 	);
 
-	// Reset trial usage so grantTrialOnFirstSignIn works on next sign-in
-	await db
-		.collection("trialUsage")
-		.doc(REVIEW_ACCOUNT_EMAIL)
-		.delete()
-		.catch(() => {});
+	if (!execute) {
+		console.log("Dry run complete. No data or authentication state changed.");
+		return;
+	}
 
-	// biome-ignore lint/style/noUnusedTemplateLiteral: <explanation>
-	console.log(`\nReview account fully reset!`);
-	console.log(`  Email:    ${REVIEW_ACCOUNT_EMAIL}`);
-	console.log(`  Password: ${password}`);
-	console.log(`  Trial:    expires ${trialExpiresAt.toISOString()}`);
-	process.exit(0);
+	const entitlementExpiresAt = new Date();
+	entitlementExpiresAt.setDate(
+		entitlementExpiresAt.getDate() + REVIEW_ENTITLEMENT_DAYS,
+	);
+	try {
+		const result = await executeReviewAccountReset({
+			existingIdentity: existingUser ? resetIdentity(existingUser) : null,
+			revokeSessions: (uid) => auth.revokeRefreshTokens(uid),
+			disableIdentity: async (uid) =>
+				resetIdentity(await auth.updateUser(uid, { disabled: true })),
+			createDisabledIdentity: async () =>
+				resetIdentity(
+					await auth.createUser({
+						email: REVIEW_ACCOUNT_EMAIL,
+						password: password as string,
+						emailVerified: true,
+						disabled: true,
+					}),
+				),
+			cleanup: (identity) =>
+				cleanupReviewAccountData({
+					db,
+					bucket,
+					uid: identity.uid,
+					email: REVIEW_ACCOUNT_EMAIL,
+				}),
+			resetAuthentication: async (identity) => {
+				const providersToUnlink = identity.providerIds.filter(
+					(providerId) => providerId !== "password",
+				);
+				await auth.updateUser(identity.uid, {
+					password: password as string,
+					emailVerified: true,
+					disabled: true,
+					...(providersToUnlink.length > 0
+						? { providersToUnlink }
+						: {}),
+				});
+			},
+			restoreEntitlement: async (uid) => {
+				const now = admin.firestore.Timestamp.now();
+				const userRef = db.collection("users").doc(uid);
+				await userRef.set({
+					email: REVIEW_ACCOUNT_EMAIL,
+					createdAt: now,
+					lastSeen: now,
+				});
+				await userRef.collection("subscription").doc("status").set({
+					plan: "pro",
+					source: "review",
+					expiresAt:
+						admin.firestore.Timestamp.fromDate(entitlementExpiresAt),
+					billingPeriod: "review",
+					willAutoRenew: false,
+					trialStartedAt: now,
+					updatedAt: now,
+				});
+			},
+			restoreClaims: (uid) =>
+				auth.setCustomUserClaims(uid, {
+					[REVIEW_ACCESS_CLAIM]: true,
+					plan: "pro",
+					planExpiresAt: entitlementExpiresAt.getTime(),
+				}),
+			enableIdentity: async (uid) => {
+				await auth.updateUser(uid, { disabled: false });
+			},
+		});
+
+		printCleanup("Completed cleanup:", result.cleanup);
+		console.log(`Review UID: ${result.uid}`);
+		console.log(
+			`Review entitlement expires: ${entitlementExpiresAt.toISOString()}`,
+		);
+		console.log("Review account prepared; the password was not printed.");
+	} catch (error) {
+		console.error(
+			"Review reset failed. The review identity remains disabled; rerun the same command after correcting the error.",
+		);
+		throw error;
+	}
 }
 
-main().catch((e) => {
-	console.error("Failed to reset review account:", e);
-	process.exit(1);
-});
+main()
+	.then(() => process.exit(0))
+	.catch((error: unknown) => {
+		console.error(
+			"Failed to prepare review account:",
+			error instanceof Error ? error.message : error,
+		);
+		process.exit(1);
+	});

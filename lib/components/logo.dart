@@ -1,4 +1,5 @@
 import 'package:better_keep/config.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
 /// A wrapper widget that adds a subtle glow effect behind the logo
@@ -34,7 +35,7 @@ class LogoImage extends StatelessWidget {
       child: Image.asset(
         'assets/better_keep-512.png',
         height: size,
-        semanticLabel: 'Better Keep logo',
+        semanticLabel: context.l10n.appLogoSemantics,
       ),
     );
   }

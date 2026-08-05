@@ -1,11 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { auth, db, emailPassword } from "../config";
-import {
-	getEmailTransporter,
-	sendEmail,
-	setSubscriptionClaims,
-} from "../utils";
+import { sendEmail, setSubscriptionClaims } from "../utils";
 
 /**
  * Scheduled function to check for expired subscriptions and notify users
@@ -51,7 +47,6 @@ export default onSchedule(
 					const email = userRecord.email;
 
 					if (email) {
-						const transporter = getEmailTransporter(emailPassword.value());
 						const senderEmail = process.env.EMAIL_FROM;
 						const senderName = process.env.EMAIL_NAME;
 						const manageUrl =
@@ -59,7 +54,7 @@ export default onSchedule(
 								? "https://apps.apple.com/account/subscriptions"
 								: "https://play.google.com/store/account/subscriptions";
 
-						await sendEmail(transporter, {
+						await sendEmail({
 							from: `"${senderName}" <${senderEmail}>`,
 							to: email,
 							subject: "Your Better Keep Pro subscription is expiring soon",

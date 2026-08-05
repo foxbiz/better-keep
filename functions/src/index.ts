@@ -18,9 +18,9 @@ import oauthStart from "./exports/oauthStart";
 import playStoreWebhook from "./exports/playStoreWebhook";
 import processScheduledDeletions from "./exports/processScheduledDeletions";
 import razorpayWebhook from "./exports/razorpayWebhook";
+import redeemOAuthCompletion from "./exports/redeemOAuthCompletion";
 import requestAccountLinkOtp from "./exports/requestAccountLinkOtp";
 import resetPasswordWithOtp from "./exports/resetPasswordWithOtp";
-import resetReviewAccount from "./exports/resetReviewAccount";
 import resolveLegacyReminderState from "./exports/resolveLegacyReminderState";
 import restoreSubscription from "./exports/restoreSubscription";
 import resumeRazorpaySubscription from "./exports/resumeRazorpaySubscription";
@@ -33,6 +33,8 @@ import sendPasswordResetOtp from "./exports/sendPasswordResetOtp";
 import sendStartFreshOtp from "./exports/sendStartFreshOtp";
 import setEmulatorTestClaims from "./exports/setEmulatorTestClaims";
 import startFreshWithOtp from "./exports/startFreshWithOtp";
+import stampLabelSyncCommit from "./exports/stampLabelSyncCommit";
+import stampNoteSyncCommit from "./exports/stampNoteSyncCommit";
 import updatePublicStats from "./exports/updatePublicStats";
 import verifyAccountLinkOtp from "./exports/verifyAccountLinkOtp";
 import verifyDeletionOtp from "./exports/verifyDeletionOtp";
@@ -62,9 +64,9 @@ export {
 	playStoreWebhook,
 	processScheduledDeletions,
 	razorpayWebhook,
+	redeemOAuthCompletion,
 	requestAccountLinkOtp,
 	resetPasswordWithOtp,
-	resetReviewAccount,
 	resolveLegacyReminderState,
 	restoreSubscription,
 	resumeRazorpaySubscription,
@@ -77,6 +79,8 @@ export {
 	sendStartFreshOtp,
 	setEmulatorTestClaims,
 	startFreshWithOtp,
+	stampLabelSyncCommit,
+	stampNoteSyncCommit,
 	updatePublicStats,
 	verifyAccountLinkOtp,
 	verifyDeletionOtp,

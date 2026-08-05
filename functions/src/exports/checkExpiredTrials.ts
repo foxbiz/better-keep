@@ -1,11 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db, emailPassword } from "../config";
-import {
-	getEmailTransporter,
-	sendEmail,
-	setSubscriptionClaims,
-} from "../utils";
+import { sendEmail, setSubscriptionClaims } from "../utils";
 
 /**
  * Scheduled function to check for expired trials and send notification emails.
@@ -113,7 +109,6 @@ async function sendTrialExpiredEmail(
 	email: string,
 	displayName: string,
 ): Promise<void> {
-	const transporter = getEmailTransporter(emailPassword.value());
 	const senderEmail = process.env.EMAIL_FROM;
 	const senderName = process.env.EMAIL_NAME;
 
@@ -179,5 +174,5 @@ Better Keep by Foxbiz Software Pvt. Ltd.
     `,
 	};
 
-	await sendEmail(transporter, mailOptions);
+	await sendEmail(mailOptions);
 }

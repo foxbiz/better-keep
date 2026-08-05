@@ -21,6 +21,7 @@ import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
 import 'package:flutter/foundation.dart';
@@ -465,7 +466,7 @@ class Note extends BaseModel<Note> {
 
   String get body {
     if (_locked) {
-      return 'Locked note reminder';
+      return currentAppLocalizations().lockedNoteReminder;
     } else if (content != null) {
       var plainText = document?.toPlainText() ?? '';
       if (plainText.length > 240) {
@@ -473,7 +474,7 @@ class Note extends BaseModel<Note> {
       }
       return plainText;
     } else {
-      return 'Better Keep Notes reminder';
+      return currentAppLocalizations().notesReminder;
     }
   }
 
@@ -2186,7 +2187,7 @@ class Note extends BaseModel<Note> {
 
     final previewImageSrc = sketch.previewImage ?? '';
     if (previewImageSrc.isEmpty) {
-      snackbar("Error saving sketch, no preview available", Colors.red);
+      snackbar(currentAppLocalizations().failedToSaveSketch, Colors.red);
       AppLogger.error('Error adding sketch to note: no preview image');
       return;
     }
@@ -2651,7 +2652,7 @@ class Note extends BaseModel<Note> {
         error,
         stackTrace,
       );
-      snackbar('Failed to save the note', Colors.red);
+      snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
       return -1;
     }
 
@@ -2668,7 +2669,7 @@ class Note extends BaseModel<Note> {
     } catch (error, stackTrace) {
       updatedAt = previousUpdatedAt;
       AppLogger.error('Failed to serialize note safely', error, stackTrace);
-      snackbar('Failed to save the note', Colors.red);
+      snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
       return -1;
     }
 
@@ -2693,7 +2694,7 @@ class Note extends BaseModel<Note> {
         } catch (e) {
           updatedAt = previousUpdatedAt;
           AppLogger.log("Error updating note: $e");
-          snackbar("Failed to save the note", Colors.red);
+          snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
           return -1;
         }
       }
@@ -2714,7 +2715,7 @@ class Note extends BaseModel<Note> {
       return id!;
     } catch (e) {
       updatedAt = previousUpdatedAt;
-      snackbar("Failed to save the note", Colors.red);
+      snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
       AppLogger.log("Error saving note: $e");
       id = null;
       return -1;

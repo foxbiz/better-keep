@@ -17,7 +17,8 @@ fi
   --release \
   --base-href=/app/ \
   --output="$APP_OUTPUT" \
-  "${DART_DEFINE_ARGS[@]}"
+  "${DART_DEFINE_ARGS[@]}" \
+  "$@"
 
 npm --prefix "$PROJECT_DIR/site" run build
 

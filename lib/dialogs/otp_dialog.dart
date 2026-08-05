@@ -1,6 +1,9 @@
 import 'package:better_keep/components/otp_input_field.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/services/cloud_functions_helper.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
+import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
@@ -168,18 +171,23 @@ class _OtpDialogState extends State<_OtpDialog> {
           );
         }
       } else {
+        AppLogger.log('OTP verification returned an unsuccessful result');
         setState(() {
           _isVerifying = false;
-          _errorText =
-              result.data['message'] ?? context.l10n.verificationFailed;
+          _errorText = context.l10n.verificationFailed;
         });
       }
     } on FirebaseFunctionsException catch (e) {
+      AppLogger.error('OTP verification failed', e);
       setState(() {
         _isVerifying = false;
-        _errorText = e.message ?? context.l10n.verificationFailed;
+        _errorText = resolveVerificationFailure(
+          e,
+          codeWasSubmitted: true,
+        ).localized(context.l10n);
       });
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('OTP verification failed', error, stackTrace);
       setState(() {
         _isVerifying = false;
         _errorText = context.l10n.verificationFailedTryAgain;

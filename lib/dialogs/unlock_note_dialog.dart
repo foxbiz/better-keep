@@ -81,16 +81,20 @@ class _UnlockNoteDialogState extends State<UnlockNoteDialog> {
       if (mounted) {
         Navigator.of(context).pop(true);
       }
-    } on FormatException catch (e) {
+    } on FormatException catch (error, stackTrace) {
+      AppLogger.error('Incorrect PIN for protected note', error, stackTrace);
       _attempts++;
       if (_attempts >= _maxAttempts) {
         _startLockTimer();
         setState(() => _error = context.l10n.tooManyAttemptsWait(_lockSeconds));
       } else {
         final remaining = _maxAttempts - _attempts;
-        setState(
-          () => _error = context.l10n.attemptsRemaining(e.message, remaining),
-        );
+        setState(() {
+          _error = context.l10n.attemptsRemaining(
+            context.l10n.incorrectPassphrase,
+            remaining,
+          );
+        });
       }
     } catch (e) {
       AppLogger.error("[UnlockNoteDialog] Failed to unlock note: $e");

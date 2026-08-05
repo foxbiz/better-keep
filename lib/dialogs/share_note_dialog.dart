@@ -1,9 +1,12 @@
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/share_link.dart';
+import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/export_data_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
+import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +25,10 @@ class _ShareTypePickerDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
+    final cloudLinkAllowed = ReviewAccess.allows(
+      AuthService.currentUser,
+      ReviewCapability.cloudLinkSharing,
+    );
 
     return AlertDialog(
       title: Text(l10n.shareNote),
@@ -79,14 +86,16 @@ class _ShareTypePickerDialog extends StatelessWidget {
             subtitle: l10n.formattedWithMarkdown,
             onTap: () => Navigator.of(context).pop(_ShareType.markdown),
           ),
-          const SizedBox(height: 8),
-          _ShareOptionTile(
-            icon: Icons.link,
-            title: l10n.createSecureLink,
-            subtitle: l10n.encryptedLinkWithApproval,
-            onTap: () => Navigator.of(context).pop(_ShareType.link),
-            isPrimary: true,
-          ),
+          if (cloudLinkAllowed) ...[
+            const SizedBox(height: 8),
+            _ShareOptionTile(
+              icon: Icons.link,
+              title: l10n.createSecureLink,
+              subtitle: l10n.encryptedLinkWithApproval,
+              onTap: () => Navigator.of(context).pop(_ShareType.link),
+              isPrimary: true,
+            ),
+          ],
         ],
       ),
       actions: [
@@ -470,10 +479,11 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
             context,
           ).showSnackBar(SnackBar(content: Text(l10n.linkRevoked)));
         }
-      } catch (e) {
+      } catch (error, stackTrace) {
+        AppLogger.error('Failed to revoke share link', error, stackTrace);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.failedToRevoke(e.toString()))),
+            SnackBar(content: Text(l10n.somethingWentWrongTryAgain)),
           );
         }
       }
@@ -774,20 +784,11 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
           _isCreatingLink = false;
         });
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to create share link', error, stackTrace);
       if (mounted) {
-        // Extract user-friendly error message
-        String errorMessage = e.toString();
-        if (errorMessage.contains('Exception:')) {
-          errorMessage = errorMessage.replaceFirst('Exception:', '').trim();
-        }
-        if (errorMessage.contains('unauthorized') ||
-            errorMessage.contains('permission')) {
-          errorMessage =
-              'Storage permission denied. Please try again or contact support.';
-        }
         setState(() {
-          _error = errorMessage;
+          _error = context.l10n.somethingWentWrongTryAgain;
           _isCreatingLink = false;
         });
       }
@@ -830,8 +831,23 @@ Future<void> showShareNoteDialog(BuildContext context, Note note) async {
     return;
   }
 
+  final cloudLinkAllowed = ReviewAccess.allows(
+    AuthService.currentUser,
+    ReviewCapability.cloudLinkSharing,
+  );
+
   // On web, directly open secure link dialog (text/markdown sharing doesn't work)
   if (kIsWeb) {
+    if (!cloudLinkAllowed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cloud link sharing is unavailable for the managed review account.',
+          ),
+        ),
+      );
+      return;
+    }
     await showDialog<bool>(
       context: context,
       builder: (context) => _SecureLinkDialog(note: note),
