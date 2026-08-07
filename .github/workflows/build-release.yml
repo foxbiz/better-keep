@@ -253,6 +253,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install task-runner dependencies
+        run: npm ci
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
