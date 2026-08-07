@@ -186,6 +186,12 @@ test("web release builds the combined site before deterministic validation", () 
 	]);
 });
 
+test("hosting assertions avoid optional local-only search tools", () => {
+	const script = readFileSync("scripts/test_hosting_routes.sh", "utf8");
+	assert.doesNotMatch(script, /\brg\b/);
+	assert.match(script, /grep -Eiq/);
+});
+
 test("release expands suites in the established order and excludes devices", () => {
 	const release = resolveTestTask(["release"]);
 	const serializedOperations = JSON.stringify(release.operations);

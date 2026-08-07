@@ -20,6 +20,12 @@ status_for() {
   awk 'toupper($1) ~ /^HTTP/ { code=$2 } END { print code }' "$1"
 }
 
+contains_pattern() {
+  local pattern="$1"
+  local file="$2"
+  LC_ALL=C grep -Eiq -- "$pattern" "$file"
+}
+
 expect_status() {
   local name="$1"
   local expected="$2"
@@ -33,7 +39,7 @@ expect_status() {
 expect_header() {
   local name="$1"
   local pattern="$2"
-  if ! rg --quiet --ignore-case "$pattern" "$TEST_OUTPUT/$name.headers"; then
+  if ! contains_pattern "$pattern" "$TEST_OUTPUT/$name.headers"; then
     failures+=("$name is missing header pattern: $pattern")
   fi
 }
@@ -41,14 +47,14 @@ expect_header() {
 expect_body() {
   local name="$1"
   local pattern="$2"
-  if ! rg --quiet --ignore-case "$pattern" "$TEST_OUTPUT/$name.body"; then
+  if ! contains_pattern "$pattern" "$TEST_OUTPUT/$name.body"; then
     failures+=("$name is missing body pattern: $pattern")
   fi
 }
 
 request "/" "home"
 astro_asset_path="$(
-  rg --only-matching '/_astro/[^"[:space:]<>]+\.[[:alnum:]_-]{8,}\.(css|js)' \
+  LC_ALL=C grep -Eio -- '/_astro/[^"[:space:]<>]+\.[[:alnum:]_-]{8,}\.(css|js)' \
     "$TEST_OUTPUT/home.body" |
     head -n 1 || true
 )"
@@ -114,7 +120,7 @@ expect_header "account_manage" "^x-robots-tag: noindex, nofollow"
 expect_body "account_manage" 'name="robots" content="noindex, nofollow"'
 expect_body "account_manage" "Manage with Apple"
 expect_body "account_manage" "Manage with Google Play"
-if rg --quiet --ignore-case "legacy-user|private@example.com|plausible.io" "$TEST_OUTPUT/account_manage.body"; then
+if contains_pattern "legacy-user|private@example.com|plausible.io" "$TEST_OUTPUT/account_manage.body"; then
   failures+=("account_manage exposes legacy identifiers or analytics")
 fi
 expect_status "share" "200"
