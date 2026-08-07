@@ -67,12 +67,16 @@ test("macOS installs task-runner dependencies before Apple validation", () => {
 	const nodeSetup = job.indexOf("uses: actions/setup-node@v6");
 	const npmInstall = job.indexOf("run: npm ci");
 	const flutterInstall = job.indexOf("run: flutter pub get");
+	const environmentCreation = job.indexOf("name: Create .env file");
+	const plistCreation = job.indexOf("node tool/firebase_apple_plist.mjs");
 	const appleValidation = job.indexOf("run: npm run check apple-config");
 	const macosBuild = job.indexOf("run: flutter build macos --release");
 	for (const [name, index] of Object.entries({
 		nodeSetup,
 		npmInstall,
 		flutterInstall,
+		environmentCreation,
+		plistCreation,
 		appleValidation,
 		macosBuild,
 	})) {
@@ -80,6 +84,9 @@ test("macOS installs task-runner dependencies before Apple validation", () => {
 	}
 	assert.ok(nodeSetup < npmInstall);
 	assert.ok(npmInstall < flutterInstall);
+	assert.ok(flutterInstall < environmentCreation);
+	assert.ok(environmentCreation < plistCreation);
+	assert.ok(plistCreation < appleValidation);
 	assert.ok(flutterInstall < appleValidation);
 	assert.ok(appleValidation < macosBuild);
 });

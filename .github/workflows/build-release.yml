@@ -271,13 +271,15 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Create GoogleService-Info.plist
-        run: |
-          echo '${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}' > macos/Runner/GoogleService-Info.plist
-
       - name: Create .env file
         run: |
           echo '${{ secrets.ENV_FILE }}' > .env
+
+      - name: Create GoogleService-Info.plist
+        run: >-
+          node tool/firebase_apple_plist.mjs
+          --env .env
+          --output macos/Runner/GoogleService-Info.plist
 
       - name: Verify Apple Firebase configuration
         run: npm run check apple-config
