@@ -1021,7 +1021,6 @@
 	"googleKeepImportBeforeStart": "始める前に",
 	"googleKeepImportInstructions": "1. Google Takeoutを開き、Keepのみを選択します。\n2. エクスポートを作成してダウンロードします。\n3. 下のZIPを選択します。同じ内容の再インポートは既定でスキップされます。",
 	"googleKeepChooseZip": "Takeout ZIPを選択",
-	"googleKeepChooseFolder": "展開したKeepフォルダを選択",
 	"googleKeepOpenTakeoutInstructions": "Google Takeoutの手順を開く",
 	"googleKeepCancelImport": "インポートをキャンセル",
 	"googleKeepImportCancelled": "インポートをキャンセルしました。ノートは保存されていません。",

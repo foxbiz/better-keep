@@ -1,0 +1,152 @@
+---
+import {
+  Ban,
+  Clock3,
+  LoaderCircle,
+  LockKeyhole,
+  SearchX,
+  ShieldCheck,
+  TimerOff,
+  TriangleAlert,
+  X
+} from '@lucide/astro';
+---
+
+<div class="share-viewer" data-share-viewer aria-busy="true">
+  <div class="share-viewer__bar">
+    <a class="share-viewer__brand" href="/" rel="noreferrer" aria-label="Better Keep home">
+      <img src="/media/brand/logo.svg" width="38" height="38" alt="" />
+      <span>Better Keep</span>
+    </a>
+    <span class="share-viewer__security-label">
+      <ShieldCheck size={18} aria-hidden="true" focusable="false" />
+      <span>Encrypted share</span>
+    </span>
+  </div>
+
+  <div class="share-viewer__card">
+    <header class="share-viewer__intro">
+      <h1>Shared note</h1>
+      <p>Securely shared through Better Keep</p>
+    </header>
+
+    <section class="share-state" data-share-screen="loading" role="status" aria-live="polite">
+      <div class="share-state__icon share-state__icon--pending">
+        <LoaderCircle class="share-spinner" size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Loading securely</h2>
+      <p>Retrieving the encrypted share information.</p>
+    </section>
+
+    <section class="share-state" data-share-screen="request" hidden>
+      <div class="share-state__icon share-state__icon--pending">
+        <LockKeyhole size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Access required</h2>
+      <p>This note is protected. Ask its owner to approve this browser before viewing it.</p>
+      <form class="share-form" data-request-form>
+        <label for="share-device-name">Your name or device</label>
+        <input
+          id="share-device-name"
+          name="deviceName"
+          type="text"
+          maxlength="80"
+          autocomplete="name"
+          placeholder="For example, Ajit’s MacBook"
+          required
+        />
+        <button class="share-button" type="submit" data-request-button>Request access</button>
+      </form>
+    </section>
+
+    <section class="share-state" data-share-screen="pending" role="status" aria-live="polite" hidden>
+      <div class="share-state__icon share-state__icon--pending">
+        <Clock3 size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Waiting for approval</h2>
+      <p>Your request was sent. This page will update automatically when the owner responds.</p>
+      <span class="share-pending-id" data-pending-id></span>
+      <button class="share-button share-button--secondary" type="button" data-check-status>
+        Check status
+      </button>
+    </section>
+
+    <section class="share-state share-state--content" data-share-screen="content" hidden>
+      <article class="share-note">
+        <header class="share-note__header">
+          <p class="share-note__eyebrow">Shared with you</p>
+          <h2 class="share-note__title" data-note-title tabindex="-1">Shared note</h2>
+        </header>
+        <div class="share-note__body" data-note-body></div>
+        <section class="share-attachments" data-attachments-section hidden>
+          <h3>Attachments</h3>
+          <div class="share-attachments__grid" data-attachments-grid></div>
+        </section>
+        <div class="share-security-note">
+          <ShieldCheck size={21} aria-hidden="true" focusable="false" />
+          <p>This note was encrypted end-to-end and decrypted only in this browser.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="share-state" data-share-screen="expired" hidden>
+      <div class="share-state__icon share-state__icon--error">
+        <TimerOff size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Link expired</h2>
+      <p>This share has expired. Ask the owner to create a new link.</p>
+    </section>
+
+    <section class="share-state" data-share-screen="revoked" hidden>
+      <div class="share-state__icon share-state__icon--error">
+        <Ban size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Link revoked</h2>
+      <p>The owner has revoked access to this shared note.</p>
+    </section>
+
+    <section class="share-state" data-share-screen="denied" hidden>
+      <div class="share-state__icon share-state__icon--error">
+        <Ban size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Access denied</h2>
+      <p>The owner did not approve this access request.</p>
+    </section>
+
+    <section class="share-state" data-share-screen="notFound" hidden>
+      <div class="share-state__icon share-state__icon--error">
+        <SearchX size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Share not found</h2>
+      <p>This link does not exist or the shared note was deleted.</p>
+    </section>
+
+    <section class="share-state" data-share-screen="error" role="alert" hidden>
+      <div class="share-state__icon share-state__icon--error">
+        <TriangleAlert size={34} aria-hidden="true" focusable="false" />
+      </div>
+      <h2 data-state-heading tabindex="-1">Something went wrong</h2>
+      <p data-error-message>Unable to load this shared note.</p>
+      <button class="share-button share-button--secondary" type="button" data-retry>
+        Try again
+      </button>
+    </section>
+  </div>
+
+  <p class="share-viewer__footer">
+    Powered by <a href="/" rel="noreferrer">Better Keep Notes</a>
+  </p>
+
+  <dialog class="share-lightbox" data-lightbox aria-label="Shared image preview">
+    <button class="share-lightbox__close" type="button" data-lightbox-close aria-label="Close image preview">
+      <X size={22} aria-hidden="true" focusable="false" />
+    </button>
+    <img data-lightbox-image alt="Shared attachment preview" />
+  </dialog>
+</div>
+
+<script>
+  import { startShareViewer } from '../../scripts/share-viewer';
+
+  startShareViewer();
+</script>

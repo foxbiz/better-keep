@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
+import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
+import 'package:better_keep/pages/home/google_keep_import_visibility.dart';
 import 'package:better_keep/components/folder_tile.dart';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/models/note.dart';
@@ -40,6 +42,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   Iterable<Label>? _labels;
   Iterable<NoteColor>? _colors;
   int? _notesCountWithoutLabels;
+  bool _hasStoredNotes = true;
   double _pendingOffset = 0.0;
   bool _showLoader = false;
   Timer? _updateShowLoaderTimeout;
@@ -308,6 +311,15 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     };
   }
 
+  bool get _showGoogleKeepImportAction => shouldShowGoogleKeepImportAction(
+    isSearchMode: widget.searchMode,
+    isAllNotesView: AppState.showNotes == NoteType.all,
+    hasLabelFilters: AppState.filterLabels.isNotEmpty,
+    isInsideFolder: AppState.currentFolder != null,
+    isFolderMode: AppState.notesViewMode.isFolderMode,
+    hasStoredNotes: _hasStoredNotes,
+  );
+
   Future<void> refresh() async {
     try {
       _scrollController.jumpTo(0.0);
@@ -323,6 +335,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   Future<void> _fetchData([dynamic _]) async {
     _startLoading();
     _notes = await _fetchNotes();
+    _hasStoredNotes = await _loadHasStoredNotes();
     _colors = await Note.getAllColors();
     _labels = await Label.get(countNotes: true);
     _notesCountWithoutLabels = await Note.countByLabels(null);
@@ -362,6 +375,19 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
 
     return notes.toList();
+  }
+
+  Future<bool> _loadHasStoredNotes() async {
+    final rows = await AppState.db.rawQuery(
+      'SELECT EXISTS(SELECT 1 FROM ${Note.model} LIMIT 1) AS has_notes',
+    );
+    return rows.first['has_notes'] == 1;
+  }
+
+  Future<void> _refreshHasStoredNotes() async {
+    final hasStoredNotes = await _loadHasStoredNotes();
+    if (!mounted) return;
+    setState(() => _hasStoredNotes = hasStoredNotes);
   }
 
   void _startLoading() {
@@ -878,6 +904,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       AppState.selectedNotes = [];
     }
 
+    if (event.event == 'deleted') {
+      unawaited(_refreshHasStoredNotes());
+    } else {
+      _hasStoredNotes = true;
+    }
+
     if (_notes == null) {
       return;
     }
@@ -989,6 +1021,13 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                   );
                 },
                 child: Text(context.l10n.createYourFirstNote),
+              ),
+            ],
+            if (_showGoogleKeepImportAction) ...[
+              const SizedBox(height: 16),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: const GoogleKeepImportCard(),
               ),
             ],
           ],

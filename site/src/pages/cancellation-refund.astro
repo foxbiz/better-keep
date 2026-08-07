@@ -1,6 +1,9 @@
 ---
 import PublicDocumentPage from '../components/PublicDocumentPage.astro';
+import CancellationRefundContent from '../components/documents/CancellationRefundContent.astro';
 import { getPublicDocument } from '../data/public-documents';
 ---
 
-<PublicDocumentPage document={getPublicDocument('cancellation-refund')} />
+<PublicDocumentPage document={getPublicDocument('cancellation-refund')}>
+  <CancellationRefundContent />
+</PublicDocumentPage>

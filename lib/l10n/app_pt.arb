@@ -1021,7 +1021,6 @@
 	"googleKeepImportBeforeStart": "Antes de começar",
 	"googleKeepImportInstructions": "1. Abra o Google Takeout e selecione apenas o Keep.\n2. Crie e baixe a exportação.\n3. Escolha o ZIP abaixo. Reimportações idênticas são ignoradas por padrão.",
 	"googleKeepChooseZip": "Escolher ZIP do Takeout",
-	"googleKeepChooseFolder": "Escolher pasta do Keep extraída",
 	"googleKeepOpenTakeoutInstructions": "Abrir instruções do Google Takeout",
 	"googleKeepCancelImport": "Cancelar importação",
 	"googleKeepImportCancelled": "Importação cancelada. Nenhuma nota foi salva.",

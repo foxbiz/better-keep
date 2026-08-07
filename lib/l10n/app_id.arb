@@ -1021,7 +1021,6 @@
 	"googleKeepImportBeforeStart": "Sebelum memulai",
 	"googleKeepImportInstructions": "1. Buka Google Takeout dan pilih hanya Keep.\n2. Buat dan unduh ekspor.\n3. Pilih ZIP di bawah. Impor ulang yang sama akan dilewati secara default.",
 	"googleKeepChooseZip": "Pilih ZIP Takeout",
-	"googleKeepChooseFolder": "Pilih folder Keep yang diekstrak",
 	"googleKeepOpenTakeoutInstructions": "Buka petunjuk Google Takeout",
 	"googleKeepCancelImport": "Batalkan impor",
 	"googleKeepImportCancelled": "Impor dibatalkan. Tidak ada catatan yang disimpan.",

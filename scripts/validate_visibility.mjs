@@ -22,6 +22,17 @@ function assert(condition, message) {
   if (!condition) failures.push(message);
 }
 
+function resolveManifestAsset(resource) {
+  try {
+    const url = new URL(resource, 'https://betterkeep.app/app/manifest.json');
+    if (url.origin !== 'https://betterkeep.app') return null;
+    const outputPath = path.resolve(root, `.${decodeURIComponent(url.pathname)}`);
+    return outputPath.startsWith(`${root}${path.sep}`) ? outputPath : null;
+  } catch {
+    return null;
+  }
+}
+
 const requiredFiles = [
   'index.html',
   '404.html',
@@ -32,7 +43,7 @@ const requiredFiles = [
   'indexnow-key.txt',
   'flutter_service_worker.js',
   'og.png',
-  'media/logo.png',
+  'media/brand/app-icon-512.png',
   'app/index.html',
   'app/manifest.json',
   'auth.html',
@@ -108,12 +119,31 @@ assert(
 const manifest = JSON.parse(await read('app/manifest.json'));
 assert(manifest.start_url === '/app/', 'PWA start_url must be /app/');
 assert(manifest.scope === '/app/', 'PWA scope must be /app/');
+assert(
+  JSON.stringify((manifest.screenshots || []).map(({ src }) => src)) ===
+    JSON.stringify([
+      '/media/screenshots/2.png',
+      '/media/screenshots/3.png',
+      '/media/screenshots/4.png'
+    ]),
+  'PWA screenshots must reuse the canonical website media URLs'
+);
 for (const screenshot of manifest.screenshots || []) {
+  const assetPath = resolveManifestAsset(screenshot.src);
   assert(
-    await exists(path.join(root, 'app', screenshot.src)),
+    assetPath && (await exists(assetPath)),
     `Manifest screenshot does not exist: ${screenshot.src}`
   );
 }
+assert(
+  !(await exists(path.join(root, 'app', 'screenshots'))),
+  'Hosting bundle contains redundant Flutter screenshot assets'
+);
+assert(
+  !(await exists(path.join(root, 'icons', 'platforms'))) &&
+    !(await exists(path.join(root, 'icons', 'store-badges'))),
+  'Hosting bundle exposes website-only artwork through the app icon directory'
+);
 
 const pagesToCheck = [
   'google-keep-alternative.html',
@@ -236,6 +266,39 @@ for (const relativePath of [
     `${relativePath} must contain noindex, nofollow`
   );
 }
+
+const shareViewer = await read('s/index.html');
+assert(
+  shareViewer.includes('noindex, nofollow, noarchive'),
+  'Shared-note viewer must opt out of indexing and archiving'
+);
+assert(
+  shareViewer.includes('name="referrer" content="no-referrer"'),
+  'Shared-note viewer must not leak its fragment-backed URL as a referrer'
+);
+assert(
+  shareViewer.includes('data-share-viewer') &&
+    shareViewer.includes('Securely shared through Better Keep'),
+  'Shared-note viewer focused shell is missing'
+);
+assert(
+  !/rel="canonical"|plausible\.io/i.test(shareViewer),
+  'Shared-note viewer must not contain a canonical URL or analytics'
+);
+assert(
+  !/(?:gstatic\.com\/firebasejs|cdn\.jsdelivr\.net|unpkg\.com)/i.test(
+    shareViewer
+  ),
+  'Shared-note viewer must not load runtime dependencies from a CDN'
+);
+const shareScripts = [
+  ...shareViewer.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gi)
+].map((match) => match[1]);
+assert(
+  shareScripts.length > 0 &&
+    shareScripts.every((source) => source.startsWith('/_astro/')),
+  'Shared-note viewer scripts must be locally bundled Astro assets'
+);
 
 async function collectHtml(directory, prefix = '') {
   const entries = await readdir(directory);

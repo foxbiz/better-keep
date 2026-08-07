@@ -1,14 +1,9 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { db } from "../config";
-
-// Allowed origins for CORS (your domains only)
-const ALLOWED_ORIGINS = [
-	"https://betterkeep.app",
-	"https://better-keep-notes.web.app",
-	"https://better-keep-notes.firebaseapp.com",
-	"http://localhost:63630", // Local development
-	// shields.io doesn't send origin header, so we allow requests without origin
-];
+import {
+	createPublicStatsPayload,
+	isPublicStatsOriginAllowed,
+} from "../publicStats";
 
 /**
  * HTTP endpoint for public statistics.
@@ -37,7 +32,7 @@ export default onRequest(
 		// Check origin for CORS (allow requests without origin for shields.io)
 		const origin = req.headers.origin;
 		if (origin) {
-			if (ALLOWED_ORIGINS.includes(origin)) {
+			if (isPublicStatsOriginAllowed(origin)) {
 				res.set("Access-Control-Allow-Origin", origin);
 			} else {
 				// Block requests from unknown origins
@@ -57,31 +52,16 @@ export default onRequest(
 
 			if (!data) {
 				// Return default if stats haven't been generated yet
-				res.json({
-					schemaVersion: 1,
-					label: "users",
-					message: "0",
-					color: "blue",
-				});
+				res.json(createPublicStatsPayload("0"));
 				return;
 			}
 
 			// Return shields.io-compatible JSON
 			// See: https://shields.io/endpoint
-			res.json({
-				schemaVersion: 1,
-				label: "users",
-				message: data.userCount || "0",
-				color: "blue",
-			});
+			res.json(createPublicStatsPayload(data.userCount || "0"));
 		} catch (error) {
 			console.error("Failed to get public stats:", error);
-			res.status(500).json({
-				schemaVersion: 1,
-				label: "users",
-				message: "error",
-				color: "red",
-			});
+			res.status(500).json(createPublicStatsPayload("error", "red"));
 		}
 	},
 );

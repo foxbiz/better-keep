@@ -16,6 +16,7 @@ export type ProductFacts = {
   playStoreUrl: string;
   microsoftStoreUrl: string;
   webAppUrl: string;
+  publicStatsUrl: string;
   githubUrl: string;
   license: {
     label: string;

@@ -2,6 +2,7 @@
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { product } from '../data/product';
+import { createStorePlatformBootstrap } from '../lib/store-platform.mjs';
 import '../styles/global.css';
 
 interface Props {
@@ -27,6 +28,7 @@ const socialImage = new URL(image, product.siteUrl).toString();
 const fullTitle = title.includes('Better Keep')
   ? title
   : `${title} | Better Keep`;
+const storePlatformBootstrap = createStorePlatformBootstrap();
 ---
 
 <!doctype html>
@@ -34,7 +36,8 @@ const fullTitle = title.includes('Better Keep')
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
-    <meta name="theme-color" content="#0b0c10" />
+    <script is:inline set:html={storePlatformBootstrap}></script>
+    <meta name="theme-color" content="#0b0b0d" />
     <meta name="description" content={description} />
     <meta name="author" content={product.publisher} />
     <meta
@@ -42,10 +45,17 @@ const fullTitle = title.includes('Better Keep')
       content={noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large'}
     />
     <link rel="canonical" href={canonical} />
+    <link
+      rel="preload"
+      href="/media/fonts/manrope-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
     <link rel="alternate" hreflang="en" href={canonical} />
     <link rel="alternate" hreflang="x-default" href={canonical} />
     <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="apple-touch-icon" href="/media/logo.png" />
+    <link rel="apple-touch-icon" href="/media/brand/apple-touch-icon.png" />
     <link rel="alternate" type="application/rss+xml" title="Better Keep updates" href="/feed.xml" />
     <meta name="apple-itunes-app" content="app-id=6759548198, app-argument=betterkeep://" />
     <meta property="og:type" content="website" />

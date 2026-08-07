@@ -1021,7 +1021,6 @@
 	"googleKeepImportBeforeStart": "시작하기 전에",
 	"googleKeepImportInstructions": "1. Google Takeout을 열고 Keep만 선택합니다.\n2. 내보내기를 만들고 다운로드합니다.\n3. 아래에서 ZIP을 선택합니다. 동일한 항목을 다시 가져오면 기본적으로 건너뜁니다.",
 	"googleKeepChooseZip": "Takeout ZIP 선택",
-	"googleKeepChooseFolder": "압축을 푼 Keep 폴더 선택",
 	"googleKeepOpenTakeoutInstructions": "Google Takeout 안내 열기",
 	"googleKeepCancelImport": "가져오기 취소",
 	"googleKeepImportCancelled": "가져오기가 취소되었습니다. 저장된 노트가 없습니다.",

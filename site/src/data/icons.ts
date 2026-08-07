@@ -17,6 +17,7 @@ import {
   Smartphone,
   Star,
   TextCursorInput,
+  Users,
   X
 } from '@lucide/astro';
 
@@ -39,6 +40,7 @@ export const iconComponents = {
   Smartphone,
   Star,
   TextCursorInput,
+  Users,
   X
 } as const;
 

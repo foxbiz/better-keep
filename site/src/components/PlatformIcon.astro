@@ -1,0 +1,43 @@
+---
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const iconFiles = {
+  apple: 'apple.svg',
+  android: 'android.svg',
+  github: 'github.svg',
+  windows: 'windows.svg',
+  web: 'web.svg'
+} as const;
+
+type PlatformIconName = keyof typeof iconFiles;
+
+interface Props {
+  name: PlatformIconName;
+  size?: number;
+}
+
+const { name, size = 48 } = Astro.props;
+const fileName = iconFiles[name];
+
+if (!fileName) {
+  throw new Error(`Unsupported platform icon: ${name}`);
+}
+
+const sourcePath = path.resolve(
+  process.cwd(),
+  'assets',
+  'platforms',
+  fileName
+);
+const markup = (await readFile(sourcePath, 'utf8'))
+  .replace(/\srole="img"/i, '')
+  .replace(/\saria-labelledby="[^"]+"/i, '')
+  .replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, '')
+  .replace(
+    '<svg ',
+    `<svg class="platform-icon" data-platform-icon="${name}" width="${size}" height="${size}" aria-hidden="true" focusable="false" `
+  );
+---
+
+<Fragment set:html={markup} />

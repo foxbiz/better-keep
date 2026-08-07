@@ -1,0 +1,59 @@
+---
+import { product } from '../data/product';
+import Icon from './Icon.astro';
+---
+
+<span
+  class="hero-proof__item user-count-proof"
+  data-user-count
+  data-state="idle"
+  data-endpoint={product.publicStatsUrl}
+  role="status"
+  aria-live="polite"
+  aria-atomic="true"
+  aria-busy="true"
+  aria-hidden="true"
+>
+  <span class="user-count-proof__visual" aria-hidden="true">
+    <Icon name="Users" size={17} />
+    <span class="user-count-proof__metric" data-user-count-metric>
+      <span class="user-count-proof__spinner"></span>
+    </span>
+    <span>People have joined</span>
+  </span>
+  <span class="sr-only" data-user-count-announcement>Loading Better Keep community count</span>
+</span>
+
+<noscript><style>.user-count-proof { display: none !important; }</style></noscript>
+
+<script>
+  import { loadPublicUserMetric } from '../lib/public-stats.mjs';
+
+  const counters = document.querySelectorAll<HTMLElement>('[data-user-count]');
+
+  for (const counter of counters) {
+    const metric = counter.querySelector<HTMLElement>('[data-user-count-metric]');
+    const announcement = counter.querySelector<HTMLElement>(
+      '[data-user-count-announcement]'
+    );
+    const endpoint = counter.dataset.endpoint;
+
+    counter.dataset.state = 'loading';
+    counter.removeAttribute('aria-hidden');
+
+    loadPublicUserMetric({ endpoint }).then((result) => {
+      counter.setAttribute('aria-busy', 'false');
+
+      if (result.status !== 'ready' || !result.metric || !metric || !announcement) {
+        counter.dataset.state = 'unavailable';
+        counter.setAttribute('aria-hidden', 'true');
+        counter.hidden = true;
+        return;
+      }
+
+      metric.textContent = result.metric;
+      announcement.textContent = `${result.metric} people have joined Better Keep`;
+      counter.dataset.state = 'ready';
+    });
+  }
+</script>

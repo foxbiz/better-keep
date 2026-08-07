@@ -3489,9 +3489,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get googleKeepChooseZip => 'Takeout ZIP\'ini seç';
 
   @override
-  String get googleKeepChooseFolder => 'Çıkarılmış Keep klasörünü seç';
-
-  @override
   String get googleKeepOpenTakeoutInstructions =>
       'Google Takeout talimatlarını aç';
 

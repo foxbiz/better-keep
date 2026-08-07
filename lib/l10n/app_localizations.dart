@@ -6216,12 +6216,6 @@ abstract class AppLocalizations {
   /// **'Choose Takeout ZIP'**
   String get googleKeepChooseZip;
 
-  /// Action to choose an extracted Google Keep folder
-  ///
-  /// In en, this message translates to:
-  /// **'Choose extracted Keep folder'**
-  String get googleKeepChooseFolder;
-
   /// Action to open Google Takeout help
   ///
   /// In en, this message translates to:

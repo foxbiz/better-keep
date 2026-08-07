@@ -3646,8 +3646,6 @@
 	"@googleKeepImportInstructions": { "description": "Steps for preparing a Google Keep export" },
 	"googleKeepChooseZip": "Choose Takeout ZIP",
 	"@googleKeepChooseZip": { "description": "Action to choose a Google Takeout ZIP" },
-	"googleKeepChooseFolder": "Choose extracted Keep folder",
-	"@googleKeepChooseFolder": { "description": "Action to choose an extracted Google Keep folder" },
 	"googleKeepOpenTakeoutInstructions": "Open Google Takeout instructions",
 	"@googleKeepOpenTakeoutInstructions": { "description": "Action to open Google Takeout help" },
 	"googleKeepCancelImport": "Cancel import",

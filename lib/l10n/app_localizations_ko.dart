@@ -3363,9 +3363,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get googleKeepChooseZip => 'Takeout ZIP 선택';
 
   @override
-  String get googleKeepChooseFolder => '압축을 푼 Keep 폴더 선택';
-
-  @override
   String get googleKeepOpenTakeoutInstructions => 'Google Takeout 안내 열기';
 
   @override

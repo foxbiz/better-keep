@@ -3309,9 +3309,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get googleKeepChooseZip => '选择 Takeout ZIP';
 
   @override
-  String get googleKeepChooseFolder => '选择已解压的 Keep 文件夹';
-
-  @override
   String get googleKeepOpenTakeoutInstructions => '打开 Google Takeout 说明';
 
   @override

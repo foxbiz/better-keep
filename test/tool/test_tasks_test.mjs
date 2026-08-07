@@ -85,6 +85,19 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 test("search suite validates site types, store metadata, and built visibility", () => {
 	assert.deepEqual(resolveTestTask(["search"]).operations, [
 		{
+			args: [
+				"--test",
+				"test/site_assets_test.mjs",
+				"test/site_public_documents_test.mjs",
+				"test/site_public_stats_test.mjs",
+				"test/site_share_viewer_test.mjs",
+				"test/site_store_platform_test.mjs",
+			],
+			command: "node",
+			environment: {},
+			type: "process",
+		},
+		{
 			args: ["--prefix", "site", "run", "check"],
 			command: "npm",
 			environment: {},

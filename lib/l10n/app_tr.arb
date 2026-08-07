@@ -3594,7 +3594,6 @@
 	"googleKeepImportBeforeStart": "Başlamadan önce",
 	"googleKeepImportInstructions": "1. Google Takeout'u açın ve yalnızca Keep'i seçin.\n2. Dışa aktarımı oluşturup indirin.\n3. Aşağıdan ZIP'i seçin. Aynı içerik varsayılan olarak yeniden içe aktarılmaz.",
 	"googleKeepChooseZip": "Takeout ZIP'ini seç",
-	"googleKeepChooseFolder": "Çıkarılmış Keep klasörünü seç",
 	"googleKeepOpenTakeoutInstructions": "Google Takeout talimatlarını aç",
 	"googleKeepCancelImport": "İçe aktarmayı iptal et",
 	"googleKeepImportCancelled": "İçe aktarma iptal edildi. Hiçbir not kaydedilmedi.",

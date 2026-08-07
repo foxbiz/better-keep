@@ -1,7 +1,9 @@
 ---
 import type { GetStaticPaths } from 'astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import DeviceFrame from '../components/DeviceFrame.astro';
 import StoreActions from '../components/StoreActions.astro';
+import { screenshotById } from '../data/home';
 import { pages, type MarketingPage } from '../data/pages';
 import { product } from '../data/product';
 
@@ -19,31 +21,25 @@ const { page } = Astro.props;
 const canonicalPath = `/${page.slug}`;
 const screenshot = (() => {
   if (page.slug === 'rich-text-notes') {
-    return {
-      src: '/media/screenshots/5-480.webp',
-      alt: 'Better Keep rich-text editor with formatting controls and a checklist'
-    };
+    return screenshotById['5'];
   }
   if (page.slug === 'voice-notes-transcription') {
-    return {
-      src: '/media/screenshots/6-480.webp',
-      alt: 'Better Keep editor showing a voice recording and its transcription'
-    };
+    return screenshotById['6'];
   }
   if (page.slug === 'security' || page.slug === 'private-encrypted-notes') {
-    return {
-      src: '/media/screenshots/4-480.webp',
-      alt: 'Better Keep security screen showing encrypted notes and approved devices'
-    };
+    return screenshotById['4'];
   }
-  return {
-    src: '/media/screenshots/2-480.webp',
-    alt:
-      page.slug === 'import/google-keep'
-        ? 'Better Keep card home where locally imported notes become available'
-        : 'Better Keep card-based notes home with labels, colors, and pinned notes'
-  };
+  return screenshotById['2'];
 })();
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+const sectionLinks = page.sections.map((section, index) => ({
+  id: `${slugify(section.heading)}-${index + 1}`,
+  label: section.heading
+}));
 const breadcrumbs = [
   {
     '@type': 'ListItem',
@@ -79,7 +75,7 @@ const schemas: Record<string, unknown>[] = [
       name: product.publisher,
       logo: {
         '@type': 'ImageObject',
-        url: `${product.siteUrl}/media/logo.png`
+        url: `${product.siteUrl}/media/brand/app-icon-512.png`
       }
     }
   },
@@ -112,36 +108,36 @@ if (page.faqs?.length) {
   canonicalPath={canonicalPath}
   schemas={schemas}
 >
-  <article class="container">
-    <header class="article-header">
-      <p class="eyebrow">{page.eyebrow}</p>
-      <h1>{page.title}</h1>
-      <p class="answer-box">{page.answer}</p>
-      <p class="article-meta">
-        Published and reviewed by {product.publisher} · Updated {product.updatedAt}
-      </p>
+  <article class="marketing-article">
+    <header class="article-hero container">
+      <div class="article-hero__copy">
+        <p class="eyebrow">{page.eyebrow}</p>
+        <h1>{page.title}</h1>
+        <p class="answer-box">{page.answer}</p>
+        <p class="article-meta">
+          Published and reviewed by {product.publisher} · Updated {product.updatedAt}
+        </p>
+      </div>
+      <DeviceFrame
+        {...screenshot}
+        class="article-hero__device"
+        priority={true}
+      />
     </header>
 
-    <figure class="article-screenshot">
-      <div>
-        <img
-          src={screenshot.src}
-          width="480"
-          height="1041"
-          loading="eager"
-          decoding="async"
-          fetchpriority="high"
-          alt={screenshot.alt}
-        />
-      </div>
-      <figcaption>Authentic Better Keep interface from the current app.</figcaption>
-    </figure>
-
-    <div class="article-grid">
+    <div class="article-grid container">
+      <nav class="article-toc" aria-label="On this page">
+        <strong>On this page</strong>
+        {
+          sectionLinks.map((section) => (
+            <a href={`#${section.id}`}>{section.label}</a>
+          ))
+        }
+      </nav>
       <div class="article-body">
         {
-          page.sections.map((section) => (
-            <section>
+          page.sections.map((section, index) => (
+            <section id={sectionLinks[index].id}>
               <h2>{section.heading}</h2>
               {section.paragraphs?.map((paragraph) => <p>{paragraph}</p>)}
               {
@@ -215,7 +211,7 @@ if (page.faqs?.length) {
         }
       </div>
 
-      <aside class="card sidebar-card">
+      <aside class="card sidebar-card article-action">
         <p class="eyebrow">Try Better Keep</p>
         <h2>Start with local notes.</h2>
         <p>

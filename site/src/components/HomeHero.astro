@@ -1,51 +1,60 @@
 ---
+import { heroScreenshots } from '../data/home';
 import { product } from '../data/product';
+import DeviceFrame from './DeviceFrame.astro';
 import Icon from './Icon.astro';
+import PlatformIcon from './PlatformIcon.astro';
 import StoreActions from './StoreActions.astro';
+import UserCount from './UserCount.astro';
+
+const positions = ['left', 'primary', 'right'] as const;
 ---
 
 <section class="home-hero">
-  <div class="home-hero__glow" aria-hidden="true"></div>
   <div class="home-hero__inner container">
     <div class="home-hero__copy">
-      <h1>Your Notes, <span>Reimagined</span></h1>
-      <p>
-        Private, offline notes with rich-text editing and optional end-to-end
-        encrypted sync—plus a local way to bring your Google Keep archive with
-        you.
+      <p class="eyebrow">Private, offline-friendly notes</p>
+      <h1>Notes that stay <span>out of your way.</span></h1>
+      <p class="home-hero__lede">
+        Better Keep pairs the fast, familiar card workflow with richer writing,
+        true offline access, and optional encrypted sync.
       </p>
-      <StoreActions variant="hero" includeMicrosoft={true} />
+      <StoreActions variant="hero" />
+      <div class="hero-proof" aria-label="Better Keep highlights">
+        <UserCount />
+        <a class="hero-proof__item" href="/offline-notes-app"><Icon name="CloudOff" size={17} />Offline-first</a>
+        <a class="hero-proof__item" href="/security"><Icon name="ShieldCheck" size={17} />Private by design</a>
+      </div>
       <p class="platforms-note">
         Available on <a href="#platforms">{product.platforms.join(', ')}</a>
       </p>
-      <div class="trust-badges" aria-label="Better Keep trust links">
+    </div>
+
+    <div class="hero-stage">
+      <div class="hero-stage__actions">
         <a
-          class="trust-badge"
+          class="hero-github-badge"
           href={product.githubUrl}
           rel="external"
           data-analytics={product.analyticsGoals.github}
         >
-          <Icon name="Heart" size={15} />
-          Source-available
-        </a>
-        <a class="trust-badge" href="/security">
-          <Icon name="ShieldCheck" size={15} />
-          Security details
-        </a>
-        <a class="trust-badge" href="/import/google-keep">
-          <Icon name="Import" size={15} />
-          Local import
+          <PlatformIcon name="github" size={19} />
+          View on GitHub
+          <Icon name="ArrowRight" size={15} />
         </a>
       </div>
-    </div>
-    <div class="home-hero__visual">
-      <img
-        src="/media/screenshots/2-480.webp"
-        width="480"
-        height="1041"
-        alt="Better Keep notes home with colorful rich-text cards, labels, images, audio, and reminders"
-        fetchpriority="high"
-      />
+      <div class="hero-stage__screens" aria-label="Better Keep rich-text, notes home, and voice-note screens">
+        <div class="hero-stage__backdrop" aria-hidden="true"></div>
+        {
+          heroScreenshots.map((screenshot, index) => (
+            <DeviceFrame
+              {...screenshot}
+              priority={positions[index] === 'primary'}
+              class={`hero-device hero-device--${positions[index]}`}
+            />
+          ))
+        }
+      </div>
     </div>
   </div>
 </section>

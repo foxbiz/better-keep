@@ -3364,9 +3364,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get googleKeepChooseZip => 'Takeout ZIPを選択';
 
   @override
-  String get googleKeepChooseFolder => '展開したKeepフォルダを選択';
-
-  @override
   String get googleKeepOpenTakeoutInstructions => 'Google Takeoutの手順を開く';
 
   @override

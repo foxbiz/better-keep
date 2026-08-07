@@ -1,30 +1,24 @@
 ---
-import { screenshots } from '../data/home';
+import { galleryScreenshots } from '../data/home';
+import DeviceFrame from './DeviceFrame.astro';
 ---
 
-<section class="home-section screenshots-section" id="screenshots">
+<section class="home-section screenshot-gallery" id="screenshots">
   <div class="container">
-    <div class="section-title">
-      <h2>See it in action</h2>
-      <p>Real Better Keep screens, ordered around the everyday notes workflow.</p>
+    <div class="section-heading section-heading--split">
+      <div>
+        <p class="eyebrow">Personalize and connect</p>
+        <h2>Set up Better Keep your way.</h2>
+      </div>
+      <p>
+        Choose a theme and language, sign in the way you prefer, and manage
+        connected accounts and subscription details.
+      </p>
     </div>
-    <div class="screenshot-rail" aria-label="Better Keep screenshots">
+    <div class="device-gallery" aria-label="Better Keep personalization, account, and sign-in screens">
       {
-        screenshots.map((screenshot) => (
-          <figure class="screenshot-card">
-            <picture>
-              <source srcset={screenshot.optimizedSrc} type="image/webp" />
-              <img
-                src={screenshot.src}
-                width="1179"
-                height="2556"
-                loading="eager"
-                decoding="async"
-                alt={screenshot.alt}
-              />
-            </picture>
-            <figcaption>{screenshot.caption}</figcaption>
-          </figure>
+        galleryScreenshots.map((screenshot) => (
+          <DeviceFrame {...screenshot} class="device-gallery__item" />
         ))
       }
     </div>

@@ -20,6 +20,7 @@
   "playStoreUrl": "https://play.google.com/store/apps/details?id=io.foxbiz.better_keep&utm_source=betterkeep.app&utm_medium=website&utm_campaign=organic_search",
   "microsoftStoreUrl": "https://apps.microsoft.com/detail/9PHT5C6WK6Q1",
   "webAppUrl": "/app/",
+  "publicStatsUrl": "https://us-central1-better-keep-notes.cloudfunctions.net/getPublicStats",
   "githubUrl": "https://github.com/foxbiz/better-keep",
   "license": {
     "label": "Source-available under CC BY-NC 4.0",

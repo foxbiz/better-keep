@@ -1,6 +1,9 @@
 ---
 import PublicDocumentPage from '../components/PublicDocumentPage.astro';
+import TermsContent from '../components/documents/TermsContent.astro';
 import { getPublicDocument } from '../data/public-documents';
 ---
 
-<PublicDocumentPage document={getPublicDocument('terms')} />
+<PublicDocumentPage document={getPublicDocument('terms')}>
+  <TermsContent />
+</PublicDocumentPage>

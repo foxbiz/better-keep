@@ -206,6 +206,14 @@ const suites = {
 		]),
 	]),
 	search: defineSuite("Validate site types, store metadata, and search visibility.", () => [
+		processStep("node", [
+			"--test",
+			"test/site_assets_test.mjs",
+			"test/site_public_documents_test.mjs",
+			"test/site_public_stats_test.mjs",
+			"test/site_share_viewer_test.mjs",
+			"test/site_store_platform_test.mjs",
+		]),
 		processStep("npm", ["--prefix", "site", "run", "check"]),
 		processStep("node", ["scripts/validate_store_metadata.mjs"]),
 		processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),

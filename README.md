@@ -45,7 +45,7 @@ Available on **Android**, **iOS**, **macOS**, **Windows**, and **Web**.
 
 | Login                                 | Home                                  | Editor                                |
 | ------------------------------------- | ------------------------------------- | ------------------------------------- |
-| ![Home screen](web/screenshots/1.png) | ![Rich editor](web/screenshots/2.png) | ![Unlock note](web/screenshots/5.png) |
+| ![Home screen](site/assets/screenshots/1.png) | ![Rich editor](site/assets/screenshots/2.png) | ![Unlock note](site/assets/screenshots/5.png) |
 
 ## Try it quickly
 

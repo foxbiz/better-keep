@@ -9,21 +9,21 @@
     {
       "position": 1,
       "key": "home",
-      "source": "web/screenshots/2.png",
+      "source": "site/assets/screenshots/2.png",
       "captureStatus": "ready",
       "messageKey": 0
     },
     {
       "position": 2,
       "key": "editor",
-      "source": "web/screenshots/5.png",
+      "source": "site/assets/screenshots/5.png",
       "captureStatus": "ready",
       "messageKey": 1
     },
     {
       "position": 3,
       "key": "security",
-      "source": "web/screenshots/4.png",
+      "source": "site/assets/screenshots/4.png",
       "captureStatus": "ready",
       "messageKey": 2
     },
@@ -44,7 +44,7 @@
     {
       "position": 6,
       "key": "voice",
-      "source": "web/screenshots/6.png",
+      "source": "site/assets/screenshots/6.png",
       "captureStatus": "ready",
       "messageKey": 5
     },

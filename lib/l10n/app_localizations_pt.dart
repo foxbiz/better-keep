@@ -3518,9 +3518,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get googleKeepChooseZip => 'Escolher ZIP do Takeout';
 
   @override
-  String get googleKeepChooseFolder => 'Escolher pasta do Keep extraída';
-
-  @override
   String get googleKeepOpenTakeoutInstructions =>
       'Abrir instruções do Google Takeout';
 

@@ -48,6 +48,28 @@ const targets = {
 			...extraArgs,
 		]),
 		]),
+	"hosting-preview": defineTarget(
+		"Build and publish the combined website to the temporary ui-overhaul Hosting channel.",
+		(extraArgs) => [
+			...resolveBuildTask(["web"]).operations.map((operation) => ({
+				...operation,
+				type: "process",
+			})),
+			firebaseStep([
+				"--",
+				"hosting:channel:deploy",
+				"ui-overhaul",
+				"--expires",
+				"7d",
+				"--no-authorized-domains",
+				"--config",
+				"firebase.deploy.json",
+				"--project",
+				projectId,
+				...extraArgs,
+			]),
+		],
+	),
 	indexnow: defineTarget("Submit built public URLs to IndexNow.", (extraArgs) => [
 		processStep("node", ["scripts/submit_indexnow.mjs", ...extraArgs]),
 	]),

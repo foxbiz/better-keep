@@ -1,9 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import {
-  readPublicDocumentContent,
-  type PublicDocument
-} from '../data/public-documents';
+import type { PublicDocument } from '../data/public-documents';
 import { product } from '../data/product';
 
 interface Props {
@@ -11,7 +8,6 @@ interface Props {
 }
 
 const { document } = Astro.props;
-const content = readPublicDocumentContent(document.sourceFile);
 const canonicalPath = `/${document.slug}`;
 const schemas = [
   {
@@ -68,6 +64,8 @@ const schemas = [
         )
       }
     </header>
-    <div class="document-body" set:html={content} />
+    <div class="document-body">
+      <slot />
+    </div>
   </article>
 </BaseLayout>

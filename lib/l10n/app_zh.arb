@@ -1021,7 +1021,6 @@
 	"googleKeepImportBeforeStart": "开始之前",
 	"googleKeepImportInstructions": "1. 打开 Google Takeout，并仅选择 Keep。\n2. 创建并下载导出文件。\n3. 在下方选择 ZIP。默认会跳过完全相同的重复导入。",
 	"googleKeepChooseZip": "选择 Takeout ZIP",
-	"googleKeepChooseFolder": "选择已解压的 Keep 文件夹",
 	"googleKeepOpenTakeoutInstructions": "打开 Google Takeout 说明",
 	"googleKeepCancelImport": "取消导入",
 	"googleKeepImportCancelled": "导入已取消，未保存任何笔记。",

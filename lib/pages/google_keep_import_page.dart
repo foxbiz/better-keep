@@ -54,20 +54,6 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
     );
   }
 
-  Future<void> _chooseDirectory() async {
-    final directory = await FilePicker.getDirectoryPath(
-      dialogTitle: context.l10n.googleKeepChooseFolder,
-    );
-    if (directory == null) return;
-    await _runImport(
-      (token) => _service.importDirectory(
-        directoryPath: directory,
-        cancellationToken: token,
-        onProgress: _onProgress,
-      ),
-    );
-  }
-
   Future<void> _runImport(
     Future<KeepImportReport> Function(KeepImportCancellationToken token)
     operation,
@@ -183,14 +169,6 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
             icon: const Icon(Icons.archive_outlined),
             label: Text(context.l10n.googleKeepChooseZip),
           ),
-          if (!kIsWeb) ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _importing ? null : _chooseDirectory,
-              icon: const Icon(Icons.folder_open),
-              label: Text(context.l10n.googleKeepChooseFolder),
-            ),
-          ],
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: () async {

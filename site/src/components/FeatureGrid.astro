@@ -1,30 +1,57 @@
 ---
-import { primaryFeatures } from '../data/home';
+import { primaryFeatures, securityScreenshot } from '../data/home';
+import DeviceFrame from './DeviceFrame.astro';
 import Icon from './Icon.astro';
 ---
 
-<section class="home-section features-section" id="features">
+<section class="home-section product-story" id="features">
   <div class="container">
-    <div class="section-title">
-      <h2>Why choose Better Keep?</h2>
-      <p>A focused notes app designed for the way you work and think.</p>
+    <div class="section-heading section-heading--split">
+      <div>
+        <p class="eyebrow">Write, organize, and find</p>
+        <h2>Useful features without a heavy workspace.</h2>
+      </div>
+      <p>
+        Capture in seconds, add structure when it helps, and keep complete
+        control over where your work lives.
+      </p>
     </div>
-    <div class="feature-grid">
+
+    <div class="feature-ledger">
       {
         primaryFeatures.map((feature) => (
-          <a class="feature-card" href={feature.href}>
-            <span class={`feature-icon tone-${feature.tone}`}>
-              <Icon name={feature.icon} size={27} strokeWidth={1.9} />
+          <a class="feature-row" href={feature.href}>
+            <span class="feature-row__number">{feature.number}</span>
+            <span class="feature-row__icon"><Icon name={feature.icon} size={23} strokeWidth={1.8} /></span>
+            <span class="feature-row__copy">
+              <strong>{feature.title}</strong>
+              <span>{feature.description}</span>
             </span>
-            <h3>{feature.title}</h3>
-            <p>{feature.description}</p>
-            <span class="text-link">
-              Explore feature
-              <Icon name="ArrowRight" size={16} />
-            </span>
+            <Icon name="ArrowRight" size={20} class="feature-row__arrow" />
           </a>
         ))
       }
+    </div>
+
+    <div class="security-story">
+      <div class="security-story__copy">
+        <p class="eyebrow">Optional encrypted sync</p>
+        <h2>Protect private notes across approved devices.</h2>
+        <p>
+          Better Keep encrypts note content and attachments on your device
+          before optional synchronization. Recovery and approved-device
+          controls remain visible and understandable.
+        </p>
+        <ul class="quiet-list">
+          <li><Icon name="ShieldCheck" size={18} /> Device-side protection</li>
+          <li><Icon name="MonitorSmartphone" size={18} /> Approved-device controls</li>
+          <li><Icon name="CloudOff" size={18} /> Local notes keep working offline</li>
+        </ul>
+        <a class="text-link" href="/security">
+          Read the security details <Icon name="ArrowRight" size={17} />
+        </a>
+      </div>
+      <DeviceFrame {...securityScreenshot} class="security-story__device" />
     </div>
   </div>
 </section>

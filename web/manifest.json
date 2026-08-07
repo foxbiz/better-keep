@@ -94,19 +94,19 @@
     ],
     "screenshots": [
         {
-            "src": "screenshots/2.png",
+            "src": "/media/screenshots/2.png",
             "sizes": "1179x2556",
             "type": "image/png",
             "label": "Card-based notes home"
         },
         {
-            "src": "screenshots/3.png",
+            "src": "/media/screenshots/3.png",
             "sizes": "1179x2556",
             "type": "image/png",
             "label": "Rich text note editor"
         },
         {
-            "src": "screenshots/4.png",
+            "src": "/media/screenshots/4.png",
             "sizes": "1179x2556",
             "type": "image/png",
             "label": "Note organization and settings"

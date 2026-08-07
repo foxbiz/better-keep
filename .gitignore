@@ -37,7 +37,8 @@ migrate_working_dir/
 /site/node_modules/
 /site/.astro/
 /site/dist/
-/site/public/media/screenshots/
+/site/public/favicon.ico
+/site/public/media/
 
 # Symbolication related
 app.*.symbols

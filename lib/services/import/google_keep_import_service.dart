@@ -92,39 +92,6 @@ class GoogleKeepImportService {
     );
   }
 
-  Future<KeepImportReport> importDirectory({
-    required String directoryPath,
-    KeepImportOptions options = const KeepImportOptions(),
-    KeepImportCancellationToken? cancellationToken,
-    KeepImportProgressCallback? onProgress,
-  }) async {
-    final token = cancellationToken ?? KeepImportCancellationToken();
-    onProgress?.call(
-      const KeepImportProgress(
-        phase: KeepImportPhase.validating,
-        completed: 0,
-        total: 1,
-        message: 'Validating extracted Google Keep folder…',
-      ),
-    );
-    final entries = await readKeepDirectory(
-      directoryPath,
-      options: options,
-      cancellationToken: token,
-    );
-    final parsed = parser.parseEntries(
-      entries,
-      options: options,
-      cancellationToken: token,
-    );
-    return _importParsed(
-      parsed,
-      options: options,
-      cancellationToken: token,
-      onProgress: onProgress,
-    );
-  }
-
   Future<KeepImportReport> _importParsed(
     KeepParseResult parsed, {
     required KeepImportOptions options,
