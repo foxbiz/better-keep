@@ -574,6 +574,7 @@
 	"purchaseCancelled": "Compra cancelada.",
 	"paymentFailed": "Pagamento falhou.",
 	"couldNotOpenSubscriptionManagement": "Não foi possível abrir o gerenciamento de assinatura.",
+	"subscriptionProviderUnknownContactSupport": "Não foi possível identificar seu provedor de cobrança. Entre em contato com contact@betterkeep.app para obter ajuda.",
 	"manageSubscriptionInStore": "Gerencie sua assinatura na {store}.",
 	"loadingFailedTryAgain": "Falha ao carregar — Tente novamente",
 	"reloadPrices": "Recarregar preços",

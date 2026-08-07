@@ -3540,6 +3540,12 @@ abstract class AppLocalizations {
   /// **'Could not open subscription management.'**
   String get couldNotOpenSubscriptionManagement;
 
+  /// Support guidance when a legacy subscription has no known billing provider
+  ///
+  /// In en, this message translates to:
+  /// **'We could not identify your billing provider. Contact contact@betterkeep.app for help.'**
+  String get subscriptionProviderUnknownContactSupport;
+
   /// Message shown when redirecting to store subscription management
   ///
   /// In en, this message translates to:

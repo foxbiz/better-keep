@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -126,6 +128,63 @@ void main() {
     );
     expect(platform.requestCount, 0);
   });
+
+  test('a failed native request does not consume cooldown state', () async {
+    final preferences = await SharedPreferences.getInstance();
+    final platform = _FakeReviewPlatform(requestFailuresRemaining: 1);
+    await _recordActiveDay(preferences, platform, DateTime(2026, 1, 1));
+    await _recordActiveDay(preferences, platform, DateTime(2026, 1, 2));
+    await _recordActiveDay(preferences, platform, DateTime(2026, 1, 3));
+    final service = ReviewPromptService(
+      platform: platform,
+      now: () => DateTime(2026, 1, 8),
+      versionLoader: () async => '1.0.0',
+      noteCountLoader: () async => 5,
+    );
+    await service.initialize(preferences: preferences);
+
+    expect(
+      await service.recordPositiveMilestone(ReviewMilestone.googleKeepImport),
+      isFalse,
+    );
+    expect(platform.requestCount, 1);
+    expect(
+      await service.recordPositiveMilestone(ReviewMilestone.googleKeepImport),
+      isTrue,
+    );
+    expect(platform.requestCount, 2);
+  });
+
+  test('concurrent milestones share one successful review request', () async {
+    final preferences = await SharedPreferences.getInstance();
+    final requestStarted = Completer<void>();
+    final requestBarrier = Completer<void>();
+    final platform = _FakeReviewPlatform(
+      requestStarted: requestStarted,
+      requestBarrier: requestBarrier,
+    );
+    await _recordActiveDay(preferences, platform, DateTime(2026, 1, 1));
+    await _recordActiveDay(preferences, platform, DateTime(2026, 1, 2));
+    await _recordActiveDay(preferences, platform, DateTime(2026, 1, 3));
+    final service = ReviewPromptService(
+      platform: platform,
+      now: () => DateTime(2026, 1, 8),
+      versionLoader: () async => '1.0.0',
+      noteCountLoader: () async => 5,
+    );
+    await service.initialize(preferences: preferences);
+
+    final first = service.recordPositiveMilestone(ReviewMilestone.dataExport);
+    await requestStarted.future;
+    final second = service.recordPositiveMilestone(
+      ReviewMilestone.reminderScheduled,
+    );
+    requestBarrier.complete();
+
+    expect(await first, isTrue);
+    expect(await second, isFalse);
+    expect(platform.requestCount, 1);
+  });
 }
 
 Future<void> _recordActiveDay(
@@ -144,10 +203,18 @@ Future<void> _recordActiveDay(
 
 class _FakeReviewPlatform implements ReviewPromptPlatform {
   final bool available;
+  final Completer<void>? requestStarted;
+  final Completer<void>? requestBarrier;
+  int requestFailuresRemaining;
   int requestCount = 0;
   int listingCount = 0;
 
-  _FakeReviewPlatform({this.available = true});
+  _FakeReviewPlatform({
+    this.available = true,
+    this.requestStarted,
+    this.requestBarrier,
+    this.requestFailuresRemaining = 0,
+  });
 
   @override
   bool get supportsPrompt => true;
@@ -163,5 +230,11 @@ class _FakeReviewPlatform implements ReviewPromptPlatform {
   @override
   Future<void> requestReview() async {
     requestCount++;
+    if (requestFailuresRemaining > 0) {
+      requestFailuresRemaining--;
+      throw StateError('Review prompt failed');
+    }
+    requestStarted?.complete();
+    await requestBarrier?.future;
   }
 }

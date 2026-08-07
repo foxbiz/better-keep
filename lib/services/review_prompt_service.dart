@@ -1,5 +1,6 @@
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -66,6 +67,7 @@ class ReviewPromptService {
   SharedPreferences? _preferences;
   bool _initialized = false;
   bool _requestInProgress = false;
+  bool _requestedThisSession = false;
 
   ReviewPromptService({
     ReviewPromptPlatform? platform,
@@ -102,21 +104,50 @@ class ReviewPromptService {
   }
 
   Future<bool> recordPositiveMilestone(ReviewMilestone milestone) async {
-    await initialize();
-    if (_requestInProgress || !platform.supportsPrompt) return false;
+    if (_requestInProgress || _requestedThisSession) return false;
     _requestInProgress = true;
     try {
+      await initialize();
+      if (!platform.supportsPrompt) return false;
       if (!await isEligible()) return false;
       if (!await platform.isAvailable()) return false;
-      final prefs = _preferences!;
       final current = now();
       final version = await versionLoader();
-      await prefs.setString(_lastRequestKey, current.toIso8601String());
-      await prefs.setString(_lastVersionKey, version);
       await platform.requestReview();
+      _requestedThisSession = true;
+      await _persistSuccessfulRequest(current: current, version: version);
       return true;
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        'Review prompt failed for ${milestone.name}',
+        error,
+        stackTrace,
+      );
+      return false;
     } finally {
       _requestInProgress = false;
+    }
+  }
+
+  Future<void> _persistSuccessfulRequest({
+    required DateTime current,
+    required String version,
+  }) async {
+    try {
+      final prefs = _preferences!;
+      final results = await Future.wait([
+        prefs.setString(_lastRequestKey, current.toIso8601String()),
+        prefs.setString(_lastVersionKey, version),
+      ]);
+      if (results.any((saved) => !saved)) {
+        await AppLogger.error('Review prompt cooldown could not be saved');
+      }
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        'Review prompt cooldown could not be saved',
+        error,
+        stackTrace,
+      );
     }
   }
 

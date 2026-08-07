@@ -160,3 +160,171 @@ export function getLocalPreviewState(location) {
   const state = new URLSearchParams(location.search).get('share-state');
   return SHARE_STATES.includes(state) ? state : null;
 }
+
+export function createByteBudget(maxBytes, { onExceeded } = {}) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new TypeError('Byte budget must be a non-negative safe integer');
+  }
+  let usedBytes = 0;
+  let exceeded = false;
+
+  return Object.freeze({
+    get exceeded() {
+      return exceeded;
+    },
+    get remainingBytes() {
+      return maxBytes - usedBytes;
+    },
+    get usedBytes() {
+      return usedBytes;
+    },
+    consume(byteLength) {
+      if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+        throw new TypeError('Consumed bytes must be a non-negative safe integer');
+      }
+      if (exceeded || byteLength > maxBytes - usedBytes) {
+        if (!exceeded) {
+          exceeded = true;
+          onExceeded?.();
+        }
+        throw new Error('Shared-note attachment budget exceeded');
+      }
+      usedBytes += byteLength;
+    }
+  });
+}
+
+function declaredContentLength(response) {
+  const value = response.headers?.get?.('content-length');
+  if (value === null || value === undefined) return null;
+  if (!/^\d+$/.test(value)) {
+    throw new Error('Attachment Content-Length is invalid');
+  }
+  const length = Number(value);
+  if (!Number.isSafeInteger(length)) {
+    throw new Error('Attachment Content-Length is invalid');
+  }
+  return length;
+}
+
+async function cancelResponseBody(response) {
+  try {
+    await response.body?.cancel?.();
+  } catch {
+    // The request may already have been aborted by the aggregate budget.
+  }
+}
+
+export async function readResponseBytesWithLimit(
+  response,
+  { maxBytes, budget }
+) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new TypeError('Attachment limit must be a non-negative safe integer');
+  }
+  const declaredLength = declaredContentLength(response);
+  if (declaredLength !== null && declaredLength > maxBytes) {
+    await cancelResponseBody(response);
+    throw new Error('Attachment is too large');
+  }
+  if (
+    declaredLength !== null &&
+    budget &&
+    declaredLength > budget.remainingBytes
+  ) {
+    await cancelResponseBody(response);
+    budget.consume(declaredLength);
+  }
+
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    throw new Error('Streaming attachment downloads are unavailable');
+  }
+
+  const chunks = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+      if (chunk.byteLength > maxBytes - received) {
+        await reader.cancel('Attachment is too large');
+        throw new Error('Attachment is too large');
+      }
+      budget?.consume(chunk.byteLength);
+      received += chunk.byteLength;
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    try {
+      await reader.cancel(error);
+    } catch {
+      // Ignore cancellation races with AbortController.
+    }
+    throw error;
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+export async function mapWithConcurrency(items, concurrency, worker) {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new TypeError('Concurrency must be a positive integer');
+  }
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const runWorker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await worker(items[index], index);
+    }
+  };
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, items.length) },
+      () => runWorker()
+    )
+  );
+  return results;
+}
+
+export function shouldObserveShareRequest(state) {
+  return state === 'pending';
+}
+
+export async function loadShareRequestState({ load, handle, watch }) {
+  if (
+    typeof load !== 'function' ||
+    typeof handle !== 'function' ||
+    typeof watch !== 'function'
+  ) {
+    throw new TypeError('Share request handlers must be functions');
+  }
+
+  const state = await handle(await load());
+  if (shouldObserveShareRequest(state)) watch();
+  return state;
+}
+
+export function createSingleFlight(operation) {
+  if (typeof operation !== 'function') {
+    throw new TypeError('Single-flight operation must be a function');
+  }
+
+  let result;
+  return (...args) => {
+    result ??= Promise.resolve().then(() => operation(...args));
+    return result;
+  };
+}

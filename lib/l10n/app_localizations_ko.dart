@@ -1840,6 +1840,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get couldNotOpenSubscriptionManagement => '구독 관리를 열 수 없습니다.';
 
   @override
+  String get subscriptionProviderUnknownContactSupport =>
+      '결제 제공업체를 확인할 수 없습니다. 도움이 필요하면 contact@betterkeep.app으로 문의하세요.';
+
+  @override
   String manageSubscriptionInStore(String store) {
     return '$store에서 구독을 관리하세요.';
   }

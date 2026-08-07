@@ -572,6 +572,7 @@
 	"purchaseCancelled": "구매가 취소되었습니다.",
 	"paymentFailed": "결제에 실패했습니다.",
 	"couldNotOpenSubscriptionManagement": "구독 관리를 열 수 없습니다.",
+	"subscriptionProviderUnknownContactSupport": "결제 제공업체를 확인할 수 없습니다. 도움이 필요하면 contact@betterkeep.app으로 문의하세요.",
 	"manageSubscriptionInStore": "{store}에서 구독을 관리하세요.",
 	"loadingFailedTryAgain": "로딩 실패 — 다시 시도",
 	"reloadPrices": "가격 다시 불러오기",

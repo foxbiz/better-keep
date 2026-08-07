@@ -405,6 +405,7 @@
 	"purchaseCancelled": "購入がキャンセルされました。",
 	"paymentFailed": "支払いに失敗しました。",
 	"couldNotOpenSubscriptionManagement": "サブスクリプション管理を開けませんでした。",
+	"subscriptionProviderUnknownContactSupport": "請求プロバイダを特定できませんでした。contact@betterkeep.app までお問い合わせください。",
 	"manageSubscriptionInStore": "{store}でサブスクリプションを管理してください。",
 	"loadingFailedTryAgain": "読み込みに失敗しました — もう一度お試しください",
 	"reloadPrices": "価格を再読み込み",

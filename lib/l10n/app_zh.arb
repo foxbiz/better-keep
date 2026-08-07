@@ -573,6 +573,7 @@
 	"purchaseCancelled": "购买已取消。",
 	"paymentFailed": "支付失败。",
 	"couldNotOpenSubscriptionManagement": "无法打开订阅管理。",
+	"subscriptionProviderUnknownContactSupport": "我们无法识别您的计费服务商。请联系 contact@betterkeep.app 获取帮助。",
 	"manageSubscriptionInStore": "在{store}中管理您的订阅。",
 	"loadingFailedTryAgain": "加载失败 — 重试",
 	"reloadPrices": "重新加载价格",

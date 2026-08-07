@@ -12,6 +12,8 @@ interface Props {
   image?: string;
   schemas?: Record<string, unknown>[];
   noindex?: boolean;
+  analytics?: boolean;
+  stripQueryParameters?: boolean;
 }
 
 const {
@@ -20,7 +22,9 @@ const {
   canonicalPath = Astro.url.pathname,
   image = '/og.png',
   schemas = [],
-  noindex = false
+  noindex = false,
+  analytics = true,
+  stripQueryParameters = false
 } = Astro.props;
 
 const canonical = new URL(canonicalPath, product.siteUrl).toString();
@@ -36,6 +40,15 @@ const storePlatformBootstrap = createStorePlatformBootstrap();
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
+    {
+      stripQueryParameters && (
+        <script is:inline>
+          if (window.location.search) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+          }
+        </script>
+      )
+    }
     <script is:inline set:html={storePlatformBootstrap}></script>
     <meta name="theme-color" content="#0b0b0d" />
     <meta name="description" content={description} />
@@ -77,34 +90,43 @@ const storePlatformBootstrap = createStorePlatformBootstrap();
         <script is:inline type="application/ld+json" set:html={JSON.stringify(schema)} />
       ))
     }
-    <script
-      is:inline
-      defer
-      data-domain="betterkeep.app"
-      src="https://plausible.io/js/script.js"
-    ></script>
-    <script is:inline>
-      window.plausible =
-        window.plausible ||
-        function () {
-          (window.plausible.q = window.plausible.q || []).push(arguments);
-        };
+    {
+      analytics && (
+        <script
+          is:inline
+          defer
+          data-domain="betterkeep.app"
+          src="https://plausible.io/js/script.js"
+        ></script>
+      )
+    }
+    {
+      analytics && (
+        <script is:inline>
+          window.plausible =
+            window.plausible ||
+            function () {
+              (window.plausible.q = window.plausible.q || []).push(arguments);
+            };
 
-      document.addEventListener('click', function (event) {
-        const target = event.target instanceof Element
-          ? event.target.closest('[data-analytics]')
-          : null;
-        const name = target && target.getAttribute('data-analytics');
-        if (name) {
-          window.plausible(name, {
-            props: {
-              path: window.location.pathname,
-              placement: target.textContent?.trim() || 'link'
+          document.addEventListener('click', function (event) {
+            const target = event.target instanceof Element
+              ? event.target.closest('[data-analytics]')
+              : null;
+            const name = target && target.getAttribute('data-analytics');
+            if (name) {
+              window.plausible(name, {
+                props: {
+                  path: window.location.pathname,
+                  placement: target.textContent?.trim() || 'link'
+                }
+              });
             }
           });
-        }
-      });
-
+        </script>
+      )
+    }
+    <script is:inline>
       const legacyStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
         window.navigator.standalone === true;

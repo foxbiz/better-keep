@@ -81,6 +81,15 @@
         ]
       },
       {
+        "source": "/account/manage{,.html,/**}",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      },
+      {
         "source": "/s/**",
         "headers": [
           {

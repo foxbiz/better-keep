@@ -1839,6 +1839,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get couldNotOpenSubscriptionManagement => 'サブスクリプション管理を開けませんでした。';
 
   @override
+  String get subscriptionProviderUnknownContactSupport =>
+      '請求プロバイダを特定できませんでした。contact@betterkeep.app までお問い合わせください。';
+
+  @override
   String manageSubscriptionInStore(String store) {
     return '$storeでサブスクリプションを管理してください。';
   }

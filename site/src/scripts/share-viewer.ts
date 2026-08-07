@@ -7,12 +7,17 @@ import type {
 import {
   classifyRequestRecord,
   classifyShareRecord,
+  createByteBudget,
+  createSingleFlight,
   decryptShareBytes,
   decryptShareText,
   detectPlatform,
   getLocalPreviewState,
   isSafeAttachmentPath,
-  parseShareLocation
+  loadShareRequestState,
+  mapWithConcurrency,
+  parseShareLocation,
+  readResponseBytesWithLimit
 } from '../lib/share-viewer.mjs';
 
 type ShareScreen =
@@ -34,6 +39,8 @@ type AttachmentRecord = {
 };
 
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const MAX_SHARED_NOTE_ATTACHMENT_BYTES = 200 * 1024 * 1024;
+const ATTACHMENT_DOWNLOAD_CONCURRENCY = 3;
 const allowedAttachmentTypes = new Set(['image', 'sketch', 'audio']);
 const allowedMimeTypes = new Set([
   'image/jpeg',
@@ -336,6 +343,16 @@ export async function startShareViewer() {
   let requestId = shareId ? readStoredRequestId(shareId) : null;
   let stopListening: (() => void) | null = null;
   const objectUrls = new Set<string>();
+  const activeAttachmentRequests = new Set<AbortController>();
+
+  const abortAttachmentRequests = () => {
+    for (const controller of activeAttachmentRequests) controller.abort();
+    activeAttachmentRequests.clear();
+  };
+  const attachmentBudget = createByteBudget(
+    MAX_SHARED_NOTE_ATTACHMENT_BYTES,
+    { onExceeded: abortAttachmentRequests }
+  );
 
   const stopRequestListener = () => {
     stopListening?.();
@@ -350,21 +367,29 @@ export async function startShareViewer() {
   const renderAttachments = async (attachments: AttachmentRecord[]) => {
     view.resetAttachments();
     const slots = attachments.map(() => view.reserveAttachmentSlot());
-    await Promise.all(
-      attachments.map(async (attachment, index) => {
+    await mapWithConcurrency(
+      attachments,
+      ATTACHMENT_DOWNLOAD_CONCURRENCY,
+      async (attachment: AttachmentRecord, index: number) => {
         const slot = slots[index];
+        const controller = new AbortController();
         try {
+          if (attachmentBudget.exceeded) {
+            throw new Error('Attachment budget exceeded');
+          }
+          activeAttachmentRequests.add(controller);
           const downloadUrl = await gateway.attachmentUrl(attachment.storagePath);
           const response = await fetch(downloadUrl, {
             cache: 'no-store',
             credentials: 'omit',
-            referrerPolicy: 'no-referrer'
+            referrerPolicy: 'no-referrer',
+            signal: controller.signal
           });
           if (!response.ok) throw new Error('Attachment download failed');
-          const encrypted = new Uint8Array(await response.arrayBuffer());
-          if (encrypted.byteLength > MAX_ATTACHMENT_BYTES) {
-            throw new Error('Attachment is too large');
-          }
+          const encrypted = await readResponseBytesWithLimit(response, {
+            maxBytes: MAX_ATTACHMENT_BYTES,
+            budget: attachmentBudget
+          });
           const decrypted = await decryptShareBytes(encrypted, shareKey);
           const url = URL.createObjectURL(
             new Blob([decrypted], { type: attachment.mimeType })
@@ -379,8 +404,10 @@ export async function startShareViewer() {
           }
         } catch {
           view.renderAttachmentError(slot);
+        } finally {
+          activeAttachmentRequests.delete(controller);
         }
-      })
+      }
     );
   };
 
@@ -418,6 +445,7 @@ export async function startShareViewer() {
       );
     }
   };
+  const decryptAndShowOnce = createSingleFlight(decryptAndShow);
 
   const handleRequest = async (record: Record<string, unknown> | null) => {
     const state = classifyRequestRecord(record);
@@ -427,15 +455,17 @@ export async function startShareViewer() {
       showRequest();
     } else if (state === 'approved') {
       stopRequestListener();
-      await decryptAndShow();
+      await decryptAndShowOnce();
     } else if (state === 'denied') {
       stopRequestListener();
       view.show('denied');
     } else if (state === 'pending' && requestId) {
       view.showPendingRequest(requestId);
     } else {
+      stopRequestListener();
       view.showError('The access request returned an unexpected response.');
     }
+    return state;
   };
 
   const startRequestListener = () => {
@@ -454,8 +484,11 @@ export async function startShareViewer() {
       return;
     }
     try {
-      await handleRequest(await gateway.loadRequest(shareId, requestId));
-      if (requestId) startRequestListener();
+      await loadShareRequestState({
+        load: () => gateway.loadRequest(shareId, requestId!),
+        handle: handleRequest,
+        watch: startRequestListener
+      });
     } catch {
       view.showError('Unable to check this access request right now.');
     }
@@ -495,6 +528,7 @@ export async function startShareViewer() {
   });
   window.addEventListener('pagehide', () => {
     stopRequestListener();
+    abortAttachmentRequests();
     for (const url of objectUrls) URL.revokeObjectURL(url);
   });
 

@@ -1905,6 +1905,10 @@ class AppLocalizationsId extends AppLocalizations {
       'Tidak dapat membuka manajemen langganan.';
 
   @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'Kami tidak dapat mengidentifikasi penyedia penagihan Anda. Hubungi contact@betterkeep.app untuk bantuan.';
+
+  @override
   String manageSubscriptionInStore(String store) {
     return 'Kelola langganan Anda di $store.';
   }

@@ -1895,6 +1895,10 @@ class AppLocalizationsTr extends AppLocalizations {
       'Abonelik yönetimi açılamadı.';
 
   @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'Faturalandırma sağlayıcınızı belirleyemedik. Yardım için contact@betterkeep.app adresiyle iletişime geçin.';
+
+  @override
   String manageSubscriptionInStore(String store) {
     return '$store\'da aboneliğinizi yönetin.';
   }

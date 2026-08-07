@@ -1436,6 +1436,8 @@ class _UserPageState extends State<UserPage> {
         message = context.l10n.subscriptionChangesMayTakeMoment;
       } else if (result.isSuccess) {
         message = context.l10n.subscriptionCancelledSuccessfully;
+      } else if (result.outcome == SubscriptionActionOutcome.providerUnknown) {
+        message = context.l10n.subscriptionProviderUnknownContactSupport;
       } else {
         message = context.l10n.couldNotOpenSubscriptionManagement;
       }

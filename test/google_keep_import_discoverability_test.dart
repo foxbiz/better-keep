@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Google Keep card is localized and opens the ZIP importer', (
+  testWidgets('Home uses a compact outlined Google Keep import action', (
     tester,
   ) async {
     final l10n = lookupAppLocalizations(const Locale('en'));
@@ -20,7 +20,8 @@ void main() {
                 onPressed: () {},
                 child: Text(l10n.createYourFirstNote),
               ),
-              const GoogleKeepImportCard(),
+              const SizedBox(height: 8),
+              const GoogleKeepImportButton(),
             ],
           ),
         ),
@@ -29,7 +30,30 @@ void main() {
 
     expect(find.text(l10n.createYourFirstNote), findsOneWidget);
     expect(find.text(l10n.googleKeepImportTitle), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, l10n.googleKeepImportTitle),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.googleKeepImportHelpSubtitle), findsNothing);
+    expect(find.byType(Card), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
+
+    await tester.tap(find.text(l10n.googleKeepImportTitle));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GoogleKeepImportPage), findsOneWidget);
+  });
+
+  testWidgets('Help card keeps its descriptive presentation and navigation', (
+    tester,
+  ) async {
+    final l10n = lookupAppLocalizations(const Locale('en'));
+    await tester.pumpWidget(_app(const Scaffold(body: GoogleKeepImportCard())));
+
+    expect(find.byType(Card), findsOneWidget);
+    expect(find.byType(ListTile), findsOneWidget);
     expect(find.text(l10n.googleKeepImportHelpSubtitle), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
 
     await tester.tap(find.text(l10n.googleKeepImportTitle));
     await tester.pumpAndSettle();

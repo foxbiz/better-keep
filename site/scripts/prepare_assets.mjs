@@ -5,6 +5,11 @@ import sharp from 'sharp';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultProjectRoot = path.resolve(path.dirname(scriptPath), '..', '..');
+const manropeFontPath = fileURLToPath(
+  import.meta.resolve(
+    '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2'
+  )
+);
 
 export const SCREENSHOT_WIDTH = 1179;
 export const SCREENSHOT_HEIGHT = 2556;
@@ -21,7 +26,7 @@ const assetCopies = Object.freeze([
   ['web/icons/ios/512.png', 'media/brand/app-icon-512.png'],
   ['web/icons/ios/180.png', 'media/brand/apple-touch-icon.png'],
   [
-    'site/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2',
+    manropeFontPath,
     'media/fonts/manrope-latin-wght-normal.woff2'
   ],
   ['site/assets/platforms/apple.svg', 'media/platforms/apple.svg'],
@@ -37,7 +42,9 @@ const assetCopies = Object.freeze([
 ]);
 
 async function copyAsset(projectRoot, outputRoot, [source, destination]) {
-  const sourcePath = path.join(projectRoot, source);
+  const sourcePath = path.isAbsolute(source)
+    ? source
+    : path.join(projectRoot, source);
   const destinationPath = path.join(outputRoot, destination);
   await mkdir(path.dirname(destinationPath), { recursive: true });
   await copyFile(sourcePath, destinationPath);

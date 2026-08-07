@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/label.dart';
@@ -13,8 +12,8 @@ import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/services/import/google_keep_takeout_parser.dart';
 import 'package:better_keep/services/import/import_fingerprint_store.dart';
+import 'package:better_keep/services/import/keep_archive_input.dart';
 import 'package:better_keep/services/import/keep_import_models.dart';
-import 'package:better_keep/services/import/keep_import_source.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
@@ -56,18 +55,12 @@ class GoogleKeepImportService {
   }) : parser = parser ?? const GoogleKeepTakeoutParser(),
        persistence = persistence ?? DatabaseKeepImportPersistence();
 
-  Future<KeepImportReport> importZip({
-    Uint8List? bytes,
-    String? filePath,
+  Future<KeepImportReport> importZip(
+    KeepArchiveInput input, {
     KeepImportOptions options = const KeepImportOptions(),
     KeepImportCancellationToken? cancellationToken,
     KeepImportProgressCallback? onProgress,
   }) async {
-    if (bytes == null && (filePath == null || filePath.isEmpty)) {
-      throw const KeepImportValidationException(
-        'Choose a Google Takeout ZIP to import.',
-      );
-    }
     final token = cancellationToken ?? KeepImportCancellationToken();
     onProgress?.call(
       const KeepImportProgress(
@@ -78,18 +71,26 @@ class GoogleKeepImportService {
       ),
     );
     token.throwIfCancelled();
-    final archiveBytes = bytes ?? await readKeepArchiveFile(filePath!);
-    final parsed = parser.parseZipBytes(
+    input.validateSize(options.maxArchiveBytes);
+    final archiveBytes = await input.read(
+      maxBytes: options.maxArchiveBytes,
+      cancellationToken: token,
+    );
+    final parsed = await parser.parseZipBytes(
       archiveBytes,
       options: options,
       cancellationToken: token,
     );
-    return _importParsed(
-      parsed,
-      options: options,
-      cancellationToken: token,
-      onProgress: onProgress,
-    );
+    try {
+      return await _importParsed(
+        parsed,
+        options: options,
+        cancellationToken: token,
+        onProgress: onProgress,
+      );
+    } finally {
+      await parsed.dispose();
+    }
   }
 
   Future<KeepImportReport> _importParsed(
@@ -121,6 +122,7 @@ class GoogleKeepImportService {
           (existing.contains(draft.fingerprint) ||
               !seen.add(draft.fingerprint))) {
         skipped++;
+        await draft.dispose();
       } else {
         seen.add(draft.fingerprint);
         pending.add(draft);
@@ -230,9 +232,13 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
         for (final attachment in draft.attachments) {
           cancellationToken.throwIfCancelled();
           try {
+            final sourceBytes = await attachment.source.read(
+              cancellationToken: cancellationToken,
+            );
+            cancellationToken.throwIfCancelled();
             if (_isImage(attachment)) {
               final preparedImage = await imagePreparation.prepare(
-                sourceBytes: attachment.bytes,
+                sourceBytes: sourceBytes,
                 extension: path.extension(attachment.archivePath),
                 generateBlurredThumbnail: true,
               );
@@ -264,7 +270,7 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
                 },
               );
               try {
-                await writeEncryptedBytes(outputPath, attachment.bytes);
+                await writeEncryptedBytes(outputPath, sourceBytes);
                 leases.add(lease);
                 noteAttachments.add(
                   NoteAttachment.audio(
@@ -293,6 +299,8 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
                     'Could not import attachment ${path.basename(attachment.archivePath)}.',
               ),
             );
+          } finally {
+            await attachment.source.dispose();
           }
         }
 
@@ -350,6 +358,7 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
 
       await AppState.db.transaction((transaction) async {
         for (final label in createdLabels) {
+          cancellationToken.throwIfCancelled();
           final labelId = await transaction.insert(
             Label.model,
             label.toJson(),
@@ -366,6 +375,7 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
         }
 
         for (var index = 0; index < prepared.length; index++) {
+          cancellationToken.throwIfCancelled();
           final item = prepared[index];
           await transaction.insert(
             Note.model,
@@ -399,6 +409,7 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
             ),
           );
         }
+        cancellationToken.throwIfCancelled();
       });
 
       for (final lease in leases) {

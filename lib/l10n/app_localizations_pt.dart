@@ -1909,6 +1909,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Não foi possível abrir o gerenciamento de assinatura.';
 
   @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'Não foi possível identificar seu provedor de cobrança. Entre em contato com contact@betterkeep.app para obter ajuda.';
+
+  @override
   String manageSubscriptionInStore(String store) {
     return 'Gerencie sua assinatura na $store.';
   }

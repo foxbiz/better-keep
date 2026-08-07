@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:better_keep/services/import/google_keep_import_service.dart';
+import 'package:better_keep/services/import/keep_archive_input.dart';
 import 'package:better_keep/services/import/keep_import_models.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -39,15 +39,26 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
       dialogTitle: context.l10n.googleKeepChooseZip,
       type: FileType.custom,
       allowedExtensions: const ['zip'],
-      withData: kIsWeb,
+      withData: false,
+      withReadStream: true,
       allowMultiple: false,
     );
     if (selection == null || selection.files.isEmpty) return;
     final file = selection.files.single;
+    final input = switch ((file.readStream, file.path, file.bytes)) {
+      (final stream?, _, _) => KeepArchiveInput.stream(stream, size: file.size),
+      (_, final filePath?, _) => KeepArchiveInput.file(
+        filePath,
+        size: file.size,
+      ),
+      (_, _, final bytes?) => KeepArchiveInput.memory(bytes),
+      _ => throw const KeepImportValidationException(
+        'The selected ZIP could not be read.',
+      ),
+    };
     await _runImport(
       (token) => _service.importZip(
-        bytes: file.bytes,
-        filePath: file.path,
+        input,
         cancellationToken: token,
         onProgress: _onProgress,
       ),

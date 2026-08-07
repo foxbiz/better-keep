@@ -58,6 +58,7 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 	assert.deepEqual(parseTestTaskArguments(["--help"]), {help: true});
 	assert.deepEqual(TEST_SUITE_NAMES, [
 		"client-sync",
+		"database-migrations",
 		"external-links",
 		"firebase-apple",
 		"firebase-emulator-android",
@@ -70,13 +71,17 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"firebase-runtime",
 		"functions",
 		"hosting",
+		"keep-import",
 		"lighthouse",
 		"localization",
 		"oauth-recovery",
 		"release",
+		"review-prompts",
 		"search",
 		"store",
+		"subscription-management",
 		"visibility",
+		"web-release",
 		"windows-build-policy",
 	]);
 	assert.match(formatTestTaskHelp(), /npm test <suite>/);
@@ -87,6 +92,7 @@ test("search suite validates site types, store metadata, and built visibility", 
 		{
 			args: [
 				"--test",
+				"test/site_account_manage_test.mjs",
 				"test/site_assets_test.mjs",
 				"test/site_public_documents_test.mjs",
 				"test/site_public_stats_test.mjs",
@@ -135,6 +141,51 @@ test("resolves individual process and pinned-runtime suites", () => {
 	]);
 });
 
+test("focused PR suites pin every required Flutter test path", () => {
+	const expectedTests = {
+		"database-migrations": ["test/database_merge_migration_test.dart"],
+		"keep-import": [
+			"test/google_keep_import_service_test.dart",
+			"test/google_keep_import_discoverability_test.dart",
+		],
+		"review-prompts": ["test/review_prompt_service_test.dart"],
+		"subscription-management": ["test/subscription_management_test.dart"],
+	};
+
+	for (const [suite, paths] of Object.entries(expectedTests)) {
+		assert.deepEqual(resolveTestTask([suite]).operations, [
+			{
+				args: ["test", ...paths],
+				command: "flutter",
+				environment: {},
+				type: "process",
+			},
+		]);
+	}
+});
+
+test("web release builds the combined site before deterministic validation", () => {
+	const operations = resolveTestTask(["web-release"]).operations;
+	assert.deepEqual(operations[0], {
+		args: [],
+		command: "./scripts/build_web.sh",
+		environment: {},
+		type: "process",
+	});
+	assert.equal(operations.at(-1).type, "firebase");
+	assert.deepEqual(operations.at(-1).args, [
+		"--",
+		"emulators:exec",
+		"--only",
+		"hosting",
+		"--config",
+		"firebase.emulators.json",
+		"--project",
+		"better-keep-notes",
+		"./scripts/test_hosting_routes.sh",
+	]);
+});
+
 test("release expands suites in the established order and excludes devices", () => {
 	const release = resolveTestTask(["release"]);
 	const serializedOperations = JSON.stringify(release.operations);
@@ -151,6 +202,14 @@ test("release expands suites in the established order and excludes devices", () 
 		"test_tasks_test.mjs",
 		"firebase_runtime_policy_test.mjs",
 		"windows_build_policy_test.mjs",
+		"database_merge_migration_test.dart",
+		"build_web.sh",
+		"site_assets_test.mjs",
+		"test_hosting_routes.sh",
+		"google_keep_import_service_test.dart",
+		"google_keep_import_discoverability_test.dart",
+		"review_prompt_service_test.dart",
+		"subscription_management_test.dart",
 		"localization_policy_test.mjs",
 		'"functions","test"',
 		"oauth_transaction_test.dart",

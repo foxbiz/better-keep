@@ -151,20 +151,26 @@ class KeepArchiveEntry {
   const KeepArchiveEntry({required this.path, required this.bytes});
 }
 
-@immutable
+abstract interface class KeepAttachmentSource {
+  int get byteLength;
+
+  Future<Uint8List> read({KeepImportCancellationToken? cancellationToken});
+
+  Future<void> dispose();
+}
+
 class KeepAttachmentDraft {
   final String archivePath;
   final String mimeType;
-  final Uint8List bytes;
+  final KeepAttachmentSource source;
 
   const KeepAttachmentDraft({
     required this.archivePath,
     required this.mimeType,
-    required this.bytes,
+    required this.source,
   });
 }
 
-@immutable
 class KeepNoteDraft {
   final String sourcePath;
   final String fingerprint;
@@ -179,8 +185,9 @@ class KeepNoteDraft {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<KeepAttachmentDraft> attachments;
+  bool _disposed = false;
 
-  const KeepNoteDraft({
+  KeepNoteDraft({
     required this.sourcePath,
     required this.fingerprint,
     required this.title,
@@ -195,17 +202,31 @@ class KeepNoteDraft {
     required this.updatedAt,
     required this.attachments,
   });
+
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    await Future.wait(
+      attachments.map((attachment) => attachment.source.dispose()),
+    );
+  }
 }
 
-@immutable
 class KeepParseResult {
   final List<KeepNoteDraft> notes;
   final List<KeepImportIssue> issues;
   final int discovered;
+  bool _disposed = false;
 
-  const KeepParseResult({
+  KeepParseResult({
     required this.notes,
     required this.issues,
     required this.discovered,
   });
+
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    await Future.wait(notes.map((note) => note.dispose()));
+  }
 }

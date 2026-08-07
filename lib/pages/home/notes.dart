@@ -1024,11 +1024,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
               ),
             ],
             if (_showGoogleKeepImportAction) ...[
-              const SizedBox(height: 16),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: const GoogleKeepImportCard(),
-              ),
+              const SizedBox(height: 8),
+              const GoogleKeepImportButton(),
             ],
           ],
         ),

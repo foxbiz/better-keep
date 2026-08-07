@@ -7,13 +7,18 @@ import {
 	SHARE_STATES,
 	classifyRequestRecord,
 	classifyShareRecord,
+	createByteBudget,
+	createSingleFlight,
 	decodeBase64,
 	decryptShareBytes,
 	decryptShareText,
 	detectPlatform,
 	getLocalPreviewState,
 	isSafeAttachmentPath,
+	loadShareRequestState,
+	mapWithConcurrency,
 	parseShareLocation,
+	readResponseBytesWithLimit,
 } from "../site/src/lib/share-viewer.mjs";
 
 const repositoryRoot = process.cwd();
@@ -176,6 +181,154 @@ test("platform, preview, and attachment helpers reject unsafe variants", () => {
 	]);
 });
 
+function streamingResponse(chunks, {contentLength} = {}) {
+	let index = 0;
+	let cancelled = false;
+	const reader = {
+		async read() {
+			if (cancelled || index >= chunks.length) return {done: true};
+			return {done: false, value: Uint8Array.from(chunks[index++])};
+		},
+		async cancel() {
+			cancelled = true;
+		},
+		releaseLock() {},
+	};
+	return {
+		response: {
+			headers: new Headers(
+				contentLength === undefined
+					? {}
+					: {"content-length": String(contentLength)},
+			),
+			body: {
+				getReader: () => reader,
+				async cancel() {
+					cancelled = true;
+				},
+			},
+		},
+		get cancelled() {
+			return cancelled;
+		},
+	};
+}
+
+test("bounded attachment reader rejects oversized declared lengths", async () => {
+	const stream = streamingResponse([], {contentLength: 11});
+	await assert.rejects(
+		readResponseBytesWithLimit(stream.response, {maxBytes: 10}),
+		/too large/,
+	);
+	assert.equal(stream.cancelled, true);
+});
+
+test("bounded attachment reader stops streams without a trustworthy length", async () => {
+	const stream = streamingResponse([[1, 2, 3], [4, 5, 6]]);
+	await assert.rejects(
+		readResponseBytesWithLimit(stream.response, {maxBytes: 5}),
+		/too large/,
+	);
+	assert.equal(stream.cancelled, true);
+});
+
+test("bounded attachment reader distrusts a misleading short length", async () => {
+	const stream = streamingResponse([[1, 2, 3], [4, 5, 6]], {contentLength: 2});
+	await assert.rejects(
+		readResponseBytesWithLimit(stream.response, {maxBytes: 5}),
+		/too large/,
+	);
+	assert.equal(stream.cancelled, true);
+});
+
+test("bounded attachment reader accepts the exact limit", async () => {
+	const stream = streamingResponse([[1, 2], [3, 4, 5]], {contentLength: 5});
+	assert.deepEqual(
+		await readResponseBytesWithLimit(stream.response, {maxBytes: 5}),
+		Uint8Array.from([1, 2, 3, 4, 5]),
+	);
+});
+
+test("shared-note aggregate budget aborts on overflow", async () => {
+	let overflows = 0;
+	const budget = createByteBudget(5, {onExceeded: () => overflows++});
+	const first = streamingResponse([[1, 2, 3]]);
+	await readResponseBytesWithLimit(first.response, {maxBytes: 5, budget});
+	const second = streamingResponse([[4, 5, 6]]);
+	await assert.rejects(
+		readResponseBytesWithLimit(second.response, {maxBytes: 5, budget}),
+		/budget exceeded/,
+	);
+	assert.equal(second.cancelled, true);
+	assert.equal(budget.usedBytes, 3);
+	assert.equal(budget.exceeded, true);
+	assert.equal(overflows, 1);
+});
+
+test("concurrency helper caps active work and preserves result order", async () => {
+	let active = 0;
+	let maximumActive = 0;
+	const results = await mapWithConcurrency([0, 1, 2, 3, 4, 5, 6], 3, async (item) => {
+		active++;
+		maximumActive = Math.max(maximumActive, active);
+		await new Promise((resolve) => setTimeout(resolve, (6 - item) % 3));
+		active--;
+		return `result-${item}`;
+	});
+	assert.equal(maximumActive, 3);
+	assert.deepEqual(results, [
+		"result-0",
+		"result-1",
+		"result-2",
+		"result-3",
+		"result-4",
+		"result-5",
+		"result-6",
+	]);
+});
+
+test("only pending access requests need a live observer", async () => {
+	for (const state of ["approved", "denied", "missing", "invalid"]) {
+		let watches = 0;
+		assert.equal(
+			await loadShareRequestState({
+				load: async () => ({status: state}),
+				handle: async () => state,
+				watch: () => watches++,
+			}),
+			state,
+		);
+		assert.equal(watches, 0);
+	}
+
+	let watches = 0;
+	assert.equal(
+		await loadShareRequestState({
+			load: async () => ({status: "pending"}),
+			handle: async () => "pending",
+			watch: () => watches++,
+		}),
+		"pending",
+	);
+	assert.equal(watches, 1);
+});
+
+test("single-flight approved rendering runs only once per viewer session", async () => {
+	let calls = 0;
+	const renderOnce = createSingleFlight(async () => {
+		calls++;
+		await new Promise((resolve) => setTimeout(resolve, 1));
+		return "rendered";
+	});
+
+	assert.deepEqual(
+		await Promise.all([renderOnce(), renderOnce(), renderOnce()]),
+		["rendered", "rendered", "rendered"],
+	);
+	assert.equal(await renderOnce(), "rendered");
+	assert.equal(calls, 1);
+});
+
 test("Astro is the single source for the focused shared-note viewer", async () => {
 	await assert.rejects(access(path.join(repositoryRoot, "web", "s", "index.html")));
 	const [route, layout, component, runtime, gateway, styles, buildScript] =
@@ -202,6 +355,13 @@ test("Astro is the single source for the focused shared-note viewer", async () =
 	assert.match(runtime, /from 'marked'/);
 	assert.match(runtime, /import\('\.\/share-firebase'\)/);
 	assert.match(runtime, /URL\.revokeObjectURL/);
+	assert.match(runtime, /createSingleFlight\(decryptAndShow\)/);
+	assert.match(runtime, /loadShareRequestState\(/);
+	assert.equal(
+		(runtime.match(/createByteBudget\(\s*MAX_SHARED_NOTE_ATTACHMENT_BYTES/g) || [])
+			.length,
+		1,
+	);
 	const attachmentRuntime = runtime.slice(
 		runtime.indexOf("const renderAttachments = async"),
 		runtime.indexOf("const decryptAndShow = async"),
@@ -209,9 +369,12 @@ test("Astro is the single source for the focused shared-note viewer", async () =
 	const slotReservation = attachmentRuntime.indexOf(
 		"const slots = attachments.map(() => view.reserveAttachmentSlot())",
 	);
-	const concurrentWork = attachmentRuntime.indexOf("await Promise.all");
+	const concurrentWork = attachmentRuntime.indexOf("await mapWithConcurrency");
 	assert.ok(slotReservation >= 0 && slotReservation < concurrentWork);
-	assert.match(attachmentRuntime, /attachments\.map\(async \(attachment, index\)/);
+	assert.match(attachmentRuntime, /ATTACHMENT_DOWNLOAD_CONCURRENCY/);
+	assert.match(attachmentRuntime, /readResponseBytesWithLimit\(response/);
+	assert.match(attachmentRuntime, /signal: controller\.signal/);
+	assert.doesNotMatch(attachmentRuntime, /response\.arrayBuffer/);
 	assert.match(attachmentRuntime, /const slot = slots\[index\]/);
 	assert.match(attachmentRuntime, /renderAudioAttachment\(slot,/);
 	assert.match(attachmentRuntime, /renderImageAttachment\(slot,/);

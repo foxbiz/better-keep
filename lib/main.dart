@@ -637,7 +637,20 @@ class _BetterKeepState extends State<BetterKeep> {
         );
       }
       await Label.fixLabels();
-      await ReviewPromptService.instance.initialize();
+      unawaited(
+        ReviewPromptService.instance.initialize().catchError((
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          unawaited(
+            AppLogger.error(
+              'Review prompt initialization failed',
+              error,
+              stackTrace,
+            ),
+          );
+        }),
+      );
       unawaited(SketchPreviewRepairService.runIfNeeded());
       setState(() {
         this.db = db;

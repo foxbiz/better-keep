@@ -64,6 +64,7 @@ request "/media/screenshots/2.png" "manifest_screenshot"
 request "/icons/platforms/apple.svg" "redundant_platform_icon"
 request "/icons/store-badges/app-store.svg" "redundant_store_badge"
 request "/auth" "auth"
+request "/account/manage?uid=legacy-user&email=private%40example.com" "account_manage"
 request "/s/example" "share"
 request "/welcome" "welcome"
 request "/welcome.html" "welcome_html"
@@ -108,6 +109,14 @@ expect_status "redundant_platform_icon" "404"
 expect_status "redundant_store_badge" "404"
 expect_status "auth" "200"
 expect_header "auth" "^x-robots-tag: noindex, nofollow"
+expect_status "account_manage" "200"
+expect_header "account_manage" "^x-robots-tag: noindex, nofollow"
+expect_body "account_manage" 'name="robots" content="noindex, nofollow"'
+expect_body "account_manage" "Manage with Apple"
+expect_body "account_manage" "Manage with Google Play"
+if rg --quiet --ignore-case "legacy-user|private@example.com|plausible.io" "$TEST_OUTPUT/account_manage.body"; then
+  failures+=("account_manage exposes legacy identifiers or analytics")
+fi
 expect_status "share" "200"
 expect_header "share" "^x-robots-tag: noindex, nofollow"
 expect_body "share" "Securely shared through Better Keep"

@@ -574,6 +574,7 @@
 	"purchaseCancelled": "Pembelian dibatalkan.",
 	"paymentFailed": "Pembayaran gagal.",
 	"couldNotOpenSubscriptionManagement": "Tidak dapat membuka manajemen langganan.",
+	"subscriptionProviderUnknownContactSupport": "Kami tidak dapat mengidentifikasi penyedia penagihan Anda. Hubungi contact@betterkeep.app untuk bantuan.",
 	"manageSubscriptionInStore": "Kelola langganan Anda di {store}.",
 	"loadingFailedTryAgain": "Gagal memuat — Coba lagi",
 	"reloadPrices": "Muat ulang harga",

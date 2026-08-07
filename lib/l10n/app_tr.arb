@@ -1794,6 +1794,8 @@
 		"description": "Error when unable to open platform subscription management"
 	},
 
+	"subscriptionProviderUnknownContactSupport": "Faturalandırma sağlayıcınızı belirleyemedik. Yardım için contact@betterkeep.app adresiyle iletişime geçin.",
+
 	"manageSubscriptionInStore": "{store}'da aboneliğinizi yönetin.",
 	"@manageSubscriptionInStore": {
 		"description": "Message shown when redirecting to store subscription management",

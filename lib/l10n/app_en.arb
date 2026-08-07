@@ -1821,6 +1821,11 @@
 		"description": "Error when unable to open platform subscription management"
 	},
 
+	"subscriptionProviderUnknownContactSupport": "We could not identify your billing provider. Contact contact@betterkeep.app for help.",
+	"@subscriptionProviderUnknownContactSupport": {
+		"description": "Support guidance when a legacy subscription has no known billing provider"
+	},
+
 	"manageSubscriptionInStore": "Manage your subscription in the {store}.",
 	"@manageSubscriptionInStore": {
 		"description": "Message shown when redirecting to store subscription management",

@@ -1890,6 +1890,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not open subscription management.';
 
   @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'We could not identify your billing provider. Contact contact@betterkeep.app for help.';
+
+  @override
   String manageSubscriptionInStore(String store) {
     return 'Manage your subscription in the $store.';
   }

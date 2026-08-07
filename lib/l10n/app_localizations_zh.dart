@@ -1819,6 +1819,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get couldNotOpenSubscriptionManagement => '无法打开订阅管理。';
 
   @override
+  String get subscriptionProviderUnknownContactSupport =>
+      '我们无法识别您的计费服务商。请联系 contact@betterkeep.app 获取帮助。';
+
+  @override
   String manageSubscriptionInStore(String store) {
     return '在$store中管理您的订阅。';
   }
