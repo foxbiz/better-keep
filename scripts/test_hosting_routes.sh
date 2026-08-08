@@ -52,6 +52,12 @@ expect_body() {
   fi
 }
 
+expect_home_redirect() {
+  local name="$1"
+  expect_status "$name" "301"
+  expect_header "$name" '^location: /[[:space:]]*$'
+}
+
 request "/" "home"
 astro_asset_path="$(
   LC_ALL=C grep -Eio -- '/_astro/[^"[:space:]<>]+\.[[:alnum:]_-]{8,}\.(css|js)' \
@@ -74,6 +80,8 @@ request "/account/manage?uid=legacy-user&email=private%40example.com" "account_m
 request "/s/example" "share"
 request "/welcome" "welcome"
 request "/welcome.html" "welcome_html"
+request "/welcome/" "welcome_slash"
+request "/welcome/legacy" "welcome_legacy"
 request "/encryption.html" "encryption_html"
 request "/open-source.html" "open_source_html"
 request "/self-host.html" "self_host_html"
@@ -128,10 +136,10 @@ expect_header "share" "^x-robots-tag: noindex, nofollow"
 expect_body "share" "Securely shared through Better Keep"
 expect_body "share" "data-share-screen=.?loading"
 expect_body "share" "media/brand/logo.svg"
-expect_status "welcome" "301"
-expect_header "welcome" "^location: /"
-expect_status "welcome_html" "301"
-expect_header "welcome_html" "^location: /"
+expect_home_redirect "welcome"
+expect_home_redirect "welcome_html"
+expect_home_redirect "welcome_slash"
+expect_home_redirect "welcome_legacy"
 expect_status "encryption_html" "301"
 expect_header "encryption_html" "^location: /security"
 expect_status "open_source_html" "301"

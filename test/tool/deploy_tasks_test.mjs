@@ -35,6 +35,19 @@ function assertHostingCachePolicy(config) {
 	);
 }
 
+function assertWelcomeRedirects(config) {
+	for (const source of ["/welcome{,/**}", "/welcome.html"]) {
+		assert.ok(
+			config.hosting.redirects.some(
+				(entry) =>
+					entry.source === source &&
+					entry.destination === "/" &&
+					entry.type === 301,
+			),
+		);
+	}
+}
+
 test("lists deployment targets and treats an omitted target as help", () => {
 	assert.deepEqual(parseDeployTaskArguments([]), {help: true});
 	assert.deepEqual(parseDeployTaskArguments(["help"]), {help: true});
@@ -145,11 +158,7 @@ test("production Hosting serves the combined site with protected app routes", ()
 				),
 		),
 	);
-	assert.ok(
-		config.hosting.redirects.some(
-			(entry) => entry.source === "/welcome{,.html}" && entry.destination === "/",
-		),
-	);
+	assertWelcomeRedirects(config);
 });
 
 test("the full emulator serves the same combined web artifact", () => {
@@ -157,6 +166,7 @@ test("the full emulator serves the same combined web artifact", () => {
 	assert.equal(config.hosting.public, "build/web");
 	assert.equal(config.hosting.cleanUrls, true);
 	assertHostingCachePolicy(config);
+	assertWelcomeRedirects(config);
 	assert.deepEqual(config.hosting.rewrites, [
 		{source: "/oauth/start", function: "oauthStart"},
 		{source: "/oauth/callback", function: "oauthCallback"},

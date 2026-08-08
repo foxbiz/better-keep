@@ -143,7 +143,12 @@
     ],
     "redirects": [
       {
-        "source": "/welcome{,.html}",
+        "source": "/welcome{,/**}",
+        "destination": "/",
+        "type": 301
+      },
+      {
+        "source": "/welcome.html",
         "destination": "/",
         "type": 301
       },
