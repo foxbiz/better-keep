@@ -1,6 +1,9 @@
 name: Build Release Artifacts
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     tags:
       - 'v*'
@@ -77,6 +80,7 @@ jobs:
   build-android:
     name: Build Android APK
     needs: release-gate
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -138,6 +142,7 @@ jobs:
   build-windows:
     name: Build Windows
     needs: release-gate
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: windows-2025-vs2026
     timeout-minutes: 30
 
@@ -240,12 +245,22 @@ jobs:
   build-macos:
     name: Build macOS
     needs: release-gate
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: macos-latest
     timeout-minutes: 60
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install task-runner dependencies
+        run: npm ci
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -256,13 +271,15 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Create GoogleService-Info.plist
-        run: |
-          echo '${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}' > macos/Runner/GoogleService-Info.plist
-
       - name: Create .env file
         run: |
           echo '${{ secrets.ENV_FILE }}' > .env
+
+      - name: Create GoogleService-Info.plist
+        run: >-
+          node tool/firebase_apple_plist.mjs
+          --env .env
+          --output macos/Runner/GoogleService-Info.plist
 
       - name: Verify Apple Firebase configuration
         run: npm run check apple-config

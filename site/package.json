@@ -1,0 +1,28 @@
+{
+  "name": "better-keep-marketing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/prepare_assets.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/prepare_assets.mjs",
+    "build": "astro build",
+    "postbuild": "node scripts/validate_design.mjs",
+    "check": "astro check",
+    "lighthouse": "node scripts/run_lighthouse.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@lucide/astro": "^1.27.0",
+    "astro": "^7.1.3",
+    "dompurify": "^3.4.13",
+    "firebase": "^12.16.0",
+    "marked": "^13.0.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "lighthouse": "^13.4.1",
+    "sharp": "^0.35.3",
+    "typescript": "^5.9.2"
+  }
+}

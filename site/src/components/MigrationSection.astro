@@ -1,0 +1,30 @@
+---
+import { product } from '../data/product';
+import Icon from './Icon.astro';
+---
+
+<section class="home-section migration-section">
+  <div class="migration-card container">
+    <div class="migration-card__copy">
+      <p class="eyebrow">Bring the archive. Keep the privacy.</p>
+      <h2>Move from Google Keep without uploading your Takeout ZIP.</h2>
+      <p>
+        Better Keep processes the archive locally, preserves supported note
+        details, skips exact repeat imports, and reports anything that needs
+        attention.
+      </p>
+      <a
+        class="button button--secondary"
+        href="/import/google-keep"
+        data-analytics={product.analyticsGoals.keepImport}
+      >
+        Read the import guide <Icon name="ArrowRight" size={18} />
+      </a>
+    </div>
+    <ol class="migration-steps">
+      <li><span>01</span><strong>Export</strong><small>Download your Google Takeout archive.</small></li>
+      <li><span>02</span><strong>Import locally</strong><small>Select the ZIP inside Better Keep.</small></li>
+      <li><span>03</span><strong>Review</strong><small>See imported, skipped, and unsupported items.</small></li>
+    </ol>
+  </div>
+</section>

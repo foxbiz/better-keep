@@ -1,0 +1,118 @@
+---
+import { product } from '../data/product';
+import Icon from './Icon.astro';
+---
+
+<header class="site-header" data-site-header>
+  <nav class="nav container" aria-label="Primary navigation">
+    <a class="brand" href="/" aria-label="Better Keep home">
+      <img src="/media/brand/logo.svg" width="38" height="38" alt="" />
+      <span>Better Keep</span>
+    </a>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/import/google-keep">Import</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
+      <a
+        class="button nav-launch"
+        href={product.webAppUrl}
+        data-analytics={product.analyticsGoals.webApp}
+      >
+        Open web app
+        <Icon name="ArrowRight" size={17} />
+      </a>
+    </div>
+    <button
+      class="mobile-menu-toggle"
+      type="button"
+      aria-label="Open navigation"
+      aria-expanded="false"
+      aria-controls="mobile-navigation"
+      data-menu-toggle
+    >
+      <span data-menu-open-icon><Icon name="Menu" size={25} /></span>
+      <span data-menu-close-icon hidden><Icon name="X" size={25} /></span>
+    </button>
+  </nav>
+  <div class="mobile-navigation" id="mobile-navigation" data-mobile-navigation hidden>
+    <div class="container mobile-navigation__links">
+      <a href="/#features">Features</a>
+      <a href="/#platforms">Platforms</a>
+      <a href="/import/google-keep">Import from Google Keep</a>
+      <a href="/security">Security</a>
+      <a href="/pricing">Pricing</a>
+      <a
+        class="button"
+        href={product.webAppUrl}
+        data-analytics={product.analyticsGoals.webApp}
+      >
+        Open web app
+        <Icon name="ArrowRight" size={17} />
+      </a>
+    </div>
+  </div>
+</header>
+
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>('[data-menu-toggle]');
+  const navigation = document.querySelector<HTMLElement>('[data-mobile-navigation]');
+  const openIcon = toggle?.querySelector<HTMLElement>('[data-menu-open-icon]');
+  const closeIcon = toggle?.querySelector<HTMLElement>('[data-menu-close-icon]');
+  const focusableSelector = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let returnFocus: HTMLElement | null = null;
+
+  const isMenuOpen = () => toggle?.getAttribute('aria-expanded') === 'true';
+
+  const setMenuOpen = (open: boolean, restoreFocus = true) => {
+    if (!toggle || !navigation || !openIcon || !closeIcon) return;
+    if (open) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : toggle;
+
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+    navigation.hidden = !open;
+    openIcon.hidden = open;
+    closeIcon.hidden = !open;
+    document.documentElement.classList.toggle('menu-open', open);
+
+    if (open) {
+      requestAnimationFrame(() => {
+        navigation.querySelector<HTMLElement>(focusableSelector)?.focus();
+      });
+    } else if (restoreFocus) {
+      returnFocus?.focus();
+      returnFocus = null;
+    }
+  };
+
+  toggle?.addEventListener('click', () => setMenuOpen(!isMenuOpen()));
+  navigation?.querySelectorAll('a').forEach((link) => {
+    link.addEventListener('click', () => setMenuOpen(false, false));
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (!isMenuOpen() || !navigation) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setMenuOpen(false);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = [toggle, ...navigation.querySelectorAll<HTMLElement>(focusableSelector)];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 860 && isMenuOpen()) setMenuOpen(false, false);
+  });
+</script>

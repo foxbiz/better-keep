@@ -37,9 +37,18 @@ const actions = {
 			]),
 		],
 	),
-	audit: defineAction("Audit root and Functions production dependencies.", () => [
+	audit: defineAction("Validate and audit project dependencies.", () => [
+		processStep("npm", [
+			"ls",
+			"--all",
+			"--workspaces",
+			"--include-workspace-root",
+		]),
 		processStep("npm", ["audit", "--omit=dev"]),
 		...resolveFunctionsTask(["audit"]).operations,
+	]),
+	site: defineAction("Type-check the Astro marketing site.", () => [
+		processStep("npm", ["--prefix", "site", "run", "check"]),
 	]),
 };
 

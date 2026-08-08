@@ -1777,11 +1777,11 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get openSource => 'Código aberto';
+  String get openSource => 'Código disponível';
 
   @override
   String get openSourceDescription =>
-      'Better Keep é código aberto! Veja o código,\ncontribua ou reporte problemas no GitHub.';
+      'O código pode ser consultado sob a licença CC BY-NC 4.0. Como o uso comercial é restrito, ele é source-available, não código aberto aprovado pela OSI.';
 
   @override
   String get frequentlyAskedQuestions => 'Perguntas frequentes';
@@ -1907,6 +1907,10 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get couldNotOpenSubscriptionManagement =>
       'Não foi possível abrir o gerenciamento de assinatura.';
+
+  @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'Não foi possível identificar seu provedor de cobrança. Entre em contato com contact@betterkeep.app para obter ajuda.';
 
   @override
   String manageSubscriptionInStore(String store) {
@@ -3491,4 +3495,96 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       'A reorganização manual não está disponível ao ordenar por data. Escolha Personalizado para reorganizar as notas.';
+
+  @override
+  String get googleKeepImportTitle => 'Importar do Google Keep';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Mova um arquivo do Google Takeout localmente, sem precisar enviá-lo.';
+
+  @override
+  String get googleKeepImportPrivacyTitle =>
+      'Seu arquivo permanece neste dispositivo';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'O Better Keep valida e converte o arquivo do Google Takeout localmente. O ZIP não é enviado a um serviço de conversão. As notas só entram no fluxo normal de sincronização opcional depois que a importação é salva com sucesso.';
+
+  @override
+  String get googleKeepImportBeforeStart => 'Antes de começar';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Abra o Google Takeout e selecione apenas o Keep.\n2. Crie e baixe a exportação.\n3. Escolha o ZIP abaixo. Reimportações idênticas são ignoradas por padrão.';
+
+  @override
+  String get googleKeepChooseZip => 'Escolher ZIP do Takeout';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions =>
+      'Abrir instruções do Google Takeout';
+
+  @override
+  String get googleKeepCancelImport => 'Cancelar importação';
+
+  @override
+  String get googleKeepImportCancelled =>
+      'Importação cancelada. Nenhuma nota foi salva.';
+
+  @override
+  String get googleKeepImportFailed =>
+      'A importação falhou. Verifique sua seleção e tente novamente.';
+
+  @override
+  String get googleKeepImportReportTitle =>
+      'Relatório de importação do Google Keep no Better Keep';
+
+  @override
+  String get googleKeepImportValidating =>
+      'Validando o arquivo do Google Takeout…';
+
+  @override
+  String get googleKeepImportParsing => 'Lendo notas do Google Keep…';
+
+  @override
+  String get googleKeepImportPreparingAttachments =>
+      'Preparando anexos importados…';
+
+  @override
+  String get googleKeepImportSaving => 'Salvando notas importadas…';
+
+  @override
+  String get googleKeepImportStarting => 'Iniciando importação…';
+
+  @override
+  String get googleKeepImportComplete => 'Importação concluída';
+
+  @override
+  String get googleKeepSafetyLimits => 'Limites de segurança';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'Os arquivos ZIP são limitados a 100 MB compactados, 500 MB expandidos, 20.000 arquivos e 50 MB por arquivo. Caminhos inseguros, links simbólicos e arquivos malformados são rejeitados antes que as notas sejam salvas.';
+
+  @override
+  String get googleKeepImported => 'Importadas';
+
+  @override
+  String get googleKeepSkipped => 'Ignoradas';
+
+  @override
+  String get googleKeepWarnings => 'Avisos';
+
+  @override
+  String get googleKeepUnsupported => 'Não compatíveis';
+
+  @override
+  String get googleKeepFailed => 'Falhas';
+
+  @override
+  String get googleKeepReviewDetails => 'Revisar detalhes da importação';
+
+  @override
+  String get googleKeepShareReport => 'Compartilhar relatório completo';
 }

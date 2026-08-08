@@ -9,6 +9,7 @@ import 'package:better_keep/services/country_detection_service.dart';
 import 'package:better_keep/services/monetization/google_play_product_selector.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
+import 'package:better_keep/services/monetization/subscription_management.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -1570,15 +1571,15 @@ Expected IDs: ${ProductIds.all}
       );
     }
     final subscriptionStatus = PlanService.instance.status;
+    final target = resolveSubscriptionManagementTarget(
+      purchasePlatform: subscriptionStatus.purchasePlatform,
+      currentPlatform: _subscriptionManagementPlatform,
+    );
 
-    // For Razorpay subscriptions, cancel via API (regardless of current platform)
-    if (subscriptionStatus.isRazorpaySubscription) {
-      return _cancelRazorpaySubscription();
-    }
-
-    // On mobile/macOS, redirect to platform subscription management
-    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid || Platform.isMacOS)) {
-      if (_isApplePlatform) {
+    switch (target.action) {
+      case SubscriptionManagementAction.razorpayApi:
+        return _cancelRazorpaySubscription();
+      case SubscriptionManagementAction.appStoreNative:
         // Use StoreKit 2 API which handles sandbox vs production automatically
         try {
           const channel = MethodChannel('com.betterkeep/subscriptions');
@@ -1597,68 +1598,45 @@ Expected IDs: ${ProductIds.all}
           AppLogger.log(
             'StoreKit manage subscriptions failed, falling back to URL: $e',
           );
-          try {
-            final launched = await launchUrl(
-              Uri.parse('https://apps.apple.com/account/subscriptions'),
-              mode: LaunchMode.externalApplication,
-            );
-            if (!launched) {
-              return CancelResult.failed(
-                'Could not open subscription management',
-              );
-            }
-            return CancelResult.pending(
-              'Manage your subscription in the App Store',
-            );
-          } catch (e2) {
-            return CancelResult.failed(
-              'Error opening subscription management: $e2',
-            );
-          }
+          return _openSubscriptionManagementUrl(target);
         }
-      } else {
-        // Android - Google Play subscriptions
-        try {
-          final launched = await launchUrl(
-            Uri.parse('https://play.google.com/store/account/subscriptions'),
-            mode: LaunchMode.externalApplication,
-          );
-          if (!launched) {
-            return CancelResult.failed(
-              'Could not open subscription management',
-            );
-          }
-          return CancelResult.pending(
-            'Manage your subscription in the Play Store',
-          );
-        } catch (e) {
-          return CancelResult.failed(
-            'Error opening subscription management: $e',
-          );
-        }
-      }
+      case SubscriptionManagementAction.externalUrl:
+        return _openSubscriptionManagementUrl(target);
+      case SubscriptionManagementAction.contactSupport:
+        return CancelResult.failed(
+          'We could not identify the billing provider. Contact '
+          'contact@betterkeep.app for help managing this subscription.',
+          outcome: SubscriptionActionOutcome.providerUnknown,
+        );
     }
+  }
 
-    // For web/desktop, redirect to account management portal
-    final manageUrl = Uri.parse(
-      'https://betterkeep.app/account/manage'
-      '?uid=${user.uid}'
-      '&email=${Uri.encodeComponent(user.email ?? '')}',
-    );
+  SubscriptionManagementPlatform get _subscriptionManagementPlatform {
+    if (kIsWeb) return SubscriptionManagementPlatform.web;
+    if (Platform.isIOS) return SubscriptionManagementPlatform.ios;
+    if (Platform.isAndroid) return SubscriptionManagementPlatform.android;
+    if (Platform.isMacOS) return SubscriptionManagementPlatform.macos;
+    if (Platform.isWindows) return SubscriptionManagementPlatform.windows;
+    if (Platform.isLinux) return SubscriptionManagementPlatform.linux;
+    return SubscriptionManagementPlatform.other;
+  }
 
+  Future<CancelResult> _openSubscriptionManagementUrl(
+    SubscriptionManagementTarget target,
+  ) async {
     try {
       final launched = await launchUrl(
-        manageUrl,
+        Uri.parse(target.url!),
         mode: LaunchMode.externalApplication,
       );
 
       if (!launched) {
-        return CancelResult.failed('Could not open account management');
+        return CancelResult.failed('Could not open subscription management');
       }
 
-      return CancelResult.pending('Manage your subscription in your browser');
+      return CancelResult.pending(target.pendingMessage!);
     } catch (e) {
-      return CancelResult.failed('Error opening account management: $e');
+      return CancelResult.failed('Error opening subscription management: $e');
     }
   }
 
@@ -1831,5 +1809,6 @@ enum SubscriptionActionOutcome {
   signInRequired,
   unavailable,
   notFound,
+  providerUnknown,
   failed,
 }

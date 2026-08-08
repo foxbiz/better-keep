@@ -1,7 +1,8 @@
 {
     "name": "Better Keep",
     "short_name": "Better Keep",
-    "start_url": ".",
+    "start_url": "/app/",
+    "scope": "/app/",
     "display": "standalone",
     "background_color": "#1c1b1f",
     "theme_color": "#1c1b1f",
@@ -93,43 +94,22 @@
     ],
     "screenshots": [
         {
-            "src": "screenshots/1.jpg",
-            "sizes": "1080x2340",
-            "type": "image/jpeg",
-            "label": "Notes list view"
+            "src": "/media/screenshots/2.png",
+            "sizes": "1179x2556",
+            "type": "image/png",
+            "label": "Card-based notes home"
         },
         {
-            "src": "screenshots/2.jpg",
-            "sizes": "1080x2340",
-            "type": "image/jpeg",
-            "label": "Note editor"
+            "src": "/media/screenshots/3.png",
+            "sizes": "1179x2556",
+            "type": "image/png",
+            "label": "Rich text note editor"
         },
         {
-            "src": "screenshots/3.jpg",
-            "sizes": "1080x2340",
-            "type": "image/jpeg",
-            "label": "Rich text formatting"
-        },
-        {
-            "src": "screenshots/10.jpg",
-            "sizes": "2560x1504",
-            "type": "image/jpeg",
-            "form_factor": "wide",
-            "label": "Desktop notes view"
-        },
-        {
-            "src": "screenshots/11.jpg",
-            "sizes": "2560x1504",
-            "type": "image/jpeg",
-            "form_factor": "wide",
-            "label": "Desktop note editor"
-        },
-        {
-            "src": "screenshots/12.jpg",
-            "sizes": "2560x1504",
-            "type": "image/jpeg",
-            "form_factor": "wide",
-            "label": "Desktop organization"
+            "src": "/media/screenshots/4.png",
+            "sizes": "1179x2556",
+            "type": "image/png",
+            "label": "Note organization and settings"
         }
     ],
     "related_applications": [

@@ -1,0 +1,13 @@
+period_start,period_end,channel,territory,locale,metric,value,notes
+YYYY-MM-DD,YYYY-MM-DD,search,,,impressions,,
+YYYY-MM-DD,YYYY-MM-DD,search,,,clicks,,
+YYYY-MM-DD,YYYY-MM-DD,search,,,indexed_pages,,
+YYYY-MM-DD,YYYY-MM-DD,website,,,store_click_ios,,
+YYYY-MM-DD,YYYY-MM-DD,website,,,store_click_android,,
+YYYY-MM-DD,YYYY-MM-DD,website,,,open_web_app,,
+YYYY-MM-DD,YYYY-MM-DD,app_store,,,product_page_views,,
+YYYY-MM-DD,YYYY-MM-DD,app_store,,,first_time_downloads,,
+YYYY-MM-DD,YYYY-MM-DD,play_store,,,store_listing_visitors,,
+YYYY-MM-DD,YYYY-MM-DD,play_store,,,store_listing_acquisitions,,
+YYYY-MM-DD,YYYY-MM-DD,app_quality,,,crash_free_users,,
+YYYY-MM-DD,YYYY-MM-DD,app_quality,,,android_anr_rate,,

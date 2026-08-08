@@ -1772,11 +1772,11 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get openSource => 'Open Source';
+  String get openSource => 'Sumber Tersedia';
 
   @override
   String get openSourceDescription =>
-      'Better Keep adalah open source! Lihat kode,\nberkontribusi, atau laporkan masalah di GitHub.';
+      'Kode sumber dapat diperiksa dengan lisensi CC BY-NC 4.0. Karena penggunaan komersial dibatasi, ini adalah source-available, bukan open source yang disetujui OSI.';
 
   @override
   String get frequentlyAskedQuestions => 'Pertanyaan yang Sering Diajukan';
@@ -1903,6 +1903,10 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get couldNotOpenSubscriptionManagement =>
       'Tidak dapat membuka manajemen langganan.';
+
+  @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'Kami tidak dapat mengidentifikasi penyedia penagihan Anda. Hubungi contact@betterkeep.app untuk bantuan.';
 
   @override
   String manageSubscriptionInStore(String store) {
@@ -3459,4 +3463,95 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       'Pengaturan ulang manual tidak tersedia saat mengurutkan berdasarkan tanggal. Pilih Kustom untuk mengatur ulang catatan.';
+
+  @override
+  String get googleKeepImportTitle => 'Impor dari Google Keep';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Pindahkan arsip Google Takeout secara lokal—tanpa perlu mengunggah.';
+
+  @override
+  String get googleKeepImportPrivacyTitle =>
+      'Arsip Anda tetap berada di perangkat ini';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'Better Keep memvalidasi dan mengonversi arsip Google Takeout secara lokal. ZIP tidak diunggah ke layanan konversi. Catatan hanya masuk ke alur sinkronisasi opsional setelah impor berhasil disimpan.';
+
+  @override
+  String get googleKeepImportBeforeStart => 'Sebelum memulai';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Buka Google Takeout dan pilih hanya Keep.\n2. Buat dan unduh ekspor.\n3. Pilih ZIP di bawah. Impor ulang yang sama akan dilewati secara default.';
+
+  @override
+  String get googleKeepChooseZip => 'Pilih ZIP Takeout';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions =>
+      'Buka petunjuk Google Takeout';
+
+  @override
+  String get googleKeepCancelImport => 'Batalkan impor';
+
+  @override
+  String get googleKeepImportCancelled =>
+      'Impor dibatalkan. Tidak ada catatan yang disimpan.';
+
+  @override
+  String get googleKeepImportFailed =>
+      'Impor gagal. Periksa pilihan Anda dan coba lagi.';
+
+  @override
+  String get googleKeepImportReportTitle =>
+      'Laporan impor Google Keep Better Keep';
+
+  @override
+  String get googleKeepImportValidating => 'Memvalidasi arsip Google Takeout…';
+
+  @override
+  String get googleKeepImportParsing => 'Membaca catatan Google Keep…';
+
+  @override
+  String get googleKeepImportPreparingAttachments =>
+      'Menyiapkan lampiran yang diimpor…';
+
+  @override
+  String get googleKeepImportSaving => 'Menyimpan catatan yang diimpor…';
+
+  @override
+  String get googleKeepImportStarting => 'Memulai impor…';
+
+  @override
+  String get googleKeepImportComplete => 'Impor selesai';
+
+  @override
+  String get googleKeepSafetyLimits => 'Batas keamanan';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'File ZIP dibatasi hingga 100 MB terkompresi, 500 MB setelah diekstrak, 20.000 file, dan 50 MB per file. Jalur yang tidak aman, tautan simbolis, dan arsip yang rusak ditolak sebelum catatan disimpan.';
+
+  @override
+  String get googleKeepImported => 'Diimpor';
+
+  @override
+  String get googleKeepSkipped => 'Dilewati';
+
+  @override
+  String get googleKeepWarnings => 'Peringatan';
+
+  @override
+  String get googleKeepUnsupported => 'Tidak didukung';
+
+  @override
+  String get googleKeepFailed => 'Gagal';
+
+  @override
+  String get googleKeepReviewDetails => 'Tinjau detail impor';
+
+  @override
+  String get googleKeepShareReport => 'Bagikan laporan lengkap';
 }

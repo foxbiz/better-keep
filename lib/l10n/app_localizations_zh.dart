@@ -1695,11 +1695,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get openSource => '开源';
+  String get openSource => '源码可查看';
 
   @override
   String get openSourceDescription =>
-      'Better Keep 是开源的！在 GitHub 上查看代码、\n贡献或报告问题。';
+      '源码按 CC BY-NC 4.0 许可提供。由于商业复用受限，应称为源码可查看软件，而不是经 OSI 认可的开源软件。';
 
   @override
   String get frequentlyAskedQuestions => '常见问题';
@@ -1817,6 +1817,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get couldNotOpenSubscriptionManagement => '无法打开订阅管理。';
+
+  @override
+  String get subscriptionProviderUnknownContactSupport =>
+      '我们无法识别您的计费服务商。请联系 contact@betterkeep.app 获取帮助。';
 
   @override
   String manageSubscriptionInStore(String store) {
@@ -3284,4 +3288,88 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reorderDateSortHint => '按日期排序时无法手动重新排列。请选择“自定义”以重新排列笔记。';
+
+  @override
+  String get googleKeepImportTitle => '从 Google Keep 导入';
+
+  @override
+  String get googleKeepImportHelpSubtitle => '在本地迁移 Google Takeout 归档，无需上传。';
+
+  @override
+  String get googleKeepImportPrivacyTitle => '归档始终保留在此设备上';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'Better Keep 会在本地验证并转换 Google Takeout 归档，不会将 ZIP 上传到转换服务。只有在导入成功提交后，笔记才会进入常规的可选同步流程。';
+
+  @override
+  String get googleKeepImportBeforeStart => '开始之前';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. 打开 Google Takeout，并仅选择 Keep。\n2. 创建并下载导出文件。\n3. 在下方选择 ZIP。默认会跳过完全相同的重复导入。';
+
+  @override
+  String get googleKeepChooseZip => '选择 Takeout ZIP';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions => '打开 Google Takeout 说明';
+
+  @override
+  String get googleKeepCancelImport => '取消导入';
+
+  @override
+  String get googleKeepImportCancelled => '导入已取消，未保存任何笔记。';
+
+  @override
+  String get googleKeepImportFailed => '导入失败。请检查所选内容并重试。';
+
+  @override
+  String get googleKeepImportReportTitle => 'Better Keep Google Keep 导入报告';
+
+  @override
+  String get googleKeepImportValidating => '正在验证 Google Takeout 归档…';
+
+  @override
+  String get googleKeepImportParsing => '正在读取 Google Keep 笔记…';
+
+  @override
+  String get googleKeepImportPreparingAttachments => '正在准备导入的附件…';
+
+  @override
+  String get googleKeepImportSaving => '正在保存导入的笔记…';
+
+  @override
+  String get googleKeepImportStarting => '正在开始导入…';
+
+  @override
+  String get googleKeepImportComplete => '导入完成';
+
+  @override
+  String get googleKeepSafetyLimits => '安全限制';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'ZIP 压缩文件上限为 100 MB，解压后上限为 500 MB，最多 20,000 个文件，单个文件上限为 50 MB。不安全路径、符号链接和格式错误的归档会在保存笔记前被拒绝。';
+
+  @override
+  String get googleKeepImported => '已导入';
+
+  @override
+  String get googleKeepSkipped => '已跳过';
+
+  @override
+  String get googleKeepWarnings => '警告';
+
+  @override
+  String get googleKeepUnsupported => '不支持';
+
+  @override
+  String get googleKeepFailed => '失败';
+
+  @override
+  String get googleKeepReviewDetails => '查看导入详情';
+
+  @override
+  String get googleKeepShareReport => '分享完整报告';
 }

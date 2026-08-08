@@ -1,0 +1,60 @@
+---
+import { heroScreenshots } from '../data/home';
+import { product } from '../data/product';
+import DeviceFrame from './DeviceFrame.astro';
+import Icon from './Icon.astro';
+import PlatformIcon from './PlatformIcon.astro';
+import StoreActions from './StoreActions.astro';
+import UserCount from './UserCount.astro';
+
+const positions = ['left', 'primary', 'right'] as const;
+---
+
+<section class="home-hero">
+  <div class="home-hero__inner container">
+    <div class="home-hero__copy">
+      <p class="eyebrow">Private, offline-friendly notes</p>
+      <h1>Notes that stay <span>out of your way.</span></h1>
+      <p class="home-hero__lede">
+        Better Keep pairs the fast, familiar card workflow with richer writing,
+        true offline access, and optional encrypted sync.
+      </p>
+      <StoreActions variant="hero" />
+      <div class="hero-proof" aria-label="Better Keep highlights">
+        <UserCount />
+        <a class="hero-proof__item" href="/offline-notes-app"><Icon name="CloudOff" size={17} />Offline-first</a>
+        <a class="hero-proof__item" href="/security"><Icon name="ShieldCheck" size={17} />Private by design</a>
+      </div>
+      <p class="platforms-note">
+        Available on <a href="#platforms">{product.platforms.join(', ')}</a>
+      </p>
+    </div>
+
+    <div class="hero-stage">
+      <div class="hero-stage__actions">
+        <a
+          class="hero-github-badge"
+          href={product.githubUrl}
+          rel="external"
+          data-analytics={product.analyticsGoals.github}
+        >
+          <PlatformIcon name="github" size={19} />
+          View on GitHub
+          <Icon name="ArrowRight" size={15} />
+        </a>
+      </div>
+      <div class="hero-stage__screens" aria-label="Better Keep rich-text, notes home, and voice-note screens">
+        <div class="hero-stage__backdrop" aria-hidden="true"></div>
+        {
+          heroScreenshots.map((screenshot, index) => (
+            <DeviceFrame
+              {...screenshot}
+              priority={positions[index] === 'primary'}
+              class={`hero-device hero-device--${positions[index]}`}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>

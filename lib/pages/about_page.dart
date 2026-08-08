@@ -1,5 +1,7 @@
 import 'package:better_keep/components/logo.dart';
+import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -117,7 +119,7 @@ class _AboutPageState extends State<AboutPage> {
           const Divider(),
           const SizedBox(height: 16),
 
-          // Open Source Section
+          // Source availability section
           Center(
             child: Column(
               children: [
@@ -161,6 +163,19 @@ class _AboutPageState extends State<AboutPage> {
               ],
             ),
           ),
+          const SizedBox(height: 24),
+          if (!kIsWeb)
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: ReviewPromptService.instance.openStoreListing,
+                icon: const Icon(Icons.star_outline),
+                label: Text(switch (defaultTargetPlatform) {
+                  TargetPlatform.android => context.l10n.rateOnPlayStore,
+                  TargetPlatform.windows => context.l10n.rateOnMicrosoftStore,
+                  _ => context.l10n.rateOnAppStore,
+                }),
+              ),
+            ),
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 16),

@@ -39,11 +39,19 @@ test("maps platform targets to their existing release builds", () => {
 
 test("forwards build flags after the positional target", () => {
 	const web = resolveBuildTask(["web", "--source-maps"]);
-	assert.deepEqual(web.operations[0].args.slice(-1), ["--source-maps"]);
+	assert.deepEqual(web.operations, [
+		{args: ["--source-maps"], command: "./scripts/build_web.sh"},
+	]);
 	assert.throws(
 		() => resolveBuildTask(["icons", "unexpected"]),
 		/does not accept extra arguments/,
 	);
+});
+
+test("web builds the marketing site and Flutter application together", () => {
+	assert.deepEqual(resolveBuildTask(["web"]).operations, [
+		{args: [], command: "./scripts/build_web.sh"},
+	]);
 });
 
 test("Windows builds the application before creating the MSIX", () => {

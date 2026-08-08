@@ -1,0 +1,25 @@
+{
+  "locale": "id-ID",
+  "reviewStatus": "needs-native-review",
+  "appStore": {
+    "name": "Better Keep: Catatan Privat",
+    "subtitle": "Teks kaya, offline & aman",
+    "keywords": "daftar,reminder,suara,transkripsi,folder,kunci,jurnal,sketsa,rapi,sinkron,catatan",
+    "promotionalText": "Catatan privat dengan teks kaya, penyimpanan lokal, pengingat, dan sinkronisasi terenkripsi ujung ke ujung."
+  },
+  "playStore": {
+    "title": "Better Keep: Catatan Privat",
+    "shortDescription": "Catatan privat offline dengan teks kaya dan sinkronisasi terenkripsi.",
+    "fullDescription": "Tulis dengan cepat tanpa mengorbankan format kaya, akses offline, atau privasi. Better Keep menggabungkan alur kartu yang ringan dengan penyimpanan lokal.\n\nGunakan judul, daftar, checklist, tautan, gambar, sketsa, rekaman suara, dan pengingat. Atur catatan dengan label, folder, warna, pin, arsip, dan pencarian cepat.\n\nCatatan lokal dapat dimulai tanpa akun. Saat sinkronisasi opsional digunakan, judul, isi, dan lampiran yang didukung dienkripsi di perangkat. Impor arsip yang didukung juga diproses secara lokal.\n\nTersedia di Android, iOS, macOS, Windows, dan Web. Beberapa fitur, termasuk transkripsi suara di perangkat, bergantung pada platform. Kode sumber tersedia dengan lisensi CC BY-NC 4.0."
+  },
+  "screenshotCopy": [
+    "Catatan privat, kini lebih lengkap",
+    "Teks kaya tanpa kerumitan",
+    "Sinkronisasi terenkripsi",
+    "Offline di berbagai perangkat",
+    "Bawa catatan Anda",
+    "Transkripsi suara di perangkat",
+    "Pengingat yang selalu siap",
+    "Folder, label, pencarian cepat"
+  ]
+}

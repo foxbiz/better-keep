@@ -38,8 +38,8 @@ const targets = {
 	macos: defineTarget("Build the release macOS application.", (extraArgs) => [
 		flutterBuild("macos", extraArgs),
 	]),
-	web: defineTarget("Build the release web application.", (extraArgs) => [
-		flutterBuild("web", extraArgs),
+	web: defineTarget("Build the marketing site and release web application.", (extraArgs) => [
+		processStep("./scripts/build_web.sh", extraArgs),
 	]),
 	windows: defineTarget("Build the release Windows MSIX package.", (extraArgs) => [
 		flutterBuild("windows", extraArgs),

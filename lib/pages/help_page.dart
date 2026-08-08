@@ -1,3 +1,4 @@
+import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -74,6 +75,8 @@ class HelpPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const GoogleKeepImportCard(),
+          const SizedBox(height: 24),
           Text(
             context.l10n.frequentlyAskedQuestions,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),

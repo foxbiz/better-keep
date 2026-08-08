@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title">
+  <title id="title">Web</title>
+  <g fill="none" stroke="#E7FF00" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+    <circle cx="12" cy="12" r="9.25"/>
+    <path d="M2.95 9h18.1M2.95 15h18.1M12 2.75c2.1 2.45 3.2 5.54 3.2 9.25S14.1 18.8 12 21.25C9.9 18.8 8.8 15.71 8.8 12S9.9 5.2 12 2.75Z"/>
+  </g>
+</svg>

@@ -1758,11 +1758,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get openSource => 'Open Source';
+  String get openSource => 'Source Available';
 
   @override
   String get openSourceDescription =>
-      'Better Keep is open source! View the code,\ncontribute, or report issues on GitHub.';
+      'Inspect the source under CC BY-NC 4.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.';
 
   @override
   String get frequentlyAskedQuestions => 'Frequently Asked Questions';
@@ -1888,6 +1888,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get couldNotOpenSubscriptionManagement =>
       'Could not open subscription management.';
+
+  @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'We could not identify your billing provider. Contact contact@betterkeep.app for help.';
 
   @override
   String manageSubscriptionInStore(String store) {
@@ -3453,4 +3457,95 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       'Manual rearranging is unavailable while sorting by date. Choose Custom to rearrange notes.';
+
+  @override
+  String get googleKeepImportTitle => 'Import from Google Keep';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Move a Google Takeout archive locally—no upload required.';
+
+  @override
+  String get googleKeepImportPrivacyTitle =>
+      'Your archive stays on this device';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'Better Keep validates and converts the Google Takeout archive locally. It does not upload the ZIP to a conversion service. Notes only enter the normal optional sync flow after the import commits successfully.';
+
+  @override
+  String get googleKeepImportBeforeStart => 'Before you start';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Open Google Takeout and select only Keep.\n2. Create and download the export.\n3. Choose the ZIP below. Exact re-imports are skipped by default.';
+
+  @override
+  String get googleKeepChooseZip => 'Choose Takeout ZIP';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions =>
+      'Open Google Takeout instructions';
+
+  @override
+  String get googleKeepCancelImport => 'Cancel import';
+
+  @override
+  String get googleKeepImportCancelled =>
+      'Import cancelled. No notes were saved.';
+
+  @override
+  String get googleKeepImportFailed =>
+      'The import failed. Check your selection and try again.';
+
+  @override
+  String get googleKeepImportReportTitle =>
+      'Better Keep Google Keep import report';
+
+  @override
+  String get googleKeepImportValidating => 'Validating Google Takeout archive…';
+
+  @override
+  String get googleKeepImportParsing => 'Reading Google Keep notes…';
+
+  @override
+  String get googleKeepImportPreparingAttachments =>
+      'Preparing imported attachments…';
+
+  @override
+  String get googleKeepImportSaving => 'Saving imported notes…';
+
+  @override
+  String get googleKeepImportStarting => 'Starting import…';
+
+  @override
+  String get googleKeepImportComplete => 'Import complete';
+
+  @override
+  String get googleKeepSafetyLimits => 'Safety limits';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'ZIP files are limited to 100 MB compressed, 500 MB expanded, 20,000 files, and 50 MB per file. Unsafe paths, symbolic links, and malformed archives are rejected before notes are saved.';
+
+  @override
+  String get googleKeepImported => 'Imported';
+
+  @override
+  String get googleKeepSkipped => 'Skipped';
+
+  @override
+  String get googleKeepWarnings => 'Warnings';
+
+  @override
+  String get googleKeepUnsupported => 'Unsupported';
+
+  @override
+  String get googleKeepFailed => 'Failed';
+
+  @override
+  String get googleKeepReviewDetails => 'Review import details';
+
+  @override
+  String get googleKeepShareReport => 'Share full report';
 }

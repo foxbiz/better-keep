@@ -8,6 +8,10 @@ import {
 	parseProductBundleId,
 	parseStringPlist,
 } from "../../tool/firebase_apple_config_policy.mjs";
+import {
+	createMacosGoogleServicePlist,
+	reverseClientId,
+} from "../../tool/firebase_apple_plist.mjs";
 
 const validEnvironment = {
 	IOS_APP_ID: "1:123:ios:correct",
@@ -52,6 +56,43 @@ test("accepts the shared correctly registered Apple Firebase app", () => {
 			macosProductBundleId: BETTER_KEEP_APPLE_BUNDLE_ID,
 		}),
 		[],
+	);
+});
+
+test("generates the macOS plist from canonical environment values", () => {
+	const environment = {
+		...validEnvironment,
+		ANDROID_CLIENT_ID: "android-client.apps.googleusercontent.com",
+		MACOS_API_KEY: "api&key",
+		MACOS_MESSAGING_SENDER_ID: "123",
+		MACOS_STORAGE_BUCKET: "better-keep-notes.firebasestorage.app",
+	};
+	const source = createMacosGoogleServicePlist(environment);
+	const plist = parseStringPlist(source);
+
+	assert.equal(plist.BUNDLE_ID, environment.MACOS_BUNDLE_ID);
+	assert.equal(plist.CLIENT_ID, environment.MACOS_CLIENT_ID);
+	assert.equal(plist.GOOGLE_APP_ID, environment.MACOS_APP_ID);
+	assert.equal(plist.API_KEY, "api&amp;key");
+	assert.equal(
+		plist.REVERSED_CLIENT_ID,
+		reverseClientId(environment.MACOS_CLIENT_ID),
+	);
+	assert.match(source, /<key>IS_SIGNIN_ENABLED<\/key>\s*<true><\/true>/);
+	assert.deepEqual(
+		appleFirebaseConfigurationViolations({
+			environment,
+			macosPlist: plist,
+			macosProductBundleId: BETTER_KEEP_APPLE_BUNDLE_ID,
+		}),
+		[],
+	);
+});
+
+test("refuses to generate an incomplete macOS plist", () => {
+	assert.throws(
+		() => createMacosGoogleServicePlist(validEnvironment),
+		/MACOS_CLIENT_ID|ANDROID_CLIENT_ID|MACOS_API_KEY/,
 	);
 });
 

@@ -1635,11 +1635,11 @@
 		}
 	},
 
-	"openSource": "Açık Kaynak",
-	"@openSource": { "description": "Open source section title" },
+	"openSource": "Kaynak Koduna Erişim",
+	"@openSource": { "description": "Source availability section title" },
 
-	"openSourceDescription": "Better Keep açık kaynaktır! Kodu görüntüleyin,\nkatkıda bulunun veya GitHub'da sorun bildirin.",
-	"@openSourceDescription": { "description": "Open source description" },
+	"openSourceDescription": "Kaynak kodu CC BY-NC 4.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.",
+	"@openSourceDescription": { "description": "Source availability and license description" },
 
 	"frequentlyAskedQuestions": "Sıkça Sorulan Sorular",
 	"@frequentlyAskedQuestions": { "description": "FAQ section title" },
@@ -1793,6 +1793,8 @@
 	"@couldNotOpenSubscriptionManagement": {
 		"description": "Error when unable to open platform subscription management"
 	},
+
+	"subscriptionProviderUnknownContactSupport": "Faturalandırma sağlayıcınızı belirleyemedik. Yardım için contact@betterkeep.app adresiyle iletişime geçin.",
 
 	"manageSubscriptionInStore": "{store}'da aboneliğinizi yönetin.",
 	"@manageSubscriptionInStore": {
@@ -3586,5 +3588,32 @@
 	"noteDisplayOptionsSaveFailed": "Not görüntüleme seçenekleri kaydedilemedi. Tekrar deneyin.",
 	"noteDisplayOptionsSaved": "Not görüntüleme seçenekleri kaydedildi",
 	"reorderCustomHint": "Bir nota basılı tutun, ardından yeniden düzenlemek için sürükleyin.",
-	"reorderDateSortHint": "Tarihe göre sıralarken elle yeniden düzenleme kullanılamaz. Notları yeniden düzenlemek için Özel'i seçin."
+	"reorderDateSortHint": "Tarihe göre sıralarken elle yeniden düzenleme kullanılamaz. Notları yeniden düzenlemek için Özel'i seçin.",
+	"googleKeepImportTitle": "Google Keep'ten içe aktar",
+	"googleKeepImportHelpSubtitle": "Google Takeout arşivini yüklemeden yerel olarak taşıyın.",
+	"googleKeepImportPrivacyTitle": "Arşiviniz bu cihazda kalır",
+	"googleKeepImportPrivacyDescription": "Better Keep, Google Takeout arşivini yerel olarak doğrular ve dönüştürür. ZIP dosyasını bir dönüştürme hizmetine yüklemez. Notlar yalnızca içe aktarma başarıyla kaydedildikten sonra normal isteğe bağlı eşitleme akışına girer.",
+	"googleKeepImportBeforeStart": "Başlamadan önce",
+	"googleKeepImportInstructions": "1. Google Takeout'u açın ve yalnızca Keep'i seçin.\n2. Dışa aktarımı oluşturup indirin.\n3. Aşağıdan ZIP'i seçin. Aynı içerik varsayılan olarak yeniden içe aktarılmaz.",
+	"googleKeepChooseZip": "Takeout ZIP'ini seç",
+	"googleKeepOpenTakeoutInstructions": "Google Takeout talimatlarını aç",
+	"googleKeepCancelImport": "İçe aktarmayı iptal et",
+	"googleKeepImportCancelled": "İçe aktarma iptal edildi. Hiçbir not kaydedilmedi.",
+	"googleKeepImportFailed": "İçe aktarma başarısız oldu. Seçiminizi kontrol edip tekrar deneyin.",
+	"googleKeepImportReportTitle": "Better Keep Google Keep içe aktarma raporu",
+	"googleKeepImportValidating": "Google Takeout arşivi doğrulanıyor…",
+	"googleKeepImportParsing": "Google Keep notları okunuyor…",
+	"googleKeepImportPreparingAttachments": "İçe aktarılan ekler hazırlanıyor…",
+	"googleKeepImportSaving": "İçe aktarılan notlar kaydediliyor…",
+	"googleKeepImportStarting": "İçe aktarma başlatılıyor…",
+	"googleKeepImportComplete": "İçe aktarma tamamlandı",
+	"googleKeepSafetyLimits": "Güvenlik sınırları",
+	"googleKeepSafetyDescription": "ZIP dosyaları sıkıştırılmış olarak 100 MB, açılmış olarak 500 MB, 20.000 dosya ve dosya başına 50 MB ile sınırlıdır. Güvenli olmayan yollar, sembolik bağlantılar ve bozuk arşivler notlar kaydedilmeden önce reddedilir.",
+	"googleKeepImported": "İçe aktarıldı",
+	"googleKeepSkipped": "Atlandı",
+	"googleKeepWarnings": "Uyarılar",
+	"googleKeepUnsupported": "Desteklenmiyor",
+	"googleKeepFailed": "Başarısız",
+	"googleKeepReviewDetails": "İçe aktarma ayrıntılarını incele",
+	"googleKeepShareReport": "Tam raporu paylaş"
 }

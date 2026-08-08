@@ -1,0 +1,64 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Manage subscription | Better Keep"
+  description="Open the billing provider that manages your Better Keep subscription."
+  canonicalPath="/account/manage"
+  noindex={true}
+  analytics={false}
+  stripQueryParameters={true}
+>
+  <section class="manage-subscription container">
+    <p class="eyebrow">Subscription management</p>
+    <h1>Choose where you subscribed</h1>
+    <p class="manage-subscription__intro">
+      Billing changes are completed securely by Apple or Google. Better Keep does
+      not need your account ID or email address to send you there.
+    </p>
+    <div class="manage-subscription__actions">
+      <a class="button" href="https://apps.apple.com/account/subscriptions" rel="noopener">
+        Manage with Apple
+      </a>
+      <a
+        class="button"
+        href="https://play.google.com/store/account/subscriptions"
+        rel="noopener"
+      >
+        Manage with Google Play
+      </a>
+      <a class="button button--secondary" href="mailto:contact@betterkeep.app">
+        Contact support
+      </a>
+    </div>
+    <p class="manage-subscription__note">
+      If you subscribed on the Better Keep website and cannot manage the plan in
+      the app, contact support and we will help.
+    </p>
+  </section>
+</BaseLayout>
+
+<style>
+  .manage-subscription {
+    min-height: 72vh;
+    padding-block: clamp(9rem, 17vw, 13rem) 6rem;
+  }
+
+  .manage-subscription h1 {
+    max-width: 820px;
+  }
+
+  .manage-subscription__intro,
+  .manage-subscription__note {
+    max-width: 680px;
+    color: var(--ink-soft);
+  }
+
+  .manage-subscription__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-block: 2rem;
+  }
+</style>

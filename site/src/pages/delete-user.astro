@@ -1,0 +1,9 @@
+---
+import PublicDocumentPage from '../components/PublicDocumentPage.astro';
+import DeleteUserContent from '../components/documents/DeleteUserContent.astro';
+import { getPublicDocument } from '../data/public-documents';
+---
+
+<PublicDocumentPage document={getPublicDocument('delete-user')}>
+  <DeleteUserContent />
+</PublicDocumentPage>

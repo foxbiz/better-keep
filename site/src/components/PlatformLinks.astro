@@ -1,0 +1,73 @@
+---
+import { product } from '../data/product';
+import Icon from './Icon.astro';
+import PlatformIcon from './PlatformIcon.astro';
+
+const platforms = [
+  {
+    label: 'iPhone, iPad & Mac',
+    detail: 'App Store',
+    icon: 'apple',
+    href: product.appStoreUrl,
+    analytics: product.analyticsGoals.appStore
+  },
+  {
+    label: 'Android',
+    detail: 'Google Play',
+    icon: 'android',
+    href: product.playStoreUrl,
+    analytics: product.analyticsGoals.playStore
+  },
+  {
+    label: 'Windows',
+    detail: 'Microsoft Store',
+    icon: 'windows',
+    href: product.microsoftStoreUrl
+  },
+  {
+    label: 'Web',
+    detail: 'Open instantly',
+    icon: 'web',
+    href: product.webAppUrl,
+    analytics: product.analyticsGoals.webApp
+  }
+] as const;
+---
+
+<section class="home-section platforms-section" id="platforms">
+  <div class="container">
+    <div class="section-heading section-heading--split">
+      <div>
+        <p class="eyebrow">One workflow, every screen</p>
+        <h2>Pick up where you left off.</h2>
+      </div>
+      <p>Native apps when you want them. A capable web app when you do not.</p>
+    </div>
+    <div class="platform-grid">
+      {
+        platforms.map((platform) => (
+          <a
+            class="platform-card"
+            href={platform.href}
+            rel={platform.href.startsWith('http') ? 'external' : undefined}
+            data-analytics={'analytics' in platform ? platform.analytics : undefined}
+          >
+            <PlatformIcon name={platform.icon} />
+            <span><strong>{platform.label}</strong><small>{platform.detail}</small></span>
+            <Icon name="ArrowRight" size={18} />
+          </a>
+        ))
+      }
+    </div>
+    <a
+      class="source-link"
+      href={product.githubUrl}
+      rel="external"
+      data-analytics={product.analyticsGoals.github}
+    >
+      <Icon name="CodeXml" size={20} />
+      Inspect the source-available code on GitHub
+      <Icon name="ArrowRight" size={17} />
+    </a>
+  </div>
+</section>

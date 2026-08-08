@@ -3312,16 +3312,16 @@ abstract class AppLocalizations {
   /// **'Version {version} ({buildNumber})'**
   String version(String version, String buildNumber);
 
-  /// Open source section title
+  /// Source availability section title
   ///
   /// In en, this message translates to:
-  /// **'Open Source'**
+  /// **'Source Available'**
   String get openSource;
 
-  /// Open source description
+  /// Source availability and license description
   ///
   /// In en, this message translates to:
-  /// **'Better Keep is open source! View the code,\ncontribute, or report issues on GitHub.'**
+  /// **'Inspect the source under CC BY-NC 4.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.'**
   String get openSourceDescription;
 
   /// FAQ section title
@@ -3539,6 +3539,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not open subscription management.'**
   String get couldNotOpenSubscriptionManagement;
+
+  /// Support guidance when a legacy subscription has no known billing provider
+  ///
+  /// In en, this message translates to:
+  /// **'We could not identify your billing provider. Contact contact@betterkeep.app for help.'**
+  String get subscriptionProviderUnknownContactSupport;
 
   /// Message shown when redirecting to store subscription management
   ///
@@ -6173,6 +6179,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manual rearranging is unavailable while sorting by date. Choose Custom to rearrange notes.'**
   String get reorderDateSortHint;
+
+  /// Title for the Google Keep import flow
+  ///
+  /// In en, this message translates to:
+  /// **'Import from Google Keep'**
+  String get googleKeepImportTitle;
+
+  /// Help-page summary for Google Keep import
+  ///
+  /// In en, this message translates to:
+  /// **'Move a Google Takeout archive locally—no upload required.'**
+  String get googleKeepImportHelpSubtitle;
+
+  /// Privacy heading in the Google Keep importer
+  ///
+  /// In en, this message translates to:
+  /// **'Your archive stays on this device'**
+  String get googleKeepImportPrivacyTitle;
+
+  /// Local-processing explanation in the Google Keep importer
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep validates and converts the Google Takeout archive locally. It does not upload the ZIP to a conversion service. Notes only enter the normal optional sync flow after the import commits successfully.'**
+  String get googleKeepImportPrivacyDescription;
+
+  /// Heading before Google Keep export instructions
+  ///
+  /// In en, this message translates to:
+  /// **'Before you start'**
+  String get googleKeepImportBeforeStart;
+
+  /// Steps for preparing a Google Keep export
+  ///
+  /// In en, this message translates to:
+  /// **'1. Open Google Takeout and select only Keep.\n2. Create and download the export.\n3. Choose the ZIP below. Exact re-imports are skipped by default.'**
+  String get googleKeepImportInstructions;
+
+  /// Action to choose a Google Takeout ZIP
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Takeout ZIP'**
+  String get googleKeepChooseZip;
+
+  /// Action to open Google Takeout help
+  ///
+  /// In en, this message translates to:
+  /// **'Open Google Takeout instructions'**
+  String get googleKeepOpenTakeoutInstructions;
+
+  /// Action to cancel a Google Keep import
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel import'**
+  String get googleKeepCancelImport;
+
+  /// Message after cancelling a Google Keep import
+  ///
+  /// In en, this message translates to:
+  /// **'Import cancelled. No notes were saved.'**
+  String get googleKeepImportCancelled;
+
+  /// Generic Google Keep import failure message
+  ///
+  /// In en, this message translates to:
+  /// **'The import failed. Check your selection and try again.'**
+  String get googleKeepImportFailed;
+
+  /// Title for a shared Google Keep import report
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep Google Keep import report'**
+  String get googleKeepImportReportTitle;
+
+  /// Google Keep import validation progress
+  ///
+  /// In en, this message translates to:
+  /// **'Validating Google Takeout archive…'**
+  String get googleKeepImportValidating;
+
+  /// Google Keep import parsing progress
+  ///
+  /// In en, this message translates to:
+  /// **'Reading Google Keep notes…'**
+  String get googleKeepImportParsing;
+
+  /// Google Keep attachment preparation progress
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing imported attachments…'**
+  String get googleKeepImportPreparingAttachments;
+
+  /// Google Keep import save progress
+  ///
+  /// In en, this message translates to:
+  /// **'Saving imported notes…'**
+  String get googleKeepImportSaving;
+
+  /// Initial Google Keep import progress
+  ///
+  /// In en, this message translates to:
+  /// **'Starting import…'**
+  String get googleKeepImportStarting;
+
+  /// Google Keep import completion heading
+  ///
+  /// In en, this message translates to:
+  /// **'Import complete'**
+  String get googleKeepImportComplete;
+
+  /// Google Keep import safety limits heading
+  ///
+  /// In en, this message translates to:
+  /// **'Safety limits'**
+  String get googleKeepSafetyLimits;
+
+  /// Google Keep import safety limit explanation
+  ///
+  /// In en, this message translates to:
+  /// **'ZIP files are limited to 100 MB compressed, 500 MB expanded, 20,000 files, and 50 MB per file. Unsafe paths, symbolic links, and malformed archives are rejected before notes are saved.'**
+  String get googleKeepSafetyDescription;
+
+  /// Imported-note count label
+  ///
+  /// In en, this message translates to:
+  /// **'Imported'**
+  String get googleKeepImported;
+
+  /// Skipped-note count label
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get googleKeepSkipped;
+
+  /// Google Keep import warning count label
+  ///
+  /// In en, this message translates to:
+  /// **'Warnings'**
+  String get googleKeepWarnings;
+
+  /// Unsupported-item count label
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported'**
+  String get googleKeepUnsupported;
+
+  /// Failed-item count label
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get googleKeepFailed;
+
+  /// Heading for Google Keep import issues
+  ///
+  /// In en, this message translates to:
+  /// **'Review import details'**
+  String get googleKeepReviewDetails;
+
+  /// Action to share a Google Keep import report
+  ///
+  /// In en, this message translates to:
+  /// **'Share full report'**
+  String get googleKeepShareReport;
 }
 
 class _AppLocalizationsDelegate

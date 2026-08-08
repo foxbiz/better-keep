@@ -1,0 +1,53 @@
+---
+interface Props {
+  id: string;
+  src: string;
+  optimizedSrc: string;
+  alt: string;
+  caption?: string;
+  class?: string;
+  priority?: boolean;
+  label?: string;
+}
+
+const {
+  id,
+  src,
+  optimizedSrc,
+  alt,
+  caption,
+  class: className,
+  priority = false,
+  label
+} = Astro.props;
+---
+
+<figure
+  class:list={['device-frame', className]}
+  data-device-frame
+  data-screenshot-id={id}
+>
+  <div class="device-frame__hardware">
+    <span class="device-frame__speaker" aria-hidden="true"></span>
+    <picture>
+      <source srcset={optimizedSrc} type="image/webp" />
+      <img
+        src={src}
+        width="1179"
+        height="2556"
+        loading={priority ? 'eager' : 'lazy'}
+        decoding="async"
+        fetchpriority={priority ? 'high' : 'auto'}
+        alt={alt}
+      />
+    </picture>
+  </div>
+  {
+    (label || caption) && (
+      <figcaption>
+        {label && <strong>{label}</strong>}
+        {caption && <span>{caption}</span>}
+      </figcaption>
+    )
+  }
+</figure>

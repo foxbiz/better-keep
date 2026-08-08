@@ -1,0 +1,48 @@
+{
+  "name": "Better Keep",
+  "storeName": "Better Keep: Private Notes",
+  "appleSubtitle": "Rich text, offline & encrypted",
+  "shortDescription": "Private, offline notes with rich text and end-to-end encrypted sync.",
+  "appleKeywords": "checklist,reminder,voice,transcription,folder,lock,journal,sketch,organize,sync,writing,memo",
+  "positioning": "The private Google Keep alternative for people who want richer notes without giving up simplicity.",
+  "publisher": "Foxbiz Software Pvt. Ltd.",
+  "siteUrl": "https://betterkeep.app",
+  "supportEmail": "contact@betterkeep.app",
+  "updatedAt": "2026-07-26",
+  "platforms": [
+    "Android",
+    "iOS",
+    "macOS",
+    "Windows",
+    "Web"
+  ],
+  "appStoreUrl": "https://apps.apple.com/us/app/better-keep-notes/id6759548198?pt=127312183&ct=betterkeep_web&mt=8",
+  "playStoreUrl": "https://play.google.com/store/apps/details?id=io.foxbiz.better_keep&utm_source=betterkeep.app&utm_medium=website&utm_campaign=organic_search",
+  "microsoftStoreUrl": "https://apps.microsoft.com/detail/9PHT5C6WK6Q1",
+  "webAppUrl": "/app/",
+  "publicStatsUrl": "https://us-central1-better-keep-notes.cloudfunctions.net/getPublicStats",
+  "githubUrl": "https://github.com/foxbiz/better-keep",
+  "license": {
+    "label": "Source-available under CC BY-NC 4.0",
+    "url": "https://github.com/foxbiz/better-keep/blob/main/LICENSE"
+  },
+  "encryption": {
+    "noteAndAttachmentCipher": "XChaCha20-Poly1305",
+    "deviceKeyExchange": "X25519",
+    "recoveryKeyDerivation": "Argon2id",
+    "metadataNotEncrypted": [
+      "labels",
+      "note colors",
+      "timestamps",
+      "pin, archive, and trash state"
+    ],
+    "independentlyAudited": false
+  },
+  "analyticsGoals": {
+    "appStore": "store_click_ios",
+    "playStore": "store_click_android",
+    "webApp": "open_web_app",
+    "github": "github_click",
+    "keepImport": "keep_import_guide_start"
+  }
+}

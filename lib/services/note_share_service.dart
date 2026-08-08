@@ -128,7 +128,7 @@ class NoteShareService {
   /// Base URL for share links - uses hosting emulator in debug mode
   String get _shareBaseUrl {
     if (kDebugMode && FirebaseEmulatorConfig.isUsingEmulators) {
-      // Use Firebase Hosting emulator which serves static files like web/s/index.html
+      // The Hosting emulator rewrites /s/** to Astro's shared-note viewer.
       return '${FirebaseEmulatorConfig.endpoints.hostingBaseUrl}/s';
     }
     return 'https://betterkeep.app/s';

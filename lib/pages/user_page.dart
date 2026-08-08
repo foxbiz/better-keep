@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:better_keep/components/e2ee_status_card.dart';
@@ -24,6 +25,7 @@ import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
@@ -1434,6 +1436,8 @@ class _UserPageState extends State<UserPage> {
         message = context.l10n.subscriptionChangesMayTakeMoment;
       } else if (result.isSuccess) {
         message = context.l10n.subscriptionCancelledSuccessfully;
+      } else if (result.outcome == SubscriptionActionOutcome.providerUnknown) {
+        message = context.l10n.subscriptionProviderUnknownContactSupport;
       } else {
         message = context.l10n.couldNotOpenSubscriptionManagement;
       }
@@ -2780,6 +2784,11 @@ class _UserPageState extends State<UserPage> {
       }
     }
 
+    unawaited(
+      ReviewPromptService.instance.recordPositiveMilestone(
+        ReviewMilestone.dataExport,
+      ),
+    );
     return true;
   }
 

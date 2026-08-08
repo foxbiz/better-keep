@@ -1712,11 +1712,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get openSource => 'オープンソース';
+  String get openSource => 'ソース公開';
 
   @override
   String get openSourceDescription =>
-      'Better Keepはオープンソースです！\nGitHubでコードを見たり、貢献したり、問題を報告できます。';
+      'ソースはCC BY-NC 4.0で閲覧できます。商用利用が制限されるため、OSI承認のオープンソースではなくソース公開ソフトウェアです。';
 
   @override
   String get frequentlyAskedQuestions => 'よくある質問';
@@ -1837,6 +1837,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get couldNotOpenSubscriptionManagement => 'サブスクリプション管理を開けませんでした。';
+
+  @override
+  String get subscriptionProviderUnknownContactSupport =>
+      '請求プロバイダを特定できませんでした。contact@betterkeep.app までお問い合わせください。';
 
   @override
   String manageSubscriptionInStore(String store) {
@@ -3338,4 +3342,89 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       '日付で並べ替えている間は手動で並べ替えできません。ノートを並べ替えるには「カスタム」を選択してください。';
+
+  @override
+  String get googleKeepImportTitle => 'Google Keepからインポート';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Google Takeoutアーカイブをアップロードせずに端末内で移行します。';
+
+  @override
+  String get googleKeepImportPrivacyTitle => 'アーカイブはこの端末内に保持されます';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'Better KeepはGoogle Takeoutアーカイブを端末内で検証して変換します。ZIPが変換サービスにアップロードされることはありません。インポートが正常に保存された後にのみ、通常の任意同期の対象になります。';
+
+  @override
+  String get googleKeepImportBeforeStart => '始める前に';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Google Takeoutを開き、Keepのみを選択します。\n2. エクスポートを作成してダウンロードします。\n3. 下のZIPを選択します。同じ内容の再インポートは既定でスキップされます。';
+
+  @override
+  String get googleKeepChooseZip => 'Takeout ZIPを選択';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions => 'Google Takeoutの手順を開く';
+
+  @override
+  String get googleKeepCancelImport => 'インポートをキャンセル';
+
+  @override
+  String get googleKeepImportCancelled => 'インポートをキャンセルしました。ノートは保存されていません。';
+
+  @override
+  String get googleKeepImportFailed => 'インポートに失敗しました。選択内容を確認して、もう一度お試しください。';
+
+  @override
+  String get googleKeepImportReportTitle => 'Better Keep Google Keepインポートレポート';
+
+  @override
+  String get googleKeepImportValidating => 'Google Takeoutアーカイブを検証しています…';
+
+  @override
+  String get googleKeepImportParsing => 'Google Keepのノートを読み込んでいます…';
+
+  @override
+  String get googleKeepImportPreparingAttachments => '添付ファイルを準備しています…';
+
+  @override
+  String get googleKeepImportSaving => 'インポートしたノートを保存しています…';
+
+  @override
+  String get googleKeepImportStarting => 'インポートを開始しています…';
+
+  @override
+  String get googleKeepImportComplete => 'インポート完了';
+
+  @override
+  String get googleKeepSafetyLimits => '安全上の制限';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'ZIPは圧縮時100 MB、展開時500 MB、20,000ファイル、1ファイル50 MBまでです。安全でないパス、シンボリックリンク、不正なアーカイブはノートを保存する前に拒否されます。';
+
+  @override
+  String get googleKeepImported => 'インポート済み';
+
+  @override
+  String get googleKeepSkipped => 'スキップ';
+
+  @override
+  String get googleKeepWarnings => '警告';
+
+  @override
+  String get googleKeepUnsupported => '未対応';
+
+  @override
+  String get googleKeepFailed => '失敗';
+
+  @override
+  String get googleKeepReviewDetails => 'インポートの詳細を確認';
+
+  @override
+  String get googleKeepShareReport => 'レポート全体を共有';
 }

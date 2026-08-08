@@ -1,0 +1,236 @@
+---
+import type { GetStaticPaths } from 'astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import DeviceFrame from '../components/DeviceFrame.astro';
+import StoreActions from '../components/StoreActions.astro';
+import { screenshotById } from '../data/home';
+import { pages, type MarketingPage } from '../data/pages';
+import { product } from '../data/product';
+
+export const getStaticPaths = (() =>
+  pages.map((page) => ({
+    params: { slug: page.slug },
+    props: { page }
+  }))) satisfies GetStaticPaths;
+
+interface Props {
+  page: MarketingPage;
+}
+
+const { page } = Astro.props;
+const canonicalPath = `/${page.slug}`;
+const screenshot = (() => {
+  if (page.slug === 'rich-text-notes') {
+    return screenshotById['5'];
+  }
+  if (page.slug === 'voice-notes-transcription') {
+    return screenshotById['6'];
+  }
+  if (page.slug === 'security' || page.slug === 'private-encrypted-notes') {
+    return screenshotById['4'];
+  }
+  return screenshotById['2'];
+})();
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+const sectionLinks = page.sections.map((section, index) => ({
+  id: `${slugify(section.heading)}-${index + 1}`,
+  label: section.heading
+}));
+const breadcrumbs = [
+  {
+    '@type': 'ListItem',
+    position: 1,
+    name: 'Better Keep',
+    item: product.siteUrl
+  },
+  ...page.slug.split('/').map((part, index, parts) => ({
+    '@type': 'ListItem',
+    position: index + 2,
+    name:
+      index === parts.length - 1
+        ? page.title
+        : part.charAt(0).toUpperCase() + part.slice(1),
+    item: `${product.siteUrl}/${parts.slice(0, index + 1).join('/')}`
+  }))
+];
+const schemas: Record<string, unknown>[] = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: page.title,
+    description: page.description,
+    datePublished: product.updatedAt,
+    dateModified: product.updatedAt,
+    mainEntityOfPage: `${product.siteUrl}${canonicalPath}`,
+    author: {
+      '@type': 'Organization',
+      name: product.publisher
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: product.publisher,
+      logo: {
+        '@type': 'ImageObject',
+        url: `${product.siteUrl}/media/brand/app-icon-512.png`
+      }
+    }
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbs
+  }
+];
+
+if (page.faqs?.length) {
+  schemas.push({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: page.faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer
+      }
+    }))
+  });
+}
+---
+
+<BaseLayout
+  title={page.title}
+  description={page.description}
+  canonicalPath={canonicalPath}
+  schemas={schemas}
+>
+  <article class="marketing-article">
+    <header class="article-hero container">
+      <div class="article-hero__copy">
+        <p class="eyebrow">{page.eyebrow}</p>
+        <h1>{page.title}</h1>
+        <p class="answer-box">{page.answer}</p>
+        <p class="article-meta">
+          Published and reviewed by {product.publisher} · Updated {product.updatedAt}
+        </p>
+      </div>
+      <DeviceFrame
+        {...screenshot}
+        class="article-hero__device"
+        priority={true}
+      />
+    </header>
+
+    <div class="article-grid container">
+      <nav class="article-toc" aria-label="On this page">
+        <strong>On this page</strong>
+        {
+          sectionLinks.map((section) => (
+            <a href={`#${section.id}`}>{section.label}</a>
+          ))
+        }
+      </nav>
+      <div class="article-body">
+        {
+          page.sections.map((section, index) => (
+            <section id={sectionLinks[index].id}>
+              <h2>{section.heading}</h2>
+              {section.paragraphs?.map((paragraph) => <p>{paragraph}</p>)}
+              {
+                section.bullets && (
+                  <ul>
+                    {section.bullets.map((bullet) => <li>{bullet}</li>)}
+                  </ul>
+                )
+              }
+            </section>
+          ))
+        }
+
+        {
+          page.comparison && (
+            <section>
+              <h2>At a glance</h2>
+              <div class="comparison-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Consideration</th>
+                      <th>Better Keep</th>
+                      <th>{page.comparison.alternativeLabel}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {page.comparison.rows.map((row) => (
+                      <tr>
+                        <td>{row.subject}</td>
+                        <td>{row.betterKeep}</td>
+                        <td>{row.alternative}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )
+        }
+
+        {
+          page.faqs?.length && (
+            <section class="faq">
+              <h2>Questions people ask</h2>
+              {page.faqs.map((faq) => (
+                <details>
+                  <summary>{faq.question}</summary>
+                  <p>{faq.answer}</p>
+                </details>
+              ))}
+            </section>
+          )
+        }
+
+        {
+          page.sources?.length && (
+            <section>
+              <h2>Sources and further reading</h2>
+              <ul>
+                {page.sources.map((source) => (
+                  <li>
+                    <a href={source.url} rel="external">
+                      {source.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        }
+      </div>
+
+      <aside class="card sidebar-card article-action">
+        <p class="eyebrow">Try Better Keep</p>
+        <h2>Start with local notes.</h2>
+        <p>
+          Add an account only when you want encrypted sync and account-based
+          features.
+        </p>
+        <StoreActions compact={true} />
+      </aside>
+    </div>
+  </article>
+
+  <section class="section container">
+    <div class="cta-band">
+      <div>
+        <p class="eyebrow">Private notes, richer writing</p>
+        <h2>Keep the capture flow. Upgrade everything around it.</h2>
+        <p>Available on {product.platforms.join(', ')}.</p>
+      </div>
+      <StoreActions compact={true} />
+    </div>
+  </section>
+</BaseLayout>

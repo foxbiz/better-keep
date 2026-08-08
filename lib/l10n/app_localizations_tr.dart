@@ -1763,11 +1763,11 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get openSource => 'Açık Kaynak';
+  String get openSource => 'Kaynak Koduna Erişim';
 
   @override
   String get openSourceDescription =>
-      'Better Keep açık kaynaktır! Kodu görüntüleyin,\nkatkıda bulunun veya GitHub\'da sorun bildirin.';
+      'Kaynak kodu CC BY-NC 4.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.';
 
   @override
   String get frequentlyAskedQuestions => 'Sıkça Sorulan Sorular';
@@ -1893,6 +1893,10 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get couldNotOpenSubscriptionManagement =>
       'Abonelik yönetimi açılamadı.';
+
+  @override
+  String get subscriptionProviderUnknownContactSupport =>
+      'Faturalandırma sağlayıcınızı belirleyemedik. Yardım için contact@betterkeep.app adresiyle iletişime geçin.';
 
   @override
   String manageSubscriptionInStore(String store) {
@@ -3463,4 +3467,95 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get reorderDateSortHint =>
       'Tarihe göre sıralarken elle yeniden düzenleme kullanılamaz. Notları yeniden düzenlemek için Özel\'i seçin.';
+
+  @override
+  String get googleKeepImportTitle => 'Google Keep\'ten içe aktar';
+
+  @override
+  String get googleKeepImportHelpSubtitle =>
+      'Google Takeout arşivini yüklemeden yerel olarak taşıyın.';
+
+  @override
+  String get googleKeepImportPrivacyTitle => 'Arşiviniz bu cihazda kalır';
+
+  @override
+  String get googleKeepImportPrivacyDescription =>
+      'Better Keep, Google Takeout arşivini yerel olarak doğrular ve dönüştürür. ZIP dosyasını bir dönüştürme hizmetine yüklemez. Notlar yalnızca içe aktarma başarıyla kaydedildikten sonra normal isteğe bağlı eşitleme akışına girer.';
+
+  @override
+  String get googleKeepImportBeforeStart => 'Başlamadan önce';
+
+  @override
+  String get googleKeepImportInstructions =>
+      '1. Google Takeout\'u açın ve yalnızca Keep\'i seçin.\n2. Dışa aktarımı oluşturup indirin.\n3. Aşağıdan ZIP\'i seçin. Aynı içerik varsayılan olarak yeniden içe aktarılmaz.';
+
+  @override
+  String get googleKeepChooseZip => 'Takeout ZIP\'ini seç';
+
+  @override
+  String get googleKeepOpenTakeoutInstructions =>
+      'Google Takeout talimatlarını aç';
+
+  @override
+  String get googleKeepCancelImport => 'İçe aktarmayı iptal et';
+
+  @override
+  String get googleKeepImportCancelled =>
+      'İçe aktarma iptal edildi. Hiçbir not kaydedilmedi.';
+
+  @override
+  String get googleKeepImportFailed =>
+      'İçe aktarma başarısız oldu. Seçiminizi kontrol edip tekrar deneyin.';
+
+  @override
+  String get googleKeepImportReportTitle =>
+      'Better Keep Google Keep içe aktarma raporu';
+
+  @override
+  String get googleKeepImportValidating =>
+      'Google Takeout arşivi doğrulanıyor…';
+
+  @override
+  String get googleKeepImportParsing => 'Google Keep notları okunuyor…';
+
+  @override
+  String get googleKeepImportPreparingAttachments =>
+      'İçe aktarılan ekler hazırlanıyor…';
+
+  @override
+  String get googleKeepImportSaving => 'İçe aktarılan notlar kaydediliyor…';
+
+  @override
+  String get googleKeepImportStarting => 'İçe aktarma başlatılıyor…';
+
+  @override
+  String get googleKeepImportComplete => 'İçe aktarma tamamlandı';
+
+  @override
+  String get googleKeepSafetyLimits => 'Güvenlik sınırları';
+
+  @override
+  String get googleKeepSafetyDescription =>
+      'ZIP dosyaları sıkıştırılmış olarak 100 MB, açılmış olarak 500 MB, 20.000 dosya ve dosya başına 50 MB ile sınırlıdır. Güvenli olmayan yollar, sembolik bağlantılar ve bozuk arşivler notlar kaydedilmeden önce reddedilir.';
+
+  @override
+  String get googleKeepImported => 'İçe aktarıldı';
+
+  @override
+  String get googleKeepSkipped => 'Atlandı';
+
+  @override
+  String get googleKeepWarnings => 'Uyarılar';
+
+  @override
+  String get googleKeepUnsupported => 'Desteklenmiyor';
+
+  @override
+  String get googleKeepFailed => 'Başarısız';
+
+  @override
+  String get googleKeepReviewDetails => 'İçe aktarma ayrıntılarını incele';
+
+  @override
+  String get googleKeepShareReport => 'Tam raporu paylaş';
 }

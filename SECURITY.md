@@ -22,7 +22,7 @@ Please include:
 
 ## Bug Bounty Program
 
-**This is an unfunded, open-source project maintained by an individual developer.** We are unable to offer monetary rewards for security reports at this time.
+**This is an unfunded, source-available project maintained by an individual developer.** We are unable to offer monetary rewards for security reports at this time.
 
 We deeply appreciate contributions from the security community and will provide public acknowledgment for valid findings if requested.
 

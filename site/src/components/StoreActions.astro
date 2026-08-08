@@ -1,0 +1,89 @@
+---
+import { product } from '../data/product';
+import PlatformIcon from './PlatformIcon.astro';
+
+interface Props {
+  variant?: 'hero' | 'compact';
+  compact?: boolean;
+  includeWeb?: boolean;
+}
+
+const {
+  variant = 'compact',
+  compact = false,
+  includeWeb = true
+} = Astro.props;
+
+const storeActions = [
+  {
+    label: 'Download on the App Store',
+    eyebrow: 'Download on the',
+    title: 'App Store',
+    href: product.appStoreUrl,
+    icon: 'apple',
+    platform: 'apple',
+    analytics: product.analyticsGoals.appStore
+  },
+  {
+    label: 'Get it on Google Play',
+    eyebrow: 'Get it on',
+    title: 'Google Play',
+    href: product.playStoreUrl,
+    icon: 'android',
+    platform: 'google',
+    analytics: product.analyticsGoals.playStore
+  },
+  {
+    label: 'Get it from Microsoft',
+    eyebrow: 'Get it from',
+    title: 'Microsoft Store',
+    href: product.microsoftStoreUrl,
+    icon: 'windows',
+    platform: 'microsoft',
+    analytics: undefined
+  }
+] as const;
+---
+
+<div
+  class:list={['store-actions', `store-actions--${variant}`, { 'is-compact': compact }]}
+  aria-label="Get Better Keep"
+>
+  {
+    includeWeb && (
+      <a
+        class="web-app-action"
+        href={product.webAppUrl}
+        data-analytics={product.analyticsGoals.webApp}
+      >
+        <span class="action-badge__icon action-badge__icon--web" aria-hidden="true">
+          <img src="/media/brand/logo.svg" width="36" height="36" alt="" />
+        </span>
+        <span class="action-badge__copy">
+          <small>Use it now</small><strong>Open web app</strong>
+        </span>
+      </a>
+    )
+  }
+  <div class="store-badges">
+    {
+      storeActions.map((action) => (
+        <a
+          class="store-badge"
+          href={action.href}
+          rel="external"
+          data-analytics={action.analytics}
+          data-store-platform={action.platform}
+          aria-label={action.label}
+        >
+          <span class="action-badge__icon" aria-hidden="true">
+            <PlatformIcon name={action.icon} size={30} />
+          </span>
+          <span class="action-badge__copy">
+            <small>{action.eyebrow}</small><strong>{action.title}</strong>
+          </span>
+        </a>
+      ))
+    }
+  </div>
+</div>

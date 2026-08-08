@@ -12,8 +12,18 @@ test("lists checks and treats an omitted action as help", () => {
 	assert.deepEqual(parseCheckTaskArguments([]), {help: true});
 	assert.deepEqual(parseCheckTaskArguments(["help"]), {help: true});
 	assert.deepEqual(parseCheckTaskArguments(["--help"]), {help: true});
-	assert.deepEqual(CHECK_ACTION_NAMES, ["analyze", "apple-config", "audit"]);
+	assert.deepEqual(CHECK_ACTION_NAMES, ["analyze", "apple-config", "audit", "site"]);
 	assert.match(formatCheckTaskHelp(), /npm run check <action>/);
+});
+
+test("site check uses the isolated Astro workspace", () => {
+	assert.deepEqual(resolveCheckTask(["site"]).operations, [
+		{
+			args: ["--prefix", "site", "run", "check"],
+			command: "npm",
+			type: "process",
+		},
+	]);
 });
 
 test("resolves analysis and the production Apple configuration check", () => {
@@ -37,8 +47,18 @@ test("resolves analysis and the production Apple configuration check", () => {
 	]);
 });
 
-test("audits root before Functions through the pinned runtime", () => {
+test("validates the workspace tree before production audits", () => {
 	assert.deepEqual(resolveCheckTask(["audit"]).operations, [
+		{
+			args: [
+				"ls",
+				"--all",
+				"--workspaces",
+				"--include-workspace-root",
+			],
+			command: "npm",
+			type: "process",
+		},
 		{args: ["audit", "--omit=dev"], command: "npm", type: "process"},
 		{
 			args: [
@@ -94,7 +114,7 @@ test("audit execution preserves environment and stops on the first failure", asy
 	assert.equal(functionsCalls.length, 0);
 });
 
-test("Functions audit runs after a successful root audit", async () => {
+test("Functions audit runs after successful tree and root checks", async () => {
 	const calls = [];
 	const exitCode = await runCheckTask(["audit"], {
 		processEnv: {BASE: "present"},
@@ -111,8 +131,8 @@ test("Functions audit runs after a successful root audit", async () => {
 	assert.equal(exitCode, 0);
 	assert.deepEqual(
 		calls.map((call) => call.type),
-		["process", "functions"],
+		["process", "process", "functions"],
 	);
-	assert.equal(calls[1].options.root, "/repository");
-	assert.equal(calls[1].options.env.BASE, "present");
+	assert.equal(calls[2].options.root, "/repository");
+	assert.equal(calls[2].options.env.BASE, "present");
 });

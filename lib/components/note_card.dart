@@ -16,6 +16,7 @@ import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
+import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
@@ -1500,6 +1501,15 @@ class _NoteCardState extends State<NoteCard>
                               context,
                               result,
                             );
+                            if (result.delivery?.state ==
+                                ReminderDeliveryState.scheduled) {
+                              unawaited(
+                                ReviewPromptService.instance
+                                    .recordPositiveMilestone(
+                                      ReviewMilestone.reminderScheduled,
+                                    ),
+                              );
+                            }
                           },
                     style: ButtonStyle(
                       padding: WidgetStatePropertyAll<EdgeInsets>(

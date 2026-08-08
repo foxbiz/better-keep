@@ -33,6 +33,7 @@ import 'package:better_keep/services/due_reminder_presenter.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
+import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
@@ -846,6 +847,15 @@ class _NoteEditorState extends State<NoteEditor>
                             context,
                             result,
                           );
+                          if (result.delivery?.state ==
+                              ReminderDeliveryState.scheduled) {
+                            unawaited(
+                              ReviewPromptService.instance
+                                  .recordPositiveMilestone(
+                                    ReviewMilestone.reminderScheduled,
+                                  ),
+                            );
+                          }
                         }
                       },
                       icon: Icon(

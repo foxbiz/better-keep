@@ -11,6 +11,7 @@ const repositoryRoot = path.resolve(path.dirname(runnerPath), "..");
 const projectId = "better-keep-notes";
 
 const firebaseStep = (args) => ({args, type: "firebase"});
+const processStep = (command, args) => ({args, command, type: "process"});
 
 function defineTarget(description, createSteps) {
 	return {createSteps, description};
@@ -30,7 +31,7 @@ const targets = {
 			...extraArgs,
 		]),
 	]),
-	hosting: defineTarget("Build and deploy the Flutter web application.", (extraArgs) => [
+	hosting: defineTarget("Build and deploy the marketing site and web application.", (extraArgs) => [
 		...resolveBuildTask(["web"]).operations.map((operation) => ({
 			...operation,
 			type: "process",
@@ -46,6 +47,31 @@ const targets = {
 			"hosting",
 			...extraArgs,
 		]),
+		]),
+	"hosting-preview": defineTarget(
+		"Build and publish the combined website to the temporary ui-overhaul Hosting channel.",
+		(extraArgs) => [
+			...resolveBuildTask(["web"]).operations.map((operation) => ({
+				...operation,
+				type: "process",
+			})),
+			firebaseStep([
+				"--",
+				"hosting:channel:deploy",
+				"ui-overhaul",
+				"--expires",
+				"7d",
+				"--no-authorized-domains",
+				"--config",
+				"firebase.deploy.json",
+				"--project",
+				projectId,
+				...extraArgs,
+			]),
+		],
+	),
+	indexnow: defineTarget("Submit built public URLs to IndexNow.", (extraArgs) => [
+		processStep("node", ["scripts/submit_indexnow.mjs", ...extraArgs]),
 	]),
 };
 

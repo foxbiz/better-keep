@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "output": {
+    "width": 1290,
+    "height": 2796,
+    "format": "png"
+  },
+  "frames": [
+    {
+      "position": 1,
+      "key": "home",
+      "source": "site/assets/screenshots/2.png",
+      "captureStatus": "ready",
+      "messageKey": 0
+    },
+    {
+      "position": 2,
+      "key": "editor",
+      "source": "site/assets/screenshots/5.png",
+      "captureStatus": "ready",
+      "messageKey": 1
+    },
+    {
+      "position": 3,
+      "key": "security",
+      "source": "site/assets/screenshots/4.png",
+      "captureStatus": "ready",
+      "messageKey": 2
+    },
+    {
+      "position": 4,
+      "key": "offline-devices",
+      "source": null,
+      "captureStatus": "needs-authentic-capture",
+      "messageKey": 3
+    },
+    {
+      "position": 5,
+      "key": "importer",
+      "source": null,
+      "captureStatus": "needs-authentic-capture",
+      "messageKey": 4
+    },
+    {
+      "position": 6,
+      "key": "voice",
+      "source": "site/assets/screenshots/6.png",
+      "captureStatus": "ready",
+      "messageKey": 5
+    },
+    {
+      "position": 7,
+      "key": "reminders",
+      "source": null,
+      "captureStatus": "needs-authentic-capture",
+      "messageKey": 6
+    },
+    {
+      "position": 8,
+      "key": "organization",
+      "source": null,
+      "captureStatus": "needs-authentic-capture",
+      "messageKey": 7
+    }
+  ]
+}

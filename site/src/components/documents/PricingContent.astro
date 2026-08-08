@@ -1,0 +1,183 @@
+---
+import DocumentIcon from './DocumentIcon.astro';
+---
+
+<!-- Feature Comparison Table -->
+    <section class="comparison-section">
+      <h2>Feature Comparison</h2>
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Free</th>
+            <th>Pro</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="feature-name">Local notes</td>
+            <td>Unlimited</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td class="feature-name">Locked notes</td>
+            <td>Up to 5</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td class="feature-name">Real-time cloud sync</td>
+            <td><span class="x-icon">✕</span></td>
+            <td><span class="check-icon">✓</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Why We Charge Section -->
+    <section class="why-pay-section">
+      <h2>Why Do We Charge?</h2>
+      <p>
+        Better Keep Notes is built with care by a small team. We believe in honest, sustainable software—no ads, no data
+        selling,
+        no dark patterns. Here's where your subscription goes:
+      </p>
+      <div class="why-cards">
+        <div class="why-card">
+          <DocumentIcon name="server" />
+          <h3>Server Infrastructure</h3>
+          <p>Cloud sync and real-time features require servers that cost real money to run and maintain securely.</p>
+        </div>
+        <div class="why-card">
+          <DocumentIcon name="shield-check" />
+          <h3>End-to-End Encryption</h3>
+          <p>Strong encryption is computationally expensive. We invest in proper cryptography to keep your data truly
+            private.</p>
+        </div>
+        <div class="why-card">
+          <DocumentIcon name="code-2" />
+          <h3>Ongoing Development</h3>
+          <p>New features, bug fixes, and cross-platform support across 6 platforms takes continuous effort.</p>
+        </div>
+        <div class="why-card">
+          <DocumentIcon name="ban" />
+          <h3>No Ads, No Tracking</h3>
+          <p>Your subscription means we never need to monetize your attention or data. You're the customer, not the
+            product.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Free Forever Section -->
+    <section class="free-forever">
+      <h2> Free Forever</h2>
+      <p>
+        These features will always be free, no account required:
+      </p>
+      <div class="free-features">
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>Unlimited local notes</span>
+        </div>
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>Local encryption</span>
+        </div>
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>5 locked notes</span>
+        </div>
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>Labels & colors</span>
+        </div>
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>Pin notes</span>
+        </div>
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>Reminders</span>
+        </div>
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>Read-only mode</span>
+        </div>
+        <div class="free-feature">
+          <DocumentIcon name="check" />
+          <span>Works offline</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section">
+      <h2>Frequently Asked Questions</h2>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I use the app without creating an account?</span>
+          <DocumentIcon name="chevron-down" />
+        </div>
+        <div class="faq-answer">
+          Yes! Better Keep Notes works completely offline without any account. All free features are available without
+          signing up. You only need an account if you want to sync your notes across devices.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>What happens when my Pro subscription expires?</span>
+          <DocumentIcon name="chevron-down" />
+        </div>
+        <div class="faq-answer">
+          Your notes are always yours. When your subscription expires, you'll still have access to all your local notes.
+          Cloud sync will pause, but your data remains safe and encrypted locally. You can export everything at any
+          time.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Is there a free trial for Pro?</span>
+          <DocumentIcon name="chevron-down" />
+        </div>
+        <div class="faq-answer">
+          Yes! New users get a 7-day free trial of Pro features. No credit card required to start. If you decide Pro
+          isn't for you, you'll automatically switch to the free plan.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I switch between monthly and yearly billing?</span>
+          <DocumentIcon name="chevron-down" />
+        </div>
+        <div class="faq-answer">
+          Yes, you can change your billing cycle at any time. If you switch from monthly to yearly, you'll get a
+          prorated credit for your remaining monthly subscription.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I self-host Better Keep Notes?</span>
+          <DocumentIcon name="chevron-down" />
+        </div>
+        <div class="faq-answer">
+          Yes! If you're interested in running your own backend with Firebase or Supabase, please contact us at
+          <a href="mailto:contact@betterkeep.app">contact@betterkeep.app</a> and we'll
+          help you get set up.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I get a refund?</span>
+          <DocumentIcon name="chevron-down" />
+        </div>
+        <div class="faq-answer">
+          Yes. If you're not satisfied within the first 30 days, contact us for a full refund. For subscriptions
+          purchased through app stores, refunds are processed according to their respective policies.
+        </div>
+      </div>
+    </section>

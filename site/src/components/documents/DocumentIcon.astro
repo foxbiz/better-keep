@@ -1,0 +1,50 @@
+---
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  Code,
+  CreditCard,
+  Mail,
+  MapPin,
+  Phone,
+  Receipt,
+  Server,
+  ShieldCheck
+} from '@lucide/astro';
+
+const icons = {
+  ban: Ban,
+  check: Check,
+  'chevron-down': ChevronDown,
+  'circle-alert': CircleAlert,
+  'code-2': Code,
+  'credit-card': CreditCard,
+  mail: Mail,
+  'map-pin': MapPin,
+  phone: Phone,
+  receipt: Receipt,
+  server: Server,
+  'shield-check': ShieldCheck
+} as const;
+
+export type DocumentIconName = keyof typeof icons;
+
+interface Props {
+  name: DocumentIconName;
+  class?: string;
+  size?: number;
+}
+
+const { name, size } = Astro.props;
+const className = Astro.props.class;
+const Icon = icons[name];
+---
+
+<Icon
+  class:list={['document-icon', className]}
+  size={size}
+  aria-hidden="true"
+  focusable="false"
+/>

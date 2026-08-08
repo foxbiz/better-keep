@@ -11,8 +11,8 @@ const resetPasswordPage = readFileSync(
 	join(repositoryRoot, "web", "reset-password.html"),
 	"utf8",
 );
-const sharedNotePage = readFileSync(
-	join(repositoryRoot, "web", "s", "index.html"),
+const sharedNoteLayout = readFileSync(
+	join(repositoryRoot, "site", "src", "layouts", "ShareLayout.astro"),
 	"utf8",
 );
 const browserRunner = readFileSync(
@@ -75,7 +75,7 @@ test("main Flutter shell hides only Firebase Auth's redundant emulator warning",
 test("standalone Firebase web pages retain the SDK warning", () => {
 	for (const [name, source] of [
 		["reset-password", resetPasswordPage],
-		["shared-note", sharedNotePage],
+		["shared-note", sharedNoteLayout],
 	]) {
 		assert.doesNotMatch(
 			source,

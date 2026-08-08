@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:better_keep/services/firebase_backend.dart';
 
-const databaseVersion = 10;
+const databaseVersion = 11;
 const databaseName = "better_keep.db";
 String get activeDatabaseName => FirebaseBackend.localDataScope.databaseName;
 const bigScreenWidthThreshold = 800;

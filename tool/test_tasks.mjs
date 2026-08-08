@@ -53,6 +53,12 @@ const suites = {
 			"test/storage_object_locator_test.dart",
 		]),
 	]),
+	"database-migrations": defineSuite("Run database migration tests.", () => [
+		flutterTests(["test/database_merge_migration_test.dart"]),
+	]),
+	"external-links": defineSuite("Check links in the built website.", () => [
+		processStep("node", ["scripts/check_external_links.mjs", "build/web"]),
+	]),
 	"firebase-apple": defineSuite("Run Apple Firebase and Auth tests.", () => [
 		flutterTests([
 			"test/apple_auth_test.dart",
@@ -175,6 +181,28 @@ const suites = {
 	functions: defineSuite("Run Cloud Functions unit tests.", () => [
 		functionsStep(["--", "npm", "--prefix", "functions", "test"]),
 	]),
+	hosting: defineSuite("Validate routes in an isolated Hosting emulator.", () => [
+		firebaseStep([
+			"--",
+			"emulators:exec",
+			"--only",
+			"hosting",
+			"--config",
+			"firebase.emulators.json",
+			"--project",
+			projectId,
+			"./scripts/test_hosting_routes.sh",
+		]),
+	]),
+	"keep-import": defineSuite("Run Google Keep import reliability tests.", () => [
+		flutterTests([
+			"test/google_keep_import_service_test.dart",
+			"test/google_keep_import_discoverability_test.dart",
+		]),
+	]),
+	lighthouse: defineSuite("Audit the marketing site with Lighthouse.", () => [
+		processStep("npm", ["--prefix", "site", "run", "lighthouse"]),
+	]),
 	localization: defineSuite("Generate and verify production localization.", () => [
 		processStep("flutter", ["gen-l10n"]),
 		processStep("node", [
@@ -196,6 +224,41 @@ const suites = {
 			"test/recovered_oauth_sign_in_coordinator_test.dart",
 		]),
 	]),
+	"review-prompts": defineSuite("Run review prompt behavior tests.", () => [
+		flutterTests(["test/review_prompt_service_test.dart"]),
+	]),
+	search: defineSuite("Validate site types, store metadata, and search visibility.", () => [
+		processStep("node", [
+			"--test",
+			"test/site_account_manage_test.mjs",
+			"test/site_assets_test.mjs",
+			"test/site_public_documents_test.mjs",
+			"test/site_public_stats_test.mjs",
+			"test/site_share_viewer_test.mjs",
+			"test/site_store_platform_test.mjs",
+		]),
+		processStep("npm", ["--prefix", "site", "run", "check"]),
+		processStep("node", ["scripts/validate_store_metadata.mjs"]),
+		processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),
+	]),
+	store: defineSuite("Validate localized store metadata.", () => [
+		processStep("node", ["scripts/validate_store_metadata.mjs"]),
+	]),
+	"subscription-management": defineSuite(
+		"Run subscription management routing tests.",
+		() => [flutterTests(["test/subscription_management_test.dart"])],
+	),
+	visibility: defineSuite("Validate the built website's search visibility.", () => [
+		processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),
+	]),
+	"web-release": defineSuite(
+		"Build and validate the combined Flutter and Astro website.",
+		() => [
+			processStep("./scripts/build_web.sh", []),
+			suiteStep("search"),
+			suiteStep("hosting"),
+		],
+	),
 	release: defineSuite("Run every non-device release test suite.", () => [
 		processStep("node", [
 			"--test",
@@ -212,6 +275,11 @@ const suites = {
 		]),
 		suiteStep("firebase-runtime"),
 		suiteStep("windows-build-policy"),
+		suiteStep("database-migrations"),
+		suiteStep("web-release"),
+		suiteStep("keep-import"),
+		suiteStep("review-prompts"),
+		suiteStep("subscription-management"),
 		suiteStep("localization"),
 		suiteStep("functions"),
 		suiteStep("oauth-recovery"),

@@ -1,0 +1,26 @@
+---
+import { galleryScreenshots } from '../data/home';
+import DeviceFrame from './DeviceFrame.astro';
+---
+
+<section class="home-section screenshot-gallery" id="screenshots">
+  <div class="container">
+    <div class="section-heading section-heading--split">
+      <div>
+        <p class="eyebrow">Personalize and connect</p>
+        <h2>Set up Better Keep your way.</h2>
+      </div>
+      <p>
+        Choose a theme and language, sign in the way you prefer, and manage
+        connected accounts and subscription details.
+      </p>
+    </div>
+    <div class="device-gallery" aria-label="Better Keep personalization, account, and sign-in screens">
+      {
+        galleryScreenshots.map((screenshot) => (
+          <DeviceFrame {...screenshot} class="device-gallery__item" />
+        ))
+      }
+    </div>
+  </div>
+</section>
