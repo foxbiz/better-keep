@@ -259,6 +259,9 @@ const suites = {
 			suiteStep("hosting"),
 		],
 	),
+	"ios-build-policy": defineSuite("Run iOS build policy tests.", () => [
+		processStep("node", ["--test", "test/tool/ios_build_policy_test.mjs"]),
+	]),
 	release: defineSuite("Run every non-device release test suite.", () => [
 		processStep("node", [
 			"--test",
@@ -274,6 +277,7 @@ const suites = {
 			"test/tool/test_tasks_test.mjs",
 		]),
 		suiteStep("firebase-runtime"),
+		suiteStep("ios-build-policy"),
 		suiteStep("windows-build-policy"),
 		suiteStep("database-migrations"),
 		suiteStep("web-release"),
