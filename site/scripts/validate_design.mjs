@@ -360,6 +360,15 @@ for (const declaration of [
     `Store actions row is missing ${declaration}`
   );
 }
+const desktopSidebarActionsRule =
+  sourceCss.match(
+    /@media\s*\(min-width:\s*1121px\)[\s\S]*?\.article-action \.store-actions\s*\{([^}]*)\}/
+  )?.[1] || '';
+assert(
+  /width:\s*100%/.test(desktopSidebarActionsRule) &&
+    /max-width:\s*100%/.test(desktopSidebarActionsRule),
+  'Desktop article sidebar actions must stay within the card content width'
+);
 assert(
   sourceCss.includes('width: min(328px, calc(100vw - 2rem))') &&
     sourceCss.includes('.article-action {\n  min-width: 0;') &&

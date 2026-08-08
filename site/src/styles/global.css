@@ -1536,6 +1536,13 @@ tr:last-child td {
   color: #11120a;
 }
 
+@media (min-width: 1121px) {
+  .article-action .store-actions {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 1120px) {
   .home-hero__inner {
     grid-template-columns: minmax(0, 0.8fr) minmax(460px, 1.2fr);
