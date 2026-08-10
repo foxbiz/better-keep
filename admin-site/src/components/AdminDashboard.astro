@@ -1,0 +1,256 @@
+<div class="admin-shell" data-admin-root>
+  <section class="login-screen" data-login-screen>
+    <div class="login-brand" aria-label="Better Keep">
+      <img src="/media/brand/app-mark.svg" width="42" height="42" alt="" />
+      <span>Better Keep</span>
+    </div>
+    <div class="login-card" data-password-screen>
+      <div class="login-kicker"><span></span> Private operations</div>
+      <h1>Welcome back.</h1>
+      <p>Sign in with the verified administrator account to continue.</p>
+      <form action="/" method="get" data-login-form>
+        <label>
+          <span>Email</span>
+          <input
+            type="email"
+            autocomplete="username"
+            spellcheck="false"
+            data-login-email
+            required
+          />
+        </label>
+        <label>
+          <span>Password</span>
+          <input
+            type="password"
+            autocomplete="current-password"
+            minlength="6"
+            data-login-password
+            required
+          />
+        </label>
+        <button class="primary-button" type="submit" data-login-button disabled>
+          <span>Sign in</span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <p class="form-message" role="status" data-login-message></p>
+      </form>
+    </div>
+    <div class="login-card" data-mfa-screen hidden>
+      <div class="login-kicker"><span></span> Two-step verification</div>
+      <h1>Enter your code.</h1>
+      <p>Use the current six-digit code from the authenticator registered to this account.</p>
+      <form action="/" method="get" data-mfa-form>
+        <label>
+          <span>Authenticator code</span>
+          <input
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            data-mfa-code
+            required
+          />
+        </label>
+        <button class="primary-button" type="submit" data-mfa-button>
+          <span>Verify</span><span aria-hidden="true">→</span>
+        </button>
+        <button class="secondary-button" type="button" data-cancel-mfa>Cancel</button>
+        <p class="form-message" role="status" data-mfa-message></p>
+      </form>
+    </div>
+    <div class="login-card" data-enrollment-screen hidden>
+      <div class="login-kicker"><span></span> Secure this account</div>
+      <h1>Add TOTP.</h1>
+      <p>Scan this code with an authenticator, or enter the manual key. Enrollment is required before admin data can load.</p>
+      <img class="totp-qr" width="220" height="220" alt="TOTP enrollment QR code" data-totp-qr />
+      <div class="totp-secret"><span>Manual key</span><code data-totp-secret></code></div>
+      <form action="/" method="get" data-enrollment-form>
+        <label>
+          <span>Authenticator code</span>
+          <input
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            data-enrollment-code
+            required
+          />
+        </label>
+        <button class="primary-button" type="submit" data-enrollment-button>
+          <span>Finish enrollment</span><span aria-hidden="true">→</span>
+        </button>
+        <button class="secondary-button" type="button" data-cancel-enrollment>Sign out</button>
+        <p class="form-message" role="status" data-enrollment-message></p>
+      </form>
+    </div>
+    <p class="login-footnote">Protected by Firebase Authentication, TOTP, App Check, and server-side authorization.</p>
+  </section>
+
+  <section class="dashboard" data-dashboard hidden>
+    <header class="admin-header">
+      <a class="admin-brand" href="/" aria-label="Better Keep Admin home">
+        <img src="/media/brand/app-mark.svg" width="36" height="36" alt="" />
+        <span><strong>Better Keep</strong><small>Operations</small></span>
+      </a>
+      <div class="admin-account">
+        <span class="live-indicator"><i></i> Protected backend data</span>
+        <span class="admin-email" data-admin-email></span>
+        <button class="quiet-button" type="button" data-sign-out>Sign out</button>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Business overview</p>
+          <h1>Good <span data-day-period>morning</span>.</h1>
+          <p class="heading-copy">A clear view of customers, subscriptions, and cash collected.</p>
+        </div>
+        <div class="as-of">
+          <span>Page refreshed</span>
+          <strong data-as-of>—</strong>
+          <button class="icon-button" type="button" aria-label="Refresh dashboard" data-refresh>↻</button>
+        </div>
+      </div>
+
+      <p class="dashboard-warning" role="status" data-dashboard-warning hidden></p>
+
+      <section class="metric-grid" aria-label="User metrics">
+        <article class="metric-card metric-card--lime">
+          <div class="metric-top"><span>All users</span><i>01</i></div>
+          <strong data-total-users>—</strong>
+          <p data-total-users-freshness>Reconciliation pending</p>
+        </article>
+        <article class="metric-card">
+          <div class="metric-top"><span>Paid access</span><i>02</i></div>
+          <strong data-paid-users>—</strong>
+          <p>Currently entitled, excluding trials</p>
+        </article>
+        <article class="metric-card">
+          <div class="metric-top"><span>Cancelled</span><i>03</i></div>
+          <strong data-cancelled-users>—</strong>
+          <p>Auto-renew off, access not yet expired</p>
+        </article>
+      </section>
+
+      <section class="subscriptions-section" aria-labelledby="subscriptions-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Subscriptions</p>
+            <h2 id="subscriptions-heading">Provider coverage</h2>
+          </div>
+          <p data-subscription-freshness>Provider reconciliation pending</p>
+        </div>
+        <div class="provider-grid">
+          <article class="provider-card" data-provider="play_store">
+            <h3>Google Play</h3>
+            <dl><div><dt>Entitled</dt><dd data-count="entitled">—</dd></div><div><dt>Renewing</dt><dd data-count="renewing">—</dd></div><div><dt>Cancelled, access remains</dt><dd data-count="cancelledWithAccess">—</dd></div><div><dt>Grace</dt><dd data-count="grace">—</dd></div><div><dt>Suspended</dt><dd data-count="suspended">—</dd></div><div><dt>Needs review</dt><dd data-count="unmatched">—</dd></div></dl>
+          </article>
+          <article class="provider-card" data-provider="app_store">
+            <h3>App Store</h3>
+            <dl><div><dt>Entitled</dt><dd data-count="entitled">—</dd></div><div><dt>Renewing</dt><dd data-count="renewing">—</dd></div><div><dt>Cancelled, access remains</dt><dd data-count="cancelledWithAccess">—</dd></div><div><dt>Grace</dt><dd data-count="grace">—</dd></div><div><dt>Suspended</dt><dd data-count="suspended">—</dd></div><div><dt>Needs review</dt><dd data-count="unmatched">—</dd></div></dl>
+          </article>
+          <article class="provider-card" data-provider="razorpay">
+            <h3>Razorpay</h3>
+            <dl><div><dt>Entitled</dt><dd data-count="entitled">—</dd></div><div><dt>Renewing</dt><dd data-count="renewing">—</dd></div><div><dt>Cancelled, access remains</dt><dd data-count="cancelledWithAccess">—</dd></div><div><dt>Grace</dt><dd data-count="grace">—</dd></div><div><dt>Suspended</dt><dd data-count="suspended">—</dd></div><div><dt>Needs review</dt><dd data-count="unmatched">—</dd></div></dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="revenue-section" aria-labelledby="revenue-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Revenue</p>
+            <h2 id="revenue-heading">Verified revenue</h2>
+          </div>
+          <p>Customer charges and refunds before fees · currencies are never mixed</p>
+        </div>
+        <p class="pipeline-warning" role="status" data-pipeline-warning hidden></p>
+        <div class="revenue-grid">
+          <article class="revenue-card">
+            <div class="revenue-label"><span>This month</span><i data-revenue-month>UTC</i></div>
+            <div class="revenue-breakdown"><section><h3>Gross</h3><div class="money-list" data-monthly-gross></div></section><section><h3>Refunds</h3><div class="money-list" data-monthly-refunds></div></section><section><h3>Net</h3><div class="money-list" data-monthly-net></div></section></div>
+          </article>
+          <article class="revenue-card revenue-card--dark">
+            <div class="revenue-label"><span>All time</span><i>Recorded</i></div>
+            <div class="revenue-breakdown"><section><h3>Gross</h3><div class="money-list" data-lifetime-gross></div></section><section><h3>Refunds</h3><div class="money-list" data-lifetime-refunds></div></section><section><h3>Net</h3><div class="money-list" data-lifetime-net></div></section></div>
+          </article>
+          <article class="coverage-card">
+            <span class="coverage-title">Data coverage</span>
+            <div data-coverage-list></div>
+            <p>Store reporting may arrive a few days after a charge.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="users-section" aria-labelledby="users-heading">
+        <div class="section-heading users-heading">
+          <div>
+            <p class="eyebrow">Customers</p>
+            <h2 id="users-heading">Manage users</h2>
+          </div>
+          <form class="user-search" role="search" data-search-form>
+            <label class="sr-only" for="admin-user-search">Search users</label>
+            <span aria-hidden="true">⌕</span>
+            <input id="admin-user-search" type="search" placeholder="Search name, email, or exact UID" data-search />
+            <button type="submit">Search</button>
+          </form>
+        </div>
+        <div class="filter-row" aria-label="Filter users" data-filters>
+          <button class="filter is-active" type="button" data-segment="all">All</button>
+          <button class="filter" type="button" data-segment="paid">Paid</button>
+          <button class="filter" type="button" data-segment="cancelled">Cancelled</button>
+          <button class="filter" type="button" data-segment="trial">Trials</button>
+          <button class="filter" type="button" data-segment="free">Free</button>
+          <button class="filter" type="button" data-segment="disabled">Disabled</button>
+        </div>
+        <div class="table-card">
+          <div class="table-status" role="status" data-table-status>Loading users…</div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col">Access</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Joined</th>
+                  <th scope="col">Last seen</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody data-user-rows></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <span data-page-label>Page 1</span>
+            <div>
+              <button class="quiet-button" type="button" data-previous disabled>Previous</button>
+              <button class="quiet-button" type="button" data-next disabled>Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <dialog class="user-dialog" aria-labelledby="admin-user-dialog-title" data-user-dialog>
+    <button class="dialog-close" type="button" aria-label="Close user details" data-dialog-close>×</button>
+    <div class="dialog-user">
+      <span class="large-avatar" data-dialog-avatar></span>
+      <div><h2 id="admin-user-dialog-title" data-dialog-name>User</h2><p data-dialog-email></p></div>
+    </div>
+    <dl class="detail-grid" data-dialog-details></dl>
+    <div class="dialog-actions">
+      <button class="secondary-button" type="button" data-revoke-sessions>Revoke sessions</button>
+      <button class="danger-button" type="button" data-toggle-disabled>Disable account</button>
+    </div>
+    <p class="dialog-message" role="status" data-dialog-message></p>
+  </dialog>
+</div>
+
+<script>
+  import '../scripts/admin-dashboard';
+</script>

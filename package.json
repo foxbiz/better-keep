@@ -16,13 +16,20 @@
 	"license": "UNLICENSED",
 	"private": true,
 	"workspaces": [
+		"admin-site",
 		"site"
 	],
 	"engines": {
 		"node": "22.x || 24.x"
 	},
 	"overrides": {
-		"js-yaml": "^4.3.1"
+		"js-yaml": "^4.3.1",
+		"gaxios": {
+			"uuid": "^11.1.1"
+		},
+		"@google-cloud/pubsub": {
+			"@opentelemetry/core": "^2.10.0"
+		}
 	},
 	"devDependencies": {
 		"@firebase/rules-unit-testing": "5.0.1",

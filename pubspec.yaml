@@ -1,7 +1,7 @@
 name: better_keep
 description: 'Notes app with enhanced features'
 publish_to: 'none'
-version: 1.2.1+75
+version: 1.2.2+78
 
 environment:
   sdk: ^3.12.0
@@ -32,19 +32,24 @@ dependencies:
   perfect_freehand: ^2.5.1
   flutter_colorpicker: ^1.1.0
   gal: ^2.3.3
-  firebase_core: ^4.2.1
-  firebase_auth: ^6.1.2
+  # Keep FlutterFire plugins on the same Firebase iOS SDK release (12.17.0).
+  # The Android App Check provider itself remains disabled for this hotfix.
+  firebase_core: 4.13.0
+  firebase_auth: 6.5.7
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^8.1.0
-  cloud_firestore: ^6.1.0
-  cloud_functions: ^6.0.4
-  firebase_storage: ^13.0.4
+  cloud_firestore: 6.8.0
+  cloud_functions: 6.3.6
+  firebase_storage: 13.4.6
   intl: ^0.20.2
   url_launcher: ^6.3.2
   metadata_fetch: ^0.4.2
   http: ^1.6.0
   sqflite_common_ffi_web: ^1.1.0
-  firebase_app_check: ^0.4.1+2
+  # 0.4.5+2 fails under the current Kotlin/AGP toolchain because its Android
+  # registrar is not resolved during compilation. Android activation remains
+  # disabled by APP_CHECK_ANDROID_ENABLED for this hotfix.
+  firebase_app_check: 0.4.6
   speech_to_text: ^7.3.0
   whisper_flutter_new: ^1.0.1
   cryptography: ^2.7.0
@@ -84,7 +89,7 @@ msix_config:
   publisher_display_name: Foxbiz Software Pvt. Ltd.
   identity_name: FoxbizSotware.BetterKeepNotes
   publisher: 'CN=886C9A5B-2D6E-4AE6-822D-DE6C845ECD7D'
-  msix_version: 1.2.1.0
+  msix_version: 1.2.2.0
   logo_path: assets/better_keep-512.png
   capabilities: internetClient, internetClientServer, privateNetworkClientServer
   protocol_activation: betterkeep

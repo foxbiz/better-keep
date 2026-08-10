@@ -287,6 +287,43 @@ service cloud.firestore {
       allow write: if false; // Only backend access
     }
 
+    // Backend-only admin data. Browser clients use authorized Cloud Functions.
+    match /adminUsers/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /adminMetrics/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /adminRevenueTransactions/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /adminRevenueSummary/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /adminAuditLogs/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /adminRevenueEvents/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /adminSubscriptionIssues/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /playStoreWebhookEvents/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /razorpayWebhookEvents/{document=**} {
+      allow read, write: if false;
+    }
+
     // Payments collection - only Cloud Functions should access
     match /payments/{paymentId} {
       allow read: if false;

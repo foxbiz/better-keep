@@ -26,6 +26,10 @@ export const appStoreSharedSecret = defineSecret("APP_STORE_SHARED_SECRET");
 // Razorpay API credentials
 export const razorpayKeyId = defineSecret("RAZORPAY_KEY_ID");
 export const razorpayKeySecret = defineSecret("RAZORPAY_KEY_SECRET");
+export const razorpayWebhookSecret = defineSecret("RAZORPAY_WEBHOOK_SECRET");
+export const razorpayWebhookSecretPrevious = defineSecret(
+	"RAZORPAY_WEBHOOK_SECRET_PREVIOUS",
+);
 
 // OAuth secrets for direct OAuth flow (bypasses Firebase SDK storage issues)
 export const facebookAppId = defineSecret("FACEBOOK_APP_ID");

@@ -1,4 +1,6 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { ADMIN_METRICS_COLLECTION } from "../adminConfig";
 import { auth, db } from "../config";
 
 /**
@@ -45,12 +47,27 @@ export default onSchedule(
 				displayCount = `${rounded}+`;
 			}
 
-			// Write to public stats document
-			await db.collection("stats").doc("public").set({
-				userCount: displayCount,
-				userCountExact: userCount, // For internal analytics (not exposed publicly)
-				updatedAt: new Date(),
-			});
+			// Keep the public document privacy-rounded. Exact counts live only in
+			// the backend-only admin metrics collection.
+			const batch = db.batch();
+			batch.set(
+				db.collection("stats").doc("public"),
+				{
+					userCount: displayCount,
+					userCountExact: FieldValue.delete(),
+					updatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
+			);
+			batch.set(
+				db.collection(ADMIN_METRICS_COLLECTION).doc("current"),
+				{
+					totalUsers: userCount,
+					totalUsersUpdatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
+			);
+			await batch.commit();
 
 			console.log(`Public stats updated: ${displayCount} users`);
 		} catch (error) {

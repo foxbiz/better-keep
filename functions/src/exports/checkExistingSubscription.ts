@@ -1,281 +1,129 @@
-import type * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
-import {
-	ANDROID_PACKAGE_NAME,
-	appStoreSharedSecret,
-	db,
-	googlePlayCredentials,
-	IOS_PRODUCT_IDS,
-} from "../config";
+import { db, googlePlayCredentials } from "../config";
+import { refreshGooglePlaySubscription } from "../googlePlayService";
 import {
 	type AuthenticatedCallableRequest,
 	onNonReviewCall,
 } from "../nonReviewCallable";
-import type { CheckSubscriptionRequest } from "../types";
 import {
-	getPlayDeveloperApi,
-	setSubscriptionClaims,
-	verifyAppStorePurchase,
-} from "../utils";
+	ENTITLEMENT_CONTRACT_VERSION,
+	evaluateSubscription,
+	verifiedEntitlementPayload,
+} from "../subscriptionEntitlement";
+import {
+	type ReconciledEntitlement,
+	reconcileUserEntitlement,
+} from "../subscriptionReconciler";
+import type { CheckSubscriptionRequest } from "../types";
 
-/**
- * Check if user already has an active subscription before making a new purchase.
- * Also attempts to recover/restore any existing subscription.
- */
+export function existingSubscriptionResponse(
+	data: Record<string, unknown> | undefined,
+	now = Date.now(),
+	reconciled?: ReconciledEntitlement,
+): Record<string, unknown> {
+	const evaluated = evaluateSubscription(data, now);
+	const verified = verifiedEntitlementPayload(data, now);
+	if (verified) {
+		return {
+			entitlementContractVersion: ENTITLEMENT_CONTRACT_VERSION,
+			hasSubscription: true,
+			resolution: "active_provider",
+			subscription: verified,
+		};
+	}
+
+	if (
+		reconciled?.resolution === "provider_inactive" ||
+		(!evaluated.entitled &&
+			evaluated.source !== null &&
+			evaluated.source !== "trial")
+	) {
+		return {
+			entitlementContractVersion: ENTITLEMENT_CONTRACT_VERSION,
+			entitlementState:
+				reconciled?.entitlementState ?? evaluated.entitlementState,
+			expiresAt:
+				reconciled?.expiresAt?.toDate().toISOString() ??
+				evaluated.expiresAt?.toDate().toISOString() ??
+				null,
+			hasSubscription: false,
+			providerState: reconciled?.providerState ?? evaluated.state,
+			renewalState: reconciled?.renewalState ?? evaluated.renewalState,
+			resolution: "provider_inactive",
+			source: reconciled?.primarySource ?? evaluated.source,
+		};
+	}
+
+	if (
+		reconciled?.resolution === "trial" ||
+		(evaluated.entitled && evaluated.source === "trial")
+	) {
+		return {
+			entitlementContractVersion: ENTITLEMENT_CONTRACT_VERSION,
+			hasSubscription: false,
+			isTrial: true,
+			resolution: "trial",
+		};
+	}
+
+	return {
+		entitlementContractVersion: ENTITLEMENT_CONTRACT_VERSION,
+		hasSubscription: false,
+		resolution: "none",
+	};
+}
+
+async function refreshLinkedPlaySubscriptions(userId: string): Promise<void> {
+	const snapshot = await db
+		.collection("subscriptions")
+		.where("userId", "==", userId)
+		.where("source", "==", "play_store")
+		.get();
+	for (const document of snapshot.docs) {
+		const data = document.data();
+		const purchaseToken =
+			typeof data.purchaseToken === "string" ? data.purchaseToken : document.id;
+		try {
+			await refreshGooglePlaySubscription({
+				purchaseToken,
+				requestedUserId: userId,
+			});
+		} catch (error) {
+			if ((error as { code?: unknown }).code !== 410) throw error;
+			await document.ref.set(
+				{
+					subscriptionState: "SUBSCRIPTION_STATE_EXPIRED",
+					entitlementState: "ended",
+					renewalState: "notRenewing",
+					willAutoRenew: false,
+					updatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
+			);
+		}
+	}
+}
+
 export default onNonReviewCall(
-	{ secrets: [googlePlayCredentials, appStoreSharedSecret] },
+	{ secrets: [googlePlayCredentials] },
 	async (request: AuthenticatedCallableRequest<CheckSubscriptionRequest>) => {
 		const userId = request.auth.uid;
-		console.log(`Checking existing subscription for user ${userId}`);
-
+		const statusRef = db
+			.collection("users")
+			.doc(userId)
+			.collection("subscription")
+			.doc("status");
 		try {
-			// Check user's current subscription status in Firestore
-			const userSubRef = db
-				.collection("users")
-				.doc(userId)
-				.collection("subscription")
-				.doc("status");
-
-			const userSubDoc = await userSubRef.get();
-
-			if (userSubDoc.exists) {
-				const subData = userSubDoc.data();
-				if (!subData) return { hasSubscription: false };
-
-				// If user is on a trial, allow them to purchase a paid subscription
-				// Check both 'source' (used by grantTrialOnFirstSignIn) and 'purchasePlatform' (used elsewhere)
-				const isTrial =
-					subData.source === "trial" || subData.purchasePlatform === "trial";
-				if (isTrial) {
-					console.log(
-						`User ${userId} is on trial (source: ${subData.source}, purchasePlatform: ${subData.purchasePlatform}), allowing upgrade`,
-					);
-					return { hasSubscription: false, isTrial: true };
-				}
-
-				// Support both field names: expiresAt (Play Store) and expiryDate (Razorpay)
-				const expiresAt =
-					subData.expiresAt?.toDate() || subData.expiryDate?.toDate();
-
-				// If subscription exists and not expired
-				if (expiresAt && expiresAt > new Date()) {
-					console.log(
-						`User ${userId} has active subscription until ${expiresAt}`,
-					);
-
-					// Optionally verify with Google Play if we have a token
-					if (subData.purchaseToken && subData.source === "play_store") {
-						try {
-							const playApi = await getPlayDeveloperApi(
-								googlePlayCredentials.value(),
-							);
-							const response = await playApi.purchases.subscriptionsv2.get({
-								packageName: ANDROID_PACKAGE_NAME,
-								token: subData.purchaseToken,
-							});
-
-							const subscriptionState = response.data.subscriptionState;
-							const isActive =
-								subscriptionState === "SUBSCRIPTION_STATE_ACTIVE" ||
-								subscriptionState === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD";
-
-							console.log(
-								`Subscription state on Google for user ${userId}: ${subscriptionState}`,
-							);
-
-							if (!isActive) {
-								// Subscription was cancelled or expired on Google's side
-								// Check if it's a terminal state (cancelled, expired, revoked)
-								const isTerminal =
-									subscriptionState === "SUBSCRIPTION_STATE_CANCELED" ||
-									subscriptionState === "SUBSCRIPTION_STATE_EXPIRED";
-
-								if (isTerminal) {
-									// Delete the subscription document - user is now on free plan
-									console.log(
-										`Subscription is terminal (${subscriptionState}), removing from user`,
-									);
-									await userSubRef.delete();
-									return {
-										hasSubscription: false,
-										message: "Subscription has been cancelled or expired",
-									};
-								}
-
-								// Just update the status (e.g., paused, pending)
-								await userSubRef.update({
-									willAutoRenew: false,
-									subscriptionState,
-									updatedAt: FieldValue.serverTimestamp(),
-								});
-							}
-
-							// Ensure custom claims are set for active subscriptions
-							if (isActive) {
-								await setSubscriptionClaims(userId, "pro", expiresAt);
-							}
-
-							return {
-								hasSubscription: isActive,
-								subscription: {
-									plan: subData.plan,
-									billingPeriod: subData.billingPeriod,
-									expiresAt: expiresAt.toISOString(),
-									willAutoRenew:
-										isActive &&
-										subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
-									source: subData.source,
-								},
-							};
-						} catch (verifyError) {
-							console.warn("Failed to verify with Google Play:", verifyError);
-							// Fall back to local data
-						}
-					}
-
-					if (subData.source === "app_store") {
-						try {
-							const subRef = db
-								.collection("subscriptions")
-								.doc(`ios_${subData.purchaseToken}`);
-							const subSnap = await subRef.get();
-							const receiptData = subSnap.data()?.receiptData as
-								| string
-								| undefined;
-
-							if (receiptData) {
-								const verified = await verifyAppStorePurchase(
-									userId,
-									(subData.productId as string | undefined) ||
-										IOS_PRODUCT_IDS.monthly,
-									receiptData,
-								);
-
-								if (!verified.valid) {
-									await userSubRef.delete();
-									await setSubscriptionClaims(userId, "free", null);
-									return {
-										hasSubscription: false,
-										message: "Subscription has been cancelled or expired",
-									};
-								}
-							}
-						} catch (verifyError) {
-							console.warn("Failed to verify with App Store:", verifyError);
-							// Fall back to local data
-						}
-					}
-
-					// Ensure custom claims are set for active subscriptions
-					// (handles users who subscribed before server-side enforcement)
-					await setSubscriptionClaims(userId, "pro", expiresAt);
-
-					return {
-						hasSubscription: true,
-						subscription: {
-							plan: subData.plan,
-							billingPeriod: subData.billingPeriod,
-							expiresAt: expiresAt.toISOString(),
-							willAutoRenew: subData.willAutoRenew ?? subData.autoRenew,
-							source: subData.source,
-						},
-					};
-				}
-			}
-
-			// Check if there's a subscription linked to this user in global subscriptions
-			// Note: We query without orderBy to avoid needing a composite index.
-			// For users with multiple subscriptions, we check all and use the one with the latest expiry.
-			const linkedSubs = await db
-				.collection("subscriptions")
-				.where("userId", "==", userId)
-				.get();
-
-			if (!linkedSubs.empty) {
-				// Find the subscription with the latest expiry date
-				let latestSub: admin.firestore.QueryDocumentSnapshot | null = null;
-				let latestExpiry: Date | null = null;
-
-				for (const doc of linkedSubs.docs) {
-					const subData = doc.data();
-					const expiresAt = subData.expiresAt?.toDate();
-					if (expiresAt && (!latestExpiry || expiresAt > latestExpiry)) {
-						latestExpiry = expiresAt;
-						latestSub = doc;
-					}
-				}
-
-				if (latestSub && latestExpiry && latestExpiry > new Date()) {
-					const subData = latestSub.data();
-					// Found an active subscription - restore it
-					console.log(`Restoring subscription for user ${userId}`);
-
-					await userSubRef.set({
-						plan: "pro",
-						billingPeriod:
-							subData.source === "app_store"
-								? subData.billingPeriod ||
-									(subData.productId === IOS_PRODUCT_IDS.yearly
-										? "yearly"
-										: "monthly")
-								: subData.basePlanId === "pro-yearly"
-									? "yearly"
-									: "monthly",
-						expiresAt: subData.expiresAt,
-						willAutoRenew:
-							subData.source === "app_store"
-								? (subData.willAutoRenew ?? true)
-								: subData.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
-						subscriptionState: subData.subscriptionState,
-						purchaseToken:
-							subData.source === "app_store"
-								? subData.originalTransactionId || subData.purchaseToken
-								: subData.purchaseToken,
-						source: subData.source,
-						basePlanId: subData.basePlanId,
-						restoredAt: FieldValue.serverTimestamp(),
-						updatedAt: FieldValue.serverTimestamp(),
-					});
-
-					await setSubscriptionClaims(userId, "pro", latestExpiry);
-
-					return {
-						hasSubscription: true,
-						restored: true,
-						subscription: {
-							plan: "pro",
-							billingPeriod:
-								subData.source === "app_store"
-									? subData.billingPeriod ||
-										(subData.productId === IOS_PRODUCT_IDS.yearly
-											? "yearly"
-											: "monthly")
-									: subData.basePlanId === "pro-yearly"
-										? "yearly"
-										: "monthly",
-							expiresAt: latestExpiry.toISOString(),
-							willAutoRenew:
-								subData.source === "app_store"
-									? (subData.willAutoRenew ?? true)
-									: subData.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
-							source: subData.source,
-						},
-					};
-				}
-			}
-
-			// No active subscription found
-			return {
-				hasSubscription: false,
-			};
+			// Always refresh provider records before deciding this is still a trial.
+			// A verified provider must immediately replace trial as canonical status.
+			await refreshLinkedPlaySubscriptions(userId);
+			const reconciled = await reconcileUserEntitlement(userId);
+			const after = await statusRef.get();
+			return existingSubscriptionResponse(after.data(), Date.now(), reconciled);
 		} catch (error) {
 			console.error(`Error checking subscription for ${userId}:`, error);
-
-			if (error instanceof HttpsError) {
-				throw error;
-			}
-
+			if (error instanceof HttpsError) throw error;
 			throw new HttpsError("internal", "Failed to check subscription status");
 		}
 	},

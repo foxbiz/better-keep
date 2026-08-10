@@ -12,6 +12,14 @@ const projectId = "better-keep-notes";
 
 const firebaseStep = (args) => ({args, type: "firebase"});
 const processStep = (command, args) => ({args, command, type: "process"});
+const verifyAdminDeploymentStep = () =>
+	processStep("node", [
+		"scripts/verify_admin_deployment.mjs",
+		"--local",
+		"build/admin/index.html",
+		"--url",
+		"https://admin.betterkeep.app/",
+	]);
 
 function defineTarget(description, createSteps) {
 	return {createSteps, description};
@@ -31,7 +39,7 @@ const targets = {
 			...extraArgs,
 		]),
 	]),
-	hosting: defineTarget("Build and deploy the marketing site and web application.", (extraArgs) => [
+	hosting: defineTarget("Build and deploy public and isolated admin Hosting.", (extraArgs) => [
 		...resolveBuildTask(["web"]).operations.map((operation) => ({
 			...operation,
 			type: "process",
@@ -44,12 +52,34 @@ const targets = {
 			"--project",
 			projectId,
 			"--only",
-			"hosting",
+			"hosting:public,hosting:admin",
 			...extraArgs,
 		]),
+		verifyAdminDeploymentStep(),
+	]),
+	"hosting-public": defineTarget("Build and deploy only public Hosting.", (extraArgs) => [
+		...resolveBuildTask(["web"]).operations.map((operation) => ({
+			...operation,
+			type: "process",
+		})),
+		firebaseStep([
+			"--", "deploy", "--config", "firebase.deploy.json", "--project", projectId,
+			"--only", "hosting:public", ...extraArgs,
 		]),
-	"hosting-preview": defineTarget(
-		"Build and publish the combined website to the temporary ui-overhaul Hosting channel.",
+	]),
+	"hosting-admin": defineTarget("Build and deploy only isolated admin Hosting.", (extraArgs) => [
+		...resolveBuildTask(["web"]).operations.map((operation) => ({
+			...operation,
+			type: "process",
+		})),
+		firebaseStep([
+			"--", "deploy", "--config", "firebase.deploy.json", "--project", projectId,
+			"--only", "hosting:admin", ...extraArgs,
+		]),
+		verifyAdminDeploymentStep(),
+	]),
+	"hosting-admin-preview": defineTarget(
+		"Build and publish isolated admin Hosting to a temporary channel.",
 		(extraArgs) => [
 			...resolveBuildTask(["web"]).operations.map((operation) => ({
 				...operation,
@@ -58,10 +88,12 @@ const targets = {
 			firebaseStep([
 				"--",
 				"hosting:channel:deploy",
-				"ui-overhaul",
+				"admin-preview",
 				"--expires",
 				"7d",
 				"--no-authorized-domains",
+				"--only",
+				"admin",
 				"--config",
 				"firebase.deploy.json",
 				"--project",

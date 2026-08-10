@@ -1840,6 +1840,11 @@
 	"@welcomeToProMessage": {
 		"description": "Snackbar message shown when user successfully subscribes via subscription listener"
 	},
+	"paymentConfirmedTitle": "Ödeme onaylandı",
+	"paymentConfirmedActivationPending": "Ödeme onaylandı ancak Pro etkinleştirmesi daha uzun sürüyor. Tekrar satın almayın. Durumu yeniden kontrol edin veya aboneliği Google Play'de yönetin.",
+	"recheckStatus": "Durumu Yeniden Kontrol Et",
+	"subscriptionAccountMismatchTitle": "Abonelik başka bir hesaba bağlı",
+	"subscriptionAccountMismatchMessage": "Bu Google Play aboneliği başka bir Better Keep hesabına bağlı. O hesapta oturum açın veya destek ile iletişime geçin; bu hesaba erişim verilmedi.",
 
 	"loadingPrices": "Fiyatlar yükleniyor...",
 	"@loadingPrices": {

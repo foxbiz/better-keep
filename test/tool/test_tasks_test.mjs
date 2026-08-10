@@ -75,6 +75,7 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"keep-import",
 		"lighthouse",
 		"localization",
+		"mobile-web",
 		"oauth-recovery",
 		"release",
 		"review-prompts",
@@ -105,7 +106,25 @@ test("search suite validates site types, store metadata, and built visibility", 
 			type: "process",
 		},
 		{
+			args: ["--prefix", "site", "test"],
+			command: "npm",
+			environment: {},
+			type: "process",
+		},
+		{
 			args: ["--prefix", "site", "run", "check"],
+			command: "npm",
+			environment: {},
+			type: "process",
+		},
+		{
+			args: ["--prefix", "admin-site", "test"],
+			command: "npm",
+			environment: {},
+			type: "process",
+		},
+		{
+			args: ["--prefix", "admin-site", "run", "check"],
 			command: "npm",
 			environment: {},
 			type: "process",
@@ -122,13 +141,23 @@ test("search suite validates site types, store metadata, and built visibility", 
 			environment: {},
 			type: "process",
 		},
+		{
+			args: ["scripts/validate_admin_bundle.mjs", "build/admin"],
+			command: "node",
+			environment: {},
+			type: "process",
+		},
 	]);
 });
 
 test("resolves individual process and pinned-runtime suites", () => {
 	assert.deepEqual(resolveTestTask(["firebase-runtime"]).operations, [
 		{
-			args: ["--test", "test/tool/firebase_runtime_policy_test.mjs"],
+			args: [
+				"--test",
+				"test/tool/admin_workspace_policy_test.mjs",
+				"test/tool/firebase_runtime_policy_test.mjs",
+			],
 			command: "node",
 			environment: {},
 			type: "process",
@@ -173,6 +202,12 @@ test("web release builds the combined site before deterministic validation", () 
 		environment: {},
 		type: "process",
 	});
+	assert.deepEqual(operations.at(-2), {
+		args: ["--prefix", "site", "run", "test:mobile"],
+		command: "npm",
+		environment: {},
+		type: "process",
+	});
 	assert.equal(operations.at(-1).type, "firebase");
 	assert.deepEqual(operations.at(-1).args, [
 		"--",
@@ -198,7 +233,10 @@ test("release expands suites in the established order and excludes devices", () 
 	const serializedOperations = JSON.stringify(release.operations);
 	const orderedMarkers = [
 		"build_tasks_test.mjs",
+		"billing_reconciliation_runner_test.mjs",
 		"check_tasks_test.mjs",
+		"dependency_override_policy_test.mjs",
+		"environment_example_policy_test.mjs",
 		"deploy_tasks_test.mjs",
 		"dev_tasks_test.mjs",
 		"firebase_tasks_test.mjs",
@@ -207,6 +245,7 @@ test("release expands suites in the established order and excludes devices", () 
 		"process_runner_test.mjs",
 		"release_tasks_test.mjs",
 		"test_tasks_test.mjs",
+		"admin_workspace_policy_test.mjs",
 		"firebase_runtime_policy_test.mjs",
 		"ios_build_policy_test.mjs",
 		"windows_build_policy_test.mjs",

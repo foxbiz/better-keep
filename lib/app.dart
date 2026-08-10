@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
+import 'package:better_keep/components/post_sign_in_recovery_view.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
 import 'package:better_keep/components/firebase_environment_banner.dart';
 import 'package:better_keep/services/firebase_backend.dart';
@@ -22,6 +23,7 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/monetization/razorpay_web.dart'
     if (dart.library.io) 'package:better_keep/services/monetization/razorpay_stub.dart'
@@ -31,11 +33,36 @@ import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/authenticated_startup_routing.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+Future<void> _retryPostSignInSafely(String source) async {
+  try {
+    await AuthService.retryPostSignInInitialization();
+  } catch (error, stackTrace) {
+    await AppLogger.error(
+      '[Auth] Authenticated startup retry failed from $source',
+      error,
+      stackTrace,
+    );
+  }
+}
+
+Future<void> _safeAuthSignOut(String source) async {
+  try {
+    await AuthService.signOut();
+  } catch (error, stackTrace) {
+    await AppLogger.error(
+      '[Auth] Sign out failed from $source',
+      error,
+      stackTrace,
+    );
+  }
+}
 
 class App extends StatefulWidget {
   const App({super.key});
@@ -233,135 +260,41 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                   AppLogger.log(
                     '[Auth] Email verified or OAuth user, checking E2EE status...',
                   );
-                  // Check E2EE status for pending approval, revoked, or still initializing
-                  return ValueListenableBuilder<E2EEStatus>(
-                    valueListenable: E2EEService.instance.status,
-                    builder: (context, e2eeStatus, child) {
-                      AppLogger.log('[Auth] E2EE status: $e2eeStatus');
-                      if (e2eeStatus == E2EEStatus.pendingApproval ||
-                          e2eeStatus == E2EEStatus.revoked) {
-                        AppLogger.log('[Auth] Showing PendingApprovalPage');
-                        return const PendingApprovalPage();
-                      }
-                      // Show account recovery page when no approved devices exist
-                      if (e2eeStatus == E2EEStatus.needsRecovery) {
-                        AppLogger.log('[Auth] Showing AccountRecoveryPage');
-                        return const AccountRecoveryPage();
-                      }
-                      // Show loading while E2EE is still initializing (no cached status)
-                      // Note: verifyingInBackground goes directly to Home (handled below)
-                      if (e2eeStatus == E2EEStatus.notInitialized) {
-                        AppLogger.log('[Auth] Showing E2EE loading screen');
-                        return AuthScaffold(child: _E2EELoadingWidget());
-                      }
-                      // Handle error state - block access until encryption is available
-                      if (e2eeStatus == E2EEStatus.error) {
-                        return AuthScaffold(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.error_outline,
-                                size: 64,
-                                color: Theme.of(context).colorScheme.error,
+                  return ValueListenableBuilder<PostSignInState>(
+                    valueListenable: AuthService.postSignInState,
+                    builder: (context, postSignInState, child) {
+                      return ValueListenableBuilder<E2EEStatus>(
+                        valueListenable: E2EEService.instance.status,
+                        builder: (context, e2eeStatus, child) {
+                          AppLogger.log('[Auth] E2EE status: $e2eeStatus');
+                          final route = resolveAuthenticatedStartupRoute(
+                            postSignInState: postSignInState,
+                            e2eeStatus: e2eeStatus,
+                          );
+
+                          return switch (route) {
+                            AuthenticatedStartupRoute.loading =>
+                              const AuthScaffold(child: _E2EELoadingWidget()),
+                            AuthenticatedStartupRoute.pendingApproval =>
+                              const PendingApprovalPage(),
+                            AuthenticatedStartupRoute.accountRecovery =>
+                              const AccountRecoveryPage(),
+                            AuthenticatedStartupRoute.recovery => AuthScaffold(
+                              child: PostSignInRecoveryView(
+                                onRetry: () => _retryPostSignInSafely(
+                                  'authenticated startup screen',
+                                ),
+                                onContinueOffline: AuthService
+                                    .continueOfflineAfterInitializationFailure,
+                                onSignOut: () => _safeAuthSignOut(
+                                  'authenticated startup screen',
+                                ),
                               ),
-                              const SizedBox(height: 24),
-                              Text(
-                                context.l10n.somethingWentWrong,
-                                style: Theme.of(context).textTheme.headlineSmall
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                context.l10n.somethingWentWrongTryAgain,
-                                style: Theme.of(context).textTheme.bodyLarge
-                                    ?.copyWith(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                    ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 32),
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  E2EEService.instance.status.value =
-                                      E2EEStatus.notInitialized;
-                                  E2EEService.instance.resetInitialization();
-                                  try {
-                                    await E2EEService.instance.initialize();
-                                  } catch (e) {
-                                    AppLogger.error(
-                                      '[Auth] E2EE retry failed from error screen',
-                                      e,
-                                    );
-                                  }
-                                },
-                                icon: const Icon(Icons.refresh),
-                                label: Text(context.l10n.retry),
-                              ),
-                              const SizedBox(height: 16),
-                              TextButton.icon(
-                                onPressed: () async {
-                                  final confirmed = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      icon: const Icon(
-                                        Icons.logout,
-                                        color: Colors.orange,
-                                        size: 32,
-                                      ),
-                                      title: Text(context.l10n.signOut),
-                                      content: Text(
-                                        context.l10n.signOutConfirmation,
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(false),
-                                          child: Text(context.l10n.cancel),
-                                        ),
-                                        FilledButton(
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(true),
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor: Colors.orange,
-                                          ),
-                                          child: Text(context.l10n.signOut),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirmed == true) {
-                                    try {
-                                      await AuthService.signOut();
-                                    } catch (e) {
-                                      // Error is logged, sign out should still proceed
-                                    }
-                                  }
-                                },
-                                icon: const Icon(Icons.logout),
-                                label: Text(context.l10n.signOut),
-                              ),
-                              const SizedBox(height: 8),
-                              TextButton(
-                                onPressed: () {
-                                  // Mark session as invalid to allow access to local notes
-                                  AuthService.sessionInvalid.value = true;
-                                },
-                                child: Text(context.l10n.continueOffline),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      // E2EE is ready, verifyingInBackground, or setup complete - show home
-                      // verifyingInBackground allows immediate access while verification happens
-                      AppLogger.log(
-                        '[Auth] E2EE ready/verifying, showing Home',
+                            ),
+                            AuthenticatedStartupRoute.home => Home(),
+                          };
+                        },
                       );
-                      return Home();
                     },
                   );
                 }
@@ -421,7 +354,7 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
         AppLogger.log(
           '[Auth] E2EE init timeout, auto-retrying (attempt $_retryCount/$_maxAutoRetries)',
         );
-        E2EEService.instance.initialize();
+        unawaited(_retryPostSignInSafely('encryption timeout'));
         // Schedule next auto-retry
         _scheduleAutoRetry();
       } else {
@@ -447,24 +380,13 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
     _retryCount = 0;
     _showOptionsTimer?.cancel();
     _showOptionsTimer = null;
-    E2EEService.instance.status.value = E2EEStatus.notInitialized;
-    E2EEService.instance.resetInitialization();
-
-    try {
-      await E2EEService.instance.initialize();
-    } catch (e) {
-      AppLogger.error('[Auth] E2EE retry failed from loading screen', e);
-    }
+    await _retryPostSignInSafely('encryption loading screen');
 
     _scheduleAutoRetry();
   }
 
   Future<void> _signOutSafely() async {
-    try {
-      await AuthService.signOut();
-    } catch (e) {
-      AppLogger.error('[Auth] Sign out failed from loading screen', e);
-    }
+    await _safeAuthSignOut('encryption loading screen');
   }
 
   @override
@@ -540,9 +462,7 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
           ),
           const SizedBox(height: 12),
           TextButton(
-            onPressed: () {
-              AuthService.sessionInvalid.value = true;
-            },
+            onPressed: AuthService.continueOfflineAfterInitializationFailure,
             child: Text(context.l10n.continueOffline),
           ),
         ],

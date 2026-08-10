@@ -40,8 +40,29 @@ void main() {
       );
       expect(target.action, SubscriptionManagementAction.externalUrl);
       expect(target.url, googlePlaySubscriptionsUrl);
+      expect(Uri.parse(target.url!).queryParameters, {
+        'sku': 'better_keep_pro',
+        'package': 'io.foxbiz.better_keep',
+      });
     }
   });
+
+  test(
+    'ownership-conflict management resolves from the current native store',
+    () {
+      final android = resolveCurrentStoreManagementTarget(
+        SubscriptionManagementPlatform.android,
+      );
+      expect(android.action, SubscriptionManagementAction.externalUrl);
+      expect(android.url, googlePlaySubscriptionsUrl);
+
+      final ios = resolveCurrentStoreManagementTarget(
+        SubscriptionManagementPlatform.ios,
+      );
+      expect(ios.action, SubscriptionManagementAction.appStoreNative);
+      expect(ios.url, appleSubscriptionsUrl);
+    },
+  );
 
   test('unknown and legacy providers direct the user to support', () {
     for (final provider in <String?>[null, '', 'trial', 'legacy']) {
@@ -57,8 +78,10 @@ void main() {
   });
 
   test('store destinations never contain account identifiers', () {
-    for (final url in [appleSubscriptionsUrl, googlePlaySubscriptionsUrl]) {
-      expect(Uri.parse(url).queryParameters, isEmpty);
-    }
+    expect(Uri.parse(appleSubscriptionsUrl).queryParameters, isEmpty);
+    final playParameters = Uri.parse(
+      googlePlaySubscriptionsUrl,
+    ).queryParameters;
+    expect(playParameters.keys, unorderedEquals(['sku', 'package']));
   });
 }

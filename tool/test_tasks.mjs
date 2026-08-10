@@ -176,7 +176,11 @@ const suites = {
 		() => [processStep("./tool/test_firebase_rules.sh", [])],
 	),
 	"firebase-runtime": defineSuite("Run Firebase runtime policy tests.", () => [
-		processStep("node", ["--test", "test/tool/firebase_runtime_policy_test.mjs"]),
+		processStep("node", [
+			"--test",
+			"test/tool/admin_workspace_policy_test.mjs",
+			"test/tool/firebase_runtime_policy_test.mjs",
+		]),
 	]),
 	functions: defineSuite("Run Cloud Functions unit tests.", () => [
 		functionsStep(["--", "npm", "--prefix", "functions", "test"]),
@@ -218,7 +222,14 @@ const suites = {
 			"test/reminder_schedule_result_presenter_test.dart",
 		]),
 	]),
+	"mobile-web": defineSuite("Run the marketing homepage mobile browser acceptance test.", () => [
+		processStep("npm", ["--prefix", "site", "run", "test:mobile"]),
+	]),
 	"oauth-recovery": defineSuite("Run OAuth recovery tests.", () => [
+		processStep("node", [
+			"--test",
+			"test/tool/oauth_hosting_verifier_test.mjs",
+		]),
 		flutterTests([
 			"test/oauth_transaction_test.dart",
 			"test/recovered_oauth_sign_in_coordinator_test.dart",
@@ -237,9 +248,13 @@ const suites = {
 			"test/site_share_viewer_test.mjs",
 			"test/site_store_platform_test.mjs",
 		]),
+		processStep("npm", ["--prefix", "site", "test"]),
 		processStep("npm", ["--prefix", "site", "run", "check"]),
+		processStep("npm", ["--prefix", "admin-site", "test"]),
+		processStep("npm", ["--prefix", "admin-site", "run", "check"]),
 		processStep("node", ["scripts/validate_store_metadata.mjs"]),
 		processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),
+		processStep("node", ["scripts/validate_admin_bundle.mjs", "build/admin"]),
 	]),
 	store: defineSuite("Validate localized store metadata.", () => [
 		processStep("node", ["scripts/validate_store_metadata.mjs"]),
@@ -256,6 +271,7 @@ const suites = {
 		() => [
 			processStep("./scripts/build_web.sh", []),
 			suiteStep("search"),
+			suiteStep("mobile-web"),
 			suiteStep("hosting"),
 		],
 	),
@@ -266,7 +282,10 @@ const suites = {
 		processStep("node", [
 			"--test",
 			"test/tool/build_tasks_test.mjs",
+			"test/tool/billing_reconciliation_runner_test.mjs",
 			"test/tool/check_tasks_test.mjs",
+			"test/tool/dependency_override_policy_test.mjs",
+			"test/tool/environment_example_policy_test.mjs",
 			"test/tool/deploy_tasks_test.mjs",
 			"test/tool/dev_tasks_test.mjs",
 			"test/tool/firebase_tasks_test.mjs",

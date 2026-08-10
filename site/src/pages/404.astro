@@ -7,16 +7,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   description="The requested Better Keep page does not exist."
   noindex={true}
 >
-  <section class="article-header container">
-    <p class="eyebrow">404</p>
-    <h1>This note wandered off.</h1>
-    <p class="answer-box">
-      The page you requested does not exist. Return to Better Keep or open the
-      web app.
-    </p>
-    <div class="actions">
-      <a class="button" href="/">Return home</a>
-      <a class="button secondary" href="/app/">Open web app</a>
+  <section class="not-found container" aria-labelledby="not-found-title">
+    <div class="not-found__content">
+      <p class="eyebrow">404</p>
+      <h1 id="not-found-title">This note wandered off.</h1>
+      <p class="answer-box">
+        The page you requested does not exist. Return to Better Keep or open the
+        web app.
+      </p>
+      <div class="actions">
+        <a class="button" href="/">Return home</a>
+        <a class="button button--secondary" href="/app/">Open web app</a>
+      </div>
     </div>
   </section>
 </BaseLayout>

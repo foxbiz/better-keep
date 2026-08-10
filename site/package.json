@@ -9,6 +9,8 @@
     "build": "astro build",
     "postbuild": "node scripts/validate_design.mjs",
     "check": "astro check",
+    "test": "node --test test/*.test.mjs",
+    "test:mobile": "node scripts/run_mobile_acceptance.mjs",
     "lighthouse": "node scripts/run_lighthouse.mjs"
   },
   "dependencies": {

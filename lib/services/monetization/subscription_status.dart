@@ -2,6 +2,56 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'user_plan.dart';
 
+const _verifiedProviderSources = {'play_store', 'app_store', 'razorpay'};
+const verifiedEntitlementContractVersion = 2;
+
+/// Parses an authenticated backend verification payload for local hydration.
+///
+/// This never replaces server authorization. It only prevents a verified paid
+/// purchase from remaining visually stuck on trial while Firestore catches up.
+SubscriptionStatus? parseVerifiedProviderEntitlement(
+  Map<String, dynamic>? data,
+) {
+  if (data == null) return null;
+  if (data['entitlementContractVersion'] !=
+      verifiedEntitlementContractVersion) {
+    return null;
+  }
+  if (data['subscriptionState'] is! String ||
+      (data['subscriptionState'] as String).trim().isEmpty ||
+      RenewalState.tryParse(data['renewalState']) == null) {
+    return null;
+  }
+  final status = SubscriptionStatus.fromFirestore(data);
+  if (status.plan != UserPlan.pro ||
+      !status.isActive ||
+      status.billingPeriod == null ||
+      !_verifiedProviderSources.contains(status.purchasePlatform)) {
+    return null;
+  }
+  return status;
+}
+
+enum RenewalState {
+  renewing,
+  notRenewing,
+  unknown;
+
+  static RenewalState? tryParse(dynamic value) {
+    switch (value) {
+      case 'renewing':
+        return RenewalState.renewing;
+      case 'notRenewing':
+      case 'not_renewing':
+        return RenewalState.notRenewing;
+      case 'unknown':
+        return RenewalState.unknown;
+      default:
+        return null;
+    }
+  }
+}
+
 /// Subscription billing period
 enum BillingPeriod {
   monthly,
@@ -34,8 +84,11 @@ class SubscriptionStatus {
   /// Grace period end date (null if not in grace period)
   final DateTime? gracePeriodEndsAt;
 
-  /// Whether the subscription will auto-renew
-  final bool willAutoRenew;
+  /// Provider-reported renewal state. Missing metadata remains unknown.
+  final RenewalState renewalState;
+
+  /// Provider subscription state used to distinguish terminal server results.
+  final String? subscriptionState;
 
   /// Platform where subscription was purchased
   final String? purchasePlatform;
@@ -52,11 +105,19 @@ class SubscriptionStatus {
     this.billingPeriod,
     this.inGracePeriod = false,
     this.gracePeriodEndsAt,
-    this.willAutoRenew = false,
+    RenewalState? renewalState,
+    bool? willAutoRenew,
+    this.subscriptionState,
     this.purchasePlatform,
     this.storeSubscriptionId,
     this.lastVerifiedAt,
-  });
+  }) : renewalState =
+           renewalState ??
+           (willAutoRenew == null
+               ? RenewalState.unknown
+               : willAutoRenew
+               ? RenewalState.renewing
+               : RenewalState.notRenewing);
 
   /// Default free subscription
   static const SubscriptionStatus free = SubscriptionStatus(
@@ -88,9 +149,12 @@ class SubscriptionStatus {
 
   /// Check if subscription is cancelled but still active (will not renew)
   bool get isCancelledButActive {
-    if (plan == UserPlan.free) return false;
-    return isActive && !willAutoRenew;
+    return isActiveProviderEntitlement &&
+        renewalState == RenewalState.notRenewing;
   }
+
+  /// Compatibility getter for code that only needs the positive renewal case.
+  bool get willAutoRenew => renewalState == RenewalState.renewing;
 
   /// Days until expiration (-1 if no expiration)
   int get daysUntilExpiration {
@@ -118,6 +182,12 @@ class SubscriptionStatus {
   /// Whether this is a trial subscription
   bool get isTrialSubscription => purchasePlatform == 'trial';
 
+  /// Whether an active paid provider, rather than a trial, grants access.
+  bool get isActiveProviderEntitlement =>
+      plan == UserPlan.pro &&
+      isActive &&
+      _verifiedProviderSources.contains(purchasePlatform);
+
   /// The effective plan (downgrades to free if expired)
   UserPlan get effectivePlan {
     if (isActive) return plan;
@@ -136,9 +206,12 @@ class SubscriptionStatus {
       billingPeriod: _parseBillingPeriod(data['billingPeriod'] as String?),
       inGracePeriod: data['inGracePeriod'] as bool? ?? false,
       gracePeriodEndsAt: _parseDateTime(data['gracePeriodEndsAt']),
-      willAutoRenew:
-          (data['willAutoRenew'] ?? data['autoRenew']) as bool? ?? false,
-      purchasePlatform: (data['purchasePlatform'] ?? data['source']) as String?,
+      renewalState: _parseRenewalState(data),
+      subscriptionState:
+          (data['subscriptionState'] ?? data['status']) as String?,
+      // `source` is the canonical provider. purchasePlatform is a legacy alias
+      // and may still contain `trial` briefly while a server write propagates.
+      purchasePlatform: (data['source'] ?? data['purchasePlatform']) as String?,
       storeSubscriptionId:
           (data['storeSubscriptionId'] ?? data['razorpaySubscriptionId'])
               as String?,
@@ -165,8 +238,11 @@ class SubscriptionStatus {
       'inGracePeriod': inGracePeriod,
       if (gracePeriodEndsAt != null)
         'gracePeriodEndsAt': gracePeriodEndsAt!.toIso8601String(),
-      'willAutoRenew': willAutoRenew,
-      if (purchasePlatform != null) 'purchasePlatform': purchasePlatform,
+      'renewalState': renewalState.name,
+      if (renewalState != RenewalState.unknown)
+        'willAutoRenew': renewalState == RenewalState.renewing,
+      if (subscriptionState != null) 'subscriptionState': subscriptionState,
+      if (purchasePlatform != null) 'source': purchasePlatform,
       if (storeSubscriptionId != null)
         'storeSubscriptionId': storeSubscriptionId,
       if (lastVerifiedAt != null)
@@ -185,13 +261,35 @@ class SubscriptionStatus {
     }
   }
 
+  static RenewalState _parseRenewalState(Map<String, dynamic> data) {
+    final typed = RenewalState.tryParse(data['renewalState']);
+    if (typed != null) return typed;
+
+    final legacy = data['willAutoRenew'] ?? data['autoRenew'];
+    if (legacy is bool) {
+      return legacy ? RenewalState.renewing : RenewalState.notRenewing;
+    }
+
+    final providerState = (data['subscriptionState'] ?? data['status'])
+        ?.toString()
+        .toUpperCase();
+    if (providerState == 'SUBSCRIPTION_STATE_CANCELED' ||
+        providerState == 'CANCELED' ||
+        providerState == 'CANCELLED') {
+      return RenewalState.notRenewing;
+    }
+    return RenewalState.unknown;
+  }
+
   SubscriptionStatus copyWith({
     UserPlan? plan,
     DateTime? expiresAt,
     BillingPeriod? billingPeriod,
     bool? inGracePeriod,
     DateTime? gracePeriodEndsAt,
+    RenewalState? renewalState,
     bool? willAutoRenew,
+    String? subscriptionState,
     String? purchasePlatform,
     String? storeSubscriptionId,
     DateTime? lastVerifiedAt,
@@ -202,7 +300,14 @@ class SubscriptionStatus {
       billingPeriod: billingPeriod ?? this.billingPeriod,
       inGracePeriod: inGracePeriod ?? this.inGracePeriod,
       gracePeriodEndsAt: gracePeriodEndsAt ?? this.gracePeriodEndsAt,
-      willAutoRenew: willAutoRenew ?? this.willAutoRenew,
+      renewalState:
+          renewalState ??
+          (willAutoRenew == null
+              ? this.renewalState
+              : willAutoRenew
+              ? RenewalState.renewing
+              : RenewalState.notRenewing),
+      subscriptionState: subscriptionState ?? this.subscriptionState,
       purchasePlatform: purchasePlatform ?? this.purchasePlatform,
       storeSubscriptionId: storeSubscriptionId ?? this.storeSubscriptionId,
       lastVerifiedAt: lastVerifiedAt ?? this.lastVerifiedAt,

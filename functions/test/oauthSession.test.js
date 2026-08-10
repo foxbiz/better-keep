@@ -11,6 +11,7 @@ const {
 	isClientTransactionId,
 	isCustomOAuthProvider,
 	isOpaqueToken,
+	OAUTH_BROWSER_COOKIE,
 	OAUTH_STATE_AUDIENCE,
 	oauthCookieHeader,
 	openOAuthState,
@@ -118,7 +119,22 @@ test("OAuth state is encrypted, authenticated, expiring, and cookie-bound", asyn
 	await assert.rejects(openOAuthState(wrongAudience, secret, now + 1));
 
 	const cookie = oauthCookieHeader(browserNonce);
-	assert.equal(readOAuthBrowserNonce(cookie), browserNonce);
-	assert.match(cookie, /Secure; HttpOnly; SameSite=Lax/);
-	assert.match(clearOAuthCookieHeader(), /Max-Age=0/);
+	assert.equal(OAUTH_BROWSER_COOKIE, "__session");
+	assert.equal(
+		cookie,
+		`__session=${browserNonce}; Max-Age=300; Path=/; Secure; HttpOnly; SameSite=Lax`,
+	);
+	assert.equal(
+		readOAuthBrowserNonce(`other=value; ${cookie.split(";")[0]}`),
+		browserNonce,
+	);
+	assert.equal(
+		readOAuthBrowserNonce(`__Host-bk-oauth=${browserNonce}`),
+		null,
+	);
+	assert.doesNotMatch(cookie, /Domain=/i);
+	assert.equal(
+		clearOAuthCookieHeader(),
+		"__session=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax",
+	);
 });

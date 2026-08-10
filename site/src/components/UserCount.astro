@@ -19,7 +19,7 @@ import Icon from './Icon.astro';
     <span class="user-count-proof__metric" data-user-count-metric>
       <span class="user-count-proof__spinner"></span>
     </span>
-    <span>People have joined</span>
+    <span data-user-count-label>People have joined</span>
   </span>
   <span class="sr-only" data-user-count-announcement>Loading Better Keep community count</span>
 </span>
@@ -27,12 +27,16 @@ import Icon from './Icon.astro';
 <noscript><style>.user-count-proof { display: none !important; }</style></noscript>
 
 <script>
-  import { loadPublicUserMetric } from '../lib/public-stats.mjs';
+  import {
+    createUserCountPresentation,
+    loadPublicUserMetric
+  } from '../lib/public-stats.mjs';
 
   const counters = document.querySelectorAll<HTMLElement>('[data-user-count]');
 
   for (const counter of counters) {
     const metric = counter.querySelector<HTMLElement>('[data-user-count-metric]');
+    const label = counter.querySelector<HTMLElement>('[data-user-count-label]');
     const announcement = counter.querySelector<HTMLElement>(
       '[data-user-count-announcement]'
     );
@@ -43,17 +47,18 @@ import Icon from './Icon.astro';
 
     loadPublicUserMetric({ endpoint }).then((result) => {
       counter.setAttribute('aria-busy', 'false');
+      const presentation = createUserCountPresentation(result);
 
-      if (result.status !== 'ready' || !result.metric || !metric || !announcement) {
+      if (!metric || !label || !announcement) {
         counter.dataset.state = 'unavailable';
-        counter.setAttribute('aria-hidden', 'true');
-        counter.hidden = true;
         return;
       }
 
-      metric.textContent = result.metric;
-      announcement.textContent = `${result.metric} people have joined Better Keep`;
-      counter.dataset.state = 'ready';
+      metric.textContent = presentation.metric || '';
+      metric.hidden = presentation.metric === null;
+      label.textContent = presentation.label;
+      announcement.textContent = presentation.announcement;
+      counter.dataset.state = presentation.state;
     });
   }
 </script>

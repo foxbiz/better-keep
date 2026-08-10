@@ -1,7 +1,9 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { auth, db, emailPassword } from "../config";
-import { sendEmail, setSubscriptionClaims } from "../utils";
+import { refreshGooglePlaySubscription } from "../googlePlayService";
+import { reconcileUserEntitlement } from "../subscriptionReconciler";
+import { sendEmail } from "../utils";
 
 /**
  * Scheduled function to check for expired subscriptions and notify users
@@ -124,37 +126,28 @@ export default onSchedule(
 				const subData = doc.data();
 				const userId = subData.userId;
 				const source = subData.source;
-				const subscriptionState = subData.subscriptionState as
-					| string
-					| undefined;
-
-				const shouldExpire =
-					source === "app_store" ||
-					subscriptionState === "SUBSCRIPTION_STATE_ACTIVE" ||
-					subscriptionState === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD";
-
-				if (!shouldExpire) {
-					continue;
-				}
-
 				try {
-					// Update subscription state
+					if (source === "play_store") {
+						try {
+							await refreshGooglePlaySubscription({
+								purchaseToken:
+									typeof subData.purchaseToken === "string"
+										? subData.purchaseToken
+										: doc.id,
+							});
+							continue;
+						} catch (error) {
+							if ((error as { code?: unknown }).code !== 410) throw error;
+						}
+					}
 					await doc.ref.update({
 						subscriptionState: "SUBSCRIPTION_STATE_EXPIRED",
+						entitlementState: "ended",
+						willAutoRenew: false,
 						updatedAt: FieldValue.serverTimestamp(),
 					});
-
-					// Update user subscription status - delete it to revert to free plan
-					await db
-						.collection("users")
-						.doc(userId)
-						.collection("subscription")
-						.doc("status")
-						.delete();
-
-					await setSubscriptionClaims(userId, "free", null);
-
-					console.log(`Removed expired subscription for user ${userId}`);
+					await reconcileUserEntitlement(userId);
+					console.log(`Reconciled expired subscription for user ${userId}`);
 				} catch (updateError) {
 					console.error(
 						`Failed to update expired sub for user ${userId}:`,

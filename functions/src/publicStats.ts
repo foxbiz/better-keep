@@ -10,21 +10,35 @@ const exactAllowedOrigins = new Set([
 	"https://betterkeep.app",
 	"https://better-keep-notes.web.app",
 	"https://better-keep-notes.firebaseapp.com",
-	"http://localhost:4321",
-	"http://127.0.0.1:4321",
-	"http://localhost:5002",
-	"http://127.0.0.1:5002",
-	"http://localhost:63630",
 ]);
+
+const localDevelopmentHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 const previewOriginPattern =
 	/^https:\/\/better-keep-notes--[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.web\.app$/;
 const compactMetricPattern = /^\d+(?:\.\d)?[KM]\+$/;
 const roundedCountPattern = /^(\d+)(\+)?$/;
 
+function isLocalDevelopmentOrigin(origin: string): boolean {
+	try {
+		const url = new URL(origin);
+		return (
+			url.origin === origin &&
+			url.protocol === "http:" &&
+			localDevelopmentHosts.has(url.hostname)
+		);
+	} catch {
+		return false;
+	}
+}
+
 export function isPublicStatsOriginAllowed(origin: string | undefined): boolean {
 	if (!origin) return true;
-	return exactAllowedOrigins.has(origin) || previewOriginPattern.test(origin);
+	return (
+		exactAllowedOrigins.has(origin) ||
+		previewOriginPattern.test(origin) ||
+		isLocalDevelopmentOrigin(origin)
+	);
 }
 
 export function compactPublicUserCount(value: unknown): string | null {

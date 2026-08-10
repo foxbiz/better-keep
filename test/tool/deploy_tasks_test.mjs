@@ -9,36 +9,36 @@ import {
 	runDeployTask,
 } from "../../tool/deploy_tasks.mjs";
 
-function cacheControlFor(config, source) {
-	return config.hosting.headers
+function cacheControlFor(hosting, source) {
+	return hosting.headers
 		.find((entry) => entry.source === source)
 		?.headers.find((header) => header.key === "Cache-Control")?.value;
 }
 
-function assertHostingCachePolicy(config) {
+function assertHostingCachePolicy(hosting) {
 	assert.equal(
-		cacheControlFor(config, "**"),
+		cacheControlFor(hosting, "**"),
 		"no-cache, max-age=0, must-revalidate",
 	);
 	assert.equal(
-		cacheControlFor(config, "/_astro/**"),
+		cacheControlFor(hosting, "/_astro/**"),
 		"public, max-age=31536000, immutable",
 	);
 	assert.equal(
-		cacheControlFor(config, "/media/**"),
+		cacheControlFor(hosting, "/media/**"),
 		"public, max-age=86400",
 	);
 	assert.ok(
-		config.hosting.headers.findIndex((entry) => entry.source === "/media/**") >
-			config.hosting.headers.findIndex((entry) => entry.source === "**"),
+		hosting.headers.findIndex((entry) => entry.source === "/media/**") >
+			hosting.headers.findIndex((entry) => entry.source === "**"),
 		"the media cache policy must override the earlier catch-all policy",
 	);
 }
 
-function assertWelcomeRedirects(config) {
+function assertWelcomeRedirects(hosting) {
 	for (const source of ["/welcome{,/**}", "/welcome.html"]) {
 		assert.ok(
-			config.hosting.redirects.some(
+			hosting.redirects.some(
 				(entry) =>
 					entry.source === source &&
 					entry.destination === "/" &&
@@ -48,13 +48,20 @@ function assertWelcomeRedirects(config) {
 	}
 }
 
+function headerValue(hosting, key) {
+	return hosting.headers.find((entry) => entry.source === "**")
+		?.headers.find((header) => header.key === key)?.value;
+}
+
 test("lists deployment targets and treats an omitted target as help", () => {
 	assert.deepEqual(parseDeployTaskArguments([]), {help: true});
 	assert.deepEqual(parseDeployTaskArguments(["help"]), {help: true});
 	assert.deepEqual(DEPLOY_TARGET_NAMES, [
 		"backend",
 		"hosting",
-		"hosting-preview",
+		"hosting-admin",
+		"hosting-admin-preview",
+		"hosting-public",
 		"indexnow",
 	]);
 	assert.match(formatDeployTaskHelp(), /npm run deploy <target>/);
@@ -104,15 +111,41 @@ test("builds the combined website before deploying only Hosting", () => {
 			"--project",
 			"better-keep-notes",
 			"--only",
-			"hosting",
+			"hosting:public,hosting:admin",
 			"--debug",
 		],
 		type: "firebase",
 	});
+	assert.deepEqual(operations[2], {
+		args: [
+			"scripts/verify_admin_deployment.mjs",
+			"--local",
+			"build/admin/index.html",
+			"--url",
+			"https://admin.betterkeep.app/",
+		],
+		command: "node",
+		type: "process",
+	});
 });
 
-test("builds the combined website before publishing the isolated preview channel", () => {
-	const operations = resolveDeployTask(["hosting-preview", "--debug"]).operations;
+test("the isolated admin deployment verifies its production asset", () => {
+	const operations = resolveDeployTask(["hosting-admin"]).operations;
+	assert.deepEqual(operations.at(-1), {
+		args: [
+			"scripts/verify_admin_deployment.mjs",
+			"--local",
+			"build/admin/index.html",
+			"--url",
+			"https://admin.betterkeep.app/",
+		],
+		command: "node",
+		type: "process",
+	});
+});
+
+test("builds both artifacts before publishing the isolated admin preview channel", () => {
+	const operations = resolveDeployTask(["hosting-admin-preview", "--debug"]).operations;
 	assert.deepEqual(operations[0], {
 		args: [],
 		command: "./scripts/build_web.sh",
@@ -122,10 +155,12 @@ test("builds the combined website before publishing the isolated preview channel
 		args: [
 			"--",
 			"hosting:channel:deploy",
-			"ui-overhaul",
+			"admin-preview",
 			"--expires",
 			"7d",
 			"--no-authorized-domains",
+			"--only",
+			"admin",
 			"--config",
 			"firebase.deploy.json",
 			"--project",
@@ -136,19 +171,21 @@ test("builds the combined website before publishing the isolated preview channel
 	});
 });
 
-test("production Hosting serves the combined site with protected app routes", () => {
+test("production Hosting isolates public and administrator artifacts", () => {
 	const config = JSON.parse(readFileSync("firebase.deploy.json", "utf8"));
-	assert.equal(config.hosting.public, "build/web");
-	assert.equal(config.hosting.cleanUrls, true);
-	assertHostingCachePolicy(config);
-	assert.deepEqual(config.hosting.rewrites, [
+	const publicHosting = config.hosting.find((hosting) => hosting.target === "public");
+	const adminHosting = config.hosting.find((hosting) => hosting.target === "admin");
+	assert.equal(publicHosting.public, "build/web");
+	assert.equal(adminHosting.public, "build/admin");
+	assertHostingCachePolicy(publicHosting);
+	assert.deepEqual(publicHosting.rewrites, [
 		{source: "/oauth/start", function: "oauthStart"},
 		{source: "/oauth/callback", function: "oauthCallback"},
 		{source: "/s/**", destination: "/s/index.html"},
 		{source: "/app/**", destination: "/app/index.html"},
 	]);
 	assert.ok(
-		config.hosting.headers.some(
+		publicHosting.headers.some(
 			(entry) =>
 				entry.source === "/app/**" &&
 				entry.headers.some(
@@ -158,15 +195,24 @@ test("production Hosting serves the combined site with protected app routes", ()
 				),
 		),
 	);
-	assertWelcomeRedirects(config);
+	assertWelcomeRedirects(publicHosting);
+	assert.equal(headerValue(adminHosting, "Cache-Control"), "no-store");
+	assert.equal(headerValue(adminHosting, "X-Robots-Tag"), "noindex, nofollow, noarchive");
+	assert.equal(headerValue(adminHosting, "Referrer-Policy"), "no-referrer");
+	assert.match(headerValue(adminHosting, "Content-Security-Policy"), /default-src 'none'/);
+	assert.match(
+		headerValue(adminHosting, "Content-Security-Policy"),
+		/connect-src[^;]*https:\/\/content-firebaseappcheck\.googleapis\.com/,
+	);
+	assert.doesNotMatch(headerValue(adminHosting, "Content-Security-Policy"), /unsafe-inline/);
 });
 
 test("the full emulator serves the same combined web artifact", () => {
 	const config = JSON.parse(readFileSync("firebase.emulators.json", "utf8"));
 	assert.equal(config.hosting.public, "build/web");
 	assert.equal(config.hosting.cleanUrls, true);
-	assertHostingCachePolicy(config);
-	assertWelcomeRedirects(config);
+	assertHostingCachePolicy(config.hosting);
+	assertWelcomeRedirects(config.hosting);
 	assert.deepEqual(config.hosting.rewrites, [
 		{source: "/oauth/start", function: "oauthStart"},
 		{source: "/oauth/callback", function: "oauthCallback"},

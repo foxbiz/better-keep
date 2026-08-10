@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/monetization/purchase_provider.dart';
 import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/services/monetization/user_plan.dart';
 import 'package:better_keep/services/review_access.dart';
@@ -94,18 +94,8 @@ class RazorpayService {
   String? get lastError => _lastError;
   void clearLastError() => _lastError = null;
 
-  /// Check if Razorpay is available on this platform
-  /// Note: On Android, this returns true but actual availability depends on
-  /// whether Google Play billing is available. Use SubscriptionService.usesRazorpay
-  /// for the actual decision.
-  bool get isAvailable {
-    if (kIsWeb) return true;
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) return true;
-    if (!kIsWeb && Platform.isAndroid) {
-      return true; // Fallback for non-GMS devices
-    }
-    return false;
-  }
+  /// Razorpay is restricted to web and desktop distribution platforms.
+  bool get isAvailable => currentPurchaseProvider == PurchaseProvider.razorpay;
 
   /// Get the Razorpay Test Key ID from environment
   String get _testKeyId {
@@ -140,6 +130,14 @@ class RazorpayService {
     required bool yearly,
     String? currency,
   }) async {
+    // Defense in depth: reject unsupported platforms before authentication or
+    // any backend call can create a Razorpay subscription.
+    if (!isAvailable) {
+      return RazorpayPaymentResult.failed(
+        'Razorpay is not available on this platform',
+      );
+    }
+
     final user = AuthService.currentUser;
     if (user == null) {
       return RazorpayPaymentResult.failed('Please sign in first');
@@ -216,6 +214,18 @@ class RazorpayService {
 
       // Force refresh local subscription status (bypass cache)
       await PlanService.instance.forceValidateSubscription();
+      if (!PlanService.instance.status.isActiveProviderEntitlement) {
+        final subscription = verifyData['subscription'] == null
+            ? null
+            : Map<String, dynamic>.from(verifyData['subscription'] as Map);
+        await PlanService.instance.applyVerifiedEntitlement(subscription);
+      }
+
+      if (!PlanService.instance.status.isActiveProviderEntitlement) {
+        return RazorpayPaymentResult.failed(
+          'Payment confirmed, but Pro activation is still pending',
+        );
+      }
 
       return RazorpayPaymentResult(
         success: true,
@@ -263,11 +273,10 @@ class RazorpayService {
         email: email,
         theme: themeColorHex,
       );
-    } else if (Platform.isWindows || Platform.isLinux || Platform.isAndroid) {
-      // Use browser checkout with local callback server for desktop and Android
-      // Android uses this when Google Play billing is not available (e.g., Huawei devices)
+    } else if (isAvailable) {
+      // Native Razorpay checkout is restricted to Windows and Linux.
       AppLogger.log(
-        'RazorpayService: Using DESKTOP/ANDROID checkout with theme: $themeColorHex',
+        'RazorpayService: Using DESKTOP checkout with theme: $themeColorHex',
       );
       return _openBrowserSubscriptionCheckout(
         keyId: keyId,
@@ -280,7 +289,7 @@ class RazorpayService {
     return RazorpayPaymentResult.failed('Platform not supported');
   }
 
-  /// Open checkout in browser for desktop (Windows/Linux) and Android fallback
+  /// Open checkout in browser for desktop (Windows/Linux).
   /// Uses a local HTTP server to receive the payment callback
   Future<RazorpayPaymentResult> _openBrowserSubscriptionCheckout({
     required String keyId,

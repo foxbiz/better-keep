@@ -5,6 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 APP_OUTPUT="$PROJECT_DIR/build/flutter-web"
 HOSTING_OUTPUT="$PROJECT_DIR/build/web"
+ADMIN_HOSTING_OUTPUT="$PROJECT_DIR/build/admin"
 
 cd "$PROJECT_DIR"
 
@@ -23,6 +24,7 @@ rm -rf "$APP_OUTPUT"
   "$@"
 
 npm --prefix "$PROJECT_DIR/site" run build
+npm --prefix "$PROJECT_DIR/admin-site" run build
 
 rm -rf "$HOSTING_OUTPUT"
 mkdir -p "$HOSTING_OUTPUT/app"
@@ -49,3 +51,8 @@ done
 cp -R "$PROJECT_DIR/web/js" "$HOSTING_OUTPUT/js"
 
 node "$PROJECT_DIR/scripts/validate_visibility.mjs" "$HOSTING_OUTPUT"
+
+rm -rf "$ADMIN_HOSTING_OUTPUT"
+mkdir -p "$ADMIN_HOSTING_OUTPUT"
+cp -R "$PROJECT_DIR/admin-site/dist/." "$ADMIN_HOSTING_OUTPUT/"
+node "$PROJECT_DIR/scripts/validate_admin_bundle.mjs" "$ADMIN_HOSTING_OUTPUT"

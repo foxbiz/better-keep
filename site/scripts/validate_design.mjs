@@ -73,6 +73,11 @@ const baseLayoutSource = await readFile(
   path.join(siteRoot, 'src', 'layouts', 'BaseLayout.astro'),
   'utf8'
 );
+const notFoundSource = await readFile(
+  path.join(siteRoot, 'src', 'pages', '404.astro'),
+  'utf8'
+);
+const notFoundHtml = await readFile(path.join(outputRoot, '404.html'), 'utf8');
 const indexVisibleText = visibleText(index);
 const requiredHomepageCopy = [
   'Private, offline-friendly notes',
@@ -164,7 +169,7 @@ const heroGithubBadgeRule =
   sourceCss.match(/\.hero-github-badge\s*\{([^}]*)\}/)?.[1] || '';
 assert(
   /display:\s*inline-flex/.test(heroGithubBadgeRule) &&
-    /min-height:\s*40px/.test(heroGithubBadgeRule) &&
+    /min-height:\s*44px/.test(heroGithubBadgeRule) &&
     /border-radius:\s*999px/.test(heroGithubBadgeRule) &&
     /background:\s*#f7f7f4/.test(heroGithubBadgeRule),
   'Hero GitHub badge must use the compact high-contrast badge treatment'
@@ -199,16 +204,23 @@ assert(
     /font-variant-numeric:\s*tabular-nums/.test(userCountMetricRule) &&
     /animation:\s*user-count-spin/.test(userCountSpinnerRule) &&
     sourceCss.includes(".user-count-proof[data-state='idle']") &&
+    sourceCss.includes('.user-count-proof__metric[hidden]') &&
     sourceCss.includes('.user-count-proof__spinner {\n    animation: none !important;'),
-  'User-count metric must reserve space and provide a reduced-motion-safe loader'
+  'User-count metric must reserve space, collapse its fallback gap, and provide a reduced-motion-safe loader'
 );
 assert(
   userCountSource.includes('loadPublicUserMetric') &&
-    userCountSource.includes("counter.hidden = true") &&
-    publicStatsSource.includes('timeoutMs = 5000') &&
+    userCountSource.includes('createUserCountPresentation') &&
+    userCountSource.includes('data-user-count-label') &&
+    userCountSource.includes('metric.hidden = presentation.metric === null') &&
+    !userCountSource.includes('counter.hidden = true') &&
+    publicStatsSource.includes('timeoutMs = 3000') &&
+    publicStatsSource.includes('maxAttempts = 2') &&
+    publicStatsSource.includes('retryDelayMs = 250') &&
+    publicStatsSource.includes("label: 'Growing community'") &&
     publicStatsSource.includes("payload.metric") &&
     publicStatsSource.includes("payload.message"),
-  'User-count client must support timeout, failure hiding, and legacy response fallback'
+  'User-count client must support retry, a stable neutral fallback, and legacy responses'
 );
 assert(
   sourceCss.includes('@media (prefers-reduced-motion: reduce)'),
@@ -227,6 +239,81 @@ assert(
   headerSource.includes("event.key !== 'Tab'") &&
     headerSource.includes('returnFocus?.focus()'),
   'Mobile navigation does not contain focus or restore its trigger'
+);
+const mobileNavigationRule =
+  sourceCss.match(/\.mobile-navigation\s*\{([^}]*)\}/)?.[1] || '';
+const mobileNavigationLinksRule =
+  sourceCss.match(/\.mobile-navigation__links\s*\{([^}]*)\}/)?.[1] || '';
+const narrowMobileNavigationRule =
+  sourceCss.match(
+    /@media\s*\(max-width:\s*860px\)[\s\S]*?\.mobile-navigation\s*\{([^}]*)\}/
+  )?.[1] || '';
+const mobileHeroDecorationRule =
+  sourceCss.match(
+    /@media\s*\(max-width:\s*920px\)[\s\S]*?\.home-hero::before\s*\{([^}]*)\}/
+  )?.[1] || '';
+const narrowHeroStageRule =
+  sourceCss.match(
+    /@media\s*\(max-width:\s*680px\)[\s\S]*?\.hero-stage\s*\{([^}]*)\}/
+  )?.[1] || '';
+const narrowHeroPrimaryDeviceRule =
+  sourceCss.match(
+    /@media\s*\(max-width:\s*680px\)[\s\S]*?\.hero-device--primary\s*\{([^}]*)\}/
+  )?.[1] || '';
+const narrowDocumentTableRule =
+  sourceCss.match(
+    /@media\s*\(max-width:\s*680px\)[\s\S]*?\.document-body table\s*\{([^}]*)\}/
+  )?.[1] || '';
+const notFoundRule = sourceCss.match(/\.not-found\s*\{([^}]*)\}/)?.[1] || '';
+const narrowNotFoundRule =
+  sourceCss.match(
+    /@media\s*\(max-width:\s*860px\)[\s\S]*?\.not-found\s*\{([^}]*)\}/
+  )?.[1] || '';
+assert(
+  /position:\s*absolute/.test(mobileNavigationRule) &&
+    /top:\s*100%/.test(mobileNavigationRule) &&
+    /height:\s*calc\(100dvh - 76px\)/.test(mobileNavigationRule) &&
+    /overflow-y:\s*auto/.test(mobileNavigationRule) &&
+    /overscroll-behavior:\s*contain/.test(mobileNavigationRule) &&
+    /background:\s*var\(--canvas-deep\)/.test(mobileNavigationRule) &&
+    /min-height:\s*100%/.test(mobileNavigationLinksRule) &&
+    /height:\s*calc\(100dvh - 68px\)/.test(narrowMobileNavigationRule),
+  'Mobile navigation must fill and scroll within the viewport below the header'
+);
+assert(
+  /top:\s*13rem/.test(mobileHeroDecorationRule),
+  'Mobile hero decoration must use a stable viewport position'
+);
+assert(
+  /min-height:\s*clamp\(590px,\s*170vw,\s*665px\)/.test(
+    narrowHeroStageRule
+  ) &&
+    /width:\s*clamp\(210px,\s*64vw,\s*250px\)/.test(
+      narrowHeroPrimaryDeviceRule
+    ),
+  'Phone hero must keep the GitHub badge separate from a bounded primary screenshot'
+);
+assert(
+  /display:\s*block/.test(narrowDocumentTableRule) &&
+    /width:\s*100%/.test(narrowDocumentTableRule) &&
+    /min-width:\s*0/.test(narrowDocumentTableRule) &&
+    /overflow-x:\s*auto/.test(narrowDocumentTableRule) &&
+    /overscroll-behavior-inline:\s*contain/.test(narrowDocumentTableRule),
+  'Narrow public-document tables must scroll without widening the page'
+);
+assert(
+  notFoundSource.includes('class="not-found container"') &&
+    notFoundSource.includes('class="button button--secondary"') &&
+    !notFoundSource.includes('class="article-header container"') &&
+    notFoundHtml.includes('id="not-found-title"'),
+  '404 page must use the dedicated accessible not-found layout'
+);
+assert(
+  /display:\s*grid/.test(notFoundRule) &&
+    /min-height:\s*min\(720px,\s*100dvh\)/.test(notFoundRule) &&
+    /padding-block:\s*calc\(76px\s*\+/.test(notFoundRule) &&
+    /padding-top:\s*calc\(68px\s*\+\s*3rem\)/.test(narrowNotFoundRule),
+  '404 page must remain clear of the fixed header at desktop and mobile widths'
 );
 assert(
   sourceCss.includes('aspect-ratio: 1179 / 2556'),

@@ -1870,6 +1870,11 @@
 	"@welcomeToProMessage": {
 		"description": "Snackbar message shown when user successfully subscribes via subscription listener"
 	},
+	"paymentConfirmedTitle": "Payment confirmed",
+	"paymentConfirmedActivationPending": "Payment was confirmed, but Pro activation is taking longer. Do not purchase again. Recheck your status or manage the subscription in Google Play.",
+	"recheckStatus": "Recheck Status",
+	"subscriptionAccountMismatchTitle": "Subscription linked to another account",
+	"subscriptionAccountMismatchMessage": "This Google Play subscription is linked to another Better Keep account. Sign in to that account or contact support; access has not been granted here.",
 
 	"loadingPrices": "Loading prices...",
 	"@loadingPrices": {

@@ -1854,6 +1854,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get welcomeToProMessage => '欢迎使用 Better Keep Pro！';
 
   @override
+  String get paymentConfirmedTitle => '付款已确认';
+
+  @override
+  String get paymentConfirmedActivationPending =>
+      '付款已确认，但 Pro 激活需要更长时间。请勿再次购买。请重新检查状态或在 Google Play 中管理订阅。';
+
+  @override
+  String get recheckStatus => '重新检查状态';
+
+  @override
+  String get subscriptionAccountMismatchTitle => '订阅已关联到其他账号';
+
+  @override
+  String get subscriptionAccountMismatchMessage =>
+      '此 Google Play 订阅已关联到另一个 Better Keep 账号。请登录该账号或联系支持；此账号尚未获得访问权限。';
+
+  @override
   String get loadingPrices => '正在加载价格...';
 
   @override

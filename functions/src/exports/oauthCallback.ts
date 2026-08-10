@@ -114,22 +114,48 @@ export default onRequest(
 		};
 
 		let state: OAuthState | undefined;
-		if (sealedState) {
+		if (!sealedState) {
+			console.warn(
+				JSON.stringify({
+					event: "oauth_state_rejected",
+					reason: "missing_state",
+				}),
+			);
+		} else {
+			let opened: OAuthState | undefined;
 			try {
-				const opened = await openOAuthState(
+				opened = await openOAuthState(
 					sealedState,
 					oauthStateSecret.value(),
 				);
-				const cookieNonce = readOAuthBrowserNonce(req.get("cookie"));
-				if (
-					!cookieNonce ||
-					!timingSafeStringEqual(cookieNonce, opened.browserNonce)
-				) {
-					throw new Error("OAuth browser binding mismatch");
-				}
-				state = opened;
 			} catch {
-				state = undefined;
+				console.warn(
+					JSON.stringify({
+						event: "oauth_state_rejected",
+						reason: "invalid_or_expired_state",
+					}),
+				);
+			}
+
+			if (opened) {
+				const cookieNonce = readOAuthBrowserNonce(req.get("cookie"));
+				if (!cookieNonce) {
+					console.warn(
+						JSON.stringify({
+							event: "oauth_state_rejected",
+							reason: "missing_browser_cookie",
+						}),
+					);
+				} else if (!timingSafeStringEqual(cookieNonce, opened.browserNonce)) {
+					console.warn(
+						JSON.stringify({
+							event: "oauth_state_rejected",
+							reason: "browser_cookie_mismatch",
+						}),
+					);
+				} else {
+					state = opened;
+				}
 			}
 		}
 		res.set("Set-Cookie", clearOAuthCookieHeader());
