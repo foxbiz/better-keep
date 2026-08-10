@@ -278,6 +278,10 @@ const suites = {
 	"ios-build-policy": defineSuite("Run iOS build policy tests.", () => [
 		processStep("node", ["--test", "test/tool/ios_build_policy_test.mjs"]),
 	]),
+	"macos-build-policy": defineSuite("Run macOS build policy tests.", () => [
+		processStep("node", ["--test", "test/tool/macos_build_policy_test.mjs"]),
+		processStep("node", ["--test", "test/tool/macos_archive_config_test.mjs"]),
+	]),
 	release: defineSuite("Run every non-device release test suite.", () => [
 		processStep("node", [
 			"--test",
@@ -297,6 +301,7 @@ const suites = {
 		]),
 		suiteStep("firebase-runtime"),
 		suiteStep("ios-build-policy"),
+		suiteStep("macos-build-policy"),
 		suiteStep("windows-build-policy"),
 		suiteStep("database-migrations"),
 		suiteStep("web-release"),

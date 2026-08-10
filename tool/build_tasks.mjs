@@ -23,6 +23,17 @@ function flutterBuild(target, extraArgs) {
 	]);
 }
 
+function prepareMacosXcode(extraArgs) {
+	return processStep("flutter", [
+		"build",
+		"macos",
+		"--config-only",
+		"--release",
+		"--dart-define-from-file=.env",
+		...extraArgs,
+	]);
+}
+
 const targets = {
 	android: defineTarget("Build the release Android App Bundle.", (extraArgs) => [
 		flutterBuild("appbundle", extraArgs),
@@ -38,6 +49,13 @@ const targets = {
 	macos: defineTarget("Build the release macOS application.", (extraArgs) => [
 		flutterBuild("macos", extraArgs),
 	]),
+	"macos-xcode": defineTarget(
+		"Prepare generated macOS configuration for Xcode archiving.",
+		(extraArgs) => [
+			prepareMacosXcode(extraArgs),
+			processStep("node", ["tool/verify_macos_archive_config.mjs"]),
+		],
+	),
 	web: defineTarget("Build the marketing site and release web application.", (extraArgs) => [
 		processStep("./scripts/build_web.sh", extraArgs),
 	]),

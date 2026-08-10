@@ -239,11 +239,19 @@ Then open `ios/Runner.xcworkspace` in Xcode to archive and distribute.
 
 **macOS:**
 
+Prepare Flutter's generated Swift package before using Xcode Organizer:
+
 ```bash
-flutter build macos --dart-define-from-file=.env
+npm run build macos-xcode
 ```
 
-The app will be at `build/macos/Build/Products/Release/better_keep.app`.
+Then open `macos/Runner.xcworkspace` and select **Product → Archive**. Run the
+preparation command again after `flutter clean`, `flutter pub get`, dependency
+changes, or deployment-target changes so Xcode does not resolve Flutter's
+generated package with its default macOS 10.15 target.
+
+For a normal command-line release build, run `npm run build macos`. The app will
+be at `build/macos/Build/Products/Release/Better Keep Notes.app`.
 
 **Windows:**
 
