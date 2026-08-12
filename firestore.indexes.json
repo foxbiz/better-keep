@@ -1,96 +1,247 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "users",
-      "queryScope": "COLLECTION",
-      "density": "SPARSE_ALL",
-      "fields": [
-        {
-          "fieldPath": "scheduledDeletion.reminderSent",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "scheduledDeletion.reminderAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "notes",
-      "queryScope": "COLLECTION",
-      "density": "SPARSE_ALL",
-      "fields": [
-        {
-          "fieldPath": "umk_version",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updated_at",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "shares",
-      "queryScope": "COLLECTION",
-      "density": "SPARSE_ALL",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "expires_at",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "shares",
-      "queryScope": "COLLECTION",
-      "density": "SPARSE_ALL",
-      "fields": [
-        {
-          "fieldPath": "owner_uid",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        }
-      ]
-    }
-  ],
-  "fieldOverrides": [
-    {
-      "collectionGroup": "accountLinkSessions",
-      "fieldPath": "deleteAfter",
-      "ttl": true,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "pendingProviderLinks",
-      "fieldPath": "deleteAfter",
-      "ttl": true,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "oauthCompletions",
-      "fieldPath": "deleteAfter",
-      "ttl": true,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "oauthStates",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "otpVerification",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
-    }
-  ]
+	"indexes": [
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "authCreatedAt", "order": "DESCENDING" },
+				{ "fieldPath": "uid", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "subscriptionClass", "order": "ASCENDING" },
+				{ "fieldPath": "authCreatedAt", "order": "DESCENDING" },
+				{ "fieldPath": "uid", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "subscriptionClass", "order": "ASCENDING" },
+				{ "fieldPath": "renewalState", "order": "ASCENDING" },
+				{ "fieldPath": "authCreatedAt", "order": "DESCENDING" },
+				{ "fieldPath": "uid", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "disabled", "order": "ASCENDING" },
+				{ "fieldPath": "authCreatedAt", "order": "DESCENDING" },
+				{ "fieldPath": "uid", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "subscriptionClass", "order": "ASCENDING" },
+				{ "fieldPath": "emailLower", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "subscriptionClass", "order": "ASCENDING" },
+				{ "fieldPath": "displayNameLower", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "subscriptionClass", "order": "ASCENDING" },
+				{ "fieldPath": "renewalState", "order": "ASCENDING" },
+				{ "fieldPath": "emailLower", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "subscriptionClass", "order": "ASCENDING" },
+				{ "fieldPath": "renewalState", "order": "ASCENDING" },
+				{ "fieldPath": "displayNameLower", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "disabled", "order": "ASCENDING" },
+				{ "fieldPath": "emailLower", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminUsers",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "disabled", "order": "ASCENDING" },
+				{ "fieldPath": "displayNameLower", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminAuditLogs",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "status", "order": "ASCENDING" },
+				{ "fieldPath": "requestedAt", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminRevenueEvents",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "status", "order": "ASCENDING" },
+				{ "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminRevenueEvents",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "status", "order": "ASCENDING" },
+				{ "fieldPath": "leaseUntil", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "subscriptions",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "userId", "order": "ASCENDING" },
+				{ "fieldPath": "source", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminSubscriptionIssues",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "providerKeyHash", "order": "ASCENDING" },
+				{ "fieldPath": "source", "order": "ASCENDING" },
+				{ "fieldPath": "status", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "payments",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "razorpaySubscriptionId", "order": "ASCENDING" },
+				{ "fieldPath": "type", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "users",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{
+					"fieldPath": "scheduledDeletion.reminderSent",
+					"order": "ASCENDING"
+				},
+				{
+					"fieldPath": "scheduledDeletion.reminderAt",
+					"order": "ASCENDING"
+				}
+			]
+		},
+		{
+			"collectionGroup": "notes",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{
+					"fieldPath": "umk_version",
+					"order": "ASCENDING"
+				},
+				{
+					"fieldPath": "updated_at",
+					"order": "ASCENDING"
+				}
+			]
+		},
+		{
+			"collectionGroup": "shares",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{
+					"fieldPath": "status",
+					"order": "ASCENDING"
+				},
+				{
+					"fieldPath": "expires_at",
+					"order": "ASCENDING"
+				}
+			]
+		},
+		{
+			"collectionGroup": "shares",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{
+					"fieldPath": "owner_uid",
+					"order": "ASCENDING"
+				},
+				{
+					"fieldPath": "created_at",
+					"order": "DESCENDING"
+				}
+			]
+		}
+	],
+	"fieldOverrides": [
+		{
+			"collectionGroup": "accountLinkSessions",
+			"fieldPath": "deleteAfter",
+			"ttl": true,
+			"indexes": []
+		},
+		{
+			"collectionGroup": "pendingProviderLinks",
+			"fieldPath": "deleteAfter",
+			"ttl": true,
+			"indexes": []
+		},
+		{
+			"collectionGroup": "oauthCompletions",
+			"fieldPath": "deleteAfter",
+			"ttl": true,
+			"indexes": []
+		},
+		{
+			"collectionGroup": "oauthStates",
+			"fieldPath": "expiresAt",
+			"ttl": true,
+			"indexes": []
+		},
+		{
+			"collectionGroup": "otpVerification",
+			"fieldPath": "expiresAt",
+			"ttl": true,
+			"indexes": []
+		}
+	]
 }

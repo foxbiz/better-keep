@@ -1,8 +1,11 @@
-import { FieldValue } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError } from "firebase-functions/v2/https";
-import { db, emailPassword, razorpayKeyId, razorpayKeySecret } from "../config";
+import { emailPassword, razorpayKeyId, razorpayKeySecret } from "../config";
 import { onNonReviewCall } from "../nonReviewCallable";
+import {
+	findUserRazorpaySubscription,
+	refreshRazorpaySubscriptionRecord,
+} from "../razorpayService";
 import { razorpayRequest, sendRazorpaySubscriptionEmail } from "../utils";
 
 /**
@@ -25,20 +28,16 @@ export default onNonReviewCall(
 			const keySecret = razorpayKeySecret.value().trim();
 
 			// Get user's subscription
-			const subDoc = await db
-				.collection("users")
-				.doc(userId)
-				.collection("subscription")
-				.doc("status")
-				.get();
+			const provider = await findUserRazorpaySubscription(userId);
 
-			if (!subDoc.exists) {
+			if (!provider) {
 				throw new HttpsError("not-found", "No subscription found");
 			}
 
-			const subData = subDoc.data();
+			const subData = provider.data;
+			const subscriptionId = subData.providerSubscriptionId;
 
-			if (subData?.source !== "razorpay" || !subData.razorpaySubscriptionId) {
+			if (typeof subscriptionId !== "string") {
 				throw new HttpsError(
 					"failed-precondition",
 					"Subscription was not purchased via Razorpay",
@@ -46,7 +45,15 @@ export default onNonReviewCall(
 			}
 
 			// Check if subscription is actually cancelled in our records
-			if (subData.subscriptionState !== "SUBSCRIPTION_STATE_CANCELED") {
+			if (
+				![
+					"CANCELED",
+					"CANCELLED",
+					"SUBSCRIPTION_STATE_CANCELED",
+					"HALTED",
+					"PAUSED",
+				].includes(String(subData.subscriptionState ?? "").toUpperCase())
+			) {
 				throw new HttpsError(
 					"failed-precondition",
 					"Subscription is not in cancelled state",
@@ -58,7 +65,7 @@ export default onNonReviewCall(
 				keyId,
 				keySecret,
 				"GET",
-				`/subscriptions/${subData.razorpaySubscriptionId}`,
+				`/subscriptions/${subscriptionId}`,
 			)) as { status: string };
 
 			console.log(`Razorpay subscription status: ${razorpaySub.status}`);
@@ -82,23 +89,27 @@ export default onNonReviewCall(
 					keyId,
 					keySecret,
 					"POST",
-					`/subscriptions/${subData.razorpaySubscriptionId}/resume`,
+					`/subscriptions/${subscriptionId}/resume`,
 					{ resume_at: "now" },
 				);
 
-				// Update subscription status
-				await subDoc.ref.update({
-					autoRenew: true,
-					subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
-					cancelledAt: FieldValue.delete(),
-					updatedAt: FieldValue.serverTimestamp(),
+				const normalized = await refreshRazorpaySubscriptionRecord({
+					billingPeriod:
+						typeof subData.billingPeriod === "string"
+							? subData.billingPeriod
+							: null,
+					keyId,
+					keySecret,
+					subscriptionId,
+					userId,
 				});
 
 				console.log(`Resumed subscription for user ${userId}`);
 
 				// Send resume email
-				const expiryDate =
-					subData.expiresAt?.toDate() || subData.expiryDate?.toDate();
+				const expiryDate = (
+					normalized.expiresAt as { toDate?: () => Date } | undefined
+				)?.toDate?.();
 				try {
 					await sendRazorpaySubscriptionEmail(userId, "resumed", expiryDate);
 				} catch (emailError) {

@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "better-keep-notes"
+  },
+  "targets": {
+    "better-keep-notes": {
+      "hosting": {
+        "public": ["better-keep-notes"],
+        "admin": ["better-keep-notes-admin"]
+      }
+    }
   }
 }

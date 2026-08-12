@@ -5,19 +5,23 @@ import { google } from "googleapis";
 import * as jose from "jose";
 import * as nodemailer from "nodemailer";
 import {
-	ANDROID_PACKAGE_NAME,
 	appStoreSharedSecret,
 	auth,
 	db,
 	emailPassword,
-	googlePlayCredentials,
 	IOS_BUNDLE_ID,
 	IOS_PRODUCT_IDS,
 	isEmulator,
-	SUBSCRIPTION_PLANS,
 } from "./config";
 import { mergeSubscriptionClaims } from "./customClaims";
 import { deliverEmail, type EmailDeliveryResult } from "./emailDelivery";
+import { refreshGooglePlaySubscription } from "./googlePlayService";
+import { enqueueRevenueEventInTransaction } from "./revenueOutbox";
+import {
+	normalizedSubscriptionFields,
+	requireVerifiedEntitlementPayload,
+} from "./subscriptionEntitlement";
+import { reconcileUserEntitlement } from "./subscriptionReconciler";
 import type { AppStoreJWSTransactionPayload } from "./types";
 
 /**
@@ -207,176 +211,42 @@ export async function verifyGooglePlayPurchase(
 	message: string;
 	subscription?: object;
 }> {
-	const playApi = await getPlayDeveloperApi(googlePlayCredentials.value());
-
-	// Get subscription details from Google Play
-	const response = await playApi.purchases.subscriptionsv2.get({
-		packageName: ANDROID_PACKAGE_NAME,
-		token: purchaseToken,
+	const subscriptionRef = db.collection("subscriptions").doc(purchaseToken);
+	const before = await subscriptionRef.get();
+	const refreshed = await refreshGooglePlaySubscription({
+		productId,
+		purchaseToken,
+		requestedUserId: userId,
 	});
-
-	const subscription = response.data;
-	console.log(
-		"Google Play subscription response:",
-		JSON.stringify(subscription),
-	);
-
-	if (!subscription) {
-		return { valid: false, message: "Subscription not found" };
+	if (refreshed.status === "mismatch") {
+		throw new HttpsError(
+			"failed-precondition",
+			"This Google Play purchase could not be matched to this account",
+		);
 	}
-
-	// Check subscription state
-	const subscriptionState = subscription.subscriptionState;
-
-	// Valid states: SUBSCRIPTION_STATE_ACTIVE, SUBSCRIPTION_STATE_IN_GRACE_PERIOD
-	const validStates = [
-		"SUBSCRIPTION_STATE_ACTIVE",
-		"SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
-	];
-
-	if (!subscriptionState || !validStates.includes(subscriptionState)) {
-		console.log(`Subscription state is ${subscriptionState}, not valid`);
+	if (!refreshed.entitled || !refreshed.expiresAt) {
 		return {
 			valid: false,
-			message: `Subscription is not active (state: ${subscriptionState})`,
+			message: "Subscription is not currently entitled",
 		};
 	}
-
-	// Extract line item details (base plan info)
-	const lineItems = subscription.lineItems || [];
-	let basePlanId = "pro-monthly"; // Default
-	let expiryTimeMillis: number | undefined;
-
-	for (const lineItem of lineItems) {
-		if (lineItem.productId === productId) {
-			basePlanId = lineItem.offerDetails?.basePlanId || "pro-monthly";
-			expiryTimeMillis = lineItem.expiryTime
-				? new Date(lineItem.expiryTime).getTime()
-				: undefined;
-			break;
-		}
-	}
-
-	// Calculate expiry date
-	const expiresAt = expiryTimeMillis
-		? Timestamp.fromMillis(expiryTimeMillis)
-		: Timestamp.fromMillis(
-				Date.now() +
-					(SUBSCRIPTION_PLANS[basePlanId]?.periodDays || 30) *
-						24 *
-						60 *
-						60 *
-						1000,
-			);
-
-	// Atomically read the subscription doc and write the new owner inside a
-	// Firestore transaction to prevent two concurrent verifications from
-	// racing to claim the same subscription.
-	const subscriptionRef = db.collection("subscriptions").doc(purchaseToken);
-	const { oldUserId, welcomeEmailAlreadySent } = await db.runTransaction(
-		async (txn) => {
-			const snap = await txn.get(subscriptionRef);
-			const data = snap.exists ? snap.data() : undefined;
-			const weSent = data?.welcomeEmailSent === true;
-			let prevOwner: string | null = null;
-
-			if (snap.exists && data?.userId && data.userId !== userId) {
-				prevOwner = data.userId as string;
-			}
-
-			txn.set(
-				subscriptionRef,
-				{
-					userId,
-					productId,
-					purchaseToken,
-					basePlanId,
-					source: "play_store",
-					subscriptionState,
-					expiresAt,
-					linkedToken: subscription.linkedPurchaseToken || null,
-					orderId: subscription.latestOrderId || null,
-					startTime: subscription.startTime
-						? Timestamp.fromDate(new Date(subscription.startTime))
-						: null,
-					...(!weSent ? { welcomeEmailSent: true } : {}),
-					...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
-					updatedAt: FieldValue.serverTimestamp(),
-				},
-				{ merge: true },
-			);
-
-			return {
-				oldUserId: prevOwner,
-				welcomeEmailAlreadySent: weSent,
-				isNewDoc: !snap.exists,
-			};
-		},
-	);
-
-	// Transfer: clean up old user outside the transaction (Auth calls are not transactional)
-	if (oldUserId) {
-		console.log(
-			`Transferring subscription from user ${oldUserId} to ${userId}`,
-		);
-		try {
-			await db
-				.collection("users")
-				.doc(oldUserId)
-				.collection("subscription")
-				.doc("status")
-				.delete();
-			await setSubscriptionClaims(oldUserId, "free", null);
-			console.log(`Cleared subscription and claims for old user ${oldUserId}`);
-		} catch (transferError) {
-			console.error(
-				`Error clearing old user ${oldUserId} subscription during transfer:`,
-				transferError,
-			);
-			// Continue — the new user should still get the subscription
-		}
-	}
-
-	// Update user's subscription status
-	await db
-		.collection("users")
-		.doc(userId)
-		.collection("subscription")
-		.doc("status")
-		.set(
-			{
-				plan: "pro",
-				billingPeriod: basePlanId === "pro-yearly" ? "yearly" : "monthly",
-				expiresAt,
-				willAutoRenew: subscriptionState === "SUBSCRIPTION_STATE_ACTIVE",
-				purchaseToken,
-				source: "play_store",
-				basePlanId,
-				verifiedAt: FieldValue.serverTimestamp(),
-				updatedAt: FieldValue.serverTimestamp(),
-				// Remove stale trial fields that conflict with store-verified data
-				expiryDate: FieldValue.delete(),
-				status: FieldValue.delete(),
-			},
+	const welcomeEmailAlreadySent = before.data()?.welcomeEmailSent === true;
+	if (!welcomeEmailAlreadySent) {
+		await subscriptionRef.set(
+			{ welcomeEmailSent: true, updatedAt: FieldValue.serverTimestamp() },
 			{ merge: true },
 		);
-
-	// Set custom claims for server-side subscription enforcement
-	await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
+	}
 
 	console.log(
-		`Successfully verified and linked subscription for user ${userId}`,
+		`Successfully verified and linked Play subscription for user ${userId}`,
 	);
 
 	return {
 		valid: true,
 		sendWelcomeEmail: !welcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
-		subscription: {
-			plan: "pro",
-			billingPeriod: basePlanId === "pro-yearly" ? "yearly" : "monthly",
-			expiresAt: expiresAt.toDate().toISOString(),
-		},
+		subscription: requireVerifiedEntitlementPayload(refreshed.data),
 	};
 }
 
@@ -500,33 +370,50 @@ export async function razorpayRequest(
 	endpoint: string,
 	body?: Record<string, unknown>,
 ): Promise<unknown> {
-	// Debug: log key lengths to verify they're populated (not the actual keys)
-	console.log(
-		`Razorpay request: ${method} ${endpoint}, keyId length: ${keyId?.length}, keySecret length: ${keySecret?.length}`,
-	);
-
 	if (!keyId || !keySecret) {
 		throw new Error("Razorpay credentials not configured");
 	}
 
 	const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
 
-	const response = await fetch(`https://api.razorpay.com/v1${endpoint}`, {
-		method,
-		headers: {
-			Authorization: `Basic ${auth}`,
-			"Content-Type": "application/json",
-		},
-		body: body ? JSON.stringify(body) : undefined,
-	});
+	let response: Response;
+	try {
+		response = await fetch(`https://api.razorpay.com/v1${endpoint}`, {
+			method,
+			headers: {
+				Authorization: `Basic ${auth}`,
+				"Content-Type": "application/json",
+			},
+			body: body ? JSON.stringify(body) : undefined,
+		});
+	} catch {
+		throw new RazorpayApiError(null);
+	}
 
 	if (!response.ok) {
-		const errorText = await response.text();
-		console.error(`Razorpay API error: ${response.status} - ${errorText}`);
-		throw new Error(`Razorpay API error: ${response.status}`);
+		await response.body?.cancel().catch(() => {});
+		throw new RazorpayApiError(response.status);
 	}
 
 	return response.json();
+}
+
+/**
+ * Sanitized provider failure. Deliberately excludes request URLs, identifiers,
+ * credentials, signatures, and response bodies so callers can safely report it.
+ */
+export class RazorpayApiError extends Error {
+	readonly status: number | null;
+
+	constructor(status: number | null) {
+		super(
+			status === null
+				? "Razorpay API request failed"
+				: `Razorpay API request failed (${status})`,
+		);
+		this.name = "RazorpayApiError";
+		this.status = status;
+	}
 }
 
 // Apple Root CA - G3 (ECC, valid through 2039-04-30)
@@ -690,113 +577,114 @@ async function handleVerifiedJWSTransaction(
 	const existingRef = db
 		.collection("subscriptions")
 		.doc(`ios_${originalTransactionId}`);
+	const revenueEvent =
+		transaction.environment === "Production" &&
+		typeof transaction.price === "number" &&
+		Number.isSafeInteger(transaction.price) &&
+		transaction.price >= 0 &&
+		Number.isSafeInteger(transaction.price * 1000) &&
+		typeof transaction.currency === "string"
+			? ({
+					provider: "app_store",
+					providerTransactionId: transaction.revocationDate
+						? `${transaction.transactionId}:refund:${transaction.revocationDate}`
+						: transaction.transactionId,
+					userId,
+					amountMicros: transaction.price * 1000,
+					currency: transaction.currency,
+					kind: transaction.revocationDate ? "refund" : "charge",
+					environment: "production",
+					occurredAt: new Date(
+						transaction.purchaseDate ?? transaction.signedDate,
+					),
+					metadata: {
+						originalTransactionId,
+						productId: resolvedProductId,
+					},
+				} as const)
+			: null;
 
-	const {
-		oldUserId,
-		welcomeEmailAlreadySent,
-		willAutoRenew,
-		subscriptionState,
-	} = await db.runTransaction(async (txn) => {
-		const snap = await txn.get(existingRef);
-		const data = snap.exists ? snap.data() : undefined;
+	const { oldUserId, welcomeEmailAlreadySent, autoRenew, subState } =
+		await db.runTransaction(async (txn) => {
+			const snap = await txn.get(existingRef);
+			const data = snap.exists ? snap.data() : undefined;
+			if (revenueEvent) {
+				await enqueueRevenueEventInTransaction(txn, revenueEvent);
+			}
 
-		// Determine willAutoRenew from webhook state or defaults
-		const revoked = transaction.revocationDate != null;
-		let autoRenew: boolean;
-		if (revoked) {
-			autoRenew = false;
-		} else if (data?.willAutoRenew != null) {
-			autoRenew = data.willAutoRenew as boolean;
-		} else {
-			autoRenew = true; // New subscription, no webhook data yet
-		}
-		const subState = autoRenew
-			? "SUBSCRIPTION_STATE_ACTIVE"
-			: "SUBSCRIPTION_STATE_CANCELED";
+			// Determine willAutoRenew from webhook state or defaults
+			const revoked = transaction.revocationDate != null;
+			let autoRenew: boolean;
+			if (revoked) {
+				autoRenew = false;
+			} else if (data?.willAutoRenew != null) {
+				autoRenew = data.willAutoRenew as boolean;
+			} else {
+				autoRenew = true; // New subscription, no webhook data yet
+			}
+			const subState = autoRenew
+				? "SUBSCRIPTION_STATE_ACTIVE"
+				: "SUBSCRIPTION_STATE_CANCELED";
 
-		const weSent = data?.welcomeEmailSent === true;
-		let prevOwner: string | null = null;
+			const weSent = data?.welcomeEmailSent === true;
+			let prevOwner: string | null = null;
 
-		if (snap.exists && data?.userId && data.userId !== userId) {
-			prevOwner = data.userId as string;
-		}
+			if (snap.exists && data?.userId && data.userId !== userId) {
+				prevOwner = data.userId as string;
+			}
 
-		txn.set(
-			existingRef,
-			{
-				userId,
-				productId: resolvedProductId,
-				purchaseToken: originalTransactionId,
-				originalTransactionId,
-				billingPeriod,
-				source: "app_store",
-				subscriptionState: subState,
-				willAutoRenew: autoRenew,
-				expiresAt,
-				jwsTransactionId: transaction.transactionId,
-				...(!weSent ? { welcomeEmailSent: true } : {}),
-				...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
-				updatedAt: FieldValue.serverTimestamp(),
-			},
-			{ merge: true },
-		);
+			txn.set(
+				existingRef,
+				{
+					...normalizedSubscriptionFields(
+						{
+							billingPeriod,
+							environment:
+								transaction.environment === "Production"
+									? "production"
+									: "test",
+							expiresAt,
+							plan: "pro",
+							source: "app_store",
+							subscriptionState: subState,
+							willAutoRenew: autoRenew,
+						},
+						Date.now(),
+					),
+					userId,
+					productId: resolvedProductId,
+					purchaseToken: originalTransactionId,
+					originalTransactionId,
+					billingPeriod,
+					expiresAt,
+					externalAccountVerified: true,
+					lastVerifiedAt: FieldValue.serverTimestamp(),
+					jwsTransactionId: transaction.transactionId,
+					...(!weSent ? { welcomeEmailSent: true } : {}),
+					...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+					updatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
+			);
 
-		return {
-			oldUserId: prevOwner,
-			welcomeEmailAlreadySent: weSent,
-			willAutoRenew: autoRenew,
-			subscriptionState: subState,
-		};
-	});
+			return {
+				autoRenew,
+				oldUserId: prevOwner,
+				subState,
+				welcomeEmailAlreadySent: weSent,
+			};
+		});
 
-	// Transfer: clean up old user outside the transaction (Auth calls are not transactional)
+	// Recompute both owners from all providers; never clear an overlapping entitlement.
 	if (oldUserId) {
 		console.log(
 			`Transferring App Store subscription ${originalTransactionId} ` +
 				`from user ${oldUserId} to ${userId} (JWS path)`,
 		);
-		try {
-			await db
-				.collection("users")
-				.doc(oldUserId)
-				.collection("subscription")
-				.doc("status")
-				.delete();
-			await setSubscriptionClaims(oldUserId, "free", null);
-			console.log(`Cleared subscription and claims for old user ${oldUserId}`);
-		} catch (transferError) {
-			console.error(
-				`Error clearing old user ${oldUserId} subscription during transfer:`,
-				transferError,
-			);
-		}
+		await reconcileUserEntitlement(oldUserId);
 	}
 
-	await db
-		.collection("users")
-		.doc(userId)
-		.collection("subscription")
-		.doc("status")
-		.set(
-			{
-				plan: "pro",
-				billingPeriod,
-				expiresAt,
-				willAutoRenew,
-				subscriptionState,
-				purchaseToken: originalTransactionId,
-				productId: resolvedProductId,
-				source: "app_store",
-				verifiedAt: FieldValue.serverTimestamp(),
-				updatedAt: FieldValue.serverTimestamp(),
-				// Remove stale trial fields that conflict with store-verified data
-				expiryDate: FieldValue.delete(),
-				status: FieldValue.delete(),
-			},
-			{ merge: true },
-		);
-
-	await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
+	await reconcileUserEntitlement(userId);
 
 	console.log(
 		`App Store (JWS): verified subscription for user ${userId}, product: ${resolvedProductId}`,
@@ -806,11 +694,14 @@ async function handleVerifiedJWSTransaction(
 		valid: true,
 		sendWelcomeEmail: !welcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
-		subscription: {
+		subscription: requireVerifiedEntitlementPayload({
 			plan: "pro",
+			source: "app_store",
 			billingPeriod,
-			expiresAt: new Date(expiresMs).toISOString(),
-		},
+			expiresAt: Timestamp.fromMillis(expiresMs),
+			willAutoRenew: autoRenew,
+			subscriptionState: subState,
+		}),
 	};
 }
 
@@ -918,12 +809,14 @@ export async function verifyAppStorePurchase(
 		return response.json() as Promise<Record<string, unknown>>;
 	}
 
+	let receiptEnvironment: "production" | "test" = "production";
 	let appleResponse = await callVerifyReceipt(
 		"https://buy.itunes.apple.com/verifyReceipt",
 	);
 
 	let status = appleResponse.status as number;
 	if (status === 21007) {
+		receiptEnvironment = "test";
 		appleResponse = await callVerifyReceipt(
 			"https://sandbox.itunes.apple.com/verifyReceipt",
 		);
@@ -1029,16 +922,27 @@ export async function verifyAppStorePurchase(
 			txn.set(
 				existingRef,
 				{
+					...normalizedSubscriptionFields(
+						{
+							billingPeriod,
+							environment: receiptEnvironment,
+							expiresAt,
+							plan: "pro",
+							source: "app_store",
+							subscriptionState,
+							willAutoRenew,
+						},
+						Date.now(),
+					),
 					userId,
 					productId: resolvedProductId,
 					purchaseToken: originalTransactionId,
 					originalTransactionId,
 					billingPeriod,
-					source: "app_store",
-					subscriptionState,
-					willAutoRenew,
 					receiptData: receiptPayload,
 					expiresAt,
+					externalAccountVerified: true,
+					lastVerifiedAt: FieldValue.serverTimestamp(),
 					...(!weSent ? { welcomeEmailSent: true } : {}),
 					...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
 					updatedAt: FieldValue.serverTimestamp(),
@@ -1052,57 +956,16 @@ export async function verifyAppStorePurchase(
 			};
 		});
 
-	// Transfer: clean up old user outside the transaction (Auth calls are not transactional)
+	// Recompute both owners from all providers; never clear an overlapping entitlement.
 	if (legacyOldUserId) {
 		console.log(
 			`Transferring App Store subscription ${originalTransactionId} ` +
 				`from user ${legacyOldUserId} to ${userId}`,
 		);
-		try {
-			await db
-				.collection("users")
-				.doc(legacyOldUserId)
-				.collection("subscription")
-				.doc("status")
-				.delete();
-			await setSubscriptionClaims(legacyOldUserId, "free", null);
-			console.log(
-				`Cleared subscription and claims for old user ${legacyOldUserId}`,
-			);
-		} catch (transferError) {
-			console.error(
-				`Error clearing old user ${legacyOldUserId} subscription during transfer:`,
-				transferError,
-			);
-			// Continue — the new user should still get the subscription
-		}
+		await reconcileUserEntitlement(legacyOldUserId);
 	}
 
-	await db
-		.collection("users")
-		.doc(userId)
-		.collection("subscription")
-		.doc("status")
-		.set(
-			{
-				plan: "pro",
-				billingPeriod,
-				expiresAt,
-				willAutoRenew,
-				subscriptionState,
-				purchaseToken: originalTransactionId,
-				productId: resolvedProductId,
-				source: "app_store",
-				verifiedAt: FieldValue.serverTimestamp(),
-				updatedAt: FieldValue.serverTimestamp(),
-				// Remove stale trial fields that conflict with store-verified data
-				expiryDate: FieldValue.delete(),
-				status: FieldValue.delete(),
-			},
-			{ merge: true },
-		);
-
-	await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
+	await reconcileUserEntitlement(userId);
 
 	console.log(
 		`App Store: verified subscription for user ${userId}, product: ${resolvedProductId}`,
@@ -1112,10 +975,13 @@ export async function verifyAppStorePurchase(
 		valid: true,
 		sendWelcomeEmail: !appStoreWelcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
-		subscription: {
+		subscription: requireVerifiedEntitlementPayload({
 			plan: "pro",
+			source: "app_store",
 			billingPeriod,
-			expiresAt: new Date(expiresMs).toISOString(),
-		},
+			expiresAt: Timestamp.fromMillis(expiresMs),
+			willAutoRenew,
+			subscriptionState,
+		}),
 	};
 }

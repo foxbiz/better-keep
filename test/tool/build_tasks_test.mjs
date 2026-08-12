@@ -16,6 +16,7 @@ test("lists build targets and treats an omitted target as help", () => {
 		"icons",
 		"ios",
 		"macos",
+		"macos-xcode",
 		"web",
 		"windows",
 	]);
@@ -34,6 +35,25 @@ test("maps platform targets to their existing release builds", () => {
 		"ios",
 		"--release",
 		"--dart-define-from-file=.env",
+	]);
+});
+
+test("prepares and validates generated Swift packages before Xcode archiving", () => {
+	assert.deepEqual(resolveBuildTask(["macos-xcode"]).operations, [
+		{
+			args: [
+				"build",
+				"macos",
+				"--config-only",
+				"--release",
+				"--dart-define-from-file=.env",
+			],
+			command: "flutter",
+		},
+		{
+			args: ["tool/verify_macos_archive_config.mjs"],
+			command: "node",
+		},
 	]);
 });
 

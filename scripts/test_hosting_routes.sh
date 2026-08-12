@@ -76,6 +76,7 @@ request "/media/screenshots/2.png" "manifest_screenshot"
 request "/icons/platforms/apple.svg" "redundant_platform_icon"
 request "/icons/store-badges/app-store.svg" "redundant_store_badge"
 request "/auth" "auth"
+request "/admin" "admin"
 request "/account/manage?uid=legacy-user&email=private%40example.com" "account_manage"
 request "/s/example" "share"
 request "/welcome" "welcome"
@@ -123,6 +124,10 @@ expect_status "redundant_platform_icon" "404"
 expect_status "redundant_store_badge" "404"
 expect_status "auth" "200"
 expect_header "auth" "^x-robots-tag: noindex, nofollow"
+expect_status "admin" "404"
+if contains_pattern "Private operations|data-admin-root|dellevenjack" "$TEST_OUTPUT/admin.body"; then
+  failures+=("public Hosting exposes administrator content")
+fi
 expect_status "account_manage" "200"
 expect_header "account_manage" "^x-robots-tag: noindex, nofollow"
 expect_body "account_manage" 'name="robots" content="noindex, nofollow"'

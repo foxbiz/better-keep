@@ -1876,6 +1876,23 @@ class AppLocalizationsKo extends AppLocalizations {
   String get welcomeToProMessage => 'Better Keep Pro에 오신 것을 환영합니다!';
 
   @override
+  String get paymentConfirmedTitle => '결제가 확인되었습니다';
+
+  @override
+  String get paymentConfirmedActivationPending =>
+      '결제가 확인되었지만 Pro 활성화가 지연되고 있습니다. 다시 구매하지 마세요. 상태를 다시 확인하거나 Google Play에서 구독을 관리하세요.';
+
+  @override
+  String get recheckStatus => '상태 다시 확인';
+
+  @override
+  String get subscriptionAccountMismatchTitle => '다른 계정에 연결된 구독';
+
+  @override
+  String get subscriptionAccountMismatchMessage =>
+      '이 Google Play 구독은 다른 Better Keep 계정에 연결되어 있습니다. 해당 계정으로 로그인하거나 지원팀에 문의하세요. 이 계정에는 접근 권한이 부여되지 않았습니다.';
+
+  @override
   String get loadingPrices => '가격 불러오는 중...';
 
   @override

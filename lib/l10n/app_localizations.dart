@@ -3600,6 +3600,36 @@ abstract class AppLocalizations {
   /// **'Welcome to Better Keep Pro!'**
   String get welcomeToProMessage;
 
+  /// No description provided for @paymentConfirmedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment confirmed'**
+  String get paymentConfirmedTitle;
+
+  /// No description provided for @paymentConfirmedActivationPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment was confirmed, but Pro activation is taking longer. Do not purchase again. Recheck your status or manage the subscription in Google Play.'**
+  String get paymentConfirmedActivationPending;
+
+  /// No description provided for @recheckStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Recheck Status'**
+  String get recheckStatus;
+
+  /// No description provided for @subscriptionAccountMismatchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription linked to another account'**
+  String get subscriptionAccountMismatchTitle;
+
+  /// No description provided for @subscriptionAccountMismatchMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This Google Play subscription is linked to another Better Keep account. Sign in to that account or contact support; access has not been granted here.'**
+  String get subscriptionAccountMismatchMessage;
+
   /// Loading text shown while subscription prices are being fetched
   ///
   /// In en, this message translates to:

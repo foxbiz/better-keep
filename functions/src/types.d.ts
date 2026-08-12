@@ -73,6 +73,12 @@ export interface AppStoreJWSTransactionPayload {
 	expiresDate: number;
 	/** Milliseconds since epoch */
 	signedDate: number;
+	/** Milliseconds since epoch */
+	purchaseDate?: number;
+	/** Price in Apple milliunits (1 currency unit = 1000 milliunits). */
+	price?: number;
+	/** Three-letter ISO 4217 currency code when price is present. */
+	currency?: string;
 	environment: "Sandbox" | "Production";
 	type:
 		| "Auto-Renewable Subscription"

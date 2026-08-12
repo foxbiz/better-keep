@@ -11,13 +11,11 @@ import 'package:better_keep/models/label.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/audio_playback_source_service.dart';
 import 'package:better_keep/services/database.dart';
-import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
-import 'package:better_keep/services/label_sync_service.dart';
+import 'package:better_keep/services/firebase_app_check_policy.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/motion_preferences.dart';
-import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
 import 'package:better_keep/services/new_attachment_transaction_service.dart';
@@ -139,18 +137,10 @@ Future<void> _finishFirebaseStartup(SharedPreferences preferences) async {
   AppLogger.log(
     '[Main] AuthService initialized, currentUser: ${AuthService.currentUser?.email}',
   );
-  final authenticatedUser = AuthService.currentUser;
-  if (authenticatedUser != null) {
-    await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(
-      authenticatedUser,
-    );
-  }
 
-  // TEMPORARILY DISABLED: AppCheck uses AppleAppAttestProvider which only
-  // activates in release mode and is suspected of causing a native crash
-  // when the IAP purchase flow is triggered. AppCheck is NOT enforced on
-  // any backend service (Cloud Functions, Firestore, Storage), so disabling
-  // it has zero security impact. Re-enable after confirming the IAP fix.
+  // Android App Check is guarded by APP_CHECK_ANDROID_ENABLED while Play
+  // Integrity attestation is repaired. Backend enforcement must remain off
+  // until verified Android traffic is healthy.
   _activateAppCheckInBackground();
 
   UserAvatar.preloadAvatar();
@@ -159,21 +149,7 @@ Future<void> _finishFirebaseStartup(SharedPreferences preferences) async {
   }
 
   final currentUser = AuthService.currentUser;
-  final isReviewSession =
-      currentUser != null && await ReviewAccess.authorize(currentUser);
-  if (currentUser != null) {
-    try {
-      ReviewAccess.requireAuthorizedReviewIdentity(
-        currentUser,
-        isReviewSession,
-      );
-    } on ReviewAuthorizationException {
-      await AuthService.signOut();
-      rethrow;
-    }
-  }
-
-  if (currentUser != null && !isReviewSession) {
+  if (currentUser != null && !ReviewAccess.isReviewIdentity(currentUser)) {
     await E2EEService.instance.preloadCachedStatus();
   }
 }
@@ -182,27 +158,45 @@ Future<void> _finishFirebaseStartup(SharedPreferences preferences) async {
 /// This is safe to run after runApp since AppCheck is only needed for
 /// authenticated Firebase operations.
 void _activateAppCheckInBackground() {
-  if (!kReleaseMode) {
-    AppLogger.log('[Main] Skipping FirebaseAppCheck activation in debug mode');
+  final shouldActivate = shouldActivateFirebaseAppCheck(
+    isReleaseMode: kReleaseMode,
+    isWeb: kIsWeb,
+    platform: defaultTargetPlatform,
+  );
+  if (!shouldActivate) {
+    if (kReleaseMode &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        !androidAppCheckEnabled) {
+      AppLogger.log(
+        '[Main] Android FirebaseAppCheck disabled by '
+        'APP_CHECK_ANDROID_ENABLED=false',
+      );
+      return;
+    }
+    AppLogger.log(
+      kReleaseMode
+          ? '[Main] FirebaseAppCheck is unsupported on this platform'
+          : '[Main] Skipping FirebaseAppCheck activation in debug mode',
+    );
     return;
   }
 
-  if (kIsWeb || Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
-    final androidProvider = AndroidPlayIntegrityProvider();
-    final appleProvider = AppleAppAttestProvider();
-
-    FirebaseAppCheck.instance
-        .activate(
-          providerWeb: ReCaptchaV3Provider(
-            const String.fromEnvironment('GOOGLE_RECAPTCHA_SITE_KEY'),
-          ),
-          providerAndroid: androidProvider,
-          providerApple: appleProvider,
-        )
-        .catchError((e) {
-          AppLogger.error('[Main] FirebaseAppCheck activation failed', e);
-        });
-  }
+  FirebaseAppCheck.instance
+      .activate(
+        providerWeb: ReCaptchaV3Provider(
+          const String.fromEnvironment('GOOGLE_RECAPTCHA_SITE_KEY'),
+        ),
+        providerAndroid: AndroidPlayIntegrityProvider(),
+        providerApple: AppleAppAttestProvider(),
+      )
+      .catchError((e, stackTrace) {
+        AppLogger.error(
+          '[Main] FirebaseAppCheck activation failed',
+          e,
+          stackTrace,
+        );
+      });
 }
 
 class _FirebaseBootstrap extends StatefulWidget {
@@ -424,70 +418,11 @@ class _BetterKeepState extends State<BetterKeep> {
     // so it will react when users sign in/out, even if not currently logged in
     await PlanService.instance.init();
 
-    // Initialize E2EE for already logged-in users, then start sync
+    // Use the same recoverable post-sign-in pipeline for restored sessions and
+    // fresh sign-ins. A transient cloud failure must not make startup fatal.
     if (AuthService.currentUser != null) {
-      final shouldInitializeStandardSyncServices =
-          await _initializeSignedInServices();
-      if (shouldInitializeStandardSyncServices) {
-        // These services initialize locally even when E2EE is unavailable.
-        // Their readiness listeners start cloud activity after E2EE recovers.
-        await NoteSyncService().init();
-        await LabelSyncService().init();
-        await NoteSortService().startCloudSync();
-      }
+      await AuthService.initializeCurrentUserServices();
     }
-  }
-
-  Future<bool> _initializeSignedInServices() async {
-    final user = AuthService.currentUser;
-    if (user == null) return false;
-
-    await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(user);
-
-    var isReviewSession = ReviewAccess.isAuthorizedSessionFor(user);
-    if (!isReviewSession) {
-      try {
-        isReviewSession = await ReviewAccess.authorize(user);
-        ReviewAccess.requireAuthorizedReviewIdentity(user, isReviewSession);
-      } catch (e, stack) {
-        AppLogger.error(
-          '[Main] Review authorization refresh failed; cloud services disabled',
-          e,
-          stack,
-        );
-        if (e is ReviewAuthorizationException) {
-          await AuthService.signOut();
-        }
-        return false;
-      }
-    }
-
-    if (isReviewSession) {
-      try {
-        final authorization = ReviewAccess.authorizationFor(user);
-        if (authorization == null) {
-          throw StateError('Review authorization was not retained');
-        }
-        PlanService.instance.activateReviewSession(authorization);
-        await E2EEService.instance.initializeReviewSession();
-      } catch (e) {
-        AppLogger.error('[Main] Review E2EE initialization error', e);
-      }
-      return false;
-    }
-
-    try {
-      await E2EEService.instance.initialize();
-    } catch (e) {
-      AppLogger.error('[Main] E2EE initialization error', e);
-    }
-
-    try {
-      await DeviceApprovalNotificationService().init();
-    } catch (e) {
-      AppLogger.error('[Main] DeviceApprovalNotificationService init error', e);
-    }
-    return true;
   }
 
   /// Initialize deep link handling for OAuth callback

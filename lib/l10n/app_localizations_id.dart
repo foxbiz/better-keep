@@ -1943,6 +1943,24 @@ class AppLocalizationsId extends AppLocalizations {
   String get welcomeToProMessage => 'Selamat datang di Better Keep Pro!';
 
   @override
+  String get paymentConfirmedTitle => 'Pembayaran dikonfirmasi';
+
+  @override
+  String get paymentConfirmedActivationPending =>
+      'Pembayaran telah dikonfirmasi, tetapi aktivasi Pro memerlukan waktu lebih lama. Jangan membeli lagi. Periksa ulang status atau kelola langganan di Google Play.';
+
+  @override
+  String get recheckStatus => 'Periksa Ulang Status';
+
+  @override
+  String get subscriptionAccountMismatchTitle =>
+      'Langganan tertaut ke akun lain';
+
+  @override
+  String get subscriptionAccountMismatchMessage =>
+      'Langganan Google Play ini tertaut ke akun Better Keep lain. Masuk ke akun tersebut atau hubungi dukungan; akses belum diberikan di sini.';
+
+  @override
   String get loadingPrices => 'Memuat harga...';
 
   @override

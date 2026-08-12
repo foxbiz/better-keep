@@ -116,5 +116,6 @@ class FirebaseScopedPreferences {
     'share_expires_',
     'share_key_',
     'share_url_',
+    'subscription_verified_entitlement_v2_',
   ];
 }

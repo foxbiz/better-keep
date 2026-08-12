@@ -1,6 +1,6 @@
-import type * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { ADMIN_USER_COLLECTION } from "../adminConfig";
 import { auth, db, storage } from "../config";
 
 /**
@@ -12,6 +12,9 @@ export default onSchedule(
 	{
 		schedule: "0 2 * * *", // Cron: every day at 2:00 AM UTC
 		timeZone: "UTC",
+		retryCount: 5,
+		minBackoffSeconds: 60,
+		maxBackoffSeconds: 3600,
 	},
 	async () => {
 		const now = Timestamp.now();
@@ -55,6 +58,11 @@ export default onSchedule(
 			`Deletion complete: ${results.succeeded}/${results.processed} succeeded, ` +
 				`${results.failed} failed`,
 		);
+		if (results.failed > 0) {
+			throw new Error(
+				`${results.failed} scheduled account deletion(s) failed and remain queued`,
+			);
+		}
 	},
 );
 
@@ -63,80 +71,70 @@ export default onSchedule(
  */
 async function deleteUserCompletely(userId: string): Promise<void> {
 	console.log(`Starting complete deletion for user: ${userId}`);
-
-	const userRef = db.collection("users").doc(userId);
-
-	// 1. Delete all known subcollections
-	const subcollections = await userRef.listCollections();
-
-	for (const subcollection of subcollections) {
-		console.log(`  Deleting subcollection: ${subcollection.id}`);
-		await deleteCollection(subcollection);
-	}
-
-	// 2. Delete user's files from Cloud Storage
-	try {
-		const bucket = storage.bucket();
-		const [files] = await bucket.getFiles({ prefix: `users/${userId}/` });
-
-		if (files.length > 0) {
+	await executeUserDeletion(userId, {
+		deleteSubcollections: async () => {
+			const userRef = db.collection("users").doc(userId);
+			const subcollections = await userRef.listCollections();
+			for (const subcollection of subcollections) {
+				console.log(`  Deleting subcollection: ${subcollection.id}`);
+				await db.recursiveDelete(subcollection);
+			}
+		},
+		deleteStorage: async () => {
+			const [files] = await storage
+				.bucket()
+				.getFiles({ prefix: `users/${userId}/` });
 			console.log(`  Deleting ${files.length} files from Storage`);
 			for (const file of files) {
-				await file.delete();
+				try {
+					await file.delete();
+				} catch (error) {
+					if (!isNotFoundError(error)) throw error;
+				}
 			}
-		}
-	} catch (error) {
-		// Storage errors shouldn't stop the deletion process
-		console.warn(`  Warning: Storage deletion issue for ${userId}:`, error);
-	}
-
-	// 3. Delete the user document itself
-	console.log("  Deleting user document");
-	await userRef.delete();
-
-	// 4. Delete the Firebase Auth user
-	try {
-		await auth.deleteUser(userId);
-		console.log("  Deleted Auth user");
-	} catch (error: unknown) {
-		// User might already be deleted from Auth, or never existed
-		const authError = error as { code?: string };
-		if (authError.code === "auth/user-not-found") {
-			console.log("  Auth user already deleted or not found");
-		} else {
-			console.warn(`  Warning: Auth deletion issue for ${userId}:`, error);
-		}
-	}
+		},
+		deleteAuthUser: async () => {
+			try {
+				await auth.deleteUser(userId);
+				console.log("  Deleted Auth user");
+			} catch (error) {
+				if (!isNotFoundError(error)) throw error;
+				console.log("  Auth user already deleted or not found");
+			}
+		},
+		deleteFirestoreRoots: async () => {
+			const batch = db.batch();
+			batch.delete(db.collection("users").doc(userId));
+			batch.delete(db.collection(ADMIN_USER_COLLECTION).doc(userId));
+			await batch.commit();
+		},
+	});
 
 	console.log(`  Complete deletion finished for user: ${userId}`);
 }
 
-/**
- * Recursively deletes all documents in a Firestore collection
- */
-async function deleteCollection(
-	collectionRef: admin.firestore.CollectionReference,
+export interface UserDeletionOperations {
+	deleteSubcollections: () => Promise<void>;
+	deleteStorage: () => Promise<void>;
+	deleteAuthUser: () => Promise<void>;
+	deleteFirestoreRoots: () => Promise<void>;
+}
+
+export function isNotFoundError(error: unknown): boolean {
+	const candidate = error as { code?: string | number };
+	return (
+		candidate?.code === "auth/user-not-found" ||
+		candidate?.code === "storage/object-not-found" ||
+		candidate?.code === 404
+	);
+}
+
+export async function executeUserDeletion(
+	_userId: string,
+	operations: UserDeletionOperations,
 ): Promise<void> {
-	const batchSize = 500;
-
-	const deleteQueryBatch = async (): Promise<void> => {
-		const snapshot = await collectionRef.limit(batchSize).get();
-
-		if (snapshot.empty) {
-			return;
-		}
-
-		const batch = db.batch();
-		for (const doc of snapshot.docs) {
-			batch.delete(doc.ref);
-		}
-		await batch.commit();
-
-		// If we deleted a full batch, there might be more documents
-		if (snapshot.size === batchSize) {
-			await deleteQueryBatch();
-		}
-	};
-
-	await deleteQueryBatch();
+	await operations.deleteSubcollections();
+	await operations.deleteStorage();
+	await operations.deleteAuthUser();
+	await operations.deleteFirestoreRoots();
 }

@@ -50,8 +50,7 @@ Future<RazorpayPaymentResult> openOrderCheckout({
   return RazorpayPaymentResult.failed('Use native checkout on this platform');
 }
 
-/// Open subscription checkout via hosted page + local callback for desktop/Android
-/// This is used on Windows, Linux, and Android (when Google Play billing is unavailable)
+/// Open subscription checkout via hosted page + local callback for desktop.
 Future<RazorpayPaymentResult> openDesktopSubscriptionCheckout({
   required String keyId,
   required String subscriptionId,
@@ -60,7 +59,7 @@ Future<RazorpayPaymentResult> openDesktopSubscriptionCheckout({
   required String email,
   String theme = '#FFA726',
 }) async {
-  if (!Platform.isWindows && !Platform.isLinux && !Platform.isAndroid) {
+  if (!Platform.isWindows && !Platform.isLinux) {
     return RazorpayPaymentResult.failed('Platform not supported');
   }
 
@@ -84,7 +83,7 @@ Future<RazorpayPaymentResult> openDesktopSubscriptionCheckout({
   );
 }
 
-/// Open order checkout via hosted page + local callback for desktop/Android
+/// Open order checkout via hosted page + local callback for desktop.
 Future<RazorpayPaymentResult> openDesktopOrderCheckout({
   required String keyId,
   required String orderId,
@@ -95,7 +94,7 @@ Future<RazorpayPaymentResult> openDesktopOrderCheckout({
   required String email,
   String theme = '#FFA726',
 }) async {
-  if (!Platform.isWindows && !Platform.isLinux && !Platform.isAndroid) {
+  if (!Platform.isWindows && !Platform.isLinux) {
     return RazorpayPaymentResult.failed('Platform not supported');
   }
 

@@ -7,7 +7,10 @@ export const OAUTH_STATE_TTL_MS = 5 * 60 * 1000;
 export const OAUTH_COMPLETION_TTL_MS = 2 * 60 * 1000;
 export const OAUTH_REDEMPTION_LEASE_MS = 30 * 1000;
 export const EPHEMERAL_DOCUMENT_RETENTION_MS = 24 * 60 * 60 * 1000;
-export const OAUTH_BROWSER_COOKIE = "__Host-bk-oauth";
+// Firebase Hosting strips cookies from rewritten requests unless the cookie is
+// named exactly `__session`. Keep the remaining attributes host-only and
+// browser-bound when creating and clearing this cookie below.
+export const OAUTH_BROWSER_COOKIE = "__session";
 export const OAUTH_STATE_AUDIENCE = "betterkeep-oauth-callback";
 
 const CUSTOM_OAUTH_PROVIDERS = ["facebook", "github", "twitter"] as const;

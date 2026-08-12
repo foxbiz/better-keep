@@ -1,8 +1,17 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import { verifyAppleJws } from "../appleJwsVerify";
+import {
+	appStoreEffectiveExpiryMillis,
+	appStoreWillAutoRenew,
+	resolveAppStoreNotification,
+} from "../appStoreSubscription";
 import { auth, db, emailPassword } from "../config";
-import { sendEmail, setSubscriptionClaims } from "../utils";
+import { enqueueRevenueEventInTransaction } from "../revenueOutbox";
+import { normalizedSubscriptionFields } from "../subscriptionEntitlement";
+import { recordSubscriptionIssue } from "../subscriptionIssues";
+import { reconcileUserEntitlement } from "../subscriptionReconciler";
+import { sendEmail } from "../utils";
 
 type JwtPayload = Record<string, unknown>;
 
@@ -19,64 +28,6 @@ function getNumber(payload: JwtPayload, key: string): number | null {
 		return Number.isFinite(parsed) ? parsed : null;
 	}
 	return null;
-}
-
-function mapNotificationToState(
-	notificationType: string,
-	subtype: string | null,
-): { state: string; isActive: boolean; isTerminal: boolean } {
-	if (notificationType === "SUBSCRIBED" || notificationType === "DID_RENEW") {
-		return {
-			state: "SUBSCRIPTION_STATE_ACTIVE",
-			isActive: true,
-			isTerminal: false,
-		};
-	}
-
-	if (notificationType === "DID_FAIL_TO_RENEW" && subtype === "GRACE_PERIOD") {
-		return {
-			state: "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
-			isActive: true,
-			isTerminal: false,
-		};
-	}
-
-	if (notificationType === "EXPIRED" || notificationType === "REVOKE") {
-		return {
-			state: "SUBSCRIPTION_STATE_EXPIRED",
-			isActive: false,
-			isTerminal: true,
-		};
-	}
-
-	if (notificationType === "REFUND") {
-		return {
-			state: "SUBSCRIPTION_STATE_CANCELED",
-			isActive: false,
-			isTerminal: true,
-		};
-	}
-
-	if (notificationType === "DID_CHANGE_RENEWAL_STATUS") {
-		if (subtype === "AUTO_RENEW_ENABLED") {
-			return {
-				state: "SUBSCRIPTION_STATE_ACTIVE",
-				isActive: true,
-				isTerminal: false,
-			};
-		}
-		return {
-			state: "SUBSCRIPTION_STATE_CANCELED",
-			isActive: false,
-			isTerminal: false,
-		};
-	}
-
-	return {
-		state: "SUBSCRIPTION_STATE_PENDING",
-		isActive: false,
-		isTerminal: false,
-	};
 }
 
 export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
@@ -98,7 +49,10 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 
 	console.log("=== App Store Webhook Received ===");
 	console.log("Timestamp:", new Date().toISOString());
-	console.log("Headers:", JSON.stringify(req.headers, null, 2));
+	console.log("Request metadata:", {
+		contentType: req.headers["content-type"] ?? null,
+		userAgent: req.headers["user-agent"] ?? null,
+	});
 	console.log("Raw body type:", typeof req.body);
 	console.log("Raw body keys:", req.body ? Object.keys(req.body) : "null");
 
@@ -131,6 +85,7 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 		const notificationType = getString(payload, "notificationType");
 		const subtype = getString(payload, "subtype");
 		const notificationUUID = getString(payload, "notificationUUID");
+		const notificationSignedDateMs = getNumber(payload, "signedDate");
 
 		console.log("Notification type:", notificationType);
 		console.log("Notification subtype:", subtype);
@@ -195,6 +150,10 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 		const productId = getString(transactionPayload, "productId");
 		const expiresDateMs = getNumber(transactionPayload, "expiresDate");
 		const revocationDateMs = getNumber(transactionPayload, "revocationDate");
+		const purchaseDateMs = getNumber(transactionPayload, "purchaseDate");
+		const price = getNumber(transactionPayload, "price");
+		const currency = getString(transactionPayload, "currency");
+		const environment = getString(transactionPayload, "environment");
 
 		console.log("Transaction details:", {
 			originalTransactionId,
@@ -260,87 +219,125 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 			return;
 		}
 
-		const mapped = mapNotificationToState(notificationType, subtype);
-		console.log("Mapped state:", mapped);
-		const expiresAt =
-			typeof expiresDateMs === "number"
-				? Timestamp.fromMillis(expiresDateMs)
-				: subData?.expiresAt || null;
-
-		const renewalStatus = getNumber(renewalPayload || {}, "autoRenewStatus");
-		const willAutoRenew =
-			renewalStatus === 1
-				? true
-				: mapped.isActive && mapped.state === "SUBSCRIPTION_STATE_ACTIVE";
-
-		await subscriptionRef.set(
-			{
-				productId,
-				purchaseToken: originalTransactionId,
-				originalTransactionId,
+		const decision = resolveAppStoreNotification(notificationType, subtype);
+		console.log("Notification decision:", decision.kind);
+		if (decision.kind === "unknown") {
+			await recordSubscriptionIssue({
+				type: "app_store_unhandled_notification",
 				source: "app_store",
-				subscriptionState: mapped.state,
-				willAutoRenew,
-				expiresAt,
-				notificationType,
-				notificationSubtype: subtype,
-				lastTransactionId: transactionId,
-				revocationDate: revocationDateMs
-					? Timestamp.fromMillis(revocationDateMs)
-					: null,
-				lastNotificationAt: FieldValue.serverTimestamp(),
-				updatedAt: FieldValue.serverTimestamp(),
-			},
-			{ merge: true },
-		);
-
-		const userSubRef = db
-			.collection("users")
-			.doc(userId)
-			.collection("subscription")
-			.doc("status");
-
-		if (mapped.isActive && expiresAt) {
-			console.log(
-				"Updating user subscription to ACTIVE - userId:",
+				providerKey: `${originalTransactionId}:${notificationType}:${subtype ?? "none"}`,
 				userId,
-				"plan: pro",
-			);
-			await userSubRef.set(
+				details: { notificationType, subtype },
+			});
+		}
+
+		const previousExpiresAt =
+			subData?.expiresAt instanceof Timestamp
+				? subData.expiresAt.toMillis()
+				: null;
+		const effectiveExpiryMillis = appStoreEffectiveExpiryMillis({
+			decision,
+			existingExpiryMillis: previousExpiresAt,
+			notificationSignedDateMillis: notificationSignedDateMs,
+			now: Date.now(),
+			providerExpiryMillis: expiresDateMs,
+			revocationDateMillis: revocationDateMs,
+		});
+		const expiresAt =
+			effectiveExpiryMillis === null
+				? null
+				: Timestamp.fromMillis(effectiveExpiryMillis);
+		const renewalStatus = getNumber(renewalPayload || {}, "autoRenewStatus");
+		const willAutoRenew = appStoreWillAutoRenew(decision, renewalStatus);
+		const revenueKind =
+			notificationType === "REFUND"
+				? "refund"
+				: notificationType === "SUBSCRIBED" || notificationType === "DID_RENEW"
+					? "charge"
+					: null;
+		const revenueOccurredAtMs =
+			revenueKind === "refund"
+				? (revocationDateMs ?? notificationSignedDateMs)
+				: purchaseDateMs;
+
+		const revenueEvent =
+			revenueKind &&
+			transactionId &&
+			price !== null &&
+			Number.isSafeInteger(price) &&
+			price >= 0 &&
+			Number.isSafeInteger(price * 1000) &&
+			currency &&
+			revenueOccurredAtMs !== null
+				? ({
+						provider: "app_store",
+						providerTransactionId:
+							revenueKind === "refund"
+								? `${transactionId}:refund`
+								: transactionId,
+						userId,
+						amountMicros: price * 1000,
+						currency,
+						kind: revenueKind,
+						environment:
+							environment === "Production" ? "production" : "sandbox",
+						occurredAt: new Date(revenueOccurredAtMs),
+						metadata: { originalTransactionId, productId },
+					} as const)
+				: null;
+
+		const stateUpdate =
+			decision.kind === "state_change"
+				? {
+						...normalizedSubscriptionFields(
+							{
+								environment:
+									environment === "Production"
+										? "production"
+										: environment === "Sandbox"
+											? "test"
+											: "unknown",
+								expiresAt,
+								plan: "pro",
+								source: "app_store",
+								subscriptionState: decision.subscriptionState,
+								willAutoRenew,
+							},
+							Date.now(),
+						),
+						expiresAt,
+						willAutoRenew,
+					}
+				: {};
+
+		await db.runTransaction(async (transaction) => {
+			if (revenueEvent) {
+				await enqueueRevenueEventInTransaction(transaction, revenueEvent);
+			}
+			transaction.set(
+				subscriptionRef,
 				{
-					plan: "pro",
-					billingPeriod:
-						productId.includes("year") || productId.includes("annual")
-							? "yearly"
-							: "monthly",
-					expiresAt,
-					willAutoRenew,
-					subscriptionState: mapped.state,
+					...stateUpdate,
+					productId,
 					purchaseToken: originalTransactionId,
-					source: "app_store",
+					originalTransactionId,
+					externalAccountVerified: true,
+					lastVerifiedAt: FieldValue.serverTimestamp(),
+					notificationType,
+					notificationSubtype: subtype,
+					lastTransactionId: transactionId,
+					revocationDate: revocationDateMs
+						? Timestamp.fromMillis(revocationDateMs)
+						: null,
+					lastNotificationAt: FieldValue.serverTimestamp(),
 					updatedAt: FieldValue.serverTimestamp(),
 				},
 				{ merge: true },
 			);
+		});
 
-			await setSubscriptionClaims(userId, "pro", expiresAt.toDate());
-		} else if (mapped.isTerminal) {
-			console.log("Terminal state - removing subscription for userId:", userId);
-			await userSubRef.delete();
-			await setSubscriptionClaims(userId, "free", null);
-		} else {
-			console.log(
-				"Non-terminal inactive state - updating status for userId:",
-				userId,
-			);
-			await userSubRef.set(
-				{
-					willAutoRenew,
-					subscriptionState: mapped.state,
-					updatedAt: FieldValue.serverTimestamp(),
-				},
-				{ merge: true },
-			);
+		if (decision.kind === "state_change") {
+			await reconcileUserEntitlement(userId);
 		}
 
 		await dedupeRef.set({
@@ -349,13 +346,18 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 			originalTransactionId,
 			transactionId,
 			processedAt: FieldValue.serverTimestamp(),
-			status: "processed",
+			status:
+				decision.kind === "state_change"
+					? "processed"
+					: decision.kind === "metadata_only"
+						? "processed_metadata_only"
+						: "ignored_unknown_notification",
 		});
 
 		// Send notification email for relevant events (don't block response).
 		// Guard against cancel→expiry double-email: if a cancellation email was
 		// already sent for this subscription, skip sending the expiry email.
-		if (userId && notificationType) {
+		if (userId && notificationType && decision.kind === "state_change") {
 			const expiresDate = expiresDateMs ? new Date(expiresDateMs) : null;
 			const subscriptionId = `ios_${originalTransactionId}`;
 

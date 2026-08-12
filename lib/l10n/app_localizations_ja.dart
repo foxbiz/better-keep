@@ -1876,6 +1876,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String get welcomeToProMessage => 'Better Keep Proへようこそ！';
 
   @override
+  String get paymentConfirmedTitle => 'お支払いを確認しました';
+
+  @override
+  String get paymentConfirmedActivationPending =>
+      'お支払いは確認されましたが、Pro の有効化に時間がかかっています。再度購入しないでください。ステータスを再確認するか、Google Play でサブスクリプションを管理してください。';
+
+  @override
+  String get recheckStatus => 'ステータスを再確認';
+
+  @override
+  String get subscriptionAccountMismatchTitle => '別のアカウントにリンクされています';
+
+  @override
+  String get subscriptionAccountMismatchMessage =>
+      'この Google Play サブスクリプションは別の Better Keep アカウントにリンクされています。そのアカウントでサインインするか、サポートにお問い合わせください。このアカウントにはアクセス権を付与していません。';
+
+  @override
   String get loadingPrices => '価格を読み込み中...';
 
   @override

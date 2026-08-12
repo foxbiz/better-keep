@@ -23,6 +23,7 @@ import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/oauth_transaction.dart';
+import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/services/recovered_oauth_sign_in_coordinator.dart';
 import 'package:better_keep/services/reminder_session_service.dart';
 import 'package:better_keep/services/reminder_sign_out_cleanup_service.dart';
@@ -61,6 +62,12 @@ typedef _OAuthCallbackResult = ({
   bool linked,
 });
 
+typedef _PostSignInRequest = ({
+  String uid,
+  String provider,
+  ValueChanged<AuthProgress>? onStatusChange,
+});
+
 class AuthService {
   static FirebaseAuth get _auth => FirebaseBackend.auth;
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
@@ -69,6 +76,9 @@ class AuthService {
   static FirebaseAuth get firebaseAuth => _auth;
 
   static final ValueNotifier<bool> isVerifying = ValueNotifier(false);
+  static final ValueNotifier<PostSignInState> postSignInState = ValueNotifier(
+    PostSignInState.idle,
+  );
 
   static const String? _serverClientId = null;
 
@@ -97,6 +107,8 @@ class AuthService {
   static DateTime? _cachedTokenAuthTime;
   // Current user ID for revocation checks
   static String? _currentUserId;
+  static _PostSignInRequest? _postSignInRequest;
+  static Future<void>? _postSignInFuture;
   // Flag to indicate session is invalid (user deleted/disabled)
   // When true, sync should be disabled and user should be warned to re-login
   static final ValueNotifier<bool> sessionInvalid = ValueNotifier(false);
@@ -549,6 +561,8 @@ class AuthService {
       } else if (user == null) {
         // User logged out - stop the listener
         _stopTokenRevocationListener();
+        _postSignInRequest = null;
+        postSignInState.value = PostSignInState.idle;
         ReviewAccess.clear();
       }
     });
@@ -1528,74 +1542,239 @@ class AuthService {
     User user,
     ValueChanged<AuthProgress>? onStatusChange,
     String provider,
-  ) async {
-    try {
-      // Force token refresh to ensure Firestore has the latest auth state
-      // This fixes permission-denied errors on web after OAuth sign-in
-      onStatusChange?.call(AuthProgress.verifying);
-      await user.getIdToken(true);
+  ) => _startPostSignInInitialization(
+    user: user,
+    provider: provider,
+    onStatusChange: onStatusChange,
+  );
 
-      // Small delay to allow token propagation (especially on web)
-      if (kIsWeb) {
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      // Set Pro claims in emulator mode for testing
-      await _setEmulatorProClaims(user, onStatusChange);
-      onStatusChange?.call(AuthProgress.checkingAccount);
-      await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(user);
-
-      final isReviewSession = await ReviewAccess.authorize(user);
-      ReviewAccess.requireAuthorizedReviewIdentity(user, isReviewSession);
-
-      if (isReviewSession) {
-        onStatusChange?.call(AuthProgress.checkingAccount);
-        final reviewAuthorization = ReviewAccess.authorizationFor(user);
-        if (reviewAuthorization == null) {
-          throw StateError('Review authorization was not retained');
-        }
-        PlanService.instance.activateReviewSession(reviewAuthorization);
-        await E2EEService.instance.initializeReviewSession();
-      } else {
-        await _ensureUserExists(user, onStatusChange, provider);
-        // Load Firestore linked providers into cache
-        await refreshLinkedProviders();
-        // Start PlanService subscription listener (deferred from auth state change)
-        await PlanService.instance.startSubscriptionListener();
-        // Initialize E2EE after successful login
-        onStatusChange?.call(AuthProgress.protectingNotes);
-        await E2EEService.instance.initialize();
-        // Guard: user may have cancelled/signed-out during the long async ops above
-        if (currentUser == null) return;
-        // Initialize device approval notifications
-        await DeviceApprovalNotificationService().init();
-        // Initialize sync services after E2EE is ready
-        // This prevents Firestore connections before E2EE initialization completes
-        await NoteSyncService().init();
-        await LabelSyncService().init();
-        await NoteSortService().startCloudSync();
-      }
-
-      // Clear sign-in progress flag on success
-      final canUseE2EEStorage =
-          !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
-      if (canUseE2EEStorage) {
-        await E2EESecureStorage.instance.setSignInProgress(false);
-      }
-    } catch (e) {
-      await signOut();
-      rethrow;
+  /// Initializes cloud and encryption services for a restored Firebase Auth
+  /// session. This uses the same recoverable pipeline as a fresh sign-in.
+  static Future<void> initializeCurrentUserServices() async {
+    final user = currentUser;
+    if (user == null) {
+      postSignInState.value = PostSignInState.idle;
+      return;
     }
-    // Start token revocation listener and cache auth time outside the main
-    // try/catch so a failure here does NOT trigger signOut() while sync is
-    // already running in the background.
-    _startTokenRevocationListener(user.uid);
+
+    await _startPostSignInInitialization(
+      user: user,
+      provider: _providerNameFor(user),
+    );
+  }
+
+  /// Retries the complete authenticated startup sequence after a transient
+  /// identity, account, or encryption failure.
+  static Future<void> retryPostSignInInitialization() async {
+    final inFlight = _postSignInFuture;
+    if (inFlight != null) {
+      await inFlight;
+      if (!postSignInState.value.hasRecoverableFailure &&
+          E2EEService.instance.status.value != E2EEStatus.error) {
+        return;
+      }
+    }
+
+    final user = currentUser;
+    if (user == null) {
+      postSignInState.value = PostSignInState.idle;
+      return;
+    }
+
+    if (E2EEService.instance.status.value == E2EEStatus.error) {
+      E2EEService.instance.status.value = E2EEStatus.notInitialized;
+      E2EEService.instance.resetInitialization();
+    }
+
+    final previousRequest = _postSignInRequest;
+    await _startPostSignInInitialization(
+      user: user,
+      provider: previousRequest != null && previousRequest.uid == user.uid
+          ? previousRequest.provider
+          : _providerNameFor(user),
+      onStatusChange: previousRequest != null && previousRequest.uid == user.uid
+          ? previousRequest.onStatusChange
+          : null,
+    );
+  }
+
+  static Future<void> continueOfflineAfterInitializationFailure() async {
+    final canUseE2EEStorage =
+        !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+    if (canUseE2EEStorage) {
+      try {
+        await E2EESecureStorage.instance.setSignInProgress(false);
+      } catch (error, stackTrace) {
+        await AppLogger.error(
+          '[POST_SIGN_IN] Failed to clear sign-in progress for offline mode',
+          error,
+          stackTrace,
+        );
+      }
+    }
+    postSignInState.value = PostSignInState.idle;
+    sessionInvalid.value = true;
+  }
+
+  static Future<void> _startPostSignInInitialization({
+    required User user,
+    required String provider,
+    ValueChanged<AuthProgress>? onStatusChange,
+  }) {
+    final running = _postSignInFuture;
+    if (running != null) return running;
+
+    final request = (
+      uid: user.uid,
+      provider: provider,
+      onStatusChange: onStatusChange,
+    );
+    _postSignInRequest = request;
+
+    late final Future<void> initialization;
+    initialization = _runPostSignInInitialization(request).whenComplete(() {
+      if (identical(_postSignInFuture, initialization)) {
+        _postSignInFuture = null;
+      }
+    });
+    _postSignInFuture = initialization;
+    return initialization;
+  }
+
+  static Future<void> _runPostSignInInitialization(
+    _PostSignInRequest request,
+  ) async {
+    final user = currentUser;
+    if (user == null || user.uid != request.uid) {
+      postSignInState.value = PostSignInState.idle;
+      return;
+    }
+
+    var isReviewSession = false;
+    final canUseE2EEStorage =
+        !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
+    final coordinator = PostSignInCoordinator(
+      validateIdentity: PostSignInOperation('validate-identity', () async {
+        request.onStatusChange?.call(AuthProgress.verifying);
+        await user.getIdToken(true);
+        if (kIsWeb) {
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+        await _setEmulatorProClaims(user, request.onStatusChange);
+        isReviewSession = await ReviewAccess.authorize(user);
+        ReviewAccess.requireAuthorizedReviewIdentity(user, isReviewSession);
+      }),
+      initializeAccount: PostSignInOperation('initialize-account', () async {
+        request.onStatusChange?.call(AuthProgress.checkingAccount);
+        await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(user);
+        if (isReviewSession) {
+          final reviewAuthorization = ReviewAccess.authorizationFor(user);
+          if (reviewAuthorization == null) {
+            throw StateError('Review authorization was not retained');
+          }
+          PlanService.instance.activateReviewSession(reviewAuthorization);
+          return;
+        }
+        await _ensureUserExists(user, request.onStatusChange, request.provider);
+      }),
+      initializeEncryption: PostSignInOperation(
+        'initialize-encryption',
+        () async {
+          request.onStatusChange?.call(AuthProgress.protectingNotes);
+          if (isReviewSession) {
+            await E2EEService.instance.initializeReviewSession();
+          } else {
+            await E2EEService.instance.initialize();
+          }
+        },
+      ),
+      auxiliaryServices: [
+        PostSignInOperation('refresh-linked-providers', () async {
+          if (!isReviewSession) await refreshLinkedProviders();
+        }),
+        PostSignInOperation('start-subscription-listener', () async {
+          if (!isReviewSession) {
+            await PlanService.instance.startSubscriptionListener();
+          }
+        }),
+        PostSignInOperation('device-approval-notifications', () async {
+          if (!isReviewSession) {
+            await DeviceApprovalNotificationService().init();
+          }
+        }),
+        PostSignInOperation('note-sync', () async {
+          if (!isReviewSession) await NoteSyncService().init();
+        }),
+        PostSignInOperation('label-sync', () async {
+          if (!isReviewSession) await LabelSyncService().init();
+        }),
+        PostSignInOperation('note-sort-sync', () async {
+          if (!isReviewSession) await NoteSortService().startCloudSync();
+        }),
+      ],
+      isFatalIdentityFailure: _isDefinitiveIdentityFailure,
+      isSessionCurrent: () => currentUser?.uid == request.uid,
+      signOut: signOut,
+      clearSignInProgress: () async {
+        if (canUseE2EEStorage) {
+          await E2EESecureStorage.instance.setSignInProgress(false);
+        }
+      },
+      onStateChanged: (state) {
+        postSignInState.value = state;
+      },
+      reportFailure: (stage, operation, error, stackTrace) => AppLogger.error(
+        '[POST_SIGN_IN] ${stage.name}/$operation failed',
+        error,
+        stackTrace,
+      ),
+    );
+
+    await coordinator.run();
+    if (currentUser?.uid != request.uid) return;
+
+    // Token revocation remains active even while the user is on a recoverable
+    // startup screen.
+    _startTokenRevocationListener(request.uid);
     try {
       final idTokenResult = await user.getIdTokenResult();
       _cachedTokenAuthTime = idTokenResult.authTime;
-    } catch (e) {
-      AppLogger.error('Error caching token auth time after sign in', e);
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        '[POST_SIGN_IN] Failed to cache token auth time',
+        error,
+        stackTrace,
+      );
     }
+  }
+
+  static bool _isDefinitiveIdentityFailure(Object error) {
+    if (error is ReviewAuthorizationException) return true;
+    if (error is! FirebaseAuthException) return false;
+    return const {
+      'user-disabled',
+      'user-not-found',
+      'invalid-user-token',
+      'user-token-expired',
+    }.contains(error.code);
+  }
+
+  static String _providerNameFor(User user) {
+    final providerId = user.providerData
+        .map((provider) => provider.providerId)
+        .firstWhere(
+          (providerId) => providerId.isNotEmpty,
+          orElse: () => 'unknown',
+        );
+    return switch (providerId) {
+      'password' => 'email',
+      'google.com' => 'google',
+      'apple.com' => 'apple',
+      'facebook.com' => 'facebook',
+      'github.com' => 'github',
+      'twitter.com' => 'twitter',
+      _ => providerId,
+    };
   }
 
   static Future<void> _ensureUserExists(
@@ -1840,6 +2019,9 @@ class AuthService {
   }
 
   static Future<void> signOut() async {
+    _postSignInRequest = null;
+    _postSignInFuture = null;
+    postSignInState.value = PostSignInState.idle;
     try {
       await ReminderSessionService.setSignedIn(false);
 

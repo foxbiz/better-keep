@@ -274,9 +274,50 @@ test("OAuth v2 start is browser-bound and creates no legacy state document", asy
   );
   assert.equal(response.status, 302);
   assert.match(response.headers.get("location"), /^https:\/\/github\.com\//);
-  assert.match(response.headers.get("set-cookie"), /__Host-bk-oauth=/);
-  assert.match(response.headers.get("set-cookie"), /HttpOnly/);
+  const setCookie = response.headers.get("set-cookie");
+  assert.match(setCookie, /^__session=/);
+  assert.match(setCookie, /Max-Age=300/);
+  assert.match(setCookie, /Path=\//);
+  assert.match(setCookie, /Secure/);
+  assert.match(setCookie, /HttpOnly/);
+  assert.match(setCookie, /SameSite=Lax/);
+  assert.doesNotMatch(setCookie, /Domain=/i);
   assert.equal(response.headers.get("cache-control"), "no-store");
+
+  const state = new URL(response.headers.get("location")).searchParams.get(
+    "state",
+  );
+  assert.ok(state);
+  const callbackUrl =
+    `${functionsEmulatorUrl.origin}/${projectId}/us-central1/oauthCallback` +
+    `?state=${encodeURIComponent(state)}`;
+  const browserCookie = setCookie.split(";", 1)[0];
+
+  const boundCallback = await fetch(callbackUrl, {
+    headers: { Cookie: browserCookie },
+    redirect: "manual",
+  });
+  assert.equal(boundCallback.status, 400);
+  assert.match(boundCallback.headers.get("content-type"), /^text\/html/);
+  const boundCallbackBody = await boundCallback.text();
+  assert.match(boundCallbackBody, /Missing authorization code/);
+  assert.doesNotMatch(boundCallbackBody, /OAuth authentication failed/);
+
+  const missingCookieCallback = await fetch(callbackUrl, {
+    redirect: "manual",
+  });
+  assert.equal(missingCookieCallback.status, 400);
+  assert.equal(await missingCookieCallback.text(), "OAuth authentication failed");
+
+  const mismatchedCookieCallback = await fetch(callbackUrl, {
+    headers: { Cookie: `__session=${"c".repeat(43)}` },
+    redirect: "manual",
+  });
+  assert.equal(mismatchedCookieCallback.status, 400);
+  assert.equal(
+    await mismatchedCookieCallback.text(),
+    "OAuth authentication failed",
+  );
 
   const rejectedOrigin = new URLSearchParams(query);
   rejectedOrigin.set("clientOrigin", "https://betterkeep.app.evil.test");

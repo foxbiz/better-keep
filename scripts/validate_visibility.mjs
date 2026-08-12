@@ -67,6 +67,8 @@ const appIndex = await read('app/index.html');
 assert(appIndex.includes('<base href="/app/">'), 'Flutter app base href must be /app/');
 assert(appIndex.includes('noindex, nofollow'), 'Flutter app index must be noindex');
 
+assert(!(await exists(path.join(root, 'admin.html'))), 'Public Hosting must not contain admin.html');
+
 const legacyServiceWorker = await read('flutter_service_worker.js');
 assert(
   legacyServiceWorker.includes('self.registration.unregister()'),
@@ -97,7 +99,7 @@ assert(
 );
 assert(
   !sitemapLocations.some((location) =>
-    /\/(?:app|auth|reset-password|desktop-checkout|s)(?:\/|$)/.test(
+    /\/(?:admin|app|auth|reset-password|desktop-checkout|s)(?:\/|$)/.test(
       new URL(location).pathname
     )
   ),
@@ -320,6 +322,10 @@ async function collectHtml(directory, prefix = '') {
 const htmlFiles = await collectHtml(root);
 for (const relativePath of htmlFiles) {
   const html = await read(relativePath);
+  assert(
+    !/data-admin-root|Private operations/i.test(html),
+    `${relativePath} exposes the isolated administrator portal`
+  );
   const localReferences = [
     ...html.matchAll(/(?:src|href)="(\/[^"#?]+)"/g)
   ].map((match) => match[1]);

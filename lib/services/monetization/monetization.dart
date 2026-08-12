@@ -30,6 +30,8 @@ library;
 export 'entitlement_guard.dart';
 export 'entitlements.dart';
 export 'plan_service.dart';
+export 'purchase_feedback.dart';
+export 'purchase_provider.dart';
 export 'subscription_service.dart';
 export 'subscription_status.dart';
 export 'user_plan.dart';

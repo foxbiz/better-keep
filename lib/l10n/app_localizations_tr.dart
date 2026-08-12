@@ -1933,6 +1933,24 @@ class AppLocalizationsTr extends AppLocalizations {
   String get welcomeToProMessage => 'Better Keep Pro\'ya Hoş Geldiniz!';
 
   @override
+  String get paymentConfirmedTitle => 'Ödeme onaylandı';
+
+  @override
+  String get paymentConfirmedActivationPending =>
+      'Ödeme onaylandı ancak Pro etkinleştirmesi daha uzun sürüyor. Tekrar satın almayın. Durumu yeniden kontrol edin veya aboneliği Google Play\'de yönetin.';
+
+  @override
+  String get recheckStatus => 'Durumu Yeniden Kontrol Et';
+
+  @override
+  String get subscriptionAccountMismatchTitle =>
+      'Abonelik başka bir hesaba bağlı';
+
+  @override
+  String get subscriptionAccountMismatchMessage =>
+      'Bu Google Play aboneliği başka bir Better Keep hesabına bağlı. O hesapta oturum açın veya destek ile iletişime geçin; bu hesaba erişim verilmedi.';
+
+  @override
   String get loadingPrices => 'Fiyatlar yükleniyor...';
 
   @override

@@ -1,16 +1,10 @@
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
+import 'package:better_keep/ui/paywall/purchase_feedback_listener.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/utils/monetization_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-/// Map a [PurchaseResult] message to a localized string.
-/// Provider diagnostics are deliberately never shown to the user.
-String _localizedPurchaseMessage(BuildContext context, PurchaseResult result) {
-  return result.outcome.localized(context.l10n);
-}
 
 /// Shows the paywall as a full-screen page.
 ///
@@ -75,99 +69,102 @@ class PaywallSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.only(bottom: bottomPadding),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Compact hero: icon inline with title
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.workspace_premium_rounded,
-                    size: 22,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    context.l10n.upgradeToPro,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
+    return PurchaseFeedbackListener(
+      events: SubscriptionService.instance.purchaseEvents,
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.only(bottom: bottomPadding),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 6),
-
-              // Feature-specific or custom message
-              Text(
-                _getMessage(context),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-              // Feature comparison
-              const _FeatureComparisonCard(),
-              const SizedBox(height: 8),
-              Text(
-                context.l10n.noAdsDescription,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                // Compact hero: icon inline with title
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      size: 22,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      context.l10n.upgradeToPro,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 6),
 
-              // Pricing options
-              const _PricingOptions(),
-              const SizedBox(height: 16),
-
-              // Restore info
-              const _RestoreInfoText(),
-              const SizedBox(height: 16),
-
-              // Terms and Privacy links
-              const _LegalLinks(),
-              const SizedBox(height: 16),
-
-              // Self-host contact info
-              _SelfHostContactInfo(theme: theme),
-              const SizedBox(height: 12),
-
-              // Close button
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(
-                  context.l10n.maybeLater,
-                  style: TextStyle(color: theme.colorScheme.outline),
+                // Feature-specific or custom message
+                Text(
+                  _getMessage(context),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+
+                // Feature comparison
+                const _FeatureComparisonCard(),
+                const SizedBox(height: 8),
+                Text(
+                  context.l10n.noAdsDescription,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+
+                // Pricing options
+                const _PricingOptions(),
+                const SizedBox(height: 16),
+
+                // Restore info
+                const _RestoreInfoText(),
+                const SizedBox(height: 16),
+
+                // Terms and Privacy links
+                const _LegalLinks(),
+                const SizedBox(height: 16),
+
+                // Self-host contact info
+                _SelfHostContactInfo(theme: theme),
+                const SizedBox(height: 12),
+
+                // Close button
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(
+                    context.l10n.maybeLater,
+                    style: TextStyle(color: theme.colorScheme.outline),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -324,7 +321,13 @@ class _PricingOptions extends StatefulWidget {
 
 class _PricingOptionsState extends State<_PricingOptions> {
   bool _yearlySelected = true;
+  bool _isLoading = false;
   bool _isLoadingProducts = false;
+  PurchaseAttemptPhase _purchasePhase = PurchaseAttemptPhase.idle;
+
+  bool get _isBusy => SubscriptionService.instance.usesRazorpay
+      ? _isLoading
+      : _purchasePhase != PurchaseAttemptPhase.idle;
 
   String? get _monthlyPrice =>
       SubscriptionService.instance.getDisplayPriceSafe(yearly: false);
@@ -338,8 +341,20 @@ class _PricingOptionsState extends State<_PricingOptions> {
   @override
   void initState() {
     super.initState();
+    _isLoading = SubscriptionService.instance.isLoading.value;
+    _purchasePhase = SubscriptionService.instance.purchasePhase.value;
+    SubscriptionService.instance.storeReadiness.addListener(
+      _onStoreReadinessChanged,
+    );
+    SubscriptionService.instance.isLoading.addListener(_onLoadingChange);
+    SubscriptionService.instance.purchasePhase.addListener(
+      _onPurchasePhaseChanged,
+    );
     // If products aren't available, try to reload them (only for mobile IAP)
-    if (!_pricesAvailable && !SubscriptionService.instance.usesRazorpay) {
+    if (!_pricesAvailable &&
+        !SubscriptionService.instance.usesRazorpay &&
+        SubscriptionService.instance.storeReadiness.value !=
+            StoreReadiness.unavailable) {
       _loadProducts();
     }
     // Listen to currency changes to update prices
@@ -352,6 +367,13 @@ class _PricingOptionsState extends State<_PricingOptions> {
 
   @override
   void dispose() {
+    SubscriptionService.instance.storeReadiness.removeListener(
+      _onStoreReadinessChanged,
+    );
+    SubscriptionService.instance.isLoading.removeListener(_onLoadingChange);
+    SubscriptionService.instance.purchasePhase.removeListener(
+      _onPurchasePhaseChanged,
+    );
     if (SubscriptionService.instance.usesRazorpay) {
       SubscriptionService.instance.selectedCurrency.removeListener(
         _onCurrencyChanged,
@@ -363,6 +385,33 @@ class _PricingOptionsState extends State<_PricingOptions> {
   void _onCurrencyChanged() {
     if (mounted) setState(() {});
   }
+
+  void _onStoreReadinessChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onLoadingChange() {
+    if (mounted) {
+      setState(() {
+        _isLoading = SubscriptionService.instance.isLoading.value;
+      });
+    }
+  }
+
+  void _onPurchasePhaseChanged() {
+    if (mounted) {
+      setState(() {
+        _purchasePhase = SubscriptionService.instance.purchasePhase.value;
+      });
+    }
+  }
+
+  String _progressLabel(BuildContext context) => switch (_purchasePhase) {
+    PurchaseAttemptPhase.preflight => context.l10n.checkingStatus,
+    PurchaseAttemptPhase.awaitingStore => context.l10n.processingSubscription,
+    PurchaseAttemptPhase.verifying => context.l10n.verifying,
+    PurchaseAttemptPhase.idle => context.l10n.processingSubscription,
+  };
 
   Future<void> _loadProducts() async {
     if (_isLoadingProducts) return;
@@ -390,8 +439,8 @@ class _PricingOptionsState extends State<_PricingOptions> {
       );
     }
 
-    // If prices aren't available (products not loaded for mobile IAP), show redirect button
-    // But for Razorpay, we always have hardcoded prices, so show full UI
+    // Native-store prices fail closed with retry UI. Razorpay platforms use
+    // configured prices and render the normal purchase controls immediately.
     if (!_pricesAvailable && !SubscriptionService.instance.usesRazorpay) {
       return Column(
         children: [
@@ -459,12 +508,20 @@ class _PricingOptionsState extends State<_PricingOptions> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: () => _handleSubscribe(context),
-            icon: const Icon(Icons.rocket_launch),
+            onPressed: _isBusy ? null : () => _handleSubscribe(context),
+            icon: _isBusy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.rocket_launch),
             label: Text(
-              context.l10n.subscribeWithPrice(
-                _yearlySelected ? _yearlyPrice! : _monthlyPrice!,
-              ),
+              _isBusy
+                  ? _progressLabel(context)
+                  : context.l10n.subscribeWithPrice(
+                      _yearlySelected ? _yearlyPrice! : _monthlyPrice!,
+                    ),
             ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -477,6 +534,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
 
   Widget _buildCurrencySelector(ThemeData theme) {
     return ValueListenableBuilder<bool>(
+      key: const ValueKey('razorpay-currency-selector'),
       valueListenable: SubscriptionService.instance.isCurrencyLoading,
       builder: (context, isLoading, _) {
         if (isLoading) {
@@ -557,16 +615,11 @@ class _PricingOptionsState extends State<_PricingOptions> {
   }
 
   Future<void> _handleSubscribe(BuildContext context) async {
-    // Set Razorpay theme color to match the app's primary color
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
-    debugPrint(
-      'PaywallSheet: Primary color = $primaryColor (value: 0x${primaryColor.toARGB32().toRadixString(16)})',
-    );
-    RazorpayService.instance.setThemeColor(primaryColor);
-    debugPrint(
-      'PaywallSheet: After setThemeColor, themeColorHex = ${RazorpayService.instance.themeColorHex}',
-    );
+    if (SubscriptionService.instance.usesRazorpay) {
+      RazorpayService.instance.setThemeColor(
+        Theme.of(context).colorScheme.primary,
+      );
+    }
 
     final PurchaseResult result;
     try {
@@ -587,34 +640,8 @@ class _PricingOptionsState extends State<_PricingOptions> {
 
     if (!context.mounted) return;
 
-    if (result.isSuccess) {
-      // Only pop if this route is still the current (topmost) route.
-      // PaywallPage._onSubscriptionChange may have already popped this route
-      // during the purchaseSubscription() await — popping again would remove
-      // the page underneath, causing a black screen.
-      final route = ModalRoute.of(context);
-      if (route != null && route.isCurrent) {
-        Navigator.pop(context, true);
-      }
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_localizedPurchaseMessage(context, result)),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } else if (result.isPending) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_localizedPurchaseMessage(context, result))),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_localizedPurchaseMessage(context, result)),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (!result.isPending) {
+      await presentPurchaseOutcome(context, result.outcome);
     }
   }
 }
@@ -735,6 +762,11 @@ class _PaywallPageState extends State<PaywallPage> {
   bool _isLoading = false;
   bool _isLoadingProducts = false;
   bool _hasPopped = false;
+  PurchaseAttemptPhase _purchasePhase = PurchaseAttemptPhase.idle;
+
+  bool get _isBusy => SubscriptionService.instance.usesRazorpay
+      ? _isLoading
+      : _purchasePhase != PurchaseAttemptPhase.idle;
 
   String? get _monthlyPrice =>
       SubscriptionService.instance.getDisplayPriceSafe(yearly: false);
@@ -748,8 +780,15 @@ class _PaywallPageState extends State<PaywallPage> {
   @override
   void initState() {
     super.initState();
+    _isLoading = SubscriptionService.instance.isLoading.value;
+    _purchasePhase = SubscriptionService.instance.purchasePhase.value;
     SubscriptionService.instance.isLoading.addListener(_onLoadingChange);
-    PlanService.instance.statusNotifier.addListener(_onSubscriptionChange);
+    SubscriptionService.instance.purchasePhase.addListener(
+      _onPurchasePhaseChanged,
+    );
+    SubscriptionService.instance.storeReadiness.addListener(
+      _onStoreReadinessChanged,
+    );
     // Listen to currency changes to update prices
     if (SubscriptionService.instance.usesRazorpay) {
       SubscriptionService.instance.selectedCurrency.addListener(
@@ -757,7 +796,10 @@ class _PaywallPageState extends State<PaywallPage> {
       );
     }
     // If products aren't available, try to reload them (only for mobile IAP)
-    if (!_pricesAvailable && !SubscriptionService.instance.usesRazorpay) {
+    if (!_pricesAvailable &&
+        !SubscriptionService.instance.usesRazorpay &&
+        SubscriptionService.instance.storeReadiness.value !=
+            StoreReadiness.unavailable) {
       _loadProducts();
     }
     // Refresh subscription status when paywall opens to catch any missed updates
@@ -767,33 +809,41 @@ class _PaywallPageState extends State<PaywallPage> {
   /// Check for existing subscription and close paywall if already subscribed
   Future<void> _checkExistingSubscription() async {
     // Refresh subscription from server to get latest status
-    await PlanService.instance.refreshSubscription();
+    try {
+      await PlanService.instance.refreshSubscription();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'PaywallPage: Could not refresh subscription on open',
+        error,
+        stackTrace,
+      );
+      return;
+    }
 
     if (!mounted) return;
 
     final status = PlanService.instance.status;
+    if (SubscriptionService.instance.purchasePhase.value !=
+        PurchaseAttemptPhase.idle) {
+      return;
+    }
     // If user has active paid subscription (non-trial), close paywall
     if (status.isActive && status.plan.isPaid && !status.isTrialSubscription) {
       if (_hasPopped) return;
       _hasPopped = true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.l10n.alreadyHaveSubscription(
-              status.plan.localizedDisplayName(context.l10n),
-            ),
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.of(context).pop(true);
+      await presentPurchaseOutcome(context, PurchaseOutcome.alreadyActive);
     }
   }
 
   @override
   void dispose() {
     SubscriptionService.instance.isLoading.removeListener(_onLoadingChange);
-    PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
+    SubscriptionService.instance.purchasePhase.removeListener(
+      _onPurchasePhaseChanged,
+    );
+    SubscriptionService.instance.storeReadiness.removeListener(
+      _onStoreReadinessChanged,
+    );
     if (SubscriptionService.instance.usesRazorpay) {
       SubscriptionService.instance.selectedCurrency.removeListener(
         _onCurrencyChanged,
@@ -806,50 +856,34 @@ class _PaywallPageState extends State<PaywallPage> {
     if (mounted) setState(() {});
   }
 
+  void _onStoreReadinessChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onLoadingChange() {
     if (mounted) {
-      final wasLoading = _isLoading;
       final isNowLoading = SubscriptionService.instance.isLoading.value;
 
       setState(() {
         _isLoading = isNowLoading;
       });
-
-      // If loading just finished, check for errors
-      if (wasLoading && !isNowLoading) {
-        final error = SubscriptionService.instance.lastPurchaseError;
-        if (error != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(error.localized(context.l10n)),
-              backgroundColor: Colors.red,
-            ),
-          );
-          SubscriptionService.instance.clearLastPurchaseError();
-        }
-      }
     }
   }
 
-  void _onSubscriptionChange() {
-    if (_hasPopped) return;
-    final status = PlanService.instance.status;
-    // Only auto-close for paid subscriptions (not trial)
-    if (mounted &&
-        status.isActive &&
-        status.plan.isPaid &&
-        !status.isTrialSubscription) {
-      _hasPopped = true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.welcomeToProMessage),
-          backgroundColor: Colors.green,
-        ),
-      );
-      // User successfully subscribed, close the paywall
-      Navigator.of(context).pop(true);
+  void _onPurchasePhaseChanged() {
+    if (mounted) {
+      setState(() {
+        _purchasePhase = SubscriptionService.instance.purchasePhase.value;
+      });
     }
   }
+
+  String _progressLabel(BuildContext context) => switch (_purchasePhase) {
+    PurchaseAttemptPhase.preflight => context.l10n.checkingStatus,
+    PurchaseAttemptPhase.awaitingStore => context.l10n.processingSubscription,
+    PurchaseAttemptPhase.verifying => context.l10n.verifying,
+    PurchaseAttemptPhase.idle => context.l10n.processingSubscription,
+  };
 
   Future<void> _loadProducts() async {
     if (_isLoadingProducts) return;
@@ -865,6 +899,7 @@ class _PaywallPageState extends State<PaywallPage> {
 
   Widget _buildCurrencySelector(ThemeData theme) {
     return ValueListenableBuilder<bool>(
+      key: const ValueKey('razorpay-currency-selector'),
       valueListenable: SubscriptionService.instance.isCurrencyLoading,
       builder: (context, isLoading, _) {
         if (isLoading) {
@@ -949,195 +984,200 @@ class _PaywallPageState extends State<PaywallPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(context.l10n.upgradeToPro),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context, false),
+    return PurchaseFeedbackListener(
+      events: SubscriptionService.instance.purchaseEvents,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(context.l10n.upgradeToPro),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context, false),
+          ),
         ),
-      ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 500),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Compact hero: icon inline with title
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.workspace_premium_rounded,
-                          size: 26,
-                          color: theme.colorScheme.primary,
+        body: Stack(
+          children: [
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Compact hero: icon inline with title
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.workspace_premium_rounded,
+                            size: 26,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              context.l10n.unlockTheFullExperience,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _getMessage(context),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: Text(
-                            context.l10n.unlockTheFullExperience,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Feature comparison
+                      const _FeatureComparisonCard(),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.l10n.noAdsDescription,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Pricing section
+                      if (_isLoadingProducts) ...[
+                        // Loading products
+                        const SizedBox(height: 24),
+                        const Center(child: CircularProgressIndicator()),
+                        const SizedBox(height: 16),
+                        Text(
+                          context.l10n.loadingPrices,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                      ] else if (_pricesAvailable ||
+                          SubscriptionService.instance.usesRazorpay) ...[
+                        // Currency selector for Razorpay platforms
+                        if (SubscriptionService.instance.usesRazorpay) ...[
+                          _buildCurrencySelector(theme),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // Pricing toggle
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _PeriodButton(
+                                  label: context.l10n.monthly,
+                                  sublabel: _monthlyPrice!,
+                                  selected: !_yearlySelected,
+                                  onTap: () =>
+                                      setState(() => _yearlySelected = false),
+                                ),
+                              ),
+                              Expanded(
+                                child: _PeriodButton(
+                                  label: context.l10n.yearly,
+                                  sublabel: _yearlyPrice!,
+                                  badge: _savePercentage > 0
+                                      ? context.l10n.savePercent(
+                                          _savePercentage,
+                                        )
+                                      : null,
+                                  selected: _yearlySelected,
+                                  onTap: () =>
+                                      setState(() => _yearlySelected = true),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Subscribe button
+                        SizedBox(
+                          height: 56,
+                          child: FilledButton.icon(
+                            onPressed: _isBusy ? null : _handleSubscribe,
+                            icon: _isBusy
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.rocket_launch),
+                            label: Text(
+                              _isBusy
+                                  ? _progressLabel(context)
+                                  : context.l10n.subscribeWithPrice(
+                                      _yearlySelected
+                                          ? _yearlyPrice!
+                                          : _monthlyPrice!,
+                                    ),
+                              style: const TextStyle(fontSize: 16),
                             ),
                           ),
                         ),
+                      ] else ...[
+                        // Products failed to load
+                        Text(
+                          context.l10n.somethingWentWrongCheckConnection,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton.icon(
+                          onPressed: _loadProducts,
+                          icon: const Icon(Icons.refresh),
+                          label: Text(context.l10n.reloadPrices),
+                        ),
                       ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _getMessage(context),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Feature comparison
-                    const _FeatureComparisonCard(),
-                    const SizedBox(height: 8),
-                    Text(
-                      context.l10n.noAdsDescription,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Pricing section
-                    if (_isLoadingProducts) ...[
-                      // Loading products
                       const SizedBox(height: 24),
-                      const Center(child: CircularProgressIndicator()),
-                      const SizedBox(height: 16),
+
+                      // Restore info
+                      const _RestoreInfoText(),
+                      const SizedBox(height: 24),
+
+                      // Terms
                       Text(
-                        context.l10n.loadingPrices,
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        context.l10n.subscriptionAutoRenewTerms,
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.outline,
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 24),
-                    ] else if (_pricesAvailable ||
-                        SubscriptionService.instance.usesRazorpay) ...[
-                      // Currency selector for Razorpay platforms
-                      if (SubscriptionService.instance.usesRazorpay) ...[
-                        _buildCurrencySelector(theme),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Pricing toggle
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _PeriodButton(
-                                label: context.l10n.monthly,
-                                sublabel: _monthlyPrice!,
-                                selected: !_yearlySelected,
-                                onTap: () =>
-                                    setState(() => _yearlySelected = false),
-                              ),
-                            ),
-                            Expanded(
-                              child: _PeriodButton(
-                                label: context.l10n.yearly,
-                                sublabel: _yearlyPrice!,
-                                badge: _savePercentage > 0
-                                    ? context.l10n.savePercent(_savePercentage)
-                                    : null,
-                                selected: _yearlySelected,
-                                onTap: () =>
-                                    setState(() => _yearlySelected = true),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Subscribe button
-                      SizedBox(
-                        height: 56,
-                        child: FilledButton.icon(
-                          onPressed: _isLoading ? null : _handleSubscribe,
-                          icon: _isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.rocket_launch),
-                          label: Text(
-                            _isLoading
-                                ? context.l10n.processingSubscription
-                                : context.l10n.subscribeWithPrice(
-                                    _yearlySelected
-                                        ? _yearlyPrice!
-                                        : _monthlyPrice!,
-                                  ),
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ] else ...[
-                      // Products failed to load
-                      Text(
-                        context.l10n.somethingWentWrongCheckConnection,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
                       const SizedBox(height: 16),
-                      TextButton.icon(
-                        onPressed: _loadProducts,
-                        icon: const Icon(Icons.refresh),
-                        label: Text(context.l10n.reloadPrices),
-                      ),
+
+                      // Terms and Privacy links
+                      const _LegalLinks(),
+                      const SizedBox(height: 16),
+
+                      // Self-host contact info
+                      _SelfHostContactInfo(theme: theme),
+                      const SizedBox(height: 24),
                     ],
-                    const SizedBox(height: 24),
-
-                    // Restore info
-                    const _RestoreInfoText(),
-                    const SizedBox(height: 24),
-
-                    // Terms
-                    Text(
-                      context.l10n.subscriptionAutoRenewTerms,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Terms and Privacy links
-                    const _LegalLinks(),
-                    const SizedBox(height: 16),
-
-                    // Self-host contact info
-                    _SelfHostContactInfo(theme: theme),
-                    const SizedBox(height: 24),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1155,16 +1195,11 @@ class _PaywallPageState extends State<PaywallPage> {
   }
 
   Future<void> _handleSubscribe() async {
-    // Set Razorpay theme color to match the app's primary color
-    final themeData = Theme.of(context);
-    final primaryColor = themeData.colorScheme.primary;
-    debugPrint(
-      'PaywallPage: Primary color = $primaryColor (value: 0x${primaryColor.toARGB32().toRadixString(16)})',
-    );
-    RazorpayService.instance.setThemeColor(primaryColor);
-    debugPrint(
-      'PaywallPage: After setThemeColor, themeColorHex = ${RazorpayService.instance.themeColorHex}',
-    );
+    if (SubscriptionService.instance.usesRazorpay) {
+      RazorpayService.instance.setThemeColor(
+        Theme.of(context).colorScheme.primary,
+      );
+    }
 
     final PurchaseResult result;
     try {
@@ -1185,25 +1220,8 @@ class _PaywallPageState extends State<PaywallPage> {
 
     if (!mounted) return;
 
-    if (result.isSuccess) {
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_localizedPurchaseMessage(context, result)),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else if (result.isPending) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_localizedPurchaseMessage(context, result))),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_localizedPurchaseMessage(context, result)),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (!result.isPending) {
+      await presentPurchaseOutcome(context, result.outcome);
     }
   }
 }

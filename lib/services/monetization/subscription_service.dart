@@ -8,8 +8,12 @@ import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:better_keep/services/country_detection_service.dart';
 import 'package:better_keep/services/monetization/google_play_product_selector.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/monetization/purchase_attempt_tracker.dart';
+import 'package:better_keep/services/monetization/purchase_feedback.dart';
+import 'package:better_keep/services/monetization/purchase_provider.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/services/monetization/subscription_management.dart';
+import 'package:better_keep/services/monetization/subscription_status.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -18,6 +22,8 @@ import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+export 'package:better_keep/services/monetization/purchase_feedback.dart';
 
 /// Supported currencies for Razorpay payments
 enum RazorpayCurrency {
@@ -62,16 +68,53 @@ class ProductNotAvailableException implements Exception {
 /// Result of checking for existing subscription
 class ExistingSubscriptionResult {
   final bool hasSubscription;
+  final bool localEntitlementActive;
   final bool restored;
   final bool isTrial;
+  final bool contractValid;
+  final ExistingEntitlementResolution resolution;
   final Map<String, dynamic>? subscription;
 
   ExistingSubscriptionResult({
     required this.hasSubscription,
+    this.localEntitlementActive = false,
     this.restored = false,
     this.isTrial = false,
+    this.contractValid = false,
+    this.resolution = ExistingEntitlementResolution.unknown,
     this.subscription,
   });
+
+  bool get linkedProviderRecordFound =>
+      resolution == ExistingEntitlementResolution.activeProvider ||
+      resolution == ExistingEntitlementResolution.providerInactive;
+
+  bool get explicitlyTerminal =>
+      contractValid &&
+      resolution == ExistingEntitlementResolution.providerInactive;
+}
+
+enum ExistingEntitlementResolution {
+  activeProvider,
+  providerInactive,
+  trial,
+  none,
+  unknown;
+
+  static ExistingEntitlementResolution parse(dynamic value) {
+    switch (value) {
+      case 'active_provider':
+        return ExistingEntitlementResolution.activeProvider;
+      case 'provider_inactive':
+        return ExistingEntitlementResolution.providerInactive;
+      case 'trial':
+        return ExistingEntitlementResolution.trial;
+      case 'none':
+        return ExistingEntitlementResolution.none;
+      default:
+        return ExistingEntitlementResolution.unknown;
+    }
+  }
 }
 
 /// Result of purchase verification
@@ -113,10 +156,20 @@ class SubscriptionService {
   static SubscriptionService get instance => _instance;
 
   // In-app purchase
-  final InAppPurchase _iap = InAppPurchase.instance;
+  // Resolve the platform implementation only when native billing is used.
+  // Provider/readiness UI can safely inspect this service without opening a
+  // billing connection as a side effect.
+  late final InAppPurchase _iap = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
   List<ProductDetails> _products = [];
-  bool _iapAvailable = false;
+  Future<bool>? _iapInitialization;
+
+  /// Native store readiness is independent from the selected provider.
+  final ValueNotifier<StoreReadiness> storeReadiness = ValueNotifier(
+    StoreReadiness.uninitialized,
+  );
+
+  bool get _iapAvailable => storeReadiness.value == StoreReadiness.ready;
 
   // Loading state
   final ValueNotifier<bool> isLoading = ValueNotifier(false);
@@ -134,23 +187,28 @@ class SubscriptionService {
     RazorpayCurrency.usd,
   );
 
-  // Stable purchase outcome for UI. Provider diagnostics are logged separately.
-  PurchaseOutcome? _lastPurchaseError;
+  final PurchaseAttemptTracker _purchaseAttempt = PurchaseAttemptTracker();
+  final ValueNotifier<PurchaseEvent?> _purchaseEvents = ValueNotifier(null);
+  final ValueNotifier<PurchaseAttemptPhase> _purchasePhase = ValueNotifier(
+    PurchaseAttemptPhase.idle,
+  );
 
   // Completer for restore purchases flow
   Completer<bool>? _restoreCompleter;
   bool _restoredSubscriptionFound = false;
+  bool _restoreOwnershipConflictFound = false;
+  bool _sawAlreadyOwnedStoreError = false;
   // Track whether we've already verified a restored iOS receipt in this
   // restore session.  iOS delivers one restored transaction per past purchase
   // but they all share the same app receipt — verifying more than once is
   // redundant and causes duplicate emails + unnecessary Cloud Function calls.
   bool _restoredIosReceiptVerified = false;
 
-  /// Get the last purchase failure category.
-  PurchaseOutcome? get lastPurchaseError => _lastPurchaseError;
+  /// One-shot outcomes from the active asynchronous app-store checkout.
+  ValueListenable<PurchaseEvent?> get purchaseEvents => _purchaseEvents;
 
-  /// Clear last purchase error
-  void clearLastPurchaseError() => _lastPurchaseError = null;
+  /// Stable progress for the active native app-store checkout.
+  ValueListenable<PurchaseAttemptPhase> get purchasePhase => _purchasePhase;
 
   /// True when running on Apple platforms (iOS/macOS), never on web.
   bool get _isApplePlatform => !kIsWeb && (Platform.isIOS || Platform.isMacOS);
@@ -165,15 +223,11 @@ class SubscriptionService {
         Platform.isLinux;
   }
 
-  /// Whether this platform uses Razorpay (web, Windows, Linux, or Android when IAP unavailable)
-  bool get usesRazorpay {
-    if (kIsWeb) return true;
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) return true;
-    // Fallback to Razorpay on Android when Google Play billing is not available
-    // This happens on devices without Google Play Services (e.g., Huawei, custom ROMs)
-    if (!kIsWeb && Platform.isAndroid && !_iapAvailable) return true;
-    return false;
-  }
+  /// Provider selected solely from the current distribution platform.
+  PurchaseProvider get purchaseProvider => currentPurchaseProvider;
+
+  /// Compatibility getter for UI and subscription-management call sites.
+  bool get usesRazorpay => purchaseProvider == PurchaseProvider.razorpay;
 
   /// Get available products
   List<ProductDetails> get products => _products;
@@ -184,7 +238,9 @@ class SubscriptionService {
   /// Get debug info for troubleshooting
   String get debugInfo {
     return '''
-IAP Available: $_iapAvailable
+Purchase provider: ${purchaseProvider.name}
+Store readiness: ${storeReadiness.value.name}
+Purchase phase: ${_purchasePhase.value.name}
 Products loaded: ${_products.length}
 Product IDs: ${_products.map((p) => p.id).toList()}
 Expected IDs: ${ProductIds.all}
@@ -218,7 +274,7 @@ Expected IDs: ${ProductIds.all}
     }
 
     if (Platform.isIOS || Platform.isAndroid || Platform.isMacOS) {
-      await _initInAppPurchase();
+      await _ensureInAppPurchaseReady();
     } else {
       AppLogger.log(
         'SubscriptionService: Desktop platform, using external checkout',
@@ -269,35 +325,69 @@ Expected IDs: ${ProductIds.all}
   }
 
   /// Initialize in-app purchases for mobile
-  Future<void> _initInAppPurchase() async {
-    _iapAvailable = await _iap.isAvailable();
-    if (!_iapAvailable) {
-      AppLogger.log('SubscriptionService: In-app purchases not available');
-      if (Platform.isAndroid) {
-        AppLogger.log(
-          'SubscriptionService: Will use Razorpay as fallback for payments',
-        );
-      }
-      return;
+  Future<bool> _ensureInAppPurchaseReady() async {
+    if (purchaseProvider != PurchaseProvider.googlePlay &&
+        purchaseProvider != PurchaseProvider.appStore) {
+      return false;
     }
 
-    // Listen to purchase updates
-    _purchaseSubscription = _iap.purchaseStream.listen(
-      _handlePurchaseUpdates,
-      onDone: () => _purchaseSubscription?.cancel(),
-      onError: (error) {
-        AppLogger.error('SubscriptionService: Purchase stream error', error);
-      },
-    );
+    final inProgress = _iapInitialization;
+    if (inProgress != null) return inProgress;
+    if (_iapAvailable) return true;
 
-    // Load products
-    await _loadProducts();
+    final initialization = _initializeInAppPurchase();
+    _iapInitialization = initialization;
+    try {
+      return await initialization;
+    } finally {
+      if (identical(_iapInitialization, initialization)) {
+        _iapInitialization = null;
+      }
+    }
+  }
 
-    // Check for any pending purchases that need to be processed
-    // This helps recover subscription state if the app was killed during purchase
-    await _checkPendingPurchases();
+  Future<bool> _initializeInAppPurchase() async {
+    storeReadiness.value = StoreReadiness.checking;
 
-    AppLogger.log('SubscriptionService: In-app purchases initialized');
+    try {
+      final available = await _iap.isAvailable();
+      if (!available) {
+        storeReadiness.value = StoreReadiness.unavailable;
+        AppLogger.log(
+          'SubscriptionService: Native store billing is unavailable; '
+          'purchases will fail closed on ${purchaseProvider.name}',
+        );
+        return false;
+      }
+
+      _purchaseSubscription ??= _iap.purchaseStream.listen(
+        _handlePurchaseUpdates,
+        onDone: () {
+          _purchaseSubscription?.cancel();
+          _purchaseSubscription = null;
+        },
+        onError: (error) {
+          AppLogger.error('SubscriptionService: Purchase stream error', error);
+        },
+      );
+
+      storeReadiness.value = StoreReadiness.ready;
+      await _loadProducts();
+
+      // Recover a purchase that completed while the app was not running.
+      await _checkPendingPurchases();
+
+      AppLogger.log('SubscriptionService: In-app purchases initialized');
+      return true;
+    } catch (error, stackTrace) {
+      storeReadiness.value = StoreReadiness.unavailable;
+      await AppLogger.error(
+        'SubscriptionService: In-app purchase initialization failed',
+        error,
+        stackTrace,
+      );
+      return false;
+    }
   }
 
   /// Load available products from store
@@ -409,20 +499,69 @@ Expected IDs: ${ProductIds.all}
 
   /// Reload products (call this if products weren't found initially)
   Future<void> reloadProducts() async {
+    final initialization = _iapInitialization;
+    if (initialization != null) {
+      await initialization;
+      return;
+    }
     if (!_iapAvailable) {
-      // Try to reinitialize if IAP wasn't available before
-      _iapAvailable = await _iap.isAvailable();
-      if (!_iapAvailable) return;
+      // Initialization performs the first product load once the store connects.
+      await _ensureInAppPurchaseReady();
+      return;
     }
     await _loadProducts();
+  }
+
+  int _beginPurchaseAttempt() {
+    // Clear presentation state from a previous attempt before any preflight
+    // loading transitions occur.
+    _purchaseEvents.value = null;
+    _sawAlreadyOwnedStoreError = false;
+    final attemptId = _purchaseAttempt.begin();
+    _purchasePhase.value = PurchaseAttemptPhase.preflight;
+    return attemptId;
+  }
+
+  void _finishPurchaseAttempt(int attemptId) {
+    if (_purchaseAttempt.activeAttemptId != attemptId) return;
+    _purchaseAttempt.finish(attemptId);
+    _purchasePhase.value = PurchaseAttemptPhase.idle;
+  }
+
+  void _awaitStore(int attemptId, String productId) {
+    if (_purchaseAttempt.awaitStore(attemptId, productId)) {
+      _purchasePhase.value = PurchaseAttemptPhase.awaitingStore;
+    }
+  }
+
+  void _beginVerification(int attemptId, String productId) {
+    if (_purchaseAttempt.beginVerification(attemptId, productId)) {
+      _purchasePhase.value = PurchaseAttemptPhase.verifying;
+    }
+  }
+
+  void _publishStoreOutcome(
+    PurchaseOutcome outcome, {
+    required String productId,
+  }) {
+    final event = _purchaseAttempt.recordStoreOutcome(
+      outcome,
+      productId: productId,
+    );
+    if (event != null) {
+      _purchasePhase.value = PurchaseAttemptPhase.idle;
+      _purchaseEvents.value = event;
+    }
   }
 
   /// Handle purchase updates from the store
   Future<void> _handlePurchaseUpdates(
     List<PurchaseDetails> purchaseDetailsList,
   ) async {
+    String? processingProductId;
     try {
       for (final purchase in purchaseDetailsList) {
+        processingProductId = purchase.productID;
         AppLogger.log(
           'SubscriptionService: Purchase update - ${purchase.productID}: ${purchase.status}',
         );
@@ -430,11 +569,19 @@ Expected IDs: ${ProductIds.all}
         switch (purchase.status) {
           case PurchaseStatus.pending:
             isLoading.value = true;
-            _lastPurchaseError = null;
             break;
 
           case PurchaseStatus.purchased:
           case PurchaseStatus.restored:
+            final activeAttemptId = _purchaseAttempt.activeAttemptId;
+            final belongsToActiveCheckout =
+                purchase.status == PurchaseStatus.purchased &&
+                activeAttemptId != null &&
+                _purchaseAttempt.acceptsStoreOutcomeFor(purchase.productID);
+            if (belongsToActiveCheckout) {
+              _beginVerification(activeAttemptId, purchase.productID);
+            }
+
             // On iOS, all restored transactions share the same app receipt.
             // Once we've successfully verified one, skip the rest to avoid
             // redundant Cloud Function calls and duplicate welcome emails.
@@ -476,31 +623,56 @@ Expected IDs: ${ProductIds.all}
             final verifyResult = await _verifyPurchase(purchase);
 
             if (verifyResult.valid) {
-              await _deliverPurchase(purchase);
-              _lastPurchaseError = null;
+              final delivered = await _deliverPurchase(
+                purchase,
+                verifiedSubscription: verifyResult.subscription,
+              );
               // Mark that we found a restored subscription
-              if (purchase.status == PurchaseStatus.restored) {
+              if (purchase.status == PurchaseStatus.restored && delivered) {
                 _restoredSubscriptionFound = true;
                 if (_isApplePlatform) {
                   _restoredIosReceiptVerified = true;
                 }
               }
+              if (belongsToActiveCheckout) {
+                _publishStoreOutcome(
+                  delivered
+                      ? PurchaseOutcome.activated
+                      : PurchaseOutcome.activationPending,
+                  productId: purchase.productID,
+                );
+              }
             } else if (verifyResult.isLinkedToOtherAccount) {
               // Subscription belongs to another account
-              _lastPurchaseError = PurchaseOutcome.failed;
+              await PlanService.instance.applyOwnershipConflict(
+                source: _isApplePlatform ? 'app_store' : 'play_store',
+              );
+              if (purchase.status == PurchaseStatus.restored) {
+                _restoreOwnershipConflictFound = true;
+              }
+              if (belongsToActiveCheckout) {
+                _publishStoreOutcome(
+                  PurchaseOutcome.ownershipConflict,
+                  productId: purchase.productID,
+                );
+              }
               AppLogger.log(
                 'SubscriptionService: Subscription linked to another account',
               );
             } else {
               if (purchase.status == PurchaseStatus.restored) {
-                // Don't set _lastPurchaseError for restored purchases that fail
-                // verification — a failed restore just means "no active subscription
-                // to restore", not an error the user needs to see.
+                // A failed restore just means "no active subscription to
+                // restore", not an error the user needs to see.
                 AppLogger.log(
                   'SubscriptionService: Restored purchase verification failed - ${verifyResult.error}',
                 );
               } else {
-                _lastPurchaseError = PurchaseOutcome.failed;
+                if (belongsToActiveCheckout) {
+                  _publishStoreOutcome(
+                    PurchaseOutcome.failed,
+                    productId: purchase.productID,
+                  );
+                }
               }
             }
 
@@ -513,6 +685,9 @@ Expected IDs: ${ProductIds.all}
             }
 
             isLoading.value = false;
+            if (belongsToActiveCheckout) {
+              _finishPurchaseAttempt(activeAttemptId);
+            }
             break;
 
           case PurchaseStatus.error:
@@ -521,8 +696,19 @@ Expected IDs: ${ProductIds.all}
               'SubscriptionService: Purchase error for "${purchase.productID}"',
               purchase.error,
             );
-            // Set user-friendly error message
-            _lastPurchaseError = PurchaseOutcome.failed;
+            if (isAlreadyOwnedStoreError(purchase.error)) {
+              // launchBillingFlow also returns false for ITEM_ALREADY_OWNED.
+              // Let that synchronous path reconcile ownership before choosing
+              // a terminal result instead of racing it with a generic error.
+              _sawAlreadyOwnedStoreError = true;
+            } else {
+              // Only an error from an active checkout is user-facing. Restore
+              // and other preflight errors remain diagnostics.
+              _publishStoreOutcome(
+                PurchaseOutcome.failed,
+                productId: purchase.productID,
+              );
+            }
             if (purchase.pendingCompletePurchase) {
               try {
                 await _iap.completePurchase(purchase);
@@ -540,7 +726,10 @@ Expected IDs: ${ProductIds.all}
             AppLogger.log(
               'SubscriptionService: Purchase canceled for "${purchase.productID}"',
             );
-            _lastPurchaseError = null;
+            _publishStoreOutcome(
+              PurchaseOutcome.cancelled,
+              productId: purchase.productID,
+            );
             if (purchase.productID.isNotEmpty &&
                 purchase.pendingCompletePurchase) {
               try {
@@ -555,6 +744,7 @@ Expected IDs: ${ProductIds.all}
             isLoading.value = false;
             break;
         }
+        processingProductId = null;
       }
 
       // Signal restore completer after ALL purchases in this batch have been
@@ -576,6 +766,13 @@ Expected IDs: ${ProductIds.all}
         'SubscriptionService: Unhandled error in purchase update handler',
         e,
       );
+      final failedProductId = processingProductId;
+      if (failedProductId != null) {
+        _publishStoreOutcome(
+          PurchaseOutcome.failed,
+          productId: failedProductId,
+        );
+      }
       isLoading.value = false;
       // Complete restore completer so purchaseSubscription() is not stuck waiting
       if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
@@ -671,7 +868,7 @@ Expected IDs: ${ProductIds.all}
   Future<bool> restoreAndWaitForPurchases() async {
     if (_skipPurchaseRestoreForReviewSession()) return false;
 
-    if (!_iapAvailable) return false;
+    if (!await _ensureInAppPurchaseReady()) return false;
 
     // If a restore is already in progress, wait for it rather than starting a new one
     if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
@@ -682,6 +879,7 @@ Expected IDs: ${ProductIds.all}
       AppLogger.log('SubscriptionService: Restoring purchases from store...');
       isLoading.value = true;
       _restoredSubscriptionFound = false;
+      _restoreOwnershipConflictFound = false;
       _restoredIosReceiptVerified = false;
       _restoreCompleter = Completer<bool>();
 
@@ -830,6 +1028,15 @@ Expected IDs: ${ProductIds.all}
         );
       }
 
+      if (e.code == 'failed-precondition' &&
+          (e.message?.toLowerCase().contains('account') ?? false)) {
+        return VerifyPurchaseResult(
+          valid: false,
+          error: e.message ?? 'This purchase belongs to another account.',
+          isLinkedToOtherAccount: true,
+        );
+      }
+
       if (e.code == 'invalid-argument' || e.code == 'failed-precondition') {
         return VerifyPurchaseResult(
           valid: false,
@@ -902,24 +1109,40 @@ Expected IDs: ${ProductIds.all}
   }
 
   /// Deliver the purchase (update user subscription)
-  Future<void> _deliverPurchase(PurchaseDetails purchase) async {
+  Future<bool> _deliverPurchase(
+    PurchaseDetails purchase, {
+    Map<String, dynamic>? verifiedSubscription,
+  }) async {
     try {
       // Verify step already updates Firestore server-side with canonical
       // subscription data. Avoid overwriting it on the client with guessed values.
       if (purchase.productID != ProductIds.proSubscription &&
           purchase.productID != ProductIds.proMonthlyIos &&
           purchase.productID != ProductIds.proYearlyIos) {
-        return;
+        return false;
       }
 
       // Refresh local subscription
       await PlanService.instance.refreshSubscription();
 
+      if (!PlanService.instance.status.isActiveProviderEntitlement) {
+        final payload = <String, dynamic>{
+          ...?verifiedSubscription,
+          'plan': 'pro',
+          'source': _isApplePlatform ? 'app_store' : 'play_store',
+        };
+        await PlanService.instance.applyVerifiedEntitlement(payload);
+      }
+
+      final delivered = PlanService.instance.status.isActiveProviderEntitlement;
+
       AppLogger.log(
-        'SubscriptionService: Delivered purchase for ${purchase.productID}',
+        'SubscriptionService: Delivered purchase for ${purchase.productID}: $delivered',
       );
+      return delivered;
     } catch (e) {
       AppLogger.error('SubscriptionService: Error delivering purchase', e);
+      return false;
     }
   }
 
@@ -1177,6 +1400,29 @@ Expected IDs: ${ProductIds.all}
       return _purchaseWithRazorpay(yearly: yearly);
     }
 
+    if (purchaseProvider == PurchaseProvider.unavailable) {
+      return PurchaseResult.failed(
+        'Purchases are not supported on this platform',
+        outcome: PurchaseOutcome.unavailable,
+      );
+    }
+
+    if (_purchaseAttempt.activeAttemptId != null) {
+      return PurchaseResult.pending('A purchase is already in progress');
+    }
+
+    final attemptId = _beginPurchaseAttempt();
+
+    // Native store platforms fail closed. A temporary Play/App Store failure
+    // must never select or invoke an external payment provider.
+    if (!await _ensureInAppPurchaseReady()) {
+      _finishPurchaseAttempt(attemptId);
+      return PurchaseResult.failed(
+        'In-app purchases are unavailable. Please check your store account and try again.',
+        outcome: PurchaseOutcome.unavailable,
+      );
+    }
+
     // First, try to restore purchases from the store (Google Play / App Store)
     // This checks if user already has an active subscription in the store
     //
@@ -1193,25 +1439,22 @@ Expected IDs: ${ProductIds.all}
         );
         final restored = await restoreAndWaitForPurchases();
 
+        if (_restoreOwnershipConflictFound) {
+          _finishPurchaseAttempt(attemptId);
+          return PurchaseResult.failed(
+            'This store purchase belongs to another Better Keep account.',
+            outcome: PurchaseOutcome.ownershipConflict,
+          );
+        }
         if (restored) {
-          // Check if the restored subscription is cancelled (auto-renewal off).
-          // A cancelled-but-active subscription should NOT block a new purchase
-          // — the user tapped Subscribe specifically to re-subscribe.
-          final status = PlanService.instance.status;
-          if (status.isCancelledButActive) {
-            AppLogger.log(
-              'SubscriptionService: Restored subscription is cancelled, '
-              'allowing new purchase flow',
-            );
-          } else {
-            AppLogger.log(
-              'SubscriptionService: Active subscription found and restored',
-            );
-            return PurchaseResult.success(
-              'Your subscription has been restored!',
-              outcome: PurchaseOutcome.restored,
-            );
-          }
+          AppLogger.log(
+            'SubscriptionService: Active subscription found and restored',
+          );
+          _finishPurchaseAttempt(attemptId);
+          return PurchaseResult.success(
+            'Your subscription has been restored!',
+            outcome: PurchaseOutcome.restored,
+          );
         }
       } catch (e) {
         AppLogger.log('SubscriptionService: Error restoring purchases: $e');
@@ -1232,28 +1475,24 @@ Expected IDs: ${ProductIds.all}
       );
 
       if (existingCheck.hasSubscription) {
-        // After refreshSubscription() above, PlanService has the latest state.
-        // If the subscription is cancelled-but-active, let the user re-subscribe
-        // instead of blocking them.
-        final status = PlanService.instance.status;
-        if (status.isCancelledButActive) {
-          AppLogger.log(
-            'SubscriptionService: checkExistingSubscription found cancelled '
-            'subscription, allowing new purchase flow',
-          );
-        } else {
-          isLoading.value = false;
-          if (existingCheck.restored) {
-            return PurchaseResult.success(
-              'Your subscription has been restored!',
-              outcome: PurchaseOutcome.restored,
-            );
-          }
-          return PurchaseResult.success(
-            'You already have an active subscription.',
-            outcome: PurchaseOutcome.alreadyActive,
+        isLoading.value = false;
+        _finishPurchaseAttempt(attemptId);
+        if (!existingCheck.localEntitlementActive) {
+          return PurchaseResult.failed(
+            'Payment is confirmed but Pro activation is still pending.',
+            outcome: PurchaseOutcome.activationPending,
           );
         }
+        if (existingCheck.restored) {
+          return PurchaseResult.success(
+            'Your subscription has been restored!',
+            outcome: PurchaseOutcome.restored,
+          );
+        }
+        return PurchaseResult.success(
+          'You already have an active subscription.',
+          outcome: PurchaseOutcome.alreadyActive,
+        );
       }
     } catch (e) {
       AppLogger.log(
@@ -1269,10 +1508,14 @@ Expected IDs: ${ProductIds.all}
       final iosProductId = yearly
           ? ProductIds.proYearlyIos
           : ProductIds.proMonthlyIos;
-      return _purchaseWithIAP(iosProductId);
+      return _purchaseWithIAP(iosProductId, attemptId: attemptId);
     }
 
-    return _purchaseWithIAP(ProductIds.proSubscription, basePlanId: basePlanId);
+    return _purchaseWithIAP(
+      ProductIds.proSubscription,
+      basePlanId: basePlanId,
+      attemptId: attemptId,
+    );
   }
 
   /// Purchase subscription using Razorpay (for web/desktop)
@@ -1296,7 +1539,6 @@ Expected IDs: ${ProductIds.all}
           outcome: PurchaseOutcome.cancelled,
         );
       } else {
-        _lastPurchaseError = PurchaseOutcome.failed;
         return PurchaseResult.failed(result.error ?? 'Payment failed');
       }
     } finally {
@@ -1316,19 +1558,41 @@ Expected IDs: ${ProductIds.all}
 
       // Convert from Map<Object?, Object?> to Map<String, dynamic>
       final data = Map<String, dynamic>.from(result.data as Map);
+      final contractValid =
+          data['entitlementContractVersion'] ==
+          verifiedEntitlementContractVersion;
+      final resolution = ExistingEntitlementResolution.parse(
+        data['resolution'],
+      );
 
       if (data['hasSubscription'] == true) {
-        // Refresh local subscription status
-        await PlanService.instance.refreshSubscription();
+        final subscription = data['subscription'] != null
+            ? Map<String, dynamic>.from(data['subscription'] as Map)
+            : null;
+        // Apply the authenticated, versioned result first. A following stale
+        // Firestore trial/missing read can no longer undo this activation.
+        final hydrated = await PlanService.instance.applyVerifiedEntitlement(
+          subscription,
+        );
+        if (hydrated) {
+          await PlanService.instance.refreshSubscription();
+        }
 
         return ExistingSubscriptionResult(
           hasSubscription: true,
+          localEntitlementActive:
+              PlanService.instance.status.isActiveProviderEntitlement,
           restored: data['restored'] == true,
           isTrial: data['isTrial'] == true,
-          subscription: data['subscription'] != null
-              ? Map<String, dynamic>.from(data['subscription'] as Map)
-              : null,
+          contractValid: contractValid,
+          resolution: resolution,
+          subscription: subscription,
         );
+      }
+
+      if (contractValid &&
+          resolution == ExistingEntitlementResolution.providerInactive) {
+        await PlanService.instance.applyExplicitTerminalEntitlement();
       }
 
       // Check if user is on trial - backend returns hasSubscription: false
@@ -1336,6 +1600,8 @@ Expected IDs: ${ProductIds.all}
       return ExistingSubscriptionResult(
         hasSubscription: false,
         isTrial: data['isTrial'] == true,
+        contractValid: contractValid,
+        resolution: resolution,
       );
     } catch (e) {
       AppLogger.error(
@@ -1353,8 +1619,10 @@ Expected IDs: ${ProductIds.all}
   Future<PurchaseResult> _purchaseWithIAP(
     String productId, {
     String? basePlanId,
+    required int attemptId,
   }) async {
-    if (!_iapAvailable) {
+    if (!await _ensureInAppPurchaseReady()) {
+      _finishPurchaseAttempt(attemptId);
       return PurchaseResult.failed(
         'In-app purchases not available on this device',
         outcome: PurchaseOutcome.unavailable,
@@ -1363,6 +1631,7 @@ Expected IDs: ${ProductIds.all}
 
     final user = AuthService.currentUser;
     if (user == null) {
+      _finishPurchaseAttempt(attemptId);
       return PurchaseResult.failed(
         'Please sign in first',
         outcome: PurchaseOutcome.signInRequired,
@@ -1390,6 +1659,7 @@ Expected IDs: ${ProductIds.all}
       try {
         product = _products.firstWhere((p) => p.id == productId);
       } catch (_) {
+        _finishPurchaseAttempt(attemptId);
         return PurchaseResult.failed(
           'This product is not available yet. Please make sure the app is updated and try again.',
           outcome: PurchaseOutcome.unavailable,
@@ -1447,6 +1717,7 @@ Expected IDs: ${ProductIds.all}
 
           // Return error instead of using wrong product
           isLoading.value = false;
+          _finishPurchaseAttempt(attemptId);
           return PurchaseResult.failed(
             'Subscription plan not available. Please try again later.',
             outcome: PurchaseOutcome.unavailable,
@@ -1487,6 +1758,7 @@ Expected IDs: ${ProductIds.all}
       // StoreKit reports a duplicate pending transaction.
       bool success;
       try {
+        _awaitStore(attemptId, productId);
         success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
       } catch (e) {
         if (!kIsWeb &&
@@ -1501,6 +1773,15 @@ Expected IDs: ${ProductIds.all}
             'SubscriptionService: Retrying buyNonConsumable after delay...',
           );
           success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+        } else if (isAlreadyOwnedStoreError(e)) {
+          AppLogger.log(
+            'SubscriptionService: Store reports an already-owned purchase; '
+            'reconciling it for the current account',
+          );
+          return _reconcileCurrentStorePurchase(
+            attemptId: attemptId,
+            paymentWasConfirmed: true,
+          );
         } else {
           rethrow;
         }
@@ -1508,18 +1789,162 @@ Expected IDs: ${ProductIds.all}
 
       if (!success) {
         isLoading.value = false;
-        return PurchaseResult.failed('Could not initiate purchase');
+        if (_purchaseAttempt.activeAttemptId != attemptId) {
+          // The purchase stream already delivered the terminal outcome while
+          // the launch call was awaiting its platform response.
+          return PurchaseResult.pending('Purchase outcome already received');
+        }
+        return _reconcileCurrentStorePurchase(
+          attemptId: attemptId,
+          paymentWasConfirmed: _sawAlreadyOwnedStoreError,
+        );
       }
 
       // Purchase initiated - result will come through purchase stream
       return PurchaseResult.pending('Processing purchase...');
     } catch (e) {
       isLoading.value = false;
+      if (_purchaseAttempt.activeAttemptId != attemptId) {
+        AppLogger.log(
+          'SubscriptionService: Store outcome arrived before launch exception: $e',
+        );
+        return PurchaseResult.pending('Purchase outcome already received');
+      }
+      _finishPurchaseAttempt(attemptId);
       AppLogger.error(
         'SubscriptionService: Purchase exception for $productId',
         e,
       );
       return PurchaseResult.failed(_getFriendlyPurchaseException(e));
+    }
+  }
+
+  /// Restores and reconciles the current store account without starting a new
+  /// checkout. This is also the recovery path for Play's ITEM_ALREADY_OWNED.
+  Future<PurchaseResult> reconcileCurrentStorePurchase() {
+    return _reconcileCurrentStorePurchase(paymentWasConfirmed: true);
+  }
+
+  Future<PurchaseResult> _reconcileCurrentStorePurchase({
+    int? attemptId,
+    required bool paymentWasConfirmed,
+  }) async {
+    final user = AuthService.currentUser;
+    if (user == null) {
+      return PurchaseResult.failed(
+        'Please sign in first',
+        outcome: PurchaseOutcome.signInRequired,
+      );
+    }
+    if (ReviewAccess.isCloudMutationBlockedFor(user)) {
+      return PurchaseResult.failed(
+        'Purchase reconciliation is unavailable for the managed review account',
+        outcome: PurchaseOutcome.unavailable,
+      );
+    }
+    if (purchaseProvider != PurchaseProvider.googlePlay &&
+        purchaseProvider != PurchaseProvider.appStore) {
+      return PurchaseResult.failed(
+        'Store purchase reconciliation is unavailable on this platform',
+        outcome: PurchaseOutcome.unavailable,
+      );
+    }
+
+    final activeAttemptId = _purchaseAttempt.activeAttemptId;
+    if (attemptId == null && activeAttemptId != null) {
+      return PurchaseResult.pending('A purchase is already being reconciled');
+    }
+    if (attemptId != null && activeAttemptId != attemptId) {
+      return PurchaseResult.pending('Purchase outcome already received');
+    }
+
+    final effectiveAttemptId = attemptId ?? _beginPurchaseAttempt();
+    _purchasePhase.value = PurchaseAttemptPhase.verifying;
+    isLoading.value = true;
+
+    try {
+      if (!await _ensureInAppPurchaseReady()) {
+        return PurchaseResult.failed(
+          'In-app purchases are unavailable. Please check your store account and try again.',
+          outcome: PurchaseOutcome.unavailable,
+        );
+      }
+
+      // Query linked provider records before asking the store to replay
+      // purchases. This avoids unnecessary restore churn and is authoritative
+      // for an already-linked, still-active subscription.
+      final existing = await checkExistingSubscription();
+      if (existing.hasSubscription && existing.localEntitlementActive) {
+        return PurchaseResult.success(
+          existing.restored
+              ? 'Your subscription has been restored!'
+              : 'You already have an active subscription.',
+          outcome: existing.restored
+              ? PurchaseOutcome.restored
+              : PurchaseOutcome.alreadyActive,
+        );
+      }
+      if (existing.hasSubscription) {
+        return PurchaseResult.failed(
+          'Payment is confirmed but Pro activation is still pending.',
+          outcome: PurchaseOutcome.activationPending,
+        );
+      }
+
+      if (!existing.linkedProviderRecordFound) {
+        final restored = await restoreAndWaitForPurchases();
+        if (_restoreOwnershipConflictFound) {
+          await PlanService.instance.applyOwnershipConflict(
+            source: _isApplePlatform ? 'app_store' : 'play_store',
+          );
+          return PurchaseResult.failed(
+            'This store purchase belongs to another Better Keep account.',
+            outcome: PurchaseOutcome.ownershipConflict,
+          );
+        }
+        if (restored &&
+            PlanService.instance.status.isActiveProviderEntitlement) {
+          return PurchaseResult.success(
+            'Your subscription has been restored!',
+            outcome: PurchaseOutcome.restored,
+          );
+        }
+
+        final afterRestore = await checkExistingSubscription();
+        if (afterRestore.hasSubscription &&
+            afterRestore.localEntitlementActive) {
+          return PurchaseResult.success(
+            'Your subscription has been restored!',
+            outcome: PurchaseOutcome.restored,
+          );
+        }
+      }
+
+      if (paymentWasConfirmed || !existing.contractValid) {
+        return PurchaseResult.failed(
+          'Payment is confirmed but Pro activation is still pending.',
+          outcome: PurchaseOutcome.activationPending,
+        );
+      }
+
+      return PurchaseResult.failed(
+        'No active subscription was found for this account.',
+      );
+    } catch (e) {
+      AppLogger.error(
+        'SubscriptionService: Store purchase reconciliation failed',
+        e,
+      );
+      if (paymentWasConfirmed) {
+        return PurchaseResult.failed(
+          'Payment is confirmed but Pro activation is still pending.',
+          outcome: PurchaseOutcome.activationPending,
+        );
+      }
+      return PurchaseResult.failed('Could not reconcile the store purchase');
+    } finally {
+      isLoading.value = false;
+      _finishPurchaseAttempt(effectiveAttemptId);
     }
   }
 
@@ -1536,7 +1961,7 @@ Expected IDs: ${ProductIds.all}
       return RestoreResult.success('Subscription status refreshed');
     }
 
-    if (!_iapAvailable) {
+    if (!await _ensureInAppPurchaseReady()) {
       return RestoreResult.failed('In-app purchases not available');
     }
 
@@ -1579,6 +2004,58 @@ Expected IDs: ${ProductIds.all}
     switch (target.action) {
       case SubscriptionManagementAction.razorpayApi:
         return _cancelRazorpaySubscription();
+      case SubscriptionManagementAction.appStoreNative:
+      case SubscriptionManagementAction.externalUrl:
+      case SubscriptionManagementAction.contactSupport:
+        return _openSubscriptionManagementTarget(target);
+    }
+  }
+
+  /// Opens the current provider's subscription-management surface without
+  /// changing entitlement state in the app.
+  Future<CancelResult> openSubscriptionManagement() async {
+    final user = AuthService.currentUser;
+    if (user == null) {
+      return CancelResult.failed('Please sign in first');
+    }
+
+    final target = resolveSubscriptionManagementTarget(
+      purchasePlatform: PlanService.instance.status.purchasePlatform,
+      currentPlatform: _subscriptionManagementPlatform,
+    );
+    if (target.action == SubscriptionManagementAction.razorpayApi) {
+      return CancelResult.failed(
+        'Manage this subscription from your Better Keep account settings.',
+        outcome: SubscriptionActionOutcome.unavailable,
+      );
+    }
+    return _openSubscriptionManagementTarget(target);
+  }
+
+  /// Opens the native store that produced the current purchase/restore event.
+  /// Used when local provider state was deliberately cleared after an
+  /// ownership conflict or has not hydrated yet after payment.
+  Future<CancelResult> openCurrentStoreSubscriptionManagement() async {
+    final user = AuthService.currentUser;
+    if (user == null) {
+      return CancelResult.failed('Please sign in first');
+    }
+
+    final target = resolveCurrentStoreManagementTarget(
+      _subscriptionManagementPlatform,
+    );
+    return _openSubscriptionManagementTarget(target);
+  }
+
+  Future<CancelResult> _openSubscriptionManagementTarget(
+    SubscriptionManagementTarget target,
+  ) async {
+    switch (target.action) {
+      case SubscriptionManagementAction.razorpayApi:
+        return CancelResult.failed(
+          'Subscription management is unavailable for this provider.',
+          outcome: SubscriptionActionOutcome.unavailable,
+        );
       case SubscriptionManagementAction.appStoreNative:
         // Use StoreKit 2 API which handles sandbox vs production automatically
         try {
@@ -1624,11 +2101,15 @@ Expected IDs: ${ProductIds.all}
   Future<CancelResult> _openSubscriptionManagementUrl(
     SubscriptionManagementTarget target,
   ) async {
+    final uri = Uri.parse(target.url!);
     try {
-      final launched = await launchUrl(
-        Uri.parse(target.url!),
-        mode: LaunchMode.externalApplication,
-      );
+      var launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      // Some Android devices report no external handler for the HTTPS intent
+      // even though the platform can open it through its default route.
+      if (!launched) {
+        launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
 
       if (!launched) {
         return CancelResult.failed('Could not open subscription management');
@@ -1636,7 +2117,17 @@ Expected IDs: ${ProductIds.all}
 
       return CancelResult.pending(target.pendingMessage!);
     } catch (e) {
-      return CancelResult.failed('Error opening subscription management: $e');
+      AppLogger.error('Error opening subscription management', e);
+      try {
+        final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+        if (launched) return CancelResult.pending(target.pendingMessage!);
+      } catch (fallbackError) {
+        AppLogger.error(
+          'Subscription management fallback failed',
+          fallbackError,
+        );
+      }
+      return CancelResult.failed('Could not open subscription management');
     }
   }
 
@@ -1703,6 +2194,14 @@ Expected IDs: ${ProductIds.all}
   /// Dispose resources
   void dispose() {
     _purchaseSubscription?.cancel();
+    _purchaseSubscription = null;
+    _iapInitialization = null;
+    _initialized = false;
+    _products = [];
+    _purchaseAttempt.reset();
+    _purchaseEvents.value = null;
+    _purchasePhase.value = PurchaseAttemptPhase.idle;
+    storeReadiness.value = StoreReadiness.uninitialized;
   }
 }
 
@@ -1741,17 +2240,6 @@ class PurchaseResult {
 }
 
 enum PurchaseResultStatus { success, pending, failed }
-
-enum PurchaseOutcome {
-  activated,
-  restored,
-  alreadyActive,
-  cancelled,
-  pending,
-  signInRequired,
-  unavailable,
-  failed,
-}
 
 /// Result of a restore attempt
 class RestoreResult {

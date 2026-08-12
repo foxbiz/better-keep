@@ -1,7 +1,8 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db, emailPassword } from "../config";
-import { sendEmail, setSubscriptionClaims } from "../utils";
+import { reconcileUserEntitlement } from "../subscriptionReconciler";
+import { sendEmail } from "../utils";
 
 /**
  * Scheduled function to check for expired trials and send notification emails.
@@ -70,13 +71,7 @@ export default onSchedule(
 						subscriptionDoc.exists &&
 						subscriptionDoc.data()?.source === "trial"
 					) {
-						await subscriptionRef.update({
-							plan: "free",
-							updatedAt: Timestamp.now(),
-						});
-
-						// Clear custom claims
-						await setSubscriptionClaims(userId, "free", null);
+						await reconcileUserEntitlement(userId);
 					}
 
 					// Send trial expired email

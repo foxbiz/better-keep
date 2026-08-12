@@ -4,6 +4,7 @@ import {
   USER_COUNT_LOADING_STATE,
   USER_COUNT_UNAVAILABLE_STATE,
   compactUserCount,
+  createUserCountPresentation,
   loadPublicUserMetric,
   resolvePublicUserMetric
 } from '../site/src/lib/public-stats.mjs';
@@ -52,23 +53,109 @@ test('loads ready and unavailable user-count states', async () => {
     assert.equal(
       await loadPublicUserMetric({
         endpoint: 'https://example.test/stats',
-        fetcher
+        fetcher,
+        retryDelayMs: 0
       }),
       USER_COUNT_UNAVAILABLE_STATE
     );
   }
 });
 
+test('retries transient failures once and returns the recovered metric', async () => {
+  let requests = 0;
+  const result = await loadPublicUserMetric({
+    endpoint: 'https://example.test/stats',
+    retryDelayMs: 0,
+    fetcher: async () => {
+      requests += 1;
+      return requests === 1
+        ? { ok: false, status: 503 }
+        : { ok: true, status: 200, json: async () => ({ metric: '4.3K+' }) };
+    }
+  });
+
+  assert.equal(requests, 2);
+  assert.deepEqual(result, { status: 'ready', metric: '4.3K+' });
+});
+
+test('does not retry client errors or malformed successful responses', async () => {
+  for (const response of [
+    { ok: false, status: 403 },
+    { ok: true, status: 200, json: async () => ({ message: 'error' }) },
+    {
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('invalid json');
+      }
+    }
+  ]) {
+    let requests = 0;
+    const result = await loadPublicUserMetric({
+      endpoint: 'https://example.test/stats',
+      retryDelayMs: 0,
+      fetcher: async () => {
+        requests += 1;
+        return response;
+      }
+    });
+
+    assert.equal(requests, 1);
+    assert.equal(result, USER_COUNT_UNAVAILABLE_STATE);
+  }
+});
+
+test('returns unavailable after both transient attempts fail', async () => {
+  let requests = 0;
+  const result = await loadPublicUserMetric({
+    endpoint: 'https://example.test/stats',
+    retryDelayMs: 0,
+    fetcher: async () => {
+      requests += 1;
+      throw new Error('offline');
+    }
+  });
+
+  assert.equal(requests, 2);
+  assert.equal(result, USER_COUNT_UNAVAILABLE_STATE);
+});
+
+test('creates ready and neutral fallback presentations', () => {
+  assert.deepEqual(
+    createUserCountPresentation({ status: 'ready', metric: '4.3K+' }),
+    {
+      state: 'ready',
+      metric: '4.3K+',
+      label: 'People have joined',
+      announcement: '4.3K+ people have joined Better Keep'
+    }
+  );
+  assert.deepEqual(createUserCountPresentation(USER_COUNT_UNAVAILABLE_STATE), {
+    state: 'unavailable',
+    metric: null,
+    label: 'Growing community',
+    announcement: 'Better Keep has a growing community'
+  });
+});
+
 test('aborts a stalled user-count request at the configured timeout', async () => {
+  let abortedAttempts = 0;
   const result = await loadPublicUserMetric({
     endpoint: 'https://example.test/stats',
     timeoutMs: 5,
+    retryDelayMs: 0,
     fetcher: (_url, { signal }) =>
       new Promise((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(new Error('aborted')), {
-          once: true
-        });
+        signal.addEventListener(
+          'abort',
+          () => {
+            abortedAttempts += 1;
+            reject(new Error('aborted'));
+          },
+          { once: true }
+        );
       })
   });
+  assert.equal(abortedAttempts, 2);
   assert.equal(result, USER_COUNT_UNAVAILABLE_STATE);
 });

@@ -1,0 +1,32 @@
+---
+import '../styles/admin.css';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="theme-color" content="#0a0b0d" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="description" content="Private Better Keep operations dashboard." />
+    <meta
+      name="admin-app-check-site-key"
+      content={import.meta.env.PUBLIC_ADMIN_APP_CHECK_SITE_KEY ?? ''}
+    />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/media/brand/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="/media/fonts/manrope-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
+    <title>Admin · Better Keep</title>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

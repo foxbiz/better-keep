@@ -1,11 +1,19 @@
-import * as crypto from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError } from "firebase-functions/v2/https";
-import { db, emailPassword, razorpayKeySecret } from "../config";
+import { db, emailPassword, razorpayKeyId, razorpayKeySecret } from "../config";
 import { wasEmailDelivered } from "../emailDelivery";
 import { onNonReviewCall } from "../nonReviewCallable";
-import { sendRazorpaySubscriptionEmail, setSubscriptionClaims } from "../utils";
+import {
+	normalizeRazorpaySubscription,
+	type RazorpaySubscriptionEntity,
+	verifyRazorpayPaymentSignature,
+} from "../razorpaySubscription";
+import { minorUnitsToMicros } from "../revenueLedger";
+import { enqueueRevenueEventInTransaction } from "../revenueOutbox";
+import { reconcileUserEntitlement } from "../subscriptionReconciler";
+import { requireVerifiedEntitlementPayload } from "../subscriptionEntitlement";
+import { razorpayRequest, sendRazorpaySubscriptionEmail } from "../utils";
 
 /**
  * Verify Razorpay subscription payment
@@ -13,7 +21,7 @@ import { sendRazorpaySubscriptionEmail, setSubscriptionClaims } from "../utils";
  */
 export default onNonReviewCall(
 	{
-		secrets: [razorpayKeySecret, emailPassword],
+		secrets: [razorpayKeyId, razorpayKeySecret, emailPassword],
 	},
 	async (
 		request: CallableRequest<{
@@ -35,13 +43,14 @@ export default onNonReviewCall(
 		try {
 			const keySecret = razorpayKeySecret.value().trim();
 
-			// Verify signature
-			const expectedSignature = crypto
-				.createHmac("sha256", keySecret)
-				.update(`${paymentId}|${subscriptionId}`)
-				.digest("hex");
-
-			if (signature !== expectedSignature) {
+			if (
+				!verifyRazorpayPaymentSignature(
+					paymentId,
+					subscriptionId,
+					signature,
+					keySecret,
+				)
+			) {
 				console.error("Invalid Razorpay signature");
 				throw new HttpsError("invalid-argument", "Invalid payment signature");
 			}
@@ -68,47 +77,102 @@ export default onNonReviewCall(
 				);
 			}
 
-			// Calculate expiry based on plan
-			const now = new Date();
-			const expiryDate = new Date(now);
-			if (paymentData.plan === "yearly") {
-				expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-			} else {
-				expiryDate.setMonth(expiryDate.getMonth() + 1);
+			const keyId = razorpayKeyId.value().trim();
+			const providerPayment = (await razorpayRequest(
+				keyId,
+				keySecret,
+				"GET",
+				`/payments/${encodeURIComponent(paymentId)}`,
+			)) as {
+				amount?: number;
+				created_at?: number;
+				currency?: string;
+				id?: string;
+				status?: string;
+			};
+			if (
+				providerPayment.id !== paymentId ||
+				providerPayment.status !== "captured" ||
+				typeof providerPayment.amount !== "number" ||
+				!Number.isSafeInteger(providerPayment.amount) ||
+				typeof providerPayment.currency !== "string"
+			) {
+				throw new HttpsError(
+					"failed-precondition",
+					"Razorpay payment is not captured",
+				);
+			}
+			const providerSubscription = (await razorpayRequest(
+				keyId,
+				keySecret,
+				"GET",
+				`/subscriptions/${encodeURIComponent(subscriptionId)}`,
+			)) as RazorpaySubscriptionEntity;
+			if (
+				providerSubscription.id !== subscriptionId ||
+				!providerSubscription.current_end
+			) {
+				throw new HttpsError(
+					"failed-precondition",
+					"Razorpay subscription state is incomplete",
+				);
+			}
+			const normalized = normalizeRazorpaySubscription({
+				billingPeriod:
+					typeof paymentData.plan === "string" ? paymentData.plan : null,
+				entity: providerSubscription,
+				userId,
+			});
+			const expiresAt = normalized.expiresAt;
+			if (!(expiresAt instanceof Timestamp)) {
+				throw new HttpsError(
+					"failed-precondition",
+					"Razorpay subscription has no expiry",
+				);
 			}
 
-			// Update payment status
-			await paymentDoc.ref.update({
-				status: "verified",
-				razorpayPaymentId: paymentId,
-				razorpaySignature: signature,
-				verifiedAt: FieldValue.serverTimestamp(),
-			});
-
-			// Activate subscription for user
-			await db
-				.collection("users")
-				.doc(userId)
-				.collection("subscription")
-				.doc("status")
-				.set({
-					plan: "pro",
-					source: "razorpay",
-					razorpaySubscriptionId: subscriptionId,
+			const revenueEvent = {
+				provider: "razorpay",
+				providerTransactionId: paymentId,
+				userId,
+				amountMicros: minorUnitsToMicros(providerPayment.amount),
+				currency: providerPayment.currency,
+				kind: "charge",
+				environment: "production",
+				occurredAt: providerPayment.created_at
+					? new Date(providerPayment.created_at * 1000)
+					: new Date(),
+				metadata: { subscriptionId, plan: paymentData.plan ?? null },
+			} as const;
+			const providerRef = db
+				.collection("subscriptions")
+				.doc(`razorpay_${subscriptionId}`);
+			await db.runTransaction(async (transaction) => {
+				const existingProvider = await transaction.get(providerRef);
+				await enqueueRevenueEventInTransaction(transaction, revenueEvent);
+				transaction.set(
+					providerRef,
+					{
+						...normalized,
+						lastVerifiedAt: FieldValue.serverTimestamp(),
+						...(!existingProvider.exists
+							? { createdAt: FieldValue.serverTimestamp() }
+							: {}),
+						updatedAt: FieldValue.serverTimestamp(),
+					},
+					{ merge: true },
+				);
+				transaction.update(paymentDoc.ref, {
+					status: "verified",
 					razorpayPaymentId: paymentId,
-					billingPeriod: paymentData.plan,
-					startDate: Timestamp.now(),
-					expiryDate: Timestamp.fromDate(expiryDate),
-					autoRenew: true,
-					subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
-					updatedAt: FieldValue.serverTimestamp(),
+					razorpaySignature: signature,
+					verifiedAt: FieldValue.serverTimestamp(),
 				});
-
-			// Set custom claims for server-side enforcement
-			await setSubscriptionClaims(userId, "pro", expiryDate);
+			});
+			await reconcileUserEntitlement(userId);
 
 			console.log(
-				`Activated subscription for user ${userId}, expires ${expiryDate.toISOString()}`,
+				`Activated subscription for user ${userId}, expires ${expiresAt.toDate().toISOString()}`,
 			);
 
 			// Send welcome email only once (idempotency guard).
@@ -120,7 +184,7 @@ export default onNonReviewCall(
 					const delivery = await sendRazorpaySubscriptionEmail(
 						userId,
 						"welcome",
-						expiryDate,
+						expiresAt.toDate(),
 					);
 					if (wasEmailDelivered(delivery)) {
 						await paymentDoc.ref.update({ welcomeEmailSent: true });
@@ -133,7 +197,11 @@ export default onNonReviewCall(
 				}
 			}
 
-			return { success: true, expiryDate: expiryDate.toISOString() };
+			return {
+				success: true,
+				expiryDate: expiresAt.toDate().toISOString(),
+				subscription: requireVerifiedEntitlementPayload(normalized),
+			};
 		} catch (error) {
 			console.error("Error verifying Razorpay subscription:", error);
 			if (error instanceof HttpsError) throw error;
