@@ -12,7 +12,7 @@ const repositoryRoot = path.resolve(
 test("admin workspace dependencies are ignored by git", () => {
 	const output = execFileSync(
 		"git",
-		["check-ignore", "-v", "admin-site/node_modules"],
+		["check-ignore", "-v", "admin-site/node_modules/.gitignore-probe"],
 		{ cwd: repositoryRoot, encoding: "utf8" },
 	);
 	assert.match(output, /\/admin-site\/node_modules\//);
