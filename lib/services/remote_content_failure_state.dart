@@ -4,7 +4,19 @@ import 'package:better_keep/services/remote_note_apply_result.dart';
 Set<int> combinedRemoteSyncFailureIds({
   required Set<int> transientFailures,
   required Iterable<RemoteContentRetryEntry> contentFailures,
-}) => {...transientFailures, ...contentFailures.map((entry) => entry.localId)};
+}) => {
+  ...transientFailures,
+  ...contentFailures
+      .where((entry) => entry.state != RemoteContentRetryState.deferred)
+      .map((entry) => entry.localId),
+};
+
+Set<int> remoteSyncDeferredIds(
+  Iterable<RemoteContentRetryEntry> contentFailures,
+) => contentFailures
+    .where((entry) => entry.state == RemoteContentRetryState.deferred)
+    .map((entry) => entry.localId)
+    .toSet();
 
 Map<int, RemoteContentRetryEntry> upsertRemoteContentFailure(
   Map<int, RemoteContentRetryEntry> current,
@@ -31,11 +43,12 @@ String remoteContentFailureStatus(
   RemoteContentRetryEntry entry, {
   required int maxAttempts,
 }) {
-  final subject = entry.category == RemoteNoteFailureCategory.attachment
-      ? 'Attachment download'
-      : entry.category == RemoteNoteFailureCategory.decryption
-      ? 'Decryption'
-      : 'Remote note';
+  final subject = switch (entry.category) {
+    RemoteNoteFailureCategory.attachment => 'Attachment download',
+    RemoteNoteFailureCategory.decryption => 'Decryption',
+    RemoteNoteFailureCategory.invalidPayload => 'Remote note',
+    RemoteNoteFailureCategory.localApply => 'Local note update',
+  };
   if (entry.state == RemoteContentRetryState.exhausted) {
     return '$subject failed; automatic retries stopped '
         '(${entry.attempts}/$maxAttempts)';

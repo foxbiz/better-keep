@@ -41,6 +41,7 @@ const suites = {
 		flutterTests([
 			"test/async_keyed_serializer_test.dart",
 			"test/cloud_sync_cursor_test.dart",
+			"test/e2ee_sync_readiness_test.dart",
 			"test/firestore_sync_resilience_test.dart",
 			"test/initial_hydration_gate_test.dart",
 			"test/remote_attachment_payload_test.dart",
@@ -51,6 +52,7 @@ const suites = {
 			"test/remote_local_id_resolver_test.dart",
 			"test/remote_sync_cache_service_test.dart",
 			"test/storage_object_locator_test.dart",
+			"test/sync_refresh_serialization_test.dart",
 		]),
 	]),
 	"database-migrations": defineSuite("Run database migration tests.", () => [
@@ -238,6 +240,24 @@ const suites = {
 	"review-prompts": defineSuite("Run review prompt behavior tests.", () => [
 		flutterTests(["test/review_prompt_service_test.dart"]),
 	]),
+	reminders: defineSuite("Run reminder reliability tests.", () => [
+		flutterTests([
+			"test/due_reminder_presenter_test.dart",
+			"test/note_set_reminder_test.dart",
+			"test/notification_initialization_recovery_test.dart",
+			"test/reminder_action_processor_test.dart",
+			"test/reminder_action_receipt_service_test.dart",
+			"test/reminder_action_ui_handoff_test.dart",
+			"test/reminder_navigation_service_test.dart",
+			"test/reminder_notification_plan_test.dart",
+			"test/reminder_notification_registration_test.dart",
+			"test/reminder_schedule_concurrency_test.dart",
+			"test/reminder_session_service_test.dart",
+			"test/reminder_sync_codec_test.dart",
+			"test/reminder_test.dart",
+			"test/reminder_time_zone_resolver_test.dart",
+		]),
+	]),
 	search: defineSuite("Validate site types, store metadata, and search visibility.", () => [
 		processStep("node", [
 			"--test",
@@ -276,7 +296,12 @@ const suites = {
 		],
 	),
 	"ios-build-policy": defineSuite("Run iOS build policy tests.", () => [
-		processStep("node", ["--test", "test/tool/ios_build_policy_test.mjs"]),
+		processStep("node", [
+			"--test",
+			"test/tool/flutterfire_apple_spm_test.mjs",
+			"test/tool/ios_build_policy_test.mjs",
+		]),
+		processStep("node", ["tool/verify_flutterfire_apple_spm.mjs"]),
 	]),
 	"macos-build-policy": defineSuite("Run macOS build policy tests.", () => [
 		processStep("node", ["--test", "test/tool/macos_build_policy_test.mjs"]),
@@ -285,6 +310,7 @@ const suites = {
 	release: defineSuite("Run every non-device release test suite.", () => [
 		processStep("node", [
 			"--test",
+			"test/tool/android_release_resource_policy_test.mjs",
 			"test/tool/build_tasks_test.mjs",
 			"test/tool/billing_reconciliation_runner_test.mjs",
 			"test/tool/check_tasks_test.mjs",
@@ -307,6 +333,7 @@ const suites = {
 		suiteStep("web-release"),
 		suiteStep("keep-import"),
 		suiteStep("review-prompts"),
+		suiteStep("reminders"),
 		suiteStep("subscription-management"),
 		suiteStep("localization"),
 		suiteStep("functions"),

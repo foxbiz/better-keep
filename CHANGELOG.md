@@ -26,6 +26,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public source licensing and encryption claims now use verified,
   product-fact-backed wording.
 
+## [1.2.2] - 2026-08-12
+
+### Fixed
+
+- Preserved the Android notification icon in shrunk release bundles and added
+  a post-build resource payload verification gate.
+- Isolated reminder initialization and scheduling from note persistence so a
+  notification platform failure cannot create false sync errors or retry loops.
+- Required an approved E2EE state and an available user master key for note,
+  label, and ordering sync, with outgoing notes and attachments failing closed.
+- Serialized startup and manual refresh work, and made note-order revision
+  conflicts rebase cleanly without committing obsolete snapshots.
+- Added durable bounded retries for unexpected local remote-note application
+  failures, cached-entry recovery, and neutral encryption-key deferrals.
+
 ## [1.0.58] - 2026-04-13
 
 - **Published to iOS App Store**: Better Keep version 1.0.58 is now live on the App Store for iPhone and iPad.

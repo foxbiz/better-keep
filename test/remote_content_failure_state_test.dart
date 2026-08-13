@@ -106,8 +106,9 @@ void main() {
         transientFailures: const {},
         contentFailures: [deferred],
       ),
-      {3},
-      reason: 'Deferred dependencies remain visible without consuming retries.',
+      isEmpty,
+      reason: 'Deferred key waits are neutral, not failed syncs.',
     );
+    expect(remoteSyncDeferredIds([deferred]), {3});
   });
 }

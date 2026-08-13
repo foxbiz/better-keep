@@ -980,6 +980,12 @@ class DeviceManager {
     hasUMK.value = true;
   }
 
+  @visibleForTesting
+  void setCachedUMKForTesting(Uint8List? umk) {
+    _cachedUMK = umk;
+    hasUMK.value = umk != null;
+  }
+
   /// Clears the cached UMK (e.g., on logout).
   Future<void> clearUMK() async {
     _cachedUMK = null;

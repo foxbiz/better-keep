@@ -111,7 +111,10 @@ class FirestoreNoteSortCloudRepository implements NoteSortCloudRepository {
       if (current.exists &&
           previousRevision != baseRevision &&
           previousRevision != revision) {
-        throw const NoteSortRevisionConflict();
+        return NoteSortCloudCommitResult.conflict(
+          previousRevision: previousRevision,
+          previousChunkCount: previousChunkCount,
+        );
       }
       transaction.set(manifest, {
         'schema_version': schemaVersion,
@@ -122,7 +125,7 @@ class FirestoreNoteSortCloudRepository implements NoteSortCloudRepository {
         'note_count': noteCount,
         'updated_at': FieldValue.serverTimestamp(),
       });
-      return NoteSortCloudCommitResult(
+      return NoteSortCloudCommitResult.committed(
         previousRevision: previousRevision,
         previousChunkCount: previousChunkCount,
       );
@@ -143,15 +146,19 @@ class FirestoreNoteSortCloudRepository implements NoteSortCloudRepository {
 }
 
 class NoteSortCloudCommitResult {
-  const NoteSortCloudCommitResult({
+  const NoteSortCloudCommitResult.committed({
     required this.previousRevision,
     required this.previousChunkCount,
-  });
+  }) : outcome = NoteSortCloudCommitOutcome.committed;
 
+  const NoteSortCloudCommitResult.conflict({
+    required this.previousRevision,
+    required this.previousChunkCount,
+  }) : outcome = NoteSortCloudCommitOutcome.conflict;
+
+  final NoteSortCloudCommitOutcome outcome;
   final String? previousRevision;
   final int previousChunkCount;
 }
 
-class NoteSortRevisionConflict implements Exception {
-  const NoteSortRevisionConflict();
-}
+enum NoteSortCloudCommitOutcome { committed, conflict }

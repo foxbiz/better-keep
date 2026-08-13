@@ -212,7 +212,7 @@ class AudioPlaybackSourceService {
           protectedBytes,
           decoder: protectedSource ? passwordProtectedDecoder : null,
         );
-        return _writeTemporarySource(
+        return await _writeTemporarySource(
           originalSource: fixedPath,
           decoded: decoded,
           mimeType: mimeType,
@@ -238,7 +238,7 @@ class AudioPlaybackSourceService {
         storedBytes,
         decoder: protectedSource ? passwordProtectedDecoder : null,
       );
-      return _writeTemporarySource(
+      return await _writeTemporarySource(
         originalSource: fixedPath,
         decoded: decoded,
         mimeType: mimeType,

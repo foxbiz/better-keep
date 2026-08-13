@@ -36,6 +36,7 @@ import 'package:better_keep/services/remote_content_retry_ledger.dart';
 import 'package:better_keep/services/remote_document_revision.dart';
 import 'package:better_keep/services/remote_local_id_resolver.dart';
 import 'package:better_keep/services/remote_note_apply_result.dart';
+import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/retry_controller.dart';
 import 'package:better_keep/services/sketch_preview_generator.dart';
@@ -70,6 +71,40 @@ enum DownloadResult {
 }
 
 enum AttachmentCiphertextKind { plaintext, passwordProtected, e2ee }
+
+class SyncEncryptionUnavailable implements Exception {
+  const SyncEncryptionUnavailable();
+
+  @override
+  String toString() => 'SyncEncryptionUnavailable: UMK is not available';
+}
+
+@visibleForTesting
+Uint8List requireSyncEncryptionKey({
+  required bool cryptoReady,
+  required Uint8List? umk,
+}) {
+  if (!cryptoReady || umk == null) {
+    throw const SyncEncryptionUnavailable();
+  }
+  return Uint8List.fromList(umk);
+}
+
+@visibleForTesting
+void validateCapturedSyncEncryptionKey({
+  required bool cryptoReady,
+  required Uint8List captured,
+  required Uint8List? current,
+}) {
+  if (!cryptoReady || current == null || current.length != captured.length) {
+    throw const SyncEncryptionUnavailable();
+  }
+  for (var index = 0; index < captured.length; index++) {
+    if (captured[index] != current[index]) {
+      throw const SyncEncryptionUnavailable();
+    }
+  }
+}
 
 /// Explicit PIN protection takes precedence over the structural E2EE
 /// heuristic. An E2EE-wrapped ENCP file does not expose the ENCP header until
@@ -119,6 +154,9 @@ bool _isRemoteStorageLocator(String value) =>
     value.startsWith('gs://');
 
 class NoteSyncService {
+  @visibleForTesting
+  static Future<void> Function()? refreshOperationOverride;
+
   Timer? _syncTimer;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   StreamSubscription<User?>? _userStreamSubscription;
@@ -135,12 +173,14 @@ class NoteSyncService {
   late final RemoteContentApplyCoordinator _contentApplyCoordinator;
   final AsyncKeyedSerializer<String> _listenerBatchSerializer =
       AsyncKeyedSerializer();
+  final AsyncKeyedSerializer<String> _syncOperationSerializer =
+      AsyncKeyedSerializer();
   static const String _listenerBatchKey = 'note-listener';
+  static const String _syncOperationKey = 'note-sync';
 
   Future<void> get initialHydration => _initialHydration.ready;
 
-  /// Track last known E2EE status to detect transitions
-  E2EEStatus? _lastKnownE2EEStatus;
+  bool _lastKnownCryptoReady = false;
 
   NoteSyncService._internal() {
     _contentApplyCoordinator = RemoteContentApplyCoordinator(
@@ -181,6 +221,7 @@ class NoteSyncService {
 
   /// Tracks notes that failed to sync
   final ValueNotifier<Set<int>> syncFailed = ValueNotifier({});
+  final ValueNotifier<Set<int>> syncDeferred = ValueNotifier({});
   final Set<int> _transientSyncFailures = {};
 
   /// Durable remote-content failures keyed by their resolved local note ID.
@@ -214,6 +255,7 @@ class NoteSyncService {
       transientFailures: _transientSyncFailures,
       contentFailures: contentFailures.value.values,
     );
+    syncDeferred.value = remoteSyncDeferredIds(contentFailures.value.values);
   }
 
   void _setContentFailure(RemoteContentRetryEntry entry) {
@@ -221,7 +263,11 @@ class NoteSyncService {
       contentFailures.value,
       entry,
     );
-    _setNoteStatus(entry.localId, const SyncProgress(SyncPhase.failed));
+    if (entry.state == RemoteContentRetryState.deferred) {
+      _clearNoteStatus(entry.localId);
+    } else {
+      _setNoteStatus(entry.localId, const SyncProgress(SyncPhase.failed));
+    }
     _publishSyncFailures();
   }
 
@@ -284,6 +330,9 @@ class NoteSyncService {
 
     AppLogger.log("[SYNC] SyncService initialized");
 
+    final e2ee = E2EEService.instance;
+    _lastKnownCryptoReady = e2ee.isCryptoReady;
+
     // Initialize the sync cache
     await _syncCache.init();
 
@@ -304,7 +353,7 @@ class NoteSyncService {
 
       // Sync if E2EE is ready or verifying in background
       // (verifyingInBackground means user can access notes while we verify)
-      if (E2EEService.instance.isReady) {
+      if (E2EEService.instance.isCryptoReady) {
         // Check if there are pending syncs from previous session
         if (_syncCache.hasPendingSyncs) {
           final pendingCount = _syncCache.getPendingSyncs().length;
@@ -333,7 +382,8 @@ class NoteSyncService {
     }
 
     // Listen for E2EE status changes to trigger sync when ready
-    E2EEService.instance.status.addListener(_onE2EEStatusChange);
+    e2ee.status.addListener(_onE2EEReadinessChange);
+    e2ee.deviceManager.hasUMK.addListener(_onE2EEReadinessChange);
 
     // Listen for subscription changes to start/stop sync when user upgrades/downgrades
     // Initialize with current subscription state
@@ -363,7 +413,7 @@ class NoteSyncService {
 
           // Only refresh if E2EE is ready - otherwise wait for E2EE status change
           // This prevents Firestore connections before E2EE initialization completes
-          if (E2EEService.instance.isReady) {
+          if (E2EEService.instance.isCryptoReady) {
             // Don't clear cache separately — refresh() handles it via startNewSync()
             // Calling clear() here races with concurrent sync from E2EE ready handler
             if (!isSyncing.value) {
@@ -382,7 +432,7 @@ class NoteSyncService {
           );
         }
         // Only start remote listener if E2EE is ready
-        if (E2EEService.instance.isReady) {
+        if (E2EEService.instance.isCryptoReady) {
           await _startRemoteListener();
         }
       } else {
@@ -397,15 +447,20 @@ class NoteSyncService {
   }
 
   /// Resume syncing from cached pending syncs
-  Future<void> _resumePendingSyncs() async {
-    if (isSyncing.value || currentUser == null) return;
+  Future<void> _resumePendingSyncs() => _syncOperationSerializer.run(
+    _syncOperationKey,
+    _resumePendingSyncsUnlocked,
+  );
+
+  Future<void> _resumePendingSyncsUnlocked() async {
+    if (currentUser == null) return;
     if (!_canReceiveSync) return;
 
     _resumingCachedSyncs = true;
 
     // Yield to ensure we don't update state during a build phase
     await Future.microtask(() {});
-    if (isSyncing.value || currentUser == null) {
+    if (currentUser == null || !_canReceiveSync) {
       _resumingCachedSyncs = false;
       return;
     }
@@ -416,6 +471,7 @@ class NoteSyncService {
         : 0;
     var restoreListener = true;
     var scheduleReconciliation = false;
+    var scheduleCachedResume = false;
 
     try {
       isSyncing.value = true;
@@ -479,6 +535,7 @@ class NoteSyncService {
           );
           break;
         case RemoteSyncResumeDisposition.retainPending:
+          scheduleCachedResume = true;
           AppLogger.log(
             "[SYNC] RESUME PARTIAL: ${failedSyncs.length} notes failed, cache retained",
           );
@@ -487,13 +544,23 @@ class NoteSyncService {
     } catch (e, stack) {
       syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.log("[SYNC] RESUME FAILED: $e\n$stack");
+      scheduleCachedResume =
+          _syncCache.hasPendingSyncs &&
+          _syncCache.metadata?.allPagesFetched == true;
     } finally {
       isSyncing.value = false;
       _resumingCachedSyncs = false;
       if (scheduleReconciliation) {
         unawaited(Future<void>.microtask(refresh));
-      } else if (restoreListener) {
-        await _startRemoteListener();
+      } else {
+        if (restoreListener) await _startRemoteListener();
+        if (scheduleCachedResume) {
+          _pullRetry.schedule(() async {
+            if (_initialized && currentUser != null && _canReceiveSync) {
+              await _resumePendingSyncs();
+            }
+          });
+        }
       }
       Future.delayed(const Duration(seconds: 2), () {
         // Only clear status message if no failed syncs
@@ -603,12 +670,16 @@ class NoteSyncService {
     );
   }
 
-  void _onE2EEStatusChange() {
-    final status = E2EEService.instance.status.value;
-    final previousStatus = _lastKnownE2EEStatus;
-    _lastKnownE2EEStatus = status;
+  void _onE2EEReadinessChange() {
+    final e2ee = E2EEService.instance;
+    final isNowReady = e2ee.isCryptoReady;
+    final wasReady = _lastKnownCryptoReady;
+    _lastKnownCryptoReady = isNowReady;
 
-    AppLogger.log("[SYNC] E2EE status changed from $previousStatus to $status");
+    AppLogger.log(
+      '[SYNC] Crypto readiness changed from $wasReady to $isNowReady '
+      '(status: ${e2ee.status.value})',
+    );
 
     // Review sessions are intentionally local-only.
     if (_isReviewSession) {
@@ -616,21 +687,13 @@ class NoteSyncService {
       return;
     }
 
-    // Check if we're transitioning TO a ready state from a non-ready state
-    final isNowReady =
-        status == E2EEStatus.ready ||
-        status == E2EEStatus.verifyingInBackground;
-    final wasReady =
-        previousStatus == E2EEStatus.ready ||
-        previousStatus == E2EEStatus.verifyingInBackground;
-
     // Trigger sync when E2EE becomes ready (from any non-ready state like pendingApproval)
     // Only trigger if we weren't already ready (to avoid duplicate syncs)
     if (isNowReady && !wasReady) {
       // E2EE just became ready - force a full sync to decrypt notes
       // This commonly happens after device approval or account recovery
       AppLogger.log(
-        "[SYNC] E2EE just became ready (was: $previousStatus), triggering full sync",
+        '[SYNC] Encryption key became available, triggering recovery sync',
       );
 
       // Schedule sync in a microtask to avoid blocking the listener callback
@@ -674,25 +737,21 @@ class NoteSyncService {
           }
         }
 
-        // Force a one-time full reconciliation before resuming the durable
-        // cloud commit stream.
-        // Don't clear cache separately — refresh() handles it via startNewSync()
-        AppState.lastSynced = null;
-        AppState.noteCloudSyncCheckpoint = null;
-
-        // Stop any existing listener before starting fresh
+        // Resume the smallest safe unit of work. A complete cached pagination
+        // run must not be discarded merely because its key was unavailable.
         await _stopRemoteListener();
 
-        // The listener starts after refresh commits the bootstrap boundary.
-        await refresh();
+        if (_syncCache.hasPendingSyncs) {
+          await _resumePendingSyncs();
+        } else {
+          await refresh();
+        }
 
         AppLogger.log("[SYNC] E2EE ready sync completed");
       });
-    } else if (status == E2EEStatus.pendingApproval ||
-        status == E2EEStatus.revoked ||
-        status == E2EEStatus.error) {
+    } else if (!isNowReady && wasReady) {
       // E2EE not ready - stop syncing encrypted content
-      AppLogger.log("[SYNC] E2EE not ready ($status), pausing remote sync");
+      AppLogger.log('[SYNC] Encryption key unavailable, pausing remote sync');
       unawaited(_stopRemoteListener());
     }
   }
@@ -713,8 +772,7 @@ class NoteSyncService {
       _wasPreviouslyPaid = true;
 
       // Trigger a full sync if E2EE is also ready
-      if (currentUser != null &&
-          E2EEService.instance.status.value == E2EEStatus.ready) {
+      if (currentUser != null && E2EEService.instance.isCryptoReady) {
         unawaited(refresh());
         unawaited(_startRemoteListener());
       }
@@ -748,11 +806,7 @@ class NoteSyncService {
       return false;
     }
 
-    final e2eeStatus = E2EEService.instance.status.value;
-    // Allow sync when E2EE is ready or verifying in background
-    // verifyingInBackground means user can access notes while we verify
-    return e2eeStatus == E2EEStatus.ready ||
-        e2eeStatus == E2EEStatus.verifyingInBackground;
+    return E2EEService.instance.isCryptoReady;
   }
 
   /// Check if we can push/upload sync (outgoing):
@@ -792,7 +846,9 @@ class NoteSyncService {
     }
     _publishSyncFailures();
     for (final entry in entries) {
-      _setNoteStatus(entry.localId, const SyncProgress(SyncPhase.failed));
+      if (entry.state != RemoteContentRetryState.deferred) {
+        _setNoteStatus(entry.localId, const SyncProgress(SyncPhase.failed));
+      }
       if (entry.state == RemoteContentRetryState.waiting) {
         _scheduleContentRetry(entry);
       }
@@ -890,7 +946,7 @@ class NoteSyncService {
         error,
         stack,
       );
-      _pullRetry.schedule(refresh);
+      _pullRetry.schedule(() => _runScheduledContentRetry(scheduled));
     }
   }
 
@@ -961,6 +1017,16 @@ class NoteSyncService {
       return const RemoteNoteApplyResult.permanent(
         RemoteNoteFailureCategory.invalidPayload,
         'invalid-remote-note-payload',
+      );
+    } catch (error, stack) {
+      AppLogger.error(
+        '[SYNC] Local apply failed for remote note $remoteDocumentId',
+        error,
+        stack,
+      );
+      return const RemoteNoteApplyResult.retryable(
+        RemoteNoteFailureCategory.localApply,
+        'local-note-apply-failed',
       );
     }
   }
@@ -1452,7 +1518,10 @@ class NoteSyncService {
     _syncTimer = null;
     await _userStreamSubscription?.cancel();
     _userStreamSubscription = null;
-    E2EEService.instance.status.removeListener(_onE2EEStatusChange);
+    E2EEService.instance.status.removeListener(_onE2EEReadinessChange);
+    E2EEService.instance.deviceManager.hasUMK.removeListener(
+      _onE2EEReadinessChange,
+    );
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     _initialized = false;
     _initialHydration.reset();
@@ -1525,8 +1594,16 @@ class NoteSyncService {
   /// Manual refresh - pushes local changes and pulls remote changes
   /// Used for pull-to-refresh and refresh button
   /// Note: Incoming sync (pull) works for all users, outgoing sync (push) requires Pro
-  Future<void> refresh() async {
-    if (isSyncing.value || currentUser == null) return;
+  Future<void> refresh() =>
+      _syncOperationSerializer.run(_syncOperationKey, _refreshUnlocked);
+
+  Future<void> _refreshUnlocked() async {
+    final override = refreshOperationOverride;
+    if (override != null) {
+      await override();
+      return;
+    }
+    if (currentUser == null) return;
 
     // Don't sync if E2EE is not ready (pending approval, revoked, etc.)
     if (!_canReceiveSync) {
@@ -1535,7 +1612,7 @@ class NoteSyncService {
     }
 
     await Future.microtask(() {});
-    if (isSyncing.value || currentUser == null) return;
+    if (currentUser == null || !_canReceiveSync) return;
 
     // Retain durable content failures; only transient operation failures are
     // cleared when the user explicitly starts another refresh.
@@ -1583,6 +1660,11 @@ class NoteSyncService {
           "[SYNC] REFRESH PARTIAL: ${activeFailures.length} active notes pending (${failedSyncs.length - activeFailures.length} deleted)",
         );
       }
+    } on SyncEncryptionUnavailable {
+      syncStatus.value = SyncProgress.idle;
+      AppLogger.log(
+        '[SYNC] REFRESH DEFERRED: Encryption key unavailable; work retained',
+      );
     } on FirestoreDocumentFetchException catch (e, stack) {
       syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('[SYNC] FIRESTORE DOCUMENT FETCH FAILED', e, stack);
@@ -1600,8 +1682,11 @@ class NoteSyncService {
     }
   }
 
-  Future<void> _sync() async {
-    if (isSyncing.value || currentUser == null) return;
+  Future<void> _sync() =>
+      _syncOperationSerializer.run(_syncOperationKey, _syncUnlocked);
+
+  Future<void> _syncUnlocked() async {
+    if (currentUser == null) return;
 
     // Don't push sync if not allowed (requires Pro)
     if (!_canPushSync) {
@@ -1612,8 +1697,8 @@ class NoteSyncService {
     // Yield to ensure we don't update state during a build phase
     await Future.microtask(() {});
 
-    // Check again after yield
-    if (isSyncing.value || currentUser == null) return;
+    // Check again after yielding or waiting behind another sync operation.
+    if (currentUser == null || !_canPushSync) return;
 
     // Check if there are pending local changes before syncing
     final pendingSyncs = await NoteSyncTrack.get(pending: true);
@@ -1633,6 +1718,14 @@ class NoteSyncService {
 
       syncStatus.value = const SyncProgress(SyncPhase.complete);
       AppLogger.log("[SYNC] PUSH COMPLETE: Local changes synced");
+    } on SyncEncryptionUnavailable {
+      for (final pending in pendingSyncs) {
+        _removeSyncingOutgoing(pending.localId);
+      }
+      syncStatus.value = SyncProgress.idle;
+      AppLogger.log(
+        '[SYNC] PUSH DEFERRED: Encryption key unavailable; local work retained',
+      );
     } catch (e, stack) {
       syncStatus.value = const SyncProgress(SyncPhase.failed);
       AppLogger.error('[SYNC] PUSH FAILED', e, stack);
@@ -1660,6 +1753,8 @@ class NoteSyncService {
     int batchCount = 0;
     int pushedCount = 0;
     int failedCount = 0;
+    bool deferredForEncryption = false;
+    Uint8List? batchUMK;
     final List<Future<void> Function()> postCommitActions = [];
 
     for (final sync in pendingSyncs) {
@@ -1667,6 +1762,7 @@ class NoteSyncService {
       final syncStartTime = DateTime.now();
       _addSyncingOutgoing(sync.localId);
       try {
+        final umk = _captureRequiredUMK();
         if (sync.action == SyncAction.delete && sync.remoteId == null) {
           await sync.delete();
           AppLogger.log(
@@ -1763,6 +1859,8 @@ class NoteSyncService {
           }
           if (sync.remoteId != null) {
             final localId = sync.localId;
+            _ensureUMKAvailable(umk);
+            batchUMK ??= umk;
             batch.set(_notesCollection.doc(sync.remoteId), {
               'local_id': sync.localId,
               'deleted_at': FieldValue.serverTimestamp(),
@@ -1797,6 +1895,8 @@ class NoteSyncService {
           // If we have a remoteId, we should sync the deletion to remote.
           if (sync.remoteId != null && !isRemoteDeleted) {
             final localId = sync.localId;
+            _ensureUMKAvailable(umk);
+            batchUMK ??= umk;
             batch.set(_notesCollection.doc(sync.remoteId), {
               'local_id': sync.localId,
               'deleted_at': FieldValue.serverTimestamp(),
@@ -1842,6 +1942,7 @@ class NoteSyncService {
         final attachmentsData = await _uploadAttachments(
           note.attachments,
           note,
+          umk,
         );
 
         // If attachment upload failed, skip this note and mark as failed
@@ -1860,8 +1961,10 @@ class NoteSyncService {
         noteData.remove('remote_id');
 
         // Apply E2EE encryption if enabled
-        noteData = await _encryptNoteData(noteData);
+        noteData = await _encryptNoteData(noteData, umk);
         noteData[cloudSyncCommittedAtField] = FieldValue.serverTimestamp();
+        _ensureUMKAvailable(umk);
+        batchUMK ??= umk;
 
         final localId = sync.localId;
         final capturedSyncStartTime = syncStartTime;
@@ -1944,6 +2047,7 @@ class NoteSyncService {
 
         if (batchCount >= 400) {
           AppLogger.log("[SYNC] PUSH: Committing batch of 400 notes");
+          _ensureUMKAvailable(batchUMK);
           await batch.commit();
           for (final action in postCommitActions) {
             try {
@@ -1955,7 +2059,14 @@ class NoteSyncService {
           postCommitActions.clear();
           batch = _firestore.batch();
           batchCount = 0;
+          batchUMK = null;
         }
+      } on SyncEncryptionUnavailable {
+        deferredForEncryption = true;
+        AppLogger.log(
+          '[SYNC] PUSH: Note ${sync.localId} deferred until encryption key is available',
+        );
+        _removeSyncingOutgoing(sync.localId);
       } catch (e) {
         AppLogger.error('[SYNC] PUSH: Note ${sync.localId} error', e);
         _markSyncFailed(sync.localId);
@@ -1965,6 +2076,7 @@ class NoteSyncService {
     }
 
     if (batchCount > 0) {
+      _ensureUMKAvailable(batchUMK!);
       await batch.commit();
       for (final action in postCommitActions) {
         try {
@@ -1975,8 +2087,30 @@ class NoteSyncService {
       }
     }
 
+    if (deferredForEncryption) {
+      throw const SyncEncryptionUnavailable();
+    }
+
     AppLogger.log(
       "[SYNC] PUSH COMPLETE: $pushedCount pushed, $failedCount failed",
+    );
+  }
+
+  Uint8List _captureRequiredUMK() {
+    final e2ee = E2EEService.instance;
+    return requireSyncEncryptionKey(
+      cryptoReady: e2ee.isCryptoReady,
+      umk: e2ee.deviceManager.getUMK(),
+    );
+  }
+
+  void _ensureUMKAvailable(Uint8List captured) {
+    final e2ee = E2EEService.instance;
+    final current = e2ee.deviceManager.getUMK();
+    validateCapturedSyncEncryptionKey(
+      cryptoReady: e2ee.isCryptoReady,
+      captured: captured,
+      current: current,
     );
   }
 
@@ -2002,9 +2136,24 @@ class NoteSyncService {
     await runRemotePullWithListenerLifecycle<void>(
       stopListener: () => _stopRemoteListener(cancelRetry: false),
       restoreListener: _startRemoteListener,
-      hasDurableCheckpoint: () {
+      recoveryDisposition: () {
         final checkpoint = AppState.noteCloudSyncCheckpoint;
-        return checkpoint != null && !checkpoint.requiresBootstrap;
+        if (checkpoint != null && !checkpoint.requiresBootstrap) {
+          return RemotePullRecoveryDisposition.none;
+        }
+        if (_syncCache.hasPendingSyncs &&
+            _syncCache.metadata?.allPagesFetched == true) {
+          return RemotePullRecoveryDisposition.resumeCached;
+        }
+        return RemotePullRecoveryDisposition.restartFull;
+      },
+      scheduleCachedResume: () {
+        _pullRetry.schedule(() async {
+          if (_initialized && currentUser != null && _canReceiveSync) {
+            AppLogger.log('[SYNC] Retrying remaining cached note revisions');
+            await _resumePendingSyncs();
+          }
+        });
       },
       scheduleFullPull: () {
         _pullRetry.schedule(() async {
@@ -2317,7 +2466,11 @@ class NoteSyncService {
             fallbackLocalId: localId,
           );
           if (handled.checkpointSafe) {
-            if (!await _completeCachedRevision(remoteDocId, handled.revision)) {
+            if (!await _completeCachedRevision(
+              remoteDocId,
+              handled.revision,
+              localId,
+            )) {
               return;
             }
             syncedCount++;
@@ -2341,7 +2494,11 @@ class NoteSyncService {
         _addSyncingIncoming(localId);
         try {
           await _handleRemoteDeletedNote(localId, remoteDocId: remoteDocId);
-          if (!await _completeCachedRevision(remoteDocId, processedRevision)) {
+          if (!await _completeCachedRevision(
+            remoteDocId,
+            processedRevision,
+            localId,
+          )) {
             return;
           }
           syncedCount++;
@@ -2363,7 +2520,11 @@ class NoteSyncService {
         AppLogger.log(
           "[SYNC] PROCESS: Note $localId skipped - has pending local changes",
         );
-        if (!await _completeCachedRevision(remoteDocId, processedRevision)) {
+        if (!await _completeCachedRevision(
+          remoteDocId,
+          processedRevision,
+          localId,
+        )) {
           return;
         }
         syncedCount++;
@@ -2397,7 +2558,11 @@ class NoteSyncService {
                 (remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
                     !equalTimestampBackgroundRepair))) {
           // Local is newer, skip
-          if (!await _completeCachedRevision(remoteDocId, processedRevision)) {
+          if (!await _completeCachedRevision(
+            remoteDocId,
+            processedRevision,
+            localId,
+          )) {
             return;
           }
           syncedCount++;
@@ -2421,7 +2586,11 @@ class NoteSyncService {
         );
 
         if (handled.checkpointSafe) {
-          if (!await _completeCachedRevision(remoteDocId, handled.revision)) {
+          if (!await _completeCachedRevision(
+            remoteDocId,
+            handled.revision,
+            localId,
+          )) {
             return;
           }
           syncedCount++;
@@ -2468,12 +2637,16 @@ class NoteSyncService {
   Future<bool> _completeCachedRevision(
     String remoteDocumentId,
     String processedRevision,
+    int localId,
   ) async {
     final removed = await _syncCache.completeIfCurrentRevision(
       remoteDocumentId,
       processedRevision,
     );
-    if (removed) return true;
+    if (removed) {
+      _clearSyncFailed(localId);
+      return true;
+    }
     AppLogger.log(
       '[SYNC] PROCESS: A newer revision of $remoteDocumentId arrived while '
       'the cached revision was applying; processing the replacement now',
@@ -2583,7 +2756,7 @@ class NoteSyncService {
     // Don't save encrypted notes with null content - wait for E2EE to be ready
     final isEncrypted = remoteData.containsKey('e2ee_ciphertext');
     final e2ee = E2EEService.instance;
-    if (isEncrypted && !e2ee.isReady) {
+    if (isEncrypted && !e2ee.isCryptoReady) {
       AppLogger.log(
         "[SYNC] PROCESS: Note $localId FAILED - encrypted but E2EE not ready (status: ${e2ee.status.value})",
       );
@@ -2594,6 +2767,10 @@ class NoteSyncService {
     }
 
     // Decrypt E2EE data if encrypted
+    final reminderChanged =
+        remoteData.containsKey('reminder') ||
+        remoteData.containsKey('reminder_v2') ||
+        remoteData.containsKey(ReminderSyncCodec.stateField);
     final updatedNoteData = await _decryptNoteData(remoteData);
     ReminderSyncCodec.decode(updatedNoteData);
 
@@ -2665,6 +2842,10 @@ class NoteSyncService {
       syncTrack.status = SyncStatus.synced;
       syncTrack.action = SyncAction.upload;
       await syncTrack.save();
+    }
+
+    if (reminderChanged) {
+      ReminderCoordinator.instance.requestReconciliation();
     }
 
     return const RemoteNoteApplyResult.success();
@@ -2884,6 +3065,7 @@ class NoteSyncService {
   Future<List<dynamic>?> _uploadAttachments(
     List<NoteAttachment> attachments,
     Note note,
+    Uint8List umk,
   ) async {
     List<dynamic> attachmentData = [];
     bool hasFailure = false;
@@ -2908,7 +3090,7 @@ class NoteSyncService {
       }
 
       // Get remote URLs for the attachment without modifying the original
-      final result = await _getRemoteAttachmentJson(attachment, note);
+      final result = await _getRemoteAttachmentJson(attachment, note, umk);
 
       if (result == null) {
         // Upload failed for this attachment (not just skipped)
@@ -2944,6 +3126,7 @@ class NoteSyncService {
   Future<Map<String, dynamic>?> _getRemoteAttachmentJson(
     NoteAttachment attachment,
     Note note,
+    Uint8List umk,
   ) async {
     // Start with the current JSON representation
     final attachmentJson = attachment.toJson();
@@ -2962,6 +3145,7 @@ class NoteSyncService {
           sketch.strokesFilePath!,
           note,
           'strokes',
+          umk,
         );
         if (remoteUrl != null) {
           data['strokesFilePath'] = remoteUrl;
@@ -2992,7 +3176,7 @@ class NoteSyncService {
           sketch.backgroundImage!.isNotEmpty &&
           !_isRemoteStorageLocator(sketch.backgroundImage!)) {
         final bgSrc = sketch.backgroundImage!;
-        final remoteBgUrl = await _uploadFile(bgSrc, note, 'bg');
+        final remoteBgUrl = await _uploadFile(bgSrc, note, 'bg', umk);
         if (remoteBgUrl != null) {
           data['backgroundImage'] = remoteBgUrl;
         } else {
@@ -3010,7 +3194,7 @@ class NoteSyncService {
     if (attachment.type == AttachmentType.image) {
       final src = attachment.image?.src;
       if (src != null && src.isNotEmpty && !_isRemoteStorageLocator(src)) {
-        final remoteUrl = await _uploadFile(src, note, 'main');
+        final remoteUrl = await _uploadFile(src, note, 'main', umk);
         final data = attachmentJson['data'] as Map<String, dynamic>;
         if (remoteUrl != null) {
           data['src'] = remoteUrl;
@@ -3027,7 +3211,7 @@ class NoteSyncService {
     // Handle audio attachments - upload as before
     final src = attachment.recording?.src;
     if (src != null && src.isNotEmpty && !_isRemoteStorageLocator(src)) {
-      final remoteUrl = await _uploadFile(src, note, 'main');
+      final remoteUrl = await _uploadFile(src, note, 'main', umk);
       final data = attachmentJson['data'] as Map<String, dynamic>;
       if (remoteUrl != null) {
         data['src'] = remoteUrl;
@@ -3043,7 +3227,12 @@ class NoteSyncService {
   }
 
   /// Helper to upload a single file and return remote URL
-  Future<String?> _uploadFile(String src, Note note, String suffix) async {
+  Future<String?> _uploadFile(
+    String src,
+    Note note,
+    String suffix,
+    Uint8List umk,
+  ) async {
     if (_isRemoteStorageLocator(src)) {
       return null; // Already remote
     }
@@ -3117,20 +3306,16 @@ class NoteSyncService {
           '${note.id}_${suffix}_${DateTime.now().millisecondsSinceEpoch}.$extension',
         );
 
-        // Encrypt if E2EE is enabled
-        final e2ee = E2EEService.instance;
-        if (e2ee.isReady) {
-          final umk = e2ee.deviceManager.getUMK();
-          if (umk != null) {
-            bytes = await FileEncryption.encryptBytes(bytes, umk);
-            AppLogger.log("Encrypted data URI attachment");
-          }
-        }
+        bytes = await FileEncryption.encryptBytes(bytes, umk);
+        AppLogger.log("Encrypted data URI attachment");
 
         syncStatus.value = const SyncProgress(SyncPhase.uploadingMedia);
         _setNoteStatus(note.id!, const SyncProgress(SyncPhase.uploadingMedia));
+        _ensureUMKAvailable(umk);
         await fileRef.putData(bytes);
         remoteUrl = await fileRef.getDownloadURL();
+      } on SyncEncryptionUnavailable {
+        rethrow;
       } catch (e) {
         AppLogger.error('Error uploading data URI image', e);
         return null;
@@ -3150,22 +3335,16 @@ class NoteSyncService {
 
           final plainBytes = await readEncryptedBytes(src);
           uploadContentHash = FileSyncTrack.computeHash(plainBytes);
-          var fileBytes = plainBytes;
+          final fileBytes = await FileEncryption.encryptBytes(plainBytes, umk);
+          AppLogger.log("Encrypted attachment: $fileName");
 
-          // Encrypt file if E2EE is enabled
-          final e2ee = E2EEService.instance;
-          if (e2ee.isReady) {
-            final umk = e2ee.deviceManager.getUMK();
-            if (umk != null) {
-              fileBytes = await FileEncryption.encryptBytes(fileBytes, umk);
-              AppLogger.log("Encrypted attachment: $fileName");
-            }
-          }
-
+          _ensureUMKAvailable(umk);
           await fileRef
               .putData(fileBytes)
               .timeout(const Duration(seconds: 120));
           remoteUrl = await fileRef.getDownloadURL();
+        } on SyncEncryptionUnavailable {
+          rethrow;
         } catch (e) {
           AppLogger.error('Error uploading $fileName', e);
           _markSyncFailed(note.id!);
@@ -3573,7 +3752,7 @@ class NoteSyncService {
       final ciphertextKind = classifyAttachmentCiphertext(bytes);
 
       if (ciphertextKind == AttachmentCiphertextKind.e2ee) {
-        if (!e2ee.isReady) {
+        if (!e2ee.isCryptoReady) {
           AppLogger.log(
             "Cannot decrypt attachment - E2EE not ready: $localPath",
           );
@@ -3686,21 +3865,18 @@ class NoteSyncService {
   /// Encrypts title, content, and sensitive sketch data within attachments.
   Future<Map<String, dynamic>> _encryptNoteData(
     Map<String, dynamic> noteData,
+    Uint8List umk,
   ) async {
     final e2ee = E2EEService.instance;
-    if (!e2ee.isReady) return noteData;
 
     final title = noteData['title'] as String?;
     final content = noteData['content'] as String?;
 
-    if (title == null && content == null) return noteData;
-
-    final encrypted = await e2ee.noteEncryption.encryptNote(
+    final encrypted = await e2ee.noteEncryption.encryptNoteWithKey(
       title: title,
       content: content,
+      umk: umk,
     );
-
-    if (encrypted == null) return noteData;
 
     // Remove plaintext fields and add encrypted fields
     final result = Map<String, dynamic>.from(noteData);
@@ -3712,6 +3888,7 @@ class NoteSyncService {
     if (result['attachments'] != null) {
       result['attachments'] = await _encryptSketchDataInAttachments(
         result['attachments'],
+        umk,
       );
     }
 
@@ -3723,11 +3900,10 @@ class NoteSyncService {
   /// Encrypts sensitive sketch data (strokes, bgColor, pagePattern) inline within attachments.
   /// File URLs remain available for download; generated presentation fields
   /// are removed before this stage and remain local-only.
-  Future<dynamic> _encryptSketchDataInAttachments(dynamic attachments) async {
-    final e2ee = E2EEService.instance;
-    final umk = e2ee.deviceManager.getUMK();
-    if (umk == null) return attachments;
-
+  Future<dynamic> _encryptSketchDataInAttachments(
+    dynamic attachments,
+    Uint8List umk,
+  ) async {
     List<dynamic> attachmentList;
     if (attachments is String) {
       try {
@@ -3820,7 +3996,7 @@ class NoteSyncService {
       return noteData;
     }
 
-    if (!e2ee.isReady) {
+    if (!e2ee.isCryptoReady) {
       // Can't decrypt - return as-is (will show as locked/encrypted)
       return noteData;
     }
@@ -3998,7 +4174,7 @@ class NoteSyncService {
         final ciphertextKind = classifyAttachmentCiphertext(bytes);
 
         if (ciphertextKind == AttachmentCiphertextKind.e2ee) {
-          if (!e2ee.isReady) {
+          if (!e2ee.isCryptoReady) {
             AppLogger.log("Cannot decrypt redownloaded file - E2EE not ready");
             return null;
           }

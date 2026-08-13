@@ -172,10 +172,11 @@ packages:
   cloud_firestore:
     dependency: "direct main"
     description:
-      name: cloud_firestore
-      sha256: a9667b44b995eb9c642e6460275af9c478f4e72befc61146f2e0f88e6f174705
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/cloud_firestore/cloud_firestore"
+      ref: f949c23d795a9d843ffd1c6deea285a4d9ce5ff3
+      resolved-ref: f949c23d795a9d843ffd1c6deea285a4d9ce5ff3
+      url: "https://github.com/firebase/flutterfire.git"
+    source: git
     version: "6.8.0"
   cloud_firestore_platform_interface:
     dependency: transitive

@@ -10,11 +10,20 @@ const readRepositoryFile = (...segments) =>
 	readFileSync(join(repositoryRoot, ...segments), "utf8");
 
 const iosPodfile = readRepositoryFile("ios", "Podfile");
+const pubspec = readRepositoryFile("pubspec.yaml");
 const runnerProject = readRepositoryFile(
 	"ios",
 	"Runner.xcodeproj",
 	"project.pbxproj",
 );
+
+test("cloud_firestore uses the immutable upstream Android transaction fix", () => {
+	assert.match(
+		pubspec,
+		/cloud_firestore:\n\s+git:\n\s+url: https:\/\/github\.com\/firebase\/flutterfire\.git\n\s+ref: f949c23d795a9d843ffd1c6deea285a4d9ce5ff3\n\s+path: packages\/cloud_firestore\/cloud_firestore/,
+	);
+	assert.match(pubspec, /flutterfire#18553/);
+});
 
 test("all iOS project configurations tolerate generated framework imports", () => {
 	const values = [
@@ -40,22 +49,35 @@ test("Whisper remains a dynamic CocoaPods framework for Dart FFI", () => {
 });
 
 test("iOS build policy runs in both focused and release test suites", () => {
-	const policyOperation = {
-		args: ["--test", "test/tool/ios_build_policy_test.mjs"],
-		command: "node",
-		environment: {},
-		type: "process",
-	};
+	const policyOperations = [
+		{
+			args: [
+				"--test",
+				"test/tool/flutterfire_apple_spm_test.mjs",
+				"test/tool/ios_build_policy_test.mjs",
+			],
+			command: "node",
+			environment: {},
+			type: "process",
+		},
+		{
+			args: ["tool/verify_flutterfire_apple_spm.mjs"],
+			command: "node",
+			environment: {},
+			type: "process",
+		},
+	];
 
 	assert.deepEqual(
 		resolveTestTask(["ios-build-policy"]).operations,
-		[policyOperation],
+		policyOperations,
 	);
-	assert.ok(
-		resolveTestTask(["release"]).operations.some(
-			(operation) =>
-				operation.command === policyOperation.command &&
-				operation.args.includes("test/tool/ios_build_policy_test.mjs"),
-		),
-	);
+	const releaseOperations = resolveTestTask(["release"]).operations;
+	for (const expected of policyOperations) {
+		assert.ok(
+			releaseOperations.some(
+				(operation) => JSON.stringify(operation) === JSON.stringify(expected),
+			),
+		);
+	}
 });
