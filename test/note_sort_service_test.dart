@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/label.dart';
@@ -23,12 +24,14 @@ void main() {
   const grid = NoteOrderContext.mainGrid();
   const list = NoteOrderContext.mainList();
   late E2EEStatus originalE2EEStatus;
+  late Uint8List? originalUMK;
 
   setUpAll(sqfliteFfiInit);
 
   setUp(() async {
     await service.dispose();
     originalE2EEStatus = E2EEService.instance.status.value;
+    originalUMK = E2EEService.instance.deviceManager.getUMK();
     E2EEService.instance.status.value = E2EEStatus.notInitialized;
     NoteSortService.canReceiveCloudOverride = null;
     NoteSortService.canPushCloudOverride = null;
@@ -57,12 +60,14 @@ void main() {
     NoteSortService.uploadRetryDelayOverride = null;
     NoteSortService.disposeTimeoutOverride = null;
     E2EEService.instance.status.value = originalE2EEStatus;
+    E2EEService.instance.deviceManager.setCachedUMKForTesting(originalUMK);
     await database.close();
   });
 
-  test('cloud startup requires a ready E2EE state', () async {
+  test('cloud startup requires a ready E2EE state and UMK', () async {
     NoteSortService.canReceiveCloudOverride = true;
     NoteSortService.e2eeReadyOverride = null;
+    E2EEService.instance.deviceManager.setCachedUMKForTesting(null);
     var starts = 0;
     NoteSortService.cloudStartOverride = () async {
       starts++;
@@ -86,7 +91,12 @@ void main() {
     }
 
     expect(starts, 0);
+    E2EEService.instance.status.value = E2EEStatus.ready;
+    expect(service.canReceiveCloudForTesting, isFalse);
     await service.dispose();
+    E2EEService.instance.deviceManager.setCachedUMK(
+      Uint8List.fromList(List<int>.filled(32, 1)),
+    );
     for (final status in const [
       E2EEStatus.ready,
       E2EEStatus.verifyingInBackground,
@@ -105,6 +115,9 @@ void main() {
     NoteSortService.cloudRepositoryOverride = cloud;
     NoteSortService.canReceiveCloudOverride = true;
     NoteSortService.e2eeReadyOverride = null;
+    E2EEService.instance.deviceManager.setCachedUMK(
+      Uint8List.fromList(List<int>.filled(32, 1)),
+    );
     var starts = 0;
     NoteSortService.cloudStartOverride = () async {
       starts++;
@@ -128,6 +141,9 @@ void main() {
       NoteSortService.cloudRepositoryOverride = cloud;
       NoteSortService.canReceiveCloudOverride = true;
       NoteSortService.e2eeReadyOverride = null;
+      E2EEService.instance.deviceManager.setCachedUMK(
+        Uint8List.fromList(List<int>.filled(32, 1)),
+      );
       await service.setMode(grid, NoteSortMode.custom);
       service.activateCloudRunForTesting();
       final generation = service.cloudGenerationForTesting;
@@ -156,6 +172,9 @@ void main() {
       NoteSortService.cloudRepositoryOverride = cloud;
       NoteSortService.canReceiveCloudOverride = true;
       NoteSortService.e2eeReadyOverride = null;
+      E2EEService.instance.deviceManager.setCachedUMK(
+        Uint8List.fromList(List<int>.filled(32, 1)),
+      );
       var starts = 0;
       NoteSortService.cloudStartOverride = () async {
         starts++;
@@ -177,6 +196,9 @@ void main() {
   test('disposal removes the E2EE lifecycle listener', () async {
     NoteSortService.canReceiveCloudOverride = true;
     NoteSortService.e2eeReadyOverride = null;
+    E2EEService.instance.deviceManager.setCachedUMK(
+      Uint8List.fromList(List<int>.filled(32, 1)),
+    );
     var starts = 0;
     NoteSortService.cloudStartOverride = () async {
       starts++;
@@ -862,6 +884,103 @@ void main() {
     expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
   });
 
+  test(
+    'manifest conflict rebases once and commits the local operation',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository()..conflictCount = 1;
+      cloud.manifests[grid.key] = {
+        'schema_version': NoteSortService.cloudSchemaVersion,
+        'context_key': grid.key,
+        'sort_mode': NoteSortMode.updatedNewest.name,
+        'revision': 'remote-2',
+        'chunk_count': 1,
+        'note_count': 1,
+      };
+      cloud.chunks['remote-2'] = [
+        {
+          'schema_version': NoteSortService.cloudSchemaVersion,
+          'revision': 'remote-2',
+          'note_ids': ['remote-note'],
+        },
+      ];
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+
+      await service.applyRemoteSnapshotForTesting(
+        NoteOrderSnapshot(
+          context: grid,
+          mode: NoteSortMode.updatedNewest,
+          orderedNoteIds: const ['remote-note'],
+          revision: 'remote-1',
+          baseRevision: 'remote-1',
+          updatedAt: DateTime.utc(2026, 7, 24),
+          hydrated: true,
+        ),
+      );
+      await service.setMode(grid, NoteSortMode.custom);
+      final conflicting = service.snapshotFor(grid);
+
+      await service.uploadSnapshotWithRetryForTesting(conflicting);
+      await _waitUntil(
+        () =>
+            cloud.commitCalls >= 2 && service.snapshotFor(grid).dirty == false,
+      );
+
+      final committed = service.snapshotFor(grid);
+      expect(cloud.commitCalls, 2);
+      expect(cloud.deletedRevisions, contains(conflicting.revision));
+      expect(committed.mode, NoteSortMode.custom);
+      expect(committed.orderedNoteIds, ['remote-note']);
+      expect(committed.baseRevision, committed.revision);
+      expect(cloud.manifests[grid.key]?['revision'], committed.revision);
+      expect(await database.query(NoteSortService.operationTableName), isEmpty);
+    },
+  );
+
+  test('snapshot superseded during chunk upload never commits', () async {
+    final writeStarted = Completer<void>();
+    final releaseWrite = Completer<void>();
+    final cloud = _FakeNoteSortCloudRepository()
+      ..writeStarted = writeStarted
+      ..writeBarrier = releaseWrite;
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = true;
+    final candidate = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['candidate-note'],
+      revision: 'superseded-candidate',
+      baseRevision: 'remote-1',
+      updatedAt: DateTime.utc(2026, 7, 24),
+      dirty: true,
+      hydrated: true,
+    );
+
+    final upload = service.uploadSnapshotWithRetryForTesting(candidate);
+    await writeStarted.future;
+    await service.applyRemoteSnapshotForTesting(
+      NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.updatedNewest,
+        orderedNoteIds: const ['newer-remote-note'],
+        revision: 'remote-2',
+        baseRevision: 'remote-2',
+        updatedAt: DateTime.utc(2026, 7, 25),
+        hydrated: true,
+      ),
+    );
+    releaseWrite.complete();
+    await upload;
+
+    expect(cloud.commitCalls, 0);
+    expect(cloud.deletedRevisions, ['superseded-candidate']);
+    expect(service.snapshotFor(grid).revision, 'remote-2');
+    expect(service.snapshotFor(grid).dirty, isFalse);
+    expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
+  });
+
   test('cleanup journal never deletes a referenced revision', () async {
     final cloud = _FakeNoteSortCloudRepository();
     cloud.manifests[grid.key] = {'revision': 'active-revision'};
@@ -1411,7 +1530,11 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
     commitCalls++;
     if (conflictOnCommit || conflictCount > 0) {
       if (conflictCount > 0) conflictCount--;
-      throw const NoteSortRevisionConflict();
+      final previous = manifests[contextKey];
+      return NoteSortCloudCommitResult.conflict(
+        previousRevision: previous?['revision'] as String?,
+        previousChunkCount: previous?['chunk_count'] as int? ?? 0,
+      );
     }
     final previous = manifests[contextKey];
     manifests[contextKey] = {
@@ -1422,7 +1545,7 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
       'chunk_count': chunkCount,
       'note_count': noteCount,
     };
-    return NoteSortCloudCommitResult(
+    return NoteSortCloudCommitResult.committed(
       previousRevision: previous?['revision'] as String?,
       previousChunkCount: previous?['chunk_count'] as int? ?? 0,
     );

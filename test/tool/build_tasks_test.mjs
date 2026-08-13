@@ -24,11 +24,20 @@ test("lists build targets and treats an omitted target as help", () => {
 });
 
 test("maps platform targets to their existing release builds", () => {
-	assert.deepEqual(resolveBuildTask(["android"]).operations[0].args, [
-		"build",
-		"appbundle",
-		"--release",
-		"--dart-define-from-file=.env",
+	assert.deepEqual(resolveBuildTask(["android"]).operations, [
+		{
+			args: [
+				"build",
+				"appbundle",
+				"--release",
+				"--dart-define-from-file=.env",
+			],
+			command: "flutter",
+		},
+		{
+			args: ["tool/verify_android_release_resources.mjs"],
+			command: "node",
+		},
 	]);
 	assert.deepEqual(resolveBuildTask(["ios"]).operations[0].args, [
 		"build",

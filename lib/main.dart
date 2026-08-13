@@ -399,10 +399,7 @@ class _BetterKeepState extends State<BetterKeep> {
       throw StateError('Database initialization failed');
     }
 
-    await ReminderCoordinator.instance.init();
-    ReminderCoordinator.instance.attachUiActionListener();
-    await ReminderCoordinator.instance.consumePendingUiActions();
-    await ReminderCoordinator.instance.reconcileAll();
+    await _initializeOptionalReminderServices();
 
     // Check notification permission status (read-only, no prompt)
     ReminderPermissionService().checkAndNotify();
@@ -422,6 +419,21 @@ class _BetterKeepState extends State<BetterKeep> {
     // fresh sign-ins. A transient cloud failure must not make startup fatal.
     if (AuthService.currentUser != null) {
       await AuthService.initializeCurrentUserServices();
+    }
+  }
+
+  Future<void> _initializeOptionalReminderServices() async {
+    try {
+      await ReminderCoordinator.instance.init();
+      ReminderCoordinator.instance.attachUiActionListener();
+      await ReminderCoordinator.instance.consumePendingUiActions();
+      await ReminderCoordinator.instance.reconcileAll();
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        '[Main] Reminder services unavailable; startup will continue',
+        error,
+        stackTrace,
+      );
     }
   }
 

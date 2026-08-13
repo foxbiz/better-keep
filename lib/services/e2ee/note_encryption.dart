@@ -4,6 +4,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -93,6 +94,15 @@ class NoteEncryptionService {
       return null;
     }
 
+    return encryptNoteWithKey(title: title, content: content, umk: umk);
+  }
+
+  /// Encrypts with a key captured by the caller before any cloud write.
+  Future<EncryptedNoteData> encryptNoteWithKey({
+    String? title,
+    String? content,
+    required Uint8List umk,
+  }) async {
     // Combine title and content into a JSON structure for encryption
     final noteData = json.encode({'title': title, 'content': content});
 

@@ -5,7 +5,12 @@ enum RemoteNoteApplyDisposition {
   deferredDependency,
 }
 
-enum RemoteNoteFailureCategory { attachment, decryption, invalidPayload }
+enum RemoteNoteFailureCategory {
+  attachment,
+  decryption,
+  invalidPayload,
+  localApply,
+}
 
 class RemoteNoteApplyResult {
   const RemoteNoteApplyResult._(this.disposition, {this.category, this.code});

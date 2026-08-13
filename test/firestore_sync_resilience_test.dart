@@ -93,7 +93,8 @@ void main() {
       runRemotePullWithListenerLifecycle<void>(
         stopListener: () => listenerRunning = false,
         restoreListener: () => listenerRunning = true,
-        hasDurableCheckpoint: () => true,
+        recoveryDisposition: () => RemotePullRecoveryDisposition.none,
+        scheduleCachedResume: () {},
         scheduleFullPull: () => fullPullScheduled = true,
         pull: () async => throw firestoreFailure('unavailable'),
       ),
@@ -114,7 +115,8 @@ void main() {
         runRemotePullWithListenerLifecycle<void>(
           stopListener: () {},
           restoreListener: () => restoreCalls++,
-          hasDurableCheckpoint: () => false,
+          recoveryDisposition: () => RemotePullRecoveryDisposition.restartFull,
+          scheduleCachedResume: () {},
           scheduleFullPull: () => scheduleCalls++,
           pull: () async => throw firestoreFailure('deadline-exceeded'),
         ),
@@ -125,6 +127,26 @@ void main() {
       expect(scheduleCalls, 1);
     },
   );
+
+  test('completed pagination retries only remaining cached entries', () async {
+    var cachedResumeCalls = 0;
+    var fullPullCalls = 0;
+
+    await expectLater(
+      runRemotePullWithListenerLifecycle<void>(
+        stopListener: () {},
+        restoreListener: () {},
+        recoveryDisposition: () => RemotePullRecoveryDisposition.resumeCached,
+        scheduleCachedResume: () => cachedResumeCalls++,
+        scheduleFullPull: () => fullPullCalls++,
+        pull: () async => throw firestoreFailure('unavailable'),
+      ),
+      throwsA(isA<FirebaseException>()),
+    );
+
+    expect(cachedResumeCalls, 1);
+    expect(fullPullCalls, 0);
+  });
 
   test('overlapping listener batches preserve update/delete order', () async {
     final serializer = AsyncKeyedSerializer<String>();
@@ -215,7 +237,8 @@ void main() {
         await serializer.waitForIdle('notes');
       },
       restoreListener: () => listenerRestored = true,
-      hasDurableCheckpoint: () => true,
+      recoveryDisposition: () => RemotePullRecoveryDisposition.none,
+      scheduleCachedResume: () {},
       scheduleFullPull: () {},
       pull: () async {
         pullStarted = true;

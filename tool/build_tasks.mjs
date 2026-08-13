@@ -37,6 +37,7 @@ function prepareMacosXcode(extraArgs) {
 const targets = {
 	android: defineTarget("Build the release Android App Bundle.", (extraArgs) => [
 		flutterBuild("appbundle", extraArgs),
+		processStep("node", ["tool/verify_android_release_resources.mjs"]),
 	]),
 	icons: defineTarget(
 		"Generate the custom icon font.",

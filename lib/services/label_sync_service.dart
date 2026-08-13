@@ -23,6 +23,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 
 class LabelSyncService {
+  @visibleForTesting
+  static Future<void> Function()? refreshOperationOverride;
+
   Timer? _syncTimer;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   StreamSubscription<User?>? _userStreamSubscription;
@@ -35,7 +38,10 @@ class LabelSyncService {
       AsyncKeyedSerializer();
   final AsyncKeyedSerializer<String> _labelApplySerializer =
       AsyncKeyedSerializer();
+  final AsyncKeyedSerializer<String> _syncOperationSerializer =
+      AsyncKeyedSerializer();
   static const String _listenerBatchKey = 'label-listener';
+  static const String _syncOperationKey = 'label-sync';
 
   Future<void> get initialHydration => _initialHydration.ready;
 
@@ -105,7 +111,7 @@ class LabelSyncService {
       return false;
     }
 
-    if (_isReviewSession) {
+    if (_isReviewSession || !E2EEService.instance.isCryptoReady) {
       return false;
     }
     return true;
@@ -135,6 +141,9 @@ class LabelSyncService {
 
     AppLogger.log("[LABEL_SYNC] LabelSyncService initialized");
 
+    final e2ee = E2EEService.instance;
+    _lastKnownCryptoReady = e2ee.isCryptoReady;
+
     // Initialize with current subscription state
     _wasPreviouslyPaid = PlanService.instance.isPaid;
 
@@ -148,7 +157,7 @@ class LabelSyncService {
         return;
       }
       // Only start sync if E2EE is ready - otherwise wait for E2EE status change listener
-      if (E2EEService.instance.isReady) {
+      if (E2EEService.instance.isCryptoReady) {
         final checkpoint = AppState.labelCloudSyncCheckpoint;
         if (checkpoint == null || checkpoint.requiresBootstrap) {
           unawaited(refresh());
@@ -167,7 +176,8 @@ class LabelSyncService {
     }
 
     // Listen for E2EE status changes to trigger sync when ready
-    E2EEService.instance.status.addListener(_onE2EEStatusChange);
+    e2ee.status.addListener(_onE2EEReadinessChange);
+    e2ee.deviceManager.hasUMK.addListener(_onE2EEReadinessChange);
 
     _userStreamSubscription = AuthService.userStream.listen((user) async {
       if (user != null) {
@@ -181,7 +191,7 @@ class LabelSyncService {
         // (before remote sync which may take time or fail)
         Label.fixLabels();
         // Only sync if E2EE is ready - otherwise wait for E2EE status change
-        if (E2EEService.instance.isReady) {
+        if (E2EEService.instance.isCryptoReady) {
           await _startRemoteListener();
           unawaited(refresh());
         } else {
@@ -195,17 +205,17 @@ class LabelSyncService {
     });
   }
 
-  /// Track last known E2EE status to detect transitions
-  E2EEStatus? _lastKnownE2EEStatus;
+  bool _lastKnownCryptoReady = false;
 
   /// Called when E2EE status changes - trigger sync when E2EE becomes ready
-  void _onE2EEStatusChange() {
-    final status = E2EEService.instance.status.value;
-    final previousStatus = _lastKnownE2EEStatus;
-    _lastKnownE2EEStatus = status;
+  void _onE2EEReadinessChange() {
+    final e2ee = E2EEService.instance;
+    final isNowReady = e2ee.isCryptoReady;
+    final wasReady = _lastKnownCryptoReady;
+    _lastKnownCryptoReady = isNowReady;
 
     AppLogger.log(
-      "[LABEL_SYNC] E2EE status changed from $previousStatus to $status",
+      '[LABEL_SYNC] Crypto readiness changed from $wasReady to $isNowReady',
     );
 
     // Review sessions are intentionally local-only.
@@ -214,23 +224,15 @@ class LabelSyncService {
       return;
     }
 
-    // Check if we're transitioning TO a ready state from a non-ready state
-    final isNowReady =
-        status == E2EEStatus.ready ||
-        status == E2EEStatus.verifyingInBackground;
-    final wasReady =
-        previousStatus == E2EEStatus.ready ||
-        previousStatus == E2EEStatus.verifyingInBackground;
-
     // Trigger sync when E2EE becomes ready
     if (isNowReady && !wasReady && currentUser != null) {
       AppLogger.log("[LABEL_SYNC] E2EE just became ready, triggering sync");
       Future.microtask(() async {
-        AppState.lastLabelSynced = null;
-        AppState.labelCloudSyncCheckpoint = null;
         await _stopRemoteListener();
         await refresh();
       });
+    } else if (!isNowReady && wasReady) {
+      unawaited(_stopRemoteListener());
     }
   }
 
@@ -265,7 +267,7 @@ class LabelSyncService {
   /// Start listening for real-time updates from Firebase
   Future<void> _startRemoteListener() async {
     await _stopRemoteListener(cancelRetry: false);
-    if (currentUser == null) return;
+    if (currentUser == null || !_canReceiveSync) return;
 
     final checkpoint = AppState.labelCloudSyncCheckpoint;
     if (checkpoint == null || checkpoint.requiresBootstrap) {
@@ -563,14 +565,17 @@ class LabelSyncService {
     await _userStreamSubscription?.cancel();
     _userStreamSubscription = null;
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
-    E2EEService.instance.status.removeListener(_onE2EEStatusChange);
+    E2EEService.instance.status.removeListener(_onE2EEReadinessChange);
+    E2EEService.instance.deviceManager.hasUMK.removeListener(
+      _onE2EEReadinessChange,
+    );
     _initialized = false;
     _initialHydration.reset();
     _listenerRetry.cancel();
     _pullRetry.cancel();
     await _labelApplySerializer.waitForAll();
     // Reset so the ready→ready transition is detected correctly on re-login
-    _lastKnownE2EEStatus = null;
+    _lastKnownCryptoReady = false;
   }
 
   Future<void> sync([bool now = false]) async {
@@ -593,17 +598,31 @@ class LabelSyncService {
     });
   }
 
-  Future<void> refresh() async {
-    if (isSyncing.value || currentUser == null) return;
+  Future<void> refresh() =>
+      _syncOperationSerializer.run(_syncOperationKey, _refreshUnlocked);
 
-    // Review sessions are intentionally local-only.
-    if (_isReviewSession) {
-      AppLogger.log("[LABEL_SYNC] Skipping refresh - review session");
+  Future<void> _refreshUnlocked() async {
+    final override = refreshOperationOverride;
+    if (override != null) {
+      await override();
+      return;
+    }
+    if (currentUser == null) return;
+
+    if (!_canReceiveSync) {
+      AppLogger.log(
+        '[LABEL_SYNC] Skipping refresh - incoming sync unavailable',
+      );
       return;
     }
 
     await Future.microtask(() {});
-    if (isSyncing.value || currentUser == null) return;
+    if (currentUser == null || !_canReceiveSync) {
+      AppLogger.log(
+        '[LABEL_SYNC] Skipping refresh - incoming sync became unavailable',
+      );
+      return;
+    }
 
     try {
       isSyncing.value = true;
@@ -611,7 +630,7 @@ class LabelSyncService {
       AppLogger.log("[LABEL_SYNC] Manual refresh started...");
 
       // Note: _startRemoteListener() is NOT called here.
-      // The listener is managed by init(), _onE2EEStatusChange(), and
+      // The listener is managed by init(), _onE2EEReadinessChange(), and
       // _onSubscriptionChange() to avoid racing with _pullRemoteChanges()
       // — both would process the same remote docs and create duplicate labels.
 
@@ -620,6 +639,13 @@ class LabelSyncService {
         await _pushLocalChanges();
       } else {
         AppLogger.log("[LABEL_SYNC]Skipping push - Pro subscription required");
+      }
+      if (!_canReceiveSync) {
+        syncStatus.value = SyncProgress.idle;
+        AppLogger.log(
+          '[LABEL_SYNC] Deferring pull - incoming sync became unavailable',
+        );
+        return;
       }
       // Always pull remote changes (available to all users)
       await _pullRemoteChanges();
@@ -640,8 +666,11 @@ class LabelSyncService {
     }
   }
 
-  Future<void> _sync() async {
-    if (isSyncing.value || currentUser == null) return;
+  Future<void> _sync() =>
+      _syncOperationSerializer.run(_syncOperationKey, _syncUnlocked);
+
+  Future<void> _syncUnlocked() async {
+    if (currentUser == null) return;
 
     // Don't push sync if not allowed (requires Pro)
     if (!_canPushSync) {
@@ -650,7 +679,7 @@ class LabelSyncService {
     }
 
     await Future.microtask(() {});
-    if (isSyncing.value || currentUser == null) return;
+    if (currentUser == null || !_canPushSync) return;
 
     final pendingSyncs = await LabelSyncTrack.get(pending: true);
     if (pendingSyncs.isEmpty) {
@@ -881,10 +910,13 @@ class LabelSyncService {
     await runRemotePullWithListenerLifecycle<void>(
       stopListener: () => _stopRemoteListener(cancelRetry: false),
       restoreListener: _startRemoteListener,
-      hasDurableCheckpoint: () {
+      recoveryDisposition: () {
         final checkpoint = AppState.labelCloudSyncCheckpoint;
-        return checkpoint != null && !checkpoint.requiresBootstrap;
+        return checkpoint != null && !checkpoint.requiresBootstrap
+            ? RemotePullRecoveryDisposition.none
+            : RemotePullRecoveryDisposition.restartFull;
       },
+      scheduleCachedResume: () {},
       scheduleFullPull: () {
         _pullRetry.schedule(() async {
           if (_initialized && currentUser != null && _canReceiveSync) {

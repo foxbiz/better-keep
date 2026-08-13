@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:better_keep/config.dart';
+import 'package:better_keep/services/async_initialization_gate.dart';
 import 'package:better_keep/services/reminder_notification_registration.dart';
 import 'package:better_keep/services/reminder_notification_plan.dart';
 import 'package:better_keep/services/reminder_occurrence.dart';
@@ -20,7 +21,12 @@ typedef ReminderNotificationResponseHandler =
 /// Feature services get their own ID namespaces, but initialization and action
 /// routing happen exactly once so callbacks cannot overwrite each other.
 class LocalNotificationService {
-  LocalNotificationService._();
+  LocalNotificationService._() : _initializationOverride = null;
+
+  @visibleForTesting
+  LocalNotificationService.forTesting({
+    required Future<void> Function() initialize,
+  }) : _initializationOverride = initialize;
 
   static final instance = LocalNotificationService._();
 
@@ -33,7 +39,8 @@ class LocalNotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
-  Future<void>? _initializing;
+  final Future<void> Function()? _initializationOverride;
+  final AsyncInitializationGate _initializationGate = AsyncInitializationGate();
   ReminderNotificationResponseHandler? _responseHandler;
   String? _timeZoneIdentifier;
   tz.Location? _timeZoneLocation;
@@ -66,10 +73,11 @@ class LocalNotificationService {
     onBackgroundResponse,
   }) {
     _responseHandler = onResponse;
-    return _initializing ??= _init(
-      onBackgroundResponse,
-      handleLaunchResponse: true,
-    );
+    return _initializationGate.run(() async {
+      final override = _initializationOverride;
+      if (override != null) return override();
+      await _init(onBackgroundResponse, handleLaunchResponse: true);
+    });
   }
 
   Future<void> initForBackgroundAction({
@@ -77,10 +85,11 @@ class LocalNotificationService {
     onBackgroundResponse,
   }) {
     _responseHandler ??= (_) {};
-    return _initializing ??= _init(
-      onBackgroundResponse,
-      handleLaunchResponse: false,
-    );
+    return _initializationGate.run(() async {
+      final override = _initializationOverride;
+      if (override != null) return override();
+      await _init(onBackgroundResponse, handleLaunchResponse: false);
+    });
   }
 
   Future<void> _init(
@@ -129,8 +138,6 @@ class LocalNotificationService {
       onDidReceiveNotificationResponse: _dispatchResponse,
       onDidReceiveBackgroundNotificationResponse: onBackgroundResponse,
     );
-    _pluginInitialized = true;
-
     if (!kIsWeb && Platform.isAndroid) {
       await _plugin
           .resolvePlatformSpecificImplementation<
@@ -156,6 +163,7 @@ class LocalNotificationService {
         await _dispatchResponse(response);
       }
     }
+    _pluginInitialized = true;
   }
 
   Future<bool> refreshTimeZone() async {

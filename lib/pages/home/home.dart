@@ -245,9 +245,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   }
 
   void _ensureSyncOnInit() {
-    if (E2EEService.instance.isReady && !NoteSyncService().isSyncing.value) {
+    if (E2EEService.instance.isCryptoReady &&
+        !NoteSyncService().isSyncing.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && E2EEService.instance.isReady) {
+        if (mounted && E2EEService.instance.isCryptoReady) {
           NoteSyncService().refresh();
         }
       });

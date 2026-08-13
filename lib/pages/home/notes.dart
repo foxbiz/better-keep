@@ -22,6 +22,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+@visibleForTesting
+Future<void> runNotesRefreshSequence({
+  required Future<void> Function() refreshNotes,
+  required Future<void> Function() refreshLabels,
+  required Future<void> Function() reloadNotes,
+}) async {
+  try {
+    await refreshNotes();
+    await refreshLabels();
+  } finally {
+    await reloadNotes();
+  }
+}
+
 class Notes extends StatefulWidget {
   final String? searchQuery;
   final bool searchMode;
@@ -323,13 +337,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   Future<void> refresh() async {
     try {
       _scrollController.jumpTo(0.0);
-      await Label.fixLabels();
-      await NoteSyncService().refresh();
-      await LabelSyncService().refresh();
+      await runNotesRefreshSequence(
+        refreshNotes: NoteSyncService().refresh,
+        refreshLabels: LabelSyncService().refresh,
+        reloadNotes: _fetchData,
+      );
     } catch (e) {
       AppLogger.error("[REFRESH] Error refreshing data: $e");
     }
-    await _fetchData();
   }
 
   Future<void> _fetchData([dynamic _]) async {

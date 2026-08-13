@@ -44,6 +44,12 @@ enum E2EEStatus {
   error,
 }
 
+bool e2eeStatusCanAccessLocalNotes(E2EEStatus status) =>
+    status == E2EEStatus.ready || status == E2EEStatus.verifyingInBackground;
+
+bool e2eeStatusIsCryptoReady(E2EEStatus status, {required bool hasUMK}) =>
+    e2eeStatusCanAccessLocalNotes(status) && hasUMK;
+
 /// Main E2EE service.
 class E2EEService {
   static E2EEService? _instance;
@@ -91,11 +97,16 @@ class E2EEService {
   /// Gets the recovery key service.
   RecoveryKeyService get recoveryKeyService => _recoveryKeyService;
 
-  /// Checks if E2EE is ready for encryption/decryption.
-  /// Also returns true when verifying in background (user can access notes).
-  bool get isReady =>
-      status.value == E2EEStatus.ready ||
-      status.value == E2EEStatus.verifyingInBackground;
+  /// Local encrypted data may be shown while server approval is rechecked.
+  bool get canAccessLocalNotes => e2eeStatusCanAccessLocalNotes(status.value);
+
+  /// Cloud synchronization requires both an approved state and an unlocked
+  /// user master key. A cached approval status alone is never crypto-ready.
+  bool get isCryptoReady =>
+      e2eeStatusIsCryptoReady(status.value, hasUMK: isAvailable);
+
+  @Deprecated('Use canAccessLocalNotes or isCryptoReady explicitly.')
+  bool get isReady => isCryptoReady;
 
   /// Checks if E2EE is available (UMK is unlocked).
   bool get isAvailable => _deviceManager.getUMK() != null;

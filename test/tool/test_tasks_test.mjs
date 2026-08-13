@@ -79,6 +79,7 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"mobile-web",
 		"oauth-recovery",
 		"release",
+		"reminders",
 		"review-prompts",
 		"search",
 		"store",

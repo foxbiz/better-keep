@@ -415,6 +415,7 @@ class _NoteCardState extends State<NoteCard>
   bool _isSyncingOutgoing = false;
   bool _isSyncingIncoming = false;
   bool _isSyncFailed = false;
+  bool _isSyncDeferred = false;
   SyncProgress? _syncStatus;
   bool _reorderGestureMoved = false;
   final NoteCardBodyCache _bodyCache = NoteCardBodyCache();
@@ -517,6 +518,7 @@ class _NoteCardState extends State<NoteCard>
     NoteSyncService().syncingOutgoing.addListener(_onSyncStateChanged);
     NoteSyncService().syncingIncoming.addListener(_onSyncStateChanged);
     NoteSyncService().syncFailed.addListener(_onSyncStateChanged);
+    NoteSyncService().syncDeferred.addListener(_onSyncStateChanged);
     NoteSyncService().noteStatus.addListener(_onSyncStateChanged);
     _updateSyncState();
 
@@ -613,16 +615,19 @@ class _NoteCardState extends State<NoteCard>
     final isOutgoing = NoteSyncService().syncingOutgoing.value.contains(noteId);
     final isIncoming = NoteSyncService().syncingIncoming.value.contains(noteId);
     final isFailed = NoteSyncService().syncFailed.value.contains(noteId);
+    final isDeferred = NoteSyncService().syncDeferred.value.contains(noteId);
     final status = NoteSyncService().noteStatus.value[noteId];
 
     if (isOutgoing != _isSyncingOutgoing ||
         isIncoming != _isSyncingIncoming ||
         isFailed != _isSyncFailed ||
+        isDeferred != _isSyncDeferred ||
         status != _syncStatus) {
       setState(() {
         _isSyncingOutgoing = isOutgoing;
         _isSyncingIncoming = isIncoming;
         _isSyncFailed = isFailed;
+        _isSyncDeferred = isDeferred;
         _syncStatus = status;
       });
     }
@@ -638,6 +643,7 @@ class _NoteCardState extends State<NoteCard>
     NoteSyncService().syncingOutgoing.removeListener(_onSyncStateChanged);
     NoteSyncService().syncingIncoming.removeListener(_onSyncStateChanged);
     NoteSyncService().syncFailed.removeListener(_onSyncStateChanged);
+    NoteSyncService().syncDeferred.removeListener(_onSyncStateChanged);
     NoteSyncService().noteStatus.removeListener(_onSyncStateChanged);
     AppState.unsubscribe("selected_notes", _selectedNotesListener);
     super.dispose();
@@ -822,7 +828,7 @@ class _NoteCardState extends State<NoteCard>
       );
       if (!mounted) return;
       if (action == 'retry') {
-        if (E2EEService.instance.isReady && E2EEService.instance.isAvailable) {
+        if (E2EEService.instance.isCryptoReady) {
           if (NoteSyncService().isSyncing.value) {
             snackbar(l10n.syncing);
           } else {
@@ -1210,6 +1216,15 @@ class _NoteCardState extends State<NoteCard>
                               size: 14.0,
                               color: Colors.red,
                             ),
+                          ),
+                        ),
+                      if (_isSyncDeferred && !_isSyncFailed)
+                        Tooltip(
+                          message: context.l10n.e2eeNotReady,
+                          child: Icon(
+                            Icons.cloud_sync_outlined,
+                            size: 14.0,
+                            color: secondaryColor.withAlpha(140),
                           ),
                         ),
                       if (_isSyncingOutgoing || _isSyncingIncoming)

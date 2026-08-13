@@ -7,6 +7,7 @@ import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/services/alarm_id_service.dart';
 import 'package:better_keep/services/alarm_lifecycle_service.dart';
 import 'package:better_keep/services/async_keyed_serializer.dart';
+import 'package:better_keep/services/async_initialization_gate.dart';
 import 'package:better_keep/services/local_notification_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/reminder_action_processor.dart';
@@ -47,23 +48,39 @@ void reminderNotificationBackgroundResponse(
 }
 
 class ReminderCoordinator {
-  ReminderCoordinator._();
+  ReminderCoordinator._()
+    : _initializationOverride = null,
+      _reconciliationOverride = null;
+
+  @visibleForTesting
+  ReminderCoordinator.forTesting({
+    Future<void> Function()? initialize,
+    Future<void> Function()? reconcile,
+  }) : _initializationOverride = initialize,
+       _reconciliationOverride = reconcile;
 
   static final instance = ReminderCoordinator._();
 
-  Future<void>? _initializing;
+  final Future<void> Function()? _initializationOverride;
+  final Future<void> Function()? _reconciliationOverride;
+
+  final AsyncInitializationGate _initializationGate = AsyncInitializationGate();
   Future<void>? _uiActionDrain;
   bool _uiActionDrainRequested = false;
+  Future<void>? _reconciliationDrain;
+  bool _reconciliationRequested = false;
   final AsyncKeyedSerializer<int> _noteOperations = AsyncKeyedSerializer<int>();
   final AsyncKeyedSerializer<String> _notificationPlanOperations =
       AsyncKeyedSerializer<String>();
   int _schedulingGeneration = 0;
 
   Future<void> init() {
-    return _initializing ??= _init();
+    return _initializationGate.run(_init);
   }
 
   Future<void> _init() async {
+    final override = _initializationOverride;
+    if (override != null) return override();
     await LocalNotificationService.instance.init(
       onResponse: handleNotificationResponse,
       onBackgroundResponse: reminderNotificationBackgroundResponse,
@@ -97,22 +114,34 @@ class ReminderCoordinator {
     Note note, {
     bool requestPermissions = false,
   }) async {
-    await init();
-    final noteId = note.id;
-    final reminder = note.reminder;
-    if (noteId == null || reminder == null || note.completed || note.trashed) {
-      return const ReminderScheduleResult(ReminderDeliveryState.failed);
-    }
-    final expected = ReminderScheduleIntent.fromNote(note);
-    _schedulingGeneration++;
-    return _noteOperations.run(
-      noteId,
-      () => _scheduleSerialized(
+    try {
+      await init();
+      final noteId = note.id;
+      final reminder = note.reminder;
+      if (noteId == null ||
+          reminder == null ||
+          note.completed ||
+          note.trashed) {
+        return const ReminderScheduleResult(ReminderDeliveryState.failed);
+      }
+      final expected = ReminderScheduleIntent.fromNote(note);
+      _schedulingGeneration++;
+      return await _noteOperations.run(
         noteId,
-        expected,
-        requestPermissions: requestPermissions,
-      ),
-    );
+        () => _scheduleSerialized(
+          noteId,
+          expected,
+          requestPermissions: requestPermissions,
+        ),
+      );
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        'Failed to initialize reminder scheduling',
+        error,
+        stackTrace,
+      );
+      return ReminderScheduleResult(ReminderDeliveryState.failed, error: error);
+    }
   }
 
   Future<ReminderScheduleResult> _scheduleSerialized(
@@ -182,10 +211,18 @@ class ReminderCoordinator {
   }
 
   Future<void> cancel(int noteId) async {
-    await init();
-    _schedulingGeneration++;
-    await _noteOperations.run(noteId, () => _cancelUnlocked(noteId));
-    await _reconcileNotificationPlan();
+    try {
+      await init();
+      _schedulingGeneration++;
+      await _noteOperations.run(noteId, () => _cancelUnlocked(noteId));
+      await _reconcileNotificationPlan();
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        'Failed to cancel reminder: noteId=$noteId',
+        error,
+        stackTrace,
+      );
+    }
   }
 
   Future<void> _cancelUnlocked(int noteId) async {
@@ -201,13 +238,21 @@ class ReminderCoordinator {
   }
 
   Future<void> forget(int noteId) async {
-    await init();
-    _schedulingGeneration++;
-    await _noteOperations.run(noteId, () async {
-      await _cancelUnlocked(noteId);
-      await AlarmIdService.removeAlarmId(noteId);
-    });
-    await _reconcileNotificationPlan();
+    try {
+      await init();
+      _schedulingGeneration++;
+      await _noteOperations.run(noteId, () async {
+        await _cancelUnlocked(noteId);
+        await AlarmIdService.removeAlarmId(noteId);
+      });
+      await _reconcileNotificationPlan();
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        'Failed to forget reminder: noteId=$noteId',
+        error,
+        stackTrace,
+      );
+    }
   }
 
   Future<void> _convergeLatestUnlocked(int noteId, Note? note) async {
@@ -236,14 +281,16 @@ class ReminderCoordinator {
   }
 
   Future<void> reconcileAll() async {
-    await init();
-    if (!await ReminderSessionService.isSignedIn()) {
-      await LocalNotificationService.instance.cancelAllReminderDeliveries();
-      return;
-    }
-    final timeZoneChanged = await LocalNotificationService.instance
-        .refreshTimeZone();
     try {
+      final override = _reconciliationOverride;
+      if (override != null) return override();
+      await init();
+      if (!await ReminderSessionService.isSignedIn()) {
+        await LocalNotificationService.instance.cancelAllReminderDeliveries();
+        return;
+      }
+      final timeZoneChanged = await LocalNotificationService.instance
+          .refreshTimeZone();
       final notes = await Note.get(NoteType.all);
       for (final note in notes) {
         if (note.id == null) continue;
@@ -269,6 +316,30 @@ class ReminderCoordinator {
       await ReminderActionReceiptService.prune(AppState.db);
     } catch (error, stackTrace) {
       AppLogger.error('Failed to reconcile reminders', error, stackTrace);
+    }
+  }
+
+  /// Requests a best-effort repair without blocking note synchronization.
+  /// Concurrent requests are folded into at most one follow-up pass.
+  void requestReconciliation() {
+    _reconciliationRequested = true;
+    _reconciliationDrain ??= Future<void>.microtask(
+      _drainRequestedReconciliations,
+    );
+  }
+
+  @visibleForTesting
+  Future<void> waitForRequestedReconciliation() =>
+      _reconciliationDrain ?? Future<void>.value();
+
+  Future<void> _drainRequestedReconciliations() async {
+    try {
+      do {
+        _reconciliationRequested = false;
+        await reconcileAll();
+      } while (_reconciliationRequested);
+    } finally {
+      _reconciliationDrain = null;
     }
   }
 
@@ -670,9 +741,17 @@ class ReminderCoordinator {
   }
 
   Future<void> onAppResumed() async {
-    await consumePendingUiActions();
-    await reconcileAll();
-    await ReminderNavigationService.instance.flush();
+    try {
+      await consumePendingUiActions();
+      await reconcileAll();
+      await ReminderNavigationService.instance.flush();
+    } catch (error, stackTrace) {
+      await AppLogger.error(
+        'Reminder resume handling failed',
+        error,
+        stackTrace,
+      );
+    }
   }
 
   Future<void> _completeFromAlarm(int noteId) async {

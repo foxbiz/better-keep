@@ -705,8 +705,7 @@ class Note extends BaseModel<Note> {
       updatedAt = DateTime.now();
     }
 
-    final reminderWasProvided = obj.containsKey('reminder');
-    if (reminderWasProvided) {
+    if (obj.containsKey('reminder')) {
       final reminderData = obj['reminder'];
       reminder = _parseReminder(reminderData);
     }
@@ -733,13 +732,6 @@ class Note extends BaseModel<Note> {
     // Pass false to prevent triggering a sync back to Firebase
     // This method is called when syncing FROM remote, not for local changes
     await save(false, ModelChangeOrigin.remoteSync);
-    if (id != null && reminderWasProvided) {
-      if (reminder != null && !completed && !trashed) {
-        await ReminderCoordinator.instance.schedule(this);
-      } else {
-        await ReminderCoordinator.instance.cancel(id!);
-      }
-    }
     return this;
   }
 

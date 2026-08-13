@@ -203,6 +203,39 @@ void main() {
     expect(sixthEvent.ledgerEntry?.attempts, 5);
   });
 
+  test(
+    'unexpected local apply failures use the bounded retry ledger',
+    () async {
+      var attempts = 0;
+
+      for (var expected = 1; expected <= 5; expected++) {
+        final handled = await automatic(
+          attempt: (_) async {
+            attempts++;
+            return const RemoteNoteApplyResult.retryable(
+              RemoteNoteFailureCategory.localApply,
+              'local-note-apply-failed',
+            );
+          },
+        );
+        expect(
+          handled.ledgerEntry?.category,
+          RemoteNoteFailureCategory.localApply,
+        );
+        expect(handled.ledgerEntry?.attempts, expected);
+        if (handled.ledgerEntry?.nextRetryAt case final next?) {
+          currentTime = next;
+        }
+      }
+
+      expect(attempts, 5);
+      expect(
+        (await ledger.get('user-1', 'note-1'))?.state,
+        RemoteContentRetryState.exhausted,
+      );
+    },
+  );
+
   test('permanent and deferred outcomes do not create retry loops', () async {
     var permanentAttempts = 0;
     final permanent = await automatic(

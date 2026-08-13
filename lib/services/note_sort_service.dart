@@ -83,6 +83,7 @@ class NoteSortService {
   Future<void>? _activeUpload;
   Timer? _cleanupTimer;
   bool _initialized = false;
+  bool _lastKnownCryptoReady = false;
   final InitialHydrationGate _remoteHydration = InitialHydrationGate();
   final HydrationRetryController _remoteListenerRetry =
       HydrationRetryController();
@@ -123,7 +124,9 @@ class NoteSortService {
       .doc(index.toString().padLeft(6, '0'));
 
   bool get _canReceiveCloud {
-    if (!(e2eeReadyOverride ?? E2EEService.instance.isReady)) return false;
+    if (!_isCryptoReady) {
+      return false;
+    }
     if (canReceiveCloudOverride != null) return canReceiveCloudOverride!;
     try {
       final user = AuthService.currentUser;
@@ -134,6 +137,9 @@ class NoteSortService {
       return false;
     }
   }
+
+  bool get _isCryptoReady =>
+      e2eeReadyOverride ?? E2EEService.instance.isCryptoReady;
 
   bool get _canPushCloud =>
       canPushCloudOverride ?? (_canReceiveCloud && PlanService.instance.isPaid);
@@ -353,11 +359,20 @@ class NoteSortService {
     await _migrateLegacyLocalState(AppState.db);
     await _loadSnapshots();
     Note.on('changed', _handleNoteEvent);
+    _lastKnownCryptoReady = _isCryptoReady;
     E2EEService.instance.status.addListener(_handleE2EEStatusChange);
+    E2EEService.instance.deviceManager.hasUMK.addListener(
+      _handleE2EEStatusChange,
+    );
   }
 
   void _handleE2EEStatusChange() {
-    if (E2EEService.instance.isReady) {
+    final isNowReady = _isCryptoReady;
+    final wasReady = _lastKnownCryptoReady;
+    _lastKnownCryptoReady = isNowReady;
+    if (isNowReady == wasReady) return;
+
+    if (isNowReady) {
       unawaited(
         startCloudSync().catchError((Object error, StackTrace stackTrace) {
           AppLogger.error(
@@ -1356,6 +1371,7 @@ class NoteSortService {
             authorizationStop = true;
           case _NoteSortUploadOutcome.success:
           case _NoteSortUploadOutcome.conflictRebased:
+          case _NoteSortUploadOutcome.supersededSnapshot:
           case _NoteSortUploadOutcome.staleSession:
             break;
         }
@@ -1429,6 +1445,18 @@ class NoteSortService {
         );
         return _NoteSortUploadOutcome.staleSession;
       }
+
+      final currentBeforeCommit = snapshots.value[local.context.key];
+      if (currentBeforeCommit?.revision != local.revision) {
+        await _cleanupCloudRevision(
+          run,
+          contextKey: local.context.key,
+          revision: local.revision,
+          chunkCount: chunks.length,
+        );
+        return _NoteSortUploadOutcome.supersededSnapshot;
+      }
+
       final commit = await run.session.repository.commitManifest(
         contextKey: local.context.key,
         sortMode: local.mode.name,
@@ -1437,6 +1465,23 @@ class NoteSortService {
         chunkCount: chunks.length,
         noteCount: local.orderedNoteIds.length,
       );
+      if (commit.outcome == NoteSortCloudCommitOutcome.conflict) {
+        if (!_isCurrentCloudRun(run)) {
+          await _cleanupCandidateWithoutLocalState(
+            run,
+            contextKey: local.context.key,
+            revision: local.revision,
+            chunkCount: chunks.length,
+          );
+          return _NoteSortUploadOutcome.staleSession;
+        }
+        return _recoverManifestConflict(
+          run,
+          local: local,
+          chunkCount: chunks.length,
+          remoteRevision: commit.previousRevision,
+        );
+      }
       manifestCommitted = true;
       if (!_isCurrentCloudRun(run)) {
         return _NoteSortUploadOutcome.staleSession;
@@ -1508,35 +1553,55 @@ class NoteSortService {
       if (!_isCurrentCloudRun(run)) {
         return _NoteSortUploadOutcome.staleSession;
       }
+      return _uploadFailureOutcome(error);
+    }
+  }
 
-      if (error is NoteSortRevisionConflict) {
-        try {
-          final remote = await _readRemoteSnapshot(run, local.context.key);
-          if (!_isCurrentCloudRun(run)) {
-            return _NoteSortUploadOutcome.staleSession;
-          }
-          if (remote == null) {
-            return _NoteSortUploadOutcome.retryableFailure;
-          }
-          await _mutations.run(
-            local.context.key,
-            () => _applyOrRebaseRemote(remote, run: run),
-          );
-          return _isCurrentCloudRun(run)
-              ? _NoteSortUploadOutcome.conflictRebased
-              : _NoteSortUploadOutcome.staleSession;
-        } catch (recoveryError, recoveryStackTrace) {
-          if (!_isCurrentCloudRun(run)) {
-            return _NoteSortUploadOutcome.staleSession;
-          }
-          AppLogger.error(
-            '[NOTE_SORT] Failed to recover order conflict',
-            recoveryError,
-            recoveryStackTrace,
-          );
-          return _uploadFailureOutcome(recoveryError);
-        }
+  Future<_NoteSortUploadOutcome> _recoverManifestConflict(
+    _NoteSortCloudRun run, {
+    required NoteOrderSnapshot local,
+    required int chunkCount,
+    required String? remoteRevision,
+  }) async {
+    AppLogger.log(
+      '[NOTE_SORT] Rebasing ${local.context.key} from '
+      '${local.baseRevision ?? 'no base'} onto '
+      '${remoteRevision ?? 'the latest remote revision'}',
+    );
+    await _cleanupCloudRevision(
+      run,
+      contextKey: local.context.key,
+      revision: local.revision,
+      chunkCount: chunkCount,
+    );
+    if (!_isCurrentCloudRun(run)) {
+      return _NoteSortUploadOutcome.staleSession;
+    }
+
+    try {
+      final remote = await _readRemoteSnapshot(run, local.context.key);
+      if (!_isCurrentCloudRun(run)) {
+        return _NoteSortUploadOutcome.staleSession;
       }
+      if (remote == null) {
+        return _NoteSortUploadOutcome.retryableFailure;
+      }
+      await _mutations.run(
+        local.context.key,
+        () => _applyOrRebaseRemote(remote, run: run),
+      );
+      return _isCurrentCloudRun(run)
+          ? _NoteSortUploadOutcome.conflictRebased
+          : _NoteSortUploadOutcome.staleSession;
+    } catch (error, stackTrace) {
+      if (!_isCurrentCloudRun(run)) {
+        return _NoteSortUploadOutcome.staleSession;
+      }
+      AppLogger.error(
+        '[NOTE_SORT] Failed to recover order conflict',
+        error,
+        stackTrace,
+      );
       return _uploadFailureOutcome(error);
     }
   }
@@ -2030,8 +2095,12 @@ class NoteSortService {
 
   Future<void> dispose() async {
     E2EEService.instance.status.removeListener(_handleE2EEStatusChange);
+    E2EEService.instance.deviceManager.hasUMK.removeListener(
+      _handleE2EEStatusChange,
+    );
     Note.off('changed', _handleNoteEvent);
     _initialized = false;
+    _lastKnownCryptoReady = false;
     await _stopCloudSync();
     final tasks = _cloudTasks.toList();
     if (tasks.isNotEmpty) {
@@ -2089,6 +2158,7 @@ class _NoteSortCloudRun {
 enum _NoteSortUploadOutcome {
   success,
   conflictRebased,
+  supersededSnapshot,
   retryableFailure,
   authorizationStop,
   staleSession,
