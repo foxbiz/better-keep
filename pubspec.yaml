@@ -38,9 +38,17 @@ dependencies:
   firebase_auth: 6.5.7
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^8.1.0
-  # 6.8.0 reports MissingPluginException after every Android transaction.
-  # Restore the latest fixed release until flutterfire#18553 is published.
-  cloud_firestore: 6.7.1
+  # 6.8.0 is required for the Firebase iOS 12.17.0 SPM pin, but its published
+  # Android plugin reports MissingPluginException after every transaction.
+  # This immutable upstream merge includes flutterfire#18553. Replace it with
+  # the first published cloud_firestore version newer than 6.8.0 containing
+  # that fix: https://github.com/firebase/flutterfire/pull/18553
+  # Published versions: https://pub.dev/packages/cloud_firestore/versions
+  cloud_firestore:
+    git:
+      url: https://github.com/firebase/flutterfire.git
+      ref: f949c23d795a9d843ffd1c6deea285a4d9ce5ff3
+      path: packages/cloud_firestore/cloud_firestore
   cloud_functions: 6.3.6
   firebase_storage: 13.4.6
   intl: ^0.20.2

@@ -296,7 +296,12 @@ const suites = {
 		],
 	),
 	"ios-build-policy": defineSuite("Run iOS build policy tests.", () => [
-		processStep("node", ["--test", "test/tool/ios_build_policy_test.mjs"]),
+		processStep("node", [
+			"--test",
+			"test/tool/flutterfire_apple_spm_test.mjs",
+			"test/tool/ios_build_policy_test.mjs",
+		]),
+		processStep("node", ["tool/verify_flutterfire_apple_spm.mjs"]),
 	]),
 	"macos-build-policy": defineSuite("Run macOS build policy tests.", () => [
 		processStep("node", ["--test", "test/tool/macos_build_policy_test.mjs"]),

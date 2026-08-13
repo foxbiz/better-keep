@@ -249,6 +249,7 @@ test("release expands suites in the established order and excludes devices", () 
 		"test_tasks_test.mjs",
 		"admin_workspace_policy_test.mjs",
 		"firebase_runtime_policy_test.mjs",
+		"flutterfire_apple_spm_test.mjs",
 		"ios_build_policy_test.mjs",
 		"macos_build_policy_test.mjs",
 		"macos_archive_config_test.mjs",

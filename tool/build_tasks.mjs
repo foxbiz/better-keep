@@ -23,6 +23,17 @@ function flutterBuild(target, extraArgs) {
 	]);
 }
 
+function prepareAppleBuild() {
+	return [
+		processStep("flutter", ["pub", "get"]),
+		processStep("node", ["tool/verify_flutterfire_apple_spm.mjs"]),
+	];
+}
+
+function flutterAppleBuild(target, extraArgs) {
+	return [...prepareAppleBuild(), flutterBuild(target, extraArgs)];
+}
+
 function prepareMacosXcode(extraArgs) {
 	return processStep("flutter", [
 		"build",
@@ -44,15 +55,16 @@ const targets = {
 		() => [processStep("dart", ["./scripts/generate_custom_icons.dart"])],
 		{acceptsArguments: false},
 	),
-	ios: defineTarget("Build the release iOS application.", (extraArgs) => [
-		flutterBuild("ios", extraArgs),
-	]),
-	macos: defineTarget("Build the release macOS application.", (extraArgs) => [
-		flutterBuild("macos", extraArgs),
-	]),
+	ios: defineTarget("Build the release iOS application.", (extraArgs) =>
+		flutterAppleBuild("ios", extraArgs),
+	),
+	macos: defineTarget("Build the release macOS application.", (extraArgs) =>
+		flutterAppleBuild("macos", extraArgs),
+	),
 	"macos-xcode": defineTarget(
 		"Prepare generated macOS configuration for Xcode archiving.",
 		(extraArgs) => [
+			...prepareAppleBuild(),
 			prepareMacosXcode(extraArgs),
 			processStep("node", ["tool/verify_macos_archive_config.mjs"]),
 		],

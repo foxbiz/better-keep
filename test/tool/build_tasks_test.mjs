@@ -8,6 +8,27 @@ import {
 	runBuildTask,
 } from "../../tool/build_tasks.mjs";
 
+const appleBuildPreflight = [
+	{args: ["pub", "get"], command: "flutter"},
+	{
+		args: ["tool/verify_flutterfire_apple_spm.mjs"],
+		command: "node",
+	},
+];
+
+const expectedAppleBuild = (target) => [
+	...appleBuildPreflight,
+	{
+		args: [
+			"build",
+			target,
+			"--release",
+			"--dart-define-from-file=.env",
+		],
+		command: "flutter",
+	},
+];
+
 test("lists build targets and treats an omitted target as help", () => {
 	assert.deepEqual(parseBuildTaskArguments([]), {help: true});
 	assert.deepEqual(parseBuildTaskArguments(["help"]), {help: true});
@@ -39,16 +60,19 @@ test("maps platform targets to their existing release builds", () => {
 			command: "node",
 		},
 	]);
-	assert.deepEqual(resolveBuildTask(["ios"]).operations[0].args, [
-		"build",
-		"ios",
-		"--release",
-		"--dart-define-from-file=.env",
-	]);
+	assert.deepEqual(
+		resolveBuildTask(["ios"]).operations,
+		expectedAppleBuild("ios"),
+	);
+	assert.deepEqual(
+		resolveBuildTask(["macos"]).operations,
+		expectedAppleBuild("macos"),
+	);
 });
 
 test("prepares and validates generated Swift packages before Xcode archiving", () => {
 	assert.deepEqual(resolveBuildTask(["macos-xcode"]).operations, [
+		...appleBuildPreflight,
 		{
 			args: [
 				"build",
