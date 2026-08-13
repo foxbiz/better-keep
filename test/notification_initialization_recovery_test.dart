@@ -72,6 +72,14 @@ void main() {
 
     expect(passes, 2);
   });
+
+  test('asynchronous reconciliation failures are contained', () async {
+    final coordinator = ReminderCoordinator.forTesting(
+      reconcile: () async => throw StateError('reconciliation unavailable'),
+    );
+
+    await expectLater(coordinator.reconcileAll(), completes);
+  });
 }
 
 @pragma('vm:entry-point')

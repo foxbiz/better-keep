@@ -438,7 +438,7 @@ Expected IDs: ${ProductIds.all}
           'SubscriptionService: No products loaded, retrying in ${retryDelay.inSeconds}s...',
         );
         await Future.delayed(retryDelay);
-        return _loadProducts(retryCount: retryCount + 1);
+        return await _loadProducts(retryCount: retryCount + 1);
       }
 
       // Log detailed product info for debugging
@@ -1778,7 +1778,7 @@ Expected IDs: ${ProductIds.all}
             'SubscriptionService: Store reports an already-owned purchase; '
             'reconciling it for the current account',
           );
-          return _reconcileCurrentStorePurchase(
+          return await _reconcileCurrentStorePurchase(
             attemptId: attemptId,
             paymentWasConfirmed: true,
           );
@@ -1794,7 +1794,7 @@ Expected IDs: ${ProductIds.all}
           // the launch call was awaiting its platform response.
           return PurchaseResult.pending('Purchase outcome already received');
         }
-        return _reconcileCurrentStorePurchase(
+        return await _reconcileCurrentStorePurchase(
           attemptId: attemptId,
           paymentWasConfirmed: _sawAlreadyOwnedStoreError,
         );

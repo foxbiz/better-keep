@@ -191,7 +191,7 @@ class ReminderCoordinator {
       }
       reminder = current!.reminder!;
 
-      return switch (reminder.type) {
+      return await switch (reminder.type) {
         ReminderType.notification => _scheduleNotification(current),
         ReminderType.alarm => _scheduleAlarm(current),
         ReminderType.unsupported => const ReminderScheduleResult(
@@ -283,7 +283,7 @@ class ReminderCoordinator {
   Future<void> reconcileAll() async {
     try {
       final override = _reconciliationOverride;
-      if (override != null) return override();
+      if (override != null) return await override();
       await init();
       if (!await ReminderSessionService.isSignedIn()) {
         await LocalNotificationService.instance.cancelAllReminderDeliveries();

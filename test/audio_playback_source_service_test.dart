@@ -266,6 +266,33 @@ void main() {
     expect(files.raw, contains('/docs/audio.wav'));
   });
 
+  test('temporary write failures are reported as unreadable audio', () async {
+    final files = _FakeAudioFiles(writeError: StateError('disk unavailable'))
+      ..raw['/docs/audio.wav'] = Uint8List.fromList([0x45, 0x4e, 0x43, 0x52])
+      ..decrypted['/docs/audio.wav'] = _wavBytes();
+    final service = AudioPlaybackSourceService(operations: files.operations);
+
+    await expectLater(
+      service.resolve('/docs/audio.wav', protectedSource: true),
+      throwsA(
+        isA<AudioPlaybackSourceException>()
+            .having(
+              (error) => error.code,
+              'code',
+              AudioPlaybackSourceError.unreadable,
+            )
+            .having((error) => error.cause, 'cause', isA<StateError>()),
+      ),
+    );
+
+    expect(
+      files.raw.keys.where(
+        (value) => value.startsWith('/cache/audio_playback'),
+      ),
+      isEmpty,
+    );
+  });
+
   test(
     'startup cleanup is restricted to the playback cache directory',
     () async {
@@ -317,6 +344,7 @@ Uint8List _wavBytes() => Uint8List.fromList([
 
 class _FakeAudioFiles {
   final bool corruptWrites;
+  final Object? writeError;
   final Map<String, Uint8List> raw = {};
   final Map<String, Uint8List> decrypted = {};
   final List<String> writes = [];
@@ -324,7 +352,7 @@ class _FakeAudioFiles {
   final List<Uint8List> rawReadBuffers = [];
   int _nextId = 0;
 
-  _FakeAudioFiles({this.corruptWrites = false});
+  _FakeAudioFiles({this.corruptWrites = false, this.writeError});
 
   late final AudioPlaybackFileOperations operations =
       AudioPlaybackFileOperations(
@@ -343,6 +371,7 @@ class _FakeAudioFiles {
             Uint8List.fromList(decrypted[filePath] ?? raw[filePath]!),
         writeRaw: (filePath, bytes) async {
           writes.add(filePath);
+          if (writeError != null) throw writeError!;
           raw[filePath] = corruptWrites
               ? Uint8List.fromList([...bytes, 0xff])
               : Uint8List.fromList(bytes);

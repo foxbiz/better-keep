@@ -1475,7 +1475,7 @@ class NoteSortService {
           );
           return _NoteSortUploadOutcome.staleSession;
         }
-        return _recoverManifestConflict(
+        return await _recoverManifestConflict(
           run,
           local: local,
           chunkCount: chunks.length,
