@@ -82,3 +82,11 @@ test('homepage density and tap targets remain responsive at narrow widths', () =
   assert.match(mobile, /\.home-section\s*\{[\s\S]*?padding-block:\s*4rem/);
   assert.match(mobile, /\.security-story__device\s*\{[\s\S]*?min\(66vw, 240px\)/);
 });
+
+test('mobile store actions use container-aware centering', () => {
+  const storeActions = blockAfter(mobile, '.store-actions');
+
+  assert.match(storeActions, /width:\s*min\(328px, 100%\)/);
+  assert.match(storeActions, /margin-inline:\s*auto/);
+  assert.doesNotMatch(storeActions, /(?:position|left|transform):/);
+});

@@ -13,6 +13,7 @@ const chromeDriverBinary =
 const viewports = Object.freeze([
   { height: 700, name: 'narrow phone', width: 320 },
   { height: 844, name: 'standard phone', width: 390 },
+  { height: 900, name: 'wide phone', width: 680 },
   { height: 1024, name: 'tablet', width: 768 },
   { height: 900, name: 'desktop', width: 1280 }
 ]);
@@ -240,12 +241,22 @@ const measurementScript = `
       document.body.scrollWidth
     ),
     innerWidth,
+    layoutWidth: document.documentElement.clientWidth,
     leftPhone: rect('.hero-device--left'),
     platformColumns: getComputedStyle(
       document.querySelector('.platform-grid')
     ).gridTemplateColumns.split(' ').length,
     primaryPhone: rect('.hero-device--primary'),
     rightPhone: rect('.hero-device--right'),
+    storeActionGroups: [...document.querySelectorAll('.store-actions')].map(
+      (element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          left: bounds.left,
+          right: bounds.right
+        };
+      }
+    ),
     targetHeights
   };
   gallery.scrollLeft = initialScrollLeft;
@@ -275,7 +286,23 @@ function verifyViewport(viewport, metrics) {
   );
 
   if (mobile) {
+    const viewportCenter = metrics.layoutWidth / 2;
     const haloRatio = metrics.halo.width / metrics.halo.height;
+    assert(
+      metrics.storeActionGroups.length >= 2,
+      'homepage store-action groups are missing'
+    );
+    assert(
+      metrics.storeActionGroups.every(
+        (group) =>
+          Math.abs((group.left + group.right) / 2 - viewportCenter) <= 1
+      ),
+      `store-action groups are not centered: ${metrics.storeActionGroups
+        .map((group) =>
+          (((group.left + group.right) / 2) - viewportCenter).toFixed(1)
+        )
+        .join(', ')}px from center`
+    );
     assert(
       haloRatio >= 0.98 && haloRatio <= 1.02,
       `hero halo ratio is ${haloRatio.toFixed(3)}, expected 1:1`

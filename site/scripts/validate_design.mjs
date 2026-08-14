@@ -456,13 +456,18 @@ assert(
     /max-width:\s*100%/.test(desktopSidebarActionsRule),
   'Desktop article sidebar actions must stay within the card content width'
 );
+const mobileStoreActionsRule =
+  sourceCss.match(
+    /@media\s*\(max-width:\s*680px\)[\s\S]*?\.store-actions\s*\{([^}]*)\}/
+  )?.[1] || '';
 assert(
-  sourceCss.includes('width: min(328px, calc(100vw - 2rem))') &&
+  /width:\s*min\(328px, 100%\)/.test(mobileStoreActionsRule) &&
+    /margin-inline:\s*auto/.test(mobileStoreActionsRule) &&
+    /justify-content:\s*center/.test(mobileStoreActionsRule) &&
+    !/(?:position|left|transform):/.test(mobileStoreActionsRule) &&
     sourceCss.includes('.article-action {\n  min-width: 0;') &&
-    sourceCss.includes('.cta-band .store-actions {\n    left: 0;') &&
-    sourceCss.includes('grid-template-columns: minmax(0, 1fr);') &&
     !sourceCss.includes('min-width: 320px'),
-  'Narrow store actions must wrap inside the viewport without page overflow'
+  'Narrow store actions must center and wrap inside their container without positional offsets'
 );
 const storeBadgeRule =
   [...sourceCss.matchAll(/(?:^|\n)\.store-badge\s*\{([^}]*)\}/g)]
