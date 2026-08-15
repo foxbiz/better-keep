@@ -7,6 +7,7 @@ const {
 	playEventClaimOutcome,
 	safePlayEventLogData,
 } = require("../lib/exports/playStoreWebhook");
+const { isGooglePlayGoneError } = require("../lib/googlePlayService");
 const { revenueEventId } = require("../lib/revenueOutbox");
 
 const unused = async () => {
@@ -21,6 +22,18 @@ test("Google Play notification logs redact purchase tokens", () => {
 	assert.equal(data.notificationType, 2);
 	assert.doesNotMatch(JSON.stringify(data), /secret/);
 	assert.equal("purchaseToken" in data, false);
+});
+
+test("Google Play 410 responses are terminal while transient errors remain retryable", () => {
+	assert.equal(isGooglePlayGoneError({ code: 410 }), true);
+	assert.equal(isGooglePlayGoneError({ code: "410" }), true);
+	assert.equal(isGooglePlayGoneError({ response: { status: 410 } }), true);
+	assert.equal(
+		isGooglePlayGoneError({ code: "ERR_REQUEST", response: { status: 410 } }),
+		true,
+	);
+	assert.equal(isGooglePlayGoneError({ code: 503 }), false);
+	assert.equal(isGooglePlayGoneError(new Error("Gone")), false);
 });
 
 test("Google Play notifications use a retrying Pub/Sub consumer, not a public webhook", () => {

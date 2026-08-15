@@ -316,6 +316,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /adminBillingActivities/{document=**} {
+      allow read, write: if false;
+    }
+
     match /playStoreWebhookEvents/{document=**} {
       allow read, write: if false;
     }

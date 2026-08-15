@@ -1,7 +1,11 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { auth, db, emailPassword } from "../config";
-import { refreshGooglePlaySubscription } from "../googlePlayService";
+import { auth, db, emailPassword, googlePlayCredentials } from "../config";
+import {
+	endUnqueryableGooglePlaySubscription,
+	isGooglePlayGoneError,
+	refreshGooglePlaySubscription,
+} from "../googlePlayService";
 import { reconcileUserEntitlement } from "../subscriptionReconciler";
 import { sendEmail } from "../utils";
 
@@ -12,7 +16,7 @@ import { sendEmail } from "../utils";
 export default onSchedule(
 	{
 		schedule: "0 9 * * *",
-		secrets: [emailPassword],
+		secrets: [emailPassword, googlePlayCredentials],
 	},
 	async () => {
 		console.log("Running expired subscription check...");
@@ -137,7 +141,13 @@ export default onSchedule(
 							});
 							continue;
 						} catch (error) {
-							if ((error as { code?: unknown }).code !== 410) throw error;
+							if (!isGooglePlayGoneError(error)) throw error;
+							await endUnqueryableGooglePlaySubscription(
+								typeof subData.purchaseToken === "string"
+									? subData.purchaseToken
+									: doc.id,
+							);
+							continue;
 						}
 					}
 					await doc.ref.update({

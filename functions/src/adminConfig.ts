@@ -8,6 +8,7 @@ export function configuredAdminUid(): string {
 
 export const ADMIN_USER_COLLECTION = "adminUsers";
 export const ADMIN_AUDIT_COLLECTION = "adminAuditLogs";
+export const ADMIN_BILLING_ACTIVITY_COLLECTION = "adminBillingActivities";
 export const ADMIN_METRICS_COLLECTION = "adminMetrics";
 export const ADMIN_REVENUE_COLLECTION = "adminRevenueTransactions";
 export const ADMIN_REVENUE_SUMMARY_COLLECTION = "adminRevenueSummary";

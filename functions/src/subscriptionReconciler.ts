@@ -9,9 +9,9 @@ import { auth, db } from "./config";
 import { mergeSubscriptionClaims } from "./customClaims";
 import {
 	type EvaluatedSubscription,
-	type RenewalState,
 	evaluateSubscription,
 	isPaidSubscriptionSource,
+	type RenewalState,
 } from "./subscriptionEntitlement";
 
 interface Candidate {
@@ -33,6 +33,10 @@ export interface ReconciledEntitlement {
 
 function issueId(kind: string, value: string): string {
 	return `${kind}_${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
+}
+
+export function isDeletedAuthUserError(error: unknown): boolean {
+	return (error as { code?: unknown })?.code === "auth/user-not-found";
 }
 
 function isPaidSource(value: unknown): boolean {
@@ -215,6 +219,30 @@ export async function reconcileUserEntitlement(
 		(candidate) => candidate.evaluated.productionPaid,
 	);
 	const paidCandidates = productionPaid;
+	const result: ReconciledEntitlement = {
+		activeSources,
+		entitlementState:
+			primary?.evaluated.entitlementState ??
+			inactiveProvider?.evaluated.entitlementState ??
+			null,
+		expiresAt: maximumExpiry ?? inactiveProvider?.evaluated.expiresAt ?? null,
+		plan: primary ? "pro" : "free",
+		primarySource:
+			primary?.evaluated.source ?? inactiveProvider?.evaluated.source ?? null,
+		providerState:
+			primary?.evaluated.state ?? inactiveProvider?.evaluated.state ?? null,
+		renewalState:
+			primary?.evaluated.renewalState ??
+			inactiveProvider?.evaluated.renewalState ??
+			"unknown",
+		resolution: primary
+			? isPaidSubscriptionSource(primary.evaluated.source)
+				? "active_provider"
+				: "trial"
+			: inactiveProvider
+				? "provider_inactive"
+				: "none",
+	};
 
 	if (!primary || !maximumExpiry) {
 		await statusRef.delete();
@@ -284,6 +312,22 @@ export async function reconcileUserEntitlement(
 		);
 		await claimsIssueRef.delete();
 	} catch (error) {
+		if (isDeletedAuthUserError(error)) {
+			await claimsIssueRef.set(
+				{
+					type: "claims_sync_failed",
+					status: "resolved",
+					actionable: false,
+					userId,
+					resolution: "auth_user_deleted",
+					errorCode: "auth/user-not-found",
+					resolvedAt: FieldValue.serverTimestamp(),
+					updatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
+			);
+			return result;
+		}
 		await claimsIssueRef.set(
 			{
 				type: "claims_sync_failed",
@@ -302,28 +346,5 @@ export async function reconcileUserEntitlement(
 		throw error;
 	}
 
-	return {
-		activeSources,
-		entitlementState:
-			primary?.evaluated.entitlementState ??
-			inactiveProvider?.evaluated.entitlementState ??
-			null,
-		expiresAt: maximumExpiry ?? inactiveProvider?.evaluated.expiresAt ?? null,
-		plan: primary ? "pro" : "free",
-		primarySource:
-			primary?.evaluated.source ?? inactiveProvider?.evaluated.source ?? null,
-		providerState:
-			primary?.evaluated.state ?? inactiveProvider?.evaluated.state ?? null,
-		renewalState:
-			primary?.evaluated.renewalState ??
-			inactiveProvider?.evaluated.renewalState ??
-			"unknown",
-		resolution: primary
-			? isPaidSubscriptionSource(primary.evaluated.source)
-				? "active_provider"
-				: "trial"
-			: inactiveProvider
-				? "provider_inactive"
-				: "none",
-	};
+	return result;
 }

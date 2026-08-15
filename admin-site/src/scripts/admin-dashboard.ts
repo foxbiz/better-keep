@@ -35,6 +35,13 @@ import {
   shouldSignOutAfterAdminError
 } from '../lib/admin-login-safety.mjs';
 import { resolveAdminTotpChallenge } from '../lib/admin-mfa-flow.mjs';
+import {
+  billingActivityLabel,
+  billingActivityTone,
+  billingProviderLabel,
+  normalizeAdminBillingActivity
+} from '../lib/admin-billing-activity.mjs';
+import { adminHealthSummary } from '../lib/admin-health.mjs';
 import { normalizeAdminOverview } from '../lib/admin-overview.mjs';
 import {
   formatAdminDate,
@@ -45,6 +52,22 @@ import {
 } from '../lib/admin-format.mjs';
 
 type Money = { currency: string; amountMicros: string };
+type BillingActivity = {
+  id: string;
+  provider: string;
+  eventType: string;
+  occurredAt: string;
+  origin: 'live' | 'historical';
+  billingPeriod: string | null;
+  environment: string;
+  subscriptionState: string | null;
+  entitlementState: string | null;
+  amountMicros: string | null;
+  currency: string | null;
+  revenueKind: string | null;
+  revenueStatus: string | null;
+  customer: { uid: string; email: string | null; displayName: string | null } | null;
+};
 type AdminUser = {
   uid: string;
   email: string | null;
@@ -100,6 +123,16 @@ type Overview = {
     unmatchedSubscriptions: number;
     providers: Record<string, { status?: string; updatedAt?: string | null }>;
   };
+  health: {
+    actionable: {
+      pendingRevenue: number;
+      retryingRevenue: number;
+      deadLetterRevenue: number;
+      subscriptionIssues: number;
+    };
+    quarantined: { revenueTransactions: number; subscriptionIssues: number };
+    providers: Record<string, { status?: string; updatedAt?: string | null }>;
+  };
 };
 type AdminServices = {
   auth: Auth;
@@ -107,6 +140,10 @@ type AdminServices = {
   listUsers: HttpsCallable<
     { pageSize: number; segment: string; cursor?: string; search?: string },
     { users: AdminUser[]; nextCursor: string | null }
+  >;
+  listBillingActivity: HttpsCallable<
+    { pageSize: number; cursor?: string; provider?: string; eventType?: string },
+    unknown
   >;
   refreshUser: HttpsCallable<{ uid: string }, { user: AdminUser }>;
   setUserDisabled: HttpsCallable<
@@ -147,6 +184,13 @@ const enrollmentMessage = element<HTMLElement>('[data-enrollment-message]');
 const totpQr = element<HTMLImageElement>('[data-totp-qr]');
 const totpSecretText = element<HTMLElement>('[data-totp-secret]');
 const adminEmail = element<HTMLElement>('[data-admin-email]');
+const activityList = element<HTMLOListElement>('[data-activity-list]');
+const activityStatus = element<HTMLElement>('[data-activity-status]');
+const activityProvider = element<HTMLSelectElement>('[data-activity-provider]');
+const activityEvent = element<HTMLSelectElement>('[data-activity-event]');
+const activityNextButton = element<HTMLButtonElement>('[data-activity-next]');
+const activityPreviousButton = element<HTMLButtonElement>('[data-activity-previous]');
+const activityPageLabel = element<HTMLElement>('[data-activity-page-label]');
 const tableStatus = element<HTMLElement>('[data-table-status]');
 const userRows = element<HTMLTableSectionElement>('[data-user-rows]');
 const nextButton = element<HTMLButtonElement>('[data-next]');
@@ -166,6 +210,24 @@ let services: AdminServices | null = null;
 let pendingMfaResolver: MultiFactorResolver | null = null;
 let pendingEnrollmentSecret: TotpSecret | null = null;
 let dialogReturnFocus: HTMLElement | null = null;
+
+const activityState: {
+  provider: string;
+  eventType: string;
+  cursor: string | null;
+  nextCursor: string | null;
+  cursorHistory: Array<string | null>;
+  page: number;
+  loading: boolean;
+} = {
+  provider: '',
+  eventType: '',
+  cursor: null,
+  nextCursor: null,
+  cursorHistory: [],
+  page: 1,
+  loading: false
+};
 
 const state: {
   segment: string;
@@ -245,6 +307,10 @@ async function initializeServices(): Promise<AdminServices> {
       { pageSize: number; segment: string; cursor?: string; search?: string },
       { users: AdminUser[]; nextCursor: string | null }
     >(functions, 'adminListUsers'),
+    listBillingActivity: httpsCallable<
+      { pageSize: number; cursor?: string; provider?: string; eventType?: string },
+      unknown
+    >(functions, 'adminListBillingActivity'),
     refreshUser: httpsCallable<{ uid: string }, { user: AdminUser }>(functions, 'adminGetUser'),
     setUserDisabled: httpsCallable<
       { uid: string; disabled: boolean; requestId: string },
@@ -426,6 +492,51 @@ function renderSubscriptionCounts(overview: Overview) {
   );
 }
 
+function renderHealth(overview: Overview) {
+  const summary = adminHealthSummary(overview);
+  const actionable = overview.health.actionable;
+  const quarantined = overview.health.quarantined;
+  const actionableCard = element<HTMLElement>('[data-actionable-health]');
+  const quarantinedCard = element<HTMLElement>('[data-quarantined-health]');
+  setText('[data-actionable-count]', summary.actionableCount.toLocaleString());
+  actionableCard.dataset.tone = summary.actionableCount === 0 ? 'success' : 'danger';
+  setText(
+    '[data-pipeline-warning]',
+    summary.actionableCount === 0
+      ? 'No actionable billing failures.'
+      : `${actionable.pendingRevenue} pending; ${actionable.retryingRevenue} retrying; ` +
+        `${actionable.deadLetterRevenue} dead-letter; ${actionable.subscriptionIssues} subscription issue(s)` +
+        (summary.degradedProviders.length
+          ? `; check ${summary.degradedProviders.map((provider) => billingProviderLabel(provider)).join(', ')}.`
+          : '.')
+  );
+  setText('[data-quarantined-count]', summary.quarantinedCount.toLocaleString());
+  quarantinedCard.dataset.tone = summary.quarantinedCount === 0 ? 'success' : 'warning';
+  setText(
+    '[data-quarantine-note]',
+    summary.quarantinedCount === 0
+      ? 'No retained historical anomalies.'
+      : `${quarantined.revenueTransactions} excluded transaction(s); ` +
+        `${quarantined.subscriptionIssues} historical subscription issue(s). Audit history is retained.`
+  );
+  const freshnessList = element<HTMLElement>('[data-freshness-list]');
+  freshnessList.replaceChildren(...summary.freshness.map((entry) => {
+    const row = document.createElement('div');
+    row.className = 'freshness-row';
+    row.dataset.stale = String(entry.stale);
+    const label = document.createElement('span');
+    label.textContent = entry.label;
+    const value = document.createElement('strong');
+    value.textContent = entry.stale
+      ? entry.value ? `Stale · ${formatAdminDate(entry.value, true)}` : 'Pending'
+      : formatAdminDate(entry.value, true);
+    row.append(label, value);
+    return row;
+  }));
+  element<HTMLElement>('[data-freshness-health]').dataset.tone =
+    summary.freshness.some((entry) => entry.stale) ? 'warning' : 'success';
+}
+
 async function loadOverview() {
   setText('[data-as-of]', 'Refreshing…');
   const result = await requireServices().getOverview();
@@ -449,20 +560,90 @@ async function loadOverview() {
   renderMoneyList(element('[data-lifetime-net]'), overview.revenue.lifetime.net);
   renderSubscriptionCounts(overview);
   renderCoverage(overview.revenue.coverage);
-  const pipelineWarning = element<HTMLElement>('[data-pipeline-warning]');
-  const degradedProviders = Object.entries(overview.revenuePipeline.providers)
-    .filter(([, value]) => value.status && value.status !== 'ready')
-    .map(([provider]) => provider.replaceAll('_', ' '));
-  const pipelineIssues = overview.revenuePipeline.pending + overview.revenuePipeline.retrying +
-    overview.revenuePipeline.deadLetter + overview.revenuePipeline.excludedTransactions +
-    overview.revenuePipeline.unmatchedSubscriptions + degradedProviders.length;
-  pipelineWarning.hidden = pipelineIssues === 0;
-  pipelineWarning.textContent = pipelineIssues === 0
-    ? ''
-    : `${overview.revenuePipeline.pending} pending; ${overview.revenuePipeline.retrying} retrying; ` +
-      `${overview.revenuePipeline.deadLetter} dead-letter; ${overview.revenuePipeline.excludedTransactions} excluded; ` +
-      `${overview.revenuePipeline.unmatchedSubscriptions} subscription issue(s)` +
-      (degradedProviders.length ? `; check ${degradedProviders.join(', ')}` : '.');
+  renderHealth(overview);
+}
+
+function renderBillingActivityItem(activity: BillingActivity): HTMLLIElement {
+  const item = document.createElement('li');
+  item.className = 'activity-item';
+
+  const event = document.createElement('div');
+  event.className = 'activity-event';
+  const dot = document.createElement('i');
+  dot.className = 'activity-dot';
+  dot.dataset.tone = billingActivityTone(activity.eventType);
+  dot.setAttribute('aria-hidden', 'true');
+  const eventText = document.createElement('div');
+  const eventName = document.createElement('strong');
+  eventName.textContent = billingActivityLabel(activity.eventType);
+  const provider = document.createElement('small');
+  provider.textContent = `${billingProviderLabel(activity.provider)} · ${formatAdminDate(activity.occurredAt, true)}`;
+  eventText.append(eventName, provider);
+  event.append(dot, eventText);
+
+  const customer = document.createElement('div');
+  customer.className = 'activity-customer';
+  const customerName = document.createElement('strong');
+  customerName.textContent = activity.customer?.displayName || activity.customer?.email || 'Unlinked customer';
+  const customerDetail = document.createElement('small');
+  customerDetail.textContent = activity.customer?.displayName && activity.customer.email
+    ? activity.customer.email
+    : activity.billingPeriod || 'No customer details';
+  customer.append(customerName, customerDetail);
+
+  const stateValue = activity.revenueStatus || activity.subscriptionState ||
+    activity.entitlementState || 'verified';
+  const activityStateValue = document.createElement('span');
+  activityStateValue.className = 'activity-state';
+  activityStateValue.textContent = stateValue.replaceAll('_', ' ');
+
+  const money = document.createElement('div');
+  money.className = 'activity-money';
+  const amount = document.createElement('strong');
+  amount.textContent = activity.amountMicros && activity.currency
+    ? formatMoneyMicros(activity.amountMicros, activity.currency)
+    : '—';
+  const kind = document.createElement('small');
+  kind.textContent = activity.revenueKind || 'state event';
+  money.append(amount, kind);
+
+  const origin = document.createElement('span');
+  origin.className = 'activity-origin';
+  origin.textContent = activity.origin;
+  item.append(event, customer, activityStateValue, money, origin);
+  return item;
+}
+
+async function loadBillingActivity() {
+  if (activityState.loading) return;
+  activityState.loading = true;
+  activityStatus.textContent = 'Loading billing activity…';
+  activityNextButton.disabled = true;
+  activityPreviousButton.disabled = true;
+  try {
+    const response = await requireServices().listBillingActivity({
+      pageSize: 20,
+      ...(activityState.cursor ? { cursor: activityState.cursor } : {}),
+      ...(activityState.provider ? { provider: activityState.provider } : {}),
+      ...(activityState.eventType ? { eventType: activityState.eventType } : {})
+    });
+    const normalized = normalizeAdminBillingActivity(response.data) as {
+      activities: BillingActivity[];
+      nextCursor: string | null;
+    };
+    activityList.replaceChildren(...normalized.activities.map(renderBillingActivityItem));
+    activityState.nextCursor = normalized.nextCursor;
+    activityStatus.textContent = normalized.activities.length === 0
+      ? 'No billing activity matches these filters.'
+      : '';
+    activityNextButton.disabled = !activityState.nextCursor;
+    activityPreviousButton.disabled = activityState.cursorHistory.length === 0;
+    activityPageLabel.textContent = `Page ${activityState.page}`;
+  } catch (error) {
+    activityStatus.textContent = friendlyError(error);
+  } finally {
+    activityState.loading = false;
+  }
 }
 
 function createCell(): HTMLTableCellElement {
@@ -632,7 +813,7 @@ async function enterDashboard(user: User) {
   }
   showDashboard(user);
   clearDashboardError();
-  await Promise.all([loadOverview(), loadUsers()]);
+  await Promise.all([loadOverview(), loadBillingActivity(), loadUsers()]);
 }
 
 loginForm.addEventListener('submit', async (event) => {
@@ -728,13 +909,38 @@ element<HTMLButtonElement>('[data-sign-out]').addEventListener('click', () => {
 element<HTMLButtonElement>('[data-refresh]').addEventListener('click', async () => {
   clearDashboardError();
   try {
-    await Promise.all([loadOverview(), loadUsers()]);
+    await Promise.all([loadOverview(), loadBillingActivity(), loadUsers()]);
     clearDashboardError();
   } catch (error) {
     setText('[data-as-of]', friendlyError(error));
     const user = requireServices().auth.currentUser;
     if (user) await handleAuthenticatedFailure(error, user);
   }
+});
+
+element<HTMLFormElement>('[data-activity-filters]').addEventListener('submit', (event) => {
+  event.preventDefault();
+  activityState.provider = activityProvider.value;
+  activityState.eventType = activityEvent.value;
+  activityState.cursor = null;
+  activityState.nextCursor = null;
+  activityState.cursorHistory = [];
+  activityState.page = 1;
+  void loadBillingActivity();
+});
+
+activityNextButton.addEventListener('click', () => {
+  if (!activityState.nextCursor) return;
+  activityState.cursorHistory.push(activityState.cursor);
+  activityState.cursor = activityState.nextCursor;
+  activityState.page += 1;
+  void loadBillingActivity();
+});
+
+activityPreviousButton.addEventListener('click', () => {
+  activityState.cursor = activityState.cursorHistory.pop() ?? null;
+  activityState.page = Math.max(1, activityState.page - 1);
+  void loadBillingActivity();
 });
 
 element<HTMLElement>('[data-filters]').addEventListener('click', (event) => {
@@ -805,7 +1011,7 @@ toggleDisabledButton.addEventListener('click', async () => {
   try {
     await requireServices().setUserDisabled({ uid: user.uid, disabled: nextDisabled, requestId });
     await refreshSelectedUser();
-    await Promise.all([loadOverview(), loadUsers()]);
+    await Promise.all([loadOverview(), loadBillingActivity(), loadUsers()]);
     dialogMessage.textContent = `Account ${nextDisabled ? 'disabled' : 'enabled'}.`;
   } catch (error) {
     await refreshSelectedUser().catch(() => undefined);

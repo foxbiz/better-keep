@@ -1,6 +1,37 @@
 {
 	"indexes": [
 		{
+			"collectionGroup": "adminBillingActivities",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "provider", "order": "ASCENDING" },
+				{ "fieldPath": "occurredAt", "order": "DESCENDING" },
+				{ "fieldPath": "__name__", "order": "DESCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminBillingActivities",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "eventType", "order": "ASCENDING" },
+				{ "fieldPath": "occurredAt", "order": "DESCENDING" },
+				{ "fieldPath": "__name__", "order": "DESCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "adminBillingActivities",
+			"queryScope": "COLLECTION",
+			"density": "SPARSE_ALL",
+			"fields": [
+				{ "fieldPath": "provider", "order": "ASCENDING" },
+				{ "fieldPath": "eventType", "order": "ASCENDING" },
+				{ "fieldPath": "occurredAt", "order": "DESCENDING" },
+				{ "fieldPath": "__name__", "order": "DESCENDING" }
+			]
+		},
+		{
 			"collectionGroup": "adminUsers",
 			"queryScope": "COLLECTION",
 			"density": "SPARSE_ALL",

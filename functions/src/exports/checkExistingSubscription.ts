@@ -1,7 +1,10 @@
-import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { db, googlePlayCredentials } from "../config";
-import { refreshGooglePlaySubscription } from "../googlePlayService";
+import {
+	endUnqueryableGooglePlaySubscription,
+	isGooglePlayGoneError,
+	refreshGooglePlaySubscription,
+} from "../googlePlayService";
 import {
 	type AuthenticatedCallableRequest,
 	onNonReviewCall,
@@ -90,17 +93,8 @@ async function refreshLinkedPlaySubscriptions(userId: string): Promise<void> {
 				requestedUserId: userId,
 			});
 		} catch (error) {
-			if ((error as { code?: unknown }).code !== 410) throw error;
-			await document.ref.set(
-				{
-					subscriptionState: "SUBSCRIPTION_STATE_EXPIRED",
-					entitlementState: "ended",
-					renewalState: "notRenewing",
-					willAutoRenew: false,
-					updatedAt: FieldValue.serverTimestamp(),
-				},
-				{ merge: true },
-			);
+			if (!isGooglePlayGoneError(error)) throw error;
+			await endUnqueryableGooglePlaySubscription(purchaseToken, false);
 		}
 	}
 }

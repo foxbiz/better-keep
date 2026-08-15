@@ -26,6 +26,17 @@ export interface RefreshedGooglePlaySubscription {
 	userId: string | null;
 }
 
+export function isGooglePlayGoneError(error: unknown): boolean {
+	const candidate = error as {
+		code?: unknown;
+		response?: { status?: unknown };
+	};
+	return (
+		Number(candidate?.code) === 410 ||
+		Number(candidate?.response?.status) === 410
+	);
+}
+
 async function publisherApi() {
 	const credentials = JSON.parse(googlePlayCredentials.value());
 	return google.androidpublisher({
@@ -84,6 +95,32 @@ export async function refreshGooglePlaySubscription({
 		requestedUserId,
 		resource,
 	});
+}
+
+export async function endUnqueryableGooglePlaySubscription(
+	purchaseToken: string,
+	reconcile = true,
+): Promise<string | null> {
+	const subscriptionRef = db.collection("subscriptions").doc(purchaseToken);
+	const existing = await subscriptionRef.get();
+	const data = existing.data() ?? {};
+	const userId = typeof data.userId === "string" ? data.userId : null;
+	if (existing.exists) {
+		await subscriptionRef.set(
+			{
+				entitlementState: "ended",
+				renewalState: "notRenewing",
+				subscriptionState: "SUBSCRIPTION_STATE_EXPIRED",
+				willAutoRenew: false,
+				lastVerifiedAt: FieldValue.serverTimestamp(),
+				updatedAt: FieldValue.serverTimestamp(),
+			},
+			{ merge: true },
+		);
+	}
+	await resolveSubscriptionIssues(purchaseToken, "play_store");
+	if (userId && reconcile) await reconcileUserEntitlement(userId);
+	return userId;
 }
 
 export async function persistVerifiedGooglePlaySubscription({

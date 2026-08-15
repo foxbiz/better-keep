@@ -160,6 +160,85 @@
         </div>
       </section>
 
+      <section class="health-section" aria-labelledby="health-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Reliability</p>
+            <h2 id="health-heading">Billing health</h2>
+          </div>
+          <p>Current failures stay separate from retained historical anomalies and data freshness.</p>
+        </div>
+        <div class="health-grid">
+          <article class="health-card" data-actionable-health>
+            <span>Action needed</span>
+            <strong data-actionable-count>—</strong>
+            <p role="status" data-pipeline-warning>Loading billing health…</p>
+          </article>
+          <article class="health-card" data-quarantined-health>
+            <span>Quarantined history</span>
+            <strong data-quarantined-count>—</strong>
+            <p role="status" data-quarantine-note>Loading retained anomalies…</p>
+          </article>
+          <article class="health-card" data-freshness-health>
+            <span>Data freshness</span>
+            <div class="freshness-list" data-freshness-list></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="activity-section" aria-labelledby="activity-heading">
+        <div class="section-heading activity-heading">
+          <div>
+            <p class="eyebrow">Billing timeline</p>
+            <h2 id="activity-heading">Recent billing activity</h2>
+          </div>
+          <form class="activity-filters" data-activity-filters>
+            <label>
+              <span>Provider</span>
+              <select data-activity-provider>
+                <option value="">All providers</option>
+                <option value="play_store">Google Play</option>
+                <option value="app_store">App Store</option>
+                <option value="razorpay">Razorpay</option>
+              </select>
+            </label>
+            <label>
+              <span>Event</span>
+              <select data-activity-event>
+                <option value="">All events</option>
+                <option value="purchase">New purchases</option>
+                <option value="renewal">Renewals</option>
+                <option value="recovery">Recoveries</option>
+                <option value="restart">Restarts</option>
+                <option value="cancellation">Cancellations</option>
+                <option value="grace">Grace periods</option>
+                <option value="hold">Holds</option>
+                <option value="pause">Pauses</option>
+                <option value="deferred">Deferrals</option>
+                <option value="plan_change">Plan changes</option>
+                <option value="revocation">Revocations</option>
+                <option value="expiration">Expirations</option>
+                <option value="charge">Charges</option>
+                <option value="refund">Refunds</option>
+                <option value="state_change">State changes</option>
+              </select>
+            </label>
+            <button class="quiet-button" type="submit">Apply</button>
+          </form>
+        </div>
+        <div class="activity-card">
+          <p class="activity-status" role="status" data-activity-status>Loading activity…</p>
+          <ol class="activity-list" data-activity-list></ol>
+          <div class="pagination">
+            <span data-activity-page-label>Page 1</span>
+            <div>
+              <button class="quiet-button" type="button" data-activity-previous disabled>Previous</button>
+              <button class="quiet-button" type="button" data-activity-next disabled>Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="revenue-section" aria-labelledby="revenue-heading">
         <div class="section-heading">
           <div>
@@ -168,7 +247,6 @@
           </div>
           <p>Customer charges and refunds before fees · currencies are never mixed</p>
         </div>
-        <p class="pipeline-warning" role="status" data-pipeline-warning hidden></p>
         <div class="revenue-grid">
           <article class="revenue-card">
             <div class="revenue-label"><span>This month</span><i data-revenue-month>UTC</i></div>
@@ -191,6 +269,7 @@
           <div>
             <p class="eyebrow">Customers</p>
             <h2 id="users-heading">Manage users</h2>
+            <p class="section-note">Newest accounts first · sorted by account join date</p>
           </div>
           <form class="user-search" role="search" data-search-form>
             <label class="sr-only" for="admin-user-search">Search users</label>

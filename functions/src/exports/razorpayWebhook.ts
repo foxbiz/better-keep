@@ -3,6 +3,10 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { error as logError, info as logInfo } from "firebase-functions/logger";
 import { onRequest } from "firebase-functions/v2/https";
 import {
+	razorpayBillingActivityType,
+	writeBillingActivity,
+} from "../billingActivity";
+import {
 	db,
 	razorpayKeyId,
 	razorpayKeySecret,
@@ -133,6 +137,7 @@ async function processSubscriptionEvent(
 	eventName: string,
 	subscription: RazorpaySubscriptionEntity,
 	payment?: RazorpayPaymentEntity,
+	activityEventKey = `${eventName}:${subscription.id}:${payment?.id ?? "state"}`,
 ): Promise<void> {
 	const owner = await subscriptionOwner(subscription.id);
 	if (!owner) {
@@ -154,8 +159,9 @@ async function processSubscriptionEvent(
 		.doc(`razorpay_${subscription.id}`);
 	await db.runTransaction(async (transaction) => {
 		const existing = await transaction.get(providerRef);
+		let revenueEventId: string | null = null;
 		if (payment) {
-			await enqueueRevenueEventInTransaction(transaction, {
+			revenueEventId = await enqueueRevenueEventInTransaction(transaction, {
 				provider: "razorpay",
 				providerTransactionId: payment.id,
 				userId: owner.userId,
@@ -197,11 +203,37 @@ async function processSubscriptionEvent(
 				{ merge: true },
 			);
 		}
+		writeBillingActivity(transaction, {
+			provider: "razorpay",
+			eventKey: activityEventKey,
+			eventType: razorpayBillingActivityType(eventName, Boolean(payment)),
+			occurredAt: payment?.created_at
+				? new Date(payment.created_at * 1000)
+				: new Date(),
+			userId: owner.userId,
+			billingPeriod: owner.plan,
+			environment: "production",
+			subscriptionState:
+				typeof normalized.subscriptionState === "string"
+					? normalized.subscriptionState
+					: null,
+			entitlementState:
+				typeof normalized.entitlementState === "string"
+					? normalized.entitlementState
+					: null,
+			amountMicros: payment ? minorUnitsToMicros(payment.amount) : null,
+			currency: payment?.currency,
+			revenueKind: payment ? "charge" : null,
+			revenueEventId,
+		});
 	});
 	await reconcileUserEntitlement(owner.userId);
 }
 
-async function processRefund(refund: RazorpayRefundEntity): Promise<void> {
+async function processRefund(
+	refund: RazorpayRefundEntity,
+	activityEventKey = `refund:${refund.id}`,
+): Promise<void> {
 	const paymentSnapshot = await db
 		.collection("payments")
 		.where("razorpayPaymentId", "==", refund.payment_id)
@@ -213,7 +245,7 @@ async function processRefund(refund: RazorpayRefundEntity): Promise<void> {
 			? (paymentSnapshot.docs[0].data().userId as string)
 			: null;
 	await db.runTransaction(async (transaction) => {
-		await enqueueRevenueEventInTransaction(transaction, {
+		const revenueEventId = await enqueueRevenueEventInTransaction(transaction, {
 			provider: "razorpay",
 			providerTransactionId: refund.id,
 			userId,
@@ -225,6 +257,20 @@ async function processRefund(refund: RazorpayRefundEntity): Promise<void> {
 				? new Date(refund.created_at * 1000)
 				: new Date(),
 			metadata: { paymentId: refund.payment_id, refundId: refund.id },
+		});
+		writeBillingActivity(transaction, {
+			provider: "razorpay",
+			eventKey: activityEventKey,
+			eventType: "refund",
+			occurredAt: refund.created_at
+				? new Date(refund.created_at * 1000)
+				: new Date(),
+			userId,
+			environment: "production",
+			amountMicros: minorUnitsToMicros(refund.amount),
+			currency: refund.currency,
+			revenueKind: "refund",
+			revenueEventId,
 		});
 		for (const payment of paymentSnapshot.docs) {
 			const originalAmount = Number(payment.data().amount);
@@ -247,6 +293,7 @@ async function processRefund(refund: RazorpayRefundEntity): Promise<void> {
 export async function processRazorpayWebhook(
 	event: RazorpayWebhookEvent,
 	loadRefunds?: (paymentId: string) => Promise<RazorpayRefundEntity[]>,
+	activityEventKey?: string,
 ): Promise<void> {
 	const eventName = event.event ?? "unknown";
 	const subscription = event.payload?.subscription?.entity;
@@ -257,12 +304,12 @@ export async function processRazorpayWebhook(
 		if (!refund || !isProcessedRazorpayRefund(refund)) {
 			throw new RazorpayRefundNotFinalError();
 		}
-		await processRefund(refund);
+		await processRefund(refund, activityEventKey);
 		return;
 	}
 	if (eventName === "payment.refunded") {
 		if (refund && isProcessedRazorpayRefund(refund)) {
-			await processRefund(refund);
+			await processRefund(refund, activityEventKey);
 			return;
 		}
 		if (!payment || !loadRefunds) throw new RazorpayRefundNotFinalError();
@@ -272,11 +319,21 @@ export async function processRazorpayWebhook(
 		if (processedRefunds.length === 0) {
 			throw new RazorpayRefundNotFinalError();
 		}
-		for (const item of processedRefunds) await processRefund(item);
+		for (const item of processedRefunds) {
+			await processRefund(
+				item,
+				activityEventKey ? `${activityEventKey}:${item.id}` : undefined,
+			);
+		}
 		return;
 	}
 	if (subscription) {
-		await processSubscriptionEvent(eventName, subscription, payment);
+		await processSubscriptionEvent(
+			eventName,
+			subscription,
+			payment,
+			activityEventKey,
+		);
 	}
 }
 
@@ -339,21 +396,25 @@ export default onRequest(
 				eventId,
 				type: event.event ?? "unknown",
 			});
-			await processRazorpayWebhook(event, async (paymentId) => {
-				const response = (await razorpayRequest(
-					razorpayKeyId.value().trim(),
-					razorpayKeySecret.value().trim(),
-					"GET",
-					`/payments/${encodeURIComponent(paymentId)}/refunds`,
-				)) as { items?: RazorpayRefundEntity[] };
-				return (response.items ?? []).filter(
-					(item) =>
-						isProcessedRazorpayRefund(item) &&
-						typeof item.id === "string" &&
-						typeof item.amount === "number" &&
-						typeof item.currency === "string",
-				);
-			});
+			await processRazorpayWebhook(
+				event,
+				async (paymentId) => {
+					const response = (await razorpayRequest(
+						razorpayKeyId.value().trim(),
+						razorpayKeySecret.value().trim(),
+						"GET",
+						`/payments/${encodeURIComponent(paymentId)}/refunds`,
+					)) as { items?: RazorpayRefundEntity[] };
+					return (response.items ?? []).filter(
+						(item) =>
+							isProcessedRazorpayRefund(item) &&
+							typeof item.id === "string" &&
+							typeof item.amount === "number" &&
+							typeof item.currency === "string",
+					);
+				},
+				eventId,
+			);
 			await finishEvent(eventId, "succeeded");
 			res.status(200).send("OK");
 		} catch (error) {

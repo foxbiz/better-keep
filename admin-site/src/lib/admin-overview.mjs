@@ -136,20 +136,20 @@ function revenueCoverage(value) {
   );
 }
 
-function providerStatuses(value) {
-  const providers = record(value, 'revenuePipeline.providers', true);
+function providerStatuses(value, path = 'revenuePipeline.providers') {
+	const providers = record(value, path, true);
   return Object.fromEntries(
     Object.entries(providers)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([provider, rawStatus]) => {
-        const status = record(rawStatus, `revenuePipeline.providers.${provider}`);
+		const status = record(rawStatus, `${path}.${provider}`);
         return [
           provider,
           {
             ...(typeof status.status === 'string' ? { status: status.status } : {}),
             updatedAt: optionalString(
-              status.updatedAt,
-              `revenuePipeline.providers.${provider}.updatedAt`
+				status.updatedAt,
+				`${path}.${provider}.updatedAt`
             )
           }
         ];
@@ -173,8 +173,12 @@ export function normalizeAdminOverview(value) {
     );
   }
   const subscriptions = record(overview.subscriptions, 'subscriptions', true);
-  const revenue = record(overview.revenue, 'revenue');
-  const pipeline = record(overview.revenuePipeline, 'revenuePipeline', true);
+	const revenue = record(overview.revenue, 'revenue');
+	const pipeline = record(overview.revenuePipeline, 'revenuePipeline', true);
+	const health = record(overview.health, 'health', true);
+	const actionable = record(health.actionable, 'health.actionable', true);
+	const quarantined = record(health.quarantined, 'health.quarantined', true);
+	const pipelineProviders = providerStatuses(pipeline.providers);
 
   return {
     schemaVersion: ADMIN_OVERVIEW_SCHEMA_VERSION,
@@ -197,7 +201,7 @@ export function normalizeAdminOverview(value) {
       monthly: revenuePeriod(revenue.monthly, 'revenue.monthly'),
       coverage: revenueCoverage(revenue.coverage)
     },
-    revenuePipeline: {
+		revenuePipeline: {
       pending: optionalCount(pipeline.pending, 'revenuePipeline.pending'),
       retrying: optionalCount(pipeline.retrying, 'revenuePipeline.retrying'),
       deadLetter: optionalCount(pipeline.deadLetter, 'revenuePipeline.deadLetter'),
@@ -209,7 +213,40 @@ export function normalizeAdminOverview(value) {
         pipeline.unmatchedSubscriptions,
         'revenuePipeline.unmatchedSubscriptions'
       ),
-      providers: providerStatuses(pipeline.providers)
-    }
-  };
+			providers: pipelineProviders
+		},
+		health: {
+			actionable: {
+				pendingRevenue: optionalCount(
+					actionable.pendingRevenue ?? pipeline.pending,
+					'health.actionable.pendingRevenue'
+				),
+				retryingRevenue: optionalCount(
+					actionable.retryingRevenue ?? pipeline.retrying,
+					'health.actionable.retryingRevenue'
+				),
+				deadLetterRevenue: optionalCount(
+					actionable.deadLetterRevenue ?? pipeline.deadLetter,
+					'health.actionable.deadLetterRevenue'
+				),
+				subscriptionIssues: optionalCount(
+					actionable.subscriptionIssues ?? pipeline.unmatchedSubscriptions,
+					'health.actionable.subscriptionIssues'
+				)
+			},
+			quarantined: {
+				revenueTransactions: optionalCount(
+					quarantined.revenueTransactions ?? pipeline.excludedTransactions,
+					'health.quarantined.revenueTransactions'
+				),
+				subscriptionIssues: optionalCount(
+					quarantined.subscriptionIssues,
+					'health.quarantined.subscriptionIssues'
+				)
+			},
+			providers: health.providers === undefined
+				? pipelineProviders
+				: providerStatuses(health.providers, 'health.providers')
+		}
+	};
 }

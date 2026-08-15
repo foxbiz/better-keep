@@ -12,12 +12,14 @@ function stableIssueId(type: string, providerKey: string): string {
 
 export async function recordSubscriptionIssue({
 	details = {},
+	status = "open",
 	providerKey,
 	source,
 	type,
 	userId = null,
 }: {
 	details?: Record<string, unknown>;
+	status?: "open" | "quarantined";
 	providerKey: string;
 	source: string;
 	type: string;
@@ -31,10 +33,15 @@ export async function recordSubscriptionIssue({
 			{
 				type,
 				source,
-				status: "open",
+				status,
+				actionable: status === "open",
 				providerKeyHash: createHash("sha256").update(providerKey).digest("hex"),
 				userId,
 				details,
+				...(status === "quarantined"
+					? { quarantinedAt: FieldValue.serverTimestamp() }
+					: { quarantinedAt: FieldValue.delete() }),
+				resolvedAt: FieldValue.delete(),
 				updatedAt: FieldValue.serverTimestamp(),
 			},
 			{ merge: true },
@@ -54,18 +61,21 @@ export async function resolveSubscriptionIssues(
 			createHash("sha256").update(providerKey).digest("hex"),
 		)
 		.where("source", "==", source)
-		.where("status", "==", "open")
 		.get();
 	if (snapshot.empty) return;
 	const batch = db.batch();
+	let writes = 0;
 	for (const issue of snapshot.docs) {
+		if (issue.data().status === "resolved") continue;
 		batch.update(issue.ref, {
 			status: "resolved",
+			actionable: false,
 			resolvedAt: FieldValue.serverTimestamp(),
 			updatedAt: FieldValue.serverTimestamp(),
 		});
+		writes += 1;
 	}
-	await batch.commit();
+	if (writes > 0) await batch.commit();
 }
 
 export async function resolveUserSubscriptionIssues(
@@ -76,16 +86,19 @@ export async function resolveUserSubscriptionIssues(
 		.collection(ADMIN_SUBSCRIPTION_ISSUE_COLLECTION)
 		.where("userId", "==", userId)
 		.where("type", "==", type)
-		.where("status", "==", "open")
 		.get();
 	if (snapshot.empty) return;
 	const batch = db.batch();
+	let writes = 0;
 	for (const issue of snapshot.docs) {
+		if (issue.data().status === "resolved") continue;
 		batch.update(issue.ref, {
 			status: "resolved",
+			actionable: false,
 			resolvedAt: FieldValue.serverTimestamp(),
 			updatedAt: FieldValue.serverTimestamp(),
 		});
+		writes += 1;
 	}
-	await batch.commit();
+	if (writes > 0) await batch.commit();
 }

@@ -11,7 +11,12 @@ const outbox = readFileSync("src/revenueOutbox.ts", "utf8");
 const utils = readFileSync("src/utils.ts", "utf8");
 
 test("every admin callable enforces App Check and mutations consume limited-use tokens", () => {
-	for (const callable of ["adminGetOverview", "adminListUsers", "adminGetUser"]) {
+	for (const callable of [
+		"adminGetOverview",
+		"adminListBillingActivity",
+		"adminListUsers",
+		"adminGetUser",
+	]) {
 		assert.match(adminApi, new RegExp(`${callable}[\\s\\S]{0,120}enforceAppCheck: true`));
 	}
 	for (const callable of ["adminSetUserDisabled", "adminRevokeUserSessions"]) {
@@ -29,6 +34,22 @@ test("overview exposes independent request, user, and revenue freshness", () => 
 	assert.match(adminApi, /revenueUpdatedAt:/);
 	assert.match(stats, /totalUsersUpdatedAt: FieldValue\.serverTimestamp\(\)/);
 	assert.match(ledger, /revenueUpdatedAt: FieldValue\.serverTimestamp\(\)/);
+	assert.match(adminApi, /health: \{/);
+	assert.match(adminApi, /actionable: \{/);
+	assert.match(adminApi, /quarantined: \{/);
+});
+
+test("billing activity is paginated, filterable, and omits raw provider identifiers", () => {
+	assert.match(adminApi, /adminListBillingActivity/);
+	assert.match(adminApi, /where\("provider", "==", provider\)/);
+	assert.match(adminApi, /where\("eventType", "==", eventType\)/);
+	assert.match(adminApi, /orderBy\("occurredAt", "desc"\)/);
+	assert.match(adminApi, /nextCursor:/);
+	const activityCallable = adminApi.slice(
+		adminApi.indexOf("export const adminListBillingActivity"),
+		adminApi.indexOf("export const adminListUsers"),
+	);
+	assert.doesNotMatch(activityCallable, /providerTransactionId|purchaseToken|orderId/);
 });
 
 test("search queries both normalized email and display name after segment selection", () => {

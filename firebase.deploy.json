@@ -2,7 +2,10 @@
 	"functions": {
 		"source": "functions",
 		"runtime": "nodejs22",
-		"predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+		"predeploy": [
+			"npm --prefix \"$RESOURCE_DIR\" run validate:deploy-env",
+			"npm --prefix \"$RESOURCE_DIR\" run build"
+		]
 	},
 	"firestore": [
 		{

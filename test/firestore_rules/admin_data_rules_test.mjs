@@ -39,6 +39,7 @@ test("even a claimed administrator cannot access backend-only data directly", as
     "adminAuditLogs/audit-1",
     "adminRevenueEvents/event-1",
     "adminSubscriptionIssues/issue-1",
+    "adminBillingActivities/activity-1",
     "playStoreWebhookEvents/event-1",
     "razorpayWebhookEvents/event-1",
   ]) {

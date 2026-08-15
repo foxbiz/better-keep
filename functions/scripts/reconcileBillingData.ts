@@ -10,6 +10,11 @@ import {
 	ADMIN_REVENUE_COLLECTION,
 	ADMIN_SUBSCRIPTION_ISSUE_COLLECTION,
 } from "../src/adminConfig";
+import { backfillAdminBillingActivities } from "../src/billingActivityBackfill";
+import {
+	historicalPlayChargeType,
+	recordBillingActivity,
+} from "../src/billingActivity";
 import {
 	identityToolkitClaimsAuth,
 	identityToolkitUserExists,
@@ -45,6 +50,7 @@ import {
 	type GooglePlayReconciliationRow,
 } from "../src/googlePlayReconciliation";
 import {
+	endUnqueryableGooglePlaySubscription,
 	getGooglePlaySubscription,
 	persistVerifiedGooglePlaySubscription,
 } from "../src/googlePlayService";
@@ -538,6 +544,7 @@ async function applyRazorpayAudit(
 		if (action.kind === "missing_user") {
 			await recordSubscriptionIssue({
 				details: { firebaseUserMissing: true },
+				status: "quarantined",
 				providerKey: action.subscriptionId,
 				source: "razorpay",
 				type: "razorpay_owner_missing",
@@ -558,6 +565,7 @@ async function applyRazorpayAudit(
 					providerStatus: action.failure.status,
 				},
 				providerKey: action.subscriptionId,
+				status: "quarantined",
 				source: "razorpay",
 				type: "razorpay_verification_failed",
 				userId: action.userId,
@@ -960,6 +968,12 @@ async function applyPlayAudit(
 					type: "play_verification_failed",
 					userId: audited.row.storedUserId,
 				});
+			} else if (audited.row.verification === "gone") {
+				const userId = await endUnqueryableGooglePlaySubscription(
+					purchaseToken,
+					false,
+				);
+				if (userId) usersToReconcile.add(userId);
 			}
 			continue;
 		}
@@ -974,6 +988,52 @@ async function applyPlayAudit(
 		});
 		if (refreshed.userId) usersToReconcile.add(refreshed.userId);
 		if (audited.row.storedUserId) usersToReconcile.add(audited.row.storedUserId);
+		const latestOrderId = audited.resource.latestOrderId;
+		if (latestOrderId) {
+			let order: GooglePlayOrder;
+			try {
+				order = await getGooglePlayOrder(latestOrderId);
+			} catch (error) {
+				console.warn(
+					`Skipped historical latest order ${providerReference("play_order", latestOrderId)} (${sanitizedErrorCode(error)})`,
+				);
+				continue;
+			}
+			const enqueued = await enqueueVerifiedGooglePlayOrder(
+				latestOrderId,
+				order,
+				refreshed.userId,
+			);
+			if (enqueued.charge) {
+				await recordBillingActivity({
+					provider: "play_store",
+					eventKey: `historical_order:${latestOrderId}`,
+					eventType: historicalPlayChargeType(
+						audited.resource.startTime,
+						enqueued.charge.occurredAt,
+					),
+					occurredAt: enqueued.charge.occurredAt,
+					origin: "historical",
+					userId: refreshed.userId,
+					billingPeriod:
+						typeof refreshed.data.billingPeriod === "string"
+							? refreshed.data.billingPeriod
+							: null,
+					productId:
+						typeof refreshed.data.productId === "string"
+							? refreshed.data.productId
+							: null,
+					environment:
+						typeof refreshed.data.environment === "string"
+							? refreshed.data.environment
+							: null,
+					amountMicros: enqueued.charge.amountMicros,
+					currency: enqueued.charge.currency,
+					revenueKind: "charge",
+					revenueEventId: enqueued.charge.eventId,
+				});
+			}
+		}
 	}
 	for (const userId of usersToReconcile) {
 		await reconcileUserEntitlement(userId, Date.now(), claimsAuth);
@@ -1123,12 +1183,14 @@ async function main(): Promise<void> {
 				subscriptionProviderCounts[source].unmatched += 1;
 			}
 		}
+		const revenueProviderStatus: Record<string, unknown> = {};
 		const metricsUpdate: Record<string, unknown> = {
 			subscriptionMetricsUpdatedAt: FieldValue.serverTimestamp(),
 			subscriptionProviderCounts,
+			revenueProviderStatus,
 		};
 		if (play) {
-			metricsUpdate["revenueProviderStatus.play_store"] = {
+			revenueProviderStatus.play_store = {
 				knownFailures: play.knownFailures,
 				reports: play.reports,
 				status:
@@ -1139,9 +1201,9 @@ async function main(): Promise<void> {
 			};
 		}
 		if (razorpay) {
-			metricsUpdate["revenueProviderStatus.razorpay"] = {
+			revenueProviderStatus.razorpay = {
 				excluded: razorpay.excluded,
-				status: razorpay.excluded === 0 ? "ready" : "degraded",
+				status: "ready",
 				updatedAt: FieldValue.serverTimestamp(),
 				verified: razorpay.verified,
 			};
@@ -1150,7 +1212,9 @@ async function main(): Promise<void> {
 			.collection(ADMIN_METRICS_COLLECTION)
 			.doc("current")
 			.set(metricsUpdate, { merge: true });
+		const activityBackfill = await backfillAdminBillingActivities();
 		console.log("Rebuilt lifetime revenue:", rebuilt.lifetime);
+		console.log("Billing activity backfill:", activityBackfill);
 		console.log("Billing reconciliation complete.");
 	} else {
 		console.log(

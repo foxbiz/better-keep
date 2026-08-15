@@ -2,12 +2,20 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { error as logError, info as logInfo } from "firebase-functions/logger";
 import { onMessagePublished } from "firebase-functions/v2/pubsub";
 import { PLAY_STORE_EVENT_COLLECTION } from "../adminConfig";
+import {
+	playBillingActivityType,
+	recordBillingActivity,
+} from "../billingActivity";
 import { ANDROID_PACKAGE_NAME, db, googlePlayCredentials } from "../config";
 import { syncGooglePlayOrderById } from "../googlePlayRevenue";
-import { refreshGooglePlaySubscription } from "../googlePlayService";
-import { reconcileUserEntitlement } from "../subscriptionReconciler";
+import {
+	endUnqueryableGooglePlaySubscription,
+	isGooglePlayGoneError,
+	refreshGooglePlaySubscription,
+} from "../googlePlayService";
 
 interface PlayNotification {
+	eventTimeMillis?: string;
 	packageName?: string;
 	subscriptionNotification?: {
 		notificationType?: number;
@@ -141,6 +149,7 @@ async function failEvent(messageId: string, error: unknown): Promise<void> {
 
 export async function processPlayNotification(
 	notification: PlayNotification,
+	eventKey = `${notification.eventTimeMillis ?? "unknown"}:${notification.subscriptionNotification?.notificationType ?? "unknown"}:${notification.subscriptionNotification?.purchaseToken ?? notification.voidedPurchaseNotification?.orderId ?? "unknown"}`,
 ): Promise<void> {
 	if (notification.testNotification) return;
 	if (notification.packageName !== ANDROID_PACKAGE_NAME) {
@@ -152,8 +161,74 @@ export async function processPlayNotification(
 		if (!subscription.purchaseToken) {
 			throw new Error("Google Play subscription notification has no token");
 		}
-		await refreshGooglePlaySubscription({
-			purchaseToken: subscription.purchaseToken,
+		let refreshed: Awaited<ReturnType<typeof refreshGooglePlaySubscription>>;
+		try {
+			refreshed = await refreshGooglePlaySubscription({
+				purchaseToken: subscription.purchaseToken,
+			});
+		} catch (error) {
+			if (!isGooglePlayGoneError(error)) throw error;
+			const userId = await endUnqueryableGooglePlaySubscription(
+				subscription.purchaseToken,
+			);
+			const occurredAtMillis = Number(notification.eventTimeMillis);
+			await recordBillingActivity({
+				provider: "play_store",
+				eventKey,
+				eventType: "expiration",
+				occurredAt: Number.isFinite(occurredAtMillis)
+					? new Date(occurredAtMillis)
+					: new Date(),
+				userId,
+				subscriptionState: "SUBSCRIPTION_STATE_EXPIRED",
+				entitlementState: "ended",
+			});
+			return;
+		}
+		const latestOrderId =
+			typeof refreshed.data.latestOrderId === "string"
+				? refreshed.data.latestOrderId
+				: null;
+		const order = latestOrderId
+			? await syncGooglePlayOrderById(latestOrderId, refreshed.userId)
+			: null;
+		const activityType = playBillingActivityType(subscription.notificationType);
+		const charge = ["purchase", "renewal"].includes(activityType)
+			? (order?.charge ?? null)
+			: null;
+		const occurredAtMillis = Number(notification.eventTimeMillis);
+		await recordBillingActivity({
+			provider: "play_store",
+			eventKey,
+			eventType: activityType,
+			occurredAt: Number.isFinite(occurredAtMillis)
+				? new Date(occurredAtMillis)
+				: (charge?.occurredAt ?? new Date()),
+			userId: refreshed.userId,
+			billingPeriod:
+				typeof refreshed.data.billingPeriod === "string"
+					? refreshed.data.billingPeriod
+					: null,
+			productId:
+				typeof refreshed.data.productId === "string"
+					? refreshed.data.productId
+					: null,
+			environment:
+				typeof refreshed.data.environment === "string"
+					? refreshed.data.environment
+					: null,
+			subscriptionState:
+				typeof refreshed.data.subscriptionState === "string"
+					? refreshed.data.subscriptionState
+					: null,
+			entitlementState:
+				typeof refreshed.data.entitlementState === "string"
+					? refreshed.data.entitlementState
+					: null,
+			amountMicros: charge?.amountMicros,
+			currency: charge?.currency,
+			revenueKind: charge?.kind,
+			revenueEventId: charge?.eventId,
 		});
 		return;
 	}
@@ -161,34 +236,43 @@ export async function processPlayNotification(
 	const voided = notification.voidedPurchaseNotification;
 	if (voided) {
 		let refreshError: unknown = null;
+		let userId: string | null = null;
 		if (voided.purchaseToken) {
 			try {
-				await refreshGooglePlaySubscription({
+				const refreshed = await refreshGooglePlaySubscription({
 					purchaseToken: voided.purchaseToken,
 				});
+				userId = refreshed.userId;
 			} catch (error) {
-				if ((error as { code?: unknown }).code === 410) {
-					const ref = db.collection("subscriptions").doc(voided.purchaseToken);
-					const existing = await ref.get();
-					await ref.set(
-						{
-							entitlementState: "ended",
-							subscriptionState: "SUBSCRIPTION_STATE_REVOKED",
-							updatedAt: FieldValue.serverTimestamp(),
-							willAutoRenew: false,
-						},
-						{ merge: true },
+				if (isGooglePlayGoneError(error)) {
+					userId = await endUnqueryableGooglePlaySubscription(
+						voided.purchaseToken,
 					);
-					const userId = existing.data()?.userId;
-					if (typeof userId === "string") {
-						await reconcileUserEntitlement(userId);
-					}
 				} else {
 					refreshError = error;
 				}
 			}
 		}
-		if (voided.orderId) await syncGooglePlayOrderById(voided.orderId);
+		const order = voided.orderId
+			? await syncGooglePlayOrderById(voided.orderId, userId)
+			: null;
+		const refund = order?.refunds[0] ?? null;
+		const occurredAtMillis = Number(notification.eventTimeMillis);
+		await recordBillingActivity({
+			provider: "play_store",
+			eventKey,
+			eventType: "refund",
+			occurredAt:
+				refund?.occurredAt ??
+				(Number.isFinite(occurredAtMillis)
+					? new Date(occurredAtMillis)
+					: new Date()),
+			userId,
+			amountMicros: refund?.amountMicros,
+			currency: refund?.currency,
+			revenueKind: "refund",
+			revenueEventId: refund?.eventId,
+		});
 		if (refreshError) throw refreshError;
 	}
 }
@@ -212,7 +296,7 @@ export default onMessagePublished(
 					messageId,
 					...safePlayEventLogData(notification),
 				});
-				await processPlayNotification(notification);
+				await processPlayNotification(notification, messageId);
 			},
 			fail: async (error) => {
 				await failEvent(messageId, error);

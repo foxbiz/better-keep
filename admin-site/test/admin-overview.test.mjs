@@ -91,14 +91,50 @@ test('defaults missing optional subscription and pipeline fields', () => {
     suspended: 0,
     unmatched: 0
   });
-  assert.deepEqual(normalized.revenuePipeline, {
+	assert.deepEqual(normalized.revenuePipeline, {
     pending: 0,
     retrying: 0,
     deadLetter: 0,
     excludedTransactions: 0,
     unmatchedSubscriptions: 0,
-    providers: {}
-  });
+		providers: {}
+	});
+	assert.deepEqual(normalized.health, {
+		actionable: {
+			pendingRevenue: 0,
+			retryingRevenue: 0,
+			deadLetterRevenue: 0,
+			subscriptionIssues: 0
+		},
+		quarantined: { revenueTransactions: 0, subscriptionIssues: 0 },
+		providers: {}
+	});
+});
+
+test('uses additive health categories while retaining the legacy pipeline', () => {
+	const overview = baseOverview({
+		revenuePipeline: {
+			pending: 9,
+			excludedTransactions: 10,
+			providers: { play_store: { status: 'legacy', updatedAt: null } }
+		},
+		health: {
+			actionable: { pendingRevenue: 1, subscriptionIssues: 2 },
+			quarantined: { revenueTransactions: 10, subscriptionIssues: 26 },
+			providers: { play_store: { status: 'ready', updatedAt: '2026-08-15T10:00:00.000Z' } }
+		}
+	});
+
+	const normalized = normalizeAdminOverview(overview);
+
+	assert.equal(normalized.revenuePipeline.pending, 9);
+	assert.equal(normalized.health.actionable.pendingRevenue, 1);
+	assert.equal(normalized.health.actionable.subscriptionIssues, 2);
+	assert.deepEqual(normalized.health.quarantined, {
+		revenueTransactions: 10,
+		subscriptionIssues: 26
+	});
+	assert.equal(normalized.health.providers.play_store.status, 'ready');
 });
 
 test('rejects unknown financial shapes with an actionable contract error', () => {

@@ -25,6 +25,8 @@ function extractWorkflowJob(source, jobName) {
 test("the tracked pre-commit hook runs the complete release gate", () => {
 	const hook = readRepositoryFile(".githooks", "pre-commit");
 	assert.match(hook, /^#!\/bin\/sh\s*$/m);
+	assert.match(hook, /git rev-parse --local-env-vars/);
+	assert.match(hook, /^\s*unset "\$variable"\s*$/m);
 	assert.match(hook, /^exec npm run release\s*$/m);
 });
 

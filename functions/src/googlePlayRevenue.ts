@@ -160,6 +160,32 @@ export interface GooglePlayOrder {
 	total?: GoogleMoney | null;
 }
 
+export interface EnqueuedGooglePlayRevenueItem {
+	amountMicros: number;
+	currency: string;
+	eventId: string;
+	kind: "charge" | "refund";
+	occurredAt: Date;
+}
+
+export interface EnqueuedGooglePlayOrder {
+	charge: EnqueuedGooglePlayRevenueItem | null;
+	refunds: EnqueuedGooglePlayRevenueItem[];
+}
+
+export interface GooglePlayOrderRevenueItem {
+	amountMicros: number;
+	currency: string;
+	kind: "charge" | "refund";
+	occurredAt: Date;
+	providerTransactionId: string;
+}
+
+export interface ParsedGooglePlayOrderRevenue {
+	charge: GooglePlayOrderRevenueItem | null;
+	refunds: GooglePlayOrderRevenueItem[];
+}
+
 function moneyToMicros(money: GoogleMoney | null | undefined): {
 	amountMicros: number;
 	currency: string;
@@ -202,48 +228,43 @@ export async function getGooglePlayOrder(
 	return response.data;
 }
 
-export async function syncGooglePlayOrderById(orderId: string): Promise<void> {
+export async function syncGooglePlayOrderById(
+	orderId: string,
+	userId: string | null = null,
+): Promise<EnqueuedGooglePlayOrder> {
 	const order = await getGooglePlayOrder(orderId);
-	await enqueueVerifiedGooglePlayOrder(orderId, order);
+	return enqueueVerifiedGooglePlayOrder(orderId, order, userId);
 }
 
-export async function enqueueVerifiedGooglePlayOrder(
+export function googlePlayOrderRevenueItems(
 	orderId: string,
 	order: GooglePlayOrder,
-): Promise<void> {
+): ParsedGooglePlayOrderRevenue {
 	const resolvedOrderId = order.orderId ?? orderId;
-	const charge = moneyToMicros(order.total);
+	const chargeMoney = moneyToMicros(order.total);
 	const chargedAt = validEventDate(
 		order.orderHistory?.processedEvent?.eventTime ?? order.createTime,
 	);
-	if (charge && chargedAt) {
-		await enqueueRevenueEvent({
-			provider: "play_store",
-			providerTransactionId: `${resolvedOrderId}:charge`,
-			userId: null,
-			amountMicros: charge.amountMicros,
-			currency: charge.currency,
-			kind: "charge",
-			environment: "production",
-			occurredAt: chargedAt,
-			metadata: { orderNumber: resolvedOrderId, source: "orders_api" },
-		});
-	}
+	const charge =
+		chargeMoney && chargedAt
+			? {
+					...chargeMoney,
+					kind: "charge" as const,
+					occurredAt: chargedAt,
+					providerTransactionId: `${resolvedOrderId}:charge`,
+				}
+			: null;
+	const refunds: GooglePlayOrderRevenueItem[] = [];
 
 	const fullRefund = order.orderHistory?.refundEvent;
 	const fullRefundMoney = moneyToMicros(fullRefund?.refundDetails?.total);
 	const fullRefundAt = validEventDate(fullRefund?.eventTime);
 	if (fullRefundMoney && fullRefundAt) {
-		await enqueueRevenueEvent({
-			provider: "play_store",
-			providerTransactionId: `${resolvedOrderId}:refund:full`,
-			userId: null,
-			amountMicros: fullRefundMoney.amountMicros,
-			currency: fullRefundMoney.currency,
+		refunds.push({
+			...fullRefundMoney,
 			kind: "refund",
-			environment: "production",
 			occurredAt: fullRefundAt,
-			metadata: { orderNumber: resolvedOrderId, source: "orders_api" },
+			providerTransactionId: `${resolvedOrderId}:refund:full`,
 		});
 	}
 
@@ -252,20 +273,51 @@ export async function enqueueVerifiedGooglePlayOrder(
 		const refund = moneyToMicros(partial.refundDetails?.total);
 		const refundedAt = validEventDate(partial.processTime);
 		if (!refund || !refundedAt) continue;
-		await enqueueRevenueEvent({
-			provider: "play_store",
+		refunds.push({
+			...refund,
+			kind: "refund",
+			occurredAt: refundedAt,
 			providerTransactionId:
 				`${resolvedOrderId}:refund:partial:` +
 				`${Math.floor(refundedAt.getTime() / 1000)}:${refund.amountMicros}`,
-			userId: null,
-			amountMicros: refund.amountMicros,
-			currency: refund.currency,
-			kind: "refund",
-			environment: "production",
-			occurredAt: refundedAt,
-			metadata: { orderNumber: resolvedOrderId, source: "orders_api" },
 		});
 	}
+	return { charge, refunds };
+}
+
+export async function enqueueVerifiedGooglePlayOrder(
+	orderId: string,
+	order: GooglePlayOrder,
+	userId: string | null = null,
+): Promise<EnqueuedGooglePlayOrder> {
+	const resolvedOrderId = order.orderId ?? orderId;
+	const parsed = googlePlayOrderRevenueItems(orderId, order);
+	const enqueue = async (
+		item: GooglePlayOrderRevenueItem,
+	): Promise<EnqueuedGooglePlayRevenueItem> => {
+		const eventId = await enqueueRevenueEvent({
+			provider: "play_store",
+			providerTransactionId: item.providerTransactionId,
+			userId,
+			amountMicros: item.amountMicros,
+			currency: item.currency,
+			kind: item.kind,
+			environment: "production",
+			occurredAt: item.occurredAt,
+			metadata: { orderNumber: resolvedOrderId, source: "orders_api" },
+		});
+		return {
+			amountMicros: item.amountMicros,
+			currency: item.currency,
+			eventId,
+			kind: item.kind,
+			occurredAt: item.occurredAt,
+		};
+	};
+	return {
+		charge: parsed.charge ? await enqueue(parsed.charge) : null,
+		refunds: await Promise.all(parsed.refunds.map(enqueue)),
+	};
 }
 
 async function downloadReport(

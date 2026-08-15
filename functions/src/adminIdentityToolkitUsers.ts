@@ -190,7 +190,11 @@ export function identityToolkitClaimsAuth({
 			const user = (payload.users ?? []).find(
 				(candidate) => candidate.localId === uid,
 			);
-			if (!user) throw new Error("Identity Platform user was not found");
+			if (!user) {
+				const error = new Error("Identity Platform user was not found");
+				Object.assign(error, { code: "auth/user-not-found" });
+				throw error;
+			}
 			return { customClaims: customClaims(user.customAttributes) };
 		},
 		async setCustomUserClaims(uid, claims) {

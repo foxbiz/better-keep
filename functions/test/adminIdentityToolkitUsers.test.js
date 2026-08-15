@@ -105,6 +105,22 @@ test("claims API failures expose only the operation and HTTP status", async () =
 	);
 });
 
+test("claims lookup classifies deleted users as terminal", async () => {
+	const claimsAuth = identityToolkitClaimsAuth({
+		credential,
+		projectId: "better-keep-notes",
+		fetchImpl: async () =>
+			new Response(JSON.stringify({ users: [] }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			}),
+	});
+	await assert.rejects(claimsAuth.getUser("deleted"), (error) => {
+		assert.equal(error.code, "auth/user-not-found");
+		return true;
+	});
+});
+
 test("lists users with a bounded page and explicit quota project", async () => {
 	let request;
 	const result = await listIdentityToolkitUsers({

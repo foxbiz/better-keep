@@ -6,6 +6,10 @@ import {
 	appStoreWillAutoRenew,
 	resolveAppStoreNotification,
 } from "../appStoreSubscription";
+import {
+	appStoreBillingActivityType,
+	writeBillingActivity,
+} from "../billingActivity";
 import { auth, db, emailPassword } from "../config";
 import { enqueueRevenueEventInTransaction } from "../revenueOutbox";
 import { normalizedSubscriptionFields } from "../subscriptionEntitlement";
@@ -311,8 +315,12 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 				: {};
 
 		await db.runTransaction(async (transaction) => {
+			let revenueEventId: string | null = null;
 			if (revenueEvent) {
-				await enqueueRevenueEventInTransaction(transaction, revenueEvent);
+				revenueEventId = await enqueueRevenueEventInTransaction(
+					transaction,
+					revenueEvent,
+				);
 			}
 			transaction.set(
 				subscriptionRef,
@@ -334,6 +342,28 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 				},
 				{ merge: true },
 			);
+			writeBillingActivity(transaction, {
+				provider: "app_store",
+				eventKey: notificationUUID,
+				eventType: appStoreBillingActivityType(notificationType, subtype),
+				occurredAt: new Date(
+					notificationSignedDateMs ?? purchaseDateMs ?? Date.now(),
+				),
+				userId,
+				productId,
+				environment:
+					environment === "Production"
+						? "production"
+						: environment === "Sandbox"
+							? "test"
+							: "unknown",
+				subscriptionState:
+					decision.kind === "state_change" ? decision.subscriptionState : null,
+				amountMicros: revenueEvent?.amountMicros,
+				currency: revenueEvent?.currency,
+				revenueKind: revenueEvent?.kind,
+				revenueEventId,
+			});
 		});
 
 		if (decision.kind === "state_change") {

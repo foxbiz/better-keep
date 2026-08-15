@@ -17,6 +17,10 @@ test("production deploy config and Firebase runtimes stay pinned", () => {
 	);
 	assert.equal(config.functions.source, "functions");
 	assert.equal(config.functions.runtime, "nodejs22");
+	assert.deepEqual(config.functions.predeploy, [
+		'npm --prefix "$RESOURCE_DIR" run validate:deploy-env',
+		'npm --prefix "$RESOURCE_DIR" run build',
+	]);
 	assert.equal(emulatorConfig.functions.runtime, "nodejs22");
 	assert.equal(rootPackage.engines.node, "22.x || 24.x");
 	assert.equal(

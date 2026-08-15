@@ -1,5 +1,5 @@
 import type { UserRecord } from "firebase-admin/auth";
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldPath, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
@@ -10,14 +10,21 @@ import {
 import { executeAuditedAdminAction } from "./adminAudit";
 import {
 	ADMIN_ACCESS_CLAIM,
+	ADMIN_BILLING_ACTIVITY_COLLECTION,
 	ADMIN_METRICS_COLLECTION,
 	ADMIN_REVENUE_COLLECTION,
 	ADMIN_REVENUE_EVENT_COLLECTION,
 	ADMIN_REVENUE_SUMMARY_COLLECTION,
 	ADMIN_SUBSCRIPTION_ISSUE_COLLECTION,
 	ADMIN_USER_COLLECTION,
+	PAID_SUBSCRIPTION_SOURCES,
 } from "./adminConfig";
+import { mergedRevenueProviderStatus } from "./adminMetrics";
 import { syncAdminUserIndex } from "./adminUserIndex";
+import {
+	BILLING_ACTIVITY_TYPES,
+	type BillingActivityType,
+} from "./billingActivity";
 import { auth, db } from "./config";
 import { monthKey, revenueSummaryAmounts } from "./revenueLedger";
 import {
@@ -41,6 +48,13 @@ interface ListUsersInput {
 	pageSize?: number;
 	search?: string;
 	segment?: AdminUserSegment;
+}
+
+interface ListBillingActivityInput {
+	cursor?: string;
+	eventType?: BillingActivityType;
+	pageSize?: number;
+	provider?: string;
 }
 
 interface UserLookupInput {
@@ -127,6 +141,45 @@ function encodeCursor(data: Record<string, unknown>): string | null {
 	if (!(createdAt instanceof Timestamp) || typeof uid !== "string") return null;
 	return Buffer.from(
 		JSON.stringify({ createdAt: createdAt.toMillis(), uid }),
+		"utf8",
+	).toString("base64url");
+}
+
+function parseActivityCursor(value: string | undefined): {
+	id: string;
+	occurredAt: Timestamp;
+} | null {
+	if (!value) return null;
+	try {
+		const decoded = JSON.parse(
+			Buffer.from(value, "base64url").toString("utf8"),
+		) as { id?: string; occurredAt?: number };
+		if (
+			typeof decoded.id !== "string" ||
+			typeof decoded.occurredAt !== "number" ||
+			!Number.isFinite(decoded.occurredAt)
+		) {
+			throw new Error("invalid cursor");
+		}
+		return {
+			id: decoded.id,
+			occurredAt: Timestamp.fromMillis(decoded.occurredAt),
+		};
+	} catch {
+		throw new HttpsError(
+			"invalid-argument",
+			"The billing activity cursor is invalid",
+		);
+	}
+}
+
+function encodeActivityCursor(
+	document: FirebaseFirestore.QueryDocumentSnapshot,
+): string | null {
+	const occurredAt = document.data().occurredAt;
+	if (!(occurredAt instanceof Timestamp)) return null;
+	return Buffer.from(
+		JSON.stringify({ id: document.id, occurredAt: occurredAt.toMillis() }),
 		"utf8",
 	).toString("base64url");
 }
@@ -283,6 +336,7 @@ export const adminGetOverview = onCall(
 			retryingRevenue,
 			deadLetterRevenue,
 			openSubscriptionIssues,
+			quarantinedSubscriptionIssues,
 			excludedRevenue,
 		] = await Promise.all([
 			db.collection(ADMIN_METRICS_COLLECTION).doc("current").get(),
@@ -323,6 +377,11 @@ export const adminGetOverview = onCall(
 				.count()
 				.get(),
 			db
+				.collection(ADMIN_SUBSCRIPTION_ISSUE_COLLECTION)
+				.where("status", "==", "quarantined")
+				.count()
+				.get(),
+			db
 				.collection(ADMIN_REVENUE_COLLECTION)
 				.where("validationStatus", "==", "excluded")
 				.count()
@@ -345,6 +404,9 @@ export const adminGetOverview = onCall(
 		);
 		const lifetimeAmounts = revenueSummaryAmounts(lifetimeRevenue.data());
 		const monthlyAmounts = revenueSummaryAmounts(monthlyRevenue.data());
+		const providerStatuses = serializeProviderStatus(
+			mergedRevenueProviderStatus(metricsData),
+		);
 
 		return {
 			schemaVersion: 2,
@@ -382,8 +444,143 @@ export const adminGetOverview = onCall(
 				deadLetter: deadLetterRevenue.data().count,
 				excludedTransactions: excludedRevenue.data().count,
 				unmatchedSubscriptions: openSubscriptionIssues.data().count,
-				providers: serializeProviderStatus(metricsData?.revenueProviderStatus),
+				providers: providerStatuses,
 			},
+			health: {
+				actionable: {
+					pendingRevenue: pendingRevenue.data().count,
+					retryingRevenue: retryingRevenue.data().count,
+					deadLetterRevenue: deadLetterRevenue.data().count,
+					subscriptionIssues: openSubscriptionIssues.data().count,
+				},
+				quarantined: {
+					revenueTransactions: excludedRevenue.data().count,
+					subscriptionIssues: quarantinedSubscriptionIssues.data().count,
+				},
+				providers: providerStatuses,
+			},
+		};
+	},
+);
+
+export const adminListBillingActivity = onCall<ListBillingActivityInput>(
+	{ enforceAppCheck: true },
+	async (request) => {
+		requestAuth(request);
+		const input =
+			request.data && typeof request.data === "object" ? request.data : {};
+		const requestedPageSize = input.pageSize ?? 25;
+		if (!Number.isInteger(requestedPageSize)) {
+			throw new HttpsError("invalid-argument", "pageSize must be an integer");
+		}
+		const pageSize = Math.min(Math.max(requestedPageSize, 1), 100);
+		const provider = input.provider;
+		if (
+			provider !== undefined &&
+			!(PAID_SUBSCRIPTION_SOURCES as readonly string[]).includes(provider)
+		) {
+			throw new HttpsError("invalid-argument", "Unknown billing provider");
+		}
+		const eventType = input.eventType;
+		if (
+			eventType !== undefined &&
+			!(BILLING_ACTIVITY_TYPES as readonly string[]).includes(eventType)
+		) {
+			throw new HttpsError("invalid-argument", "Unknown billing activity type");
+		}
+
+		let query: FirebaseFirestore.Query = db.collection(
+			ADMIN_BILLING_ACTIVITY_COLLECTION,
+		);
+		if (provider) query = query.where("provider", "==", provider);
+		if (eventType) query = query.where("eventType", "==", eventType);
+		query = query
+			.orderBy("occurredAt", "desc")
+			.orderBy(FieldPath.documentId(), "desc")
+			.limit(pageSize + 1);
+		const cursor = parseActivityCursor(input.cursor);
+		if (cursor) query = query.startAfter(cursor.occurredAt, cursor.id);
+		const snapshot = await query.get();
+		const hasMore = snapshot.docs.length > pageSize;
+		const page = snapshot.docs.slice(0, pageSize);
+
+		const userIds = [
+			...new Set(
+				page
+					.map((document) => document.data().userId)
+					.filter((value): value is string => typeof value === "string"),
+			),
+		];
+		const revenueEventIds = [
+			...new Set(
+				page
+					.map((document) => document.data().revenueEventId)
+					.filter((value): value is string => typeof value === "string"),
+			),
+		];
+		const refs = [
+			...userIds.map((uid) => db.collection(ADMIN_USER_COLLECTION).doc(uid)),
+			...revenueEventIds.map((id) =>
+				db.collection(ADMIN_REVENUE_EVENT_COLLECTION).doc(id),
+			),
+		];
+		const related = refs.length > 0 ? await db.getAll(...refs) : [];
+		const relatedByPath = new Map(
+			related.map((document) => [document.ref.path, document.data() ?? null]),
+		);
+
+		return {
+			activities: page.map((document) => {
+				const data = document.data();
+				const userId = typeof data.userId === "string" ? data.userId : null;
+				const revenueEventId =
+					typeof data.revenueEventId === "string" ? data.revenueEventId : null;
+				const customer = userId
+					? relatedByPath.get(
+							db.collection(ADMIN_USER_COLLECTION).doc(userId).path,
+						)
+					: null;
+				const revenueEvent = revenueEventId
+					? relatedByPath.get(
+							db.collection(ADMIN_REVENUE_EVENT_COLLECTION).doc(revenueEventId)
+								.path,
+						)
+					: null;
+				return {
+					id: document.id,
+					provider: data.provider,
+					eventType: data.eventType,
+					occurredAt: iso(data.occurredAt),
+					origin: data.origin ?? "live",
+					billingPeriod: data.billingPeriod ?? null,
+					environment: data.environment ?? "unknown",
+					subscriptionState: data.subscriptionState ?? null,
+					entitlementState: data.entitlementState ?? null,
+					amountMicros:
+						Number.isSafeInteger(data.amountMicros) && data.amountMicros >= 0
+							? String(data.amountMicros)
+							: null,
+					currency: typeof data.currency === "string" ? data.currency : null,
+					revenueKind: data.revenueKind ?? null,
+					revenueStatus:
+						typeof revenueEvent?.status === "string"
+							? revenueEvent.status
+							: (data.revenueStatus ?? null),
+					customer: userId
+						? {
+								uid: userId,
+								email: customer?.email ?? null,
+								displayName: customer?.displayName ?? null,
+							}
+						: null,
+				};
+			}),
+			nextCursor:
+				hasMore && page.length > 0
+					? encodeActivityCursor(
+							page.at(-1) as FirebaseFirestore.QueryDocumentSnapshot,
+						)
+					: null,
 		};
 	},
 );

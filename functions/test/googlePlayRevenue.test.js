@@ -3,6 +3,7 @@ const test = require("node:test");
 const { strToU8, zipSync } = require("fflate");
 const {
 	isGooglePlaySubscriptionSalesRow,
+	googlePlayOrderRevenueItems,
 	parseGooglePlayRevenueRow,
 	parseGooglePlaySalesArchive,
 	normalizeGooglePlayReportBucket,
@@ -77,4 +78,37 @@ test("extracts a CSV from the Play report ZIP archive", () => {
 	const rows = parseGooglePlaySalesArchive(archive);
 	assert.equal(rows.length, 1);
 	assert.equal(rows[0]["Order Number"], base["Order Number"]);
+});
+
+test("normalizes Orders API charges and processed refunds for ingestion", () => {
+	const order = googlePlayOrderRevenueItems("GPA.order", {
+		orderId: "GPA.order",
+		total: { units: "2", nanos: 990_000_000, currencyCode: "eur" },
+		orderHistory: {
+			processedEvent: { eventTime: "2026-08-15T10:00:00.000Z" },
+			refundEvent: {
+				eventTime: "2026-08-16T10:00:00.000Z",
+				refundDetails: {
+					total: { units: "2", nanos: 990_000_000, currencyCode: "eur" },
+				},
+			},
+			partialRefundEvents: [
+				{
+					state: "PENDING",
+					processTime: "2026-08-16T11:00:00.000Z",
+					refundDetails: { total: { units: "1", currencyCode: "EUR" } },
+				},
+			],
+		},
+	});
+	assert.deepEqual(
+		{
+			amountMicros: order.charge.amountMicros,
+			currency: order.charge.currency,
+			id: order.charge.providerTransactionId,
+		},
+		{ amountMicros: 2_990_000, currency: "EUR", id: "GPA.order:charge" },
+	);
+	assert.equal(order.refunds.length, 1);
+	assert.equal(order.refunds[0].providerTransactionId, "GPA.order:refund:full");
 });

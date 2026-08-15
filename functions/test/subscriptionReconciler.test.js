@@ -3,6 +3,7 @@ const test = require("node:test");
 const { Timestamp } = require("firebase-admin/firestore");
 const {
  canonicalStatusCleanupFieldNames,
+	isDeletedAuthUserError,
  selectEffectiveEntitlements,
 } = require("../lib/subscriptionReconciler");
 
@@ -154,4 +155,10 @@ test("an expired paid conversion does not recreate the consumed trial", () => {
 
  assert.equal(selected.active.length, 0);
  assert.equal(selected.primary, null);
+});
+
+test("deleted Firebase users are terminal claim-sync outcomes", () => {
+	assert.equal(isDeletedAuthUserError({ code: "auth/user-not-found" }), true);
+	assert.equal(isDeletedAuthUserError({ code: "auth/internal-error" }), false);
+	assert.equal(isDeletedAuthUserError(new Error("user-not-found")), false);
 });

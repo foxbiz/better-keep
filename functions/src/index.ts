@@ -1,6 +1,7 @@
 import {
 	adminGetOverview,
 	adminGetUser,
+	adminListBillingActivity,
 	adminListUsers,
 	adminRevokeUserSessions,
 	adminSetUserDisabled,
@@ -60,6 +61,7 @@ import verifyRazorpaySubscription from "./exports/verifyRazorpaySubscription";
 export {
 	adminGetOverview,
 	adminGetUser,
+	adminListBillingActivity,
 	adminListUsers,
 	adminRevokeUserSessions,
 	adminSetUserDisabled,
@@ -80,8 +82,8 @@ export {
 	grantTrialOnFirstSignIn,
 	oauthCallback,
 	oauthStart,
-	processPlayStoreNotification,
 	processAdminRevenueEvent,
+	processPlayStoreNotification,
 	processScheduledDeletions,
 	razorpayWebhook,
 	reconcileAdminActions,
