@@ -1217,6 +1217,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get checklist => '清单';
 
   @override
+  String get openChecklistView => '打开列表视图';
+
+  @override
+  String get convertToNormalText => '转换为普通文本';
+
+  @override
+  String get convertEntireChecklistToText => '将整个清单转换为文本';
+
+  @override
+  String get focusedChecklistRequiresChecklistOnly =>
+      '仅当每一行都是清单项目时，才可使用专注列表视图。';
+
+  @override
+  String get focusedChecklistUnsupportedContent => '附件和块格式仅可在富文本编辑器中使用。';
+
+  @override
+  String get focusedChecklistInvalidContent => '无法在专注视图中打开此清单。请继续在此处编辑。';
+
+  @override
+  String get completedTasks => '已完成';
+
+  @override
+  String get clearCompletedTasks => '清除已完成项';
+
+  @override
+  String get outdent => '减少缩进';
+
+  @override
+  String get checklistEmbedUnsupported => '附件只能粘贴到富文本编辑器中。';
+
+  @override
+  String get checklistChangedElsewhere => '此笔记已在其他位置更改。请重新加载或保留本地编辑。';
+
+  @override
+  String get reloadChecklist => '重新加载';
+
+  @override
+  String get keepChecklistEdits => '保留我的编辑';
+
+  @override
   String get quote => '引用';
 
   @override

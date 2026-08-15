@@ -1268,6 +1268,51 @@ class AppLocalizationsPt extends AppLocalizations {
   String get checklist => 'Lista de verificação';
 
   @override
+  String get openChecklistView => 'Abrir visualização de lista';
+
+  @override
+  String get convertToNormalText => 'Converter em texto normal';
+
+  @override
+  String get convertEntireChecklistToText =>
+      'Converter toda a checklist em texto';
+
+  @override
+  String get focusedChecklistRequiresChecklistOnly =>
+      'A visualização de lista focada só está disponível quando todas as linhas são itens de checklist.';
+
+  @override
+  String get focusedChecklistUnsupportedContent =>
+      'Anexos e formatação de bloco estão disponíveis apenas no editor de rich text.';
+
+  @override
+  String get focusedChecklistInvalidContent =>
+      'Não foi possível abrir esta checklist na visualização focada. Continue editando aqui.';
+
+  @override
+  String get completedTasks => 'Concluídas';
+
+  @override
+  String get clearCompletedTasks => 'Limpar concluídas';
+
+  @override
+  String get outdent => 'Diminuir recuo';
+
+  @override
+  String get checklistEmbedUnsupported =>
+      'Anexos só podem ser colados no editor de texto formatado.';
+
+  @override
+  String get checklistChangedElsewhere =>
+      'Esta nota foi alterada em outro lugar. Recarregue-a ou mantenha suas edições locais.';
+
+  @override
+  String get reloadChecklist => 'Recarregar';
+
+  @override
+  String get keepChecklistEdits => 'Manter minhas edições';
+
+  @override
   String get quote => 'Citação';
 
   @override

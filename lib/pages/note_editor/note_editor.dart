@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:better_keep/components/adaptive_toolbar.dart';
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
@@ -12,22 +11,18 @@ import 'package:better_keep/dialogs/paste_dialog.dart';
 import 'package:better_keep/dialogs/share_note_dialog.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note_image.dart';
+import 'package:better_keep/models/rich_checklist.dart';
 import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/pages/checklist_editor/rich_checklist_editor.dart';
 import 'package:better_keep/pages/content_preview_page.dart';
-import 'package:better_keep/pages/note_editor/toolbar/align_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/attach_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/checklist_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/indent_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/line_spacing_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/link_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/redo_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/style_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/text_color_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/text_size_button.dart';
-import 'package:better_keep/pages/note_editor/toolbar/undo_button.dart';
+import 'package:better_keep/pages/note_editor/checklist_caret_prompt_controller.dart';
+import 'package:better_keep/pages/note_editor/note_editor_action_service.dart';
+import 'package:better_keep/pages/note_editor/note_editor_app_bar.dart';
+import 'package:better_keep/pages/note_editor/note_editor_toolbar.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/camera_detection.dart';
+import 'package:better_keep/services/checklist_delta_codec.dart';
 import 'package:better_keep/services/checkbox_service.dart';
 import 'package:better_keep/services/due_reminder_presenter.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
@@ -48,7 +43,6 @@ import 'package:better_keep/dialogs/lock_note_dialog.dart';
 import 'package:better_keep/dialogs/reminder.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/reminder.dart';
-import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
@@ -56,6 +50,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
@@ -79,6 +74,19 @@ class NoteEditor extends StatefulWidget {
   State<NoteEditor> createState() => _NoteEditorState();
 }
 
+@immutable
+class _ChecklistPopupGeometry {
+  const _ChecklistPopupGeometry({
+    required this.left,
+    required this.top,
+    required this.width,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+}
+
 class _NoteEditorState extends State<NoteEditor>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   static final Map<String, Metadata> _metadataCache = {};
@@ -87,7 +95,14 @@ class _NoteEditorState extends State<NoteEditor>
   StreamSubscription? _changesSubscription;
   String? _linkUrl;
   Timer? _changeTimer;
+  Timer? _checklistEligibilityTimer;
+  Timer? _checklistLayoutRetryTimer;
   final Set<String> _shownDueReminderOccurrences = <String>{};
+  final ChecklistDeltaCodec _checklistDeltaCodec = ChecklistDeltaCodec();
+  final ChecklistCaretPromptController _checklistPromptController =
+      ChecklistCaretPromptController();
+  final ValueNotifier<({int checked, int total})> _checklistProgress =
+      ValueNotifier((checked: 0, total: 0));
   Future<void> _saveTail = Future<void>.value();
   Future<void>? _pendingLockOperation;
   Future<void>? _pendingLockRemovalOperation;
@@ -103,6 +118,7 @@ class _NoteEditorState extends State<NoteEditor>
   final ScrollController _toolbarScrollController = ScrollController();
   final Map<String, GlobalKey> _audioPlayerKeys = {};
   final GlobalKey<EditorState> _editorKey = GlobalKey<EditorState>();
+  final GlobalKey _editorStackKey = GlobalKey();
   late final Note _note;
   late FocusNode _focusNode;
   late FocusNode _titleFocusNode;
@@ -111,6 +127,8 @@ class _NoteEditorState extends State<NoteEditor>
   late Color _backgroundColor;
   bool _isKeyboardVisible = false;
   String? _initialPlainText;
+  bool _checklistLayoutSyncScheduled = false;
+  _ChecklistPopupGeometry? _checklistPopupGeometry;
 
   // Checkbox cascade/bubble handling
   final CheckboxService _checkboxService = CheckboxService();
@@ -269,6 +287,8 @@ class _NoteEditorState extends State<NoteEditor>
       document: document,
       selection: TextSelection.collapsed(offset: document.length - 1),
     );
+    _updateChecklistProgress();
+    _refreshChecklistEligibility(rebuild: false);
 
     // Store initial plain text for deleteIfUnchanged check
     if (widget.deleteIfUnchanged) {
@@ -287,9 +307,16 @@ class _NoteEditorState extends State<NoteEditor>
 
     _focusNode.addListener(_focusListener);
     _titleFocusNode.addListener(_titleFocusListener);
+    _checklistPromptController.addListener(_onChecklistPromptChanged);
+    _checklistPromptController.updateInteraction(
+      hasFocus: _focusNode.hasFocus,
+      hasCollapsedSelection: _hasCollapsedChecklistSelection,
+    );
+    _quillScrollController.addListener(_requestChecklistPopupLayout);
     _note.sub("changed", _onNoteChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_showOverdueReminderDialogIfNeeded());
+      if (!mounted) return;
+      unawaited(_showOverdueReminderDialogIfNeeded());
     });
   }
 
@@ -310,6 +337,10 @@ class _NoteEditorState extends State<NoteEditor>
       return;
     }
 
+    _checklistPromptController.updateInteraction(
+      hasFocus: _focusNode.hasFocus,
+      hasCollapsedSelection: _hasCollapsedChecklistSelection,
+    );
     if (_focusNode.hasFocus) {
       setState(() {
         _showAttachmentFab = false;
@@ -317,7 +348,413 @@ class _NoteEditorState extends State<NoteEditor>
 
       // Scroll to caret after toolbar animation completes
       _scrollToCaretAfterKeyboard();
+    } else {
+      _checklistLayoutRetryTimer?.cancel();
+      setState(() {});
     }
+    _scheduleChecklistPopupLayout();
+  }
+
+  void _refreshChecklistEligibility({bool rebuild = true}) {
+    _checklistPromptController.updateBlock(_checklistBlockAtCaret);
+    if (rebuild && mounted) setState(() {});
+    _scheduleChecklistPopupLayout(resetAttempts: false);
+  }
+
+  void _scheduleChecklistEligibilityRefresh() {
+    _checklistEligibilityTimer?.cancel();
+    _checklistEligibilityTimer = Timer(
+      const Duration(milliseconds: 120),
+      _refreshChecklistEligibility,
+    );
+  }
+
+  bool get _hasCollapsedChecklistSelection =>
+      _controller.selection.isValid && _controller.selection.isCollapsed;
+
+  ChecklistBlockLookupResult? get _checklistBlockAtCaret {
+    if (!_hasCollapsedChecklistSelection) return null;
+    final lookup = _checklistDeltaCodec.findChecklistBlockAt(
+      _controller.document,
+      _controller.selection.baseOffset,
+    );
+    return lookup.isChecklistLine ? lookup : null;
+  }
+
+  void _onChecklistPromptChanged() {
+    if (!mounted) return;
+    if (!_checklistPromptController.state.isVisible) {
+      _checklistPopupGeometry = null;
+    }
+    setState(() {});
+  }
+
+  void _scheduleChecklistPopupLayout({bool resetAttempts = true}) {
+    if (!mounted) return;
+    if (resetAttempts) _checklistPromptController.requestLayout();
+    if (!_checklistPromptController.state.needsLayout ||
+        _checklistLayoutSyncScheduled) {
+      return;
+    }
+    _checklistLayoutSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checklistLayoutSyncScheduled = false;
+      if (mounted) _syncChecklistPopupLayout();
+    });
+  }
+
+  void _syncChecklistPopupLayout() {
+    if (!_checklistPromptController.state.needsLayout) return;
+    final geometry = _resolveChecklistPopupGeometry();
+    if (geometry == null) {
+      final shouldRetry = _checklistPromptController.markLayoutUnavailable();
+      if (shouldRetry) {
+        final attempt = _checklistPromptController.state.layoutAttempts;
+        _checklistLayoutRetryTimer?.cancel();
+        _checklistLayoutRetryTimer = Timer(
+          Duration(milliseconds: 16 + (attempt * 24)),
+          () => _scheduleChecklistPopupLayout(resetAttempts: false),
+        );
+      }
+      return;
+    }
+    _checklistPopupGeometry = geometry;
+    _checklistLayoutRetryTimer?.cancel();
+    _checklistPromptController.markLayoutReady();
+  }
+
+  void _dismissChecklistPopup() {
+    _checklistLayoutRetryTimer?.cancel();
+    _checklistPopupGeometry = null;
+    _checklistPromptController.dismissUntilNextTap();
+  }
+
+  void _requestChecklistPopupLayout() {
+    _scheduleChecklistPopupLayout();
+  }
+
+  _ChecklistPopupGeometry? _resolveChecklistPopupGeometry() {
+    final editorState = _editorKey.currentState;
+    final stackRenderObject = _editorStackKey.currentContext
+        ?.findRenderObject();
+    if (editorState == null ||
+        !_checklistPromptController.state.needsLayout ||
+        stackRenderObject is! RenderBox ||
+        !stackRenderObject.attached ||
+        !stackRenderObject.hasSize) {
+      return null;
+    }
+
+    try {
+      final renderEditor = editorState.renderEditor;
+      final selection = _controller.selection;
+      if (!renderEditor.attached ||
+          !selection.isValid ||
+          !selection.isCollapsed) {
+        return null;
+      }
+      final caretRect = renderEditor.getLocalRectForCaret(
+        TextPosition(offset: selection.baseOffset),
+      );
+      final caretTop = stackRenderObject.globalToLocal(
+        renderEditor.localToGlobal(caretRect.topLeft),
+      );
+      final media = MediaQuery.of(context);
+      final availableWidth = stackRenderObject.size.width - 16;
+      if (availableWidth < 120) return null;
+      final popupWidth = availableWidth.clamp(120.0, 280.0).toDouble();
+      final left = (caretTop.dx - 14)
+          .clamp(8.0, stackRenderObject.size.width - popupWidth - 8)
+          .toDouble();
+      final safeTop = media.padding.top + 8;
+      final top = (caretTop.dy - 56)
+          .clamp(
+            safeTop,
+            stackRenderObject.size.height - media.padding.bottom - 56,
+          )
+          .toDouble();
+      return _ChecklistPopupGeometry(left: left, top: top, width: popupWidth);
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          '[ChecklistPrompt] caret geometry unavailable: '
+          '${error.runtimeType}',
+        );
+      }
+      return null;
+    }
+  }
+
+  Widget _buildChecklistPopup() {
+    final geometry = _checklistPopupGeometry;
+    if (geometry == null || !_checklistPromptController.state.isVisible) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: geometry.left,
+      top: geometry.top,
+      width: geometry.width,
+      child: Material(
+        key: const ValueKey('open_focused_checklist_popup'),
+        elevation: 8,
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        shadowColor: Colors.black.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                key: const ValueKey('open_focused_checklist'),
+                onTap: _openFocusedChecklistEditor,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 8, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.view_list_rounded, size: 20),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          context.l10n.openChecklistView,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              key: const ValueKey('dismiss_focused_checklist_popup'),
+              onPressed: _dismissChecklistPopup,
+              icon: const Icon(Icons.close, size: 18),
+              tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleChecklistEditorTap() {
+    _checklistPromptController.onEditorTap(
+      block: _checklistBlockAtCaret,
+      hasFocus: _focusNode.hasFocus,
+      hasCollapsedSelection: _hasCollapsedChecklistSelection,
+    );
+    // Quill resolves the tapped line after pointer down. Evaluate on the next
+    // frame so a tap can never open the block at the previous caret position.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final block = _checklistBlockAtCaret;
+      _checklistPromptController.onEditorTap(
+        block: block,
+        hasFocus: _focusNode.hasFocus,
+        hasCollapsedSelection: _hasCollapsedChecklistSelection,
+      );
+      if (block?.isEligible ?? false) {
+        _checklistPromptController.requestLayout();
+        _syncChecklistPopupLayout();
+      } else if (block?.isChecklistLine ?? false) {
+        _showFocusedChecklistEligibilityGuidance(block?.failureReason);
+      }
+    });
+  }
+
+  void _showFocusedChecklistEligibilityGuidance(
+    ChecklistDeltaFailureReason? reason,
+  ) {
+    final message = switch (reason) {
+      ChecklistDeltaFailureReason.nonChecklistLine ||
+      ChecklistDeltaFailureReason.empty ||
+      ChecklistDeltaFailureReason.noItems ||
+      ChecklistDeltaFailureReason.unterminatedLine =>
+        context.l10n.focusedChecklistInvalidContent,
+      ChecklistDeltaFailureReason.embed ||
+      ChecklistDeltaFailureReason.textBlockAttributes ||
+      ChecklistDeltaFailureReason.incompatibleBlock =>
+        context.l10n.focusedChecklistUnsupportedContent,
+      _ => context.l10n.focusedChecklistInvalidContent,
+    };
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _openFocusedChecklistEditor() async {
+    _changeTimer?.cancel();
+    final previousSelection = _controller.selection;
+    final selectedBlock = _checklistBlockAtCaret?.slice;
+    _dismissChecklistPopup();
+    if (selectedBlock == null) return;
+    _focusNode.unfocus();
+    if (!_note.readOnly && !_note.trashed && !await _enqueueSave()) return;
+    if (!mounted) return;
+
+    final session = _checklistDeltaCodec.createEditSession(
+      title: _titleController.text,
+      document: _controller.document,
+      caretOffset: previousSelection.baseOffset,
+      selectionStart: previousSelection.start,
+      selectionEnd: previousSelection.end,
+    );
+    if (session == null) {
+      snackbar(context.l10n.somethingWentWrongTryAgain, Colors.orange);
+      _refreshChecklistEligibility();
+      return;
+    }
+
+    final result = await Navigator.of(context).push<RichChecklistEditorResult>(
+      MaterialPageRoute(
+        builder: (_) => RichChecklistEditor(note: _note, session: session),
+      ),
+    );
+    if (!mounted || result is! RichChecklistEditorResult) return;
+    await _applyChecklistEditorResult(result, previousSelection);
+  }
+
+  Future<void> _openChecklistCollectionEditor() async {
+    _changeTimer?.cancel();
+    final previousSelection = _controller.selection;
+    _dismissChecklistPopup();
+    _focusNode.unfocus();
+    if (!_note.readOnly && !_note.trashed && !await _enqueueSave()) return;
+    if (!mounted) return;
+
+    final session = _checklistDeltaCodec.createCollectionEditSession(
+      title: _titleController.text,
+      document: _controller.document,
+      selectionStart: previousSelection.start,
+      selectionEnd: previousSelection.end,
+    );
+    if (session == null) return;
+
+    final result = await Navigator.of(context)
+        .push<RichChecklistCollectionEditorResult>(
+          MaterialPageRoute(
+            builder: (_) =>
+                RichChecklistCollectionEditor(note: _note, session: session),
+          ),
+        );
+    if (!mounted || result == null) return;
+    await _applyChecklistCollectionEditorResult(result, previousSelection);
+  }
+
+  Future<void> _applyChecklistEditorResult(
+    RichChecklistEditorResult result,
+    TextSelection previousSelection,
+  ) async {
+    final previousChangesSubscription = _changesSubscription;
+    _changesSubscription = null;
+    unawaited(previousChangesSubscription?.cancel());
+    if (!mounted) return;
+    final currentBody = _controller.document.toDelta();
+    final currentSlice = currentBody
+        .slice(
+          result.replacementStart,
+          result.replacementStart + result.replacementLength,
+        )
+        .toJson();
+    final maxSelectionOffset =
+        documentFromJsonSafe(result.bodyDelta).length - 1;
+    final restoredSelection = TextSelection(
+      baseOffset: result.selectionStart.clamp(0, maxSelectionOffset),
+      extentOffset: result.selectionEnd.clamp(0, maxSelectionOffset),
+      affinity: previousSelection.affinity,
+      isDirectional: previousSelection.isDirectional,
+    );
+    if (!result.requiresFullRefresh &&
+        _checklistDeltaCodec.fingerprintOperations(currentSlice) ==
+            result.sourceFingerprint) {
+      final transaction = Delta()..retain(result.replacementStart);
+      for (final operation in Delta.fromJson(
+        result.replacementDelta,
+      ).toList()) {
+        transaction.push(operation);
+      }
+      transaction.delete(result.replacementLength);
+      _controller.compose(transaction, restoredSelection, ChangeSource.local);
+      _controller.updateSelection(restoredSelection, ChangeSource.local);
+    } else {
+      final document = documentFromJsonSafe(result.bodyDelta);
+      document.setCustomRules(customQuillRules);
+      _controller.document = document;
+      _controller.updateSelection(restoredSelection, ChangeSource.local);
+    }
+    _changesSubscription = _controller.changes.listen(
+      _controllerChangesListener,
+    );
+    if (_titleController.text != result.title) {
+      _titleController.text = result.title;
+    }
+    _note
+      ..title = result.title
+      ..content = result.content
+      ..plainText = result.plainText;
+    _checkboxService.invalidateCache();
+    _updateChecklistProgress();
+    _checklistPromptController.updateBlock(null);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _applyChecklistCollectionEditorResult(
+    RichChecklistCollectionEditorResult result,
+    TextSelection previousSelection,
+  ) async {
+    final previousChangesSubscription = _changesSubscription;
+    _changesSubscription = null;
+    unawaited(previousChangesSubscription?.cancel());
+    if (!mounted) return;
+    final maxSelectionOffset =
+        documentFromJsonSafe(result.bodyDelta).length - 1;
+    final restoredSelection = TextSelection(
+      baseOffset: result.selectionStart.clamp(0, maxSelectionOffset),
+      extentOffset: result.selectionEnd.clamp(0, maxSelectionOffset),
+      affinity: previousSelection.affinity,
+      isDirectional: previousSelection.isDirectional,
+    );
+    var appliedTransaction = false;
+    if (!result.requiresFullRefresh) {
+      try {
+        final transaction = _checklistDeltaCodec.buildCollectionTransaction(
+          currentBodyDelta: _controller.document.toDelta().toJson(),
+          replacements: result.replacements,
+        );
+        if (transaction.isNotEmpty) {
+          _controller.compose(
+            transaction,
+            restoredSelection,
+            ChangeSource.local,
+          );
+        }
+        _controller.updateSelection(restoredSelection, ChangeSource.local);
+        appliedTransaction = true;
+      } on ChecklistBlockStaleException {
+        appliedTransaction = false;
+      }
+    }
+    if (!appliedTransaction) {
+      final document = documentFromJsonSafe(result.bodyDelta);
+      document.setCustomRules(customQuillRules);
+      _controller.document = document;
+      _controller.updateSelection(restoredSelection, ChangeSource.local);
+    }
+    _changesSubscription = _controller.changes.listen(
+      _controllerChangesListener,
+    );
+    if (_titleController.text != result.title) {
+      _titleController.text = result.title;
+    }
+    _note
+      ..title = result.title
+      ..content = result.content
+      ..plainText = result.plainText;
+    _checkboxService.invalidateCache();
+    _updateChecklistProgress();
+    _checklistPromptController.updateBlock(null);
+    if (mounted) setState(() {});
   }
 
   /// Scrolls the editor to ensure the caret is visible above the toolbar
@@ -620,6 +1057,8 @@ class _NoteEditorState extends State<NoteEditor>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _changeTimer?.cancel();
+    _checklistEligibilityTimer?.cancel();
+    _checklistLayoutRetryTimer?.cancel();
     _changesSubscription?.cancel();
     // Cancel pending scroll timers
     for (final timer in _scrollTimers) {
@@ -632,15 +1071,18 @@ class _NoteEditorState extends State<NoteEditor>
     _controller.removeListener(_didChangeSelection);
     _controller.dispose();
     _titleController.dispose();
+    _focusNode.removeListener(_focusListener);
+    _titleFocusNode.removeListener(_titleFocusListener);
+    _checklistPromptController.removeListener(_onChecklistPromptChanged);
+    _checklistPromptController.dispose();
+    _checklistProgress.dispose();
+    _quillScrollController.removeListener(_requestChecklistPopupLayout);
     _focusNode.dispose();
     _titleFocusNode.dispose();
     _note.unsub("changed", _onNoteChanged);
     _quillScrollController.dispose();
     _carouselScrollController.dispose();
     _toolbarScrollController.dispose();
-
-    _focusNode.removeListener(_focusListener);
-    _titleFocusNode.removeListener(_titleFocusListener);
 
     super.dispose();
   }
@@ -660,6 +1102,7 @@ class _NoteEditorState extends State<NoteEditor>
   @override
   void didChangeMetrics() {
     super.didChangeMetrics();
+    _requestChecklistPopupLayout();
     // Check keyboard visibility based on view insets
     // Guard against empty views on Windows during minimize/display changes
     final views = WidgetsBinding.instance.platformDispatcher.views;
@@ -679,56 +1122,6 @@ class _NoteEditorState extends State<NoteEditor>
     }
   }
 
-  Widget? _buildAppBarTitle(Color foregroundColor) {
-    final hasCheckboxes = _note.hasCheckboxes;
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    if (!hasCheckboxes || screenWidth < 400) return null;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final children = <Widget>[];
-
-        // Add checkbox progress
-        if (hasCheckboxes) {
-          final checkboxCount = _note.checkboxCount;
-          final progress = _note.checkboxProgress;
-          final isComplete = progress == 1.0;
-
-          children.add(
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isComplete ? Icons.check_circle : Icons.checklist,
-                  size: 18,
-                  color: isComplete
-                      ? Colors.green
-                      : foregroundColor.withAlpha(180),
-                ),
-                SizedBox(width: 4),
-                Text(
-                  '${checkboxCount.checked}/${checkboxCount.total}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isComplete ? Colors.green : foregroundColor,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: children,
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     Color backgroundColor = _backgroundColor == Colors.transparent
@@ -745,7 +1138,6 @@ class _NoteEditorState extends State<NoteEditor>
       foregroundColor = Colors.black;
       placeholderColor = Colors.black38;
     }
-
     final editor = PopScope(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) {
@@ -754,326 +1146,290 @@ class _NoteEditorState extends State<NoteEditor>
       },
       child: AbsorbPointer(
         absorbing: _isClosing,
-        child: Scaffold(
-          floatingActionButton:
-              _showAttachmentFab && !_note.readOnly && !_note.trashed
-              ? BubbleMenu(
-                  fabIcon: Icons.attach_file,
-                  fabSize: 56,
-                  itemDistance: 100,
-                  itemSize: 48,
-                  items: [
-                    BubbleMenuItem(
-                      icon: Icons.image,
-                      label: context.l10n.image,
-                      onTap: _showImageSourceDialog,
+        child: Stack(
+          key: _editorStackKey,
+          fit: StackFit.expand,
+          children: [
+            Scaffold(
+              floatingActionButton:
+                  _showAttachmentFab && !_note.readOnly && !_note.trashed
+                  ? BubbleMenu(
+                      fabIcon: Icons.attach_file,
+                      fabSize: 56,
+                      itemDistance: 100,
+                      itemSize: 48,
+                      items: [
+                        BubbleMenuItem(
+                          icon: Icons.image,
+                          label: context.l10n.image,
+                          onTap: _showImageSourceDialog,
+                        ),
+                        BubbleMenuItem(
+                          icon: Icons.mic,
+                          label: context.l10n.audio,
+                          onTap: _handleAudioAttachment,
+                        ),
+                        BubbleMenuItem(
+                          icon: Icons.draw,
+                          label: context.l10n.sketch,
+                          onTap: _handleSketchAttachment,
+                        ),
+                      ],
+                    )
+                  : null,
+              appBar: NoteEditorAppBar(
+                backgroundColor: backgroundColor,
+                foregroundColor: foregroundColor,
+                leadingWidth: isBigScreen(context) ? 96 : null,
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    BackButton(
+                      color: foregroundColor,
+                      onPressed: () => unawaited(_closeEditor()),
                     ),
-                    BubbleMenuItem(
-                      icon: Icons.mic,
-                      label: context.l10n.audio,
-                      onTap: _handleAudioAttachment,
-                    ),
-                    BubbleMenuItem(
-                      icon: Icons.draw,
-                      label: context.l10n.sketch,
-                      onTap: _handleSketchAttachment,
-                    ),
+                    if (isBigScreen(context))
+                      IconButton(
+                        color: foregroundColor,
+                        onPressed: () {
+                          setState(() {
+                            AppState.editorFullScreen =
+                                !AppState.editorFullScreen;
+                          });
+                        },
+                        icon: Icon(
+                          AppState.editorFullScreen
+                              ? Icons.fullscreen_exit
+                              : Icons.fullscreen,
+                        ),
+                      ),
                   ],
-                )
-              : null,
-          appBar: AppBar(
-            backgroundColor: backgroundColor,
-            foregroundColor: foregroundColor,
-            iconTheme: IconThemeData(color: foregroundColor),
-            actionsIconTheme: IconThemeData(color: foregroundColor),
-            leadingWidth: isBigScreen(context) ? 96 : null,
-            leading: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                BackButton(
-                  color: foregroundColor,
-                  onPressed: () => unawaited(_closeEditor()),
                 ),
-                if (isBigScreen(context))
-                  IconButton(
-                    color: foregroundColor,
-                    onPressed: () {
-                      setState(() {
-                        AppState.editorFullScreen = !AppState.editorFullScreen;
-                      });
-                    },
-                    icon: Icon(
-                      AppState.editorFullScreen
-                          ? Icons.fullscreen_exit
-                          : Icons.fullscreen,
-                    ),
+                title: ValueListenableBuilder<({int checked, int total})>(
+                  valueListenable: _checklistProgress,
+                  builder: (context, progress, _) => NoteCheckboxProgressTitle(
+                    checked: progress.checked,
+                    total: progress.total,
+                    foregroundColor: foregroundColor,
+                    onTap: progress.total == 0
+                        ? null
+                        : () => unawaited(_openChecklistCollectionEditor()),
                   ),
-              ],
-            ),
-            title: _buildAppBarTitle(foregroundColor),
-            centerTitle: true,
-            actions: _note.trashed
-                ? [
-                    IconButton(
-                      color: foregroundColor,
-                      onPressed: () async {
-                        final navigator = Navigator.of(context);
-                        await _note.restoreFromTrash();
-                        if (mounted) {
-                          navigator.pop();
-                        }
-                      },
-                      icon: Icon(Icons.restore_from_trash),
-                      tooltip: context.l10n.restore,
-                    ),
-                  ]
-                : [
-                    _toolNoteColor(_note.color, foregroundColor),
-                    IconButton(
-                      color: foregroundColor,
-                      onPressed: () async {
-                        final res = await reminder(
-                          context,
-                          initialReminder: _note.reminder,
-                        );
-                        if (res != null) {
-                          final result = await _note.setReminder(res);
-                          if (!mounted || !context.mounted) return;
-                          if (result.persisted) {
-                            _shownDueReminderOccurrences.clear();
-                            setState(() {});
-                          }
-                          ReminderScheduleResultPresenter.instance.show(
-                            context,
-                            result,
-                          );
-                          if (result.delivery?.state ==
-                              ReminderDeliveryState.scheduled) {
-                            unawaited(
-                              ReviewPromptService.instance
-                                  .recordPositiveMilestone(
-                                    ReviewMilestone.reminderScheduled,
-                                  ),
-                            );
-                          }
-                        }
-                      },
-                      icon: Icon(
-                        _note.hasReminder
-                            ? (_note.completed
-                                  ? (_note.reminder?.type == ReminderType.alarm
-                                        ? Icons.alarm_off
-                                        : Icons.notifications_off)
-                                  : (_note.hasReminderExpired
-                                        ? (_note.reminder?.type ==
-                                                  ReminderType.alarm
-                                              ? Icons.alarm_on
-                                              : Icons.notification_important)
-                                        : (_note.reminder?.type ==
-                                                  ReminderType.alarm
-                                              ? Icons.alarm
-                                              : Icons.notifications_active)))
-                            : Icons.notifications_none,
-                      ),
-                      tooltip: context.l10n.reminder,
-                    ),
-                    IconButton(
-                      color: foregroundColor,
-                      onPressed: () {
-                        _note.pinned = !_note.pinned;
-                        _note.save();
-                        setState(() {});
-                      },
-                      icon: Icon(
-                        _note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                      ),
-                    ),
-                    IconButton(
-                      color: foregroundColor,
-                      onPressed: () async {
-                        final selectedLabels = await labels(
-                          context,
-                          mode: Labels.labelsModeSelect,
-                          initiallySelected: _note.labels != null
-                              ? _note.labels!.split(',')
-                              : [],
-                        );
-                        if (selectedLabels != null) {
-                          _note.labels = selectedLabels.join(',');
-                          _note.save();
-                          setState(() {});
-                        }
-                      },
-                      icon: Icon(
-                        _note.labels != null && _note.labels!.isNotEmpty
-                            ? Icons.label
-                            : Icons.label_outline,
-                      ),
-                      tooltip: context.l10n.labels,
-                    ),
-                    PopupMenuButton(itemBuilder: _buildPopupMenu),
-                  ],
-          ),
-          backgroundColor: backgroundColor,
-          body: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: _quillScrollController,
-                  child: Column(
-                    children: [
-                      NoteAttachmentsCarousel(
-                        note: _note,
-                        onPop: () => setState(() {}),
-                        scrollController: _carouselScrollController,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16, right: 16),
-                        child: Focus(
-                          onKeyEvent: (node, event) {
-                            if (event is KeyDownEvent) {
-                              if (event.logicalKey ==
-                                      LogicalKeyboardKey.enter ||
-                                  event.logicalKey == LogicalKeyboardKey.tab) {
-                                _handleTitleEnterPressed();
-                                return KeyEventResult.handled;
-                              }
+                ),
+                actions: _note.trashed
+                    ? [
+                        IconButton(
+                          color: foregroundColor,
+                          onPressed: () async {
+                            final navigator = Navigator.of(context);
+                            await _note.restoreFromTrash();
+                            if (mounted) {
+                              navigator.pop();
                             }
-                            return KeyEventResult.ignored;
                           },
-                          child: TextField(
-                            controller: _titleController,
-                            focusNode: _titleFocusNode,
-                            autofocus:
-                                widget.autoFocus ||
-                                (!_note.readOnly && _note.content == ''),
-                            readOnly: _note.readOnly || _note.trashed,
-                            maxLines: null,
-                            keyboardType: TextInputType.text,
-                            textInputAction: TextInputAction.next,
-                            onSubmitted: (_) => _handleTitleEnterPressed(),
-                            onEditingComplete: _handleTitleEnterPressed,
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w600,
-                              color: foregroundColor,
-                            ),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: EdgeInsets.only(bottom: 8),
-                              border: InputBorder.none,
-                              hintText: context.l10n.titleYourThought,
-                              hintStyle: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w600,
-                                color: placeholderColor,
+                          icon: Icon(Icons.restore_from_trash),
+                          tooltip: context.l10n.restore,
+                        ),
+                      ]
+                    : [
+                        NoteEditorAppBarActions(
+                          note: _note,
+                          foregroundColor: foregroundColor,
+                          onColor: () => unawaited(_pickNoteColor()),
+                          onReminder: () => unawaited(_editReminder()),
+                          onPin: _togglePinned,
+                          onLabels: () => unawaited(_editLabels()),
+                          overflowMenu: _buildNoteOverflowMenu(),
+                        ),
+                      ],
+              ),
+              backgroundColor: backgroundColor,
+              body: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: _quillScrollController,
+                      child: Column(
+                        children: [
+                          NoteAttachmentsCarousel(
+                            note: _note,
+                            onPop: () => setState(() {}),
+                            scrollController: _carouselScrollController,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16, right: 16),
+                            child: Focus(
+                              onKeyEvent: (node, event) {
+                                if (event is KeyDownEvent) {
+                                  if (event.logicalKey ==
+                                          LogicalKeyboardKey.enter ||
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.tab) {
+                                    _handleTitleEnterPressed();
+                                    return KeyEventResult.handled;
+                                  }
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              child: TextField(
+                                controller: _titleController,
+                                focusNode: _titleFocusNode,
+                                autofocus:
+                                    widget.autoFocus ||
+                                    (!_note.readOnly && _note.content == ''),
+                                readOnly: _note.readOnly || _note.trashed,
+                                maxLines: null,
+                                keyboardType: TextInputType.text,
+                                textInputAction: TextInputAction.next,
+                                onSubmitted: (_) => _handleTitleEnterPressed(),
+                                onEditingComplete: _handleTitleEnterPressed,
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w600,
+                                  color: foregroundColor,
+                                ),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.only(bottom: 8),
+                                  border: InputBorder.none,
+                                  hintText: context.l10n.titleYourThought,
+                                  hintStyle: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w600,
+                                    color: placeholderColor,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      Theme(
-                        data: Theme.of(context).copyWith(
-                          checkboxTheme: CheckboxThemeData(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
+                          Theme(
+                            data: Theme.of(context).copyWith(
+                              checkboxTheme: CheckboxThemeData(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                side: BorderSide(
+                                  width: 2,
+                                  color: foregroundColor,
+                                ),
+                                splashRadius: 24,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.padded,
+                              ),
                             ),
-                            side: BorderSide(width: 2, color: foregroundColor),
-                            splashRadius: 24,
-                            materialTapTargetSize: MaterialTapTargetSize.padded,
-                          ),
-                        ),
-                        child: DefaultTextStyle(
-                          style: TextStyle(color: foregroundColor),
-                          child: Focus(
-                            onKeyEvent: _handleKeyPressed,
-                            child: QuillEditor.basic(
-                              scrollController: _quillScrollController,
-                              focusNode: _focusNode,
-                              controller: _controller,
-                              config: QuillEditorConfig(
-                                editorKey: _editorKey,
-                                checkBoxReadOnly: _note.trashed,
-                                scrollable: false,
-                                padding: EdgeInsets.only(
-                                  top: 0,
-                                  bottom: 32,
-                                  left: 16,
-                                  right: 16,
-                                ),
-                                readOnlyMouseCursor: SystemMouseCursors.alias,
-                                showCursor: !_note.readOnly && !_note.trashed,
-                                enableInteractiveSelection: true,
-                                enableSelectionToolbar: true,
-                                placeholder: context.l10n.startWriting,
-                                customLeadingBlockBuilder:
-                                    customLeadingBlockBuilder,
-                                customStyles: buildQuillStyles(
-                                  foregroundColor: foregroundColor,
-                                  backgroundColor: backgroundColor,
-                                  placeholderColor: placeholderColor,
-                                ),
-                                embedBuilders: kIsWeb
-                                    ? FlutterQuillEmbeds.editorWebBuilders()
-                                    : FlutterQuillEmbeds.editorBuilders(
-                                        imageEmbedConfig:
-                                            QuillEditorImageEmbedConfig(
-                                              imageProviderBuilder:
-                                                  buildQuillImageProvider,
-                                              imageErrorWidgetBuilder:
-                                                  buildQuillImageErrorWidget,
-                                            ),
+                            child: DefaultTextStyle(
+                              style: TextStyle(color: foregroundColor),
+                              child: Focus(
+                                onKeyEvent: _handleKeyPressed,
+                                child: Listener(
+                                  behavior: HitTestBehavior.translucent,
+                                  onPointerDown: (_) =>
+                                      _handleChecklistEditorTap(),
+                                  child: QuillEditor.basic(
+                                    scrollController: _quillScrollController,
+                                    focusNode: _focusNode,
+                                    controller: _controller,
+                                    config: QuillEditorConfig(
+                                      editorKey: _editorKey,
+                                      checkBoxReadOnly: _note.trashed,
+                                      scrollable: false,
+                                      padding: EdgeInsets.only(
+                                        top: 0,
+                                        bottom: 32,
+                                        left: 16,
+                                        right: 16,
                                       ),
-                                customLinkPrefixes: const ['audio://'],
-                                linkActionPickerDelegate:
-                                    _audioLinkActionPicker,
-                                onLaunchUrl: (url) {
-                                  return;
-                                },
+                                      readOnlyMouseCursor:
+                                          SystemMouseCursors.alias,
+                                      showCursor:
+                                          !_note.readOnly && !_note.trashed,
+                                      enableInteractiveSelection: true,
+                                      enableSelectionToolbar: true,
+                                      placeholder: context.l10n.startWriting,
+                                      customLeadingBlockBuilder:
+                                          customLeadingBlockBuilder,
+                                      customStyles: buildQuillStyles(
+                                        foregroundColor: foregroundColor,
+                                        backgroundColor: backgroundColor,
+                                        placeholderColor: placeholderColor,
+                                      ),
+                                      embedBuilders: kIsWeb
+                                          ? FlutterQuillEmbeds.editorWebBuilders()
+                                          : FlutterQuillEmbeds.editorBuilders(
+                                              imageEmbedConfig:
+                                                  QuillEditorImageEmbedConfig(
+                                                    imageProviderBuilder:
+                                                        buildQuillImageProvider,
+                                                    imageErrorWidgetBuilder:
+                                                        buildQuillImageErrorWidget,
+                                                  ),
+                                            ),
+                                      customLinkPrefixes: const ['audio://'],
+                                      linkActionPickerDelegate:
+                                          _audioLinkActionPicker,
+                                      onLaunchUrl: (url) {
+                                        return;
+                                      },
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          ..._note.recordings.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final recording = entry.value;
+                            _audioPlayerKeys[recording.src] ??= GlobalKey();
+                            return NoteAudioPlayer(
+                              key: _audioPlayerKeys[recording.src],
+                              recording: recording,
+                              noteLocked: _note.locked,
+                              noteSessionUnlocked: _note.unlocked,
+                              passwordProtectedDecoder:
+                                  _note.decryptAttachmentForSession,
+                              onDelete: () async {
+                                _removeAudioTagsForIndex(index);
+                                await _note.removeRecording(recording.src);
+                                _audioPlayerKeys.remove(recording.src);
+                                setState(() {});
+                              },
+                              onUpdate: (updatedRecording) async {
+                                await _note.updateRecording(updatedRecording);
+                                setState(() {});
+                              },
+                            );
+                          }),
+                        ],
                       ),
-                      ..._note.recordings.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final recording = entry.value;
-                        _audioPlayerKeys[recording.src] ??= GlobalKey();
-                        return NoteAudioPlayer(
-                          key: _audioPlayerKeys[recording.src],
-                          recording: recording,
-                          noteLocked: _note.locked,
-                          noteSessionUnlocked: _note.unlocked,
-                          passwordProtectedDecoder:
-                              _note.decryptAttachmentForSession,
-                          onDelete: () async {
-                            _removeAudioTagsForIndex(index);
-                            await _note.removeRecording(recording.src);
-                            _audioPlayerKeys.remove(recording.src);
-                            setState(() {});
-                          },
-                          onUpdate: (updatedRecording) async {
-                            await _note.updateRecording(updatedRecording);
-                            setState(() {});
-                          },
-                        );
-                      }),
-                    ],
+                    ),
                   ),
+                  if (!_note.trashed && !_note.readOnly)
+                    _buildLinkPreview(backgroundColor, foregroundColor),
+                  if (!_note.trashed && !_note.readOnly)
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
+                      child: _showAttachmentFab
+                          ? const SizedBox.shrink()
+                          : _buildToolbar(),
+                    ),
+                ],
+              ),
+            ),
+            if (_checklistPromptController.state.isVisible &&
+                _checklistPopupGeometry != null)
+              Positioned.fill(
+                child: GestureDetector(
+                  key: const ValueKey('focused_checklist_popup_barrier'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _dismissChecklistPopup,
+                  child: const SizedBox.expand(),
                 ),
               ),
-              if (!_note.trashed && !_note.readOnly)
-                _buildLinkPreview(backgroundColor, foregroundColor),
-              if (!_note.trashed && !_note.readOnly)
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
-                  child: _showAttachmentFab
-                      ? const SizedBox.shrink()
-                      : _buildToolbar(),
-                ),
-            ],
-          ),
+            if (_checklistPromptController.state.isVisible &&
+                _checklistPopupGeometry != null)
+              _buildChecklistPopup(),
+          ],
         ),
       ),
     );
@@ -1281,93 +1637,20 @@ class _NoteEditorState extends State<NoteEditor>
   }
 
   Widget _buildToolbar() {
-    final noteColor = _note.color;
-    Color textColor = isDark(noteColor) ? Colors.white : Colors.black;
-    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-
-    return AdaptiveToolbar(
-      key: Key('note_editor_toolbar'),
-      parentColor: noteColor,
-      scrollController: _toolbarScrollController,
-      children: [
-        if (isIOS)
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            child: _isKeyboardVisible
-                ? IconButton(
-                    icon: const Icon(Icons.keyboard_hide),
-                    onPressed: () => _focusNode.unfocus(),
-                    tooltip: context.l10n.hideKeyboard,
-                  )
-                : const SizedBox.shrink(),
-          ),
-        UndoButton(
-          readOnly: _note.readOnly,
-          controller: _controller,
-          focusNode: _focusNode,
-        ),
-        RedoButton(
-          readOnly: _note.readOnly,
-          controller: _controller,
-          focusNode: _focusNode,
-        ),
-        AttachButton(
-          readOnly: _note.readOnly,
-          note: _note,
-          imageAttachmentPreparationService:
-              widget.imageAttachmentPreparationService,
-          onAppendTranscript: _appendTranscriptToNote,
-          onAttachmentAdded: _scrollToAttachments,
-        ),
-        TextColorButton(
-          color: textColor,
-          focusNode: _focusNode,
-          readOnly: _note.readOnly,
-          controller: _controller,
-        ),
-        CheckListButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-        ),
-        LinkButton(controller: _controller, readOnly: _note.readOnly),
-        _styleButton(Attribute.ul),
-        _styleButton(Attribute.ol),
-        _styleButton(Attribute.strikeThrough),
-        _styleButton(Attribute.bold),
-        _styleButton(Attribute.italic),
-        _styleButton(Attribute.underline),
-        AlignButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-        ),
-        IndentButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-        ),
-        TextSizeButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-        ),
-        LineSpacingButton(
-          focusNode: _focusNode,
-          controller: _controller,
-          readOnly: _note.readOnly,
-        ),
-      ],
-    );
-  }
-
-  Widget _styleButton(Attribute attribute) {
-    return StyleButton(
-      attribute: attribute,
-      focusNode: _focusNode,
+    return NoteEditorToolbar(
+      key: const Key('note_editor_toolbar'),
       controller: _controller,
+      focusNode: _focusNode,
       readOnly: _note.readOnly,
+      parentColor: _note.color,
+      scrollController: _toolbarScrollController,
+      note: _note,
+      imageAttachmentPreparationService:
+          widget.imageAttachmentPreparationService,
+      onAppendTranscript: _appendTranscriptToNote,
+      onAttachmentAdded: _scrollToAttachments,
+      showKeyboardHide: _isKeyboardVisible,
+      onHideKeyboard: _focusNode.unfocus,
     );
   }
 
@@ -1625,26 +1908,57 @@ class _NoteEditorState extends State<NoteEditor>
     snackbar(context.l10n.errorSavingNote, Colors.red);
   }
 
-  Widget _toolNoteColor(Color noteColor, Color iconColor) {
-    return IconButton(
-      icon: Icon(Icons.color_lens),
-      color: iconColor,
-      onPressed: () async {
-        _focusNode.unfocus();
-        final color = await colorPicker(
-          context,
-          context.l10n.pickNoteColor,
-          noteColor,
-        );
-        _focusNode.requestFocus();
-        if (color == null) return;
-        _note.color = color;
-        _note.save();
-        setState(() {
-          _backgroundColor = color;
-        });
-      },
+  Future<void> _pickNoteColor() async {
+    final restoreEditorFocus = _focusNode.hasFocus;
+    _focusNode.unfocus();
+    final color = await colorPicker(
+      context,
+      context.l10n.pickNoteColor,
+      _note.color,
     );
+    if (restoreEditorFocus && mounted) _focusNode.requestFocus();
+    if (color == null || !mounted) return;
+    _note.color = color;
+    await _note.save();
+    if (!mounted) return;
+    setState(() => _backgroundColor = color);
+  }
+
+  Future<void> _editReminder() async {
+    final selected = await reminder(context, initialReminder: _note.reminder);
+    if (selected == null) return;
+    final result = await _note.setReminder(selected);
+    if (!mounted) return;
+    if (result.persisted) {
+      _shownDueReminderOccurrences.clear();
+      setState(() {});
+    }
+    ReminderScheduleResultPresenter.instance.show(context, result);
+    if (result.delivery?.state == ReminderDeliveryState.scheduled) {
+      unawaited(
+        ReviewPromptService.instance.recordPositiveMilestone(
+          ReviewMilestone.reminderScheduled,
+        ),
+      );
+    }
+  }
+
+  void _togglePinned() {
+    _note.pinned = !_note.pinned;
+    unawaited(_note.save());
+    setState(() {});
+  }
+
+  Future<void> _editLabels() async {
+    final selectedLabels = await labels(
+      context,
+      mode: Labels.labelsModeSelect,
+      initiallySelected: _note.labels?.split(',') ?? const [],
+    );
+    if (selectedLabels == null || !mounted) return;
+    _note.labels = selectedLabels.join(',');
+    await _note.save();
+    if (mounted) setState(() {});
   }
 
   Future<void> _fetchMetadata(String url) async {
@@ -1733,6 +2047,11 @@ class _NoteEditorState extends State<NoteEditor>
   void _didChangeSelection() {
     final selection = _controller.selection;
     final position = selection.baseOffset;
+    _checklistPromptController.updateBlock(_checklistBlockAtCaret);
+    _checklistPromptController.updateInteraction(
+      hasFocus: _focusNode.hasFocus,
+      hasCollapsedSelection: _hasCollapsedChecklistSelection,
+    );
 
     // First check exact position
     final styles = _controller.getSelectionStyle();
@@ -1751,6 +2070,7 @@ class _NoteEditorState extends State<NoteEditor>
     } else {
       setState(() {});
     }
+    _scheduleChecklistPopupLayout();
   }
 
   Widget _buildLinkPreview(Color backgroundColor, Color foregroundColor) {
@@ -1940,6 +2260,8 @@ class _NoteEditorState extends State<NoteEditor>
   void _controllerChangesListener(DocChange event) {
     // Always set the save timer for any document change (including cascade/bubble)
     _scheduleAutosave();
+    _updateChecklistProgress();
+    _scheduleChecklistEligibilityRefresh();
 
     // Skip checkbox processing if we're applying checkbox cascade/bubble changes
     if (_isApplyingCheckboxChanges) return;
@@ -1950,6 +2272,12 @@ class _NoteEditorState extends State<NoteEditor>
       // Log error but don't crash - checkbox cascade is non-critical
       debugPrint('Checkbox cascade error: $error');
     });
+  }
+
+  void _updateChecklistProgress() {
+    final next = _checklistDeltaCodec.checklistProgress(_controller.document);
+    if (_checklistProgress.value == next) return;
+    _checklistProgress.value = next;
   }
 
   /// Handle nested checkbox cascade (parent→children) and bubble (children→parent) logic
@@ -2158,228 +2486,103 @@ class _NoteEditorState extends State<NoteEditor>
     }
   }
 
-  List<PopupMenuEntry> _buildPopupMenu(BuildContext context) {
-    bool isSaved = _note.id != null;
+  Widget _buildNoteOverflowMenu() {
+    return NoteEditorOverflowMenu(
+      note: _note,
+      lockBusy: _isLockQueued || _isLockRemovalQueued,
+      onArchivedChanged: (value) => unawaited(_setArchived(value)),
+      onReadOnlyChanged: (value) => unawaited(_setReadOnly(value)),
+      onLockedChanged: (value) => unawaited(_setLocked(value)),
+      onSaveAs: () => showExportOptions(context, _note, _controller),
+      onCopyAs: () => showCopyOptions(context, _note, _controller),
+      onPasteAs: () => unawaited(_handlePasteAs(context)),
+      onShare: () => unawaited(_shareCurrentNote()),
+      onDuplicate: () => unawaited(_duplicateCurrentNote()),
+      onDelete: () => unawaited(_moveCurrentNoteToTrash()),
+    );
+  }
 
-    return [
-      PopupMenuItem(
-        height: 20,
-        child: CheckboxListTile(
-          value: _note.archived,
-          onChanged: (checked) {
-            Navigator.of(context).pop();
-            _note.archived = checked ?? false;
-            _note.save();
-            setState(() {});
-          },
-          title: Text(context.l10n.archive),
-        ),
-      ),
-      PopupMenuItem(
-        height: 20,
-        child: CheckboxListTile(
-          value: _note.readOnly,
-          onChanged: (checked) {
-            Navigator.of(context).pop();
-            _note.readOnly = checked ?? false;
-            _controller.readOnly = _note.readOnly;
-            _note.save();
-            setState(() {});
-          },
-          title: Text(context.l10n.readOnly),
-        ),
-      ),
-      PopupMenuItem(
-        height: 20,
-        child: CheckboxListTile(
-          value: _note.locked,
-          onChanged: _isLockQueued || _isLockRemovalQueued
-              ? null
-              : (checked) async {
-                  Navigator.of(context).pop();
+  Future<void> _setArchived(bool value) async {
+    if (!await _enqueueSave()) return;
+    _note.archived = value;
+    await _note.save();
+    if (mounted) setState(() {});
+  }
 
-                  if (checked == true) {
-                    // Check entitlement before allowing new lock
-                    final lockedNotes = await Note.get(NoteType.locked);
+  Future<void> _setReadOnly(bool value) async {
+    if (!await _enqueueSave()) return;
+    _note.readOnly = value;
+    _controller.readOnly = value;
+    await _note.save();
+    if (mounted) setState(() {});
+  }
 
-                    if (!context.mounted) return;
+  Future<void> _setLocked(bool value) async {
+    if (value) {
+      final lockedNotes = await Note.get(NoteType.locked);
+      if (!mounted) return;
+      final check = EntitlementGuard.canLockNote(
+        lockedNotes.length,
+        context.l10n,
+      );
+      if (!check.allowed) {
+        showPaywall(
+          context,
+          feature: GatedFeature.lockNote,
+          customMessage: check.denialReason,
+        );
+        return;
+      }
+      final password = await showLockNoteDialog(context);
+      if (password == null || password.isEmpty || !mounted) return;
+      try {
+        await _enqueueLock(password);
+        if (mounted) snackbar(context.l10n.noteLocked, Colors.green);
+      } catch (error, stackTrace) {
+        AppLogger.error('Failed to lock note', error, stackTrace);
+        if (mounted) {
+          snackbar(context.l10n.somethingWentWrongTryAgain, Colors.red);
+        }
+      }
+    } else {
+      final password = _note.password ?? await showLockNoteDialog(context);
+      if (password == null || password.isEmpty) return;
+      try {
+        await _enqueueLockRemoval(password);
+        if (mounted) snackbar(context.l10n.lockRemoved, Colors.green);
+      } catch (error, stackTrace) {
+        AppLogger.error('Failed to remove note lock', error, stackTrace);
+        if (mounted) {
+          snackbar(context.l10n.somethingWentWrongTryAgain, Colors.red);
+        }
+      }
+    }
+    if (mounted) setState(() {});
+  }
 
-                    final check = EntitlementGuard.canLockNote(
-                      lockedNotes.length,
-                      context.l10n,
-                    );
+  Future<void> _shareCurrentNote() async {
+    if (!await _enqueueSave() || !mounted) return;
+    await showShareNoteDialog(context, _note);
+  }
 
-                    if (!check.allowed) {
-                      showPaywall(
-                        context,
-                        feature: GatedFeature.lockNote,
-                        customMessage: check.denialReason,
-                      );
-                      return;
-                    }
+  Future<void> _duplicateCurrentNote() async {
+    if (_note.id == null || !await _enqueueSave()) return;
+    try {
+      await NoteEditorActionService.duplicate(_note);
+    } catch (error, stackTrace) {
+      AppLogger.error('Duplicated note could not be locked', error, stackTrace);
+      if (mounted) {
+        snackbar(context.l10n.somethingWentWrongTryAgain, Colors.orange);
+      }
+      return;
+    }
+    if (mounted) snackbar(context.l10n.noteDuplicated, Colors.green);
+  }
 
-                    if (!context.mounted) {
-                      snackbar(context.l10n.actionCancelled, Colors.red);
-                      return;
-                    }
-
-                    // Locking: show dialog to set password
-                    final password = await showLockNoteDialog(context);
-
-                    if (password == null || password.isEmpty) {
-                      return;
-                    }
-
-                    try {
-                      await _enqueueLock(password);
-                      if (context.mounted) {
-                        snackbar(context.l10n.noteLocked, Colors.green);
-                      }
-                    } catch (error, stackTrace) {
-                      AppLogger.error('Failed to lock note', error, stackTrace);
-                      if (context.mounted) {
-                        snackbar(
-                          context.l10n.somethingWentWrongTryAgain,
-                          Colors.red,
-                        );
-                      }
-                    }
-                  } else {
-                    // Removing lock: need password to decrypt before removing lock
-                    final password =
-                        _note.password ?? await showLockNoteDialog(context);
-                    if (password == null || password.isEmpty) {
-                      return;
-                    }
-                    try {
-                      await _enqueueLockRemoval(password);
-                      if (context.mounted) {
-                        snackbar(context.l10n.lockRemoved, Colors.green);
-                      }
-                    } catch (error, stackTrace) {
-                      AppLogger.error(
-                        'Failed to remove note lock',
-                        error,
-                        stackTrace,
-                      );
-                      if (context.mounted) {
-                        snackbar(
-                          context.l10n.somethingWentWrongTryAgain,
-                          Colors.red,
-                        );
-                      }
-                    }
-                  }
-                  if (mounted) setState(() {});
-                },
-          title: Row(
-            children: [
-              Expanded(child: Text(context.l10n.locked)),
-              if (_isLockQueued || _isLockRemovalQueued)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-            ],
-          ),
-        ),
-      ),
-      PopupMenuDivider(),
-      PopupMenuItem(
-        height: 20,
-        onTap: () => showExportOptions(context, _note, _controller),
-        child: ListTile(
-          leading: Icon(Icons.save_alt),
-          title: Text(context.l10n.saveAs),
-        ),
-      ),
-      PopupMenuItem(
-        height: 20,
-        onTap: () => showCopyOptions(context, _note, _controller),
-        child: ListTile(
-          leading: Icon(Icons.content_copy),
-          title: Text(context.l10n.copyAs),
-        ),
-      ),
-      PopupMenuItem(
-        height: 20,
-        onTap: () => _handlePasteAs(context),
-        child: ListTile(
-          leading: Icon(Icons.paste),
-          title: Text(context.l10n.pasteAs),
-        ),
-      ),
-      PopupMenuItem(
-        height: 20,
-        onTap: () => showShareNoteDialog(context, _note),
-        child: ListTile(
-          leading: Icon(Icons.share),
-          title: Text(context.l10n.share),
-        ),
-      ),
-      PopupMenuItem(
-        height: 20,
-        onTap: isSaved
-            ? () async {
-                final duplicatedNote = Note(
-                  title: _note.title,
-                  content: _note.content,
-                  plainText: _note.plainText,
-                  labels: _note.labels,
-                  color: _note.color,
-                  pinned: _note.pinned,
-                  archived: _note.archived,
-                  locked: _note.locked,
-                  readOnly: _note.readOnly,
-                  attachments: _note.attachments
-                      .map((a) => NoteAttachment.fromJson(a.toJson()))
-                      .toList(),
-                );
-                if (_note.locked &&
-                    _note.password != null &&
-                    _note.password!.isNotEmpty) {
-                  try {
-                    await duplicatedNote.lock(_note.password!);
-                  } catch (error, stackTrace) {
-                    AppLogger.error(
-                      'Duplicated note could not be locked',
-                      error,
-                      stackTrace,
-                    );
-                    if (context.mounted) {
-                      snackbar(
-                        context.l10n.somethingWentWrongTryAgain,
-                        Colors.orange,
-                      );
-                    }
-                    return;
-                  }
-                }
-                if (context.mounted) {
-                  snackbar(context.l10n.noteDuplicated, Colors.green);
-                }
-              }
-            : null,
-        child: ListTile(
-          enabled: isSaved,
-          leading: Icon(Icons.copy),
-          title: Text(context.l10n.duplicate),
-        ),
-      ),
-      PopupMenuItem(
-        height: 20,
-        child: ListTile(
-          enabled: isSaved,
-          leading: Icon(Icons.delete),
-          title: Text(context.l10n.delete),
-        ),
-        onTap: () {
-          Navigator.of(context).pop();
-          _note.moveToTrash();
-        },
-      ),
-    ];
+  Future<void> _moveCurrentNoteToTrash() async {
+    if (_note.id == null || !await _enqueueSave()) return;
+    await _note.moveToTrash();
+    if (mounted) await _closeEditor();
   }
 }
 

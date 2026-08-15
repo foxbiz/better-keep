@@ -1081,6 +1081,40 @@
 	"checklist": "Checklist",
 	"@checklist": { "description": "Checklist tooltip" },
 
+	"openChecklistView": "Open list view",
+	"@openChecklistView": { "description": "Action that opens the focused checklist editor" },
+	"convertToNormalText": "Convert to normal text",
+	"@convertToNormalText": { "description": "Converts a checklist item subtree into rich-text paragraphs" },
+	"convertEntireChecklistToText": "Convert entire checklist to text",
+	"@convertEntireChecklistToText": { "description": "Converts the focused checklist block into rich-text paragraphs" },
+	"focusedChecklistRequiresChecklistOnly": "Focused list view is available only when every line is a checklist item.",
+	"@focusedChecklistRequiresChecklistOnly": { "description": "Explains why a mixed document cannot open in the focused checklist editor" },
+	"focusedChecklistUnsupportedContent": "Attachments and block formatting are available only in the rich-text editor.",
+	"@focusedChecklistUnsupportedContent": { "description": "Explains that focused checklist view does not support embeds or incompatible blocks" },
+	"focusedChecklistInvalidContent": "This checklist can’t be opened in focused view. Continue editing it here.",
+	"@focusedChecklistInvalidContent": { "description": "Guidance for malformed checklist content that cannot safely open in focused view" },
+
+	"completedTasks": "Completed",
+	"@completedTasks": { "description": "Heading for completed checklist items" },
+
+	"clearCompletedTasks": "Clear completed",
+	"@clearCompletedTasks": { "description": "Action that removes all completed root checklist items" },
+
+	"outdent": "Outdent",
+	"@outdent": { "description": "Move a checklist item one nesting level outward" },
+
+	"checklistEmbedUnsupported": "Attachments can only be pasted in the rich-text editor.",
+	"@checklistEmbedUnsupported": { "description": "Shown when an embed is pasted into the focused checklist editor" },
+
+	"checklistChangedElsewhere": "This note changed elsewhere. Reload it or keep your local edits.",
+	"@checklistChangedElsewhere": { "description": "Conflict warning in the focused checklist editor" },
+
+	"reloadChecklist": "Reload",
+	"@reloadChecklist": { "description": "Reload externally changed checklist content" },
+
+	"keepChecklistEdits": "Keep my edits",
+	"@keepChecklistEdits": { "description": "Resolve a checklist conflict in favor of local changes" },
+
 	"quote": "Quote",
 	"@quote": { "description": "Quote tooltip" },
 

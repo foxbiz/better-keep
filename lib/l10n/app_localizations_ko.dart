@@ -1228,6 +1228,50 @@ class AppLocalizationsKo extends AppLocalizations {
   String get checklist => '체크리스트';
 
   @override
+  String get openChecklistView => '목록 보기 열기';
+
+  @override
+  String get convertToNormalText => '일반 텍스트로 변환';
+
+  @override
+  String get convertEntireChecklistToText => '전체 체크리스트를 텍스트로 변환';
+
+  @override
+  String get focusedChecklistRequiresChecklistOnly =>
+      '포커스 목록 보기는 모든 줄이 체크리스트 항목인 경우에만 사용할 수 있습니다.';
+
+  @override
+  String get focusedChecklistUnsupportedContent =>
+      '첨부 파일과 블록 서식은 서식 있는 텍스트 편집기에서만 사용할 수 있습니다.';
+
+  @override
+  String get focusedChecklistInvalidContent =>
+      '이 체크리스트는 포커스 보기에서 열 수 없습니다. 여기에서 계속 편집하세요.';
+
+  @override
+  String get completedTasks => '완료됨';
+
+  @override
+  String get clearCompletedTasks => '완료 항목 지우기';
+
+  @override
+  String get outdent => '내어쓰기';
+
+  @override
+  String get checklistEmbedUnsupported =>
+      '첨부 파일은 서식 있는 텍스트 편집기에서만 붙여넣을 수 있습니다.';
+
+  @override
+  String get checklistChangedElsewhere =>
+      '이 노트가 다른 곳에서 변경되었습니다. 다시 불러오거나 로컬 편집 내용을 유지하세요.';
+
+  @override
+  String get reloadChecklist => '다시 불러오기';
+
+  @override
+  String get keepChecklistEdits => '내 편집 유지';
+
+  @override
   String get quote => '인용';
 
   @override
