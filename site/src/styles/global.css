@@ -1760,17 +1760,9 @@ tr:last-child td {
   }
 
   .store-actions {
-    position: relative;
-    left: 50%;
-    width: min(328px, calc(100vw - 2rem));
+    width: min(328px, 100%);
     justify-content: center;
-    transform: translateX(-50%);
-  }
-
-  .cta-band .store-actions {
-    left: 0;
-    justify-self: center;
-    transform: none;
+    margin-inline: auto;
   }
 
   h1 {
