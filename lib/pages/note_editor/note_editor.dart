@@ -292,7 +292,7 @@ class _NoteEditorState extends State<NoteEditor>
 
     // Store initial plain text for deleteIfUnchanged check
     if (widget.deleteIfUnchanged) {
-      _initialPlainText = _controller.document.toPlainText().trim();
+      _initialPlainText = _captureSaveSnapshot().plainText;
     }
 
     _controller.addListener(_didChangeSelection);
@@ -1302,6 +1302,11 @@ class _NoteEditorState extends State<NoteEditor>
                               ),
                             ),
                           ),
+                          _NoteEditorMetadata(
+                            updatedAt: _note.updatedAt,
+                            labels: _note.labels,
+                            foregroundColor: foregroundColor,
+                          ),
                           Theme(
                             data: Theme.of(context).copyWith(
                               checkboxTheme: CheckboxThemeData(
@@ -1352,6 +1357,7 @@ class _NoteEditorState extends State<NoteEditor>
                                         foregroundColor: foregroundColor,
                                         backgroundColor: backgroundColor,
                                         placeholderColor: placeholderColor,
+                                        comfortableLists: true,
                                       ),
                                       embedBuilders: kIsWeb
                                           ? FlutterQuillEmbeds.editorWebBuilders()
@@ -2583,6 +2589,69 @@ class _NoteEditorState extends State<NoteEditor>
     if (_note.id == null || !await _enqueueSave()) return;
     await _note.moveToTrash();
     if (mounted) await _closeEditor();
+  }
+}
+
+class _NoteEditorMetadata extends StatelessWidget {
+  const _NoteEditorMetadata({
+    required this.updatedAt,
+    required this.labels,
+    required this.foregroundColor,
+  });
+
+  final DateTime? updatedAt;
+  final String? labels;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final localUpdatedAt = updatedAt?.toLocal();
+    final timestamp = localUpdatedAt == null
+        ? null
+        : '${MaterialLocalizations.of(context).formatMediumDate(localUpdatedAt)}, '
+              '${TimeOfDay.fromDateTime(localUpdatedAt).format(context)}';
+    final labelText = labels
+        ?.split(',')
+        .map((label) => label.trim())
+        .where((label) => label.isNotEmpty)
+        .join(', ');
+    final hasTimestamp = timestamp != null;
+    final hasLabels = labelText?.isNotEmpty ?? false;
+    if (!hasTimestamp && !hasLabels) return const SizedBox.shrink();
+
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: foregroundColor.withValues(alpha: 0.55),
+    );
+    return Padding(
+      key: const ValueKey('note_editor_metadata'),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          if (hasTimestamp)
+            Text(
+              timestamp,
+              key: const ValueKey('note_editor_metadata_timestamp'),
+              style: style,
+            ),
+          if (hasTimestamp && hasLabels)
+            Text(
+              '  •  ',
+              key: const ValueKey('note_editor_metadata_separator'),
+              style: style,
+            ),
+          if (hasLabels)
+            Expanded(
+              child: Text(
+                labelText!,
+                key: const ValueKey('note_editor_metadata_labels'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

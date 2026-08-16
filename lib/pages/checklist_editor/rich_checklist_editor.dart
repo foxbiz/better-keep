@@ -960,7 +960,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         _commitActiveRow();
         final item = _document.itemById(id);
         if (item?.isEmpty ?? false) {
-          _deleteItem(id);
+          _deleteItem(id, focusPreviousAtEnd: true);
           return KeyEventResult.handled;
         }
         final previous = _document.previousSiblingOf(id);
@@ -1042,7 +1042,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     _commitDocument(_document.outdentSubtree(id), focusId: id);
   }
 
-  void _deleteItem(String id) {
+  void _deleteItem(String id, {bool focusPreviousAtEnd = false}) {
     if (_readOnly) return;
     if (!_prepareSectionForItem(id)) return;
     if (_document.items.length == 1 && _document.items.single.id == id) return;
@@ -1051,9 +1051,15 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     final index = _document.indexOfId(id);
     final fallbackIndex = index <= 0 ? 0 : index - 1;
     final updated = _document.deleteSubtree(id, newId: _newId);
-    final focusId =
-        updated.items[fallbackIndex.clamp(0, updated.items.length - 1)].id;
-    _commitDocument(updated, focusId: focusId);
+    final focusItem =
+        updated.items[fallbackIndex.clamp(0, updated.items.length - 1)];
+    _commitDocument(
+      updated,
+      focusId: focusItem.id,
+      selectionOffset: focusPreviousAtEnd && index > 0
+          ? focusItem.textLength
+          : null,
+    );
   }
 
   void _clearCompleted([String? sectionId]) {
@@ -1824,7 +1830,8 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         enableSelectionToolbar: true,
         textInputAction: TextInputAction.newline,
         onPerformAction: (action) {
-          if (action == TextInputAction.newline) {
+          if (Theme.of(context).platform == TargetPlatform.android &&
+              action == TextInputAction.newline) {
             _splitActiveItem();
           }
         },

@@ -75,6 +75,23 @@ void main() {
 
       expect(styles.lists, isNotNull);
       expect(styles.lists?.style.color, Colors.black);
+      expect(styles.lists?.style.height, isNull);
+      expect(styles.lists?.lineSpacing.top, 0);
+      expect(styles.lists?.lineSpacing.bottom, 0);
+    });
+
+    test('supports comfortable list readability without changing defaults', () {
+      final styles = buildQuillStyles(
+        foregroundColor: Colors.black,
+        backgroundColor: Colors.white,
+        comfortableLists: true,
+      );
+
+      expect(styles.lists?.style.height, 1.25);
+      expect(styles.lists?.verticalSpacing.top, 0);
+      expect(styles.lists?.verticalSpacing.bottom, 0);
+      expect(styles.lists?.lineSpacing.top, 0);
+      expect(styles.lists?.lineSpacing.bottom, 6);
     });
 
     test('includes code style with correct background', () {

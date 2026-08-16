@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:better_keep/l10n/app_localization_config.dart';
+import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/rich_checklist.dart';
 import 'package:better_keep/pages/checklist_editor/rich_checklist_editor.dart';
@@ -581,6 +582,7 @@ void main() {
       note: _RecordingNote(content: _content('Tasks', document.items)),
       title: 'Tasks',
       document: document,
+      platform: TargetPlatform.android,
     );
 
     await tester.tap(find.text('First', findRichText: true));
@@ -631,6 +633,59 @@ void main() {
     expect(
       newItemEditor.controller.selection,
       const TextSelection.collapsed(offset: 17),
+    );
+  });
+
+  testWidgets('iOS Return creates exactly one new checklist row', (
+    tester,
+  ) async {
+    final document = RichChecklistDocument([_item('a', 'First')]);
+    await _pumpEditor(
+      tester,
+      note: _RecordingNote(content: _content('Tasks', document.items)),
+      title: 'Tasks',
+      document: document,
+      platform: TargetPlatform.iOS,
+    );
+
+    await tester.tap(find.text('First', findRichText: true));
+    await tester.pump();
+    final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final firstQuillState = tester.state<QuillEditorState>(
+      find.byType(QuillEditor),
+    );
+    final firstRawEditorState = firstQuillState.editableTextKey.currentState;
+
+    await tester.testTextInput.receiveAction(TextInputAction.newline);
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'First\n\n',
+        selection: TextSelection.collapsed(offset: 6),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(Dismissible), findsNWidgets(2));
+    expect(find.text('First', findRichText: true), findsOneWidget);
+    final newItemEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final newItemQuillState = tester.state<QuillEditorState>(
+      find.byType(QuillEditor),
+    );
+    expect(newItemQuillState, same(firstQuillState));
+    expect(
+      newItemQuillState.editableTextKey.currentState,
+      same(firstRawEditorState),
+    );
+    expect(newItemEditor.controller, same(firstEditor.controller));
+    expect(newItemEditor.focusNode, same(firstEditor.focusNode));
+    expect(newItemEditor.focusNode.hasFocus, isTrue);
+    expect(tester.testTextInput.isRegistered, isTrue);
+    expect(newItemEditor.controller.document.toPlainText(), '\n');
+    expect(
+      newItemEditor.controller.selection,
+      const TextSelection.collapsed(offset: 0),
     );
   });
 
@@ -706,6 +761,53 @@ void main() {
     expect(
       splitEditor.controller.selection,
       const TextSelection.collapsed(offset: 0),
+    );
+  });
+
+  testWidgets('Backspace on an empty item focuses the previous item end', (
+    tester,
+  ) async {
+    final document = RichChecklistDocument([
+      _item('previous', 'Previous'),
+      _item('empty', ''),
+    ]);
+    await _pumpEditor(
+      tester,
+      note: _RecordingNote(content: _content('Tasks', document.items)),
+      title: 'Tasks',
+      document: document,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('checklist-text-lane-empty')));
+    await tester.pump();
+    await tester.pump();
+    final emptyEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final quillState = tester.state<QuillEditorState>(find.byType(QuillEditor));
+    final rawEditorState = quillState.editableTextKey.currentState;
+    expect(emptyEditor.controller.document.toPlainText(), '\n');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(Dismissible), findsOneWidget);
+    final previousEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final previousQuillState = tester.state<QuillEditorState>(
+      find.byType(QuillEditor),
+    );
+    expect(previousQuillState, same(quillState));
+    expect(
+      previousQuillState.editableTextKey.currentState,
+      same(rawEditorState),
+    );
+    expect(previousEditor.controller, same(emptyEditor.controller));
+    expect(previousEditor.focusNode, same(emptyEditor.focusNode));
+    expect(previousEditor.focusNode.hasFocus, isTrue);
+    expect(tester.testTextInput.isRegistered, isTrue);
+    expect(previousEditor.controller.document.toPlainText(), 'Previous\n');
+    expect(
+      previousEditor.controller.selection,
+      const TextSelection.collapsed(offset: 8),
     );
   });
 
@@ -1370,39 +1472,13 @@ void main() {
   testWidgets('To-do launch opens normal Quill and Back returns its caller', (
     tester,
   ) async {
-    final note = Note(
+    final note = _RecordingNote(
+      id: 42,
       title: 'Tasks',
-      content: jsonEncode([
-        {'insert': 'Tasks'},
-        {
-          'insert': '\n',
-          'attributes': {'header': 1},
-        },
-        {
-          'insert': '\n',
-          'attributes': {'list': 'unchecked'},
-        },
-      ]),
+      content: _emptyTodoContent(),
     );
 
-    await tester.pumpWidget(
-      _host(
-        Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => NoteEditor(
-                  note: note,
-                  autoFocus: true,
-                  deleteIfUnchanged: true,
-                ),
-              ),
-            ),
-            child: const Text('Create To-do'),
-          ),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_todoLaunchHost(note));
     await tester.tap(find.text('Create To-do'));
     await tester.pumpAndSettle();
 
@@ -1423,6 +1499,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NoteEditor), findsNothing);
     expect(find.text('Create To-do'), findsOneWidget);
+    expect(note.deleteCalls, 1);
+    expect(note.saveCalls, 0);
+  });
+
+  testWidgets('To-do launch preserves entered task content', (tester) async {
+    final note = _RecordingNote(
+      id: 43,
+      title: 'Tasks',
+      content: _emptyTodoContent(),
+    );
+
+    await tester.pumpWidget(_todoLaunchHost(note));
+    await tester.tap(find.text('Create To-do'));
+    await tester.pumpAndSettle();
+
+    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    quill.controller.replaceText(
+      0,
+      0,
+      'Buy milk',
+      const TextSelection.collapsed(offset: 8),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NoteEditor), findsNothing);
+    expect(note.deleteCalls, 0);
+    expect(note.saveCalls, 1);
+    expect(note.plainText, 'Tasks\nBuy milk');
+  });
+
+  testWidgets('normal editor enables comfortable list spacing', (tester) async {
+    final note = Note(
+      readOnly: true,
+      content: jsonEncode([
+        {'insert': 'A checklist item that may wrap'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+      ]),
+    );
+
+    await tester.pumpWidget(_host(NoteEditor(note: note)));
+    await tester.pumpAndSettle();
+
+    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final lists = editor.config.customStyles?.lists;
+    expect(lists?.style.height, 1.25);
+    expect(lists?.verticalSpacing.top, 0);
+    expect(lists?.verticalSpacing.bottom, 0);
+    expect(lists?.lineSpacing.top, 0);
+    expect(lists?.lineSpacing.bottom, 6);
   });
 
   testWidgets('normal checklist toolbar remains a formatting toggle', (
@@ -1704,6 +1835,7 @@ Future<void> _pumpEditor(
   required Note note,
   required RichChecklistDocument document,
   String title = '',
+  TargetPlatform? platform,
 }) async {
   final codec = ChecklistDeltaCodec();
   final body = codec.encodeBody(document);
@@ -1723,15 +1855,31 @@ Future<void> _pumpEditor(
           selectionEnd: 0,
         ),
       ),
+      platform: platform,
     ),
   );
   await tester.pump();
 }
 
-Widget _host(Widget home) => MaterialApp(
+Widget _host(Widget home, {TargetPlatform? platform}) => MaterialApp(
   localizationsDelegates: betterKeepLocalizationDelegates,
   supportedLocales: betterKeepSupportedLocales,
+  theme: ThemeData(platform: platform),
   home: home,
+);
+
+Widget _todoLaunchHost(Note note) => _host(
+  Builder(
+    builder: (context) => ElevatedButton(
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              NoteEditor(note: note, autoFocus: true, deleteIfUnchanged: true),
+        ),
+      ),
+      child: const Text('Create To-do'),
+    ),
+  ),
 );
 
 double _firstGlyphCenter(WidgetTester tester, Finder richText) {
@@ -1765,10 +1913,32 @@ String _content(String title, Iterable<RichChecklistItem> items) =>
       document: RichChecklistDocument(items),
     );
 
+String _emptyTodoContent() => jsonEncode([
+  {'insert': 'Tasks'},
+  {
+    'insert': '\n',
+    'attributes': {'header': 1},
+  },
+  {
+    'insert': '\n',
+    'attributes': {'list': 'unchecked'},
+  },
+]);
+
 class _RecordingNote extends Note {
   _RecordingNote({super.id, super.title, super.content, super.locked});
 
   int saveCalls = 0;
+  int deleteCalls = 0;
+
+  @override
+  Future<int> delete({
+    bool trackSync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  }) async {
+    deleteCalls++;
+    return id == null ? 0 : 1;
+  }
 
   @override
   Future<int> saveEditorSnapshot({
