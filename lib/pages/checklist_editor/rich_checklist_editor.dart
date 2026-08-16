@@ -10,6 +10,7 @@ import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/utils.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -56,6 +57,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   static const _autosaveDelay = Duration(seconds: 1);
   static const _rowCommitDelay = Duration(milliseconds: 180);
   static const _minimumFirstLineExtent = 42.0;
+  static const _emptyRowBackspaceSentinel = '\u2060';
 
   final ChecklistDeltaCodec _codec = ChecklistDeltaCodec();
   final ScrollController _scrollController = ScrollController();
@@ -86,9 +88,12 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   bool _restoreRowFocusAfterDrag = false;
   bool _applyingRowDocument = false;
   bool _performingRowSplit = false;
+  bool _armBackspaceSentinelAfterComposition = false;
+  bool _softBackspaceScheduled = false;
   bool _rowHasUncommittedChanges = false;
   bool _rowWasInteractedWith = false;
   bool _dirty = false;
+  int _localEditRevision = 0;
   bool _closing = false;
   bool _allowPop = false;
   bool _externalConflict = false;
@@ -183,9 +188,18 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
       )
       ..addListener(_onHistoryChanged);
     _activeItemId = initialSection.isEligible ? firstActive.id : null;
+    final initialHasBackspaceSentinel =
+        initialSection.isEligible && _shouldUseBackspaceSentinel(firstActive);
+    final initialSelection = _editorSelectionFromModel(
+      TextSelection.collapsed(offset: firstActive.textLength),
+      hasBackspaceSentinel: initialHasBackspaceSentinel,
+    );
     _rowController = QuillController(
-      document: _rowDocumentFor(firstActive),
-      selection: TextSelection.collapsed(offset: firstActive.textLength),
+      document: _rowDocumentFor(
+        firstActive,
+        includeBackspaceSentinel: initialHasBackspaceSentinel,
+      ),
+      selection: initialSelection,
       readOnly: _readOnly || !initialSection.isEligible,
       onReplaceText: _onBeforeRowTextReplaced,
       onSelectionChanged: _onRowSelectionChanged,
@@ -223,7 +237,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     if (state == AppLifecycleState.paused) {
       _rowCommitTimer?.cancel();
       _commitActiveRow();
-      unawaited(_enqueueSave());
+      _saveInBackground();
     }
   }
 
@@ -232,6 +246,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     if (_applyingRowDocument) {
       return;
     }
+    _localEditRevision++;
     _dirty = true;
     _scheduleAutosave();
   }
@@ -243,6 +258,11 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     if (noteId == null || event.note.id != noteId) return;
     final remoteSession = _collectionSessionFromNote(event.note);
     if (remoteSession == null) return;
+    if (_rowHasUncommittedChanges && !_hasActiveComposition) {
+      _rowCommitTimer?.cancel();
+      _commitActiveRow();
+    }
+    final hasPendingLocalChanges = _hasPendingLocalChanges;
     final remoteTitle = event.note.title ?? remoteSession.title;
     final remoteCollection = remoteSession.collection;
     final sameTopology = _sameSectionTopology(_collection, remoteCollection);
@@ -268,7 +288,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         ..content = event.note.content
         ..plainText = event.note.plainText
         ..updatedAt = event.note.updatedAt;
-      if (!_dirty) {
+      if (!hasPendingLocalChanges) {
         _applyingRowDocument = true;
         final reloaded = _collectionWithStableIds(
           remoteCollection,
@@ -286,13 +306,13 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
           ),
         );
         _applyingRowDocument = false;
-        _scheduleAutosave();
+        if (_dirty) _scheduleAutosave();
       }
       if (titleChanged && mounted) setState(() {});
       return;
     }
 
-    if (_dirty) {
+    if (hasPendingLocalChanges) {
       setState(() {
         _externalNote = event.note;
         _externalConflict = true;
@@ -479,17 +499,28 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   void _scheduleAutosave() {
     if (_closing || _externalConflict || _readOnly) return;
     _autosaveTimer?.cancel();
-    _autosaveTimer = Timer(_autosaveDelay, () => unawaited(_enqueueSave()));
+    _autosaveTimer = Timer(_autosaveDelay, _saveInBackground);
   }
 
-  Future<void> _enqueueSave() {
-    if (_readOnly || _externalConflict) return Future<void>.value();
+  void _saveInBackground() {
+    unawaited(_enqueueSave().then<void>((_) {}, onError: (_, _) {}));
+  }
+
+  Future<void> _enqueueSave() async {
+    if (_readOnly || _externalConflict) return;
     _commitActiveRow();
-    final snapshot = _buildWorkspaceSnapshot();
+    final snapshotRevision = _localEditRevision;
+    late final _ChecklistWorkspaceSnapshot snapshot;
+    try {
+      snapshot = _buildWorkspaceSnapshot();
+    } catch (error, stackTrace) {
+      _reportSaveFailure(error, stackTrace);
+      rethrow;
+    }
     if (snapshot.content == _lastPersistedContent &&
         snapshot.title == (widget.note.title ?? '')) {
-      _dirty = false;
-      return Future<void>.value();
+      _dirty = _rowHasUncommittedChanges || _hasActiveComposition;
+      return;
     }
     final save = _saveTail.then((_) async {
       try {
@@ -502,15 +533,24 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         _bodyDelta = snapshot.bodyDelta;
         _history.rebaseSources(snapshot.collection);
         _lastPersistedContent = snapshot.content;
-        _dirty = false;
+        final hasNewerLocalChanges =
+            _localEditRevision != snapshotRevision ||
+            _rowHasUncommittedChanges ||
+            _hasActiveComposition;
+        _dirty = hasNewerLocalChanges;
+        if (hasNewerLocalChanges) _scheduleAutosave();
       } catch (error, stackTrace) {
-        AppLogger.error('Failed to save checklist editor', error, stackTrace);
-        if (mounted) snackbar(context.l10n.errorSavingNote, Colors.red);
+        _reportSaveFailure(error, stackTrace);
         rethrow;
       }
     });
     _saveTail = save.then<void>((_) {}, onError: (_, _) {});
-    return save;
+    await save;
+  }
+
+  void _reportSaveFailure(Object error, StackTrace stackTrace) {
+    AppLogger.error('Failed to save checklist editor', error, stackTrace);
+    if (mounted) snackbar(context.l10n.errorSavingNote, Colors.red);
   }
 
   _ChecklistWorkspaceSnapshot _buildWorkspaceSnapshot() {
@@ -569,7 +609,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
           itemStart += section.document!.items[index].textLength + 1;
         }
         final local = _clampSelection(
-          _rowController.selection,
+          _modelSelectionFromEditor(_rowController.selection),
           section.document!.items[itemIndex].textLength,
         );
         return TextSelection(
@@ -628,7 +668,12 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   }
 
   Future<void> _close() async {
-    if (_closing) return;
+    if (_closing || _externalConflict) return;
+    if (_hasActiveComposition) {
+      _pendingCompositionMutation = () => unawaited(_close());
+      _rowFocusNode.unfocus();
+      return;
+    }
     _rowCommitTimer?.cancel();
     _autosaveTimer?.cancel();
     _commitActiveRow();
@@ -636,6 +681,10 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     try {
       await _enqueueSave();
       if (!mounted) return;
+      if (_externalConflict) {
+        setState(() => _closing = false);
+        return;
+      }
       final result = _navigationResult(_buildWorkspaceSnapshot());
       setState(() => _allowPop = true);
       Navigator.of(context).pop(result);
@@ -660,7 +709,9 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     if (_activeItemId == id) {
       if (selection != null) {
         _rowController.updateSelection(
-          _clampSelection(selection, _rowController.document.length - 1),
+          _editorSelectionFromModel(
+            _clampSelection(selection, _document.itemById(id)?.textLength ?? 0),
+          ),
           ChangeSource.local,
         );
       }
@@ -682,7 +733,11 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
 
     _rowChanges?.cancel();
     final retiredDocument = _rowController.document;
-    final rowDocument = _rowDocumentFor(item);
+    final hasBackspaceSentinel = _shouldUseBackspaceSentinel(item);
+    final rowDocument = _rowDocumentFor(
+      item,
+      includeBackspaceSentinel: hasBackspaceSentinel,
+    );
     final nextSelection = _clampSelection(
       selection ?? TextSelection.collapsed(offset: item.textLength),
       item.textLength,
@@ -690,7 +745,13 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     _applyingRowDocument = true;
     _activeItemId = id;
     _rowController.document = rowDocument;
-    _rowController.updateSelection(nextSelection, ChangeSource.local);
+    _rowController.updateSelection(
+      _editorSelectionFromModel(
+        nextSelection,
+        hasBackspaceSentinel: hasBackspaceSentinel,
+      ),
+      ChangeSource.local,
+    );
     _rowChanges = _rowController.changes.listen(_onRowChanged);
     _rowHasUncommittedChanges = false;
     _history.commit(
@@ -720,7 +781,21 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     return null;
   }
 
-  Document _rowDocumentFor(RichChecklistItem item) => documentFromJsonSafe([
+  bool get _canUseBackspaceSentinel =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS && !_readOnly;
+
+  bool get _rowHasBackspaceSentinel => _rowController.document
+      .toPlainText()
+      .startsWith(_emptyRowBackspaceSentinel);
+
+  bool _shouldUseBackspaceSentinel(RichChecklistItem item) =>
+      _canUseBackspaceSentinel && item.isEmpty;
+
+  Document _rowDocumentFor(
+    RichChecklistItem item, {
+    bool includeBackspaceSentinel = false,
+  }) => documentFromJsonSafe([
+    if (includeBackspaceSentinel) {'insert': _emptyRowBackspaceSentinel},
     ...item.inlineDelta.map(
       (operation) => Map<String, dynamic>.from(operation),
     ),
@@ -729,6 +804,36 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
       if (item.lineAttributes.isNotEmpty) 'attributes': item.lineAttributes,
     },
   ]);
+
+  TextSelection _editorSelectionFromModel(
+    TextSelection selection, {
+    bool? hasBackspaceSentinel,
+  }) {
+    if (!(hasBackspaceSentinel ?? _rowHasBackspaceSentinel)) return selection;
+    return selection.copyWith(
+      baseOffset: selection.baseOffset + 1,
+      extentOffset: selection.extentOffset + 1,
+    );
+  }
+
+  TextSelection _modelSelectionFromEditor(TextSelection selection) {
+    if (!_rowHasBackspaceSentinel) return selection;
+    return selection.copyWith(
+      baseOffset: selection.baseOffset <= 1 ? 0 : selection.baseOffset - 1,
+      extentOffset: selection.extentOffset <= 1
+          ? 0
+          : selection.extentOffset - 1,
+    );
+  }
+
+  TextSelection _normalizeSentinelSelection(TextSelection selection) {
+    if (!_rowHasBackspaceSentinel) return selection;
+    final maxOffset = _rowController.document.length - 1;
+    return selection.copyWith(
+      baseOffset: selection.baseOffset.clamp(1, maxOffset),
+      extentOffset: selection.extentOffset.clamp(1, maxOffset),
+    );
+  }
 
   TextSelection _clampSelection(TextSelection selection, int textLength) {
     final baseOffset = selection.baseOffset.clamp(0, textLength);
@@ -759,6 +864,9 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     return range != null && range.isValid && !range.isCollapsed;
   }
 
+  bool get _hasPendingLocalChanges =>
+      _dirty || _rowHasUncommittedChanges || _hasActiveComposition;
+
   void _bindCompositionListener() {
     final state = _rowEditorKey.currentState;
     if (state is! QuillRawEditorState) return;
@@ -770,6 +878,10 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
 
   void _onCompositionChanged() {
     if (_hasActiveComposition) return;
+    if (_armBackspaceSentinelAfterComposition) {
+      _armBackspaceSentinelAfterComposition = false;
+      _armBackspaceSentinelForEmptyRow();
+    }
     final mutation = _pendingCompositionMutation;
     if (mutation == null) return;
     _pendingCompositionMutation = null;
@@ -777,11 +889,18 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   }
 
   void _onRowSelectionChanged(TextSelection selection) {
-    if (_applyingRowDocument || _rowHasUncommittedChanges) return;
+    if (_applyingRowDocument) return;
+    final normalized = _normalizeSentinelSelection(selection);
+    if (normalized != _rowController.selection) {
+      _applyingRowDocument = true;
+      _rowController.updateSelection(normalized, ChangeSource.local);
+      _applyingRowDocument = false;
+    }
+    if (_rowHasUncommittedChanges) return;
     final id = _activeItemId;
     if (id == null) return;
     final clamped = _clampSelection(
-      selection,
+      _modelSelectionFromEditor(normalized),
       _document.itemById(id)?.textLength ?? 0,
     );
     _history.commit(
@@ -796,6 +915,15 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   }
 
   bool _onBeforeRowTextReplaced(int index, int length, Object? data) {
+    if (_isBackspaceSentinelDeletion(index, length, data)) {
+      if (_hasActiveComposition) {
+        scheduleMicrotask(_resyncSentinelInput);
+      } else {
+        _scheduleSoftBackspaceAtRowStart();
+      }
+      return false;
+    }
+    _preserveSentinelReplacementStyle(index, length, data);
     final changesText = length > 0 || data is! String || data.isNotEmpty;
     if (!_applyingRowDocument && changesText) {
       _rowHasUncommittedChanges = true;
@@ -803,11 +931,92 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     return true;
   }
 
+  void _preserveSentinelReplacementStyle(int index, int length, Object? data) {
+    if (!_rowHasBackspaceSentinel ||
+        index != 0 ||
+        length <= 1 ||
+        data is! String ||
+        data.isEmpty ||
+        data.startsWith(_emptyRowBackspaceSentinel)) {
+      return;
+    }
+    final replacedStyle = _rowController.document.collectStyle(1, length - 1);
+    final inlineStyle = Style.attr({
+      for (final attribute in replacedStyle.values)
+        if (attribute.scope == AttributeScope.inline) attribute.key: attribute,
+    });
+    if (inlineStyle.isEmpty) return;
+    final itemId = _activeItemId;
+    final replacementLength = data.length;
+    scheduleMicrotask(() {
+      if (!mounted ||
+          itemId == null ||
+          _activeItemId != itemId ||
+          _rowHasBackspaceSentinel) {
+        return;
+      }
+      final formatLength = replacementLength.clamp(
+        0,
+        _rowController.document.length - 1,
+      );
+      if (formatLength == 0) return;
+      _applyingRowDocument = true;
+      try {
+        _rowController.formatTextStyle(0, formatLength, inlineStyle);
+      } finally {
+        _applyingRowDocument = false;
+      }
+    });
+  }
+
+  bool _isBackspaceSentinelDeletion(int index, int length, Object? data) {
+    final selection = _rowController.selection;
+    return !_applyingRowDocument &&
+        _rowHasBackspaceSentinel &&
+        index == 0 &&
+        length == 1 &&
+        data is String &&
+        data.isEmpty &&
+        selection.isCollapsed &&
+        selection.baseOffset == 1 &&
+        _rowController.document.toPlainText().startsWith(
+          _emptyRowBackspaceSentinel,
+        );
+  }
+
+  void _scheduleSoftBackspaceAtRowStart() {
+    if (_softBackspaceScheduled) return;
+    final itemId = _activeItemId;
+    _softBackspaceScheduled = true;
+    scheduleMicrotask(() {
+      _softBackspaceScheduled = false;
+      if (!mounted || itemId == null || _activeItemId != itemId) return;
+      _handleBackspaceAtRowStart();
+      if (_activeItemId == itemId) _resyncSentinelInput();
+    });
+  }
+
+  void _resyncSentinelInput() {
+    if (!mounted || !_rowHasBackspaceSentinel) return;
+    _rowController.updateSelection(
+      _normalizeSentinelSelection(_rowController.selection),
+      ChangeSource.local,
+    );
+  }
+
   void _onRowChanged(DocChange change) {
     if (_applyingRowDocument || _readOnly) return;
+    _localEditRevision++;
     _rowHasUncommittedChanges = true;
     _rowCommitTimer?.cancel();
     final text = _rowController.document.toPlainText();
+    if (!_rowHasBackspaceSentinel && _canUseBackspaceSentinel && text == '\n') {
+      if (_hasActiveComposition) {
+        _armBackspaceSentinelAfterComposition = true;
+      } else {
+        scheduleMicrotask(_armBackspaceSentinelForEmptyRow);
+      }
+    }
     if (text.indexOf('\n') < text.length - 1) {
       _splitActiveItem();
       return;
@@ -827,17 +1036,27 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     final original = _document.itemById(id);
     if (original == null) return false;
 
-    final selection = controller.selection;
+    final selection = _modelSelectionFromEditor(controller.selection);
+    final editedDocument = _rowDocumentWithoutBackspaceSentinel();
+    final ownsEditedDocument = !identical(editedDocument, controller.document);
     final decoded = _codec.tryDecodeEditedRow(
       original: original,
-      document: controller.document,
+      document: editedDocument,
     );
     if (!decoded.isEligible) {
+      if (ownsEditedDocument) editedDocument.close();
       _restoreActiveRowAfterInvalidEdit(decoded.failureReason);
       return false;
     }
 
     final replacements = decoded.document!.items;
+    if (ownsEditedDocument &&
+        replacements.length == 1 &&
+        !replacements.single.isEmpty) {
+      _adoptSentinelFreeRowDocument(editedDocument, selection);
+    } else if (ownsEditedDocument) {
+      editedDocument.close();
+    }
     final updated = replacements.length == 1
         ? _document.replaceItem(replacements.single)
         : _document.replaceItemWith(id: id, replacements: replacements);
@@ -864,6 +1083,60 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
       return true;
     }
     return false;
+  }
+
+  Document _rowDocumentWithoutBackspaceSentinel() {
+    final controllerDocument = _rowController.document;
+    if (!_rowHasBackspaceSentinel) {
+      return controllerDocument;
+    }
+    return documentFromJsonSafe(controllerDocument.toDelta().slice(1).toJson());
+  }
+
+  void _adoptSentinelFreeRowDocument(
+    Document document,
+    TextSelection selection,
+  ) => _replaceRowControllerDocument(document, selection);
+
+  void _armBackspaceSentinelForEmptyRow() {
+    if (!mounted ||
+        !_canUseBackspaceSentinel ||
+        _rowHasBackspaceSentinel ||
+        _activeItemId == null ||
+        _rowController.document.toPlainText() != '\n') {
+      return;
+    }
+    if (_hasActiveComposition) {
+      _armBackspaceSentinelAfterComposition = true;
+      return;
+    }
+    final selection = _rowController.selection.copyWith(
+      baseOffset: _rowController.selection.baseOffset + 1,
+      extentOffset: _rowController.selection.extentOffset + 1,
+    );
+    final document = documentFromJsonSafe([
+      {'insert': _emptyRowBackspaceSentinel},
+      ..._rowController.document.toDelta().toJson(),
+    ]);
+    _replaceRowControllerDocument(document, selection);
+    setState(() {});
+  }
+
+  void _replaceRowControllerDocument(
+    Document document,
+    TextSelection selection,
+  ) {
+    _rowChanges?.cancel();
+    final retiredDocument = _rowController.document;
+    _applyingRowDocument = true;
+    _rowController.document = document;
+    _rowController.updateSelection(selection, ChangeSource.local);
+    _rowChanges = _rowController.changes.listen(_onRowChanged);
+    _applyingRowDocument = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      retiredDocument.close();
+      if (mounted) _bindCompositionListener();
+    });
   }
 
   void _restoreActiveRowAfterInvalidEdit(
@@ -951,31 +1224,37 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      final controller = _rowController;
-      final id = _activeItemId;
-      if (id != null &&
-          controller.selection.isCollapsed &&
-          controller.selection.baseOffset == 0) {
-        _rowCommitTimer?.cancel();
-        _commitActiveRow();
-        final item = _document.itemById(id);
-        if (item?.isEmpty ?? false) {
-          _deleteItem(id, focusPreviousAtEnd: true);
-          return KeyEventResult.handled;
-        }
-        final previous = _document.previousSiblingOf(id);
-        if (item != null && previous != null) {
-          final selectionOffset = previous.textLength;
-          _commitDocument(
-            _document.mergeWithPrevious(id),
-            focusId: previous.id,
-            selectionOffset: selectionOffset,
-          );
-          return KeyEventResult.handled;
-        }
+      final selection = _modelSelectionFromEditor(_rowController.selection);
+      if (selection.isCollapsed && selection.baseOffset == 0) {
+        return _handleBackspaceAtRowStart()
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
       }
     }
     return KeyEventResult.ignored;
+  }
+
+  bool _handleBackspaceAtRowStart() {
+    if (_readOnly || _hasActiveComposition) return false;
+    final id = _activeItemId;
+    if (id == null) return false;
+    _rowCommitTimer?.cancel();
+    _commitActiveRow();
+    final item = _document.itemById(id);
+    if (item?.isEmpty ?? false) {
+      _deleteItem(id, focusPreviousAtEnd: true);
+      return true;
+    }
+    final previous = _document.previousSiblingOf(id);
+    if (item != null && previous != null) {
+      _commitDocument(
+        _document.mergeWithPrevious(id),
+        focusId: previous.id,
+        selectionOffset: previous.textLength,
+      );
+      return true;
+    }
+    return false;
   }
 
   void _commitDocument(
@@ -993,7 +1272,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         (selectionOffset != null
             ? TextSelection.collapsed(offset: selectionOffset)
             : targetId == _activeItemId
-            ? _rowController.selection
+            ? _modelSelectionFromEditor(_rowController.selection)
             : const TextSelection.collapsed(offset: 0));
     _history.commit(
       _collection.replaceDocument(_activeSectionId, document),
@@ -1089,7 +1368,8 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     final preservedSectionId = _activeSectionId;
     _activeSectionId = sectionId;
     final preservedFocusId = _dragActiveItemId ?? _activeItemId;
-    final preservedSelection = _dragSelection ?? _rowController.selection;
+    final preservedSelection =
+        _dragSelection ?? _modelSelectionFromEditor(_rowController.selection);
     final draggedIndex = _document.indexOfId(dragged.id);
     if (draggedIndex < 0) return;
     final subtreeIds = _document.items
@@ -1440,6 +1720,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
               foregroundColor,
               placeholderColor,
               reorderIndex: index,
+              canDelete: section.document!.items.length > 1,
             ),
     );
   }
@@ -1544,7 +1825,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   void _onReorderStart(List<_ChecklistListEntry> entries, int index) {
     final entry = entries[index];
     _dragActiveItemId = _activeItemId;
-    _dragSelection = _rowController.selection;
+    _dragSelection = _modelSelectionFromEditor(_rowController.selection);
     _restoreRowFocusAfterDrag = _rowFocusNode.hasFocus;
     unawaited(HapticFeedback.selectionClick());
     setState(() => _draggedItemId = entry.item?.id);
@@ -1657,6 +1938,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     Color foregroundColor,
     Color placeholderColor, {
     required int reorderIndex,
+    required bool canDelete,
   }) {
     final active = item.id == _activeItemId;
     final dragging = item.id == _draggedItemId;
@@ -1758,6 +2040,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
                     ),
                     PopupMenuItem(
                       value: 'delete',
+                      enabled: canDelete,
                       child: Text(context.l10n.delete),
                     ),
                   ],
@@ -1787,10 +2070,10 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
 
     return Dismissible(
       key: ValueKey('checklist-item-${item.id}'),
-      direction: _readOnly || active || dragging
+      direction: _readOnly || active || dragging || !canDelete
           ? DismissDirection.none
           : DismissDirection.endToStart,
-      background: dragging
+      background: dragging || !canDelete
           ? null
           : Container(
               key: ValueKey('checklist-delete-surface-${item.id}'),
@@ -1816,7 +2099,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     required double verticalInset,
   }) {
     final controller = _rowController;
-    return QuillEditor.basic(
+    final editor = QuillEditor.basic(
       key: _rowQuillEditorKey,
       controller: controller,
       focusNode: _rowFocusNode,
@@ -1843,6 +2126,43 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         ),
         customLinkPrefixes: const ['audio://'],
       ),
+    );
+    if (!_rowHasBackspaceSentinel) return editor;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedBuilder(
+              animation: controller,
+              builder: (context, child) {
+                if (controller.document.toPlainText() !=
+                    '$_emptyRowBackspaceSentinel\n') {
+                  return const SizedBox.shrink();
+                }
+                return Semantics(
+                  label: context.l10n.startWriting,
+                  child: ExcludeSemantics(
+                    child: Align(
+                      alignment: AlignmentDirectional.topStart,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: verticalInset),
+                        child: Text(
+                          context.l10n.startWriting,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: placeholderColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        editor,
+      ],
     );
   }
 

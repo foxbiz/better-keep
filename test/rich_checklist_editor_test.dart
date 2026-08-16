@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/l10n/app_localization_config.dart';
@@ -636,58 +637,89 @@ void main() {
     );
   });
 
-  testWidgets('iOS Return creates exactly one new checklist row', (
-    tester,
-  ) async {
-    final document = RichChecklistDocument([_item('a', 'First')]);
-    await _pumpEditor(
-      tester,
-      note: _RecordingNote(content: _content('Tasks', document.items)),
-      title: 'Tasks',
-      document: document,
-      platform: TargetPlatform.iOS,
-    );
+  testWidgets(
+    'iOS Return creates exactly one new checklist row',
+    (tester) async {
+      const sentinel = '\u2060';
+      final document = RichChecklistDocument([_item('a', 'First')]);
+      final note = _RecordingNote(content: _content('Tasks', document.items));
+      await _pumpEditor(
+        tester,
+        note: note,
+        title: 'Tasks',
+        document: document,
+        platform: TargetPlatform.iOS,
+      );
 
-    await tester.tap(find.text('First', findRichText: true));
-    await tester.pump();
-    final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    final firstQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
-    );
-    final firstRawEditorState = firstQuillState.editableTextKey.currentState;
+      await tester.tap(find.text('First', findRichText: true));
+      await tester.pump();
+      final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final firstQuillState = tester.state<QuillEditorState>(
+        find.byType(QuillEditor),
+      );
+      final firstRawEditorState = firstQuillState.editableTextKey.currentState;
 
-    await tester.testTextInput.receiveAction(TextInputAction.newline);
-    await tester.pump();
-    tester.testTextInput.updateEditingValue(
-      const TextEditingValue(
-        text: 'First\n\n',
-        selection: TextSelection.collapsed(offset: 6),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.newline);
+      await tester.pump();
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'First\n\n',
+          selection: TextSelection.collapsed(offset: 6),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.byType(Dismissible), findsNWidgets(2));
-    expect(find.text('First', findRichText: true), findsOneWidget);
-    final newItemEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    final newItemQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
-    );
-    expect(newItemQuillState, same(firstQuillState));
-    expect(
-      newItemQuillState.editableTextKey.currentState,
-      same(firstRawEditorState),
-    );
-    expect(newItemEditor.controller, same(firstEditor.controller));
-    expect(newItemEditor.focusNode, same(firstEditor.focusNode));
-    expect(newItemEditor.focusNode.hasFocus, isTrue);
-    expect(tester.testTextInput.isRegistered, isTrue);
-    expect(newItemEditor.controller.document.toPlainText(), '\n');
-    expect(
-      newItemEditor.controller.selection,
-      const TextSelection.collapsed(offset: 0),
-    );
-  });
+      expect(find.byType(Dismissible), findsNWidgets(2));
+      expect(find.text('First', findRichText: true), findsOneWidget);
+      final newItemEditor = tester.widget<QuillEditor>(
+        find.byType(QuillEditor),
+      );
+      final newItemQuillState = tester.state<QuillEditorState>(
+        find.byType(QuillEditor),
+      );
+      expect(newItemQuillState, same(firstQuillState));
+      expect(
+        newItemQuillState.editableTextKey.currentState,
+        same(firstRawEditorState),
+      );
+      expect(newItemEditor.controller, same(firstEditor.controller));
+      expect(newItemEditor.focusNode, same(firstEditor.focusNode));
+      expect(newItemEditor.focusNode.hasFocus, isTrue);
+      expect(tester.testTextInput.isRegistered, isTrue);
+      expect(newItemEditor.controller.document.toPlainText(), '$sentinel\n');
+      expect(
+        newItemEditor.controller.selection,
+        const TextSelection.collapsed(offset: 1),
+      );
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '${sentinel}Typed immediately\n',
+          selection: TextSelection.collapsed(offset: 18),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 220));
+
+      expect(find.byType(Dismissible), findsNWidgets(2));
+      expect(
+        newItemEditor.controller.document.toPlainText(),
+        'Typed immediately\n',
+      );
+      expect(
+        newItemEditor.controller.selection,
+        const TextSelection.collapsed(offset: 17),
+      );
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(note.saveCalls, 1);
+      expect(note.content, isNot(contains(sentinel)));
+      expect(note.plainText, 'Tasks\nFirst\nTyped immediately');
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
 
   testWidgets('an inserted newline uses the same persistent row split path', (
     tester,
@@ -808,6 +840,374 @@ void main() {
     expect(
       previousEditor.controller.selection,
       const TextSelection.collapsed(offset: 8),
+    );
+  });
+
+  group('iOS soft-keyboard Backspace', () {
+    const sentinel = '\u2060';
+
+    testWidgets(
+      'deletes an empty row and focuses the previous item end',
+      (tester) async {
+        final document = RichChecklistDocument([
+          _item('previous', 'Previous'),
+          _item('empty', ''),
+        ]);
+        await _pumpEditor(
+          tester,
+          note: _RecordingNote(content: _content('Tasks', document.items)),
+          title: 'Tasks',
+          document: document,
+          platform: TargetPlatform.iOS,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('checklist-text-lane-empty')),
+        );
+        await tester.pump();
+        await tester.pump();
+        final emptyEditor = tester.widget<QuillEditor>(
+          find.byType(QuillEditor),
+        );
+        expect(emptyEditor.controller.document.toPlainText(), '$sentinel\n');
+        expect(
+          emptyEditor.controller.selection,
+          const TextSelection.collapsed(offset: 1),
+        );
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '\n',
+            selection: TextSelection.collapsed(offset: 0),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.byType(Dismissible), findsOneWidget);
+        final previousEditor = tester.widget<QuillEditor>(
+          find.byType(QuillEditor),
+        );
+        expect(previousEditor.focusNode.hasFocus, isTrue);
+        expect(tester.testTextInput.isRegistered, isTrue);
+        expect(previousEditor.controller.document.toPlainText(), 'Previous\n');
+        expect(
+          previousEditor.controller.selection,
+          const TextSelection.collapsed(offset: 8),
+        );
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'keeps the sole empty row and restores usable input',
+      (tester) async {
+        final document = RichChecklistDocument([_item('only', '')]);
+        final note = _RecordingNote(content: _content('Tasks', document.items));
+        await _pumpEditor(
+          tester,
+          note: note,
+          title: 'Tasks',
+          document: document,
+          platform: TargetPlatform.iOS,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('checklist-text-lane-only')),
+        );
+        await tester.pump();
+        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '\n',
+            selection: TextSelection.collapsed(offset: 0),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.byType(Dismissible), findsOneWidget);
+        expect(editor.controller.document.toPlainText(), '$sentinel\n');
+        expect(editor.controller.selection.baseOffset, 1);
+        expect(editor.controller.selection.extentOffset, 1);
+        expect(tester.testTextInput.isRegistered, isTrue);
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '${sentinel}A\n',
+            selection: TextSelection.collapsed(offset: 2),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 220));
+
+        expect(editor.controller.document.toPlainText(), 'A\n');
+        expect(
+          editor.controller.selection,
+          const TextSelection.collapsed(offset: 1),
+        );
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '\n',
+            selection: TextSelection.collapsed(offset: 0),
+          ),
+        );
+        await tester.pump();
+        expect(editor.controller.document.toPlainText(), '$sentinel\n');
+        expect(editor.controller.selection.baseOffset, 1);
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '\n',
+            selection: TextSelection.collapsed(offset: 0),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(Dismissible), findsOneWidget);
+        expect(editor.controller.document.toPlainText(), '$sentinel\n');
+        expect(note.saveCalls, 0);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'strips the sentinel after IME composition before saving',
+      (tester) async {
+        final document = RichChecklistDocument([_item('only', '')]);
+        final note = _RecordingNote(content: _content('Tasks', document.items));
+        await _pumpEditor(
+          tester,
+          note: note,
+          title: 'Tasks',
+          document: document,
+          platform: TargetPlatform.iOS,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('checklist-text-lane-only')),
+        );
+        await tester.pump();
+        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+        editor.controller.formatSelection(Attribute.bold);
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '${sentinel}Typed\n',
+            selection: TextSelection.collapsed(offset: 6),
+            composing: TextRange(start: 1, end: 6),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 220));
+        expect(editor.controller.document.toPlainText(), '${sentinel}Typed\n');
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '${sentinel}Typed\n',
+            selection: TextSelection.collapsed(offset: 6),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 220));
+
+        expect(editor.controller.document.toPlainText(), 'Typed\n');
+        expect(
+          editor.controller.selection,
+          const TextSelection.collapsed(offset: 5),
+        );
+        expect(editor.controller.document.toDelta().toJson().first, {
+          'insert': 'Typed',
+          'attributes': {'bold': true},
+        });
+
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+
+        expect(note.saveCalls, 1);
+        expect(note.content, isNot(contains(sentinel)));
+        expect(note.plainText, 'Tasks\nTyped');
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'keeps logical selection after autocorrect replaces the sentinel',
+      (tester) async {
+        final document = RichChecklistDocument([
+          _item('previous', 'Previous'),
+          _item('only', ''),
+        ]);
+        final note = _RecordingNote(
+          title: 'Tasks',
+          content: _content('Tasks', document.items),
+        );
+        Object? navigationResult;
+        await tester.pumpWidget(
+          _focusedLaunchHost(
+            note,
+            document,
+            onResult: (result) => navigationResult = result,
+          ),
+        );
+        await tester.tap(find.text('Open checklist'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('checklist-text-lane-only')),
+        );
+        await tester.pump();
+
+        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+        editor.controller.formatSelection(Attribute.bold);
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '${sentinel}teh\n',
+            selection: TextSelection.collapsed(offset: 4),
+          ),
+        );
+        await tester.pump();
+        expect(editor.controller.document.toDelta().toJson(), [
+          {'insert': sentinel},
+          {
+            'insert': 'teh',
+            'attributes': {'bold': true},
+          },
+          {'insert': '\n'},
+        ]);
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: 'the\n',
+            selection: TextSelection.collapsed(offset: 3),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 220));
+
+        expect(editor.controller.document.toPlainText(), 'the\n');
+        expect(
+          editor.controller.selection,
+          const TextSelection.collapsed(offset: 3),
+        );
+        expect(editor.controller.document.toDelta().toJson().first, {
+          'insert': 'the',
+          'attributes': {'bold': true},
+        });
+
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+
+        final result = navigationResult as RichChecklistEditorResult;
+        expect(result.selectionStart, 12);
+        expect(result.selectionEnd, 12);
+        expect(result.document.itemById('only')!.plainText, 'the');
+        expect(result.content, isNot(contains(sentinel)));
+        expect(jsonEncode(result.bodyDelta), isNot(contains(sentinel)));
+        expect(result.plainText, 'Tasks\nPrevious\nthe');
+        expect(note.content, isNot(contains(sentinel)));
+        expect(note.plainText, 'Tasks\nPrevious\nthe');
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      're-arms Backspace after a replacement removes the sentinel',
+      (tester) async {
+        final document = RichChecklistDocument([
+          _item('previous', 'Previous'),
+          _item('empty', ''),
+        ]);
+        await _pumpEditor(
+          tester,
+          note: _RecordingNote(content: _content('Tasks', document.items)),
+          title: 'Tasks',
+          document: document,
+          platform: TargetPlatform.iOS,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('checklist-text-lane-empty')),
+        );
+        await tester.pump();
+
+        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '${sentinel}teh\n',
+            selection: TextSelection.collapsed(offset: 4),
+          ),
+        );
+        await tester.pump();
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: 'the\n',
+            selection: TextSelection.collapsed(offset: 3),
+          ),
+        );
+        await tester.pump();
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '\n',
+            selection: TextSelection.collapsed(offset: 0),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(editor.controller.document.toPlainText(), '$sentinel\n');
+        expect(
+          editor.controller.selection,
+          const TextSelection.collapsed(offset: 1),
+        );
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '\n',
+            selection: TextSelection.collapsed(offset: 0),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.byType(Dismissible), findsOneWidget);
+        expect(editor.controller.document.toPlainText(), 'Previous\n');
+        expect(editor.focusNode.hasFocus, isTrue);
+        expect(
+          editor.controller.selection,
+          const TextSelection.collapsed(offset: 8),
+        );
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'announces the placeholder only while the sentinel row is empty',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          final document = RichChecklistDocument([_item('only', '')]);
+          await _pumpEditor(
+            tester,
+            note: _RecordingNote(content: _content('Tasks', document.items)),
+            title: 'Tasks',
+            document: document,
+            platform: TargetPlatform.iOS,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('checklist-text-lane-only')),
+          );
+          await tester.pump();
+
+          expect(find.bySemanticsLabel('Start writing...'), findsOneWidget);
+
+          tester.testTextInput.updateEditingValue(
+            const TextEditingValue(
+              text: '${sentinel}A\n',
+              selection: TextSelection.collapsed(offset: 2),
+            ),
+          );
+          await tester.pump();
+
+          expect(find.bySemanticsLabel('Start writing...'), findsNothing);
+        } finally {
+          semantics.dispose();
+        }
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
     );
   });
 
@@ -1080,6 +1480,99 @@ void main() {
     expect(note.title, 'Remote');
   });
 
+  for (final useSystemBack in [false, true]) {
+    testWidgets(
+      'conflicts block ${useSystemBack ? 'system' : 'leading'} Back until resolved',
+      (tester) async {
+        final initial = RichChecklistDocument([_item('a', 'Local task')]);
+        final note = _RecordingNote(
+          id: 44,
+          title: 'Tasks',
+          content: _content('Tasks', initial.items),
+        );
+        await tester.pumpWidget(_focusedLaunchHost(note, initial));
+        await tester.tap(find.text('Open checklist'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const ValueKey('checklist-checkbox-a')));
+        await tester.pump(const Duration(milliseconds: 100));
+        _RecordingNote(
+          id: 44,
+          title: 'Remote',
+          content: _content('Remote', [_item('remote', 'Remote task')]),
+        ).notify('updated', false);
+        await tester.pump();
+
+        if (useSystemBack) {
+          await tester.binding.handlePopRoute();
+        } else {
+          await tester.tap(find.byType(BackButton));
+        }
+        await tester.pump();
+
+        expect(find.byType(RichChecklistEditor), findsOneWidget);
+        expect(find.byType(MaterialBanner), findsOneWidget);
+        expect(find.text('Open checklist'), findsNothing);
+        expect(note.saveCalls, 0);
+
+        await tester.tap(find.text('Keep my edits'));
+        await tester.pump(const Duration(milliseconds: 1100));
+        if (useSystemBack) {
+          await tester.binding.handlePopRoute();
+        } else {
+          await tester.tap(find.byType(BackButton));
+        }
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RichChecklistEditor), findsNothing);
+        expect(find.text('Open checklist'), findsOneWidget);
+        expect(note.saveCalls, 1);
+      },
+    );
+  }
+
+  testWidgets('a conflict arriving during save keeps the editor open', (
+    tester,
+  ) async {
+    final initial = RichChecklistDocument([_item('a', 'Local task')]);
+    final note = _DeferredSaveNote(
+      id: 46,
+      title: 'Tasks',
+      content: _content('Tasks', initial.items),
+    );
+    await tester.pumpWidget(_focusedLaunchHost(note, initial));
+    await tester.tap(find.text('Open checklist'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('checklist-checkbox-a')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byType(BackButton));
+    await tester.pump();
+    expect(note.saveCalls, 1);
+
+    _RecordingNote(
+      id: 46,
+      title: 'Remote',
+      content: _content('Remote', [_item('remote', 'Remote task')]),
+    ).notify('updated', false);
+    await tester.pump();
+    note.completeFirstSave();
+    await tester.pump();
+
+    expect(find.byType(RichChecklistEditor), findsOneWidget);
+    expect(find.byType(MaterialBanner), findsOneWidget);
+    expect(find.text('Open checklist'), findsNothing);
+
+    await tester.tap(find.text('Keep my edits'));
+    await tester.pump(const Duration(milliseconds: 1100));
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RichChecklistEditor), findsNothing);
+    expect(find.text('Open checklist'), findsOneWidget);
+    expect(note.saveCalls, 2);
+  });
+
   testWidgets('external edits outside the selected block merge safely', (
     tester,
   ) async {
@@ -1175,6 +1668,148 @@ void main() {
     );
   });
 
+  testWidgets('external surrounding edits preserve uncommitted IME row text', (
+    tester,
+  ) async {
+    final codec = ChecklistDeltaCodec();
+    final initialBody = <Map<String, dynamic>>[
+      {'insert': 'Before\n'},
+      {'insert': 'Task'},
+      {
+        'insert': '\n',
+        'attributes': {'list': 'unchecked'},
+      },
+      {'insert': 'After\n'},
+    ];
+    final block = codec
+        .scanChecklistBlocks(documentFromJsonSafe(initialBody))
+        .single
+        .slice!
+        .copyWith(document: RichChecklistDocument([_item('a', 'Task')]));
+    final note = _RecordingNote(
+      id: 45,
+      title: 'Mixed',
+      content: codec.encodeCombinedBodyJson(
+        title: 'Mixed',
+        bodyDelta: initialBody,
+      ),
+    );
+    await tester.pumpWidget(
+      _host(
+        RichChecklistEditor(
+          note: note,
+          session: ChecklistBlockEditSession(
+            title: 'Mixed',
+            bodyDelta: initialBody,
+            block: block,
+            selectionStart: block.startOffset,
+            selectionEnd: block.startOffset,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('checklist-text-lane-a')));
+    await tester.pump();
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'Task local\n',
+        selection: TextSelection.collapsed(offset: 10),
+        composing: TextRange(start: 5, end: 10),
+      ),
+    );
+    await tester.pump();
+    final remoteBody = <Map<String, dynamic>>[
+      {'insert': 'Remote before\n'},
+      {'insert': 'Task'},
+      {
+        'insert': '\n',
+        'attributes': {'list': 'unchecked'},
+      },
+      {'insert': 'After\n'},
+    ];
+    _RecordingNote(
+      id: 45,
+      title: 'Remote title',
+      content: codec.encodeCombinedBodyJson(
+        title: 'Remote title',
+        bodyDelta: remoteBody,
+      ),
+    ).notify('updated', false);
+    await tester.pump();
+
+    expect(find.byType(MaterialBanner), findsNothing);
+    expect(
+      tester
+          .widget<QuillEditor>(find.byType(QuillEditor))
+          .controller
+          .document
+          .toPlainText(),
+      'Task local\n',
+    );
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'Task local\n',
+        selection: TextSelection.collapsed(offset: 10),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 1100));
+
+    expect(note.saveCalls, 1);
+    expect(
+      documentFromJsonSafe(
+        codec.tryParseCombinedJson(note.content)!.bodyDelta,
+      ).toPlainText(),
+      'Remote before\nTask local\nAfter\n',
+    );
+  });
+
+  testWidgets('an older save cannot clear a newer local revision', (
+    tester,
+  ) async {
+    final document = RichChecklistDocument([_item('a', 'Task')]);
+    final note = _DeferredSaveNote(content: _content('Tasks', document.items));
+    await _pumpEditor(tester, note: note, title: 'Tasks', document: document);
+    final controller = tester
+        .widget<QuillEditor>(find.byType(QuillEditor))
+        .controller;
+
+    controller.replaceText(
+      0,
+      4,
+      'First edit',
+      const TextSelection.collapsed(offset: 10),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(note.saveCalls, 1);
+
+    controller.replaceText(
+      0,
+      10,
+      'Second edit',
+      const TextSelection.collapsed(offset: 11),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    note.completeFirstSave();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1100));
+
+    expect(note.saveCalls, 2);
+    expect(
+      ChecklistDeltaCodec()
+          .tryParseCombinedJson(note.content)!
+          .bodyDelta
+          .map((operation) => operation['insert'])
+          .whereType<String>()
+          .join(),
+      'Second edit\n',
+    );
+  });
+
   testWidgets('reload conflict action replaces dirty local state', (
     tester,
   ) async {
@@ -1267,6 +1902,70 @@ void main() {
           .data,
       'Lists',
     );
+  });
+
+  testWidgets('an inactive sole section row cannot be deleted', (tester) async {
+    final codec = ChecklistDeltaCodec();
+    final body = <Map<String, dynamic>>[
+      {'insert': 'First task'},
+      {
+        'insert': '\n',
+        'attributes': {'list': 'unchecked'},
+      },
+      {
+        'insert': {'image': 'between.png'},
+      },
+      {'insert': '\n'},
+      {'insert': 'Second task'},
+      {
+        'insert': '\n',
+        'attributes': {'list': 'unchecked'},
+      },
+    ];
+    final session = codec.createCollectionEditSession(
+      title: 'Lists',
+      document: documentFromJsonSafe(body),
+      selectionStart: 0,
+      selectionEnd: 0,
+    )!;
+    await tester.pumpWidget(
+      _host(
+        RichChecklistCollectionEditor(
+          note: _RecordingNote(
+            title: 'Lists',
+            content: codec.encodeCombinedBodyJson(
+              title: 'Lists',
+              bodyDelta: body,
+            ),
+          ),
+          session: session,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final secondRow = find.ancestor(
+      of: find.text('Second task', findRichText: true),
+      matching: find.byType(Dismissible),
+    );
+    expect(
+      tester.widget<Dismissible>(secondRow).direction,
+      DismissDirection.none,
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: secondRow,
+        matching: find.byType(PopupMenuButton<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final deleteItem = tester.widget<PopupMenuItem<String>>(
+      find.byWidgetPredicate(
+        (widget) => widget is PopupMenuItem<String> && widget.value == 'delete',
+      ),
+    );
+    expect(deleteItem.enabled, isFalse);
   });
 
   testWidgets(
@@ -1755,11 +2454,10 @@ void main() {
     expect(find.byKey(const ValueKey('open_focused_checklist')), findsNothing);
   });
 
-  testWidgets('opens only the selected checklist block in a mixed note', (
+  testWidgets('opens and saves only the selected block in a mixed note', (
     tester,
   ) async {
-    final note = Note(
-      readOnly: true,
+    final note = _RecordingNote(
       content: jsonEncode([
         {'insert': 'Mixed'},
         {
@@ -1798,6 +2496,39 @@ void main() {
     expect(find.text('Second block', findRichText: true), findsOneWidget);
     expect(find.text('First block', findRichText: true), findsNothing);
     expect(find.text('Paragraph', findRichText: true), findsNothing);
+
+    final saveCallsBeforeEdit = note.saveCalls;
+    final rowController = tester
+        .widget<QuillEditor>(find.byType(QuillEditor))
+        .controller;
+    rowController.replaceText(
+      0,
+      'Second block'.length,
+      'Second edited',
+      const TextSelection.collapsed(offset: 13),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 1100));
+
+    expect(note.saveCalls, saveCallsBeforeEdit + 1);
+    expect(
+      documentFromJsonSafe(
+        ChecklistDeltaCodec().tryParseCombinedJson(note.content)!.bodyDelta,
+      ).toPlainText(),
+      'First block\nParagraph\nSecond edited\n',
+    );
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(RichChecklistEditor), findsNothing);
+    expect(
+      tester
+          .widget<QuillEditor>(find.byType(QuillEditor))
+          .controller
+          .document
+          .toPlainText(),
+      'First block\nParagraph\nSecond edited\n',
+    );
   });
 
   testWidgets('positions the popup within a Motorola-sized keyboard viewport', (
@@ -1882,6 +2613,43 @@ Widget _todoLaunchHost(Note note) => _host(
   ),
 );
 
+Widget _focusedLaunchHost(
+  Note note,
+  RichChecklistDocument document, {
+  ValueChanged<Object?>? onResult,
+}) {
+  final codec = ChecklistDeltaCodec();
+  final body = codec.encodeBody(document);
+  final block = codec
+      .findChecklistBlockAt(documentFromJsonSafe(body), 0)
+      .slice!
+      .copyWith(document: document);
+  return _host(
+    Builder(
+      builder: (context) => ElevatedButton(
+        onPressed: () async {
+          final result = await Navigator.of(context).push(
+            MaterialPageRoute<Object?>(
+              builder: (_) => RichChecklistEditor(
+                note: note,
+                session: ChecklistBlockEditSession(
+                  title: note.title ?? '',
+                  bodyDelta: body,
+                  block: block,
+                  selectionStart: 0,
+                  selectionEnd: 0,
+                ),
+              ),
+            ),
+          );
+          onResult?.call(result);
+        },
+        child: const Text('Open checklist'),
+      ),
+    ),
+  );
+}
+
 double _firstGlyphCenter(WidgetTester tester, Finder richText) {
   final paragraph = tester.renderObject<RenderParagraph>(richText);
   final box = paragraph
@@ -1948,6 +2716,29 @@ class _RecordingNote extends Note {
     bool trackSync = true,
   }) async {
     saveCalls++;
+    this.title = title;
+    this.content = content;
+    this.plainText = plainText;
+    return id ?? 1;
+  }
+}
+
+class _DeferredSaveNote extends _RecordingNote {
+  _DeferredSaveNote({super.id, super.title, super.content});
+
+  final Completer<void> _firstSave = Completer<void>();
+
+  void completeFirstSave() => _firstSave.complete();
+
+  @override
+  Future<int> saveEditorSnapshot({
+    required String title,
+    required String content,
+    required String plainText,
+    bool trackSync = true,
+  }) async {
+    saveCalls++;
+    if (saveCalls == 1) await _firstSave.future;
     this.title = title;
     this.content = content;
     this.plainText = plainText;

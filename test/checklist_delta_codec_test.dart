@@ -578,6 +578,50 @@ void main() {
       },
     );
 
+    test('splices an edited subset without requiring every note block', () {
+      final source = documentFromJsonSafe([
+        {'insert': 'First'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+        {'insert': 'Paragraph\n'},
+        {'insert': 'Second'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+      ]);
+      final session = codec.createCollectionEditSession(
+        title: 'Mixed',
+        document: source,
+        selectionStart: 0,
+        selectionEnd: 0,
+      )!;
+      final second = session.collection.sections.last;
+      final editedSecond = second.withDocument(
+        RichChecklistDocument([
+          second.document!.items.single.copyWith(
+            inlineDelta: const [
+              {'insert': 'Second edited'},
+            ],
+          ),
+        ]),
+      );
+
+      final result = codec.replaceCollectionDocuments(
+        bodyDelta: session.bodyDelta,
+        collection: RichChecklistCollection([editedSecond]),
+      );
+
+      expect(result.collection.sections, hasLength(1));
+      expect(result.collection.sections.single.id, second.id);
+      expect(
+        documentFromJsonSafe(result.bodyDelta).toPlainText(),
+        'First\nParagraph\nSecond edited\n',
+      );
+    });
+
     test('rejects a collection splice when any source block is stale', () {
       final source = documentFromJsonSafe([
         {'insert': 'One'},

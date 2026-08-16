@@ -313,15 +313,27 @@ class ChecklistDeltaCodec {
       selectionStart: 0,
       selectionEnd: 0,
     );
-    if (rescanned == null ||
-        rescanned.collection.sections.length != collection.sections.length) {
+    if (rescanned == null) {
       throw StateError('Encoded checklist collection is not decodable');
     }
 
+    final rescannedByStart = {
+      for (final section in rescanned.collection.sections)
+        section.startOffset: section,
+    };
     final rebased = <RichChecklistSection>[];
-    for (var index = 0; index < collection.sections.length; index++) {
-      final previous = collection.sections[index];
-      final next = rescanned.collection.sections[index];
+    for (final previous in collection.sections) {
+      var rebasedStart = previous.startOffset;
+      for (final replacement in replacements) {
+        if (replacement.startOffset >= previous.startOffset) continue;
+        rebasedStart +=
+            replacementDeltaLength(replacement.replacementDelta) -
+            replacement.sourceLength;
+      }
+      final next = rescannedByStart[rebasedStart];
+      if (next == null) {
+        throw StateError('Encoded checklist collection is not decodable');
+      }
       if (previous.isEligible != next.isEligible) {
         throw StateError('Checklist section eligibility changed after encode');
       }
