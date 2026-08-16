@@ -104,6 +104,7 @@ class NoteCheckboxProgressTitle extends StatelessWidget {
         child: InkWell(
           key: const ValueKey('note_checkbox_progress_title'),
           onTap: onTap,
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(18),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 48, minHeight: 48),

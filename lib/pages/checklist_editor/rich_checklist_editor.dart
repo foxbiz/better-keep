@@ -16,6 +16,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:uuid/uuid.dart';
 
+const _checklistActionMouseCursor =
+    WidgetStateMouseCursor.fromMap(<WidgetStatesConstraint, MouseCursor>{
+      WidgetState.disabled: SystemMouseCursors.basic,
+      WidgetState.any: SystemMouseCursors.click,
+    });
+const _checklistItemMaxWidth = 600.0;
+
 class RichChecklistEditor extends StatefulWidget {
   const RichChecklistEditor({
     super.key,
@@ -1519,14 +1526,15 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final backgroundColor = widget.note.color == Colors.transparent
-        ? Theme.of(context).colorScheme.surface
+        ? theme.colorScheme.surface
         : widget.note.color;
     final foregroundColor = isDark(backgroundColor)
         ? Colors.white
         : Colors.black;
     final placeholderColor = foregroundColor.withValues(alpha: 0.4);
-    return PopScope(
+    final page = PopScope(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) unawaited(_close());
@@ -1611,6 +1619,24 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
                 ),
         ),
       ),
+    );
+    return Theme(
+      data: theme.copyWith(
+        iconButtonTheme: IconButtonThemeData(
+          style: (theme.iconButtonTheme.style ?? const ButtonStyle()).copyWith(
+            mouseCursor: _checklistActionMouseCursor,
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: (theme.textButtonTheme.style ?? const ButtonStyle()).copyWith(
+            mouseCursor: _checklistActionMouseCursor,
+          ),
+        ),
+        popupMenuTheme: theme.popupMenuTheme.copyWith(
+          mouseCursor: _checklistActionMouseCursor,
+        ),
+      ),
+      child: page,
     );
   }
 
@@ -1706,22 +1732,31 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     final entry = entries[index];
     return KeyedSubtree(
       key: ValueKey('checklist-entry-${section.id}-${entry.identity}'),
-      child: entry.isCompletedHeader
-          ? _buildCompletedHeader(
-              section.id,
-              foregroundColor,
-              section.document!.items
-                  .where((item) => item.indent == 0 && item.checked)
-                  .length,
-            )
-          : _buildItemRow(
-              entry.item!,
-              backgroundColor,
-              foregroundColor,
-              placeholderColor,
-              reorderIndex: index,
-              canDelete: section.document!.items.length > 1,
-            ),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          key: ValueKey(
+            'checklist-entry-content-${section.id}-${entry.identity}',
+          ),
+          constraints: const BoxConstraints(maxWidth: _checklistItemMaxWidth),
+          child: entry.isCompletedHeader
+              ? _buildCompletedHeader(
+                  section.id,
+                  foregroundColor,
+                  section.document!.items
+                      .where((item) => item.indent == 0 && item.checked)
+                      .length,
+                )
+              : _buildItemRow(
+                  entry.item!,
+                  backgroundColor,
+                  foregroundColor,
+                  placeholderColor,
+                  reorderIndex: index,
+                  canDelete: section.document!.items.length > 1,
+                ),
+        ),
+      ),
     );
   }
 
@@ -1842,21 +1877,52 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     if (restoreFocus && focusId != null) _requestRowKeyboard(focusId);
   }
 
-  Widget _buildDragProxy(
-    Widget child,
-    int index,
-    Animation<double> animation,
-  ) => Material(
-    type: MaterialType.transparency,
-    elevation: 0,
-    child: FadeTransition(
-      opacity: Tween<double>(
-        begin: 0.9,
-        end: 1,
-      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-      child: child,
-    ),
-  );
+  Widget _buildDragProxy(Widget child, int index, Animation<double> animation) {
+    final draggedItemId = _draggedItemId;
+    Widget proxyChild = child;
+    if (draggedItemId != null) {
+      // Reusing the live row here reparents Quill's keyed LayoutBuilders into
+      // the overlay while the reorderable list is laying out on web.
+      for (final section in _collection.sections) {
+        final document = section.document;
+        final item = document?.itemById(draggedItemId);
+        if (document == null || item == null) continue;
+        final theme = Theme.of(context);
+        final backgroundColor = widget.note.color == Colors.transparent
+            ? theme.colorScheme.surface
+            : widget.note.color;
+        final foregroundColor = isDark(backgroundColor)
+            ? Colors.white
+            : Colors.black;
+        proxyChild = Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _checklistItemMaxWidth),
+            child: _buildItemRow(
+              item,
+              backgroundColor,
+              foregroundColor,
+              foregroundColor.withValues(alpha: 0.4),
+              reorderIndex: index,
+              canDelete: document.items.length > 1,
+              isDragProxy: true,
+            ),
+          ),
+        );
+        break;
+      }
+    }
+    return Material(
+      type: MaterialType.transparency,
+      elevation: 0,
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.9, end: 1).animate(
+          CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+        ),
+        child: proxyChild,
+      ),
+    );
+  }
 
   Widget _buildCompletedHeader(
     String sectionId,
@@ -1871,6 +1937,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
           Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
+              mouseCursor: _checklistActionMouseCursor,
               onTap: () {
                 _completedExpandedBySection[sectionId] = !completedExpanded;
                 _syncVisibleEntries();
@@ -1939,9 +2006,11 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     Color placeholderColor, {
     required int reorderIndex,
     required bool canDelete,
+    bool isDragProxy = false,
   }) {
-    final active = item.id == _activeItemId;
-    final dragging = item.id == _draggedItemId;
+    final active =
+        !isDragProxy && _draggedItemId == null && item.id == _activeItemId;
+    final dragging = isDragProxy || item.id == _draggedItemId;
     final firstLineMetrics = _firstLineMetricsFor(item);
     final firstLineExtent = firstLineMetrics.extent;
     final rowMargin = EdgeInsetsDirectional.only(
@@ -1994,6 +2063,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
                     )
                   : InkWell(
                       borderRadius: BorderRadius.circular(8),
+                      mouseCursor: _checklistActionMouseCursor,
                       onTap: () => _activateItem(item.id),
                       child: Padding(
                         padding: EdgeInsets.symmetric(
@@ -2048,21 +2118,12 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
               ),
             ),
           if (!_readOnly)
-            ReorderableDragStartListener(
-              key: ValueKey('checklist-drag-handle-${item.id}'),
+            _ChecklistReorderHandle(
+              itemId: item.id,
               index: reorderIndex,
-              child: SizedBox(
-                height: firstLineExtent,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(
-                      Icons.drag_indicator,
-                      color: foregroundColor.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
-              ),
+              height: firstLineExtent,
+              color: foregroundColor.withValues(alpha: 0.5),
+              forceGrabbing: isDragProxy,
             ),
         ],
       ),
@@ -2167,23 +2228,26 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   }
 
   Widget _buildFormattingToolbar(Color backgroundColor) {
-    return NoteEditorToolbar(
-      key: const ValueKey('rich_checklist_toolbar'),
-      controller: _rowController,
-      focusNode: _rowFocusNode,
-      readOnly: _readOnly,
-      parentColor: backgroundColor,
-      historyBinding: NoteEditorHistoryBinding(
-        listenable: _history,
-        canUndo: () => _history.canUndo,
-        canRedo: () => _history.canRedo,
-        undo: _undo,
-        redo: _redo,
+    return Center(
+      heightFactor: 1,
+      child: NoteEditorToolbar(
+        key: const ValueKey('rich_checklist_toolbar'),
+        controller: _rowController,
+        focusNode: _rowFocusNode,
+        readOnly: _readOnly,
+        parentColor: backgroundColor,
+        historyBinding: NoteEditorHistoryBinding(
+          listenable: _history,
+          canUndo: () => _history.canUndo,
+          canRedo: () => _history.canRedo,
+          undo: _undo,
+          redo: _redo,
+        ),
+        showAttachments: false,
+        showChecklist: false,
+        showBlockLists: false,
+        showIndent: false,
       ),
-      showAttachments: false,
-      showChecklist: false,
-      showBlockLists: false,
-      showIndent: false,
     );
   }
 }
@@ -2248,6 +2312,7 @@ class _AnimatedChecklistBox extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           customBorder: const CircleBorder(),
+          mouseCursor: _checklistActionMouseCursor,
           onTap: enabled ? () => onChanged(!checked) : null,
           child: Padding(
             padding: const EdgeInsets.all(6),
@@ -2279,6 +2344,62 @@ class _AnimatedChecklistBox extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ChecklistReorderHandle extends StatefulWidget {
+  const _ChecklistReorderHandle({
+    required this.itemId,
+    required this.index,
+    required this.height,
+    required this.color,
+    this.forceGrabbing = false,
+  });
+
+  final String itemId;
+  final int index;
+  final double height;
+  final Color color;
+  final bool forceGrabbing;
+
+  @override
+  State<_ChecklistReorderHandle> createState() =>
+      _ChecklistReorderHandleState();
+}
+
+class _ChecklistReorderHandleState extends State<_ChecklistReorderHandle> {
+  bool _pressed = false;
+
+  void _setPressed(bool pressed) {
+    if (!mounted || pressed == _pressed) return;
+    setState(() => _pressed = pressed);
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    key: ValueKey('checklist-drag-cursor-${widget.itemId}'),
+    cursor: widget.forceGrabbing || _pressed
+        ? SystemMouseCursors.grabbing
+        : SystemMouseCursors.grab,
+    child: Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => _setPressed(true),
+      onPointerUp: (_) => _setPressed(false),
+      onPointerCancel: (_) => _setPressed(false),
+      child: ReorderableDragStartListener(
+        key: ValueKey('checklist-drag-handle-${widget.itemId}'),
+        index: widget.index,
+        child: SizedBox(
+          height: widget.height,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.drag_indicator, color: widget.color),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _RichChecklistText extends StatelessWidget {

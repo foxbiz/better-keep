@@ -91,12 +91,21 @@ class _NoteEditorState extends State<NoteEditor>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   static final Map<String, Metadata> _metadataCache = {};
   static const int _maxCacheSize = 10;
+  static const double _checklistPopupMaxWidth = 280;
+  static const double _checklistPopupHeight = 40;
+  static const double _checklistPopupIconSize = 18;
+  static const double _checklistPopupHorizontalPadding = 12;
+  static const double _checklistPopupSpacing = 8;
+  static const double _checklistPopupScreenInset = 8;
+  static const double _checklistPopupCaretGap = 8;
+  static const Duration _checklistPopupAutoHideDuration = Duration(seconds: 3);
 
   StreamSubscription? _changesSubscription;
   String? _linkUrl;
   Timer? _changeTimer;
   Timer? _checklistEligibilityTimer;
   Timer? _checklistLayoutRetryTimer;
+  Timer? _checklistPopupAutoHideTimer;
   final Set<String> _shownDueReminderOccurrences = <String>{};
   final ChecklistDeltaCodec _checklistDeltaCodec = ChecklistDeltaCodec();
   final ChecklistCaretPromptController _checklistPromptController =
@@ -119,6 +128,9 @@ class _NoteEditorState extends State<NoteEditor>
   final Map<String, GlobalKey> _audioPlayerKeys = {};
   final GlobalKey<EditorState> _editorKey = GlobalKey<EditorState>();
   final GlobalKey _editorStackKey = GlobalKey();
+  final FocusNode _checklistPopupFocusNode = FocusNode(
+    debugLabel: 'Open checklist view',
+  );
   late final Note _note;
   late FocusNode _focusNode;
   late FocusNode _titleFocusNode;
@@ -129,6 +141,10 @@ class _NoteEditorState extends State<NoteEditor>
   String? _initialPlainText;
   bool _checklistLayoutSyncScheduled = false;
   _ChecklistPopupGeometry? _checklistPopupGeometry;
+  Duration _checklistPopupAutoHideRemaining = _checklistPopupAutoHideDuration;
+  DateTime? _checklistPopupAutoHideStartedAt;
+  bool _isChecklistPopupHovered = false;
+  bool _isChecklistPopupPressed = false;
 
   // Checkbox cascade/bubble handling
   final CheckboxService _checkboxService = CheckboxService();
@@ -307,9 +323,11 @@ class _NoteEditorState extends State<NoteEditor>
 
     _focusNode.addListener(_focusListener);
     _titleFocusNode.addListener(_titleFocusListener);
+    _checklistPopupFocusNode.addListener(_checklistPopupFocusListener);
     _checklistPromptController.addListener(_onChecklistPromptChanged);
+    HardwareKeyboard.instance.addHandler(_handleChecklistPopupHardwareKey);
     _checklistPromptController.updateInteraction(
-      hasFocus: _focusNode.hasFocus,
+      hasFocus: _hasChecklistPromptFocus,
       hasCollapsedSelection: _hasCollapsedChecklistSelection,
     );
     _quillScrollController.addListener(_requestChecklistPopupLayout);
@@ -338,7 +356,7 @@ class _NoteEditorState extends State<NoteEditor>
     }
 
     _checklistPromptController.updateInteraction(
-      hasFocus: _focusNode.hasFocus,
+      hasFocus: _hasChecklistPromptFocus,
       hasCollapsedSelection: _hasCollapsedChecklistSelection,
     );
     if (_focusNode.hasFocus) {
@@ -353,6 +371,22 @@ class _NoteEditorState extends State<NoteEditor>
       setState(() {});
     }
     _scheduleChecklistPopupLayout();
+  }
+
+  bool get _hasChecklistPromptFocus =>
+      _focusNode.hasFocus || _checklistPopupFocusNode.hasFocus;
+
+  void _checklistPopupFocusListener() {
+    if (!mounted) return;
+    _checklistPromptController.updateInteraction(
+      hasFocus: _hasChecklistPromptFocus,
+      hasCollapsedSelection: _hasCollapsedChecklistSelection,
+    );
+    if (_checklistPopupFocusNode.hasFocus) {
+      _pauseChecklistPopupAutoHide();
+    } else {
+      _resumeChecklistPopupAutoHide();
+    }
   }
 
   void _refreshChecklistEligibility({bool rebuild = true}) {
@@ -385,8 +419,98 @@ class _NoteEditorState extends State<NoteEditor>
     if (!mounted) return;
     if (!_checklistPromptController.state.isVisible) {
       _checklistPopupGeometry = null;
+      _cancelChecklistPopupAutoHide();
+      _isChecklistPopupHovered = false;
+      _isChecklistPopupPressed = false;
+    } else {
+      _resumeChecklistPopupAutoHide();
     }
     setState(() {});
+  }
+
+  bool get _isChecklistPopupAutoHidePaused =>
+      _isChecklistPopupHovered ||
+      _isChecklistPopupPressed ||
+      _checklistPopupFocusNode.hasFocus;
+
+  void _restartChecklistPopupAutoHide() {
+    _cancelChecklistPopupAutoHide();
+    _resumeChecklistPopupAutoHide();
+  }
+
+  void _pauseChecklistPopupAutoHide() {
+    final startedAt = _checklistPopupAutoHideStartedAt;
+    if (startedAt != null) {
+      final elapsed = DateTime.now().difference(startedAt);
+      _checklistPopupAutoHideRemaining =
+          elapsed >= _checklistPopupAutoHideRemaining
+          ? Duration.zero
+          : _checklistPopupAutoHideRemaining - elapsed;
+    }
+    _checklistPopupAutoHideTimer?.cancel();
+    _checklistPopupAutoHideTimer = null;
+    _checklistPopupAutoHideStartedAt = null;
+  }
+
+  void _resumeChecklistPopupAutoHide() {
+    if (!_checklistPromptController.state.isVisible ||
+        _isChecklistPopupAutoHidePaused ||
+        _checklistPopupAutoHideTimer != null) {
+      return;
+    }
+    if (_checklistPopupAutoHideRemaining <= Duration.zero) {
+      _dismissChecklistPopupUntilNextEligibleTap();
+      return;
+    }
+    _checklistPopupAutoHideStartedAt = DateTime.now();
+    _checklistPopupAutoHideTimer = Timer(
+      _checklistPopupAutoHideRemaining,
+      _dismissChecklistPopupUntilNextEligibleTap,
+    );
+  }
+
+  void _cancelChecklistPopupAutoHide() {
+    _checklistPopupAutoHideTimer?.cancel();
+    _checklistPopupAutoHideTimer = null;
+    _checklistPopupAutoHideStartedAt = null;
+    _checklistPopupAutoHideRemaining = _checklistPopupAutoHideDuration;
+  }
+
+  void _dismissChecklistPopupUntilNextEligibleTap() {
+    _cancelChecklistPopupAutoHide();
+    _isChecklistPopupHovered = false;
+    _isChecklistPopupPressed = false;
+    _checklistLayoutRetryTimer?.cancel();
+    _checklistPopupGeometry = null;
+    _checklistPromptController.dismissUntilNextEligibleTap();
+  }
+
+  void _setChecklistPopupHovered(bool hovered) {
+    _isChecklistPopupHovered = hovered;
+    if (hovered) {
+      _pauseChecklistPopupAutoHide();
+    } else {
+      _resumeChecklistPopupAutoHide();
+    }
+  }
+
+  void _setChecklistPopupPressed(bool pressed) {
+    _isChecklistPopupPressed = pressed;
+    if (pressed) {
+      _pauseChecklistPopupAutoHide();
+    } else {
+      _resumeChecklistPopupAutoHide();
+    }
+  }
+
+  bool _handleChecklistPopupHardwareKey(KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        _checklistPromptController.state.isVisible) {
+      _dismissChecklistPopupUntilNextEligibleTap();
+      return true;
+    }
+    return false;
   }
 
   void _scheduleChecklistPopupLayout({bool resetAttempts = true}) {
@@ -423,15 +547,13 @@ class _NoteEditorState extends State<NoteEditor>
     _checklistPromptController.markLayoutReady();
   }
 
-  void _dismissChecklistPopup() {
-    _checklistLayoutRetryTimer?.cancel();
-    _checklistPopupGeometry = null;
-    _checklistPromptController.dismissUntilNextTap();
-  }
-
   void _requestChecklistPopupLayout() {
     _scheduleChecklistPopupLayout();
   }
+
+  TextStyle get _checklistPopupTextStyle =>
+      Theme.of(context).textTheme.labelLarge ??
+      const TextStyle(fontSize: 14, fontWeight: FontWeight.w500);
 
   _ChecklistPopupGeometry? _resolveChecklistPopupGeometry() {
     final editorState = _editorKey.currentState;
@@ -460,19 +582,53 @@ class _NoteEditorState extends State<NoteEditor>
         renderEditor.localToGlobal(caretRect.topLeft),
       );
       final media = MediaQuery.of(context);
-      final availableWidth = stackRenderObject.size.width - 16;
+      final availableWidth =
+          stackRenderObject.size.width - (_checklistPopupScreenInset * 2);
       if (availableWidth < 120) return null;
-      final popupWidth = availableWidth.clamp(120.0, 280.0).toDouble();
-      final left = (caretTop.dx - 14)
-          .clamp(8.0, stackRenderObject.size.width - popupWidth - 8)
+      final popupMaxWidth = availableWidth
+          .clamp(0.0, _checklistPopupMaxWidth)
           .toDouble();
-      final safeTop = media.padding.top + 8;
-      final top = (caretTop.dy - 56)
+      const chromeWidth =
+          (_checklistPopupHorizontalPadding * 2) +
+          _checklistPopupIconSize +
+          _checklistPopupSpacing;
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: context.l10n.openChecklistView,
+          style: _checklistPopupTextStyle,
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: media.textScaler,
+        maxLines: 1,
+      )..layout(maxWidth: popupMaxWidth - chromeWidth);
+      final textWidth = textPainter.width;
+      textPainter.dispose();
+      final popupWidth = (chromeWidth + textWidth)
+          .clamp(chromeWidth, popupMaxWidth)
+          .toDouble();
+      final direction = Directionality.of(context);
+      final preferredLeft = direction == TextDirection.rtl
+          ? caretTop.dx - popupWidth + 14
+          : caretTop.dx - 14;
+      final left = preferredLeft
           .clamp(
-            safeTop,
-            stackRenderObject.size.height - media.padding.bottom - 56,
+            _checklistPopupScreenInset,
+            stackRenderObject.size.width -
+                popupWidth -
+                _checklistPopupScreenInset,
           )
           .toDouble();
+      final safeTop = media.padding.top + _checklistPopupScreenInset;
+      final top =
+          (caretTop.dy - _checklistPopupHeight - _checklistPopupCaretGap)
+              .clamp(
+                safeTop,
+                stackRenderObject.size.height -
+                    media.padding.bottom -
+                    _checklistPopupHeight -
+                    _checklistPopupScreenInset,
+              )
+              .toDouble();
       return _ChecklistPopupGeometry(left: left, top: top, width: popupWidth);
     } catch (error) {
       if (kDebugMode) {
@@ -491,59 +647,52 @@ class _NoteEditorState extends State<NoteEditor>
       return const SizedBox.shrink();
     }
 
+    final colorScheme = Theme.of(context).colorScheme;
+    final popup = TextButton.icon(
+      key: const ValueKey('open_focused_checklist'),
+      focusNode: _checklistPopupFocusNode,
+      onPressed: _openFocusedChecklistEditor,
+      onHover: _setChecklistPopupHovered,
+      style: TextButton.styleFrom(
+        foregroundColor: colorScheme.onSurface,
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        shadowColor: Colors.black.withValues(alpha: 0.12),
+        elevation: 2,
+        minimumSize: Size.zero,
+        padding: const EdgeInsets.symmetric(
+          horizontal: _checklistPopupHorizontalPadding,
+        ),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+        shape: const StadiumBorder(),
+        textStyle: _checklistPopupTextStyle,
+      ),
+      icon: const Icon(Icons.view_list_rounded, size: _checklistPopupIconSize),
+      label: Text(
+        context.l10n.openChecklistView,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
     return Positioned(
       left: geometry.left,
       top: geometry.top,
       width: geometry.width,
-      child: Material(
-        key: const ValueKey('open_focused_checklist_popup'),
-        elevation: 8,
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        shadowColor: Colors.black.withValues(alpha: 0.28),
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            Expanded(
-              child: InkWell(
-                key: const ValueKey('open_focused_checklist'),
-                onTap: _openFocusedChecklistEditor,
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 8, 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.view_list_rounded, size: 20),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: Text(
-                          context.l10n.openChecklistView,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            IconButton(
-              key: const ValueKey('dismiss_focused_checklist_popup'),
-              onPressed: _dismissChecklistPopup,
-              icon: const Icon(Icons.close, size: 18),
-              tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-            ),
-          ],
+      height: _checklistPopupHeight,
+      child: TextFieldTapRegion(
+        child: Listener(
+          key: const ValueKey('open_focused_checklist_popup'),
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (_) => _setChecklistPopupPressed(true),
+          onPointerUp: (_) => _setChecklistPopupPressed(false),
+          onPointerCancel: (_) => _setChecklistPopupPressed(false),
+          child: SizedBox.expand(child: popup),
         ),
       ),
     );
   }
 
   void _handleChecklistEditorTap() {
-    _checklistPromptController.onEditorTap(
-      block: _checklistBlockAtCaret,
-      hasFocus: _focusNode.hasFocus,
-      hasCollapsedSelection: _hasCollapsedChecklistSelection,
-    );
     // Quill resolves the tapped line after pointer down. Evaluate on the next
     // frame so a tap can never open the block at the previous caret position.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -555,6 +704,7 @@ class _NoteEditorState extends State<NoteEditor>
         hasCollapsedSelection: _hasCollapsedChecklistSelection,
       );
       if (block?.isEligible ?? false) {
+        _restartChecklistPopupAutoHide();
         _checklistPromptController.requestLayout();
         _syncChecklistPopupLayout();
       } else if (block?.isChecklistLine ?? false) {
@@ -583,12 +733,20 @@ class _NoteEditorState extends State<NoteEditor>
     )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _waitForChecklistRouteFrame() async {
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   Future<void> _openFocusedChecklistEditor() async {
     _changeTimer?.cancel();
+    _cancelChecklistPopupAutoHide();
+    _isChecklistPopupPressed = false;
     final previousSelection = _controller.selection;
     final selectedBlock = _checklistBlockAtCaret?.slice;
-    _dismissChecklistPopup();
-    if (selectedBlock == null) return;
+    if (selectedBlock == null) {
+      _refreshChecklistEligibility();
+      return;
+    }
     _focusNode.unfocus();
     if (!_note.readOnly && !_note.trashed && !await _enqueueSave()) return;
     if (!mounted) return;
@@ -605,11 +763,13 @@ class _NoteEditorState extends State<NoteEditor>
       _refreshChecklistEligibility();
       return;
     }
+    await _waitForChecklistRouteFrame();
+    if (!mounted) return;
 
-    final result = await Navigator.of(context).push<RichChecklistEditorResult>(
-      MaterialPageRoute(
-        builder: (_) => RichChecklistEditor(note: _note, session: session),
-      ),
+    final result = await showPage(
+      context,
+      RichChecklistEditor(note: _note, session: session),
+      allowFullScreen: true,
     );
     if (!mounted || result is! RichChecklistEditorResult) return;
     await _applyChecklistEditorResult(result, previousSelection);
@@ -617,8 +777,9 @@ class _NoteEditorState extends State<NoteEditor>
 
   Future<void> _openChecklistCollectionEditor() async {
     _changeTimer?.cancel();
+    _cancelChecklistPopupAutoHide();
+    _isChecklistPopupPressed = false;
     final previousSelection = _controller.selection;
-    _dismissChecklistPopup();
     _focusNode.unfocus();
     if (!_note.readOnly && !_note.trashed && !await _enqueueSave()) return;
     if (!mounted) return;
@@ -630,15 +791,15 @@ class _NoteEditorState extends State<NoteEditor>
       selectionEnd: previousSelection.end,
     );
     if (session == null) return;
+    await _waitForChecklistRouteFrame();
+    if (!mounted) return;
 
-    final result = await Navigator.of(context)
-        .push<RichChecklistCollectionEditorResult>(
-          MaterialPageRoute(
-            builder: (_) =>
-                RichChecklistCollectionEditor(note: _note, session: session),
-          ),
-        );
-    if (!mounted || result == null) return;
+    final result = await showPage(
+      context,
+      RichChecklistCollectionEditor(note: _note, session: session),
+      allowFullScreen: true,
+    );
+    if (!mounted || result is! RichChecklistCollectionEditorResult) return;
     await _applyChecklistCollectionEditorResult(result, previousSelection);
   }
 
@@ -1059,6 +1220,7 @@ class _NoteEditorState extends State<NoteEditor>
     _changeTimer?.cancel();
     _checklistEligibilityTimer?.cancel();
     _checklistLayoutRetryTimer?.cancel();
+    _checklistPopupAutoHideTimer?.cancel();
     _changesSubscription?.cancel();
     // Cancel pending scroll timers
     for (final timer in _scrollTimers) {
@@ -1073,12 +1235,15 @@ class _NoteEditorState extends State<NoteEditor>
     _titleController.dispose();
     _focusNode.removeListener(_focusListener);
     _titleFocusNode.removeListener(_titleFocusListener);
+    _checklistPopupFocusNode.removeListener(_checklistPopupFocusListener);
     _checklistPromptController.removeListener(_onChecklistPromptChanged);
+    HardwareKeyboard.instance.removeHandler(_handleChecklistPopupHardwareKey);
     _checklistPromptController.dispose();
     _checklistProgress.dispose();
     _quillScrollController.removeListener(_requestChecklistPopupLayout);
     _focusNode.dispose();
     _titleFocusNode.dispose();
+    _checklistPopupFocusNode.dispose();
     _note.unsub("changed", _onNoteChanged);
     _quillScrollController.dispose();
     _carouselScrollController.dispose();
@@ -1422,16 +1587,6 @@ class _NoteEditorState extends State<NoteEditor>
                 ],
               ),
             ),
-            if (_checklistPromptController.state.isVisible &&
-                _checklistPopupGeometry != null)
-              Positioned.fill(
-                child: GestureDetector(
-                  key: const ValueKey('focused_checklist_popup_barrier'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _dismissChecklistPopup,
-                  child: const SizedBox.expand(),
-                ),
-              ),
             if (_checklistPromptController.state.isVisible &&
                 _checklistPopupGeometry != null)
               _buildChecklistPopup(),
@@ -1872,6 +2027,7 @@ class _NoteEditorState extends State<NoteEditor>
     if (_isClosing || _allowPop) return;
 
     _changeTimer?.cancel();
+    _cancelChecklistPopupAutoHide();
     FocusManager.instance.primaryFocus?.unfocus();
     if (mounted) {
       setState(() => _isClosing = true);
