@@ -36,7 +36,7 @@ void main() {
     expect(controller.state.phase, ChecklistCaretPromptPhase.visible);
   });
 
-  test('dismissal survives passive changes and clears on the next tap', () {
+  test('eligible taps keep the prompt visible and request fresh layout', () {
     final controller = ChecklistCaretPromptController();
     addTearDown(controller.dispose);
     controller.onEditorTap(
@@ -45,14 +45,81 @@ void main() {
       hasCollapsedSelection: true,
     );
     controller.markLayoutReady();
-    controller.dismissUntilNextTap();
+
+    controller.onEditorTap(
+      block: eligible,
+      hasFocus: true,
+      hasCollapsedSelection: true,
+    );
+    expect(controller.state.phase, ChecklistCaretPromptPhase.visible);
+    expect(controller.state.needsLayout, isTrue);
+  });
+
+  test('a tap outside checklist text hides the prompt', () {
+    final controller = ChecklistCaretPromptController();
+    addTearDown(controller.dispose);
+    controller.onEditorTap(
+      block: eligible,
+      hasFocus: true,
+      hasCollapsedSelection: true,
+    );
+    controller.markLayoutReady();
+
+    controller.onEditorTap(
+      block: null,
+      hasFocus: true,
+      hasCollapsedSelection: true,
+    );
+    expect(controller.state.phase, ChecklistCaretPromptPhase.hidden);
+  });
+
+  test('losing editor focus hides a visible prompt', () {
+    final controller = ChecklistCaretPromptController();
+    addTearDown(controller.dispose);
+    controller.onEditorTap(
+      block: eligible,
+      hasFocus: true,
+      hasCollapsedSelection: true,
+    );
+    controller.markLayoutReady();
 
     controller.updateInteraction(hasFocus: false, hasCollapsedSelection: true);
-    controller.updateInteraction(hasFocus: true, hasCollapsedSelection: true);
+    expect(controller.state.phase, ChecklistCaretPromptPhase.hidden);
+  });
+
+  test('dismissal survives passive changes until an eligible editor tap', () {
+    final controller = ChecklistCaretPromptController();
+    addTearDown(controller.dispose);
+    controller.onEditorTap(
+      block: eligible,
+      hasFocus: true,
+      hasCollapsedSelection: true,
+    );
+    controller.markLayoutReady();
+
+    controller.dismissUntilNextEligibleTap();
     controller.updateBlock(eligible);
+    controller.updateInteraction(hasFocus: false, hasCollapsedSelection: true);
+    controller.updateInteraction(hasFocus: true, hasCollapsedSelection: true);
+    controller.requestLayout();
     expect(
       controller.state.phase,
-      ChecklistCaretPromptPhase.dismissedUntilNextTap,
+      ChecklistCaretPromptPhase.dismissedUntilNextEligibleTap,
+    );
+
+    controller.onEditorTap(
+      block: null,
+      hasFocus: true,
+      hasCollapsedSelection: true,
+    );
+    controller.onEditorTap(
+      block: ineligible,
+      hasFocus: true,
+      hasCollapsedSelection: true,
+    );
+    expect(
+      controller.state.phase,
+      ChecklistCaretPromptPhase.dismissedUntilNextEligibleTap,
     );
 
     controller.onEditorTap(

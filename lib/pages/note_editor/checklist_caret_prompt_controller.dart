@@ -6,7 +6,7 @@ enum ChecklistCaretPromptPhase {
   ineligible,
   waitingForLayout,
   visible,
-  dismissedUntilNextTap,
+  dismissedUntilNextEligibleTap,
 }
 
 @immutable
@@ -34,9 +34,7 @@ class ChecklistCaretPromptState {
 }
 
 /// Owns the checklist prompt lifecycle independently of caret geometry.
-///
-/// Dismissal is intentionally cleared only by [onEditorTap]. Passive focus,
-/// selection, scroll, and layout changes cannot reactivate a dismissed prompt.
+/// Timeout and Escape dismissal can only be cleared by a new eligible tap.
 class ChecklistCaretPromptController extends ChangeNotifier {
   ChecklistCaretPromptController({this.maxLayoutAttempts = 8});
 
@@ -46,7 +44,7 @@ class ChecklistCaretPromptController extends ChangeNotifier {
   ChecklistBlockLookupResult? _block;
   bool _hasFocus = false;
   bool _hasCollapsedSelection = false;
-  bool _dismissedUntilNextTap = false;
+  bool _dismissedUntilNextEligibleTap = false;
 
   ChecklistCaretPromptState get state => _state;
 
@@ -73,11 +71,23 @@ class ChecklistCaretPromptController extends ChangeNotifier {
     required bool hasFocus,
     required bool hasCollapsedSelection,
   }) {
-    _dismissedUntilNextTap = false;
     _block = block;
     _hasFocus = hasFocus;
     _hasCollapsedSelection = hasCollapsedSelection;
+    if (block?.isEligible ?? false) {
+      _dismissedUntilNextEligibleTap = false;
+    }
     _evaluate(resetLayoutAttempts: true);
+  }
+
+  void dismissUntilNextEligibleTap() {
+    _dismissedUntilNextEligibleTap = true;
+    _emit(
+      ChecklistCaretPromptState(
+        phase: ChecklistCaretPromptPhase.dismissedUntilNextEligibleTap,
+        block: _block,
+      ),
+    );
   }
 
   void requestLayout() {
@@ -120,26 +130,16 @@ class ChecklistCaretPromptController extends ChangeNotifier {
     );
   }
 
-  void dismissUntilNextTap() {
-    _dismissedUntilNextTap = true;
-    _emit(
-      ChecklistCaretPromptState(
-        phase: ChecklistCaretPromptPhase.dismissedUntilNextTap,
-        block: _block,
-      ),
-    );
-  }
-
   bool get _canPresent =>
-      !_dismissedUntilNextTap &&
+      !_dismissedUntilNextEligibleTap &&
       _hasFocus &&
       _hasCollapsedSelection &&
       (_block?.isEligible ?? false);
 
   void _evaluate({required bool resetLayoutAttempts}) {
     final interactive = _hasFocus && _hasCollapsedSelection;
-    final phase = _dismissedUntilNextTap
-        ? ChecklistCaretPromptPhase.dismissedUntilNextTap
+    final phase = _dismissedUntilNextEligibleTap
+        ? ChecklistCaretPromptPhase.dismissedUntilNextEligibleTap
         : !interactive || !(_block?.isChecklistLine ?? false)
         ? ChecklistCaretPromptPhase.hidden
         : (_block?.isEligible ?? false)

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:better_keep/l10n/app_localization_config.dart';
 import 'package:better_keep/models/base_model.dart';
@@ -13,6 +14,7 @@ import 'package:better_keep/pages/note_editor/toolbar/text_size_button.dart';
 import 'package:better_keep/services/checklist_delta_codec.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/quill_config.dart';
+import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -1330,9 +1332,9 @@ void main() {
     final handles = find.byType(ReorderableDragStartListener);
     expect(handles, findsNWidgets(3));
 
-    final gesture = await tester.startGesture(tester.getCenter(handles.at(2)));
+    final gesture = await tester.startGesture(tester.getCenter(handles.first));
     await tester.pump();
-    await gesture.moveBy(const Offset(0, -300));
+    await gesture.moveBy(const Offset(0, 300));
     await tester.pump(const Duration(milliseconds: 250));
     expect(
       hapticCalls.where(
@@ -1345,6 +1347,7 @@ void main() {
       (widget) => widget.runtimeType.toString().contains('DragItemProxy'),
     );
     expect(proxy, findsOneWidget);
+    expect(find.byType(QuillEditor), findsNothing);
     final proxyMaterials = tester.widgetList<Material>(
       find.descendant(of: proxy, matching: find.byType(Material)),
     );
@@ -1379,13 +1382,248 @@ void main() {
     );
     expect(editorAfterDrag.focusNode.hasFocus, isTrue);
     expect(editorAfterDrag.controller.selection, selectionBeforeDrag);
-    final thirdY = tester.getTopLeft(find.text('Third', findRichText: true)).dy;
-    final firstY = tester.getTopLeft(find.text('First', findRichText: true)).dy;
     final secondY = tester
         .getTopLeft(find.text('Second', findRichText: true))
         .dy;
+    final thirdY = tester.getTopLeft(find.text('Third', findRichText: true)).dy;
+    final firstY = tester.getTopLeft(find.text('First', findRichText: true)).dy;
+    expect(secondY, lessThan(thirdY));
     expect(thirdY, lessThan(firstY));
-    expect(firstY, lessThan(secondY));
+  });
+
+  testWidgets('desktop checklist uses grab and grabbing cursors for reorder', (
+    tester,
+  ) async {
+    final document = RichChecklistDocument([
+      _item('first', 'First'),
+      _item('second', 'Second'),
+    ]);
+    await _pumpEditor(
+      tester,
+      note: _RecordingNote(content: _content('Tasks', document.items)),
+      title: 'Tasks',
+      document: document,
+      platform: TargetPlatform.macOS,
+    );
+
+    final mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      pointer: 21,
+    );
+    addTearDown(mouse.removePointer);
+    final handle = find.byKey(const ValueKey('checklist-drag-handle-first'));
+    final handleCenter = tester.getCenter(handle);
+    await mouse.addPointer(location: handleCenter);
+    await tester.pump();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.grab,
+    );
+
+    await mouse.down(handleCenter);
+    await tester.pump();
+    expect(
+      tester
+          .widget<MouseRegion>(
+            find.byKey(const ValueKey('checklist-drag-cursor-first')),
+          )
+          .cursor,
+      SystemMouseCursors.grabbing,
+    );
+    await mouse.up();
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(handle));
+    await tester.pump();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.grab,
+    );
+
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('checklist-checkbox-first'))),
+    );
+    await tester.pump();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.click,
+    );
+
+    await mouse.moveTo(tester.getCenter(find.byType(QuillEditor)));
+    await tester.pump();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.text,
+    );
+  });
+
+  testWidgets('desktop checklist centers its toolbar and 600px entries', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final document = RichChecklistDocument([
+      _item('root', 'Root task'),
+      _item('nested', 'Nested task', indent: 1),
+      _item('done', 'Done task', checked: true),
+    ]);
+    await _pumpEditor(
+      tester,
+      note: _RecordingNote(content: _content('Tasks', document.items)),
+      title: 'Tasks',
+      document: document,
+      platform: TargetPlatform.macOS,
+    );
+
+    final scaffoldRect = tester.getRect(find.byType(Scaffold));
+    final toolbarRect = tester.getRect(
+      find.byKey(const ValueKey('rich_checklist_toolbar')),
+    );
+    expect(toolbarRect.width, lessThan(600));
+    expect(toolbarRect.center.dx, closeTo(scaffoldRect.center.dx, 0.01));
+
+    final entryContents = _checklistEntryContents();
+    expect(entryContents, findsNWidgets(4));
+    for (final entry in entryContents.evaluate()) {
+      final entryRect = tester.getRect(find.byWidget(entry.widget));
+      expect(entryRect.width, 600);
+      expect(entryRect.center.dx, closeTo(scaffoldRect.center.dx, 0.01));
+    }
+
+    final nestedEntryRect = tester.getRect(
+      find.byKey(const ValueKey('checklist-item-nested')),
+    );
+    final nestedSurfaceRect = tester.getRect(
+      find.byKey(const ValueKey('checklist-row-surface-nested')),
+    );
+    expect(nestedEntryRect.width, 600);
+    expect(nestedSurfaceRect, nestedEntryRect);
+    expect(
+      tester
+          .widget<AnimatedContainer>(
+            find.byKey(const ValueKey('checklist-row-surface-nested')),
+          )
+          .margin,
+      const EdgeInsetsDirectional.only(start: 22, bottom: 4),
+    );
+    final nestedDismissible = tester.widget<Dismissible>(
+      find.byKey(const ValueKey('checklist-item-nested')),
+    );
+    expect(nestedDismissible.direction, DismissDirection.endToStart);
+    final nestedDeleteSurface = nestedDismissible.background! as Container;
+    expect(
+      nestedDeleteSurface.key,
+      const ValueKey('checklist-delete-surface-nested'),
+    );
+    expect(
+      nestedDeleteSurface.margin,
+      const EdgeInsetsDirectional.only(start: 22, bottom: 4),
+    );
+
+    final handle = find.byKey(const ValueKey('checklist-drag-handle-root'));
+    final gesture = await tester.startGesture(tester.getCenter(handle));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 80));
+    await tester.pump();
+    final draggedEntryRect = tester.getRect(
+      find.byKey(const ValueKey('checklist-item-root')),
+    );
+    expect(draggedEntryRect.width, 600);
+    expect(draggedEntryRect.center.dx, closeTo(scaffoldRect.center.dx, 0.01));
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('collection checklist centers every constrained entry', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final codec = ChecklistDeltaCodec();
+    final body = <Map<String, dynamic>>[
+      {'insert': 'First task'},
+      {
+        'insert': '\n',
+        'attributes': {'list': 'unchecked'},
+      },
+      {'insert': 'Between sections\nSecond task'},
+      {
+        'insert': '\n',
+        'attributes': {'list': 'unchecked'},
+      },
+    ];
+    final session = codec.createCollectionEditSession(
+      title: 'Lists',
+      document: documentFromJsonSafe(body),
+      selectionStart: 0,
+      selectionEnd: 0,
+    )!;
+    await tester.pumpWidget(
+      _host(
+        RichChecklistCollectionEditor(
+          note: _RecordingNote(
+            title: 'Lists',
+            content: codec.encodeCombinedBodyJson(
+              title: 'Lists',
+              bodyDelta: body,
+            ),
+          ),
+          session: session,
+        ),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await tester.pump();
+
+    final scaffoldRect = tester.getRect(find.byType(Scaffold));
+    final entryContents = _checklistEntryContents();
+    expect(entryContents, findsNWidgets(2));
+    for (final entry in entryContents.evaluate()) {
+      final entryRect = tester.getRect(find.byWidget(entry.widget));
+      expect(entryRect.width, 600);
+      expect(entryRect.center.dx, closeTo(scaffoldRect.center.dx, 0.01));
+    }
+  });
+
+  testWidgets('narrow checklist keeps entries bounded and toolbar scrollable', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final document = RichChecklistDocument([
+      _item('first', 'First task'),
+      _item('second', 'Second task'),
+    ]);
+    await _pumpEditor(
+      tester,
+      note: _RecordingNote(content: _content('Tasks', document.items)),
+      title: 'Tasks',
+      document: document,
+    );
+
+    final scaffoldRect = tester.getRect(find.byType(Scaffold));
+    for (final entry in _checklistEntryContents().evaluate()) {
+      final entryRect = tester.getRect(find.byWidget(entry.widget));
+      expect(entryRect.width, 366);
+      expect(entryRect.center.dx, closeTo(scaffoldRect.center.dx, 0.01));
+    }
+
+    final toolbar = find.byKey(const ValueKey('rich_checklist_toolbar'));
+    final toolbarRect = tester.getRect(toolbar);
+    expect(toolbarRect.width, lessThanOrEqualTo(scaffoldRect.width));
+    expect(toolbarRect.center.dx, closeTo(scaffoldRect.center.dx, 0.01));
+    final toolbarScrollable = find.descendant(
+      of: toolbar,
+      matching: find.byType(Scrollable),
+    );
+    expect(toolbarScrollable, findsOneWidget);
+    expect(
+      tester.state<ScrollableState>(toolbarScrollable).position.maxScrollExtent,
+      greaterThan(0),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('completion cascades, undo restores, and locked notes autosave', (
@@ -2004,20 +2242,47 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(RichChecklistCollectionEditor), findsOneWidget);
+      final collectionEditor = find.byType(RichChecklistCollectionEditor);
+      expect(collectionEditor, findsOneWidget);
       expect(
-        find.byKey(const ValueKey('rich_checklist_collection_scroll_view')),
+        find.descendant(
+          of: collectionEditor,
+          matching: find.byKey(
+            const ValueKey('rich_checklist_collection_scroll_view'),
+          ),
+        ),
         findsOneWidget,
       );
-      expect(find.text('Groceries'), findsOneWidget);
-      expect(find.text('Calls'), findsOneWidget);
-      expect(find.text('0/2'), findsOneWidget);
-      expect(find.byType(QuillEditor), findsOneWidget);
-      expect(find.byType(TextField), findsNothing);
+      expect(
+        find.descendant(of: collectionEditor, matching: find.text('Groceries')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: collectionEditor, matching: find.text('Calls')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: collectionEditor, matching: find.text('0/2')),
+        findsOneWidget,
+      );
+      final collectionRowEditor = find.descendant(
+        of: collectionEditor,
+        matching: find.byType(QuillEditor),
+      );
+      expect(collectionRowEditor, findsOneWidget);
+      expect(
+        find.descendant(of: collectionEditor, matching: find.byType(TextField)),
+        findsNothing,
+      );
 
-      await tester.tap(find.text('Milk', findRichText: true));
+      await tester.tap(
+        find.descendant(
+          of: collectionEditor,
+          matching: find.text('Milk', findRichText: true),
+        ),
+      );
       await tester.pump();
-      final rowEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final rowEditor = tester.widget<QuillEditor>(collectionRowEditor);
       rowEditor.controller.replaceText(
         0,
         4,
@@ -2026,7 +2291,12 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 220));
 
-      await tester.tap(find.text('Call Mom', findRichText: true));
+      await tester.tap(
+        find.descendant(
+          of: collectionEditor,
+          matching: find.text('Call Mom', findRichText: true),
+        ),
+      );
       await tester.pump();
       rowEditor.controller.replaceText(
         0,
@@ -2036,7 +2306,12 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 220));
 
-      await tester.tap(find.byType(BackButton));
+      await tester.tap(
+        find.descendant(
+          of: collectionEditor,
+          matching: find.byType(BackButton),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final normalEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
@@ -2298,6 +2573,278 @@ void main() {
     );
   });
 
+  testWidgets('desktop mouse opens the contextual checklist action', (
+    tester,
+  ) async {
+    final note = _RecordingNote(
+      content: jsonEncode([
+        {'insert': 'First task'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+        {'insert': 'Second task'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+        {'insert': 'Ordinary paragraph\n'},
+      ]),
+    );
+    await tester.pumpWidget(
+      _host(NoteEditor(note: note), platform: TargetPlatform.macOS),
+    );
+    await tester.pumpAndSettle();
+    final mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      pointer: 22,
+    );
+    addTearDown(mouse.removePointer);
+    final firstTask = find.text('First task', findRichText: true);
+    final secondTask = find.text('Second task', findRichText: true);
+    final ordinaryText = find.text('Ordinary paragraph', findRichText: true);
+    final firstTaskCenter = tester.getCenter(firstTask);
+    await mouse.addPointer(location: firstTaskCenter);
+    await mouse.down(firstTaskCenter);
+    await mouse.up();
+    await tester.pump();
+    await tester.pump();
+
+    final openChecklist = find.byKey(const ValueKey('open_focused_checklist'));
+    expect(openChecklist, findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('dismiss_focused_checklist_popup')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('focused_checklist_popup_barrier')),
+      findsNothing,
+    );
+    final firstPopupRect = tester.getRect(
+      find.byKey(const ValueKey('open_focused_checklist_popup')),
+    );
+    expect(tester.getRect(openChecklist), firstPopupRect);
+    final popupTextWidth = tester.getSize(find.text('Open list view')).width;
+    expect(firstPopupRect.width, closeTo(popupTextWidth + 50, 0.01));
+    expect(firstPopupRect.width, lessThan(280));
+    expect(firstPopupRect.height, 40);
+
+    final secondTaskCenter = tester.getCenter(secondTask);
+    await mouse.moveTo(secondTaskCenter);
+    await mouse.down(secondTaskCenter);
+    await mouse.up();
+    await tester.pump();
+    await tester.pump();
+    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    expect(quill.controller.selection.baseOffset, inInclusiveRange(11, 22));
+    expect(openChecklist, findsOneWidget);
+    final secondPopupRect = tester.getRect(
+      find.byKey(const ValueKey('open_focused_checklist_popup')),
+    );
+    expect(secondPopupRect.top, greaterThan(firstPopupRect.top));
+
+    final ordinaryCenter = tester.getCenter(ordinaryText);
+    await mouse.moveTo(ordinaryCenter);
+    await mouse.down(ordinaryCenter);
+    await mouse.up();
+    await tester.pump();
+    await tester.pump();
+    expect(quill.controller.selection.baseOffset, greaterThanOrEqualTo(23));
+    expect(openChecklist, findsNothing);
+
+    await mouse.moveTo(firstTaskCenter);
+    await mouse.down(firstTaskCenter);
+    await mouse.up();
+    await tester.pump();
+    await tester.pump();
+    expect(openChecklist, findsOneWidget);
+    final actionCenter = tester.getCenter(openChecklist);
+    await mouse.down(actionCenter);
+    await tester.pump();
+    expect(openChecklist, findsOneWidget);
+    await mouse.up();
+    await tester.pumpAndSettle();
+    expect(find.byType(RichChecklistEditor), findsOneWidget);
+  });
+
+  testWidgets(
+    'contextual checklist action auto-hides and Escape suppresses reopening',
+    (tester) async {
+      const ordinary = 'Text above the task';
+      const first = 'First timed task';
+      const second = 'Second timed task';
+      final note = Note(
+        readOnly: true,
+        content: jsonEncode([
+          {'insert': '$ordinary\n'},
+          {'insert': first},
+          {
+            'insert': '\n',
+            'attributes': {'list': 'unchecked'},
+          },
+          {'insert': second},
+          {
+            'insert': '\n',
+            'attributes': {'list': 'unchecked'},
+          },
+        ]),
+      );
+      await tester.pumpWidget(
+        _host(NoteEditor(note: note), platform: TargetPlatform.macOS),
+      );
+      await tester.pumpAndSettle();
+      final ordinaryText = find.text(ordinary, findRichText: true);
+      final firstTask = find.text(first, findRichText: true);
+      final secondTask = find.text(second, findRichText: true);
+      final openChecklist = find.byKey(
+        const ValueKey('open_focused_checklist'),
+      );
+      final mouse = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+        pointer: 24,
+      );
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      Future<void> clickWithMouse(Finder target) async {
+        final center = tester.getCenter(target);
+        await mouse.moveTo(center);
+        await mouse.down(center);
+        await mouse.up();
+      }
+
+      await clickWithMouse(firstTask);
+      await tester.pump();
+      await tester.pump();
+      expect(openChecklist, findsOneWidget);
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('open_focused_checklist_popup')))
+            .overlaps(tester.getRect(ordinaryText)),
+        isTrue,
+      );
+
+      await tester.pump(const Duration(milliseconds: 2999));
+      expect(openChecklist, findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(openChecklist, findsNothing);
+
+      await clickWithMouse(ordinaryText);
+      await tester.pump();
+      await tester.pump();
+      final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      expect(
+        quill.controller.selection.baseOffset,
+        lessThanOrEqualTo(ordinary.length),
+      );
+
+      await clickWithMouse(firstTask);
+      await tester.pump();
+      await tester.pump();
+      final firstPopupTop = tester
+          .getRect(find.byKey(const ValueKey('open_focused_checklist_popup')))
+          .top;
+      await tester.pump(const Duration(seconds: 2));
+      await clickWithMouse(secondTask);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('open_focused_checklist_popup')))
+            .top,
+        greaterThan(firstPopupTop),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(openChecklist, findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(openChecklist, findsNothing);
+
+      await tester.tap(secondTask);
+      await tester.pump();
+      await tester.pump();
+      expect(openChecklist, findsOneWidget);
+      final selectionBeforeEscape = quill.controller.selection;
+      expect(quill.focusNode.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(openChecklist, findsNothing);
+      expect(quill.focusNode.hasFocus, isTrue);
+      expect(quill.controller.selection, selectionBeforeEscape);
+
+      quill.controller.updateSelection(
+        TextSelection.collapsed(offset: ordinary.length + first.length + 3),
+        ChangeSource.local,
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump();
+      expect(openChecklist, findsNothing);
+
+      await clickWithMouse(firstTask);
+      await tester.pump();
+      await tester.pump();
+      expect(openChecklist, findsOneWidget);
+    },
+  );
+
+  testWidgets('hover and keyboard focus pause checklist action auto-hide', (
+    tester,
+  ) async {
+    final note = Note(
+      readOnly: true,
+      content: jsonEncode([
+        {'insert': 'Paused task'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+      ]),
+    );
+    await tester.pumpWidget(
+      _host(NoteEditor(note: note), platform: TargetPlatform.macOS),
+    );
+    await tester.pumpAndSettle();
+    final task = find.text('Paused task', findRichText: true);
+    final openChecklist = find.byKey(const ValueKey('open_focused_checklist'));
+    final mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      pointer: 23,
+    );
+    addTearDown(mouse.removePointer);
+    final taskCenter = tester.getCenter(task);
+    await mouse.addPointer(location: taskCenter);
+    await mouse.down(taskCenter);
+    await mouse.up();
+    await tester.pump();
+    await tester.pump();
+
+    await tester.pump(const Duration(seconds: 1));
+    final actionRect = tester.getRect(openChecklist);
+    await mouse.moveTo(Offset(actionRect.center.dx, actionRect.bottom - 2));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    expect(openChecklist, findsOneWidget);
+    await mouse.moveTo(const Offset(760, 560));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2800));
+    expect(openChecklist, findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(openChecklist, findsNothing);
+
+    await tester.tap(task);
+    await tester.pump();
+    await tester.pump();
+    final action = tester.widget<TextButton>(openChecklist);
+    action.focusNode!.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    expect(openChecklist, findsOneWidget);
+
+    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    quill.focusNode.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(openChecklist, findsNothing);
+  });
+
   testWidgets('NoteEditor offers focused view for a checklist caret', (
     tester,
   ) async {
@@ -2310,7 +2857,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('open_focused_checklist')), findsNothing);
-    var taskText = find.text('Formatted task', findRichText: true);
+    final taskText = find.text('Formatted task', findRichText: true);
     await tester.tap(taskText);
     await tester.pump();
     await tester.pump();
@@ -2331,67 +2878,25 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('focused_checklist_popup_barrier')),
-      findsOneWidget,
+      findsNothing,
     );
-    await tester.tap(
-      find.byKey(const ValueKey('focused_checklist_popup_barrier')),
-    );
-    await tester.pump();
-    expect(find.byKey(const ValueKey('open_focused_checklist')), findsNothing);
     expect(
-      find.byKey(const ValueKey('focused_checklist_popup_barrier')),
+      find.byKey(const ValueKey('dismiss_focused_checklist_popup')),
       findsNothing,
     );
 
-    // The transparent barrier consumes the outside tap. A later, deliberate
-    // caret tap can offer the focused view again in the same editor visit.
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.tap(taskText);
-    await tester.pump();
-    await tester.pump();
-    expect(
-      find.byKey(const ValueKey('open_focused_checklist')),
-      findsOneWidget,
-    );
-    await tester.tap(
-      find.byKey(const ValueKey('dismiss_focused_checklist_popup')),
-    );
-    await tester.pump();
-    expect(find.byKey(const ValueKey('open_focused_checklist')), findsNothing);
-
     final sameVisitQuill = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    sameVisitQuill.focusNode.unfocus();
-    await tester.pump();
-    sameVisitQuill.focusNode.requestFocus();
-    await tester.pump();
-    await tester.pump();
-    expect(find.byKey(const ValueKey('open_focused_checklist')), findsNothing);
-
-    // Passive focus changes do not undo dismissal. A fresh visit may prompt
-    // again as soon as the user places a caret.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-    await tester.pumpWidget(
-      _host(
-        NoteEditor(key: const ValueKey('reopened-checklist-note'), note: note),
-      ),
-    );
-    await tester.pumpAndSettle();
-    taskText = find.text('Formatted task', findRichText: true);
-    await tester.tap(taskText);
-    await tester.pump();
-    await tester.pump();
-    expect(
-      find.byKey(const ValueKey('open_focused_checklist')),
-      findsOneWidget,
-    );
-
-    final reopenedQuill = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    reopenedQuill.controller.updateSelection(
+    sameVisitQuill.controller.updateSelection(
       const TextSelection.collapsed(offset: 3),
       ChangeSource.local,
     );
     await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('open_focused_checklist')),
+      findsOneWidget,
+    );
+
     await tester.tap(find.byKey(const ValueKey('open_focused_checklist')));
     await tester.pumpAndSettle();
     expect(find.byType(RichChecklistEditor), findsOneWidget);
@@ -2402,7 +2907,7 @@ void main() {
           matching: find.byType(Scaffold),
         ),
       ),
-      const Size(800, 600),
+      const Size(640, 510),
     );
     await tester.tap(
       find.descendant(
@@ -2492,14 +2997,38 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open_focused_checklist')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(RichChecklistEditor), findsOneWidget);
-    expect(find.text('Second block', findRichText: true), findsOneWidget);
-    expect(find.text('First block', findRichText: true), findsNothing);
-    expect(find.text('Paragraph', findRichText: true), findsNothing);
+    final focusedEditor = find.byType(RichChecklistEditor);
+    expect(focusedEditor, findsOneWidget);
+    expect(
+      find.descendant(
+        of: focusedEditor,
+        matching: find.text('Second block', findRichText: true),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: focusedEditor,
+        matching: find.text('First block', findRichText: true),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: focusedEditor,
+        matching: find.text('Paragraph', findRichText: true),
+      ),
+      findsNothing,
+    );
 
     final saveCallsBeforeEdit = note.saveCalls;
     final rowController = tester
-        .widget<QuillEditor>(find.byType(QuillEditor))
+        .widget<QuillEditor>(
+          find.descendant(
+            of: focusedEditor,
+            matching: find.byType(QuillEditor),
+          ),
+        )
         .controller;
     rowController.replaceText(
       0,
@@ -2518,7 +3047,9 @@ void main() {
       'First block\nParagraph\nSecond edited\n',
     );
 
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(
+      find.descendant(of: focusedEditor, matching: find.byType(BackButton)),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(RichChecklistEditor), findsNothing);
     expect(
@@ -2531,34 +3062,198 @@ void main() {
     );
   });
 
-  testWidgets('positions the popup within a Motorola-sized keyboard viewport', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(424, 924);
-    tester.view.viewInsets = const FakeViewPadding(bottom: 360);
-    addTearDown(tester.view.reset);
+  testWidgets(
+    'desktop checklist frame matches the note editor window mode',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
+      addTearDown(() => AppState.editorFullScreen = false);
+      final checklist = RichChecklistDocument([
+        _item('a', 'Desktop task'),
+        _item('b', 'Second desktop task'),
+      ]);
+      final note = _RecordingNote(content: _content('Tasks', checklist.items));
 
-    final checklist = RichChecklistDocument([_item('a', 'Device task')]);
-    final note = Note(
-      readOnly: true,
-      content: _content('Tasks', checklist.items),
-    );
-    await tester.pumpWidget(_host(NoteEditor(note: note)));
-    await tester.pumpAndSettle();
-    final taskText = find.text('Device task', findRichText: true);
-    await tester.tap(taskText);
-    await tester.pump();
-    await tester.pump();
+      for (final fullScreen in [false, true]) {
+        AppState.editorFullScreen = fullScreen;
+        await tester.pumpWidget(
+          _host(
+            Builder(
+              builder: (context) => ElevatedButton(
+                key: const ValueKey('open_adaptive_note_editor'),
+                onPressed: () => showPage(
+                  context,
+                  NoteEditor(note: note),
+                  allowFullScreen: true,
+                ),
+                child: const Text('Open editor'),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('open_adaptive_note_editor')),
+        );
+        await tester.pumpAndSettle();
 
-    final popup = tester.getRect(
-      find.byKey(const ValueKey('open_focused_checklist_popup')),
-    );
-    expect(popup.left, greaterThanOrEqualTo(8));
-    expect(popup.right, lessThanOrEqualTo(416));
-    expect(popup.top, greaterThanOrEqualTo(8));
-    expect(popup.bottom, lessThanOrEqualTo(tester.getRect(taskText).top));
-  });
+        final noteEditorSize = tester.getSize(
+          find.descendant(
+            of: find.byType(NoteEditor),
+            matching: find.byType(Scaffold),
+          ),
+        );
+        expect(
+          noteEditorSize,
+          fullScreen ? const Size(1200, 900) : const Size(900, 700),
+        );
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NoteEditor),
+            matching: find.text('Desktop task', findRichText: true),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('open_focused_checklist')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        final checklistSize = tester.getSize(
+          find.descendant(
+            of: find.byType(RichChecklistEditor),
+            matching: find.byType(Scaffold),
+          ),
+        );
+        expect(checklistSize, noteEditorSize);
+
+        final checklistRect = tester.getRect(
+          find.descendant(
+            of: find.byType(RichChecklistEditor),
+            matching: find.byType(Scaffold),
+          ),
+        );
+        final handle = find
+            .descendant(
+              of: find.byType(RichChecklistEditor),
+              matching: find.byIcon(Icons.drag_indicator),
+            )
+            .first;
+        final drag = await tester.startGesture(tester.getCenter(handle));
+        await tester.pump();
+        await drag.moveBy(const Offset(0, 80));
+        await tester.pump();
+        final draggedEntryRect = tester.getRect(
+          _checklistEntryContents().first,
+        );
+        expect(draggedEntryRect.width, lessThanOrEqualTo(600));
+        expect(
+          draggedEntryRect.center.dx,
+          closeTo(checklistRect.center.dx, 0.01),
+        );
+        expect(tester.takeException(), isNull);
+        await drag.up();
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(RichChecklistEditor),
+            matching: find.byType(BackButton),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NoteEditor),
+            matching: find.byKey(
+              const ValueKey('note_checkbox_progress_title'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(RichChecklistCollectionEditor), findsOneWidget);
+        expect(
+          tester.getSize(
+            find.descendant(
+              of: find.byType(RichChecklistEditor),
+              matching: find.byType(Scaffold),
+            ),
+          ),
+          noteEditorSize,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.tap(
+          find.descendant(
+            of: find.byType(RichChecklistCollectionEditor),
+            matching: find.byType(BackButton),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NoteEditor),
+            matching: find.byType(BackButton),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('open_adaptive_note_editor')),
+          findsOneWidget,
+        );
+      }
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
+  );
+
+  testWidgets(
+    'positions a scaled translated popup within a keyboard viewport',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 924);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+      addTearDown(tester.view.reset);
+
+      final checklist = RichChecklistDocument([_item('a', 'Device task')]);
+      final note = Note(
+        readOnly: true,
+        trashed: true,
+        content: _content('Tasks', checklist.items),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: betterKeepLocalizationDelegates,
+          supportedLocales: betterKeepSupportedLocales,
+          locale: const Locale('pt'),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.4)),
+            child: child!,
+          ),
+          home: NoteEditor(note: note),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final taskText = find.text('Device task', findRichText: true);
+      await tester.tap(taskText);
+      await tester.pump();
+      await tester.pump();
+
+      final popup = tester.getRect(
+        find.byKey(const ValueKey('open_focused_checklist_popup')),
+      );
+      expect(popup.left, greaterThanOrEqualTo(8));
+      expect(popup.right, lessThanOrEqualTo(382));
+      expect(popup.top, greaterThanOrEqualTo(8));
+      expect(popup.bottom, lessThanOrEqualTo(tester.getRect(taskText).top));
+      expect(popup.width, lessThanOrEqualTo(280));
+      expect(find.text('Abrir visualização de lista'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> _pumpEditor(
@@ -2597,6 +3292,14 @@ Widget _host(Widget home, {TargetPlatform? platform}) => MaterialApp(
   supportedLocales: betterKeepSupportedLocales,
   theme: ThemeData(platform: platform),
   home: home,
+);
+
+Finder _checklistEntryContents() => find.byWidgetPredicate(
+  (widget) =>
+      widget.key is ValueKey<String> &&
+      (widget.key! as ValueKey<String>).value.startsWith(
+        'checklist-entry-content-',
+      ),
 );
 
 Widget _todoLaunchHost(Note note) => _host(
