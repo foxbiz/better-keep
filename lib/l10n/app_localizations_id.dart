@@ -1271,6 +1271,51 @@ class AppLocalizationsId extends AppLocalizations {
   String get checklist => 'Daftar centang';
 
   @override
+  String get openChecklistView => 'Buka tampilan daftar';
+
+  @override
+  String get convertToNormalText => 'Ubah menjadi teks biasa';
+
+  @override
+  String get convertEntireChecklistToText =>
+      'Ubah seluruh daftar centang menjadi teks';
+
+  @override
+  String get focusedChecklistRequiresChecklistOnly =>
+      'Tampilan daftar terfokus hanya tersedia jika setiap baris merupakan item daftar centang.';
+
+  @override
+  String get focusedChecklistUnsupportedContent =>
+      'Lampiran dan pemformatan blok hanya tersedia di editor teks kaya.';
+
+  @override
+  String get focusedChecklistInvalidContent =>
+      'Daftar centang ini tidak dapat dibuka dalam tampilan terfokus. Lanjutkan mengeditnya di sini.';
+
+  @override
+  String get completedTasks => 'Selesai';
+
+  @override
+  String get clearCompletedTasks => 'Hapus yang selesai';
+
+  @override
+  String get outdent => 'Kurangi inden';
+
+  @override
+  String get checklistEmbedUnsupported =>
+      'Lampiran hanya dapat ditempel di editor teks kaya.';
+
+  @override
+  String get checklistChangedElsewhere =>
+      'Catatan ini diubah di tempat lain. Muat ulang atau pertahankan edit lokal Anda.';
+
+  @override
+  String get reloadChecklist => 'Muat ulang';
+
+  @override
+  String get keepChecklistEdits => 'Pertahankan edit saya';
+
+  @override
   String get quote => 'Kutipan';
 
   @override

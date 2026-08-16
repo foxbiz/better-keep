@@ -45,7 +45,7 @@ import 'package:better_keep/services/firebase_apple_configuration.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/firebase_bootstrap_coordinator.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:better_keep/services/firebase_default_app_initializer.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
@@ -70,14 +70,17 @@ void main() async {
   // Load SharedPreferences once and share across services
   final prefsInstance = await SharedPreferences.getInstance();
 
-  // Run independent initializations in parallel for faster startup
+  // Initialize the default app before Alarm can start background isolate work.
+  // Android may retain the native default app across a hot restart, so this
+  // path is deliberately idempotent.
+  await initializeDefaultFirebaseApp(DefaultFirebaseOptions.currentPlatform);
+
+  // Run the remaining independent initializations in parallel.
   await Future.wait([
     // Alarm init (Android/iOS only)
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) Alarm.init(),
     // Load app state (theme, settings, etc.)
     AppState.init(prefs: prefsInstance),
-    // Initialize Firebase
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
     // Detect physical vs emulator Android so the correct emulator host is used
     FirebaseEmulatorConfig.initDeviceInfo(),
   ]);

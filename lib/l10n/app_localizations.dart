@@ -2400,6 +2400,84 @@ abstract class AppLocalizations {
   /// **'Checklist'**
   String get checklist;
 
+  /// Action that opens the focused checklist editor
+  ///
+  /// In en, this message translates to:
+  /// **'Open list view'**
+  String get openChecklistView;
+
+  /// Converts a checklist item subtree into rich-text paragraphs
+  ///
+  /// In en, this message translates to:
+  /// **'Convert to normal text'**
+  String get convertToNormalText;
+
+  /// Converts the focused checklist block into rich-text paragraphs
+  ///
+  /// In en, this message translates to:
+  /// **'Convert entire checklist to text'**
+  String get convertEntireChecklistToText;
+
+  /// Explains why a mixed document cannot open in the focused checklist editor
+  ///
+  /// In en, this message translates to:
+  /// **'Focused list view is available only when every line is a checklist item.'**
+  String get focusedChecklistRequiresChecklistOnly;
+
+  /// Explains that focused checklist view does not support embeds or incompatible blocks
+  ///
+  /// In en, this message translates to:
+  /// **'Attachments and block formatting are available only in the rich-text editor.'**
+  String get focusedChecklistUnsupportedContent;
+
+  /// Guidance for malformed checklist content that cannot safely open in focused view
+  ///
+  /// In en, this message translates to:
+  /// **'This checklist can’t be opened in focused view. Continue editing it here.'**
+  String get focusedChecklistInvalidContent;
+
+  /// Heading for completed checklist items
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get completedTasks;
+
+  /// Action that removes all completed root checklist items
+  ///
+  /// In en, this message translates to:
+  /// **'Clear completed'**
+  String get clearCompletedTasks;
+
+  /// Move a checklist item one nesting level outward
+  ///
+  /// In en, this message translates to:
+  /// **'Outdent'**
+  String get outdent;
+
+  /// Shown when an embed is pasted into the focused checklist editor
+  ///
+  /// In en, this message translates to:
+  /// **'Attachments can only be pasted in the rich-text editor.'**
+  String get checklistEmbedUnsupported;
+
+  /// Conflict warning in the focused checklist editor
+  ///
+  /// In en, this message translates to:
+  /// **'This note changed elsewhere. Reload it or keep your local edits.'**
+  String get checklistChangedElsewhere;
+
+  /// Reload externally changed checklist content
+  ///
+  /// In en, this message translates to:
+  /// **'Reload'**
+  String get reloadChecklist;
+
+  /// Resolve a checklist conflict in favor of local changes
+  ///
+  /// In en, this message translates to:
+  /// **'Keep my edits'**
+  String get keepChecklistEdits;
+
   /// Quote tooltip
   ///
   /// In en, this message translates to:

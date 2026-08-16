@@ -1227,6 +1227,49 @@ class AppLocalizationsJa extends AppLocalizations {
   String get checklist => 'チェックリスト';
 
   @override
+  String get openChecklistView => 'リスト表示を開く';
+
+  @override
+  String get convertToNormalText => '通常のテキストに変換';
+
+  @override
+  String get convertEntireChecklistToText => 'チェックリスト全体をテキストに変換';
+
+  @override
+  String get focusedChecklistRequiresChecklistOnly =>
+      'フォーカスリスト表示は、すべての行がチェックリスト項目の場合にのみ利用できます。';
+
+  @override
+  String get focusedChecklistUnsupportedContent =>
+      '添付ファイルとブロック書式はリッチテキストエディターでのみ利用できます。';
+
+  @override
+  String get focusedChecklistInvalidContent =>
+      'このチェックリストはフォーカス表示で開けません。ここで編集を続けてください。';
+
+  @override
+  String get completedTasks => '完了済み';
+
+  @override
+  String get clearCompletedTasks => '完了済みを消去';
+
+  @override
+  String get outdent => 'インデントを減らす';
+
+  @override
+  String get checklistEmbedUnsupported => '添付ファイルはリッチテキストエディターでのみ貼り付けられます。';
+
+  @override
+  String get checklistChangedElsewhere =>
+      'このノートは別の場所で変更されました。再読み込みするか、ローカルの編集を保持してください。';
+
+  @override
+  String get reloadChecklist => '再読み込み';
+
+  @override
+  String get keepChecklistEdits => '編集を保持';
+
+  @override
   String get quote => '引用';
 
   @override

@@ -167,6 +167,7 @@ DefaultStyles buildQuillStyles({
   required Color backgroundColor,
   Color? placeholderColor,
   Color? secondaryColor,
+  bool comfortableLists = false,
 }) {
   final defaultStyles = DefaultStyles();
   final isDarkBg = isDark(backgroundColor);
@@ -226,10 +227,14 @@ DefaultStyles buildQuillStyles({
       ),
     ),
     lists: DefaultListBlockStyle(
-      TextStyle(fontSize: 16, color: foregroundColor),
+      TextStyle(
+        fontSize: 16,
+        height: comfortableLists ? 1.25 : null,
+        color: foregroundColor,
+      ),
       HorizontalSpacing.zero,
       VerticalSpacing.zero,
-      VerticalSpacing.zero,
+      comfortableLists ? const VerticalSpacing(0, 6) : VerticalSpacing.zero,
       null,
       null,
     ),

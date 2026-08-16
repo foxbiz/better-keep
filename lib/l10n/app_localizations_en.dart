@@ -1259,6 +1259,50 @@ class AppLocalizationsEn extends AppLocalizations {
   String get checklist => 'Checklist';
 
   @override
+  String get openChecklistView => 'Open list view';
+
+  @override
+  String get convertToNormalText => 'Convert to normal text';
+
+  @override
+  String get convertEntireChecklistToText => 'Convert entire checklist to text';
+
+  @override
+  String get focusedChecklistRequiresChecklistOnly =>
+      'Focused list view is available only when every line is a checklist item.';
+
+  @override
+  String get focusedChecklistUnsupportedContent =>
+      'Attachments and block formatting are available only in the rich-text editor.';
+
+  @override
+  String get focusedChecklistInvalidContent =>
+      'This checklist can’t be opened in focused view. Continue editing it here.';
+
+  @override
+  String get completedTasks => 'Completed';
+
+  @override
+  String get clearCompletedTasks => 'Clear completed';
+
+  @override
+  String get outdent => 'Outdent';
+
+  @override
+  String get checklistEmbedUnsupported =>
+      'Attachments can only be pasted in the rich-text editor.';
+
+  @override
+  String get checklistChangedElsewhere =>
+      'This note changed elsewhere. Reload it or keep your local edits.';
+
+  @override
+  String get reloadChecklist => 'Reload';
+
+  @override
+  String get keepChecklistEdits => 'Keep my edits';
+
+  @override
   String get quote => 'Quote';
 
   @override

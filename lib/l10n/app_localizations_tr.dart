@@ -1261,6 +1261,51 @@ class AppLocalizationsTr extends AppLocalizations {
   String get checklist => 'Kontrol listesi';
 
   @override
+  String get openChecklistView => 'Liste görünümünü aç';
+
+  @override
+  String get convertToNormalText => 'Normal metne dönüştür';
+
+  @override
+  String get convertEntireChecklistToText =>
+      'Tüm kontrol listesini metne dönüştür';
+
+  @override
+  String get focusedChecklistRequiresChecklistOnly =>
+      'Odaklanmış liste görünümü yalnızca her satır bir kontrol listesi öğesi olduğunda kullanılabilir.';
+
+  @override
+  String get focusedChecklistUnsupportedContent =>
+      'Ekler ve blok biçimlendirme yalnızca zengin metin düzenleyicide kullanılabilir.';
+
+  @override
+  String get focusedChecklistInvalidContent =>
+      'Bu kontrol listesi odaklanmış görünümde açılamıyor. Burada düzenlemeye devam edin.';
+
+  @override
+  String get completedTasks => 'Tamamlananlar';
+
+  @override
+  String get clearCompletedTasks => 'Tamamlananları temizle';
+
+  @override
+  String get outdent => 'Girintiyi azalt';
+
+  @override
+  String get checklistEmbedUnsupported =>
+      'Ekler yalnızca zengin metin düzenleyicisine yapıştırılabilir.';
+
+  @override
+  String get checklistChangedElsewhere =>
+      'Bu not başka bir yerde değiştirildi. Yeniden yükleyin veya yerel düzenlemelerinizi koruyun.';
+
+  @override
+  String get reloadChecklist => 'Yeniden yükle';
+
+  @override
+  String get keepChecklistEdits => 'Düzenlemelerimi koru';
+
+  @override
   String get quote => 'Alıntı';
 
   @override

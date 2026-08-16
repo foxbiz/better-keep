@@ -36,8 +36,11 @@ async function createBundle(appCheckMeta) {
   return root;
 }
 
-function validate(root) {
-  return spawnSync(process.execPath, [validator, root], { encoding: 'utf8' });
+function validate(root, env = {}) {
+  return spawnSync(process.execPath, [validator, root], {
+    encoding: 'utf8',
+    env: { ...process.env, GITHUB_ACTIONS: '', ...env }
+  });
 }
 
 test('admin bundle validator accepts a configured App Check key', async (t) => {
@@ -47,6 +50,16 @@ test('admin bundle validator accepts a configured App Check key', async (t) => {
   t.after(() => rm(root, { recursive: true, force: true }));
 
   const result = validate(root);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Admin bundle validation passed/);
+});
+
+test('admin bundle validator allows a missing App Check key in GitHub Actions', async (t) => {
+  const root = await createBundle('');
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const result = validate(root, { GITHUB_ACTIONS: 'true' });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Admin bundle validation passed/);
