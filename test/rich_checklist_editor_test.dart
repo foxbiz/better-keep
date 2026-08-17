@@ -2237,6 +2237,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsOneWidget);
 
+      await tester.tap(find.byKey(const ValueKey('note_editor_search_action')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('note_find_query')),
+        'Mom',
+      );
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump();
+      expect(find.text('1/1'), findsOneWidget);
+
       await tester.tap(
         find.byKey(const ValueKey('note_checkbox_progress_title')),
       );
@@ -2313,12 +2323,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump();
 
       final normalEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
       expect(
         normalEditor.controller.document.toPlainText(),
         'Groceries\nOat milk\n￼\nCalls\nCall Dad\nTail\n',
       );
+      expect(find.text('0/0'), findsOneWidget);
       final savedBody = codec.tryParseCombinedJson(note.content)!.bodyDelta;
       expect(
         savedBody.any(
@@ -2330,11 +2343,13 @@ void main() {
       );
 
       normalEditor.controller.undo();
+      await tester.pump(const Duration(milliseconds: 220));
       await tester.pump();
       expect(
         normalEditor.controller.document.toPlainText(),
         'Groceries\nMilk\n￼\nCalls\nCall Mom\nTail\n',
       );
+      expect(find.text('1/1'), findsOneWidget);
     },
   );
 

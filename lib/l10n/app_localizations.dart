@@ -6449,6 +6449,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share full report'**
   String get googleKeepShareReport;
+
+  /// Action and search-field label for finding text in the open note
+  ///
+  /// In en, this message translates to:
+  /// **'Find in note'**
+  String get findInNote;
+
+  /// Replace the current search match
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get replace;
+
+  /// Replace every search match
+  ///
+  /// In en, this message translates to:
+  /// **'Replace all'**
+  String get replaceAll;
+
+  /// Expand the replacement controls
+  ///
+  /// In en, this message translates to:
+  /// **'Show replace'**
+  String get showReplace;
+
+  /// Collapse the replacement controls
+  ///
+  /// In en, this message translates to:
+  /// **'Hide replace'**
+  String get hideReplace;
+
+  /// Navigate to the previous in-note search match
+  ///
+  /// In en, this message translates to:
+  /// **'Previous match'**
+  String get previousMatch;
+
+  /// Navigate to the next in-note search match
+  ///
+  /// In en, this message translates to:
+  /// **'Next match'**
+  String get nextMatch;
+
+  /// Open advanced in-note search options
+  ///
+  /// In en, this message translates to:
+  /// **'Search options'**
+  String get searchOptions;
+
+  /// Case-sensitive search option
+  ///
+  /// In en, this message translates to:
+  /// **'Match case'**
+  String get matchCase;
+
+  /// Whole-word search option
+  ///
+  /// In en, this message translates to:
+  /// **'Match whole word'**
+  String get matchWholeWord;
+
+  /// Fuzzy in-note search mode
+  ///
+  /// In en, this message translates to:
+  /// **'Smart match'**
+  String get smartMatch;
+
+  /// Explanation of smart in-note search
+  ///
+  /// In en, this message translates to:
+  /// **'Find typos and abbreviations'**
+  String get smartMatchDescription;
+
+  /// Advanced regular-expression search mode
+  ///
+  /// In en, this message translates to:
+  /// **'Regular expression (advanced)'**
+  String get regularExpressionAdvanced;
+
+  /// Invalid regex search error
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid regular expression'**
+  String get invalidRegularExpression;
+
+  /// Unsupported empty regex match error
+  ///
+  /// In en, this message translates to:
+  /// **'Patterns that only match empty text aren\'t supported'**
+  String get zeroLengthRegexUnsupported;
+
+  /// Invalid regex replacement capture error
+  ///
+  /// In en, this message translates to:
+  /// **'Replacement refers to a missing capture group'**
+  String get invalidReplacementReference;
+
+  /// Empty state for in-note search
+  ///
+  /// In en, this message translates to:
+  /// **'No matches'**
+  String get noMatches;
+
+  /// Accessible label while in-note search is running
+  ///
+  /// In en, this message translates to:
+  /// **'Searching'**
+  String get searching;
+
+  /// Current and total in-note search match count
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String searchResultCount(int current, int total);
+
+  /// Result after replacing all in-note search matches
+  ///
+  /// In en, this message translates to:
+  /// **'Replaced {count} occurrences'**
+  String replacedOccurrences(int count);
 }
 
 class _AppLocalizationsDelegate

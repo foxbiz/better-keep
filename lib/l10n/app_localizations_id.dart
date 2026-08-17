@@ -3617,4 +3617,70 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get googleKeepShareReport => 'Bagikan laporan lengkap';
+
+  @override
+  String get findInNote => 'Cari dalam catatan';
+
+  @override
+  String get replace => 'Ganti';
+
+  @override
+  String get replaceAll => 'Ganti semua';
+
+  @override
+  String get showReplace => 'Tampilkan penggantian';
+
+  @override
+  String get hideReplace => 'Sembunyikan penggantian';
+
+  @override
+  String get previousMatch => 'Hasil sebelumnya';
+
+  @override
+  String get nextMatch => 'Hasil berikutnya';
+
+  @override
+  String get searchOptions => 'Opsi pencarian';
+
+  @override
+  String get matchCase => 'Cocokkan huruf besar-kecil';
+
+  @override
+  String get matchWholeWord => 'Cocokkan seluruh kata';
+
+  @override
+  String get smartMatch => 'Pencocokan pintar';
+
+  @override
+  String get smartMatchDescription => 'Temukan salah ketik dan singkatan';
+
+  @override
+  String get regularExpressionAdvanced => 'Ekspresi reguler (lanjutan)';
+
+  @override
+  String get invalidRegularExpression => 'Ekspresi reguler tidak valid';
+
+  @override
+  String get zeroLengthRegexUnsupported =>
+      'Pola yang hanya cocok dengan teks kosong tidak didukung';
+
+  @override
+  String get invalidReplacementReference =>
+      'Penggantian merujuk ke grup tangkapan yang tidak ada';
+
+  @override
+  String get noMatches => 'Tidak ada hasil';
+
+  @override
+  String get searching => 'Mencari';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '$current dari $total';
+  }
+
+  @override
+  String replacedOccurrences(int count) {
+    return 'Mengganti $count kemunculan';
+  }
 }

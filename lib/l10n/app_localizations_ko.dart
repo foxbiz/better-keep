@@ -3487,4 +3487,68 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get googleKeepShareReport => '전체 보고서 공유';
+
+  @override
+  String get findInNote => '노트에서 찾기';
+
+  @override
+  String get replace => '바꾸기';
+
+  @override
+  String get replaceAll => '모두 바꾸기';
+
+  @override
+  String get showReplace => '바꾸기 표시';
+
+  @override
+  String get hideReplace => '바꾸기 숨기기';
+
+  @override
+  String get previousMatch => '이전 일치 항목';
+
+  @override
+  String get nextMatch => '다음 일치 항목';
+
+  @override
+  String get searchOptions => '검색 옵션';
+
+  @override
+  String get matchCase => '대/소문자 구분';
+
+  @override
+  String get matchWholeWord => '단어 단위로 일치';
+
+  @override
+  String get smartMatch => '스마트 일치';
+
+  @override
+  String get smartMatchDescription => '오타 및 약어 찾기';
+
+  @override
+  String get regularExpressionAdvanced => '정규식(고급)';
+
+  @override
+  String get invalidRegularExpression => '잘못된 정규식';
+
+  @override
+  String get zeroLengthRegexUnsupported => '빈 텍스트에만 일치하는 패턴은 지원되지 않습니다';
+
+  @override
+  String get invalidReplacementReference => '바꾸기에서 존재하지 않는 캡처 그룹을 참조합니다';
+
+  @override
+  String get noMatches => '일치 항목 없음';
+
+  @override
+  String get searching => '검색 중';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '$total개 중 $current개';
+  }
+
+  @override
+  String replacedOccurrences(int count) {
+    return '$count개 항목을 바꿨습니다';
+  }
 }

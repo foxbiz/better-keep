@@ -3487,4 +3487,68 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get googleKeepShareReport => 'レポート全体を共有';
+
+  @override
+  String get findInNote => 'ノート内を検索';
+
+  @override
+  String get replace => '置換';
+
+  @override
+  String get replaceAll => 'すべて置換';
+
+  @override
+  String get showReplace => '置換を表示';
+
+  @override
+  String get hideReplace => '置換を非表示';
+
+  @override
+  String get previousMatch => '前の一致';
+
+  @override
+  String get nextMatch => '次の一致';
+
+  @override
+  String get searchOptions => '検索オプション';
+
+  @override
+  String get matchCase => '大文字と小文字を区別';
+
+  @override
+  String get matchWholeWord => '単語単位で一致';
+
+  @override
+  String get smartMatch => 'スマート一致';
+
+  @override
+  String get smartMatchDescription => '入力ミスや略語を検索';
+
+  @override
+  String get regularExpressionAdvanced => '正規表現（上級者向け）';
+
+  @override
+  String get invalidRegularExpression => '正規表現が無効です';
+
+  @override
+  String get zeroLengthRegexUnsupported => '空の文字列のみに一致するパターンは使用できません';
+
+  @override
+  String get invalidReplacementReference => '置換が存在しないキャプチャグループを参照しています';
+
+  @override
+  String get noMatches => '一致なし';
+
+  @override
+  String get searching => '検索中';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '$total 件中 $current 件目';
+  }
+
+  @override
+  String replacedOccurrences(int count) {
+    return '$count 件を置換しました';
+  }
 }
