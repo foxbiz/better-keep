@@ -19,6 +19,9 @@ import 'package:better_keep/pages/note_editor/checklist_caret_prompt_controller.
 import 'package:better_keep/pages/note_editor/note_editor_action_service.dart';
 import 'package:better_keep/pages/note_editor/note_editor_app_bar.dart';
 import 'package:better_keep/pages/note_editor/note_editor_toolbar.dart';
+import 'package:better_keep/pages/note_editor/note_find_bar.dart';
+import 'package:better_keep/pages/note_editor/note_find_controller.dart';
+import 'package:better_keep/pages/note_editor/note_search_highlighter.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/camera_detection.dart';
@@ -27,6 +30,8 @@ import 'package:better_keep/services/checkbox_service.dart';
 import 'package:better_keep/services/due_reminder_presenter.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
+import 'package:better_keep/services/note_search_delta_composer.dart';
+import 'package:better_keep/services/note_search_service.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
@@ -136,7 +141,9 @@ class _NoteEditorState extends State<NoteEditor>
   late FocusNode _titleFocusNode;
   late TextEditingController _titleController;
   late QuillController _controller;
+  late final NoteFindController _findController;
   late Color _backgroundColor;
+  int _noteSearchRevision = 0;
   bool _isKeyboardVisible = false;
   String? _initialPlainText;
   bool _checklistLayoutSyncScheduled = false;
@@ -303,6 +310,12 @@ class _NoteEditorState extends State<NoteEditor>
       document: document,
       selection: TextSelection.collapsed(offset: document.length - 1),
     );
+    _findController = NoteFindController(
+      snapshot: _captureFindSnapshot,
+      onMatchActivated: _activateFindMatch,
+      currentRevision: () => _noteSearchRevision,
+    );
+    _findController.addListener(_onFindChanged);
     _updateChecklistProgress();
     _refreshChecklistEligibility(rebuild: false);
 
@@ -326,6 +339,7 @@ class _NoteEditorState extends State<NoteEditor>
     _checklistPopupFocusNode.addListener(_checklistPopupFocusListener);
     _checklistPromptController.addListener(_onChecklistPromptChanged);
     HardwareKeyboard.instance.addHandler(_handleChecklistPopupHardwareKey);
+    HardwareKeyboard.instance.addHandler(_handleFindHardwareKey);
     _checklistPromptController.updateInteraction(
       hasFocus: _hasChecklistPromptFocus,
       hasCollapsedSelection: _hasCollapsedChecklistSelection,
@@ -508,6 +522,47 @@ class _NoteEditorState extends State<NoteEditor>
         event.logicalKey == LogicalKeyboardKey.escape &&
         _checklistPromptController.state.isVisible) {
       _dismissChecklistPopupUntilNextEligibleTap();
+      return true;
+    }
+    return false;
+  }
+
+  bool _handleFindHardwareKey(KeyEvent event) {
+    if (!mounted ||
+        event is! KeyDownEvent ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    final platform = Theme.of(context).platform;
+    final applePlatform =
+        platform == TargetPlatform.macOS || platform == TargetPlatform.iOS;
+
+    if (event.logicalKey == LogicalKeyboardKey.keyF &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+      _openFind(
+        showReplace:
+            applePlatform && keyboard.isMetaPressed && keyboard.isAltPressed,
+      );
+      return true;
+    }
+    if (!applePlatform &&
+        event.logicalKey == LogicalKeyboardKey.keyH &&
+        keyboard.isControlPressed) {
+      _openFind(showReplace: true);
+      return true;
+    }
+    if (_findController.isOpen && event.logicalKey == LogicalKeyboardKey.f3) {
+      if (keyboard.isShiftPressed) {
+        _findController.previous();
+      } else {
+        _findController.next();
+      }
+      return true;
+    }
+    if (_findController.isOpen &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      _closeFind(true);
       return true;
     }
     return false;
@@ -847,6 +902,7 @@ class _NoteEditorState extends State<NoteEditor>
     _changesSubscription = _controller.changes.listen(
       _controllerChangesListener,
     );
+    _invalidateFindForDocumentChange();
     if (_titleController.text != result.title) {
       _titleController.text = result.title;
     }
@@ -905,6 +961,7 @@ class _NoteEditorState extends State<NoteEditor>
     _changesSubscription = _controller.changes.listen(
       _controllerChangesListener,
     );
+    _invalidateFindForDocumentChange();
     if (_titleController.text != result.title) {
       _titleController.text = result.title;
     }
@@ -916,6 +973,179 @@ class _NoteEditorState extends State<NoteEditor>
     _updateChecklistProgress();
     _checklistPromptController.updateBlock(null);
     if (mounted) setState(() {});
+  }
+
+  NoteFindSnapshot _captureFindSnapshot() {
+    return (
+      document: NoteSearchDocument.fromDeltaJson(
+        _controller.document.toDelta().toJson().cast<Map<String, dynamic>>(),
+      ),
+      revision: _noteSearchRevision,
+    );
+  }
+
+  void _invalidateFindForDocumentChange() {
+    _noteSearchRevision += 1;
+    _findController.refreshForDocumentChange();
+  }
+
+  void _onFindChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _openFind({bool showReplace = false}) {
+    if (_findController.isOpen) {
+      if (showReplace && !_note.readOnly && !_note.trashed) {
+        _findController.showReplace();
+      } else {
+        _findController.focusQuery();
+      }
+      return;
+    }
+
+    final selection = _controller.selection;
+    var anchor = 0;
+    var seed = '';
+    if (selection.isValid) {
+      anchor = selection.start.clamp(0, _controller.document.length - 1);
+      final selectionLength = selection.end - selection.start;
+      if (!selection.isCollapsed && selectionLength <= 200) {
+        final selected = _controller.document.getPlainText(
+          selection.start,
+          selectionLength,
+        );
+        if (!selected.contains('\n') && !selected.contains('\uFFFC')) {
+          seed = selected;
+        }
+      }
+    }
+    _cancelChecklistPopupAutoHide();
+    _checklistPromptController.updateBlock(null);
+    _findController.open(anchorOffset: anchor, seed: seed);
+    if (showReplace && !_note.readOnly && !_note.trashed) {
+      _findController.showReplace();
+    }
+  }
+
+  void _closeFind(bool fromKeyboard) {
+    if (!_findController.isOpen) return;
+    final platform = Theme.of(context).platform;
+    final mobile =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+    _findController.close();
+    if (fromKeyboard || !mobile) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _focusNode.canRequestFocus) _focusNode.requestFocus();
+      });
+    } else {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+  }
+
+  void _activateFindMatch(NoteSearchMatch match) {
+    if (!mounted || !_findController.isOpen) return;
+    _controller.updateSelection(
+      TextSelection(baseOffset: match.start, extentOffset: match.end),
+      ChangeSource.local,
+    );
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _findController.isOpen) {
+        _scrollFindMatchIntoView(match);
+      }
+    });
+  }
+
+  void _scrollFindMatchIntoView(NoteSearchMatch match) {
+    if (!_quillScrollController.hasClients) return;
+    final editorState = _editorKey.currentState;
+    final viewportContext =
+        _quillScrollController.position.context.notificationContext;
+    final viewportBox = viewportContext?.findRenderObject();
+    if (editorState == null || viewportBox is! RenderBox) return;
+
+    try {
+      final renderEditor = editorState.renderEditor;
+      final startRect = renderEditor.getLocalRectForCaret(
+        TextPosition(offset: match.start),
+      );
+      final endRect = renderEditor.getLocalRectForCaret(
+        TextPosition(
+          offset: match.end.clamp(0, _controller.document.length - 1),
+        ),
+      );
+      final matchTop = renderEditor.localToGlobal(startRect.topLeft).dy;
+      final matchBottom = renderEditor.localToGlobal(endRect.bottomLeft).dy;
+      final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
+      final viewportBottom = viewportTop + viewportBox.size.height;
+      const margin = 20.0;
+      var delta = 0.0;
+      if (matchTop < viewportTop + margin) {
+        delta = matchTop - viewportTop - margin;
+      } else if (matchBottom > viewportBottom - margin) {
+        delta = matchBottom - viewportBottom + margin;
+      }
+      if (delta == 0) return;
+      final position = _quillScrollController.position;
+      final target = (position.pixels + delta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      _quillScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      );
+    } catch (_) {
+      // The editor can relayout while a keyboard or replacement row animates.
+    }
+  }
+
+  Future<void> _replaceFindMatch({required bool replaceAll}) async {
+    if (_note.readOnly || _note.trashed || !_findController.canReplace) return;
+    final request = await _findController.buildReplacementRequest(
+      replaceAll: replaceAll,
+    );
+    if (!mounted || !request.plan.isValid || request.plan.edits.isEmpty) {
+      return;
+    }
+    if (request.revision != _noteSearchRevision) {
+      _findController.refreshForDocumentChange();
+      return;
+    }
+
+    final transaction = NoteSearchDeltaComposer.build(
+      _controller.document,
+      request.plan,
+    );
+    if (transaction.isEmpty) return;
+    final firstEdit = request.plan.edits.first;
+    final selectionOffset = firstEdit.start + firstEdit.replacement.length;
+    final selection = TextSelection.collapsed(offset: selectionOffset);
+    _noteSearchRevision += 1;
+    _controller.compose(transaction, selection, ChangeSource.local);
+    _controller.updateSelection(selection, ChangeSource.local);
+    _findController.anchorAfterReplacement(selectionOffset);
+
+    if (replaceAll) {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.replacedOccurrences(request.plan.edits.length),
+          ),
+          action: SnackBarAction(
+            label: context.l10n.undo,
+            onPressed: () {
+              _controller.undo();
+              _findController.refreshForDocumentChange(
+                anchorOffset: firstEdit.start,
+              );
+            },
+          ),
+        ),
+      );
+    }
   }
 
   /// Scrolls the editor to ensure the caret is visible above the toolbar
@@ -1231,6 +1461,8 @@ class _NoteEditorState extends State<NoteEditor>
     _bubbleUpdatedOffsets.clear();
     _checkboxService.invalidateCache();
     _controller.removeListener(_didChangeSelection);
+    _findController.removeListener(_onFindChanged);
+    _findController.dispose();
     _controller.dispose();
     _titleController.dispose();
     _focusNode.removeListener(_focusListener);
@@ -1238,6 +1470,7 @@ class _NoteEditorState extends State<NoteEditor>
     _checklistPopupFocusNode.removeListener(_checklistPopupFocusListener);
     _checklistPromptController.removeListener(_onChecklistPromptChanged);
     HardwareKeyboard.instance.removeHandler(_handleChecklistPopupHardwareKey);
+    HardwareKeyboard.instance.removeHandler(_handleFindHardwareKey);
     _checklistPromptController.dispose();
     _checklistProgress.dispose();
     _quillScrollController.removeListener(_requestChecklistPopupLayout);
@@ -1289,6 +1522,9 @@ class _NoteEditorState extends State<NoteEditor>
 
   @override
   Widget build(BuildContext context) {
+    final largeScreen = isBigScreen(context);
+    final wideAppBar =
+        MediaQuery.sizeOf(context).width >= bigScreenWidthThreshold;
     Color backgroundColor = _backgroundColor == Colors.transparent
         ? Theme.of(context).colorScheme.surface
         : _backgroundColor;
@@ -1345,7 +1581,7 @@ class _NoteEditorState extends State<NoteEditor>
               appBar: NoteEditorAppBar(
                 backgroundColor: backgroundColor,
                 foregroundColor: foregroundColor,
-                leadingWidth: isBigScreen(context) ? 96 : null,
+                leadingWidth: largeScreen ? 96 : null,
                 leading: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1353,7 +1589,7 @@ class _NoteEditorState extends State<NoteEditor>
                       color: foregroundColor,
                       onPressed: () => unawaited(_closeEditor()),
                     ),
-                    if (isBigScreen(context))
+                    if (largeScreen)
                       IconButton(
                         color: foregroundColor,
                         onPressed: () {
@@ -1384,6 +1620,13 @@ class _NoteEditorState extends State<NoteEditor>
                 actions: _note.trashed
                     ? [
                         IconButton(
+                          key: const ValueKey('note_editor_search_action'),
+                          color: foregroundColor,
+                          onPressed: _openFind,
+                          icon: const Icon(Icons.search),
+                          tooltip: context.l10n.findInNote,
+                        ),
+                        IconButton(
                           color: foregroundColor,
                           onPressed: () async {
                             final navigator = Navigator.of(context);
@@ -1400,17 +1643,36 @@ class _NoteEditorState extends State<NoteEditor>
                         NoteEditorAppBarActions(
                           note: _note,
                           foregroundColor: foregroundColor,
+                          onSearch: _openFind,
                           onColor: () => unawaited(_pickNoteColor()),
                           onReminder: () => unawaited(_editReminder()),
                           onPin: _togglePinned,
                           onLabels: () => unawaited(_editLabels()),
-                          overflowMenu: _buildNoteOverflowMenu(),
+                          overflowMenu: _buildNoteOverflowMenu(
+                            showColor: !wideAppBar,
+                          ),
+                          showColor: wideAppBar,
                         ),
                       ],
               ),
               backgroundColor: backgroundColor,
               body: Column(
                 children: [
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: NoteFindBar(
+                      controller: _findController,
+                      canEdit: !_note.readOnly && !_note.trashed,
+                      backgroundColor: backgroundColor,
+                      foregroundColor: foregroundColor,
+                      onClose: _closeFind,
+                      onReplace: () =>
+                          unawaited(_replaceFindMatch(replaceAll: false)),
+                      onReplaceAll: () =>
+                          unawaited(_replaceFindMatch(replaceAll: true)),
+                    ),
+                  ),
                   Expanded(
                     child: SingleChildScrollView(
                       controller: _quillScrollController,
@@ -1518,6 +1780,39 @@ class _NoteEditorState extends State<NoteEditor>
                                       placeholder: context.l10n.startWriting,
                                       customLeadingBlockBuilder:
                                           customLeadingBlockBuilder,
+                                      textSpanBuilder:
+                                          (
+                                            context,
+                                            node,
+                                            nodeOffset,
+                                            text,
+                                            style,
+                                            recognizer,
+                                          ) => NoteSearchHighlighter.build(
+                                            node: node,
+                                            nodeOffset: nodeOffset,
+                                            text: text,
+                                            style: style,
+                                            recognizer: recognizer,
+                                            matches:
+                                                _findController.renderedMatches,
+                                            activeMatch:
+                                                _findController.currentMatch,
+                                            matchColor: isDark(backgroundColor)
+                                                ? Colors.amber.withValues(
+                                                    alpha: 0.34,
+                                                  )
+                                                : Colors.yellow.withValues(
+                                                    alpha: 0.56,
+                                                  ),
+                                            activeMatchColor:
+                                                isDark(backgroundColor)
+                                                ? Colors.orangeAccent
+                                                      .withValues(alpha: 0.62)
+                                                : Colors.orange.withValues(
+                                                    alpha: 0.58,
+                                                  ),
+                                          ),
                                       customStyles: buildQuillStyles(
                                         foregroundColor: foregroundColor,
                                         backgroundColor: backgroundColor,
@@ -2420,6 +2715,7 @@ class _NoteEditorState extends State<NoteEditor>
   }
 
   void _controllerChangesListener(DocChange event) {
+    _invalidateFindForDocumentChange();
     // Always set the save timer for any document change (including cascade/bubble)
     _scheduleAutosave();
     _updateChecklistProgress();
@@ -2648,7 +2944,7 @@ class _NoteEditorState extends State<NoteEditor>
     }
   }
 
-  Widget _buildNoteOverflowMenu() {
+  Widget _buildNoteOverflowMenu({required bool showColor}) {
     return NoteEditorOverflowMenu(
       note: _note,
       lockBusy: _isLockQueued || _isLockRemovalQueued,
@@ -2661,6 +2957,7 @@ class _NoteEditorState extends State<NoteEditor>
       onShare: () => unawaited(_shareCurrentNote()),
       onDuplicate: () => unawaited(_duplicateCurrentNote()),
       onDelete: () => unawaited(_moveCurrentNoteToTrash()),
+      onColor: showColor ? () => unawaited(_pickNoteColor()) : null,
     );
   }
 

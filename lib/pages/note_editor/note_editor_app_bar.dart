@@ -125,20 +125,24 @@ class NoteEditorAppBarActions extends StatelessWidget {
     super.key,
     required this.note,
     required this.foregroundColor,
+    required this.onSearch,
     required this.onColor,
     required this.onReminder,
     required this.onPin,
     required this.onLabels,
     required this.overflowMenu,
+    this.showColor = true,
   });
 
   final Note note;
   final Color foregroundColor;
+  final VoidCallback onSearch;
   final VoidCallback onColor;
   final VoidCallback onReminder;
   final VoidCallback onPin;
   final VoidCallback onLabels;
   final Widget overflowMenu;
+  final bool showColor;
 
   @override
   Widget build(BuildContext context) {
@@ -146,12 +150,20 @@ class NoteEditorAppBarActions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          key: const ValueKey('note_editor_color_action'),
-          icon: const Icon(Icons.color_lens),
+          key: const ValueKey('note_editor_search_action'),
+          icon: const Icon(Icons.search),
           color: foregroundColor,
-          tooltip: context.l10n.pickNoteColor,
-          onPressed: onColor,
+          tooltip: context.l10n.findInNote,
+          onPressed: onSearch,
         ),
+        if (showColor)
+          IconButton(
+            key: const ValueKey('note_editor_color_action'),
+            icon: const Icon(Icons.color_lens),
+            color: foregroundColor,
+            tooltip: context.l10n.pickNoteColor,
+            onPressed: onColor,
+          ),
         IconButton(
           key: const ValueKey('note_editor_reminder_action'),
           color: foregroundColor,
@@ -210,6 +222,7 @@ class NoteEditorOverflowMenu extends StatelessWidget {
     this.onCopyAs,
     this.onPasteAs,
     this.onConvertChecklist,
+    this.onColor,
   });
 
   final Note note;
@@ -224,6 +237,7 @@ class NoteEditorOverflowMenu extends StatelessWidget {
   final VoidCallback? onCopyAs;
   final VoidCallback? onPasteAs;
   final VoidCallback? onConvertChecklist;
+  final VoidCallback? onColor;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +245,16 @@ class NoteEditorOverflowMenu extends StatelessWidget {
     return PopupMenuButton<void>(
       key: const ValueKey('note_editor_overflow_menu'),
       itemBuilder: (menuContext) => [
+        if (onColor != null)
+          PopupMenuItem<void>(
+            key: const ValueKey('note_editor_overflow_color_action'),
+            height: 20,
+            onTap: onColor,
+            child: ListTile(
+              leading: const Icon(Icons.color_lens),
+              title: Text(context.l10n.pickNoteColor),
+            ),
+          ),
         PopupMenuItem<void>(
           height: 20,
           child: CheckboxListTile(

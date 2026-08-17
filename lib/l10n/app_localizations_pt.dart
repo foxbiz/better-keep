@@ -3650,4 +3650,71 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get googleKeepShareReport => 'Compartilhar relatório completo';
+
+  @override
+  String get findInNote => 'Localizar na nota';
+
+  @override
+  String get replace => 'Substituir';
+
+  @override
+  String get replaceAll => 'Substituir tudo';
+
+  @override
+  String get showReplace => 'Mostrar substituição';
+
+  @override
+  String get hideReplace => 'Ocultar substituição';
+
+  @override
+  String get previousMatch => 'Resultado anterior';
+
+  @override
+  String get nextMatch => 'Próximo resultado';
+
+  @override
+  String get searchOptions => 'Opções de pesquisa';
+
+  @override
+  String get matchCase => 'Diferenciar maiúsculas de minúsculas';
+
+  @override
+  String get matchWholeWord => 'Corresponder palavra inteira';
+
+  @override
+  String get smartMatch => 'Correspondência inteligente';
+
+  @override
+  String get smartMatchDescription =>
+      'Encontre erros de digitação e abreviações';
+
+  @override
+  String get regularExpressionAdvanced => 'Expressão regular (avançado)';
+
+  @override
+  String get invalidRegularExpression => 'Expressão regular inválida';
+
+  @override
+  String get zeroLengthRegexUnsupported =>
+      'Padrões que correspondem apenas a texto vazio não são compatíveis';
+
+  @override
+  String get invalidReplacementReference =>
+      'A substituição se refere a um grupo de captura ausente';
+
+  @override
+  String get noMatches => 'Nenhum resultado';
+
+  @override
+  String get searching => 'Pesquisando';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String replacedOccurrences(int count) {
+    return '$count ocorrências substituídas';
+  }
 }

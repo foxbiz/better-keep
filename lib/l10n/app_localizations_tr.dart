@@ -3621,4 +3621,70 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get googleKeepShareReport => 'Tam raporu paylaş';
+
+  @override
+  String get findInNote => 'Notta bul';
+
+  @override
+  String get replace => 'Değiştir';
+
+  @override
+  String get replaceAll => 'Tümünü değiştir';
+
+  @override
+  String get showReplace => 'Değiştirmeyi göster';
+
+  @override
+  String get hideReplace => 'Değiştirmeyi gizle';
+
+  @override
+  String get previousMatch => 'Önceki eşleşme';
+
+  @override
+  String get nextMatch => 'Sonraki eşleşme';
+
+  @override
+  String get searchOptions => 'Arama seçenekleri';
+
+  @override
+  String get matchCase => 'Büyük/küçük harf eşleştir';
+
+  @override
+  String get matchWholeWord => 'Tam sözcüğü eşleştir';
+
+  @override
+  String get smartMatch => 'Akıllı eşleşme';
+
+  @override
+  String get smartMatchDescription => 'Yazım hatalarını ve kısaltmaları bul';
+
+  @override
+  String get regularExpressionAdvanced => 'Düzenli ifade (gelişmiş)';
+
+  @override
+  String get invalidRegularExpression => 'Geçersiz düzenli ifade';
+
+  @override
+  String get zeroLengthRegexUnsupported =>
+      'Yalnızca boş metinle eşleşen kalıplar desteklenmez';
+
+  @override
+  String get invalidReplacementReference =>
+      'Değiştirme, eksik bir yakalama grubuna başvuruyor';
+
+  @override
+  String get noMatches => 'Eşleşme yok';
+
+  @override
+  String get searching => 'Aranıyor';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '$total eşleşmeden $current.';
+  }
+
+  @override
+  String replacedOccurrences(int count) {
+    return '$count eşleşme değiştirildi';
+  }
 }

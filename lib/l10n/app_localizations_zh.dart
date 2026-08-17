@@ -3429,4 +3429,68 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get googleKeepShareReport => '分享完整报告';
+
+  @override
+  String get findInNote => '在笔记中查找';
+
+  @override
+  String get replace => '替换';
+
+  @override
+  String get replaceAll => '全部替换';
+
+  @override
+  String get showReplace => '显示替换';
+
+  @override
+  String get hideReplace => '隐藏替换';
+
+  @override
+  String get previousMatch => '上一个匹配项';
+
+  @override
+  String get nextMatch => '下一个匹配项';
+
+  @override
+  String get searchOptions => '搜索选项';
+
+  @override
+  String get matchCase => '区分大小写';
+
+  @override
+  String get matchWholeWord => '全字匹配';
+
+  @override
+  String get smartMatch => '智能匹配';
+
+  @override
+  String get smartMatchDescription => '查找拼写错误和缩写';
+
+  @override
+  String get regularExpressionAdvanced => '正则表达式（高级）';
+
+  @override
+  String get invalidRegularExpression => '无效的正则表达式';
+
+  @override
+  String get zeroLengthRegexUnsupported => '不支持仅匹配空文本的模式';
+
+  @override
+  String get invalidReplacementReference => '替换内容引用了不存在的捕获组';
+
+  @override
+  String get noMatches => '没有匹配项';
+
+  @override
+  String get searching => '正在搜索';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '第 $current 项，共 $total 项';
+  }
+
+  @override
+  String replacedOccurrences(int count) {
+    return '已替换 $count 处';
+  }
 }

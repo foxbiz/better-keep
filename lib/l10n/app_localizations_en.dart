@@ -3610,4 +3610,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get googleKeepShareReport => 'Share full report';
+
+  @override
+  String get findInNote => 'Find in note';
+
+  @override
+  String get replace => 'Replace';
+
+  @override
+  String get replaceAll => 'Replace all';
+
+  @override
+  String get showReplace => 'Show replace';
+
+  @override
+  String get hideReplace => 'Hide replace';
+
+  @override
+  String get previousMatch => 'Previous match';
+
+  @override
+  String get nextMatch => 'Next match';
+
+  @override
+  String get searchOptions => 'Search options';
+
+  @override
+  String get matchCase => 'Match case';
+
+  @override
+  String get matchWholeWord => 'Match whole word';
+
+  @override
+  String get smartMatch => 'Smart match';
+
+  @override
+  String get smartMatchDescription => 'Find typos and abbreviations';
+
+  @override
+  String get regularExpressionAdvanced => 'Regular expression (advanced)';
+
+  @override
+  String get invalidRegularExpression => 'Invalid regular expression';
+
+  @override
+  String get zeroLengthRegexUnsupported =>
+      'Patterns that only match empty text aren\'t supported';
+
+  @override
+  String get invalidReplacementReference =>
+      'Replacement refers to a missing capture group';
+
+  @override
+  String get noMatches => 'No matches';
+
+  @override
+  String get searching => 'Searching';
+
+  @override
+  String searchResultCount(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String replacedOccurrences(int count) {
+    return 'Replaced $count occurrences';
+  }
 }
