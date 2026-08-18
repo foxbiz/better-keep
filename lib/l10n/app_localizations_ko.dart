@@ -3551,4 +3551,74 @@ class AppLocalizationsKo extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count개 항목을 바꿨습니다';
   }
+
+  @override
+  String get table => '표';
+
+  @override
+  String get insertTable => '표 삽입';
+
+  @override
+  String get tableQuickSize => '빠른 크기';
+
+  @override
+  String get tableCustomSize => '사용자 지정 크기';
+
+  @override
+  String get tableRows => '행';
+
+  @override
+  String get tableColumns => '열';
+
+  @override
+  String get tableHeaderRow => '머리글 행';
+
+  @override
+  String tableSize(int rows, int columns) {
+    return '$rows × $columns';
+  }
+
+  @override
+  String tableCell(int row, int column) {
+    return '$row행 $column열';
+  }
+
+  @override
+  String get tableUnsupported => '이 표 또는 포함된 콘텐츠를 안전하게 표시할 수 없습니다';
+
+  @override
+  String tableMoreRows(int count) {
+    return '+$count개 행 더 보기';
+  }
+
+  @override
+  String get insertRowAbove => '위에 행 삽입';
+
+  @override
+  String get insertRowBelow => '아래에 행 삽입';
+
+  @override
+  String get deleteRow => '행 삭제';
+
+  @override
+  String get insertColumnBefore => '앞에 열 삽입';
+
+  @override
+  String get insertColumnAfter => '뒤에 열 삽입';
+
+  @override
+  String get deleteColumn => '열 삭제';
+
+  @override
+  String get deleteTable => '표 삭제';
+
+  @override
+  String tableRowsLimit(int count) {
+    return '최대 $count개 행';
+  }
+
+  @override
+  String tableColumnsLimit(int count) {
+    return '최대 $count개 열';
+  }
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/export_data_service.dart';
+import 'package:better_keep/services/note_document_projection.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -39,7 +40,7 @@ class NoteExportService {
           extensionSet: md.ExtensionSet.gitHubFlavored,
         );
       case ExportFormat.text:
-        return controller.document.toPlainText();
+        return NoteDocumentProjection.toPlainText(controller.document);
     }
   }
 

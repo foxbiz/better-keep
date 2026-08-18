@@ -3687,4 +3687,75 @@ class AppLocalizationsTr extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count eşleşme değiştirildi';
   }
+
+  @override
+  String get table => 'Tablo';
+
+  @override
+  String get insertTable => 'Tablo ekle';
+
+  @override
+  String get tableQuickSize => 'Hızlı boyut';
+
+  @override
+  String get tableCustomSize => 'Özel boyut';
+
+  @override
+  String get tableRows => 'Satırlar';
+
+  @override
+  String get tableColumns => 'Sütunlar';
+
+  @override
+  String get tableHeaderRow => 'Başlık satırı';
+
+  @override
+  String tableSize(int rows, int columns) {
+    return '$rows × $columns';
+  }
+
+  @override
+  String tableCell(int row, int column) {
+    return '$row. satır, $column. sütun';
+  }
+
+  @override
+  String get tableUnsupported =>
+      'Bu tablo veya gömülü içerik güvenle görüntülenemiyor';
+
+  @override
+  String tableMoreRows(int count) {
+    return '+$count satır daha';
+  }
+
+  @override
+  String get insertRowAbove => 'Üste satır ekle';
+
+  @override
+  String get insertRowBelow => 'Alta satır ekle';
+
+  @override
+  String get deleteRow => 'Satırı sil';
+
+  @override
+  String get insertColumnBefore => 'Önüne sütun ekle';
+
+  @override
+  String get insertColumnAfter => 'Arkasına sütun ekle';
+
+  @override
+  String get deleteColumn => 'Sütunu sil';
+
+  @override
+  String get deleteTable => 'Tabloyu sil';
+
+  @override
+  String tableRowsLimit(int count) {
+    return 'En fazla $count satır';
+  }
+
+  @override
+  String tableColumnsLimit(int count) {
+    return 'En fazla $count sütun';
+  }
 }

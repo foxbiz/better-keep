@@ -6569,6 +6569,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Replaced {count} occurrences'**
   String replacedOccurrences(int count);
+
+  /// No description provided for @table.
+  ///
+  /// In en, this message translates to:
+  /// **'Table'**
+  String get table;
+
+  /// No description provided for @insertTable.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert table'**
+  String get insertTable;
+
+  /// No description provided for @tableQuickSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick size'**
+  String get tableQuickSize;
+
+  /// No description provided for @tableCustomSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom size'**
+  String get tableCustomSize;
+
+  /// No description provided for @tableRows.
+  ///
+  /// In en, this message translates to:
+  /// **'Rows'**
+  String get tableRows;
+
+  /// No description provided for @tableColumns.
+  ///
+  /// In en, this message translates to:
+  /// **'Columns'**
+  String get tableColumns;
+
+  /// No description provided for @tableHeaderRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Header row'**
+  String get tableHeaderRow;
+
+  /// Selected table dimensions, rows by columns
+  ///
+  /// In en, this message translates to:
+  /// **'{rows} × {columns}'**
+  String tableSize(int rows, int columns);
+
+  /// Accessible table cell coordinates
+  ///
+  /// In en, this message translates to:
+  /// **'Row {row}, column {column}'**
+  String tableCell(int row, int column);
+
+  /// No description provided for @tableUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This table or embedded content cannot be displayed safely'**
+  String get tableUnsupported;
+
+  /// Number of table rows omitted from a note card preview
+  ///
+  /// In en, this message translates to:
+  /// **'+{count} more rows'**
+  String tableMoreRows(int count);
+
+  /// No description provided for @insertRowAbove.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert row above'**
+  String get insertRowAbove;
+
+  /// No description provided for @insertRowBelow.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert row below'**
+  String get insertRowBelow;
+
+  /// No description provided for @deleteRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete row'**
+  String get deleteRow;
+
+  /// No description provided for @insertColumnBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert column before'**
+  String get insertColumnBefore;
+
+  /// No description provided for @insertColumnAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert column after'**
+  String get insertColumnAfter;
+
+  /// No description provided for @deleteColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete column'**
+  String get deleteColumn;
+
+  /// No description provided for @deleteTable.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete table'**
+  String get deleteTable;
+
+  /// Maximum supported table row count
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum {count} rows'**
+  String tableRowsLimit(int count);
+
+  /// Maximum supported table column count
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum {count} columns'**
+  String tableColumnsLimit(int count);
 }
 
 class _AppLocalizationsDelegate

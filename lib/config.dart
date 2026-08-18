@@ -13,6 +13,11 @@ const defaultAlarmSound = "assets/sounds/2.mp3";
 /// This helps maintain performance and prevents storage bloat.
 const int maxAttachmentsPerNote = 50;
 
+/// Stage two enables table creation and supported Markdown table imports now
+/// that table decoding and editing support is available across app releases.
+const bool enableTableCreation = true;
+const bool enableMarkdownTableImport = true;
+
 /// Review account email for app store review and testing.
 /// This account bypasses certain features for easier testing.
 const String demoAccountEmail = 'review@betterkeep.app';

@@ -1,4 +1,5 @@
 import 'package:better_keep/components/adaptive_toolbar.dart';
+import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/pages/note_editor/toolbar/align_button.dart';
@@ -10,6 +11,8 @@ import 'package:better_keep/pages/note_editor/toolbar/link_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/style_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_color_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_size_button.dart';
+import 'package:better_keep/pages/note_editor/table/note_table_button.dart';
+import 'package:better_keep/pages/note_editor/table/note_table_controller.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
@@ -102,6 +105,7 @@ class NoteEditorToolbar extends StatelessWidget {
     this.showChecklist = true,
     this.showBlockLists = true,
     this.showIndent = true,
+    this.tableController,
   });
 
   final QuillController controller;
@@ -121,6 +125,7 @@ class NoteEditorToolbar extends StatelessWidget {
   final bool showChecklist;
   final bool showBlockLists;
   final bool showIndent;
+  final NoteTableController? tableController;
 
   Widget _styleButton(Attribute attribute) => StyleButton(
     attribute: attribute,
@@ -178,6 +183,12 @@ class NoteEditorToolbar extends StatelessWidget {
             focusNode: focusNode,
             controller: controller,
             readOnly: readOnly,
+          ),
+        if (enableTableCreation && showBlockLists && tableController != null)
+          NoteTableButton(
+            controller: controller,
+            readOnly: readOnly,
+            tableController: tableController!,
           ),
         LinkButton(controller: controller, readOnly: readOnly),
         if (showBlockLists) ...[

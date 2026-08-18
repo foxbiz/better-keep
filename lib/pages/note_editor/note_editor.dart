@@ -22,6 +22,9 @@ import 'package:better_keep/pages/note_editor/note_editor_toolbar.dart';
 import 'package:better_keep/pages/note_editor/note_find_bar.dart';
 import 'package:better_keep/pages/note_editor/note_find_controller.dart';
 import 'package:better_keep/pages/note_editor/note_search_highlighter.dart';
+import 'package:better_keep/pages/note_editor/table/note_table_controller.dart';
+import 'package:better_keep/pages/note_editor/table/note_table_embed.dart';
+import 'package:better_keep/pages/note_editor/table/note_table_toolbar.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/camera_detection.dart';
@@ -29,9 +32,11 @@ import 'package:better_keep/services/checklist_delta_codec.dart';
 import 'package:better_keep/services/checkbox_service.dart';
 import 'package:better_keep/services/due_reminder_presenter.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
+import 'package:better_keep/services/note_document_projection.dart';
+import 'package:better_keep/services/note_find_delta_composer.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
-import 'package:better_keep/services/note_search_delta_composer.dart';
 import 'package:better_keep/services/note_search_service.dart';
+import 'package:better_keep/services/note_table_codec.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
@@ -141,6 +146,7 @@ class _NoteEditorState extends State<NoteEditor>
   late FocusNode _titleFocusNode;
   late TextEditingController _titleController;
   late QuillController _controller;
+  late final NoteTableController _tableController;
   late final NoteFindController _findController;
   late Color _backgroundColor;
   int _noteSearchRevision = 0;
@@ -168,6 +174,14 @@ class _NoteEditorState extends State<NoteEditor>
   /// Handles keyboard events to block formatting shortcuts when editing title
   /// and to handle Backspace at start of content to move focus to title
   KeyEventResult _handleKeyPressed(FocusNode node, KeyEvent event) {
+    // A table cell owns its text input. Let its EditableText handle deletion,
+    // selection, clipboard, and native undo without touching Quill's caret.
+    if (_tableController.isCellInputFocused) {
+      return _isQuillOnlyTableShortcut(event)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
+    }
+
     // Only intercept key down events
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
@@ -229,6 +243,38 @@ class _NoteEditorState extends State<NoteEditor>
     }
 
     return KeyEventResult.ignored;
+  }
+
+  bool _isQuillOnlyTableShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final primaryModifier =
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed;
+    if (!primaryModifier) return false;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.keyB ||
+        key == LogicalKeyboardKey.keyI ||
+        key == LogicalKeyboardKey.keyU ||
+        key == LogicalKeyboardKey.keyK ||
+        key == LogicalKeyboardKey.keyM ||
+        key == LogicalKeyboardKey.keyG ||
+        key == LogicalKeyboardKey.backquote ||
+        key == LogicalKeyboardKey.tilde ||
+        key == LogicalKeyboardKey.digit0 ||
+        key == LogicalKeyboardKey.digit1 ||
+        key == LogicalKeyboardKey.digit2 ||
+        key == LogicalKeyboardKey.digit3 ||
+        key == LogicalKeyboardKey.digit4 ||
+        key == LogicalKeyboardKey.digit5 ||
+        key == LogicalKeyboardKey.digit6) {
+      return true;
+    }
+    if (!HardwareKeyboard.instance.isShiftPressed) return false;
+    return key == LogicalKeyboardKey.keyS ||
+        key == LogicalKeyboardKey.keyL ||
+        key == LogicalKeyboardKey.keyO ||
+        key == LogicalKeyboardKey.keyC;
   }
 
   /// Handles Enter key pressed in title field.
@@ -310,9 +356,15 @@ class _NoteEditorState extends State<NoteEditor>
       document: document,
       selection: TextSelection.collapsed(offset: document.length - 1),
     );
+    _tableController = NoteTableController(
+      controller: _controller,
+      parentFocusNode: _focusNode,
+      onDraftChanged: _scheduleAutosave,
+    )..addListener(_onTableEditingChanged);
     _findController = NoteFindController(
       snapshot: _captureFindSnapshot,
-      onMatchActivated: _activateFindMatch,
+      tableSnapshot: _captureFindTableSnapshot,
+      onTargetActivated: _activateFindMatch,
       currentRevision: () => _noteSearchRevision,
     );
     _findController.addListener(_onFindChanged);
@@ -364,6 +416,15 @@ class _NoteEditorState extends State<NoteEditor>
     }
   }
 
+  void _onTableEditingChanged() {
+    if (!mounted) return;
+    _checklistPromptController.updateInteraction(
+      hasFocus: _hasChecklistPromptFocus,
+      hasCollapsedSelection: _hasCollapsedChecklistSelection,
+    );
+    setState(() {});
+  }
+
   void _focusListener() {
     if (!mounted) {
       return;
@@ -387,8 +448,11 @@ class _NoteEditorState extends State<NoteEditor>
     _scheduleChecklistPopupLayout();
   }
 
+  bool get _hasBodyEditorFocus =>
+      _focusNode.hasFocus && !_tableController.isCellInputFocused;
+
   bool get _hasChecklistPromptFocus =>
-      _focusNode.hasFocus || _checklistPopupFocusNode.hasFocus;
+      _hasBodyEditorFocus || _checklistPopupFocusNode.hasFocus;
 
   void _checklistPopupFocusListener() {
     if (!mounted) return;
@@ -755,7 +819,7 @@ class _NoteEditorState extends State<NoteEditor>
       final block = _checklistBlockAtCaret;
       _checklistPromptController.onEditorTap(
         block: block,
-        hasFocus: _focusNode.hasFocus,
+        hasFocus: _hasBodyEditorFocus,
         hasCollapsedSelection: _hasCollapsedChecklistSelection,
       );
       if (block?.isEligible ?? false) {
@@ -984,12 +1048,27 @@ class _NoteEditorState extends State<NoteEditor>
     );
   }
 
+  List<NoteFindTableSnapshot> _captureFindTableSnapshot() {
+    final tables = <NoteFindTableSnapshot>[];
+    var offset = 0;
+    for (final operation in _controller.document.toDelta().toList()) {
+      if (!operation.isInsert) continue;
+      final table = NoteTableCodec.tryDecodeInsert(operation.data);
+      if (table != null) {
+        tables.add(NoteFindTableSnapshot(offset: offset, table: table));
+      }
+      offset += operation.length ?? 0;
+    }
+    return List.unmodifiable(tables);
+  }
+
   void _invalidateFindForDocumentChange() {
     _noteSearchRevision += 1;
     _findController.refreshForDocumentChange();
   }
 
   void _onFindChanged() {
+    _tableController.setSearchMatches(_findController.renderedTableMatches);
     if (mounted) setState(() {});
   }
 
@@ -1042,8 +1121,26 @@ class _NoteEditorState extends State<NoteEditor>
     }
   }
 
-  void _activateFindMatch(NoteSearchMatch match) {
+  void _activateFindMatch(NoteFindTarget target) {
     if (!mounted || !_findController.isOpen) return;
+    final cell = target.cell;
+    if (cell != null) {
+      _controller.updateSelection(
+        TextSelection.collapsed(offset: target.documentOffset),
+        ChangeSource.local,
+      );
+      _tableController.requestCell(
+        cell,
+        selection: TextSelection(
+          baseOffset: target.match.start,
+          extentOffset: target.match.end,
+        ),
+        requestKeyboardFocus: false,
+      );
+      return;
+    }
+    _tableController.deactivate();
+    final match = target.match;
     _controller.updateSelection(
       TextSelection(baseOffset: match.start, extentOffset: match.end),
       ChangeSource.local,
@@ -1102,6 +1199,7 @@ class _NoteEditorState extends State<NoteEditor>
 
   Future<void> _replaceFindMatch({required bool replaceAll}) async {
     if (_note.readOnly || _note.trashed || !_findController.canReplace) return;
+    _tableController.flushActive();
     final request = await _findController.buildReplacementRequest(
       replaceAll: replaceAll,
     );
@@ -1113,17 +1211,32 @@ class _NoteEditorState extends State<NoteEditor>
       return;
     }
 
-    final transaction = NoteSearchDeltaComposer.build(
+    final transaction = NoteFindDeltaComposer.build(
       _controller.document,
       request.plan,
     );
     if (transaction.isEmpty) return;
     final firstEdit = request.plan.edits.first;
-    final selectionOffset = firstEdit.start + firstEdit.replacement.length;
+    final cell = firstEdit.target.cell;
+    final selectionOffset = cell == null
+        ? firstEdit.target.match.start + firstEdit.replacement.length
+        : transaction.transformPosition(
+            firstEdit.target.documentOffset,
+            force: false,
+          );
     final selection = TextSelection.collapsed(offset: selectionOffset);
     _noteSearchRevision += 1;
     _controller.compose(transaction, selection, ChangeSource.local);
     _controller.updateSelection(selection, ChangeSource.local);
+    if (cell != null) {
+      final localOffset =
+          firstEdit.target.match.start + firstEdit.replacement.length;
+      _tableController.requestCell(
+        cell,
+        selection: TextSelection.collapsed(offset: localOffset),
+        requestKeyboardFocus: false,
+      );
+    }
     _findController.anchorAfterReplacement(selectionOffset);
 
     if (replaceAll) {
@@ -1139,7 +1252,7 @@ class _NoteEditorState extends State<NoteEditor>
             onPressed: () {
               _controller.undo();
               _findController.refreshForDocumentChange(
-                anchorOffset: firstEdit.start,
+                anchorOffset: firstEdit.target.documentOffset,
               );
             },
           ),
@@ -1150,7 +1263,7 @@ class _NoteEditorState extends State<NoteEditor>
 
   /// Scrolls the editor to ensure the caret is visible above the toolbar
   void _scrollToCaret() {
-    if (!mounted || !_focusNode.hasFocus) return;
+    if (!mounted || !_hasBodyEditorFocus) return;
 
     final editorState = _editorKey.currentState;
     if (editorState == null) return;
@@ -1201,7 +1314,7 @@ class _NoteEditorState extends State<NoteEditor>
 
   /// Scrolls to caret with keyboard-aware timing
   void _scrollToCaretAfterKeyboard() {
-    if (!mounted || !_focusNode.hasFocus) return;
+    if (!mounted || !_hasBodyEditorFocus) return;
 
     // Cancel any pending scroll timers to prevent conflicts
     for (final timer in _scrollTimers) {
@@ -1211,16 +1324,16 @@ class _NoteEditorState extends State<NoteEditor>
 
     // First scroll immediately after layout settles
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_focusNode.hasFocus) return;
+      if (!mounted || !_hasBodyEditorFocus) return;
       _scrollToCaret();
     });
 
     // Second scroll during keyboard animation (~250ms)
     _scrollTimers.add(
       Timer(const Duration(milliseconds: 250), () {
-        if (!mounted || !_focusNode.hasFocus) return;
+        if (!mounted || !_hasBodyEditorFocus) return;
         SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_focusNode.hasFocus) return;
+          if (!mounted || !_hasBodyEditorFocus) return;
           _scrollToCaret();
         });
       }),
@@ -1230,9 +1343,9 @@ class _NoteEditorState extends State<NoteEditor>
     // Some devices have slower keyboard animations
     _scrollTimers.add(
       Timer(const Duration(milliseconds: 500), () {
-        if (!mounted || !_focusNode.hasFocus) return;
+        if (!mounted || !_hasBodyEditorFocus) return;
         SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_focusNode.hasFocus) return;
+          if (!mounted || !_hasBodyEditorFocus) return;
           _scrollToCaret();
         });
       }),
@@ -1463,6 +1576,8 @@ class _NoteEditorState extends State<NoteEditor>
     _controller.removeListener(_didChangeSelection);
     _findController.removeListener(_onFindChanged);
     _findController.dispose();
+    _tableController.removeListener(_onTableEditingChanged);
+    _tableController.dispose();
     _controller.dispose();
     _titleController.dispose();
     _focusNode.removeListener(_focusListener);
@@ -1487,6 +1602,9 @@ class _NoteEditorState extends State<NoteEditor>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _tableController.flushActive();
+    }
     if (state == AppLifecycleState.paused) {
       _changeTimer?.cancel();
       unawaited(_enqueueSave());
@@ -1514,7 +1632,7 @@ class _NoteEditorState extends State<NoteEditor>
       });
 
       // Keyboard just appeared while editor has focus - scroll to caret
-      if (keyboardVisible && wasHidden && _focusNode.hasFocus) {
+      if (keyboardVisible && wasHidden && _hasBodyEditorFocus) {
         _scrollToCaretAfterKeyboard();
       }
     }
@@ -1796,8 +1914,8 @@ class _NoteEditorState extends State<NoteEditor>
                                             recognizer: recognizer,
                                             matches:
                                                 _findController.renderedMatches,
-                                            activeMatch:
-                                                _findController.currentMatch,
+                                            activeMatch: _findController
+                                                .currentBodyMatch,
                                             matchColor: isDark(backgroundColor)
                                                 ? Colors.amber.withValues(
                                                     alpha: 0.34,
@@ -1819,17 +1937,25 @@ class _NoteEditorState extends State<NoteEditor>
                                         placeholderColor: placeholderColor,
                                         comfortableLists: true,
                                       ),
-                                      embedBuilders: kIsWeb
-                                          ? FlutterQuillEmbeds.editorWebBuilders()
-                                          : FlutterQuillEmbeds.editorBuilders(
-                                              imageEmbedConfig:
-                                                  QuillEditorImageEmbedConfig(
-                                                    imageProviderBuilder:
-                                                        buildQuillImageProvider,
-                                                    imageErrorWidgetBuilder:
-                                                        buildQuillImageErrorWidget,
-                                                  ),
-                                            ),
+                                      embedBuilders: [
+                                        ...(kIsWeb
+                                            ? FlutterQuillEmbeds.editorWebBuilders()
+                                            : FlutterQuillEmbeds.editorBuilders(
+                                                imageEmbedConfig:
+                                                    QuillEditorImageEmbedConfig(
+                                                      imageProviderBuilder:
+                                                          buildQuillImageProvider,
+                                                      imageErrorWidgetBuilder:
+                                                          buildQuillImageErrorWidget,
+                                                    ),
+                                              )),
+                                        NoteTableEmbedBuilder(
+                                          parentColor: backgroundColor,
+                                          tableController: _tableController,
+                                        ),
+                                      ],
+                                      unknownEmbedBuilder:
+                                          const UnknownNoteEmbedBuilder(),
                                       customLinkPrefixes: const ['audio://'],
                                       linkActionPickerDelegate:
                                           _audioLinkActionPicker,
@@ -2093,6 +2219,14 @@ class _NoteEditorState extends State<NoteEditor>
   }
 
   Widget _buildToolbar() {
+    if (_tableController.hasActiveCell) {
+      return NoteTableToolbar(
+        controller: _tableController,
+        parentColor: _note.color,
+        showKeyboardHide: _isKeyboardVisible,
+        onHideKeyboard: () => FocusManager.instance.primaryFocus?.unfocus(),
+      );
+    }
     return NoteEditorToolbar(
       key: const Key('note_editor_toolbar'),
       controller: _controller,
@@ -2107,6 +2241,7 @@ class _NoteEditorState extends State<NoteEditor>
       onAttachmentAdded: _scrollToAttachments,
       showKeyboardHide: _isKeyboardVisible,
       onHideKeyboard: _focusNode.unfocus,
+      tableController: _tableController,
     );
   }
 
@@ -2119,6 +2254,7 @@ class _NoteEditorState extends State<NoteEditor>
   }
 
   _NoteEditorSaveSnapshot _captureSaveSnapshot() {
+    _tableController.flushActive();
     final title = _titleController.text;
     final contentDelta = _controller.document.toDelta().toJson();
     final combinedDeltaJson = <Map<String, dynamic>>[];
@@ -2137,8 +2273,10 @@ class _NoteEditorState extends State<NoteEditor>
     return _NoteEditorSaveSnapshot(
       title: title,
       content: json.encode(combinedDeltaJson),
-      plainText: combinedDoc.toPlainText().trim(),
-      bodyPlainText: _controller.document.toPlainText().trim(),
+      plainText: NoteDocumentProjection.toPlainText(combinedDoc).trim(),
+      bodyPlainText: NoteDocumentProjection.toPlainText(
+        _controller.document,
+      ).trim(),
     );
   }
 
@@ -2366,7 +2504,7 @@ class _NoteEditorState extends State<NoteEditor>
   }
 
   Future<void> _pickNoteColor() async {
-    final restoreEditorFocus = _focusNode.hasFocus;
+    final restoreEditorFocus = _hasBodyEditorFocus;
     _focusNode.unfocus();
     final color = await colorPicker(
       context,
@@ -2506,7 +2644,7 @@ class _NoteEditorState extends State<NoteEditor>
     final position = selection.baseOffset;
     _checklistPromptController.updateBlock(_checklistBlockAtCaret);
     _checklistPromptController.updateInteraction(
-      hasFocus: _focusNode.hasFocus,
+      hasFocus: _hasChecklistPromptFocus,
       hasCollapsedSelection: _hasCollapsedChecklistSelection,
     );
 

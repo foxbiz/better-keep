@@ -3676,4 +3676,75 @@ class AppLocalizationsEn extends AppLocalizations {
   String replacedOccurrences(int count) {
     return 'Replaced $count occurrences';
   }
+
+  @override
+  String get table => 'Table';
+
+  @override
+  String get insertTable => 'Insert table';
+
+  @override
+  String get tableQuickSize => 'Quick size';
+
+  @override
+  String get tableCustomSize => 'Custom size';
+
+  @override
+  String get tableRows => 'Rows';
+
+  @override
+  String get tableColumns => 'Columns';
+
+  @override
+  String get tableHeaderRow => 'Header row';
+
+  @override
+  String tableSize(int rows, int columns) {
+    return '$rows × $columns';
+  }
+
+  @override
+  String tableCell(int row, int column) {
+    return 'Row $row, column $column';
+  }
+
+  @override
+  String get tableUnsupported =>
+      'This table or embedded content cannot be displayed safely';
+
+  @override
+  String tableMoreRows(int count) {
+    return '+$count more rows';
+  }
+
+  @override
+  String get insertRowAbove => 'Insert row above';
+
+  @override
+  String get insertRowBelow => 'Insert row below';
+
+  @override
+  String get deleteRow => 'Delete row';
+
+  @override
+  String get insertColumnBefore => 'Insert column before';
+
+  @override
+  String get insertColumnAfter => 'Insert column after';
+
+  @override
+  String get deleteColumn => 'Delete column';
+
+  @override
+  String get deleteTable => 'Delete table';
+
+  @override
+  String tableRowsLimit(int count) {
+    return 'Maximum $count rows';
+  }
+
+  @override
+  String tableColumnsLimit(int count) {
+    return 'Maximum $count columns';
+  }
 }

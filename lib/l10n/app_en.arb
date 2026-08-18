@@ -3778,5 +3778,51 @@
 	"@replacedOccurrences": {
 		"description": "Result after replacing all in-note search matches",
 		"placeholders": { "count": { "type": "int" } }
+	},
+	"table": "Table",
+	"insertTable": "Insert table",
+	"tableQuickSize": "Quick size",
+	"tableCustomSize": "Custom size",
+	"tableRows": "Rows",
+	"tableColumns": "Columns",
+	"tableHeaderRow": "Header row",
+	"tableSize": "{rows} × {columns}",
+	"@tableSize": {
+		"description": "Selected table dimensions, rows by columns",
+		"placeholders": {
+			"rows": { "type": "int" },
+			"columns": { "type": "int" }
+		}
+	},
+	"tableCell": "Row {row}, column {column}",
+	"@tableCell": {
+		"description": "Accessible table cell coordinates",
+		"placeholders": {
+			"row": { "type": "int" },
+			"column": { "type": "int" }
+		}
+	},
+	"tableUnsupported": "This table or embedded content cannot be displayed safely",
+	"tableMoreRows": "+{count} more rows",
+	"@tableMoreRows": {
+		"description": "Number of table rows omitted from a note card preview",
+		"placeholders": { "count": { "type": "int" } }
+	},
+	"insertRowAbove": "Insert row above",
+	"insertRowBelow": "Insert row below",
+	"deleteRow": "Delete row",
+	"insertColumnBefore": "Insert column before",
+	"insertColumnAfter": "Insert column after",
+	"deleteColumn": "Delete column",
+	"deleteTable": "Delete table",
+	"tableRowsLimit": "Maximum {count} rows",
+	"@tableRowsLimit": {
+		"description": "Maximum supported table row count",
+		"placeholders": { "count": { "type": "int" } }
+	},
+	"tableColumnsLimit": "Maximum {count} columns",
+	"@tableColumnsLimit": {
+		"description": "Maximum supported table column count",
+		"placeholders": { "count": { "type": "int" } }
 	}
 }

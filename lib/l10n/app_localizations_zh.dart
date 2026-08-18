@@ -3493,4 +3493,74 @@ class AppLocalizationsZh extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '已替换 $count 处';
   }
+
+  @override
+  String get table => '表格';
+
+  @override
+  String get insertTable => '插入表格';
+
+  @override
+  String get tableQuickSize => '快速尺寸';
+
+  @override
+  String get tableCustomSize => '自定义尺寸';
+
+  @override
+  String get tableRows => '行';
+
+  @override
+  String get tableColumns => '列';
+
+  @override
+  String get tableHeaderRow => '标题行';
+
+  @override
+  String tableSize(int rows, int columns) {
+    return '$rows × $columns';
+  }
+
+  @override
+  String tableCell(int row, int column) {
+    return '第 $row 行，第 $column 列';
+  }
+
+  @override
+  String get tableUnsupported => '无法安全显示此表格或嵌入内容';
+
+  @override
+  String tableMoreRows(int count) {
+    return '+$count 行';
+  }
+
+  @override
+  String get insertRowAbove => '在上方插入行';
+
+  @override
+  String get insertRowBelow => '在下方插入行';
+
+  @override
+  String get deleteRow => '删除行';
+
+  @override
+  String get insertColumnBefore => '在前面插入列';
+
+  @override
+  String get insertColumnAfter => '在后面插入列';
+
+  @override
+  String get deleteColumn => '删除列';
+
+  @override
+  String get deleteTable => '删除表格';
+
+  @override
+  String tableRowsLimit(int count) {
+    return '最多 $count 行';
+  }
+
+  @override
+  String tableColumnsLimit(int count) {
+    return '最多 $count 列';
+  }
 }

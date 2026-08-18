@@ -13,8 +13,10 @@ import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
+import 'package:better_keep/pages/note_editor/table/note_table_embed.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_document_projection.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/state.dart';
@@ -451,7 +453,7 @@ class _NoteCardState extends State<NoteCard>
   Document? _createTruncatedDocument(Document? doc, {int maxChars = 500}) {
     if (doc == null) return null;
 
-    final plainText = doc.toPlainText();
+    final plainText = NoteDocumentProjection.toPlainText(doc);
     if (plainText.length <= maxChars) return doc;
 
     // Iterate through Delta operations preserving attributes
@@ -1396,77 +1398,89 @@ class _NoteCardState extends State<NoteCard>
                                 backgroundColor: noteColor,
                                 secondaryColor: secondaryColor,
                               ),
-                              embedBuilders: kIsWeb
-                                  ? FlutterQuillEmbeds.editorWebBuilders()
-                                  : FlutterQuillEmbeds.editorBuilders(
-                                      imageEmbedConfig: QuillEditorImageEmbedConfig(
-                                        imageProviderBuilder: (context, imageUrl) {
-                                          if (imageUrl.startsWith('http://') ||
-                                              imageUrl.startsWith('https://')) {
-                                            return NetworkImage(imageUrl);
-                                          } else if (imageUrl.startsWith(
-                                            'data:image/',
-                                          )) {
-                                            // Check cache first
-                                            if (_base64ImageCache.containsKey(
-                                              imageUrl,
+                              embedBuilders: [
+                                ...(kIsWeb
+                                    ? FlutterQuillEmbeds.editorWebBuilders()
+                                    : FlutterQuillEmbeds.editorBuilders(
+                                        imageEmbedConfig: QuillEditorImageEmbedConfig(
+                                          imageProviderBuilder: (context, imageUrl) {
+                                            if (imageUrl.startsWith(
+                                                  'http://',
+                                                ) ||
+                                                imageUrl.startsWith(
+                                                  'https://',
+                                                )) {
+                                              return NetworkImage(imageUrl);
+                                            } else if (imageUrl.startsWith(
+                                              'data:image/',
                                             )) {
-                                              return _base64ImageCache[imageUrl];
-                                            }
-                                            try {
-                                              final regex = RegExp(
-                                                r'^data:image/[^;]+;base64,(.+)$',
-                                              );
-                                              final match = regex.firstMatch(
+                                              // Check cache first
+                                              if (_base64ImageCache.containsKey(
                                                 imageUrl,
-                                              );
-                                              if (match != null) {
-                                                final base64Data = match.group(
-                                                  1,
-                                                )!;
-                                                final bytes = base64Decode(
-                                                  base64Data,
-                                                );
-                                                final image = MemoryImage(
-                                                  bytes,
-                                                );
-                                                // Cache with size limit
-                                                if (_base64ImageCache.length >=
-                                                    _maxImageCacheSize) {
-                                                  _base64ImageCache.remove(
-                                                    _base64ImageCache
-                                                        .keys
-                                                        .first,
-                                                  );
-                                                }
-                                                _base64ImageCache[imageUrl] =
-                                                    image;
-                                                return image;
+                                              )) {
+                                                return _base64ImageCache[imageUrl];
                                               }
-                                            } catch (e) {
-                                              AppLogger.error(
-                                                '[NoteCard] Failed to decode data URL',
-                                                e,
-                                              );
+                                              try {
+                                                final regex = RegExp(
+                                                  r'^data:image/[^;]+;base64,(.+)$',
+                                                );
+                                                final match = regex.firstMatch(
+                                                  imageUrl,
+                                                );
+                                                if (match != null) {
+                                                  final base64Data = match
+                                                      .group(1)!;
+                                                  final bytes = base64Decode(
+                                                    base64Data,
+                                                  );
+                                                  final image = MemoryImage(
+                                                    bytes,
+                                                  );
+                                                  // Cache with size limit
+                                                  if (_base64ImageCache
+                                                          .length >=
+                                                      _maxImageCacheSize) {
+                                                    _base64ImageCache.remove(
+                                                      _base64ImageCache
+                                                          .keys
+                                                          .first,
+                                                    );
+                                                  }
+                                                  _base64ImageCache[imageUrl] =
+                                                      image;
+                                                  return image;
+                                                }
+                                              } catch (e) {
+                                                AppLogger.error(
+                                                  '[NoteCard] Failed to decode data URL',
+                                                  e,
+                                                );
+                                              }
                                             }
-                                          }
-                                          return null;
-                                        },
-                                        imageErrorWidgetBuilder:
-                                            (context, error, stackTrace) {
-                                              return Container(
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                child: Icon(
-                                                  Icons.broken_image_outlined,
-                                                  size: 14,
-                                                  color: Colors.grey,
-                                                ),
-                                              );
-                                            },
-                                      ),
-                                    ),
+                                            return null;
+                                          },
+                                          imageErrorWidgetBuilder:
+                                              (context, error, stackTrace) {
+                                                return Container(
+                                                  padding: const EdgeInsets.all(
+                                                    4,
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.broken_image_outlined,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
+                                                );
+                                              },
+                                        ),
+                                      )),
+                                NoteTableEmbedBuilder(
+                                  parentColor: noteColor,
+                                  presentation: NoteTablePresentation.card,
+                                ),
+                              ],
+                              unknownEmbedBuilder:
+                                  const UnknownNoteEmbedBuilder(),
                             ),
                           ),
                         ),

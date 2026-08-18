@@ -3,10 +3,16 @@ import 'dart:convert';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/note_recording.dart';
+import 'package:better_keep/models/note_table.dart';
+import 'package:better_keep/config.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/note_document_projection.dart';
+import 'package:better_keep/services/note_table_codec.dart';
+import 'package:better_keep/services/note_table_markdown_codec.dart';
 import 'package:better_keep/utils/image_compressor.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/quill_config.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
@@ -35,8 +41,18 @@ class MarkdownImportService {
     // Create a new note
     final note = Note(title: extractedTitle);
 
+    final tableExtraction = enableMarkdownTableImport
+        ? NoteTableMarkdownCodec.extract(markdownContent)
+        : NoteTableMarkdownExtraction(
+            markdown: markdownContent,
+            tables: const {},
+          );
+
     // Process the markdown (HTML conversion, header normalization, etc.)
-    final processedContent = await _processMarkdown(markdownContent, note);
+    final processedContent = await _processMarkdown(
+      tableExtraction.markdown,
+      note,
+    );
 
     // Process images for inline embedding
     final imageResult = await _processImagesForInline(processedContent);
@@ -45,9 +61,12 @@ class MarkdownImportService {
     final delta = _markdownToQuillDelta(
       imageResult.markdown,
       imageResult.imageMap,
+      tableExtraction.tables,
     );
     note.content = json.encode(delta);
-    note.plainText = _extractPlainText(imageResult.markdown);
+    note.plainText = NoteDocumentProjection.toPlainText(
+      documentFromJsonSafe(delta),
+    );
 
     // Save the note
     await note.save();
@@ -133,6 +152,21 @@ class MarkdownImportService {
   /// Note: <img> tags are preserved and handled separately by _processImagesForInline
   static String _convertHtmlToText(String html) {
     String result = html;
+
+    // Stage two converts supported tables before this point. Keep any table
+    // that was deliberately left unsupported as literal, readable source.
+    final tablePreserveMap = <String, String>{};
+    if (enableMarkdownTableImport) {
+      var tableIndex = 0;
+      result = result.replaceAllMapped(
+        RegExp(r'<table\b[^>]*>[\s\S]*?</table>', caseSensitive: false),
+        (match) {
+          final marker = '{{PRESERVED_TABLE_SOURCE_${tableIndex++}}}';
+          tablePreserveMap[marker] = match.group(0)!;
+          return marker;
+        },
+      );
+    }
 
     // First, preserve <a><img></a> patterns as a unit (multiline support)
     // These will be processed later by _processImagesForInline
@@ -253,6 +287,10 @@ class MarkdownImportService {
         .replaceAll('&quot;', '"')
         .replaceAll('&#39;', "'")
         .replaceAll('&nbsp;', ' ');
+
+    tablePreserveMap.forEach((marker, original) {
+      result = result.replaceAll(marker, original);
+    });
 
     return result;
   }
@@ -693,6 +731,7 @@ class MarkdownImportService {
   static List<Map<String, dynamic>> _markdownToQuillDelta(
     String markdown,
     Map<String, String> imageMap,
+    Map<String, NoteTable> tables,
   ) {
     final delta = <Map<String, dynamic>>[];
 
@@ -716,6 +755,14 @@ class MarkdownImportService {
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
+
+      final table = NoteTableMarkdownCodec.tableForPlaceholder(line, tables);
+      if (table != null) {
+        delta.add({'insert': NoteTableCodec.encodeInsert(table)});
+        delta.add({'insert': '\n'});
+        lastWasHeader = false;
+        continue;
+      }
 
       // Check for code block fence
       if (line.trim().startsWith('```')) {
@@ -1002,25 +1049,6 @@ class MarkdownImportService {
     }
 
     return segments.isEmpty ? [_TextSegment(text: text)] : segments;
-  }
-
-  /// Extract plain text from processed markdown
-  static String _extractPlainText(String markdown) {
-    String text = markdown;
-
-    // Remove markdown formatting
-    text = text.replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1');
-    text = text.replaceAll(RegExp(r'__(.+?)__'), r'$1');
-    text = text.replaceAll(RegExp(r'\*(.+?)\*'), r'$1');
-    text = text.replaceAll(RegExp(r'_(.+?)_'), r'$1');
-    text = text.replaceAll(RegExp(r'`([^`]+)`'), r'$1');
-    text = text.replaceAll(RegExp(r'\[([^\]]+)\]\([^)]+\)'), r'$1');
-    text = text.replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '');
-    text = text.replaceAll(RegExp(r'^\s*[-*+]\s', multiLine: true), '');
-    text = text.replaceAll(RegExp(r'^\s*\d+\.\s', multiLine: true), '');
-    text = text.replaceAll(RegExp(r'^>\s*', multiLine: true), '');
-
-    return text.trim();
   }
 }
 

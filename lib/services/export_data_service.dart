@@ -9,6 +9,8 @@ import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/note_table_codec.dart';
+import 'package:better_keep/services/note_table_markdown_codec.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
@@ -665,6 +667,23 @@ class ExportDataService {
           }
         }
       } else if (insert is Map) {
+        final table = NoteTableCodec.tryDecodeInsert(insert);
+        if (table != null) {
+          if (currentLine.isNotEmpty || pendingLineAttributes != null) {
+            _writeMarkdownLine(
+              buffer,
+              currentLine,
+              pendingLineAttributes,
+              noteId,
+            );
+            currentLine = '';
+            pendingLineAttributes = null;
+          }
+          buffer
+            ..writeln(NoteTableMarkdownCodec.encode(table))
+            ..writeln();
+          continue;
+        }
         // Handle embeds (images, videos, etc.)
         if (insert.containsKey('image')) {
           final imageSrc = insert['image'] as String;

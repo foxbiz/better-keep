@@ -1,3 +1,6 @@
+import 'package:better_keep/config.dart';
+import 'package:better_keep/services/note_table_codec.dart';
+import 'package:better_keep/services/note_table_markdown_codec.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 /// Utility class for converting markdown to Quill Delta format
@@ -7,9 +10,12 @@ class MarkdownConverter {
   /// Returns a list of delta operations that can be used to create a Quill Document
   static List<Map<String, dynamic>> markdownToQuillDelta(String markdown) {
     final delta = <Map<String, dynamic>>[];
+    final extraction = enableMarkdownTableImport
+        ? NoteTableMarkdownCodec.extract(markdown)
+        : NoteTableMarkdownExtraction(markdown: markdown, tables: const {});
 
     // Preprocess: join multiline links [text\nmore text](url) into single line
-    String processed = markdown;
+    String processed = extraction.markdown;
     processed = processed.replaceAllMapped(
       RegExp(r'\[([^\]]+)\]\(([^)\s]+)\)', multiLine: true),
       (m) {
@@ -28,6 +34,17 @@ class MarkdownConverter {
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
+
+      final table = NoteTableMarkdownCodec.tableForPlaceholder(
+        line,
+        extraction.tables,
+      );
+      if (table != null) {
+        delta.add({'insert': NoteTableCodec.encodeInsert(table)});
+        delta.add({'insert': '\n'});
+        lastWasHeader = false;
+        continue;
+      }
 
       // Check for code block fence
       if (line.trim().startsWith('```')) {

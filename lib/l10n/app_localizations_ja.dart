@@ -3551,4 +3551,74 @@ class AppLocalizationsJa extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count 件を置換しました';
   }
+
+  @override
+  String get table => '表';
+
+  @override
+  String get insertTable => '表を挿入';
+
+  @override
+  String get tableQuickSize => 'クイックサイズ';
+
+  @override
+  String get tableCustomSize => 'カスタムサイズ';
+
+  @override
+  String get tableRows => '行';
+
+  @override
+  String get tableColumns => '列';
+
+  @override
+  String get tableHeaderRow => 'ヘッダー行';
+
+  @override
+  String tableSize(int rows, int columns) {
+    return '$rows × $columns';
+  }
+
+  @override
+  String tableCell(int row, int column) {
+    return '$row 行 $column 列';
+  }
+
+  @override
+  String get tableUnsupported => 'この表または埋め込みコンテンツを安全に表示できません';
+
+  @override
+  String tableMoreRows(int count) {
+    return '他 $count 行';
+  }
+
+  @override
+  String get insertRowAbove => '上に行を挿入';
+
+  @override
+  String get insertRowBelow => '下に行を挿入';
+
+  @override
+  String get deleteRow => '行を削除';
+
+  @override
+  String get insertColumnBefore => '前に列を挿入';
+
+  @override
+  String get insertColumnAfter => '後に列を挿入';
+
+  @override
+  String get deleteColumn => '列を削除';
+
+  @override
+  String get deleteTable => '表を削除';
+
+  @override
+  String tableRowsLimit(int count) {
+    return '最大 $count 行';
+  }
+
+  @override
+  String tableColumnsLimit(int count) {
+    return '最大 $count 列';
+  }
 }

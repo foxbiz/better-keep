@@ -15,6 +15,7 @@ import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/legacy_sketch_migration_service.dart';
 import 'package:better_keep/services/note_share_service.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:better_keep/services/note_document_projection.dart';
 import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/sketch_preview_repair_service.dart';
@@ -468,7 +469,9 @@ class Note extends BaseModel<Note> {
     if (_locked) {
       return currentAppLocalizations().lockedNoteReminder;
     } else if (content != null) {
-      var plainText = document?.toPlainText() ?? '';
+      var plainText = document == null
+          ? ''
+          : NoteDocumentProjection.toPlainText(document!);
       if (plainText.length > 240) {
         plainText = '${plainText.substring(0, 240)}...';
       }
@@ -2851,7 +2854,10 @@ class Note extends BaseModel<Note> {
 
     if (!_locked) {
       try {
-        plainTextToSave = document?.toPlainText() ?? '';
+        final currentDocument = document;
+        plainTextToSave = currentDocument == null
+            ? ''
+            : NoteDocumentProjection.toPlainText(currentDocument);
         plainText = plainTextToSave;
       } catch (e) {
         plainTextToSave = '';
@@ -2983,7 +2989,10 @@ class Note extends BaseModel<Note> {
   }
 
   Map<String, dynamic> toJson() {
-    final plainTextValue = _locked ? '' : (document?.toPlainText() ?? '');
+    final currentDocument = document;
+    final plainTextValue = _locked || currentDocument == null
+        ? ''
+        : NoteDocumentProjection.toPlainText(currentDocument);
 
     return {
       'id': id,

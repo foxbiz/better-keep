@@ -3683,4 +3683,75 @@ class AppLocalizationsId extends AppLocalizations {
   String replacedOccurrences(int count) {
     return 'Mengganti $count kemunculan';
   }
+
+  @override
+  String get table => 'Tabel';
+
+  @override
+  String get insertTable => 'Sisipkan tabel';
+
+  @override
+  String get tableQuickSize => 'Ukuran cepat';
+
+  @override
+  String get tableCustomSize => 'Ukuran khusus';
+
+  @override
+  String get tableRows => 'Baris';
+
+  @override
+  String get tableColumns => 'Kolom';
+
+  @override
+  String get tableHeaderRow => 'Baris header';
+
+  @override
+  String tableSize(int rows, int columns) {
+    return '$rows × $columns';
+  }
+
+  @override
+  String tableCell(int row, int column) {
+    return 'Baris $row, kolom $column';
+  }
+
+  @override
+  String get tableUnsupported =>
+      'Tabel atau konten tersemat ini tidak dapat ditampilkan dengan aman';
+
+  @override
+  String tableMoreRows(int count) {
+    return '+$count baris lainnya';
+  }
+
+  @override
+  String get insertRowAbove => 'Sisipkan baris di atas';
+
+  @override
+  String get insertRowBelow => 'Sisipkan baris di bawah';
+
+  @override
+  String get deleteRow => 'Hapus baris';
+
+  @override
+  String get insertColumnBefore => 'Sisipkan kolom sebelum';
+
+  @override
+  String get insertColumnAfter => 'Sisipkan kolom setelah';
+
+  @override
+  String get deleteColumn => 'Hapus kolom';
+
+  @override
+  String get deleteTable => 'Hapus tabel';
+
+  @override
+  String tableRowsLimit(int count) {
+    return 'Maksimum $count baris';
+  }
+
+  @override
+  String tableColumnsLimit(int count) {
+    return 'Maksimum $count kolom';
+  }
 }
