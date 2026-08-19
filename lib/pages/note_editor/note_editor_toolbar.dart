@@ -179,7 +179,11 @@ class NoteEditorToolbar extends StatelessWidget {
             controller: controller,
             readOnly: readOnly,
           ),
-        LinkButton(controller: controller, readOnly: readOnly),
+        LinkButton(
+          controller: controller,
+          focusNode: focusNode,
+          readOnly: readOnly,
+        ),
         if (showBlockLists) ...[
           _styleButton(Attribute.ul),
           _styleButton(Attribute.ol),

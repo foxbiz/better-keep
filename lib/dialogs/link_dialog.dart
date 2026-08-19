@@ -106,6 +106,7 @@ class _LinkDialogState extends State<_LinkDialog> {
     final theme = Theme.of(context);
 
     return AlertDialog(
+      actionsAlignment: MainAxisAlignment.end,
       title: Text(
         widget.isEditingExisting ? context.l10n.editLink : context.l10n.addLink,
       ),
@@ -152,7 +153,6 @@ class _LinkDialogState extends State<_LinkDialog> {
               style: TextStyle(color: theme.colorScheme.error),
             ),
           ),
-        const Spacer(),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(context.l10n.cancel),

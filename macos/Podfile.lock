@@ -14,7 +14,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/whisper_flutter_new/macos
 
 SPEC CHECKSUMS:
-  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
   whisper_flutter_new: d73daf7f6977167139555f841bd5b6bfbf4f9e3b
 
 PODFILE CHECKSUM: ab9556631431c976fd3add6a48598df573ae6f9b

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/components/logo.dart';
+import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
 import 'package:better_keep/dialogs/attachment_commit_dialog.dart';
 import 'package:better_keep/dialogs/share_note_dialog.dart';
@@ -18,6 +19,7 @@ import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/audio_content_utils.dart';
@@ -29,11 +31,13 @@ import 'package:path/path.dart' as path;
 import 'package:better_keep/components/animated_icon.dart';
 import 'package:better_keep/dialogs/delete_dialog.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/pages/home/notes.dart';
 import 'package:better_keep/pages/home/sidebar.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/pages/user_page.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/reminder_navigation_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
@@ -104,6 +108,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
     AppState.subscribe("show_notes", _showNotesListener);
     AppState.subscribe("selected_notes", _selectedNotesListener);
+    NoteSortService().snapshots.addListener(_sortStateListener);
 
     // Listen for pending device approvals
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
@@ -260,6 +265,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   }
 
   Future<void> _checkPendingApprovals() async {
+    if (!FirebaseBackend.isConfigured) return;
     final pendingApprovals =
         E2EEService.instance.deviceManager.pendingApprovals.value;
     final isFirst = await E2EEService.instance.deviceManager.isFirstDevice();
@@ -327,6 +333,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     _searchFocusNode.dispose();
     AppState.unsubscribe("show_notes", _showNotesListener);
     AppState.unsubscribe("selected_notes", _selectedNotesListener);
+    NoteSortService().snapshots.removeListener(_sortStateListener);
     E2EEService.instance.deviceManager.pendingApprovals.removeListener(
       _onPendingApprovalsChanged,
     );
@@ -496,6 +503,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     setState(() {});
   }
 
+  void _sortStateListener() {
+    if (mounted) setState(() {});
+  }
+
   void _selectedNotesListener(dynamic notes) {
     setState(() {
       _selectionMode = (notes as List).isNotEmpty;
@@ -570,23 +581,34 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
     if (AppState.showNotes == NoteType.all) {
       return _buildSearchField();
-    } else if (_isBigScreen) {
-      return Text("");
     }
 
-    if (AppState.showNotes == NoteType.archived) {
-      return Text(context.l10n.archive);
+    final systemTitle = _systemTitle;
+    if (systemTitle != null) {
+      return Text(systemTitle, maxLines: 1, overflow: TextOverflow.ellipsis);
     }
 
-    if (AppState.showNotes == NoteType.trashed) {
-      return Text(context.l10n.trash);
-    }
-
-    if (AppState.showNotes == NoteType.reminder) {
-      return Text(context.l10n.reminders);
-    }
+    if (_isBigScreen) return const SizedBox.shrink();
 
     return Text(appLabel);
+  }
+
+  String? get _systemTitle => switch (AppState.showNotes) {
+    NoteType.archived => context.l10n.archive,
+    NoteType.trashed => context.l10n.trash,
+    NoteType.reminder => context.l10n.reminders,
+    _ => null,
+  };
+
+  Widget _buildSystemDisplayOptionsButton(String title) {
+    final noteType = AppState.showNotes;
+    return NoteDisplayOptionsButton(
+      showViewOptions: false,
+      orderContext: NoteOrderContext.system(noteType.name),
+      contextLabel: title,
+      onSortChanged: (mode) =>
+          _notesKey.currentState?.handleSortModeChanged(mode),
+    );
   }
 
   List<Widget> _buildActions() {
@@ -598,8 +620,9 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       return [];
     }
 
+    final systemTitle = _systemTitle;
     if ([NoteType.archived, NoteType.reminder].contains(AppState.showNotes)) {
-      return [];
+      return [_buildSystemDisplayOptionsButton(systemTitle!)];
     }
 
     bool showRefresh = false;
@@ -637,6 +660,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           },
           icon: Icon(Icons.delete_forever),
         ),
+        _buildSystemDisplayOptionsButton(systemTitle!),
       ];
     }
 

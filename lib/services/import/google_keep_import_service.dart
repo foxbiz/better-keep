@@ -19,6 +19,7 @@ import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:better_keep/utils/quill_config.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
@@ -118,6 +119,11 @@ class GoogleKeepImportService {
     var skipped = 0;
     for (final draft in parsed.notes) {
       cancellationToken.throwIfCancelled();
+      if (_isEmptyDraft(draft)) {
+        skipped++;
+        await draft.dispose();
+        continue;
+      }
       if (options.skipDuplicates &&
           (existing.contains(draft.fingerprint) ||
               !seen.add(draft.fingerprint))) {
@@ -167,6 +173,11 @@ class GoogleKeepImportService {
     );
     return report;
   }
+
+  bool _isEmptyDraft(KeepNoteDraft draft) =>
+      draft.title.isEmpty &&
+      draft.plainText.isEmpty &&
+      draft.attachments.isEmpty;
 }
 
 class DatabaseKeepImportPersistence implements KeepImportPersistence {
@@ -185,7 +196,20 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
 
   @override
   Future<Set<String>> existingFingerprints(ImportSource source) =>
-      ImportFingerprintStore.getForSource(AppState.db, source.name);
+      AppState.db.transaction((transaction) async {
+        await transaction.delete(
+          ImportFingerprintStore.table,
+          where: '''
+            source = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM ${Note.model}
+              WHERE ${Note.model}.id = ${ImportFingerprintStore.table}.note_id
+            )
+          ''',
+          whereArgs: [source.name],
+        );
+        return ImportFingerprintStore.getForSource(transaction, source.name);
+      });
 
   @override
   Future<KeepPersistenceResult> commit(
@@ -327,7 +351,7 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
           syncId: newId(),
           title: draft.title,
           labels: normalizedLabels.join(','),
-          content: jsonEncode(draft.delta),
+          content: _encodeContent(draft),
           plainText: draft.plainText,
           pinned: draft.pinned,
           archived: draft.archived,
@@ -433,6 +457,20 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
       }
       rethrow;
     }
+  }
+
+  String _encodeContent(KeepNoteDraft draft) {
+    final delta = <Map<String, Object?>>[];
+    if (draft.title.isNotEmpty) {
+      delta
+        ..add({'insert': draft.title})
+        ..add({
+          'insert': '\n',
+          'attributes': {'header': 1},
+        });
+    }
+    delta.addAll(draft.delta);
+    return jsonEncode(documentFromJsonSafe(delta).toDelta().toJson());
   }
 
   bool _isImage(KeepAttachmentDraft attachment) {

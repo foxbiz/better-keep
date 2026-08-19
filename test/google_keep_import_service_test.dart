@@ -7,6 +7,7 @@ import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/import/google_keep_import_service.dart';
 import 'package:better_keep/services/import/google_keep_takeout_parser.dart';
 import 'package:better_keep/services/import/import_fingerprint_store.dart';
@@ -297,6 +298,62 @@ void main() {
   });
 
   group('GoogleKeepImportService', () {
+    test('skips only notes without a title, text, or attachments', () async {
+      final persistence = _FakePersistence();
+      final service = GoogleKeepImportService(persistence: persistence);
+      final archive = _zip([
+        _jsonEntry('Keep/Empty.json', {
+          'title': '',
+          'textContent': '',
+          'isPinned': false,
+        }),
+        _jsonEntry('Keep/Title only.json', {
+          'title': 'Title only',
+          'textContent': '',
+          'isPinned': false,
+        }),
+        _jsonEntry('Keep/Text only.json', {
+          'title': '',
+          'textContent': 'Text only',
+          'isPinned': false,
+        }),
+        _jsonEntry('Keep/Whitespace text.json', {
+          'title': '',
+          'textContent': ' ',
+          'isPinned': false,
+        }),
+        _jsonEntry('Keep/Attachment only.json', {
+          'title': '',
+          'textContent': '',
+          'isPinned': false,
+          'attachments': [
+            {'filePath': 'photo.png', 'mimetype': 'image/png'},
+          ],
+        }),
+        KeepArchiveEntry(
+          path: 'Keep/photo.png',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        ),
+      ]);
+
+      final report = await service.importZip(KeepArchiveInput.memory(archive));
+
+      expect(report.discovered, 5);
+      expect(report.imported, 4);
+      expect(report.skipped, 1);
+      expect(report.issues, isEmpty);
+      expect(persistence.commitCalls, 1);
+      expect(
+        persistence.committed.map((draft) => draft.sourcePath),
+        containsAll([
+          'Keep/Title only.json',
+          'Keep/Text only.json',
+          'Keep/Whitespace text.json',
+          'Keep/Attachment only.json',
+        ]),
+      );
+    });
+
     test(
       'skips persisted and repeated fingerprints before committing',
       () async {
@@ -447,17 +504,128 @@ void main() {
     });
   });
 
+  test(
+    're-imports a fingerprint only after its note is permanently deleted',
+    () async {
+      final database = await _openImportDatabase();
+      AppState.db = database;
+      addTearDown(database.close);
+      _disablePushSyncForTest();
+      var timeOffset = 0;
+      final persistence = DatabaseKeepImportPersistence(
+        now: () =>
+            DateTime.utc(2026, 1, 1).add(Duration(milliseconds: timeOffset++)),
+        newId: _sequentialIds(),
+      );
+      final service = GoogleKeepImportService(persistence: persistence);
+      final archive = _zip([
+        _jsonEntry('Keep/Retry.json', {
+          'title': 'Retry import',
+          'textContent': 'Body',
+          'isPinned': false,
+        }),
+      ]);
+      Future<KeepImportReport> importArchive() =>
+          service.importZip(KeepArchiveInput.memory(archive));
+
+      final first = await importArchive();
+      expect(first.imported, 1);
+      expect(first.skipped, 0);
+      final firstNoteId = Sqflite.firstIntValue(
+        await database.rawQuery('SELECT id FROM ${Note.model}'),
+      )!;
+
+      final liveRetry = await importArchive();
+      expect(liveRetry.imported, 0);
+      expect(liveRetry.skipped, 1);
+
+      expect(
+        await database.delete(
+          Note.model,
+          where: 'id = ?',
+          whereArgs: [firstNoteId],
+        ),
+        1,
+      );
+      expect(await database.query(ImportFingerprintStore.table), hasLength(1));
+
+      final deletedRetry = await importArchive();
+      expect(deletedRetry.imported, 1);
+      expect(deletedRetry.skipped, 0);
+      final noteRows = await database.query(Note.model);
+      final fingerprintRows = await database.query(
+        ImportFingerprintStore.table,
+      );
+      expect(noteRows, hasLength(1));
+      expect(fingerprintRows, hasLength(1));
+      final recreatedNoteId = noteRows.single['id'] as int;
+      expect(recreatedNoteId, isNot(firstNoteId));
+      expect(fingerprintRows.single['note_id'], recreatedNoteId);
+
+      await database.update(
+        Note.model,
+        {'trashed': 1},
+        where: 'id = ?',
+        whereArgs: [recreatedNoteId],
+      );
+      final trashedRetry = await importArchive();
+      expect(trashedRetry.imported, 0);
+      expect(trashedRetry.skipped, 1);
+    },
+  );
+
+  test(
+    'database persistence stores canonical imported title content',
+    () async {
+      final database = await _openImportDatabase();
+      AppState.db = database;
+      addTearDown(database.close);
+      _disablePushSyncForTest();
+      final persistence = DatabaseKeepImportPersistence(
+        now: () => DateTime.utc(2026, 1, 1),
+        newId: _sequentialIds(),
+      );
+
+      final result = await persistence.commit(
+        [
+          _draft(fingerprint: 'titled', title: 'Imported title'),
+          _draft(fingerprint: 'titleless', title: ''),
+        ],
+        source: ImportSource.googleKeepTakeout,
+        cancellationToken: KeepImportCancellationToken(),
+      );
+
+      expect(result.imported, 2);
+      final rows = await database.query(Note.model);
+      final notes = await Future.wait(rows.map(Note.fromJsonAsync));
+      final titled = notes.singleWhere(
+        (note) => note.title == 'Imported title',
+      );
+      expect(
+        titled.content,
+        jsonEncode([
+          {'insert': 'Imported title'},
+          {
+            'insert': '\n',
+            'attributes': {'header': 1},
+          },
+          {'insert': 'Body\n'},
+        ]),
+      );
+      final titleless = notes.singleWhere((note) => note.title == '');
+      expect(
+        titleless.content,
+        jsonEncode([
+          {'insert': 'Body\n'},
+        ]),
+      );
+    },
+  );
+
   test('cancellation during database saving rolls back every row', () async {
-    final database = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-    );
+    final database = await _openImportDatabase();
     AppState.db = database;
     addTearDown(database.close);
-    await Note.createTable(database);
-    await Label.createTable(database);
-    await NoteSyncTrack.createTable(database);
-    await LabelSyncTrack.createTable(database);
-    await ImportFingerprintStore.createTable(database);
 
     final token = KeepImportCancellationToken();
     final persistence = DatabaseKeepImportPersistence(
@@ -563,12 +731,13 @@ void _setFirstZipHeaderUint32(
 
 KeepNoteDraft _draft({
   String fingerprint = 'fingerprint',
+  String? title,
   List<String> labels = const [],
   List<KeepAttachmentDraft> attachments = const [],
 }) => KeepNoteDraft(
   sourcePath: 'Keep/note.json',
   fingerprint: fingerprint,
-  title: fingerprint,
+  title: title ?? fingerprint,
   plainText: 'Body',
   delta: const [
     {'insert': 'Body'},
@@ -583,6 +752,22 @@ KeepNoteDraft _draft({
   updatedAt: DateTime.utc(2025, 1, 2),
   attachments: attachments,
 );
+
+Future<Database> _openImportDatabase() async {
+  final database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+  await Note.createTable(database);
+  await Label.createTable(database);
+  await NoteSyncTrack.createTable(database);
+  await LabelSyncTrack.createTable(database);
+  await ImportFingerprintStore.createTable(database);
+  return database;
+}
+
+void _disablePushSyncForTest() {
+  final previousSessionInvalid = AuthService.sessionInvalid.value;
+  AuthService.sessionInvalid.value = true;
+  addTearDown(() => AuthService.sessionInvalid.value = previousSessionInvalid);
+}
 
 String Function() _sequentialIds() {
   var next = 0;

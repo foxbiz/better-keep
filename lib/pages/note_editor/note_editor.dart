@@ -37,6 +37,7 @@ import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/ui/paywall/paywall.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
+import 'package:better_keep/utils/quill_vertical_selection_action.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -51,6 +52,7 @@ import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -141,6 +143,7 @@ class _NoteEditorState extends State<NoteEditor>
   late FocusNode _titleFocusNode;
   late TextEditingController _titleController;
   late QuillController _controller;
+  QuillVerticalSelectionAction? _verticalSelectionAction;
   late final NoteFindController _findController;
   late Color _backgroundColor;
   int _noteSearchRevision = 0;
@@ -231,6 +234,46 @@ class _NoteEditorState extends State<NoteEditor>
     return KeyEventResult.ignored;
   }
 
+  KeyEventResult? _handleEditorKey(KeyEvent event, Node? _) {
+    final action = _verticalSelectionAction;
+    if (action == null ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return null;
+    }
+
+    final keyboard = HardwareKeyboard.instance;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (keyboard.isAltPressed ||
+          keyboard.isControlPressed ||
+          keyboard.isMetaPressed ||
+          keyboard.isShiftPressed ||
+          _findController.isOpen ||
+          _checklistPromptController.state.isVisible) {
+        return null;
+      }
+      return action.dismissSelectionFromKeyboard()
+          ? KeyEventResult.handled
+          : null;
+    }
+
+    if (keyboard.isAltPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed) {
+      return null;
+    }
+    final forward = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowUp => false,
+      LogicalKeyboardKey.arrowDown => true,
+      _ => null,
+    };
+    if (forward == null) return null;
+    final handled = action.invokeFromKeyboard(
+      forward: forward,
+      extendSelection: keyboard.isShiftPressed,
+    );
+    return handled ? KeyEventResult.handled : null;
+  }
+
   /// Handles Enter key pressed in title field.
   /// Moves focus to the Quill content editor at the start.
   void _handleTitleEnterPressed() {
@@ -239,6 +282,46 @@ class _NoteEditorState extends State<NoteEditor>
       const TextSelection.collapsed(offset: 0),
       ChangeSource.local,
     );
+  }
+
+  void _focusEditorAtEnd() {
+    if (_note.readOnly || _note.trashed || !_focusNode.canRequestFocus) return;
+    final endOffset = _controller.document.length - 1;
+    _controller.updateSelection(
+      TextSelection.collapsed(offset: endOffset),
+      ChangeSource.local,
+    );
+    _focusNode.requestFocus();
+  }
+
+  GestureRecognizer? _buildDesktopLinkRecognizer(
+    Attribute attribute,
+    Leaf leaf,
+  ) {
+    if (attribute.key != Attribute.link.key) return null;
+    return TapGestureRecognizer()
+      ..onTapUp = (details) => _focusDesktopLink(details, leaf);
+  }
+
+  void _focusDesktopLink(TapUpDetails details, Leaf leaf) {
+    if (_note.readOnly || _note.trashed || !_focusNode.canRequestFocus) return;
+    final range = getLinkRange(leaf);
+    final editorState = _editorKey.currentState;
+    final tappedOffset = editorState == null
+        ? range.start
+        : editorState.renderEditor
+              .getPositionForOffset(details.globalPosition)
+              .offset;
+    final selectionOffset = tappedOffset
+        .clamp(range.start, range.end - 1)
+        .toInt();
+    final selection = TextSelection.collapsed(offset: selectionOffset);
+    final selectionChanged = _controller.selection != selection;
+    _controller.updateSelection(selection, ChangeSource.local);
+    _focusNode.requestFocus();
+    // updateSelection does not notify listeners when the caret was already at
+    // this offset, but a link click must still refresh the preview.
+    if (!selectionChanged) _didChangeSelection();
   }
 
   @override
@@ -309,6 +392,11 @@ class _NoteEditorState extends State<NoteEditor>
       readOnly: _note.readOnly || _note.trashed,
       document: document,
       selection: TextSelection.collapsed(offset: document.length - 1),
+    );
+    _verticalSelectionAction = QuillVerticalSelectionAction(
+      controller: _controller,
+      editorKey: _editorKey,
+      focusNode: _focusNode,
     );
     _findController = NoteFindController(
       snapshot: _captureFindSnapshot,
@@ -1460,6 +1548,7 @@ class _NoteEditorState extends State<NoteEditor>
     // Clear checkbox tracking state
     _bubbleUpdatedOffsets.clear();
     _checkboxService.invalidateCache();
+    _verticalSelectionAction?.dispose();
     _controller.removeListener(_didChangeSelection);
     _findController.removeListener(_onFindChanged);
     _findController.dispose();
@@ -1525,6 +1614,15 @@ class _NoteEditorState extends State<NoteEditor>
     final largeScreen = isBigScreen(context);
     final wideAppBar =
         MediaQuery.sizeOf(context).width >= bigScreenWidthThreshold;
+    final interceptDesktopLinkTaps =
+        !_note.readOnly &&
+        !_note.trashed &&
+        (switch (Theme.of(context).platform) {
+          TargetPlatform.linux ||
+          TargetPlatform.macOS ||
+          TargetPlatform.windows => true,
+          _ => false,
+        });
     Color backgroundColor = _backgroundColor == Colors.transparent
         ? Theme.of(context).colorScheme.surface
         : _backgroundColor;
@@ -1674,8 +1772,12 @@ class _NoteEditorState extends State<NoteEditor>
                     ),
                   ),
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: _NoteEditorScrollSurface(
+                      key: const ValueKey('note_editor_scroll_surface'),
                       controller: _quillScrollController,
+                      onTap: _note.readOnly || _note.trashed
+                          ? null
+                          : _focusEditorAtEnd,
                       child: Column(
                         children: [
                           NoteAttachmentsCarousel(
@@ -1780,6 +1882,18 @@ class _NoteEditorState extends State<NoteEditor>
                                       placeholder: context.l10n.startWriting,
                                       customLeadingBlockBuilder:
                                           customLeadingBlockBuilder,
+                                      onKeyPressed: _handleEditorKey,
+                                      customActions:
+                                          _verticalSelectionAction == null
+                                          ? null
+                                          : <Type, Action<Intent>>{
+                                              ExtendSelectionVerticallyToAdjacentLineIntent:
+                                                  _verticalSelectionAction!,
+                                            },
+                                      customRecognizerBuilder:
+                                          interceptDesktopLinkTaps
+                                          ? _buildDesktopLinkRecognizer
+                                          : null,
                                       textSpanBuilder:
                                           (
                                             context,
@@ -2475,7 +2589,7 @@ class _NoteEditorState extends State<NoteEditor>
     // Check current position (cursor is before this character)
     // This handles: [cursor]{text with link}
     if (position >= 0 && position < docLength) {
-      final styles = doc.collectStyle(position, 0);
+      final styles = doc.collectStyle(position, 1);
       final link = styles.attributes[Attribute.link.key]?.value;
       if (link != null) return link;
     }
@@ -2488,7 +2602,7 @@ class _NoteEditorState extends State<NoteEditor>
       // Check if the character before cursor is NOT whitespace
       final charBefore = plainText[posBefore];
       if (!_isWhitespace(charBefore)) {
-        final styles = doc.collectStyle(posBefore, 0);
+        final styles = doc.collectStyle(posBefore, 1);
         final link = styles.attributes[Attribute.link.key]?.value;
         if (link != null) return link;
       }
@@ -2564,6 +2678,7 @@ class _NoteEditorState extends State<NoteEditor>
     }
 
     return Material(
+      key: const ValueKey('note_editor_link_preview'),
       color: previewBgColor,
       child: Container(
         decoration: BoxDecoration(
@@ -3042,6 +3157,28 @@ class _NoteEditorState extends State<NoteEditor>
     if (_note.id == null || !await _enqueueSave()) return;
     await _note.moveToTrash();
     if (mounted) await _closeEditor();
+  }
+}
+
+class _NoteEditorScrollSurface extends StatelessWidget {
+  const _NoteEditorScrollSurface({
+    super.key,
+    required this.controller,
+    required this.onTap,
+    required this.child,
+  });
+
+  final ScrollController controller;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: onTap,
+      child: SingleChildScrollView(controller: controller, child: child),
+    );
   }
 }
 

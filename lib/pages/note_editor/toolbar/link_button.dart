@@ -5,12 +5,14 @@ import 'package:flutter_quill/flutter_quill.dart';
 
 class LinkButton extends StatefulWidget {
   final QuillController controller;
+  final FocusNode focusNode;
   final bool readOnly;
 
   const LinkButton({
     super.key,
-    required this.readOnly,
     required this.controller,
+    required this.focusNode,
+    required this.readOnly,
   });
 
   @override
@@ -81,38 +83,43 @@ class _LinkButtonState extends State<LinkButton> {
       isEditingExisting: isEditingExisting,
     );
 
-    if (result == null) return;
+    if (!mounted) return;
+    try {
+      if (result == null) return;
 
-    if (result.url == null) {
-      // Remove link - just clear the link attribute from existing text
-      if (isEditingExisting) {
-        final textLink = QuillTextLink(existingText, null);
-        textLink.submit(controller);
+      if (result.url == null) {
+        // Remove link - just clear the link attribute from existing text
+        if (isEditingExisting) {
+          final textLink = QuillTextLink(existingText, null);
+          textLink.submit(controller);
+        }
+        return;
       }
-      return;
-    }
 
-    if (hasSelection) {
-      // Convert selected text to link
-      controller.formatSelection(LinkAttribute(result.url));
-    } else if (isEditingExisting) {
-      // Update existing link
-      final textLink = QuillTextLink(result.text, result.url);
-      textLink.submit(controller);
-    } else {
-      // Insert new text with link at cursor position
-      final index = selection.baseOffset;
-      controller.document.insert(index, result.text);
-      controller.formatText(
-        index,
-        result.text.length,
-        LinkAttribute(result.url),
-      );
-      // Move cursor to end of inserted text
-      controller.updateSelection(
-        TextSelection.collapsed(offset: index + result.text.length),
-        ChangeSource.local,
-      );
+      if (hasSelection) {
+        // Convert selected text to link
+        controller.formatSelection(LinkAttribute(result.url));
+      } else if (isEditingExisting) {
+        // Update existing link
+        final textLink = QuillTextLink(result.text, result.url);
+        textLink.submit(controller);
+      } else {
+        // Insert new text with link at cursor position
+        final index = selection.baseOffset;
+        controller.document.insert(index, result.text);
+        controller.formatText(
+          index,
+          result.text.length,
+          LinkAttribute(result.url),
+        );
+        // Move cursor to end of inserted text
+        controller.updateSelection(
+          TextSelection.collapsed(offset: index + result.text.length),
+          ChangeSource.local,
+        );
+      }
+    } finally {
+      if (widget.focusNode.canRequestFocus) widget.focusNode.requestFocus();
     }
   }
 }

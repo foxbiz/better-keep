@@ -12,6 +12,12 @@ analyzer:
     - build/**
     - node_modules/**
     - "**/node_modules/**"
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   errors:
     experimental_member_use: ignore
 include: package:flutter_lints/flutter.yaml

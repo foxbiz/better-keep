@@ -198,7 +198,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                           showSortOptions: AppState.currentFolder != null,
                           contextForView: _contextForView,
                           contextLabel: _activeContextLabel,
-                          onSortChanged: _onSortModeChanged,
+                          onSortChanged: handleSortModeChanged,
                         ),
                       ],
                     ),
@@ -238,7 +238,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
             physics: const AlwaysScrollableScrollPhysics(),
             scrollDirection: Axis.vertical,
             slivers: [
-              if (!widget.searchMode && !_selectionMode)
+              if (!widget.searchMode &&
+                  !_selectionMode &&
+                  AppState.showNotes == NoteType.all)
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: _StickyHeaderDelegate(
@@ -247,40 +249,29 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          if (AppState.showNotes == NoteType.all) ...[
-                            Expanded(
-                              child: Labels(
-                                key: Key('labels_widget'),
-                                onSelect: (selectedLabel) async {
-                                  _scrollController.jumpTo(0.0);
-                                  _startLoading();
-                                  _notes = await Note.get(
-                                    AppState.showNotes,
-                                    selectedLabel.map((e) => e.name).toList(),
-                                  );
-                                  _stopLoading();
-                                  if (context.mounted) {
-                                    setState(() {});
-                                  }
-                                },
-                              ),
+                          Expanded(
+                            child: Labels(
+                              key: Key('labels_widget'),
+                              onSelect: (selectedLabel) async {
+                                _scrollController.jumpTo(0.0);
+                                _startLoading();
+                                _notes = await Note.get(
+                                  AppState.showNotes,
+                                  selectedLabel.map((e) => e.name).toList(),
+                                );
+                                _stopLoading();
+                                if (context.mounted) {
+                                  setState(() {});
+                                }
+                              },
                             ),
-                            NoteDisplayOptionsButton(
-                              orderContext: _activeOrderContext,
-                              contextForView: _contextForView,
-                              contextLabel: _activeContextLabel,
-                              onSortChanged: _onSortModeChanged,
-                            ),
-                          ] else ...[
-                            const Spacer(),
-                            NoteDisplayOptionsButton(
-                              showViewOptions: false,
-                              orderContext: _activeOrderContext,
-                              contextForView: _contextForView,
-                              contextLabel: _activeContextLabel,
-                              onSortChanged: _onSortModeChanged,
-                            ),
-                          ],
+                          ),
+                          NoteDisplayOptionsButton(
+                            orderContext: _activeOrderContext,
+                            contextForView: _contextForView,
+                            contextLabel: _activeContextLabel,
+                            onSortChanged: handleSortModeChanged,
+                          ),
                         ],
                       ),
                     ),
@@ -415,7 +406,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   void _stopLoading() {
     _updateShowLoaderTimeout?.cancel();
-    if (_showLoader) setState(() => _showLoader = false);
+    if (mounted && _showLoader) setState(() => _showLoader = false);
   }
 
   void _selectedNotesListener(dynamic payload) {
@@ -430,7 +421,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     setState(() {});
   }
 
-  void _onSortModeChanged(NoteSortMode mode) {
+  void handleSortModeChanged(NoteSortMode mode) {
     if (_activeReorderController != null) {
       unawaited(_cancelDrag());
     }

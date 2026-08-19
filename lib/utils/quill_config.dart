@@ -175,16 +175,18 @@ DefaultStyles buildQuillStyles({
   final codeBackgroundColor = isDarkBg
       ? Colors.white.withAlpha(20)
       : Colors.black.withAlpha(15);
+  final paragraphStyle = DefaultTextBlockStyle(
+    TextStyle(fontSize: 16, color: foregroundColor),
+    HorizontalSpacing.zero,
+    VerticalSpacing.zero,
+    VerticalSpacing.zero,
+    null,
+  );
 
   return DefaultStyles(
     color: foregroundColor,
-    paragraph: DefaultTextBlockStyle(
-      TextStyle(fontSize: 16, color: foregroundColor),
-      HorizontalSpacing.zero,
-      VerticalSpacing.zero,
-      VerticalSpacing.zero,
-      null,
-    ),
+    paragraph: paragraphStyle,
+    indent: paragraphStyle,
     h1: DefaultTextBlockStyle(
       (defaultStyles.h1?.style ?? TextStyle(fontSize: 28)).copyWith(
         color: foregroundColor,

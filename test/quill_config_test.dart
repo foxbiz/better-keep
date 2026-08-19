@@ -94,6 +94,20 @@ void main() {
       expect(styles.lists?.lineSpacing.bottom, 6);
     });
 
+    test('indented paragraphs do not inherit Flutter Quill spacing', () {
+      final styles = buildQuillStyles(
+        foregroundColor: Colors.black,
+        backgroundColor: Colors.white,
+        comfortableLists: true,
+      );
+
+      expect(styles.indent, same(styles.paragraph));
+      expect(styles.indent?.verticalSpacing, VerticalSpacing.zero);
+      expect(styles.indent?.lineSpacing, VerticalSpacing.zero);
+      expect(styles.lists?.style.height, 1.25);
+      expect(styles.lists?.lineSpacing.bottom, 6);
+    });
+
     test('includes code style with correct background', () {
       final darkStyles = buildQuillStyles(
         foregroundColor: Colors.white,
