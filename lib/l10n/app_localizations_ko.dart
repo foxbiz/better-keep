@@ -3563,4 +3563,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get matchAnySelectedLabelHint => '선택한 라벨이 하나 이상 포함된 메모를 표시합니다.';
+
+  @override
+  String createLabelConfirmation(String name) {
+    return '“$name” 라벨을 만들까요?';
+  }
+
+  @override
+  String createAndApplyLabelConfirmation(String name) {
+    return '“$name” 라벨을 만들고 이 메모에 추가할까요?';
+  }
+
+  @override
+  String get couldNotSaveLabel => '라벨을 저장하지 못했습니다. 다시 시도해 주세요.';
 }

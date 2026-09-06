@@ -3690,4 +3690,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get matchAnySelectedLabelHint =>
       'Show notes containing at least one selected label.';
+
+  @override
+  String createLabelConfirmation(String name) {
+    return 'Create “$name”?';
+  }
+
+  @override
+  String createAndApplyLabelConfirmation(String name) {
+    return 'Create “$name” and add it to this note?';
+  }
+
+  @override
+  String get couldNotSaveLabel => 'Couldn’t save label. Try again.';
 }

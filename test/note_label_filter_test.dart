@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/note_card.dart';
@@ -210,6 +211,136 @@ void main() {
   });
 
   for (final viewMode in [NoteViewMode.grid, NoteViewMode.list]) {
+    testWidgets(
+      '${viewMode.name} search shows read-only labels and restores editing',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        AppState.set('notes_view_mode', viewMode);
+        await _pumpNotes(tester, database, width: 300);
+        for (final name in ['2024', 'Работа']) {
+          final chip = find.widgetWithText(FilterChip, name);
+          await tester.ensureVisible(chip);
+          await tester.tap(chip);
+          await tester.pump();
+        }
+        await _waitFor(tester, () => _visibleIds(tester).length == 1);
+
+        await tester.pumpWidget(
+          _app(const Notes(searchMode: true, searchQuery: 'Note'), width: 180),
+        );
+        await tester.pumpAndSettle();
+        expect(_visibleIds(tester), {1});
+        expect(find.byType(FilterChip), findsNWidgets(2));
+        expect(find.widgetWithText(FilterChip, 'Личное'), findsNothing);
+        final close = find.byKey(const ValueKey('clear-label-filters-button'));
+        expect(close, findsNothing);
+        expect(find.byType(NoteDisplayOptionsButton), findsNothing);
+        for (final name in ['2024', 'Работа']) {
+          final chipFinder = find.widgetWithText(FilterChip, name);
+          await tester.ensureVisible(chipFinder);
+          await tester.pumpAndSettle();
+          final chip = tester.widget<FilterChip>(chipFinder);
+          expect(chip.selected, isTrue);
+          expect(chip.onSelected, isNull);
+          expect(chip.onDeleted, isNull);
+          expect(
+            tester
+                .getSemantics(chipFinder)
+                .getSemanticsData()
+                .hasAction(SemanticsAction.tap),
+            isFalse,
+          );
+          expect(
+            tester
+                .widgetList<Focus>(
+                  find.descendant(of: chipFinder, matching: find.byType(Focus)),
+                )
+                .every((focus) => !focus.canRequestFocus),
+            isTrue,
+          );
+          await tester.tap(chipFinder);
+          await tester.pump();
+          expect(AppState.filterLabels.toSet(), {'2024', 'Работа'});
+        }
+        final labels = find.byType(Labels);
+        final scroll = tester.state<ScrollableState>(
+          find.descendant(of: labels, matching: find.byType(Scrollable)),
+        );
+        expect(scroll.position.maxScrollExtent, greaterThan(0));
+        scroll.position.jumpTo(0);
+        await tester.pump();
+        await tester.drag(labels, const Offset(-150, 0));
+        await tester.pumpAndSettle();
+        expect(scroll.position.pixels, greaterThan(0));
+        expect(AppState.filterLabels.toSet(), {'2024', 'Работа'});
+
+        // Note 2 matches the query but not all the selected labels.
+        await tester.pumpWidget(
+          _app(
+            const Notes(searchMode: true, searchQuery: 'Note 2'),
+            width: 500,
+          ),
+        );
+        await _waitFor(tester, () => _visibleIds(tester).isEmpty);
+        await tester.pumpWidget(
+          _app(
+            const Notes(searchMode: true, searchQuery: 'Note 1'),
+            width: 500,
+          ),
+        );
+        await _waitFor(tester, () => _visibleIds(tester).contains(1));
+
+        await tester.pumpWidget(_app(const Notes(), width: 300));
+        await tester.pumpAndSettle();
+        expect(AppState.filterLabels.toSet(), {'2024', 'Работа'});
+        expect(find.byType(FilterChip), findsNWidgets(3));
+        expect(close, findsOneWidget);
+        for (final chip in tester.widgetList<FilterChip>(
+          find.byType(FilterChip),
+        )) {
+          expect(chip.onSelected, isNotNull);
+          expect(chip.selected, (chip.label as Text).data != 'Личное');
+        }
+        final restoredChip = find.widgetWithText(FilterChip, 'Работа');
+        await tester.ensureVisible(restoredChip);
+        await tester.tap(restoredChip);
+        await _waitFor(tester, () => _visibleIds(tester).length == 2);
+        expect(AppState.filterLabels, ['2024']);
+        await tester.tap(close);
+        await _waitFor(tester, () => _visibleIds(tester).length == 4);
+        await tester.pumpAndSettle();
+        expect(find.byType(NoteDisplayOptionsButton), findsOneWidget);
+        semantics.dispose();
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('${viewMode.name} search without labels hides the label row', (
+      tester,
+    ) async {
+      AppState.set('notes_view_mode', viewMode);
+      await _pumpNotes(tester, database);
+      await tester.pumpWidget(
+        _app(const Notes(searchMode: true, searchQuery: 'Note 2')),
+      );
+      await _waitFor(tester, () => _visibleIds(tester).length == 1);
+      expect(_visibleIds(tester), {2});
+      expect(find.byType(Labels), findsNothing);
+      expect(find.byType(NoteDisplayOptionsButton), findsNothing);
+      expect(AppState.filterLabels, isEmpty);
+      await tester.pumpWidget(_app(const Notes()));
+      await _waitFor(tester, () => _visibleIds(tester).length == 4);
+      await tester.pumpAndSettle();
+      expect(find.byType(FilterChip), findsNWidgets(3));
+      expect(find.byType(NoteDisplayOptionsButton), findsOneWidget);
+      expect(
+        tester
+            .widgetList<FilterChip>(find.byType(FilterChip))
+            .every((chip) => !chip.selected && chip.onSelected != null),
+        isTrue,
+      );
+    });
+
     testWidgets(
       '${viewMode.name} replaces configure with a fixed close button',
       (tester) async {

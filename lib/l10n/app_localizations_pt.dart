@@ -3731,4 +3731,18 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get matchAnySelectedLabelHint =>
       'Mostrar notas que contenham pelo menos uma das etiquetas selecionadas.';
+
+  @override
+  String createLabelConfirmation(String name) {
+    return 'Criar “$name”?';
+  }
+
+  @override
+  String createAndApplyLabelConfirmation(String name) {
+    return 'Criar “$name” e adicionar a esta nota?';
+  }
+
+  @override
+  String get couldNotSaveLabel =>
+      'Não foi possível salvar a etiqueta. Tente novamente.';
 }

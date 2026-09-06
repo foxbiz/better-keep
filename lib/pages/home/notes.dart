@@ -247,9 +247,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
             physics: const AlwaysScrollableScrollPhysics(),
             scrollDirection: Axis.vertical,
             slivers: [
-              if (!widget.searchMode &&
-                  !_selectionMode &&
-                  AppState.showNotes == NoteType.all)
+              if (!_selectionMode &&
+                  AppState.showNotes == NoteType.all &&
+                  (!widget.searchMode || AppState.filterLabels.isNotEmpty))
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: _StickyHeaderDelegate(
@@ -263,6 +263,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                             child: Labels(
                               key: Key('labels_widget'),
                               selectedLabels: AppState.filterLabels,
+                              readOnly: widget.searchMode,
                               onSelect: (selectedLabels) {
                                 AppState.filterLabels = selectedLabels
                                     .map((e) => e.name)
@@ -270,14 +271,15 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                               },
                             ),
                           ),
-                          if (AppState.filterLabels.isNotEmpty)
+                          if (!widget.searchMode &&
+                              AppState.filterLabels.isNotEmpty)
                             IconButton(
                               key: const ValueKey('clear-label-filters-button'),
                               tooltip: context.l10n.clear,
                               icon: const Icon(Icons.close),
                               onPressed: () => AppState.filterLabels = [],
                             )
-                          else
+                          else if (!widget.searchMode)
                             NoteDisplayOptionsButton(
                               showLabelFilterOptions: true,
                               orderContext: _activeOrderContext,

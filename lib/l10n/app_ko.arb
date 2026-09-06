@@ -1083,5 +1083,8 @@
 	"labelFiltering": "라벨 필터링",
 	"strict": "엄격",
 	"matchAllSelectedLabelsHint": "선택한 모든 라벨이 포함된 메모만 표시합니다.",
-	"matchAnySelectedLabelHint": "선택한 라벨이 하나 이상 포함된 메모를 표시합니다."
+	"matchAnySelectedLabelHint": "선택한 라벨이 하나 이상 포함된 메모를 표시합니다.",
+	"createLabelConfirmation": "“{name}” 라벨을 만들까요?",
+	"createAndApplyLabelConfirmation": "“{name}” 라벨을 만들고 이 메모에 추가할까요?",
+	"couldNotSaveLabel": "라벨을 저장하지 못했습니다. 다시 시도해 주세요."
 }

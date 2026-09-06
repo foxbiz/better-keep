@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 class Labels extends StatefulWidget {
   final Function(List<Label>) onSelect;
   final List<String> selectedLabels;
+  final bool readOnly;
   const Labels({
     super.key,
     required this.onSelect,
     this.selectedLabels = const [],
+    this.readOnly = false,
   });
 
   @override
@@ -56,36 +58,43 @@ class _LabelsState extends State<Labels> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final visibleLabels = widget.readOnly
+        ? _labels
+              .where((label) => widget.selectedLabels.contains(label.name))
+              .toList()
+        : _labels;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          ..._labels.asMap().entries.map((entry) {
+          ...visibleLabels.asMap().entries.map((entry) {
             final index = entry.key;
             final label = entry.value;
             final isSelected = widget.selectedLabels.contains(label.name);
             return Padding(
               padding: EdgeInsets.only(
-                right: index < _labels.length - 1 ? 8 : 0,
+                right: index < visibleLabels.length - 1 ? 8 : 0,
               ),
               child: FilterChip(
                 selected: isSelected,
                 label: Text(label.displayName(context.l10n)),
-                onSelected: (selected) {
-                  final selectedNames = widget.selectedLabels.toSet();
-                  if (selected) {
-                    selectedNames.add(label.name);
-                  } else {
-                    selectedNames.remove(label.name);
-                  }
-                  widget.onSelect(
-                    _labels
-                        .where((lbl) => selectedNames.contains(lbl.name))
-                        .toList(),
-                  );
-                },
+                onSelected: widget.readOnly
+                    ? null
+                    : (selected) {
+                        final selectedNames = widget.selectedLabels.toSet();
+                        if (selected) {
+                          selectedNames.add(label.name);
+                        } else {
+                          selectedNames.remove(label.name);
+                        }
+                        widget.onSelect(
+                          _labels
+                              .where((lbl) => selectedNames.contains(lbl.name))
+                              .toList(),
+                        );
+                      },
                 showCheckmark: false,
                 avatar: isSelected
                     ? Icon(Icons.check, size: 18)

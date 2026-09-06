@@ -3701,4 +3701,17 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get matchAnySelectedLabelHint =>
       'Seçilen etiketlerden en az birini içeren notları göster.';
+
+  @override
+  String createLabelConfirmation(String name) {
+    return '“$name” oluşturulsun mu?';
+  }
+
+  @override
+  String createAndApplyLabelConfirmation(String name) {
+    return '“$name” oluşturulup bu nota eklensin mi?';
+  }
+
+  @override
+  String get couldNotSaveLabel => 'Etiket kaydedilemedi. Tekrar deneyin.';
 }

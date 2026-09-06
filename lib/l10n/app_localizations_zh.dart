@@ -3505,4 +3505,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get matchAnySelectedLabelHint => '显示包含至少一个选中标签的笔记。';
+
+  @override
+  String createLabelConfirmation(String name) {
+    return '创建“$name”？';
+  }
+
+  @override
+  String createAndApplyLabelConfirmation(String name) {
+    return '创建“$name”并添加到此笔记？';
+  }
+
+  @override
+  String get couldNotSaveLabel => '无法保存标签。请重试。';
 }

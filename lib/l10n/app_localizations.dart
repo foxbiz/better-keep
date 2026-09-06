@@ -6593,6 +6593,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show notes containing at least one selected label.'**
   String get matchAnySelectedLabelHint;
+
+  /// Confirm creating a pending label from the sidebar labels dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Create “{name}”?'**
+  String createLabelConfirmation(String name);
+
+  /// Confirm creating a pending label and selecting it for the current note
+  ///
+  /// In en, this message translates to:
+  /// **'Create “{name}” and add it to this note?'**
+  String createAndApplyLabelConfirmation(String name);
+
+  /// Label save failure shown without discarding the pending name
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t save label. Try again.'**
+  String get couldNotSaveLabel;
 }
 
 class _AppLocalizationsDelegate

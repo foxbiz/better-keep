@@ -1083,5 +1083,8 @@
 	"labelFiltering": "Filtragem por etiquetas",
 	"strict": "Estrito",
 	"matchAllSelectedLabelsHint": "Mostrar apenas notas que contenham todas as etiquetas selecionadas.",
-	"matchAnySelectedLabelHint": "Mostrar notas que contenham pelo menos uma das etiquetas selecionadas."
+	"matchAnySelectedLabelHint": "Mostrar notas que contenham pelo menos uma das etiquetas selecionadas.",
+	"createLabelConfirmation": "Criar “{name}”?",
+	"createAndApplyLabelConfirmation": "Criar “{name}” e adicionar a esta nota?",
+	"couldNotSaveLabel": "Não foi possível salvar a etiqueta. Tente novamente."
 }
