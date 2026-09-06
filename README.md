@@ -311,6 +311,12 @@ Run the complete portable release gate with:
 npm run release
 ```
 
+The gate runs `npm run check analyze`, then `npm test release`, stopping on
+failure. CI uses this same command for pull requests, tags, and manual runs.
+Dependency audits are invoked manually with `npm run check audit` (root and
+Functions) or `npm run functions audit` (Functions only); they are not part of
+the release gate. Dependency installation may still print advisory summaries.
+
 The gate requires `flutter` and `npm` on `Path`. Its browser acceptance stage
 also requires Google Chrome plus a version-matched `chromedriver` executable.
 Download matching releases from the [Chrome for Testing availability

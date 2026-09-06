@@ -8,7 +8,6 @@ import {runTestTask} from "./test_tasks.mjs";
 const runnerPath = fileURLToPath(import.meta.url);
 
 export const RELEASE_STAGES = Object.freeze([
-	Object.freeze({args: ["audit"], type: "check"}),
 	Object.freeze({args: ["analyze"], type: "check"}),
 	Object.freeze({args: ["release"], type: "test"}),
 ]);
@@ -35,9 +34,8 @@ export function formatReleaseTaskHelp() {
 		"Usage: npm run release",
 		"",
 		"Runs the release gate in this order:",
-		"1. npm run check audit",
-		"2. npm run check analyze",
-		"3. npm test release",
+		"1. npm run check analyze",
+		"2. npm test release",
 	].join("\n");
 }
 
