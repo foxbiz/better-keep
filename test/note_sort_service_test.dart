@@ -491,6 +491,153 @@ void main() {
     expect(service.snapshotFor(list).orderedNoteIds, isEmpty);
   });
 
+  for (final scenario in [
+    (
+      name: 'older import moves above newer import',
+      context: grid,
+      dragged: 4,
+      target: 3,
+      placeAfter: false,
+      expected: [4, 3, 1, 2],
+    ),
+    (
+      name: 'saved note moves above imports',
+      context: list,
+      dragged: 2,
+      target: 3,
+      placeAfter: false,
+      expected: [2, 3, 4, 1],
+    ),
+    (
+      name: 'import moves below saved notes',
+      context: grid,
+      dragged: 3,
+      target: 2,
+      placeAfter: true,
+      expected: [4, 1, 2, 3],
+    ),
+    (
+      name: 'saved note moves between imports in a folder',
+      context: NoteOrderContext.label('import-folder'),
+      dragged: 1,
+      target: 3,
+      placeAfter: true,
+      expected: [3, 1, 4, 2],
+    ),
+  ]) {
+    test('import reorder: ${scenario.name} survives reload', () async {
+      final notes = await _seedImportedOrder(database, scenario.context);
+      final otherContext = scenario.context == grid ? list : grid;
+      final otherSnapshot = service.snapshotFor(otherContext);
+      expect(
+        service.sortNotes(scenario.context, notes).map((note) => note.id),
+        [3, 4, 1, 2],
+      );
+
+      expect(
+        await service.reorderVisibleNotes(
+          context: scenario.context,
+          draggedId: scenario.dragged,
+          targetId: scenario.target,
+          placeAfter: scenario.placeAfter,
+          visibleNotes: notes.reversed,
+        ),
+        isTrue,
+      );
+
+      final saved = service.snapshotFor(scenario.context);
+      expect(
+        service.sortNotes(scenario.context, notes).map((note) => note.id),
+        scenario.expected,
+      );
+      expect(saved.orderedNoteIds, contains('hidden-note'));
+      expect(service.snapshotFor(otherContext), same(otherSnapshot));
+      await service.dispose();
+      await service.init();
+      expect(
+        service.sortNotes(scenario.context, notes).map((note) => note.id),
+        scenario.expected,
+      );
+      expect(
+        service.snapshotFor(scenario.context).orderedNoteIds,
+        saved.orderedNoteIds,
+      );
+    });
+  }
+
+  test(
+    'import reorder survives deferred remote state with missing IDs',
+    () async {
+      final notes = await _seedImportedOrder(database, grid);
+      service.beginDrag(grid);
+      await service.receiveRemoteSnapshotForTesting(
+        service
+            .snapshotFor(grid)
+            .copyWith(
+              orderedNoteIds: [
+                'note-1',
+                'remote-note',
+                'hidden-note',
+                'note-2',
+              ],
+              revision: 'import-remote',
+              baseRevision: 'import-remote',
+            ),
+      );
+      await service.reorderVisibleNotes(
+        context: grid,
+        draggedId: 4,
+        targetId: 3,
+        placeAfter: false,
+        visibleNotes: notes,
+      );
+
+      final rows = await database.query(
+        NoteSortService.operationTableName,
+        orderBy: 'rowid',
+      );
+      final operations = rows
+          .map(NoteOrderOperation.tryFromDatabaseJson)
+          .toList();
+      expect(operations.map((operation) => operation!.type), [
+        NoteOrderOperationType.insertNote,
+        NoteOrderOperationType.insertNote,
+        NoteOrderOperationType.moveNote,
+      ]);
+      expect(operations.map((operation) => operation!.noteId), [
+        'note-4',
+        'note-3',
+        'note-4',
+      ]);
+      // Force UUID order to oppose commit order at an identical timestamp.
+      for (final (index, row) in rows.indexed) {
+        await database.update(
+          NoteSortService.operationTableName,
+          {
+            'id': 'operation-${rows.length - index}',
+            'created_at': DateTime.utc(2026, 7, 25).toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+
+      await service.endDrag(grid, committed: true);
+
+      final rebased = service.snapshotFor(grid);
+      expect(rebased.orderedNoteIds, [
+        'note-4',
+        'note-3',
+        'note-1',
+        'remote-note',
+        'hidden-note',
+        'note-2',
+      ]);
+      expect(rebased.baseRevision, 'import-remote');
+      expect(rebased.dirty, isTrue);
+    },
+  );
+
   test(
     'folder reorder changes only that folder and preserves hidden IDs',
     () async {
@@ -1427,18 +1574,14 @@ void main() {
     await database.delete(NoteSortService.positionTableName);
     await database.delete(NoteSortService.operationTableName);
     await database.delete(NoteSortService.tableName);
-    await database.insert(
-      NoteSortService.legacyTableName,
-      {
-        'id': 1,
-        'sort_mode': NoteSortMode.custom.name,
-        'ordered_note_ids': '[2,1]',
-        'revision': 'legacy-revision',
-        'updated_at': DateTime.utc(2026, 7, 24).toIso8601String(),
-        'dirty': 0,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await database.insert(NoteSortService.legacyTableName, {
+      'id': 1,
+      'sort_mode': NoteSortMode.custom.name,
+      'ordered_note_ids': '[2,1]',
+      'revision': 'legacy-revision',
+      'updated_at': DateTime.utc(2026, 7, 24).toIso8601String(),
+      'dirty': 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
     await _insertNote(database, id: 1, updatedAt: DateTime.utc(2026, 7, 20));
     await _insertNote(database, id: 2, updatedAt: DateTime.utc(2026, 7, 21));
 
@@ -1454,6 +1597,32 @@ void main() {
     );
     expect(positions.map((row) => row['note_sync_id']), ['note-2', 'note-1']);
   });
+}
+
+Future<List<Note>> _seedImportedOrder(
+  Database database,
+  NoteOrderContext context,
+) async {
+  for (var id = 1; id <= 4; id++) {
+    await _insertNote(
+      database,
+      id: id,
+      updatedAt: DateTime.utc(id <= 2 ? 2026 : 2020, 7, 25 - id),
+    );
+  }
+  // Keep imports emit migration events, leaving their IDs out of saved orders.
+  await NoteSortService().applyRemoteSnapshotForTesting(
+    NoteOrderSnapshot(
+      context: context,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['note-1', 'hidden-note', 'note-2'],
+      revision: 'import-base',
+      baseRevision: 'import-base',
+      updatedAt: DateTime.utc(2026, 7, 24),
+      hydrated: true,
+    ),
+  );
+  return Note.get(NoteType.all);
 }
 
 Future<void> _insertNote(

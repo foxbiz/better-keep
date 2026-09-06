@@ -22,12 +22,11 @@ function extractWorkflowJob(source, jobName) {
 	return nextJob === -1 ? remainder : remainder.slice(0, nextJob);
 }
 
-test("the tracked pre-commit hook runs the complete release gate", () => {
+test("the tracked pre-commit hook preserves the index for component checks", () => {
 	const hook = readRepositoryFile(".githooks", "pre-commit");
 	assert.match(hook, /^#!\/bin\/sh\s*$/m);
-	assert.match(hook, /git rev-parse --local-env-vars/);
-	assert.match(hook, /^\s*unset "\$variable"\s*$/m);
-	assert.match(hook, /^exec npm run release\s*$/m);
+	assert.doesNotMatch(hook, /\bunset\b|npm run release/);
+	assert.match(hook, /^exec npm run check commit\s*$/m);
 });
 
 test("only release artifact CI remains and local hook setup is documented", () => {
@@ -38,6 +37,8 @@ test("only release artifact CI remains and local hook setup is documented", () =
 	const readme = readRepositoryFile("README.md");
 	assert.match(readme, /git config core\.hooksPath \.githooks/);
 	assert.match(readme, /git commit --no-verify/);
+	assert.match(readme, /npm run check commit/);
+	assert.match(readme, /staged\s+changes/);
 	assert.match(readme, /version-matched\s+`chromedriver`/);
 });
 

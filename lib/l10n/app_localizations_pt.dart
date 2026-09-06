@@ -3717,4 +3717,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count ocorrências substituídas';
   }
+
+  @override
+  String get labelFiltering => 'Filtragem por etiquetas';
+
+  @override
+  String get strict => 'Estrito';
+
+  @override
+  String get matchAllSelectedLabelsHint =>
+      'Mostrar apenas notas que contenham todas as etiquetas selecionadas.';
+
+  @override
+  String get matchAnySelectedLabelHint =>
+      'Mostrar notas que contenham pelo menos uma das etiquetas selecionadas.';
 }

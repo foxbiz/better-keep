@@ -3493,4 +3493,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '已替换 $count 处';
   }
+
+  @override
+  String get labelFiltering => '标签筛选';
+
+  @override
+  String get strict => '严格';
+
+  @override
+  String get matchAllSelectedLabelsHint => '仅显示包含所有选中标签的笔记。';
+
+  @override
+  String get matchAnySelectedLabelHint => '显示包含至少一个选中标签的笔记。';
 }

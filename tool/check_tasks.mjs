@@ -47,6 +47,9 @@ const actions = {
 		processStep("npm", ["audit", "--omit=dev"]),
 		...resolveFunctionsTask(["audit"]).operations,
 	]),
+	commit: defineAction("Check components affected by staged changes.", () => [
+		processStep("node", ["tool/commit_checks.mjs"]),
+	]),
 	site: defineAction("Type-check the Astro marketing site.", () => [
 		processStep("npm", ["--prefix", "site", "run", "check"]),
 	]),

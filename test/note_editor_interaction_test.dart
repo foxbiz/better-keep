@@ -264,10 +264,7 @@ void main() {
   testWidgets('mobile editors keep Flutter Quill link gestures', (
     tester,
   ) async {
-    for (final platform in const [
-      TargetPlatform.android,
-      TargetPlatform.iOS,
-    ]) {
+    for (final platform in const [TargetPlatform.android, TargetPlatform.iOS]) {
       await _pumpNoteEditor(
         tester,
         platform: platform,

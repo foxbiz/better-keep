@@ -3687,4 +3687,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count eşleşme değiştirildi';
   }
+
+  @override
+  String get labelFiltering => 'Etiket filtreleme';
+
+  @override
+  String get strict => 'Katı';
+
+  @override
+  String get matchAllSelectedLabelsHint =>
+      'Yalnızca seçilen tüm etiketleri içeren notları göster.';
+
+  @override
+  String get matchAnySelectedLabelHint =>
+      'Seçilen etiketlerden en az birini içeren notları göster.';
 }

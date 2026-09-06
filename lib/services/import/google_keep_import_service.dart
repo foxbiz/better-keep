@@ -199,7 +199,8 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
       AppState.db.transaction((transaction) async {
         await transaction.delete(
           ImportFingerprintStore.table,
-          where: '''
+          where:
+              '''
             source = ?
             AND NOT EXISTS (
               SELECT 1 FROM ${Note.model}
@@ -414,16 +415,12 @@ class DatabaseKeepImportPersistence implements KeepImportPersistence {
             'created_at': timestamp,
             'updated_at': timestamp,
           }, conflictAlgorithm: ConflictAlgorithm.abort);
-          await transaction.insert(
-            ImportFingerprintStore.table,
-            {
-              'fingerprint': item.fingerprint,
-              'source': source.name,
-              'note_id': item.note.id,
-              'imported_at': timestamp,
-            },
-            conflictAlgorithm: ConflictAlgorithm.abort,
-          );
+          await transaction.insert(ImportFingerprintStore.table, {
+            'fingerprint': item.fingerprint,
+            'source': source.name,
+            'note_id': item.note.id,
+            'imported_at': timestamp,
+          }, conflictAlgorithm: ConflictAlgorithm.abort);
           onProgress?.call(
             KeepImportProgress(
               phase: KeepImportPhase.saving,

@@ -81,28 +81,31 @@ void main() {
     },
   );
 
-  test('remote note persistence is independent from reminder delivery', () async {
-    final reminder = Reminder(dateTime: DateTime(2026, 8, 14, 9));
-    final note = Note(id: 42);
+  test(
+    'remote note persistence is independent from reminder delivery',
+    () async {
+      final reminder = Reminder(dateTime: DateTime(2026, 8, 14, 9));
+      final note = Note(id: 42);
 
-    await note.updateFromJson({
-      'sync_id': 'remote-note-42',
-      'pinned': 0,
-      'locked': 0,
-      'trashed': 0,
-      'archived': 0,
-      'read_only': 0,
-      'completed': 0,
-      'title': 'Remote reminder',
-      'content': '[]',
-      'plain_text': '',
-      'updated_at': DateTime(2026, 8, 12).toIso8601String(),
-      'reminder': jsonEncode(reminder.toJson()),
-      'attachments': <dynamic>[],
-    });
+      await note.updateFromJson({
+        'sync_id': 'remote-note-42',
+        'pinned': 0,
+        'locked': 0,
+        'trashed': 0,
+        'archived': 0,
+        'read_only': 0,
+        'completed': 0,
+        'title': 'Remote reminder',
+        'content': '[]',
+        'plain_text': '',
+        'updated_at': DateTime(2026, 8, 12).toIso8601String(),
+        'reminder': jsonEncode(reminder.toJson()),
+        'attachments': <dynamic>[],
+      });
 
-    expect(note.id, 42);
-    expect(note.reminder?.dateTime, reminder.dateTime);
-    expect(await Note.findById(42), isNotNull);
-  });
+      expect(note.id, 42);
+      expect(note.reminder?.dateTime, reminder.dateTime);
+      expect(await Note.findById(42), isNotNull);
+    },
+  );
 }

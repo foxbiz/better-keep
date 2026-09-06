@@ -3551,4 +3551,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count 件を置換しました';
   }
+
+  @override
+  String get labelFiltering => 'ラベルで絞り込み';
+
+  @override
+  String get strict => '厳密';
+
+  @override
+  String get matchAllSelectedLabelsHint => '選択したすべてのラベルを含むノートのみ表示します。';
+
+  @override
+  String get matchAnySelectedLabelHint => '選択したラベルを少なくとも1つ含むノートを表示します。';
 }

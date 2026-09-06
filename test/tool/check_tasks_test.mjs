@@ -12,8 +12,16 @@ test("lists checks and treats an omitted action as help", () => {
 	assert.deepEqual(parseCheckTaskArguments([]), {help: true});
 	assert.deepEqual(parseCheckTaskArguments(["help"]), {help: true});
 	assert.deepEqual(parseCheckTaskArguments(["--help"]), {help: true});
-	assert.deepEqual(CHECK_ACTION_NAMES, ["analyze", "apple-config", "audit", "site"]);
+	assert.deepEqual(CHECK_ACTION_NAMES, [
+		"analyze", "apple-config", "audit", "commit", "site",
+	]);
 	assert.match(formatCheckTaskHelp(), /npm run check <action>/);
+});
+
+test("commit checks have a separate runner from the release gate", () => {
+	assert.deepEqual(resolveCheckTask(["commit"]).operations, [
+		{args: ["tool/commit_checks.mjs"], command: "node", type: "process"},
+	]);
 });
 
 test("site check uses the isolated Astro workspace", () => {

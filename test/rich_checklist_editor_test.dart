@@ -639,89 +639,85 @@ void main() {
     );
   });
 
-  testWidgets(
-    'iOS Return creates exactly one new checklist row',
-    (tester) async {
-      const sentinel = '\u2060';
-      final document = RichChecklistDocument([_item('a', 'First')]);
-      final note = _RecordingNote(content: _content('Tasks', document.items));
-      await _pumpEditor(
-        tester,
-        note: note,
-        title: 'Tasks',
-        document: document,
-        platform: TargetPlatform.iOS,
-      );
+  testWidgets('iOS Return creates exactly one new checklist row', (
+    tester,
+  ) async {
+    const sentinel = '\u2060';
+    final document = RichChecklistDocument([_item('a', 'First')]);
+    final note = _RecordingNote(content: _content('Tasks', document.items));
+    await _pumpEditor(
+      tester,
+      note: note,
+      title: 'Tasks',
+      document: document,
+      platform: TargetPlatform.iOS,
+    );
 
-      await tester.tap(find.text('First', findRichText: true));
-      await tester.pump();
-      final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-      final firstQuillState = tester.state<QuillEditorState>(
-        find.byType(QuillEditor),
-      );
-      final firstRawEditorState = firstQuillState.editableTextKey.currentState;
+    await tester.tap(find.text('First', findRichText: true));
+    await tester.pump();
+    final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final firstQuillState = tester.state<QuillEditorState>(
+      find.byType(QuillEditor),
+    );
+    final firstRawEditorState = firstQuillState.editableTextKey.currentState;
 
-      await tester.testTextInput.receiveAction(TextInputAction.newline);
-      await tester.pump();
-      tester.testTextInput.updateEditingValue(
-        const TextEditingValue(
-          text: 'First\n\n',
-          selection: TextSelection.collapsed(offset: 6),
-        ),
-      );
-      await tester.pump();
-      await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.newline);
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'First\n\n',
+        selection: TextSelection.collapsed(offset: 6),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
 
-      expect(find.byType(Dismissible), findsNWidgets(2));
-      expect(find.text('First', findRichText: true), findsOneWidget);
-      final newItemEditor = tester.widget<QuillEditor>(
-        find.byType(QuillEditor),
-      );
-      final newItemQuillState = tester.state<QuillEditorState>(
-        find.byType(QuillEditor),
-      );
-      expect(newItemQuillState, same(firstQuillState));
-      expect(
-        newItemQuillState.editableTextKey.currentState,
-        same(firstRawEditorState),
-      );
-      expect(newItemEditor.controller, same(firstEditor.controller));
-      expect(newItemEditor.focusNode, same(firstEditor.focusNode));
-      expect(newItemEditor.focusNode.hasFocus, isTrue);
-      expect(tester.testTextInput.isRegistered, isTrue);
-      expect(newItemEditor.controller.document.toPlainText(), '$sentinel\n');
-      expect(
-        newItemEditor.controller.selection,
-        const TextSelection.collapsed(offset: 1),
-      );
+    expect(find.byType(Dismissible), findsNWidgets(2));
+    expect(find.text('First', findRichText: true), findsOneWidget);
+    final newItemEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final newItemQuillState = tester.state<QuillEditorState>(
+      find.byType(QuillEditor),
+    );
+    expect(newItemQuillState, same(firstQuillState));
+    expect(
+      newItemQuillState.editableTextKey.currentState,
+      same(firstRawEditorState),
+    );
+    expect(newItemEditor.controller, same(firstEditor.controller));
+    expect(newItemEditor.focusNode, same(firstEditor.focusNode));
+    expect(newItemEditor.focusNode.hasFocus, isTrue);
+    expect(tester.testTextInput.isRegistered, isTrue);
+    expect(newItemEditor.controller.document.toPlainText(), '$sentinel\n');
+    expect(
+      newItemEditor.controller.selection,
+      const TextSelection.collapsed(offset: 1),
+    );
 
-      tester.testTextInput.updateEditingValue(
-        const TextEditingValue(
-          text: '${sentinel}Typed immediately\n',
-          selection: TextSelection.collapsed(offset: 18),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 220));
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '${sentinel}Typed immediately\n',
+        selection: TextSelection.collapsed(offset: 18),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
 
-      expect(find.byType(Dismissible), findsNWidgets(2));
-      expect(
-        newItemEditor.controller.document.toPlainText(),
-        'Typed immediately\n',
-      );
-      expect(
-        newItemEditor.controller.selection,
-        const TextSelection.collapsed(offset: 17),
-      );
+    expect(find.byType(Dismissible), findsNWidgets(2));
+    expect(
+      newItemEditor.controller.document.toPlainText(),
+      'Typed immediately\n',
+    );
+    expect(
+      newItemEditor.controller.selection,
+      const TextSelection.collapsed(offset: 17),
+    );
 
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
 
-      expect(note.saveCalls, 1);
-      expect(note.content, isNot(contains(sentinel)));
-      expect(note.plainText, 'Tasks\nFirst\nTyped immediately');
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-  );
+    expect(note.saveCalls, 1);
+    expect(note.content, isNot(contains(sentinel)));
+    expect(note.plainText, 'Tasks\nFirst\nTyped immediately');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('an inserted newline uses the same persistent row split path', (
     tester,
@@ -848,187 +844,173 @@ void main() {
   group('iOS soft-keyboard Backspace', () {
     const sentinel = '\u2060';
 
-    testWidgets(
-      'deletes an empty row and focuses the previous item end',
-      (tester) async {
-        final document = RichChecklistDocument([
-          _item('previous', 'Previous'),
-          _item('empty', ''),
-        ]);
-        await _pumpEditor(
-          tester,
-          note: _RecordingNote(content: _content('Tasks', document.items)),
-          title: 'Tasks',
-          document: document,
-          platform: TargetPlatform.iOS,
-        );
+    testWidgets('deletes an empty row and focuses the previous item end', (
+      tester,
+    ) async {
+      final document = RichChecklistDocument([
+        _item('previous', 'Previous'),
+        _item('empty', ''),
+      ]);
+      await _pumpEditor(
+        tester,
+        note: _RecordingNote(content: _content('Tasks', document.items)),
+        title: 'Tasks',
+        document: document,
+        platform: TargetPlatform.iOS,
+      );
 
-        await tester.tap(
-          find.byKey(const ValueKey('checklist-text-lane-empty')),
-        );
-        await tester.pump();
-        await tester.pump();
-        final emptyEditor = tester.widget<QuillEditor>(
-          find.byType(QuillEditor),
-        );
-        expect(emptyEditor.controller.document.toPlainText(), '$sentinel\n');
-        expect(
-          emptyEditor.controller.selection,
-          const TextSelection.collapsed(offset: 1),
-        );
+      await tester.tap(find.byKey(const ValueKey('checklist-text-lane-empty')));
+      await tester.pump();
+      await tester.pump();
+      final emptyEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      expect(emptyEditor.controller.document.toPlainText(), '$sentinel\n');
+      expect(
+        emptyEditor.controller.selection,
+        const TextSelection.collapsed(offset: 1),
+      );
 
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '\n',
-            selection: TextSelection.collapsed(offset: 0),
-          ),
-        );
-        await tester.pump();
-        await tester.pump();
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '\n',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
-        expect(find.byType(Dismissible), findsOneWidget);
-        final previousEditor = tester.widget<QuillEditor>(
-          find.byType(QuillEditor),
-        );
-        expect(previousEditor.focusNode.hasFocus, isTrue);
-        expect(tester.testTextInput.isRegistered, isTrue);
-        expect(previousEditor.controller.document.toPlainText(), 'Previous\n');
-        expect(
-          previousEditor.controller.selection,
-          const TextSelection.collapsed(offset: 8),
-        );
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-    );
+      expect(find.byType(Dismissible), findsOneWidget);
+      final previousEditor = tester.widget<QuillEditor>(
+        find.byType(QuillEditor),
+      );
+      expect(previousEditor.focusNode.hasFocus, isTrue);
+      expect(tester.testTextInput.isRegistered, isTrue);
+      expect(previousEditor.controller.document.toPlainText(), 'Previous\n');
+      expect(
+        previousEditor.controller.selection,
+        const TextSelection.collapsed(offset: 8),
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
-    testWidgets(
-      'keeps the sole empty row and restores usable input',
-      (tester) async {
-        final document = RichChecklistDocument([_item('only', '')]);
-        final note = _RecordingNote(content: _content('Tasks', document.items));
-        await _pumpEditor(
-          tester,
-          note: note,
-          title: 'Tasks',
-          document: document,
-          platform: TargetPlatform.iOS,
-        );
+    testWidgets('keeps the sole empty row and restores usable input', (
+      tester,
+    ) async {
+      final document = RichChecklistDocument([_item('only', '')]);
+      final note = _RecordingNote(content: _content('Tasks', document.items));
+      await _pumpEditor(
+        tester,
+        note: note,
+        title: 'Tasks',
+        document: document,
+        platform: TargetPlatform.iOS,
+      );
 
-        await tester.tap(
-          find.byKey(const ValueKey('checklist-text-lane-only')),
-        );
-        await tester.pump();
-        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '\n',
-            selection: TextSelection.collapsed(offset: 0),
-          ),
-        );
-        await tester.pump();
-        await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('checklist-text-lane-only')));
+      await tester.pump();
+      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '\n',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
-        expect(find.byType(Dismissible), findsOneWidget);
-        expect(editor.controller.document.toPlainText(), '$sentinel\n');
-        expect(editor.controller.selection.baseOffset, 1);
-        expect(editor.controller.selection.extentOffset, 1);
-        expect(tester.testTextInput.isRegistered, isTrue);
+      expect(find.byType(Dismissible), findsOneWidget);
+      expect(editor.controller.document.toPlainText(), '$sentinel\n');
+      expect(editor.controller.selection.baseOffset, 1);
+      expect(editor.controller.selection.extentOffset, 1);
+      expect(tester.testTextInput.isRegistered, isTrue);
 
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '${sentinel}A\n',
-            selection: TextSelection.collapsed(offset: 2),
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 220));
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '${sentinel}A\n',
+          selection: TextSelection.collapsed(offset: 2),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 220));
 
-        expect(editor.controller.document.toPlainText(), 'A\n');
-        expect(
-          editor.controller.selection,
-          const TextSelection.collapsed(offset: 1),
-        );
+      expect(editor.controller.document.toPlainText(), 'A\n');
+      expect(
+        editor.controller.selection,
+        const TextSelection.collapsed(offset: 1),
+      );
 
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '\n',
-            selection: TextSelection.collapsed(offset: 0),
-          ),
-        );
-        await tester.pump();
-        expect(editor.controller.document.toPlainText(), '$sentinel\n');
-        expect(editor.controller.selection.baseOffset, 1);
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '\n',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      await tester.pump();
+      expect(editor.controller.document.toPlainText(), '$sentinel\n');
+      expect(editor.controller.selection.baseOffset, 1);
 
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '\n',
-            selection: TextSelection.collapsed(offset: 0),
-          ),
-        );
-        await tester.pump();
-        await tester.pump();
-        expect(find.byType(Dismissible), findsOneWidget);
-        expect(editor.controller.document.toPlainText(), '$sentinel\n');
-        expect(note.saveCalls, 0);
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-    );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '\n',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(Dismissible), findsOneWidget);
+      expect(editor.controller.document.toPlainText(), '$sentinel\n');
+      expect(note.saveCalls, 0);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
-    testWidgets(
-      'strips the sentinel after IME composition before saving',
-      (tester) async {
-        final document = RichChecklistDocument([_item('only', '')]);
-        final note = _RecordingNote(content: _content('Tasks', document.items));
-        await _pumpEditor(
-          tester,
-          note: note,
-          title: 'Tasks',
-          document: document,
-          platform: TargetPlatform.iOS,
-        );
+    testWidgets('strips the sentinel after IME composition before saving', (
+      tester,
+    ) async {
+      final document = RichChecklistDocument([_item('only', '')]);
+      final note = _RecordingNote(content: _content('Tasks', document.items));
+      await _pumpEditor(
+        tester,
+        note: note,
+        title: 'Tasks',
+        document: document,
+        platform: TargetPlatform.iOS,
+      );
 
-        await tester.tap(
-          find.byKey(const ValueKey('checklist-text-lane-only')),
-        );
-        await tester.pump();
-        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-        editor.controller.formatSelection(Attribute.bold);
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '${sentinel}Typed\n',
-            selection: TextSelection.collapsed(offset: 6),
-            composing: TextRange(start: 1, end: 6),
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 220));
-        expect(editor.controller.document.toPlainText(), '${sentinel}Typed\n');
+      await tester.tap(find.byKey(const ValueKey('checklist-text-lane-only')));
+      await tester.pump();
+      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      editor.controller.formatSelection(Attribute.bold);
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '${sentinel}Typed\n',
+          selection: TextSelection.collapsed(offset: 6),
+          composing: TextRange(start: 1, end: 6),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(editor.controller.document.toPlainText(), '${sentinel}Typed\n');
 
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '${sentinel}Typed\n',
-            selection: TextSelection.collapsed(offset: 6),
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 220));
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '${sentinel}Typed\n',
+          selection: TextSelection.collapsed(offset: 6),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 220));
 
-        expect(editor.controller.document.toPlainText(), 'Typed\n');
-        expect(
-          editor.controller.selection,
-          const TextSelection.collapsed(offset: 5),
-        );
-        expect(editor.controller.document.toDelta().toJson().first, {
-          'insert': 'Typed',
-          'attributes': {'bold': true},
-        });
+      expect(editor.controller.document.toPlainText(), 'Typed\n');
+      expect(
+        editor.controller.selection,
+        const TextSelection.collapsed(offset: 5),
+      );
+      expect(editor.controller.document.toDelta().toJson().first, {
+        'insert': 'Typed',
+        'attributes': {'bold': true},
+      });
 
-        await tester.tap(find.byType(BackButton));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
 
-        expect(note.saveCalls, 1);
-        expect(note.content, isNot(contains(sentinel)));
-        expect(note.plainText, 'Tasks\nTyped');
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-    );
+      expect(note.saveCalls, 1);
+      expect(note.content, isNot(contains(sentinel)));
+      expect(note.plainText, 'Tasks\nTyped');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets(
       'keeps logical selection after autocorrect replaces the sentinel',
@@ -1107,74 +1089,70 @@ void main() {
       variant: TargetPlatformVariant.only(TargetPlatform.iOS),
     );
 
-    testWidgets(
-      're-arms Backspace after a replacement removes the sentinel',
-      (tester) async {
-        final document = RichChecklistDocument([
-          _item('previous', 'Previous'),
-          _item('empty', ''),
-        ]);
-        await _pumpEditor(
-          tester,
-          note: _RecordingNote(content: _content('Tasks', document.items)),
-          title: 'Tasks',
-          document: document,
-          platform: TargetPlatform.iOS,
-        );
-        await tester.tap(
-          find.byKey(const ValueKey('checklist-text-lane-empty')),
-        );
-        await tester.pump();
+    testWidgets('re-arms Backspace after a replacement removes the sentinel', (
+      tester,
+    ) async {
+      final document = RichChecklistDocument([
+        _item('previous', 'Previous'),
+        _item('empty', ''),
+      ]);
+      await _pumpEditor(
+        tester,
+        note: _RecordingNote(content: _content('Tasks', document.items)),
+        title: 'Tasks',
+        document: document,
+        platform: TargetPlatform.iOS,
+      );
+      await tester.tap(find.byKey(const ValueKey('checklist-text-lane-empty')));
+      await tester.pump();
 
-        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '${sentinel}teh\n',
-            selection: TextSelection.collapsed(offset: 4),
-          ),
-        );
-        await tester.pump();
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: 'the\n',
-            selection: TextSelection.collapsed(offset: 3),
-          ),
-        );
-        await tester.pump();
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '\n',
-            selection: TextSelection.collapsed(offset: 0),
-          ),
-        );
-        await tester.pump();
-        await tester.pump();
+      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '${sentinel}teh\n',
+          selection: TextSelection.collapsed(offset: 4),
+        ),
+      );
+      await tester.pump();
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'the\n',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      await tester.pump();
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '\n',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
-        expect(editor.controller.document.toPlainText(), '$sentinel\n');
-        expect(
-          editor.controller.selection,
-          const TextSelection.collapsed(offset: 1),
-        );
+      expect(editor.controller.document.toPlainText(), '$sentinel\n');
+      expect(
+        editor.controller.selection,
+        const TextSelection.collapsed(offset: 1),
+      );
 
-        tester.testTextInput.updateEditingValue(
-          const TextEditingValue(
-            text: '\n',
-            selection: TextSelection.collapsed(offset: 0),
-          ),
-        );
-        await tester.pump();
-        await tester.pump();
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '\n',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
-        expect(find.byType(Dismissible), findsOneWidget);
-        expect(editor.controller.document.toPlainText(), 'Previous\n');
-        expect(editor.focusNode.hasFocus, isTrue);
-        expect(
-          editor.controller.selection,
-          const TextSelection.collapsed(offset: 8),
-        );
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-    );
+      expect(find.byType(Dismissible), findsOneWidget);
+      expect(editor.controller.document.toPlainText(), 'Previous\n');
+      expect(editor.focusNode.hasFocus, isTrue);
+      expect(
+        editor.controller.selection,
+        const TextSelection.collapsed(offset: 8),
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets(
       'announces the placeholder only while the sentinel row is empty',
@@ -3077,151 +3055,143 @@ void main() {
     );
   });
 
-  testWidgets(
-    'desktop checklist frame matches the note editor window mode',
-    (tester) async {
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(1200, 900);
-      addTearDown(tester.view.reset);
-      addTearDown(() => AppState.editorFullScreen = false);
-      final checklist = RichChecklistDocument([
-        _item('a', 'Desktop task'),
-        _item('b', 'Second desktop task'),
-      ]);
-      final note = _RecordingNote(content: _content('Tasks', checklist.items));
+  testWidgets('desktop checklist frame matches the note editor window mode', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    addTearDown(() => AppState.editorFullScreen = false);
+    final checklist = RichChecklistDocument([
+      _item('a', 'Desktop task'),
+      _item('b', 'Second desktop task'),
+    ]);
+    final note = _RecordingNote(content: _content('Tasks', checklist.items));
 
-      for (final fullScreen in [false, true]) {
-        AppState.editorFullScreen = fullScreen;
-        await tester.pumpWidget(
-          _host(
-            Builder(
-              builder: (context) => ElevatedButton(
-                key: const ValueKey('open_adaptive_note_editor'),
-                onPressed: () => showPage(
-                  context,
-                  NoteEditor(note: note),
-                  allowFullScreen: true,
-                ),
-                child: const Text('Open editor'),
+    for (final fullScreen in [false, true]) {
+      AppState.editorFullScreen = fullScreen;
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => ElevatedButton(
+              key: const ValueKey('open_adaptive_note_editor'),
+              onPressed: () => showPage(
+                context,
+                NoteEditor(note: note),
+                allowFullScreen: true,
               ),
+              child: const Text('Open editor'),
             ),
           ),
-        );
-        await tester.tap(
-          find.byKey(const ValueKey('open_adaptive_note_editor')),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('open_adaptive_note_editor')));
+      await tester.pumpAndSettle();
 
-        final noteEditorSize = tester.getSize(
-          find.descendant(
-            of: find.byType(NoteEditor),
-            matching: find.byType(Scaffold),
-          ),
-        );
-        expect(
-          noteEditorSize,
-          fullScreen ? const Size(1200, 900) : const Size(900, 700),
-        );
+      final noteEditorSize = tester.getSize(
+        find.descendant(
+          of: find.byType(NoteEditor),
+          matching: find.byType(Scaffold),
+        ),
+      );
+      expect(
+        noteEditorSize,
+        fullScreen ? const Size(1200, 900) : const Size(900, 700),
+      );
 
-        await tester.tap(
-          find.descendant(
-            of: find.byType(NoteEditor),
-            matching: find.text('Desktop task', findRichText: true),
-          ),
-        );
-        await tester.pump();
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('open_focused_checklist')));
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NoteEditor),
+          matching: find.text('Desktop task', findRichText: true),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('open_focused_checklist')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
 
-        final checklistSize = tester.getSize(
+      final checklistSize = tester.getSize(
+        find.descendant(
+          of: find.byType(RichChecklistEditor),
+          matching: find.byType(Scaffold),
+        ),
+      );
+      expect(checklistSize, noteEditorSize);
+
+      final checklistRect = tester.getRect(
+        find.descendant(
+          of: find.byType(RichChecklistEditor),
+          matching: find.byType(Scaffold),
+        ),
+      );
+      final handle = find
+          .descendant(
+            of: find.byType(RichChecklistEditor),
+            matching: find.byIcon(Icons.drag_indicator),
+          )
+          .first;
+      final drag = await tester.startGesture(tester.getCenter(handle));
+      await tester.pump();
+      await drag.moveBy(const Offset(0, 80));
+      await tester.pump();
+      final draggedEntryRect = tester.getRect(_checklistEntryContents().first);
+      expect(draggedEntryRect.width, lessThanOrEqualTo(600));
+      expect(
+        draggedEntryRect.center.dx,
+        closeTo(checklistRect.center.dx, 0.01),
+      );
+      expect(tester.takeException(), isNull);
+      await drag.up();
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(RichChecklistEditor),
+          matching: find.byType(BackButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NoteEditor),
+          matching: find.byKey(const ValueKey('note_checkbox_progress_title')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(RichChecklistCollectionEditor), findsOneWidget);
+      expect(
+        tester.getSize(
           find.descendant(
             of: find.byType(RichChecklistEditor),
             matching: find.byType(Scaffold),
           ),
-        );
-        expect(checklistSize, noteEditorSize);
+        ),
+        noteEditorSize,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(RichChecklistCollectionEditor),
+          matching: find.byType(BackButton),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        final checklistRect = tester.getRect(
-          find.descendant(
-            of: find.byType(RichChecklistEditor),
-            matching: find.byType(Scaffold),
-          ),
-        );
-        final handle = find
-            .descendant(
-              of: find.byType(RichChecklistEditor),
-              matching: find.byIcon(Icons.drag_indicator),
-            )
-            .first;
-        final drag = await tester.startGesture(tester.getCenter(handle));
-        await tester.pump();
-        await drag.moveBy(const Offset(0, 80));
-        await tester.pump();
-        final draggedEntryRect = tester.getRect(
-          _checklistEntryContents().first,
-        );
-        expect(draggedEntryRect.width, lessThanOrEqualTo(600));
-        expect(
-          draggedEntryRect.center.dx,
-          closeTo(checklistRect.center.dx, 0.01),
-        );
-        expect(tester.takeException(), isNull);
-        await drag.up();
-        await tester.pumpAndSettle();
-
-        await tester.tap(
-          find.descendant(
-            of: find.byType(RichChecklistEditor),
-            matching: find.byType(BackButton),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        await tester.tap(
-          find.descendant(
-            of: find.byType(NoteEditor),
-            matching: find.byKey(
-              const ValueKey('note_checkbox_progress_title'),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(find.byType(RichChecklistCollectionEditor), findsOneWidget);
-        expect(
-          tester.getSize(
-            find.descendant(
-              of: find.byType(RichChecklistEditor),
-              matching: find.byType(Scaffold),
-            ),
-          ),
-          noteEditorSize,
-        );
-        expect(tester.takeException(), isNull);
-        await tester.tap(
-          find.descendant(
-            of: find.byType(RichChecklistCollectionEditor),
-            matching: find.byType(BackButton),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        await tester.tap(
-          find.descendant(
-            of: find.byType(NoteEditor),
-            matching: find.byType(BackButton),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('open_adaptive_note_editor')),
-          findsOneWidget,
-        );
-      }
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NoteEditor),
+          matching: find.byType(BackButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('open_adaptive_note_editor')),
+        findsOneWidget,
+      );
+    }
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets(
     'positions a scaled translated popup within a keyboard viewport',

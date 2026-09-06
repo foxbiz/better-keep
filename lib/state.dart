@@ -8,6 +8,7 @@ import 'package:better_keep/services/motion_preferences.dart';
 import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/logger.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,6 +35,7 @@ final _defaultState = {
   "recent_colors": <Color>[],
   "show_notes": NoteType.all,
   "filter_labels": <String>[],
+  "match_all_labels": true,
   "selected_notes": <Note>[],
   "alarm_sound": defaultAlarmSound,
   "last_synced_at": DateTime.fromMillisecondsSinceEpoch(0),
@@ -90,6 +92,7 @@ class AppState {
     String alarmSound = AppState.alarmSound;
     bool followSystemTheme = AppState.followSystemTheme;
     bool followSystemAnimations = AppState.followSystemAnimations;
+    bool matchAllLabels = AppState.matchAllLabels;
     String darkThemeId = AppState.darkThemeId;
     String lightThemeId = AppState.lightThemeId;
     GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
@@ -104,6 +107,7 @@ class AppState {
         ThemeRegistry.darkThemes[ThemeRegistry.defaultDarkThemeId];
     _state["follow_system_theme"] = followSystemTheme;
     _state["follow_system_animations"] = followSystemAnimations;
+    _state["match_all_labels"] = matchAllLabels;
     _state["dark_theme_id"] = darkThemeId;
     _state["light_theme_id"] = lightThemeId;
     _state["alarm_sound"] = alarmSound;
@@ -199,6 +203,10 @@ class AppState {
       );
     }
 
+    // Label matching is device-wide; active selections are temporary.
+    _state["match_all_labels"] =
+        prefsInstance.getBool("match_all_labels") ?? true;
+    _state["filter_labels"] = <String>[];
     // Load notes view mode preference
     final notesViewModeName = prefsInstance.getString("notes_view_mode");
     if (notesViewModeName != null) {
@@ -607,7 +615,7 @@ class AppState {
   }
 
   static List<String> get filterLabels {
-    return _state["filter_labels"] as List<String>;
+    return List.unmodifiable(_state["filter_labels"] as List<String>);
   }
 
   static List<Note> get selectedNotes {
@@ -619,7 +627,17 @@ class AppState {
   }
 
   static set filterLabels(List<String> labels) {
-    set("filter_labels", labels);
+    final normalized = Note.normalizeLabelNames(labels);
+    if (listEquals(filterLabels, normalized)) return;
+    set("filter_labels", normalized);
+  }
+
+  static bool get matchAllLabels => _state["match_all_labels"] as bool? ?? true;
+
+  static set matchAllLabels(bool value) {
+    if (value == matchAllLabels) return;
+    set("match_all_labels", value);
+    _persistToPrefs((p) async => p.setBool("match_all_labels", value));
   }
 
   static Database get db {

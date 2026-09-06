@@ -3778,5 +3778,9 @@
 	"@replacedOccurrences": {
 		"description": "Result after replacing all in-note search matches",
 		"placeholders": { "count": { "type": "int" } }
-	}
+	},
+	"labelFiltering": "Label filtering",
+	"strict": "Strict",
+	"matchAllSelectedLabelsHint": "Only show notes containing every selected label.",
+	"matchAnySelectedLabelHint": "Show notes containing at least one selected label."
 }

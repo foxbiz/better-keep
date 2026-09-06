@@ -1079,5 +1079,9 @@
 	"noMatches": "Nenhum resultado",
 	"searching": "Pesquisando",
 	"searchResultCount": "{current} de {total}",
-	"replacedOccurrences": "{count} ocorrências substituídas"
+	"replacedOccurrences": "{count} ocorrências substituídas",
+	"labelFiltering": "Filtragem por etiquetas",
+	"strict": "Estrito",
+	"matchAllSelectedLabelsHint": "Mostrar apenas notas que contenham todas as etiquetas selecionadas.",
+	"matchAnySelectedLabelHint": "Mostrar notas que contenham pelo menos uma das etiquetas selecionadas."
 }

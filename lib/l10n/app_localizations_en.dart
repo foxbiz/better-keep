@@ -3676,4 +3676,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String replacedOccurrences(int count) {
     return 'Replaced $count occurrences';
   }
+
+  @override
+  String get labelFiltering => 'Label filtering';
+
+  @override
+  String get strict => 'Strict';
+
+  @override
+  String get matchAllSelectedLabelsHint =>
+      'Only show notes containing every selected label.';
+
+  @override
+  String get matchAnySelectedLabelHint =>
+      'Show notes containing at least one selected label.';
 }

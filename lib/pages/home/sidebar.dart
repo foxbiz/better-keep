@@ -98,45 +98,25 @@ class _SidebarState extends State<Sidebar> {
               padding: EdgeInsets.zero,
               children: <Widget>[
                 if (!_isBigScreen) Logo(),
-                _buildTile(
-                  Icons.note,
-                  context.l10n.notes,
-                  () {
-                    if (!_isBigScreen) Navigator.pop(context);
-                    AppState.showNotes = NoteType.all;
-                  },
-                  selected: AppState.showNotes == NoteType.all,
-                ),
+                _buildTile(Icons.note, context.l10n.notes, () {
+                  if (!_isBigScreen) Navigator.pop(context);
+                  AppState.showNotes = NoteType.all;
+                }, selected: AppState.showNotes == NoteType.all),
                 _buildTile(Icons.label, context.l10n.labels, () {
                   labels(context);
                 }),
-                _buildTile(
-                  Icons.archive,
-                  context.l10n.archive,
-                  () {
-                    if (!_isBigScreen) Navigator.pop(context);
-                    AppState.showNotes = NoteType.archived;
-                  },
-                  selected: AppState.showNotes == NoteType.archived,
-                ),
-                _buildTile(
-                  Icons.alarm,
-                  context.l10n.reminders,
-                  () {
-                    if (!_isBigScreen) Navigator.pop(context);
-                    AppState.showNotes = NoteType.reminder;
-                  },
-                  selected: AppState.showNotes == NoteType.reminder,
-                ),
-                _buildTile(
-                  Icons.delete,
-                  context.l10n.trash,
-                  () {
-                    if (!_isBigScreen) Navigator.pop(context);
-                    AppState.showNotes = NoteType.trashed;
-                  },
-                  selected: AppState.showNotes == NoteType.trashed,
-                ),
+                _buildTile(Icons.archive, context.l10n.archive, () {
+                  if (!_isBigScreen) Navigator.pop(context);
+                  AppState.showNotes = NoteType.archived;
+                }, selected: AppState.showNotes == NoteType.archived),
+                _buildTile(Icons.alarm, context.l10n.reminders, () {
+                  if (!_isBigScreen) Navigator.pop(context);
+                  AppState.showNotes = NoteType.reminder;
+                }, selected: AppState.showNotes == NoteType.reminder),
+                _buildTile(Icons.delete, context.l10n.trash, () {
+                  if (!_isBigScreen) Navigator.pop(context);
+                  AppState.showNotes = NoteType.trashed;
+                }, selected: AppState.showNotes == NoteType.trashed),
                 _buildTile(Icons.settings, context.l10n.settings, () {
                   if (!_isBigScreen) Navigator.pop(context);
                   showPage(context, const Settings());

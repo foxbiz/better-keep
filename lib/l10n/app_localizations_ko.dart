@@ -3551,4 +3551,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count개 항목을 바꿨습니다';
   }
+
+  @override
+  String get labelFiltering => '라벨 필터링';
+
+  @override
+  String get strict => '엄격';
+
+  @override
+  String get matchAllSelectedLabelsHint => '선택한 모든 라벨이 포함된 메모만 표시합니다.';
+
+  @override
+  String get matchAnySelectedLabelHint => '선택한 라벨이 하나 이상 포함된 메모를 표시합니다.';
 }

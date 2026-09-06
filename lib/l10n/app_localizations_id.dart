@@ -3683,4 +3683,18 @@ class AppLocalizationsId extends AppLocalizations {
   String replacedOccurrences(int count) {
     return 'Mengganti $count kemunculan';
   }
+
+  @override
+  String get labelFiltering => 'Penyaringan label';
+
+  @override
+  String get strict => 'Ketat';
+
+  @override
+  String get matchAllSelectedLabelsHint =>
+      'Hanya tampilkan catatan yang memiliki semua label yang dipilih.';
+
+  @override
+  String get matchAnySelectedLabelHint =>
+      'Tampilkan catatan yang memiliki setidaknya satu label yang dipilih.';
 }
