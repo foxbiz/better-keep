@@ -3683,4 +3683,31 @@ class AppLocalizationsId extends AppLocalizations {
   String replacedOccurrences(int count) {
     return 'Mengganti $count kemunculan';
   }
+
+  @override
+  String get labelFiltering => 'Penyaringan label';
+
+  @override
+  String get strict => 'Ketat';
+
+  @override
+  String get matchAllSelectedLabelsHint =>
+      'Hanya tampilkan catatan yang memiliki semua label yang dipilih.';
+
+  @override
+  String get matchAnySelectedLabelHint =>
+      'Tampilkan catatan yang memiliki setidaknya satu label yang dipilih.';
+
+  @override
+  String createLabelConfirmation(String name) {
+    return 'Buat “$name”?';
+  }
+
+  @override
+  String createAndApplyLabelConfirmation(String name) {
+    return 'Buat “$name” dan tambahkan ke catatan ini?';
+  }
+
+  @override
+  String get couldNotSaveLabel => 'Tidak dapat menyimpan label. Coba lagi.';
 }

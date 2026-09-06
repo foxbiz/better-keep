@@ -299,6 +299,7 @@ Apple Firebase configuration:
 npm run check analyze
 npm run check audit
 npm run check apple-config
+npm run check commit
 ```
 
 Run `npm run check` to list the available checks. The Apple configuration check
@@ -309,6 +310,12 @@ Run the complete portable release gate with:
 ```bash
 npm run release
 ```
+
+The gate runs `npm run check analyze`, then `npm test release`, stopping on
+failure. CI uses this same command for pull requests, tags, and manual runs.
+Dependency audits are invoked manually with `npm run check audit` (root and
+Functions) or `npm run functions audit` (Functions only); they are not part of
+the release gate. Dependency installation may still print advisory summaries.
 
 The gate requires `flutter` and `npm` on `Path`. Its browser acceptance stage
 also requires Google Chrome plus a version-matched `chromedriver` executable.
@@ -323,9 +330,35 @@ Enable the tracked local commit gate once per clone:
 git config core.hooksPath .githooks
 ```
 
-Every `git commit` then runs the complete release gate and stops if any check
-fails. For an exceptional commit that must bypass the gate, use
-`git commit --no-verify` and run `npm run release` manually as soon as possible.
+Every `git commit` runs `npm run check commit`, selecting components from staged
+changes. Each affected component runs once:
+
+| Component | Local commit checks |
+| --- | --- |
+| Flutter | `flutter analyze --no-pub` and the complete local unit/widget suite |
+| Functions | Existing compilation, script type checks, and unit tests |
+| Admin and marketing | Each affected workspace's Astro/TypeScript check and local tests |
+| Tooling | Local Node tests |
+
+Source, test, configuration, and dependency files select their owning component.
+Root npm dependency/runtime changes select tooling and both web workspaces.
+Documentation-only commits skip code checks; marketing content under `site/src`
+is treated as application content. Renames and deletions also select affected
+components.
+
+Formatting checks read staged Dart files and Functions source files covered by
+Biome, excluding generated files. They never rewrite or stage files: failures
+show a fix command so you can review and stage the result. Analysis and tests
+run against the current working tree. Install the component's dependencies first;
+the hook does not install packages or update lockfiles.
+
+Dependency audits, browser/emulator/device tests, and release builds are not part
+of local commit checks. Functions compilation is retained because its unit tests
+use compiled JavaScript. The complete release gate remains available through
+`npm run release` and continues to run in CI.
+
+For an exceptional commit that must bypass the local checks, use
+`git commit --no-verify` and run the appropriate checks manually.
 
 ## Source license
 

@@ -172,14 +172,15 @@ overview → Send for review**.
 
 ## Dependency audit policy
 
+Dependency audits are run manually, separately from `npm run release` and CI.
+Use `npm run check audit` for the root and Functions production dependencies,
+or `npm run functions audit` for Functions only. Advisory summaries printed
+during dependency installation do not block the release gate.
+
 `firebase-tools` is intentionally pinned to `15.24.0`. On 2026-07-28, the root
 full audit reported 19 development-only advisories (3 moderate, 16 high) in the
-Firebase CLI dependency tree, while the release gate remained clean:
-
-```sh
-npm run release
-# found 0 vulnerabilities
-```
+Firebase CLI dependency tree, while the production-only audit was clean at that
+time. This historical baseline does not describe current audit results.
 
 Do not apply npm's suggested forced downgrade to `firebase-tools@14.23.0` and
 do not add transitive overrides for the CLI. Whenever the pinned Firebase CLI
@@ -187,12 +188,10 @@ version changes, rerun both `npm audit` and `npm audit --omit=dev`, update this
 baseline, and rerun every emulator suite.
 
 The Functions package pins patched, Node 22-compatible transitive releases for
-`protobufjs`, `uuid`, and `@tootallnate/once`. Both runtime audits must remain
-clean:
+`protobufjs`, `uuid`, and `@tootallnate/once`. To review both runtime audits:
 
 ```sh
 npm run check audit
-# found 0 vulnerabilities
 ```
 
 Do not remove those Functions overrides without rerunning the Functions build,

@@ -609,12 +609,15 @@ class NoteSortService {
     final targetStableId = _stableId(target);
     if (draggedStableId == null || targetStableId == null) return false;
 
-    final ids = current.orderedNoteIds.toList();
-    final included = ids.toSet();
-    for (final note in visibleNotes) {
+    final included = current.orderedNoteIds.toSet();
+    final missingIds = <String>[];
+    // Custom sorting displays unpositioned notes before the saved order.
+    // Materialize that same prefix before applying the previewed move.
+    for (final note in sortNotes(context, visibleById.values)) {
       final stableId = _stableId(note);
-      if (stableId != null && included.add(stableId)) ids.add(stableId);
+      if (stableId != null && included.add(stableId)) missingIds.add(stableId);
     }
+    final ids = [...missingIds, ...current.orderedNoteIds];
     ids.remove(draggedStableId);
     final targetIndex = ids.indexOf(targetStableId);
     if (targetIndex < 0) return false;
@@ -624,6 +627,7 @@ class NoteSortService {
     final movedIndex = ids.indexOf(draggedStableId);
     final afterId = movedIndex > 0 ? ids[movedIndex - 1] : null;
     final beforeId = movedIndex + 1 < ids.length ? ids[movedIndex + 1] : null;
+    final createdAt = DateTime.now().toUtc();
     await _commit(
       current.copyWith(mode: NoteSortMode.custom, orderedNoteIds: ids),
       NoteOrderOperation(
@@ -634,8 +638,19 @@ class NoteSortService {
         beforeId: beforeId,
         afterId: afterId,
         mode: NoteSortMode.custom,
-        createdAt: DateTime.now().toUtc(),
+        createdAt: createdAt,
       ),
+      precedingOperations: [
+        // Each insert prepends during rebase, so journal the prefix in reverse.
+        for (final stableId in missingIds.reversed)
+          NoteOrderOperation(
+            id: const Uuid().v4(),
+            contextKey: context.key,
+            type: NoteOrderOperationType.insertNote,
+            noteId: stableId,
+            createdAt: createdAt,
+          ),
+      ],
     );
     return true;
   }, visibleNotes: visibleNotes);
@@ -843,8 +858,9 @@ class NoteSortService {
 
   Future<void> _commit(
     NoteOrderSnapshot draft,
-    NoteOrderOperation operation,
-  ) async {
+    NoteOrderOperation operation, {
+    Iterable<NoteOrderOperation> precedingOperations = const [],
+  }) async {
     final next = draft.copyWith(
       revision: const Uuid().v4(),
       updatedAt: DateTime.now().toUtc(),
@@ -852,11 +868,13 @@ class NoteSortService {
     );
     await AppState.db.transaction((txn) async {
       await _persistSnapshot(next, txn: txn);
-      await txn.insert(
-        operationTableName,
-        operation.toDatabaseJson(),
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      for (final pending in [...precedingOperations, operation]) {
+        await txn.insert(
+          operationTableName,
+          pending.toDatabaseJson(),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
     });
     _publishSnapshot(next);
     _scheduleCloudWrite();
@@ -922,7 +940,8 @@ class NoteSortService {
       operationTableName,
       where: 'context_key = ?',
       whereArgs: [contextKey],
-      orderBy: 'created_at ASC, id ASC',
+      // Replay commit order, including batches whose timestamps are identical.
+      orderBy: 'rowid ASC',
     );
     return rows
         .map(NoteOrderOperation.tryFromDatabaseJson)

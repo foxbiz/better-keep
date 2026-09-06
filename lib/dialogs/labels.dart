@@ -11,30 +11,9 @@ Future<List<String>?> labels(
   List<String>? initiallySelected,
   int mode = Labels.labelsModeManage,
 }) {
-  List<String>? selectedLabels;
-
   return showDialog<List<String>?>(
     context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: Text(context.l10n.labels),
-        content: Labels(
-          selectedLabels: initiallySelected,
-          mode: mode,
-          onSelect: mode == Labels.labelsModeSelect
-              ? (labels) {
-                  selectedLabels = labels;
-                }
-              : null,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, selectedLabels),
-            child: Text(context.l10n.ok),
-          ),
-        ],
-      );
-    },
+    builder: (context) => Labels(selectedLabels: initiallySelected, mode: mode),
   );
 }
 
@@ -61,34 +40,40 @@ class _LabelsState extends State<Labels> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _newLabelController = TextEditingController();
   final FocusNode _newLabelFocusNode = FocusNode();
+  bool _selectionChanged = false;
+  bool _submitting = false;
+  bool _saveFailed = false;
 
   @override
   void initState() {
-    selectedLabels = widget.selectedLabels ?? [];
+    super.initState();
+    selectedLabels = widget.selectedLabels?.toSet().toList() ?? [];
 
     Label.get()
-        .then(
-          (fetchedLabels) => setState(() {
+        .then((fetchedLabels) {
+          if (!mounted) return;
+          setState(() {
             labels = fetchedLabels;
-          }),
-        )
+          });
+        })
         .catchError((e) {
-          // Handle error gracefully
+          if (!mounted) return;
           setState(() {
             labels = [];
           });
         });
 
     _labelsUpdate = (event) {
+      if (!mounted) return;
       setState(() {
         if (event.event == "created") {
           labels = [event.label, ...(labels ?? [])];
         } else if (event.event == "deleted") {
-          labels = labels!
+          labels = (labels ?? [])
               .where((label) => label.id != event.label.id)
               .toList();
         } else if (event.event == "updated") {
-          final index = labels!.indexWhere(
+          final index = (labels ?? []).indexWhere(
             (label) => label.id == event.label.id,
           );
           if (index != -1) {
@@ -99,7 +84,6 @@ class _LabelsState extends State<Labels> {
     };
 
     Label.on("changed", _labelsUpdate);
-    super.initState();
   }
 
   @override
@@ -115,13 +99,31 @@ class _LabelsState extends State<Labels> {
   Widget build(BuildContext context) {
     final double maxHeight = MediaQuery.of(context).size.height * 0.6;
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        minWidth: 300,
-        maxWidth: 320,
-        maxHeight: maxHeight,
+    return PopScope(
+      canPop: !_submitting,
+      child: AlertDialog(
+        title: Text(context.l10n.labels),
+        content: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: 300,
+            maxWidth: 320,
+            maxHeight: maxHeight,
+          ),
+          child: AbsorbPointer(absorbing: _submitting, child: _buildBody()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _submitting ? null : () => Navigator.pop(context),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: _submitting
+                ? null
+                : () => _submit(closeAfterSaving: true),
+            child: Text(context.l10n.ok),
+          ),
+        ],
       ),
-      child: _buildBody(),
     );
   }
 
@@ -212,9 +214,7 @@ class _LabelsState extends State<Labels> {
           }
           setState(() {});
 
-          if (widget.onSelect != null) {
-            widget.onSelect!(selectedLabels);
-          }
+          _notifySelection();
         },
       );
     }
@@ -268,10 +268,13 @@ class _LabelsState extends State<Labels> {
         children: [
           Expanded(
             child: TextField(
+              readOnly: _submitting,
               controller: _newLabelController,
               focusNode: _newLabelFocusNode,
               decoration: InputDecoration(
                 hintText: context.l10n.newLabelName,
+                errorText: _saveFailed ? context.l10n.couldNotSaveLabel : null,
+                errorMaxLines: 3,
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -281,13 +284,13 @@ class _LabelsState extends State<Labels> {
                   vertical: 10,
                 ),
               ),
-              onSubmitted: (_) => _addLabelFromInput(),
+              onSubmitted: (_) => _submit(),
             ),
           ),
           SizedBox(width: 8),
           IconButton(
             icon: Icon(Icons.add),
-            onPressed: _addLabelFromInput,
+            onPressed: _submitting ? null : () => _submit(),
             tooltip: context.l10n.addLabel,
           ),
         ],
@@ -295,20 +298,88 @@ class _LabelsState extends State<Labels> {
     );
   }
 
-  void _addLabelFromInput() {
-    final labelName = _newLabelController.text.trim();
-    if (labelName.isEmpty) return;
-    final label = Label(name: labelName);
-    label.save();
-    _newLabelController.clear();
-    _newLabelFocusNode.requestFocus();
+  void _notifySelection() {
+    _selectionChanged = true;
+    widget.onSelect?.call(List.of(selectedLabels));
+  }
 
-    // Auto-select the newly created label in select mode
-    if (widget.mode == Labels.labelsModeSelect) {
-      selectedLabels.add(labelName);
-      if (widget.onSelect != null) {
-        widget.onSelect!(selectedLabels);
+  void _acceptSelection() {
+    Navigator.pop(
+      context,
+      widget.mode == Labels.labelsModeSelect && _selectionChanged
+          ? List.of(selectedLabels)
+          : null,
+    );
+  }
+
+  Future<void> _submit({bool closeAfterSaving = false}) async {
+    if (_submitting) return;
+    final labelName = _newLabelController.text.trim();
+    if (labelName.isEmpty) {
+      if (closeAfterSaving) _acceptSelection();
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _saveFailed = false;
+    });
+    try {
+      var existing = await Label.findByName(labelName);
+      if (!mounted) return;
+      if (existing == null && closeAfterSaving) {
+        var answered = false;
+        void respond(BuildContext context, bool confirmed) {
+          if (answered) return;
+          answered = true;
+          Navigator.pop(context, confirmed);
+        }
+
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            content: Text(
+              widget.mode == Labels.labelsModeSelect
+                  ? context.l10n.createAndApplyLabelConfirmation(labelName)
+                  : context.l10n.createLabelConfirmation(labelName),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => respond(context, false),
+                child: Text(context.l10n.cancel),
+              ),
+              TextButton(
+                onPressed: () => respond(context, true),
+                child: Text(context.l10n.addLabel),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || confirmed != true) return;
+        // A label may have arrived through sync while confirmation was open.
+        existing = await Label.findByName(labelName);
+        if (!mounted) return;
       }
+      if (existing == null) {
+        await Label(name: labelName).save();
+      }
+      if (!mounted) return;
+
+      if (widget.mode == Labels.labelsModeSelect &&
+          !selectedLabels.contains(labelName)) {
+        selectedLabels.add(labelName);
+        _notifySelection();
+      }
+      _newLabelController.clear();
+      if (closeAfterSaving) {
+        _acceptSelection();
+      } else {
+        _newLabelFocusNode.requestFocus();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _saveFailed = true);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 }

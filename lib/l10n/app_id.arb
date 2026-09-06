@@ -1079,5 +1079,12 @@
 	"noMatches": "Tidak ada hasil",
 	"searching": "Mencari",
 	"searchResultCount": "{current} dari {total}",
-	"replacedOccurrences": "Mengganti {count} kemunculan"
+	"replacedOccurrences": "Mengganti {count} kemunculan",
+	"labelFiltering": "Penyaringan label",
+	"strict": "Ketat",
+	"matchAllSelectedLabelsHint": "Hanya tampilkan catatan yang memiliki semua label yang dipilih.",
+	"matchAnySelectedLabelHint": "Tampilkan catatan yang memiliki setidaknya satu label yang dipilih.",
+	"createLabelConfirmation": "Buat “{name}”?",
+	"createAndApplyLabelConfirmation": "Buat “{name}” dan tambahkan ke catatan ini?",
+	"couldNotSaveLabel": "Tidak dapat menyimpan label. Coba lagi."
 }

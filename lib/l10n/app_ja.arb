@@ -1079,5 +1079,12 @@
 	"noMatches": "一致なし",
 	"searching": "検索中",
 	"searchResultCount": "{total} 件中 {current} 件目",
-	"replacedOccurrences": "{count} 件を置換しました"
+	"replacedOccurrences": "{count} 件を置換しました",
+	"labelFiltering": "ラベルで絞り込み",
+	"strict": "厳密",
+	"matchAllSelectedLabelsHint": "選択したすべてのラベルを含むノートのみ表示します。",
+	"matchAnySelectedLabelHint": "選択したラベルを少なくとも1つ含むノートを表示します。",
+	"createLabelConfirmation": "「{name}」を作成しますか？",
+	"createAndApplyLabelConfirmation": "「{name}」を作成してこのノートに追加しますか？",
+	"couldNotSaveLabel": "ラベルを保存できませんでした。もう一度お試しください。"
 }

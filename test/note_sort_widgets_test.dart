@@ -2,13 +2,17 @@ import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
+import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
+import 'package:better_keep/pages/home/folder_breadcrumb.dart';
+import 'package:better_keep/pages/home/notes.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/gestures.dart' show kLongPressTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -371,6 +375,208 @@ void main() {
 
     expect(find.byIcon(Icons.drag_indicator), findsNothing);
   });
+
+  for (final viewMode in [NoteViewMode.grid, NoteViewMode.list]) {
+    testWidgets(
+      'imported bottom note stays first after ${viewMode.name} drop',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+        final orderContext = viewMode == NoteViewMode.grid
+            ? const NoteOrderContext.mainGrid()
+            : const NoteOrderContext.mainList();
+        AppState.set('notes_view_mode', viewMode);
+        AppState.showNotes = NoteType.all;
+        AppState.currentFolder = null;
+        await tester.runAsync(() async {
+          await Label.createTable(database);
+          for (var id = 1; id <= 4; id++) {
+            final note = _note(id, 'Note $id')..syncId = 'note-$id';
+            await database.insert(Note.model, note.toJson());
+          }
+          await service.applyRemoteSnapshotForTesting(
+            NoteOrderSnapshot(
+              context: orderContext,
+              mode: NoteSortMode.custom,
+              orderedNoteIds: const ['note-1', 'note-2', 'note-4'],
+              revision: 'before-import-drag',
+              updatedAt: DateTime.utc(2026, 7, 24),
+            ),
+          );
+        });
+        await tester.pumpWidget(_app(const Notes()));
+        await _waitForNoteWork(
+          tester,
+          () => find.byType(AnimatedMasonryReorderLayout).evaluate().isNotEmpty,
+        );
+        await tester.pumpAndSettle();
+
+        final layout = tester.widget<AnimatedMasonryReorderLayout>(
+          find.byType(AnimatedMasonryReorderLayout),
+        );
+        Iterable<int> displayedIds() => tester
+            .widget<AnimatedMasonryReorderLayout>(
+              find.byType(AnimatedMasonryReorderLayout),
+            )
+            .children
+            .cast<MasonryReorderItem>()
+            .map((item) => item.id);
+        expect(displayedIds(), [3, 1, 2, 4]);
+        final firstPosition = layout.controller.globalRectFor(3)!.center;
+        final gesture = await tester.startGesture(
+          layout.controller.globalRectFor(4)!.center,
+        );
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 20));
+        await gesture.moveTo(firstPosition);
+        await tester.pumpAndSettle();
+        expect(displayedIds(), [4, 3, 1, 2]);
+        await gesture.up();
+        await _waitForNoteWork(
+          tester,
+          () =>
+              service.snapshotFor(orderContext).orderedNoteIds.first ==
+              'note-4',
+        );
+        await tester.pumpAndSettle();
+
+        expect(service.snapshotFor(orderContext).orderedNoteIds, [
+          'note-4',
+          'note-3',
+          'note-1',
+          'note-2',
+        ]);
+        expect(displayedIds(), [4, 3, 1, 2]);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  for (final viewMode in [NoteViewMode.grid, NoteViewMode.list]) {
+    testWidgets('auto-scroll accelerates below the ${viewMode.name} labels', (
+      tester,
+    ) async {
+      final drag = await _startAutoScrollDrag(
+        tester,
+        database,
+        viewMode: viewMode,
+      );
+      final x = drag.viewport.center.dx;
+      final nearLabels = Offset(x, drag.headerBottom + 80);
+      expect(nearLabels.dy, greaterThan(96));
+      await drag.gesture.moveTo(nearLabels);
+      await tester.pump();
+      final beforeSlow = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 200));
+      final slowDistance = beforeSlow - drag.scroll.offset;
+      expect(slowDistance, greaterThan(0));
+
+      await drag.gesture.moveTo(Offset(x, drag.headerBottom + 20));
+      await tester.pump();
+      final beforeFast = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 200));
+      final fastDistance = beforeFast - drag.scroll.offset;
+      expect(fastDistance, greaterThan(slowDistance));
+      final beforeStationary = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(beforeStationary - drag.scroll.offset, closeTo(fastDistance, 0.1));
+
+      await drag.gesture.moveTo(
+        Offset(x, (drag.headerBottom + drag.viewport.bottom) / 2),
+      );
+      await tester.pump();
+      final stopped = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(drag.scroll.offset, stopped);
+
+      await drag.gesture.moveTo(Offset(x, drag.viewport.top - 20));
+      await tester.pump();
+      final beforeCapped = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(beforeCapped - drag.scroll.offset, closeTo(180, 0.1));
+      if (viewMode == NoteViewMode.grid) {
+        await drag.gesture.up();
+      } else {
+        await drag.gesture.cancel();
+      }
+      final afterEnd = drag.scroll.offset;
+      await _waitForNoteWork(
+        tester,
+        () => _notesLayout(tester).activeId == null,
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(drag.scroll.offset, afterEnd);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('auto-scroll uses folder bounds and stops at scroll limits', (
+    tester,
+  ) async {
+    final drag = await _startAutoScrollDrag(
+      tester,
+      database,
+      viewMode: NoteViewMode.folderLabels,
+    );
+    final x = drag.viewport.center.dx;
+    final lowerZone = Offset(x, drag.viewport.bottom - 40);
+    expect(lowerZone.dy, lessThan(tester.view.physicalSize.height - 96));
+    await drag.gesture.moveTo(lowerZone);
+    await tester.pump();
+    final beforeDown = drag.scroll.offset;
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(drag.scroll.offset, greaterThan(beforeDown));
+
+    drag.scroll.jumpTo(drag.scroll.position.maxScrollExtent - 10);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(drag.scroll.offset, drag.scroll.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+
+    drag.scroll.jumpTo(10);
+    await drag.gesture.moveTo(Offset(x, drag.headerBottom + 20));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(drag.scroll.offset, drag.scroll.position.minScrollExtent);
+    await tester.pumpAndSettle();
+    await drag.gesture.cancel();
+    await _waitForNoteWork(tester, () => _notesLayout(tester).activeId == null);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'auto-scroll zones shrink and follow layout changes during drag',
+    (tester) async {
+      final drag = await _startAutoScrollDrag(tester, database, height: 180);
+      final x = drag.viewport.center.dx;
+      await drag.gesture.moveTo(
+        Offset(x, (drag.headerBottom + drag.viewport.bottom) / 2),
+      );
+      await tester.pump();
+      final middleOffset = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(drag.scroll.offset, middleOffset);
+
+      await drag.gesture.moveTo(Offset(x, drag.headerBottom + 25));
+      await tester.pump();
+      final beforeUp = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(drag.scroll.offset, lessThan(beforeUp));
+
+      // Move the viewport upward without moving the pointer. It is now near
+      // the lower edge, so the running ticker must recalculate its direction.
+      drag.topInset.value = 0;
+      await tester.pump();
+      final beforeDown = drag.scroll.offset;
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(drag.scroll.offset, greaterThan(beforeDown));
+      await drag.gesture.cancel();
+      await _waitForNoteWork(
+        tester,
+        () => _notesLayout(tester).activeId == null,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('hold without movement selects the note', (tester) async {
     final note = _note(11, 'Selectable note');
@@ -800,6 +1006,142 @@ void main() {
     expect(immediatelyAfter.topLeft, isNot(before.topLeft));
     expect(controller.globalRectFor(3)!.topLeft, immediatelyAfter.topLeft);
   });
+}
+
+AnimatedMasonryReorderLayout _notesLayout(WidgetTester tester) =>
+    tester.widget<AnimatedMasonryReorderLayout>(
+      find.byType(AnimatedMasonryReorderLayout),
+    );
+
+Future<
+  ({
+    TestGesture gesture,
+    ScrollController scroll,
+    Rect viewport,
+    double headerBottom,
+    ValueNotifier<double> topInset,
+  })
+>
+_startAutoScrollDrag(
+  WidgetTester tester,
+  Database database, {
+  NoteViewMode viewMode = NoteViewMode.grid,
+  double height = 400,
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(800, 800);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  addTearDown(tester.view.resetPhysicalSize);
+  final topInset = ValueNotifier(80.0);
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    topInset.dispose();
+    AppState.currentFolder = null;
+  });
+  AppState.set('notes_view_mode', viewMode);
+  AppState.showNotes = NoteType.all;
+  AppState.currentFolder = viewMode.isFolderMode
+      ? const FolderLocation.label('', syncId: '__unlabeled__')
+      : null;
+  final orderContext = viewMode.isFolderMode
+      ? NoteOrderContext.label('__unlabeled__')
+      : viewMode == NoteViewMode.grid
+      ? const NoteOrderContext.mainGrid()
+      : const NoteOrderContext.mainList();
+  await tester.runAsync(() async {
+    await Label.createTable(database);
+    for (var id = 1; id <= 40; id++) {
+      final note = _note(id, 'Note $id')..syncId = 'note-$id';
+      await database.insert(Note.model, note.toJson());
+    }
+    await NoteSortService().applyRemoteSnapshotForTesting(
+      NoteOrderSnapshot(
+        context: orderContext,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: [for (var id = 1; id <= 40; id++) 'note-$id'],
+        revision: 'auto-scroll-base',
+        updatedAt: DateTime.utc(2026, 7, 24),
+      ),
+    );
+  });
+  await tester.pumpWidget(
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        appBar: AppBar(toolbarHeight: 60),
+        body: ValueListenableBuilder<double>(
+          valueListenable: topInset,
+          child: SizedBox(width: 360, height: height, child: const Notes()),
+          builder: (context, inset, child) => Padding(
+            padding: EdgeInsets.only(top: inset),
+            child: child,
+          ),
+        ),
+      ),
+    ),
+  );
+  await _waitForNoteWork(
+    tester,
+    () => find.byType(AnimatedMasonryReorderLayout).evaluate().isNotEmpty,
+  );
+  await tester.pumpAndSettle();
+  final scroll = tester
+      .widget<CustomScrollView>(find.byType(CustomScrollView))
+      .controller!;
+  scroll.jumpTo(scroll.position.maxScrollExtent / 2);
+  await tester.pumpAndSettle();
+  final viewport = tester.getRect(find.byType(Notes));
+  final headerBottom = tester
+      .getBottomRight(find.byType(NoteDisplayOptionsButton))
+      .dy;
+  final layout = _notesLayout(tester);
+  final visibleNotes = Rect.fromLTRB(
+    viewport.left,
+    headerBottom + 1,
+    viewport.right,
+    viewport.bottom - 1,
+  );
+  final cardRects =
+      [
+            for (final item in layout.children.cast<MasonryReorderItem>())
+              layout.controller.globalRectFor(item.id)!,
+          ]
+          .map((rect) => rect.intersect(visibleNotes))
+          .where((rect) => !rect.isEmpty)
+          .toList()
+        ..sort(
+          (a, b) => (a.center.dy - (headerBottom + viewport.bottom) / 2)
+              .abs()
+              .compareTo(
+                (b.center.dy - (headerBottom + viewport.bottom) / 2).abs(),
+              ),
+        );
+  final start = cardRects.first.center;
+  expect(start.dy, inExclusiveRange(headerBottom, viewport.bottom));
+  final gesture = await tester.startGesture(start);
+  await tester.pump(kLongPressTimeout + const Duration(milliseconds: 20));
+  return (
+    gesture: gesture,
+    scroll: scroll,
+    viewport: viewport,
+    headerBottom: headerBottom,
+    topInset: topInset,
+  );
+}
+
+Future<void> _waitForNoteWork(
+  WidgetTester tester,
+  bool Function() ready,
+) async {
+  for (var attempt = 0; attempt < 200 && !ready(); attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+  }
+  expect(ready(), isTrue, reason: 'Note loading or reorder did not complete');
 }
 
 Note _note(int id, String title) {

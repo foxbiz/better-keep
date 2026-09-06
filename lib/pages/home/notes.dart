@@ -51,11 +51,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   late bool _selectionMode;
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _stickyHeaderKey = GlobalKey();
 
   Iterable<Note>? _notes;
   Iterable<Label>? _labels;
   Iterable<NoteColor>? _colors;
   int? _notesCountWithoutLabels;
+  int _loadGeneration = 0;
+  int _noteRevision = 0;
   bool _hasStoredNotes = true;
   double _pendingOffset = 0.0;
   bool _showLoader = false;
@@ -98,7 +101,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
     Label.on("changed", _fetchData);
     Note.on("changed", _notesListener);
-    AppState.subscribe("show_notes", _fetchData);
+    AppState.subscribe("show_notes", _showNotesListener);
+    AppState.subscribe("filter_labels", _labelFilterListener);
+    AppState.subscribe("match_all_labels", _labelFilterListener);
     AppState.subscribe("notes_view_mode", _viewModeListener);
     AppState.subscribe("selected_notes", _selectedNotesListener);
     AppState.subscribe("current_folder", _updateCurrentFolderListener);
@@ -114,6 +119,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    _loadGeneration++;
     if (_activeReorderController != null) {
       final orderContext = _activeOrderContext;
       if (orderContext != null) {
@@ -127,7 +133,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     _scrollController.dispose();
     Label.off("changed", _fetchData);
     Note.off("changed", _notesListener);
-    AppState.unsubscribe("show_notes", _fetchData);
+    AppState.unsubscribe("show_notes", _showNotesListener);
+    AppState.unsubscribe("filter_labels", _labelFilterListener);
+    AppState.unsubscribe("match_all_labels", _labelFilterListener);
     AppState.unsubscribe("notes_view_mode", _viewModeListener);
     AppState.unsubscribe("selected_notes", _selectedNotesListener);
     AppState.unsubscribe("current_folder", _updateCurrentFolderListener);
@@ -185,6 +193,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                 pinned: true,
                 delegate: _StickyHeaderDelegate(
                   child: Padding(
+                    key: _stickyHeaderKey,
                     padding: const EdgeInsets.symmetric(horizontal: 6.0),
                     child: Row(
                       children: [
@@ -238,13 +247,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
             physics: const AlwaysScrollableScrollPhysics(),
             scrollDirection: Axis.vertical,
             slivers: [
-              if (!widget.searchMode &&
-                  !_selectionMode &&
-                  AppState.showNotes == NoteType.all)
+              if (!_selectionMode &&
+                  AppState.showNotes == NoteType.all &&
+                  (!widget.searchMode || AppState.filterLabels.isNotEmpty))
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: _StickyHeaderDelegate(
                     child: Padding(
+                      key: _stickyHeaderKey,
                       padding: const EdgeInsets.symmetric(horizontal: 6.0),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -252,26 +262,31 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                           Expanded(
                             child: Labels(
                               key: Key('labels_widget'),
-                              onSelect: (selectedLabel) async {
-                                _scrollController.jumpTo(0.0);
-                                _startLoading();
-                                _notes = await Note.get(
-                                  AppState.showNotes,
-                                  selectedLabel.map((e) => e.name).toList(),
-                                );
-                                _stopLoading();
-                                if (context.mounted) {
-                                  setState(() {});
-                                }
+                              selectedLabels: AppState.filterLabels,
+                              readOnly: widget.searchMode,
+                              onSelect: (selectedLabels) {
+                                AppState.filterLabels = selectedLabels
+                                    .map((e) => e.name)
+                                    .toList();
                               },
                             ),
                           ),
-                          NoteDisplayOptionsButton(
-                            orderContext: _activeOrderContext,
-                            contextForView: _contextForView,
-                            contextLabel: _activeContextLabel,
-                            onSortChanged: handleSortModeChanged,
-                          ),
+                          if (!widget.searchMode &&
+                              AppState.filterLabels.isNotEmpty)
+                            IconButton(
+                              key: const ValueKey('clear-label-filters-button'),
+                              tooltip: context.l10n.clear,
+                              icon: const Icon(Icons.close),
+                              onPressed: () => AppState.filterLabels = [],
+                            )
+                          else if (!widget.searchMode)
+                            NoteDisplayOptionsButton(
+                              showLabelFilterOptions: true,
+                              orderContext: _activeOrderContext,
+                              contextForView: _contextForView,
+                              contextLabel: _activeContextLabel,
+                              onSortChanged: handleSortModeChanged,
+                            ),
                         ],
                       ),
                     ),
@@ -339,21 +354,41 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _fetchData([dynamic _]) async {
-    _startLoading();
-    _notes = await _fetchNotes();
-    _hasStoredNotes = await _loadHasStoredNotes();
-    _colors = await Note.getAllColors();
-    _labels = await Label.get(countNotes: true);
-    _notesCountWithoutLabels = await Note.countByLabels(null);
+    final generation = ++_loadGeneration;
+    final noteRevision = _noteRevision;
     final orderContext = _activeOrderContext;
+    _startLoading();
+    final notes = await _fetchNotes();
+    if (!_isCurrentLoad(generation)) return;
+    final hasStoredNotes = await _loadHasStoredNotes();
+    if (!_isCurrentLoad(generation)) return;
+    final colors = await Note.getAllColors();
+    if (!_isCurrentLoad(generation)) return;
+    final labels = await Label.get(countNotes: true);
+    if (!_isCurrentLoad(generation)) return;
+    final notesCountWithoutLabels = await Note.countByLabels(null);
+    if (!_isCurrentLoad(generation)) return;
     if (!widget.searchMode && orderContext != null) {
-      await NoteSortService().ensureContext(orderContext, visibleNotes: _notes);
+      await NoteSortService().ensureContext(orderContext, visibleNotes: notes);
     }
+    if (!_isCurrentLoad(generation)) return;
+    // A note may change while its older snapshot is being decoded or metadata
+    // is loading. Coalesce those events into one fresh load before publishing.
+    if (noteRevision != _noteRevision) {
+      await _fetchData();
+      return;
+    }
+    _notes = notes;
+    _hasStoredNotes = hasStoredNotes;
+    _colors = colors;
+    _labels = labels;
+    _notesCountWithoutLabels = notesCountWithoutLabels;
     _stopLoading();
-    if (mounted) {
-      setState(() {});
-    }
+    setState(() {});
   }
+
+  bool _isCurrentLoad(int generation) =>
+      mounted && generation == _loadGeneration;
 
   Future<List<Note>> _fetchNotes() async {
     final location = AppState.currentFolder;
@@ -364,6 +399,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
         AppState.showNotes,
         AppState.filterLabels,
         widget.searchQuery,
+        AppState.matchAllLabels,
       );
     }
 
@@ -373,6 +409,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     } else if (location.labelName != null) {
       notes = await Note.filterByLabels(
         location.labelName!.isEmpty ? null : [location.labelName!],
+        matchAllLabels: AppState.matchAllLabels,
       );
     } else if (location.color != null) {
       notes = await Note.filterByColor(location.color!);
@@ -431,8 +468,28 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   void _viewModeListener(dynamic payload) async {
+    _loadGeneration++;
     if (_activeReorderController != null) await _cancelDrag();
+    if (!mounted) return;
     AppState.currentFolder = null;
+    _showNotesListener(payload);
+  }
+
+  void _showNotesListener(dynamic _) {
+    if (AppState.filterLabels.isNotEmpty) {
+      AppState.filterLabels = [];
+    } else {
+      unawaited(_fetchData());
+    }
+  }
+
+  Future<void> _labelFilterListener(dynamic _) async {
+    final generation = ++_loadGeneration;
+    if (!mounted) return;
+    setState(() {});
+    if (_activeReorderController != null) await _cancelDrag();
+    if (!_isCurrentLoad(generation)) return;
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     await _fetchData();
   }
 
@@ -778,21 +835,49 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
   }
 
-  void _updateAutoScrollVelocity(Offset globalPosition) {
-    if (!_scrollController.hasClients) return;
-    final screenHeight = MediaQuery.sizeOf(context).height;
-    const edge = 96.0;
+  double _autoScrollVelocityFor(Offset globalPosition) {
+    if (!_scrollController.hasClients) return 0;
+    final viewport = context.findRenderObject();
+    if (viewport is! RenderBox || !viewport.attached || !viewport.hasSize) {
+      return 0;
+    }
+    var top = viewport.localToGlobal(Offset.zero).dy;
+    final bottom = viewport.localToGlobal(Offset(0, viewport.size.height)).dy;
+    final header = _stickyHeaderKey.currentContext?.findRenderObject();
+    if (header is RenderBox && header.attached && header.hasSize) {
+      top = header
+          .localToGlobal(Offset(0, header.size.height))
+          .dy
+          .clamp(top, bottom);
+    }
+    // Keep the zones inside the visible notes area, even in a short window.
+    final edge = ((bottom - top) / 2).clamp(0.0, 96.0);
+    if (edge == 0) return 0;
     var velocity = 0.0;
-    if (globalPosition.dy < edge) {
-      final proximity = ((edge - globalPosition.dy) / edge).clamp(0.0, 1.0);
+    if (globalPosition.dy < top + edge) {
+      final proximity = ((top + edge - globalPosition.dy) / edge).clamp(
+        0.0,
+        1.0,
+      );
       velocity = -(100 + 800 * proximity * proximity);
-    } else if (globalPosition.dy > screenHeight - edge) {
-      final proximity = ((globalPosition.dy - (screenHeight - edge)) / edge)
-          .clamp(0.0, 1.0);
+    } else if (globalPosition.dy > bottom - edge) {
+      final proximity = ((globalPosition.dy - (bottom - edge)) / edge).clamp(
+        0.0,
+        1.0,
+      );
       velocity = 100 + 800 * proximity * proximity;
     }
-    _autoScrollVelocity = velocity;
-    if (velocity == 0) {
+    final position = _scrollController.position;
+    if ((velocity < 0 && position.pixels <= position.minScrollExtent) ||
+        (velocity > 0 && position.pixels >= position.maxScrollExtent)) {
+      return 0;
+    }
+    return velocity;
+  }
+
+  void _updateAutoScrollVelocity(Offset globalPosition) {
+    _autoScrollVelocity = _autoScrollVelocityFor(globalPosition);
+    if (_autoScrollVelocity == 0) {
       _stopAutoScroll();
     } else if (!_autoScrollTicker.isActive) {
       _lastAutoScrollElapsed = null;
@@ -801,14 +886,19 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   void _onAutoScrollTick(Duration elapsed) {
-    final previous = _lastAutoScrollElapsed;
-    _lastAutoScrollElapsed = elapsed;
-    if (previous == null ||
-        _autoScrollVelocity == 0 ||
-        !_scrollController.hasClients) {
+    final dragPosition = _dragGlobalPosition;
+    if (dragPosition == null) {
+      _stopAutoScroll();
       return;
     }
+    // Layout can change while the finger/cursor stays still.
+    _updateAutoScrollVelocity(dragPosition);
+    if (!_autoScrollTicker.isActive) return;
+    final previous = _lastAutoScrollElapsed;
+    _lastAutoScrollElapsed = elapsed;
+    if (previous == null) return;
     final seconds = (elapsed - previous).inMicroseconds / 1000000;
+    if (seconds <= 0) return;
     final position = _scrollController.position;
     final next = (_scrollController.offset + _autoScrollVelocity * seconds)
         .clamp(position.minScrollExtent, position.maxScrollExtent);
@@ -817,10 +907,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       return;
     }
     _scrollController.jumpTo(next);
-    final dragPosition = _dragGlobalPosition;
-    if (dragPosition != null) {
-      _scheduleDragEvaluation(dragPosition);
-    }
+    _scheduleDragEvaluation(dragPosition);
   }
 
   void _stopAutoScroll() {
@@ -875,6 +962,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   void _notesListener(NoteEvent event) {
+    _noteRevision++;
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       _fetchData();
       return;
@@ -925,6 +1013,10 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
     final shouldRemove =
         event.event == "deleted" ||
+        !newNote.matchesLabels(
+          AppState.filterLabels,
+          matchAllLabels: AppState.matchAllLabels,
+        ) ||
         switch (AppState.showNotes) {
           NoteType.archived => !newNote.archived || newNote.trashed,
           NoteType.trashed => !newNote.trashed,
@@ -1288,20 +1380,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   void _openFolder(FolderLocation location) async {
+    _loadGeneration++;
     AppState.currentFolder = location;
 
     _notes = null;
     _scrollController.jumpTo(0.0);
-    _startLoading();
-    _notes = await _fetchNotes();
-    final orderContext = _activeOrderContext;
-    if (orderContext != null) {
-      await NoteSortService().ensureContext(orderContext, visibleNotes: _notes);
-    }
-    _stopLoading();
-    if (mounted) {
-      setState(() {});
-    }
+    await _fetchData();
   }
 }
 

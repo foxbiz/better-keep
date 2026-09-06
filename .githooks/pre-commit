@@ -1,7 +1,3 @@
 #!/bin/sh
 
-for variable in $(git rev-parse --local-env-vars); do
-	unset "$variable"
-done
-
-exec npm run release
+exec npm run check commit

@@ -408,16 +408,32 @@ class Note extends BaseModel<Note> {
     NoteType type, [
     List<String>? filterLabels,
     String? searchQuery,
+    bool matchAllLabels = true,
   ]) {
-    return _schema.get([type, filterLabels, searchQuery]);
+    return _schema.get([
+      type,
+      filterLabels,
+      searchQuery,
+      null,
+      null,
+      matchAllLabels,
+    ]);
   }
 
   static Future<int> count(
     NoteType type, [
     List<String>? filterLabels,
     String? searchQuery,
+    bool matchAllLabels = true,
   ]) {
-    return _schema.count([type, filterLabels, searchQuery]);
+    return _schema.count([
+      type,
+      filterLabels,
+      searchQuery,
+      null,
+      null,
+      matchAllLabels,
+    ]);
   }
 
   static Future<List<Note>> filterByColor(Color color) {
@@ -433,20 +449,47 @@ class Note extends BaseModel<Note> {
     ]);
   }
 
-  static Future<List<Note>> filterByLabels(List<String>? filterLabels) {
-    if (filterLabels == null) {
-      return _schema.get([NoteType.all, null, null, null, true]);
-    }
-
-    return _schema.get([NoteType.all, filterLabels]);
+  static Future<List<Note>> filterByLabels(
+    List<String>? filterLabels, {
+    bool matchAllLabels = true,
+  }) {
+    return _schema.get([
+      NoteType.all,
+      filterLabels,
+      null,
+      null,
+      filterLabels == null,
+      matchAllLabels,
+    ]);
   }
 
-  static Future<int> countByLabels(List<String>? filterLabels) {
-    if (filterLabels == null) {
-      return _schema.count([NoteType.all, null, null, null, true]);
-    }
+  static Future<int> countByLabels(
+    List<String>? filterLabels, {
+    bool matchAllLabels = true,
+  }) {
+    return _schema.count([
+      NoteType.all,
+      filterLabels,
+      null,
+      null,
+      filterLabels == null,
+      matchAllLabels,
+    ]);
+  }
 
-    return _schema.count([NoteType.all, filterLabels]);
+  static List<String> normalizeLabelNames(Iterable<String> labels) => labels
+      .map((label) => label.trim())
+      .where((label) => label.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
+
+  bool matchesLabels(Iterable<String> selected, {bool matchAllLabels = true}) {
+    final requiredLabels = normalizeLabelNames(selected);
+    if (requiredLabels.isEmpty) return true;
+    final ownLabels = normalizeLabelNames((labels ?? '').split(',')).toSet();
+    return matchAllLabels
+        ? requiredLabels.every(ownLabels.contains)
+        : requiredLabels.any(ownLabels.contains);
   }
 
   static Future<List<NoteColor>> getAllColors() async {
@@ -3310,12 +3353,13 @@ class _NoteSchema implements ModelSchema<Note> {
     List<dynamic> args,
   ) async {
     NoteType filter = args.isNotEmpty ? args[0] as NoteType : NoteType.all;
-    List<String>? filterLabels = args.length > 1
-        ? args[1] as List<String>?
-        : null;
+    final filterLabels = Note.normalizeLabelNames(
+      args.length > 1 ? (args[1] as List<String>? ?? const []) : const [],
+    );
     String? searchQuery = args.length > 2 ? args[2] as String? : null;
     String? color = args.length > 3 ? args[3] as String? : null;
     bool? withoutLabel = args.length > 4 ? args[4] as bool? : null;
+    final matchAllLabels = args.length > 5 ? args[5] as bool : true;
 
     List<String> whereClauses = [
       switch (filter) {
@@ -3347,7 +3391,7 @@ class _NoteSchema implements ModelSchema<Note> {
       whereArgs.add(color);
     }
 
-    if (filterLabels == null || filterLabels.isEmpty) {
+    if (filterLabels.isEmpty) {
       if (withoutLabel == true) {
         whereClauses.add("(labels IS NULL OR labels = '')");
       }
@@ -3360,51 +3404,37 @@ class _NoteSchema implements ModelSchema<Note> {
     }
 
     final placeholders = List.filled(filterLabels.length, '?').join(', ');
+    // Match Dart's trim whitespace when splitting persisted comma-separated labels.
+    const whitespace =
+        '\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0'
+        '\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008'
+        '\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
     return await AppState.db.rawQuery(
       '''
         WITH RECURSIVE splitter(id, part, rest) AS (
-          SELECT
-            id,
-            TRIM(SUBSTR(
-              labels,
-              1,
-              CASE INSTR(labels, ',')
-                WHEN 0 THEN LENGTH(labels)
-                ELSE INSTR(labels, ',') - 1
-              END
-            )) AS part,
-            TRIM(CASE INSTR(labels, ',')
-              WHEN 0 THEN ''
-              ELSE SUBSTR(labels, INSTR(labels, ',') + 1)
-            END) AS rest
+          SELECT id, '', labels || ','
           FROM note
           WHERE labels IS NOT NULL AND labels <> ''
           UNION ALL
           SELECT
             id,
-            TRIM(SUBSTR(
-              rest,
-              1,
-              CASE INSTR(rest, ',')
-                WHEN 0 THEN LENGTH(rest)
-                ELSE INSTR(rest, ',') - 1
-              END
-            )) AS part,
-            TRIM(CASE INSTR(rest, ',')
-              WHEN 0 THEN ''
-              ELSE SUBSTR(rest, INSTR(rest, ',') + 1)
-            END) AS rest
+            TRIM(SUBSTR(rest, 1, INSTR(rest, ',') - 1), '$whitespace'),
+            SUBSTR(rest, INSTR(rest, ',') + 1)
           FROM splitter
           WHERE rest <> ''
         )
-        SELECT ${count ? "COUNT(DISTINCT n.id) as count" : "DISTINCT n.*"}
+        SELECT ${count ? "COUNT(n.id) as count" : "n.*"}
         FROM note n
-        JOIN splitter s ON s.id = n.id
         WHERE ${whereClauses.join(" AND ")}
-          AND s.part IN ($placeholders)
+          AND n.id IN (
+            SELECT id FROM splitter
+            WHERE part IN ($placeholders)
+            GROUP BY id
+            ${matchAllLabels ? 'HAVING COUNT(DISTINCT part) = ?' : ''}
+          )
         ORDER BY n.pinned DESC, n.updated_at DESC;
       ''',
-      [...whereArgs, ...filterLabels],
+      [...whereArgs, ...filterLabels, if (matchAllLabels) filterLabels.length],
     );
   }
 }

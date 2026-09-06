@@ -14,6 +14,7 @@ class NoteDisplayOptionsButton extends StatelessWidget {
     super.key,
     this.showViewOptions = true,
     this.showSortOptions = true,
+    this.showLabelFilterOptions = false,
     this.orderContext,
     this.contextForView,
     this.contextLabel,
@@ -23,6 +24,7 @@ class NoteDisplayOptionsButton extends StatelessWidget {
 
   final bool showViewOptions;
   final bool showSortOptions;
+  final bool showLabelFilterOptions;
   final NoteOrderContext? orderContext;
   final NoteOrderContextForView? contextForView;
   final String? contextLabel;
@@ -48,6 +50,7 @@ class NoteDisplayOptionsButton extends StatelessWidget {
       builder: (dialogContext) => _NoteDisplayOptionsDialog(
         showViewOptions: showViewOptions,
         showSortOptions: showSortOptions,
+        showLabelFilterOptions: showLabelFilterOptions,
         initialViewMode: initialViewMode,
         initialOrderContext: initialOrderContext,
         contextForView: _contextFor,
@@ -76,6 +79,9 @@ class NoteDisplayOptionsButton extends StatelessWidget {
           }
           if (viewChanged) {
             AppState.notesViewMode = selection.viewMode;
+          }
+          if (showLabelFilterOptions) {
+            AppState.matchAllLabels = selection.matchAllLabels;
           }
           if (sortChanged) {
             onSortChanged?.call(selection.sortMode);
@@ -140,17 +146,20 @@ class _NoteDisplayOptionsSelection {
     required this.viewMode,
     required this.orderContext,
     required this.sortMode,
+    required this.matchAllLabels,
   });
 
   final NoteViewMode viewMode;
   final NoteOrderContext? orderContext;
   final NoteSortMode sortMode;
+  final bool matchAllLabels;
 }
 
 class _NoteDisplayOptionsDialog extends StatefulWidget {
   const _NoteDisplayOptionsDialog({
     required this.showViewOptions,
     required this.showSortOptions,
+    required this.showLabelFilterOptions,
     required this.initialViewMode,
     required this.initialOrderContext,
     required this.contextForView,
@@ -159,6 +168,7 @@ class _NoteDisplayOptionsDialog extends StatefulWidget {
 
   final bool showViewOptions;
   final bool showSortOptions;
+  final bool showLabelFilterOptions;
   final NoteViewMode initialViewMode;
   final NoteOrderContext? initialOrderContext;
   final NoteOrderContextForView contextForView;
@@ -173,6 +183,8 @@ class _NoteDisplayOptionsDialogState extends State<_NoteDisplayOptionsDialog> {
   late NoteViewMode _viewMode;
   late NoteOrderContext? _orderContext;
   late NoteSortMode _sortMode;
+  late bool _matchAllLabels;
+  late bool _initialMatchAllLabels;
   bool _saving = false;
   bool _saveFailed = false;
 
@@ -180,6 +192,7 @@ class _NoteDisplayOptionsDialogState extends State<_NoteDisplayOptionsDialog> {
   void initState() {
     super.initState();
     _viewMode = widget.initialViewMode;
+    _matchAllLabels = _initialMatchAllLabels = AppState.matchAllLabels;
     _orderContext = widget.initialOrderContext;
     _sortMode = _orderContext == null
         ? NoteSortMode.updatedNewest
@@ -196,6 +209,8 @@ class _NoteDisplayOptionsDialogState extends State<_NoteDisplayOptionsDialog> {
 
   bool get _hasChanges =>
       _sortChanged ||
+      (widget.showLabelFilterOptions &&
+          _matchAllLabels != _initialMatchAllLabels) ||
       (widget.showViewOptions && _viewMode != widget.initialViewMode);
 
   void _selectViewMode(NoteViewMode? mode) {
@@ -234,6 +249,7 @@ class _NoteDisplayOptionsDialogState extends State<_NoteDisplayOptionsDialog> {
           viewMode: _viewMode,
           orderContext: _orderContext,
           sortMode: _sortMode,
+          matchAllLabels: _matchAllLabels,
         ),
       );
       if (!mounted) return;
@@ -378,6 +394,27 @@ class _NoteDisplayOptionsDialogState extends State<_NoteDisplayOptionsDialog> {
                   ),
                 ),
                 if (_orderContext!.reorderable) _reorderGuidance(context),
+              ],
+              if (widget.showLabelFilterOptions) ...[
+                if (widget.showViewOptions || _sortVisible) const Divider(),
+                _sectionTitle(context, context.l10n.labelFiltering),
+                SwitchListTile(
+                  key: const ValueKey('match-all-labels-switch'),
+                  value: _matchAllLabels,
+                  title: Text(context.l10n.strict),
+                  subtitle: Text(
+                    _matchAllLabels
+                        ? context.l10n.matchAllSelectedLabelsHint
+                        : context.l10n.matchAnySelectedLabelHint,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() {
+                          _matchAllLabels = value;
+                          _saveFailed = false;
+                        }),
+                ),
               ],
               if (_saveFailed)
                 Semantics(

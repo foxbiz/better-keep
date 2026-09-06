@@ -3687,4 +3687,31 @@ class AppLocalizationsTr extends AppLocalizations {
   String replacedOccurrences(int count) {
     return '$count eşleşme değiştirildi';
   }
+
+  @override
+  String get labelFiltering => 'Etiket filtreleme';
+
+  @override
+  String get strict => 'Katı';
+
+  @override
+  String get matchAllSelectedLabelsHint =>
+      'Yalnızca seçilen tüm etiketleri içeren notları göster.';
+
+  @override
+  String get matchAnySelectedLabelHint =>
+      'Seçilen etiketlerden en az birini içeren notları göster.';
+
+  @override
+  String createLabelConfirmation(String name) {
+    return '“$name” oluşturulsun mu?';
+  }
+
+  @override
+  String createAndApplyLabelConfirmation(String name) {
+    return '“$name” oluşturulup bu nota eklensin mi?';
+  }
+
+  @override
+  String get couldNotSaveLabel => 'Etiket kaydedilemedi. Tekrar deneyin.';
 }

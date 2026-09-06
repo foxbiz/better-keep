@@ -3653,5 +3653,12 @@
 	"noMatches": "Eşleşme yok",
 	"searching": "Aranıyor",
 	"searchResultCount": "{total} eşleşmeden {current}.",
-	"replacedOccurrences": "{count} eşleşme değiştirildi"
+	"replacedOccurrences": "{count} eşleşme değiştirildi",
+	"labelFiltering": "Etiket filtreleme",
+	"strict": "Katı",
+	"matchAllSelectedLabelsHint": "Yalnızca seçilen tüm etiketleri içeren notları göster.",
+	"matchAnySelectedLabelHint": "Seçilen etiketlerden en az birini içeren notları göster.",
+	"createLabelConfirmation": "“{name}” oluşturulsun mu?",
+	"createAndApplyLabelConfirmation": "“{name}” oluşturulup bu nota eklensin mi?",
+	"couldNotSaveLabel": "Etiket kaydedilemedi. Tekrar deneyin."
 }

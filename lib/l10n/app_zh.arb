@@ -1079,5 +1079,12 @@
 	"noMatches": "没有匹配项",
 	"searching": "正在搜索",
 	"searchResultCount": "第 {current} 项，共 {total} 项",
-	"replacedOccurrences": "已替换 {count} 处"
+	"replacedOccurrences": "已替换 {count} 处",
+	"labelFiltering": "标签筛选",
+	"strict": "严格",
+	"matchAllSelectedLabelsHint": "仅显示包含所有选中标签的笔记。",
+	"matchAnySelectedLabelHint": "显示包含至少一个选中标签的笔记。",
+	"createLabelConfirmation": "创建“{name}”？",
+	"createAndApplyLabelConfirmation": "创建“{name}”并添加到此笔记？",
+	"couldNotSaveLabel": "无法保存标签。请重试。"
 }

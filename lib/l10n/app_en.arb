@@ -3778,5 +3778,21 @@
 	"@replacedOccurrences": {
 		"description": "Result after replacing all in-note search matches",
 		"placeholders": { "count": { "type": "int" } }
-	}
+	},
+	"labelFiltering": "Label filtering",
+	"strict": "Strict",
+	"matchAllSelectedLabelsHint": "Only show notes containing every selected label.",
+	"matchAnySelectedLabelHint": "Show notes containing at least one selected label.",
+	"createLabelConfirmation": "Create “{name}”?",
+	"@createLabelConfirmation": {
+		"description": "Confirm creating a pending label from the sidebar labels dialog",
+		"placeholders": { "name": { "type": "String" } }
+	},
+	"createAndApplyLabelConfirmation": "Create “{name}” and add it to this note?",
+	"@createAndApplyLabelConfirmation": {
+		"description": "Confirm creating a pending label and selecting it for the current note",
+		"placeholders": { "name": { "type": "String" } }
+	},
+	"couldNotSaveLabel": "Couldn’t save label. Try again.",
+	"@couldNotSaveLabel": { "description": "Label save failure shown without discarding the pending name" }
 }
