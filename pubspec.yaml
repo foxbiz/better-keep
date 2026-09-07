@@ -25,9 +25,9 @@ dependencies:
   record: ^7.1.1
   audioplayers: ^6.5.1
   shared_preferences: ^2.5.3
-  file_picker: ^11.0.2
+  file_picker: ^12.2.0
   file_selector_windows: ^0.9.3+5
-  share_plus: ^12.0.1
+  share_plus: ^13.3.0
   path: ^1.9.1
   perfect_freehand: ^2.5.1
   flutter_colorpicker: ^1.1.0
@@ -70,8 +70,8 @@ dependencies:
   flutter_local_notifications: ^22.0.1
   flutter_timezone: ^5.1.0
   timezone: ^0.11.1
-  device_info_plus: ^12.3.0
-  package_info_plus: ^9.0.0
+  device_info_plus: ^13.2.0
+  package_info_plus: ^10.2.1
   archive: ^4.0.4
   flutter_lints: ^6.0.0
   web: ^1.1.1
@@ -86,6 +86,11 @@ dependencies:
   markdown: ^7.3.0
   flutter_html: ^3.0.0
   flutter_quill_extensions: ^11.0.0
+
+dependency_overrides:
+  # Android-only clipboard allocation fix; see the vendored PATCHES.md.
+  quill_native_bridge_android:
+    path: third_party/quill_native_bridge_android
 
 dev_dependencies:
   msix: ^3.16.7

@@ -27,6 +27,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
   KeepImportCancellationToken? _cancellationToken;
   String? _error;
   bool _importing = false;
+  bool _choosing = false;
 
   @override
   void initState() {
@@ -35,34 +36,32 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
   }
 
   Future<void> _chooseZip() async {
-    final selection = await FilePicker.pickFiles(
-      dialogTitle: context.l10n.googleKeepChooseZip,
-      type: FileType.custom,
-      allowedExtensions: const ['zip'],
-      withData: false,
-      withReadStream: true,
-      allowMultiple: false,
-    );
-    if (selection == null || selection.files.isEmpty) return;
-    final file = selection.files.single;
-    final input = switch ((file.readStream, file.path, file.bytes)) {
-      (final stream?, _, _) => KeepArchiveInput.stream(stream, size: file.size),
-      (_, final filePath?, _) => KeepArchiveInput.file(
-        filePath,
-        size: file.size,
-      ),
-      (_, _, final bytes?) => KeepArchiveInput.memory(bytes),
-      _ => throw const KeepImportValidationException(
-        'The selected ZIP could not be read.',
-      ),
-    };
-    await _runImport(
-      (token) => _service.importZip(
-        input,
-        cancellationToken: token,
-        onProgress: _onProgress,
-      ),
-    );
+    if (_choosing || _importing) return;
+    setState(() => _choosing = true);
+    try {
+      final file = await FilePicker.pickFile(
+        dialogTitle: context.l10n.googleKeepChooseZip,
+        type: FileType.custom,
+        allowedExtensions: const ['zip'],
+      );
+      if (!mounted || file == null) return;
+      await _runImport((token) async {
+        final size = file.lengthSync() ?? await file.length();
+        token.throwIfCancelled();
+        return _service.importZip(
+          KeepArchiveInput.stream(file.readAsByteStream(), size: size),
+          cancellationToken: token,
+          onProgress: _onProgress,
+        );
+      });
+    } catch (error, stackTrace) {
+      AppLogger.error('Google Keep ZIP selection failed', error, stackTrace);
+      if (mounted) {
+        setState(() => _error = context.l10n.googleKeepImportFailed);
+      }
+    } finally {
+      if (mounted) setState(() => _choosing = false);
+    }
   }
 
   Future<void> _runImport(
@@ -176,7 +175,7 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
           Text(context.l10n.googleKeepImportInstructions),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: _importing ? null : _chooseZip,
+            onPressed: _importing || _choosing ? null : _chooseZip,
             icon: const Icon(Icons.archive_outlined),
             label: Text(context.l10n.googleKeepChooseZip),
           ),

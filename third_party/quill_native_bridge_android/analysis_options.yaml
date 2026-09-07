@@ -1,0 +1,4 @@
+# Pigeon input is retained for provenance; generated channel bindings are unchanged.
+analyzer:
+  exclude:
+    - pigeons/**

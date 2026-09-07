@@ -55,13 +55,6 @@ void main() async {
 
   // Enable edge-to-edge display for Android 15+ compatibility
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-    ),
-  );
 
   initializeDb();
   // Native motion detection is best-effort and must never delay app startup.
