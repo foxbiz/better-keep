@@ -1,3 +1,6 @@
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/models/label_sync_track.dart';
+import 'package:better_keep/services/sync_track_store.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
@@ -167,27 +170,40 @@ class Label extends BaseModel<Label> {
     syncId ??= const Uuid().v4();
     updatedAt = DateTime.now();
 
-    if (id == null) {
-      createdAt = DateTime.now();
-      final rowId = await db.insert(
-        model,
-        toJson(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      id = rowId;
-      notifyWithOrigin("created", origin);
+    final wasNew = id == null;
+    if (wasNew) createdAt = DateTime.now();
+    final savedId = await db.transaction((transaction) async {
+      requireCloudOperation();
+      final rowId = wasNew
+          ? await transaction.insert(
+              model,
+              toJson(),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            )
+          : id!;
+      if (!wasNew) {
+        await transaction.update(
+          model,
+          toJson(),
+          where: 'id = ?',
+          whereArgs: [rowId],
+        );
+      }
       if (sync) {
-        LabelSyncService().queueSync(this);
+        await SyncTrackStore.queueInTransaction(
+          transaction: transaction,
+          table: LabelSyncTrack.model,
+          localId: rowId,
+          action: LabelSyncAction.upload.name,
+        );
       }
       return rowId;
-    }
-
-    await db.update(model, toJson(), where: "id = ?", whereArgs: [id]);
-    notifyWithOrigin("updated", origin);
-    if (sync) {
-      LabelSyncService().queueSync(this);
-    }
-    return id!;
+    });
+    requireCloudOperation();
+    id = savedId;
+    notifyWithOrigin(wasNew ? 'created' : 'updated', origin);
+    if (sync) LabelSyncService().sync();
+    return savedId;
   }
 
   Future<int> delete({
@@ -199,15 +215,26 @@ class Label extends BaseModel<Label> {
     }
 
     final labelId = id!;
-    final rowsDeleted = await AppState.db.delete(
-      model,
-      where: "id = ?",
-      whereArgs: [id],
-    );
-    notifyWithOrigin("deleted", origin);
-    if (sync) {
-      LabelSyncService().queueDelete(labelId);
-    }
+    final rowsDeleted = await AppState.db.transaction((transaction) async {
+      requireCloudOperation();
+      final count = await transaction.delete(
+        model,
+        where: 'id = ?',
+        whereArgs: [labelId],
+      );
+      if (sync) {
+        await SyncTrackStore.queueInTransaction(
+          transaction: transaction,
+          table: LabelSyncTrack.model,
+          localId: labelId,
+          action: LabelSyncAction.delete.name,
+        );
+      }
+      return count;
+    });
+    requireCloudOperation();
+    notifyWithOrigin('deleted', origin);
+    if (sync) LabelSyncService().sync();
 
     final notes = await Note.filterByLabels([name]);
     for (final note in notes) {

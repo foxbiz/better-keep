@@ -5,7 +5,7 @@ import 'package:better_keep/services/monetization/verified_entitlement_snapshot.
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final now = DateTime.utc(2026, 8, 10);
+  final now = DateTime.now().toUtc();
 
   SubscriptionStatus provider({
     String source = 'play_store',

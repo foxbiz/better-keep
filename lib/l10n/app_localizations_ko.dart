@@ -3576,4 +3576,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get couldNotSaveLabel => '라벨을 저장하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get noConnectionAvailable => '네트워크에 연결할 수 없습니다.';
+
+  @override
+  String get localEncryptionUnavailable =>
+      '저장된 암호화 키를 읽을 수 없습니다. 기기 잠금을 해제하고 다시 시도하세요. 로컬 데이터는 보존되었습니다.';
+
+  @override
+  String get localEncryptionMissing =>
+      '저장된 노트를 여는 데 필요한 키가 없거나 손상되었습니다. 다시 연결하여 접근을 복원하거나 계정 복구를 사용하세요. 로컬 데이터는 보존되었습니다.';
 }

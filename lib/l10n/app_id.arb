@@ -1086,5 +1086,8 @@
 	"matchAnySelectedLabelHint": "Tampilkan catatan yang memiliki setidaknya satu label yang dipilih.",
 	"createLabelConfirmation": "Buat “{name}”?",
 	"createAndApplyLabelConfirmation": "Buat “{name}” dan tambahkan ke catatan ini?",
-	"couldNotSaveLabel": "Tidak dapat menyimpan label. Coba lagi."
+	"couldNotSaveLabel": "Tidak dapat menyimpan label. Coba lagi.",
+	"noConnectionAvailable": "Tidak ada koneksi yang tersedia.",
+	"localEncryptionUnavailable": "Kunci enkripsi tersimpan tidak dapat dibaca. Buka kunci perangkat dan coba lagi. Data lokal Anda tetap disimpan.",
+	"localEncryptionMissing": "Kunci untuk membuka catatan tersimpan hilang atau rusak. Sambungkan kembali untuk memulihkan akses atau gunakan pemulihan akun. Data lokal Anda tetap disimpan."
 }

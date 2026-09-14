@@ -1086,5 +1086,8 @@
 	"matchAnySelectedLabelHint": "显示包含至少一个选中标签的笔记。",
 	"createLabelConfirmation": "创建“{name}”？",
 	"createAndApplyLabelConfirmation": "创建“{name}”并添加到此笔记？",
-	"couldNotSaveLabel": "无法保存标签。请重试。"
+	"couldNotSaveLabel": "无法保存标签。请重试。",
+	"noConnectionAvailable": "无可用网络连接。",
+	"localEncryptionUnavailable": "无法读取已保存的加密密钥。请解锁设备后重试。本地数据已保留。",
+	"localEncryptionMissing": "打开已保存笔记所需的密钥丢失或损坏。请重新连接以恢复访问，或使用账户恢复。本地数据已保留。"
 }

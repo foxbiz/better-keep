@@ -3576,4 +3576,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get couldNotSaveLabel => 'ラベルを保存できませんでした。もう一度お試しください。';
+
+  @override
+  String get noConnectionAvailable => 'ネットワークに接続できません。';
+
+  @override
+  String get localEncryptionUnavailable =>
+      '保存された暗号化キーを読み取れませんでした。端末のロックを解除して再試行してください。ローカルデータは保持されています。';
+
+  @override
+  String get localEncryptionMissing =>
+      '保存されたノートを開くためのキーが見つからないか破損しています。再接続してアクセスを復元するか、アカウント復元を使用してください。ローカルデータは保持されています。';
 }

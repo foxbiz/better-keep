@@ -1,3 +1,4 @@
+import 'package:better_keep/services/cloud_operation.dart';
 import 'dart:typed_data';
 
 import 'package:better_keep/models/base_model.dart';
@@ -64,26 +65,24 @@ class FileSyncTrack extends BaseModel<FileSyncTrack> {
     await save();
   }
 
-  Future<int> save() async {
+  Future<int> save({DatabaseExecutor? database}) async {
+    requireCloudOperation();
+    final executor = database ?? AppState.db;
     var jsonObj = toJson();
     jsonObj['updated_at'] = DateTime.now().toIso8601String();
 
     if (id != null) {
-      await AppState.db.update(
-        model,
-        jsonObj,
-        where: "id = ?",
-        whereArgs: [id],
-      );
+      await executor.update(model, jsonObj, where: "id = ?", whereArgs: [id]);
       return id!;
     }
 
     jsonObj['created_at'] = DateTime.now().toIso8601String();
-    id = await AppState.db.insert(model, jsonObj);
+    id = await executor.insert(model, jsonObj);
     return id!;
   }
 
   Future<void> delete() async {
+    requireCloudOperation();
     if (id == null) {
       return;
     }

@@ -20,6 +20,7 @@ import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
@@ -132,6 +133,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    AuthService.setAppForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
       // Check for token revocation when app resumes from background
       AuthService.checkTokenRevocationOnResume();
@@ -217,7 +219,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           builder: (context, isSessionInvalid, child) {
             // If session is invalid, show home with warning banner
             // This allows user to access local notes even when auth fails
-            if (isSessionInvalid) {
+            if (isSessionInvalid && E2EEService.instance.isCryptoReady) {
               AppLogger.log(
                 '[Auth] Session invalid, showing Home with warning banner',
               );
@@ -281,6 +283,17 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                               const AccountRecoveryPage(),
                             AuthenticatedStartupRoute.recovery => AuthScaffold(
                               child: PostSignInRecoveryView(
+                                canContinueOffline:
+                                    E2EEService.instance.isCryptoReady,
+                                message:
+                                    switch (E2EEService.instance.localState) {
+                                      LocalEncryptionState.unavailable =>
+                                        context.l10n.localEncryptionUnavailable,
+                                      LocalEncryptionState.missing ||
+                                      LocalEncryptionState.corrupt =>
+                                        context.l10n.localEncryptionMissing,
+                                      _ => null,
+                                    },
                                 onRetry: () => _retryPostSignInSafely(
                                   'authenticated startup screen',
                                 ),

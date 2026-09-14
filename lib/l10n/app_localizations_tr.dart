@@ -3714,4 +3714,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get couldNotSaveLabel => 'Etiket kaydedilemedi. Tekrar deneyin.';
+
+  @override
+  String get noConnectionAvailable => 'Bağlantı yok.';
+
+  @override
+  String get localEncryptionUnavailable =>
+      'Kaydedilen şifreleme anahtarları okunamadı. Cihazınızın kilidini açıp tekrar deneyin. Yerel verileriniz korundu.';
+
+  @override
+  String get localEncryptionMissing =>
+      'Kayıtlı notlarınızı açmak için gereken anahtarlar eksik veya hasarlı. Erişimi geri yüklemek için yeniden bağlanın veya hesap kurtarmayı kullanın. Yerel verileriniz korundu.';
 }

@@ -3745,4 +3745,15 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get couldNotSaveLabel =>
       'Não foi possível salvar a etiqueta. Tente novamente.';
+
+  @override
+  String get noConnectionAvailable => 'Sem conexão disponível.';
+
+  @override
+  String get localEncryptionUnavailable =>
+      'Não foi possível ler as chaves de criptografia salvas. Desbloqueie o dispositivo e tente novamente. Seus dados locais foram mantidos.';
+
+  @override
+  String get localEncryptionMissing =>
+      'As chaves necessárias para abrir suas notas salvas estão ausentes ou danificadas. Reconecte-se para restaurar o acesso ou use a recuperação de conta. Seus dados locais foram mantidos.';
 }

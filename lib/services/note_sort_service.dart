@@ -1,3 +1,4 @@
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -131,7 +132,7 @@ class NoteSortService {
     try {
       final user = AuthService.currentUser;
       return user != null &&
-          !AuthService.sessionInvalid.value &&
+          AuthService.canSyncCloud &&
           !ReviewAccess.isAuthorizedSessionFor(user);
     } catch (_) {
       return false;
@@ -144,7 +145,8 @@ class NoteSortService {
   bool get _canPushCloud =>
       canPushCloudOverride ?? (_canReceiveCloud && PlanService.instance.isPaid);
 
-  bool _isCurrentCloudRun(_NoteSortCloudRun run) => identical(_cloudRun, run);
+  bool _isCurrentCloudRun(_NoteSortCloudRun run) =>
+      identical(_cloudRun, run) && (run.session.isCurrent?.call() ?? true);
 
   Future<T> _trackCloudTask<T>(Future<T> task) {
     _cloudTasks.add(task);
@@ -165,6 +167,7 @@ class NoteSortService {
   }) {
     final session = _NoteSortCloudSession(
       generation: ++_nextCloudGeneration,
+      isCurrent: firestore == null ? null : AuthService.captureSession(),
       userId: userId,
       database: database,
       firestore: firestore,
@@ -361,8 +364,25 @@ class NoteSortService {
     Note.on('changed', _handleNoteEvent);
     _lastKnownCryptoReady = _isCryptoReady;
     E2EEService.instance.status.addListener(_handleE2EEStatusChange);
+    AuthService.cloudRecovery.state.addListener(_handleCloudSessionChange);
     E2EEService.instance.deviceManager.hasUMK.addListener(
       _handleE2EEStatusChange,
+    );
+  }
+
+  void _handleCloudSessionChange() {
+    if (AuthService.cloudRecovery.state.value == CloudSessionState.ready) {
+      return;
+    }
+    // Invalidate synchronously before awaiting listener cancellation.
+    unawaited(
+      _stopCloudSync().catchError((Object error, StackTrace stack) {
+        AppLogger.error(
+          '[NOTE_SORT] Cloud pause cleanup deferred',
+          error,
+          stack,
+        );
+      }),
     );
   }
 
@@ -952,7 +972,16 @@ class NoteSortService {
   Future<void> startCloudSync() async {
     await init();
     if (!_initialized) return;
-    if (_cloudRun != null || !_canReceiveCloud) return;
+    if (!_canReceiveCloud) return;
+    final existing = _cloudRun;
+    if (existing != null) {
+      if (_isCurrentCloudRun(existing)) {
+        _startContextListener(existing);
+        _scheduleCloudWrite(existing);
+        return;
+      }
+      await _stopCloudSync();
+    }
     final startOverride = cloudStartOverride;
     if (startOverride != null) {
       await startOverride();
@@ -961,14 +990,16 @@ class NoteSortService {
     final user = AuthService.currentUser;
     if (user == null) return;
     final firestore = _firestore;
+    late final _NoteSortCloudRun run;
     final repository =
         cloudRepositoryOverride ??
         FirestoreNoteSortCloudRepository(
           firestore: firestore,
           userId: user.uid,
           schemaVersion: cloudSchemaVersion,
+          isCurrent: () => _isCurrentCloudRun(run),
         );
-    final run = _newCloudRun(
+    run = _newCloudRun(
       userId: user.uid,
       database: AppState.db,
       firestore: firestore,
@@ -1053,6 +1084,10 @@ class NoteSortService {
             _trackCloudTask(work);
           },
           onError: (Object error, StackTrace stackTrace) {
+            if (!_isCurrentCloudRun(run)) return;
+            if (isCloudConnectionFailure(error)) {
+              AuthService.cloudRecovery.connectionLost();
+            }
             AppLogger.error(
               '[NOTE_SORT] Context listener failed',
               error,
@@ -1096,6 +1131,9 @@ class NoteSortService {
       }
     } catch (error, stackTrace) {
       hydrationFailed = true;
+      if (_isCurrentCloudRun(run) && isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+      }
       AppLogger.error(
         '[NOTE_SORT] Failed to apply context snapshot',
         error,
@@ -1441,8 +1479,6 @@ class NoteSortService {
       return _NoteSortUploadOutcome.staleSession;
     }
     final chunks = chunkNoteIds(local.orderedNoteIds);
-    var chunksMayExist = false;
-    var manifestCommitted = false;
     try {
       await _journalCloudRevision(
         run,
@@ -1453,15 +1489,8 @@ class NoteSortService {
       if (!_isCurrentCloudRun(run)) {
         return _NoteSortUploadOutcome.staleSession;
       }
-      chunksMayExist = true;
       await run.session.repository.writeChunks(local.revision, chunks);
       if (!_isCurrentCloudRun(run)) {
-        await _cleanupCandidateWithoutLocalState(
-          run,
-          contextKey: local.context.key,
-          revision: local.revision,
-          chunkCount: chunks.length,
-        );
         return _NoteSortUploadOutcome.staleSession;
       }
 
@@ -1486,12 +1515,6 @@ class NoteSortService {
       );
       if (commit.outcome == NoteSortCloudCommitOutcome.conflict) {
         if (!_isCurrentCloudRun(run)) {
-          await _cleanupCandidateWithoutLocalState(
-            run,
-            contextKey: local.context.key,
-            revision: local.revision,
-            chunkCount: chunks.length,
-          );
           return _NoteSortUploadOutcome.staleSession;
         }
         return await _recoverManifestConflict(
@@ -1501,7 +1524,6 @@ class NoteSortService {
           remoteRevision: commit.previousRevision,
         );
       }
-      manifestCommitted = true;
       if (!_isCurrentCloudRun(run)) {
         return _NoteSortUploadOutcome.staleSession;
       }
@@ -1517,18 +1539,34 @@ class NoteSortService {
           dirty: false,
           hydrated: true,
         );
-        await run.session.database.transaction((txn) async {
+        final acknowledged = await run.session.database.transaction((
+          txn,
+        ) async {
+          if (!_isCurrentCloudRun(run)) throw const CloudOperationCancelled();
+          final rows = await txn.query(
+            tableName,
+            where: 'context_key = ?',
+            whereArgs: [local.context.key],
+          );
+          if (rows.isEmpty || rows.single['revision'] != local.revision) {
+            return false;
+          }
           await _persistSnapshot(clean, txn: txn);
           await txn.delete(
             operationTableName,
             where: 'context_key = ?',
             whereArgs: [local.context.key],
           );
+          if (!_isCurrentCloudRun(run)) throw const CloudOperationCancelled();
+          return true;
         });
         if (!_isCurrentCloudRun(run)) {
           return _NoteSortUploadOutcome.staleSession;
         }
-        _publishSnapshot(clean);
+        if (acknowledged &&
+            snapshots.value[local.context.key]?.revision == local.revision) {
+          _publishSnapshot(clean);
+        }
       }
       _remoteContextKeys.add(local.context.key);
       _remoteChunkCounts[local.revision] = chunks.length;
@@ -1547,17 +1585,13 @@ class NoteSortService {
       return _NoteSortUploadOutcome.success;
     } catch (error, stackTrace) {
       if (!_isCurrentCloudRun(run)) {
-        if (chunksMayExist && !manifestCommitted) {
-          await _cleanupCandidateWithoutLocalState(
-            run,
-            contextKey: local.context.key,
-            revision: local.revision,
-            chunkCount: chunks.length,
-          );
-        }
         return _NoteSortUploadOutcome.staleSession;
       }
 
+      if (isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+        return _NoteSortUploadOutcome.retryableFailure;
+      }
       AppLogger.error(
         '[NOTE_SORT] Failed to upload ${local.context.key}',
         error,
@@ -1626,6 +1660,9 @@ class NoteSortService {
   }
 
   _NoteSortUploadOutcome _uploadFailureOutcome(Object error) {
+    if (isCloudConnectionFailure(error)) {
+      AuthService.cloudRecovery.connectionLost();
+    }
     if (_isAuthorizationError(error)) {
       return _NoteSortUploadOutcome.authorizationStop;
     }
@@ -1692,31 +1729,14 @@ class NoteSortService {
       if (!_isCurrentCloudRun(run)) return;
       await _clearCloudCleanup(run, revision);
     } catch (error, stackTrace) {
+      if (_isCurrentCloudRun(run) && isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+      }
       if (_isCurrentCloudRun(run) && !_isAuthorizationError(error)) {
         await _recordCloudCleanupFailure(run, revision);
       }
       AppLogger.error(
         '[NOTE_SORT] Failed to remove unreferenced order chunks',
-        error,
-        stackTrace,
-      );
-    }
-  }
-
-  Future<void> _cleanupCandidateWithoutLocalState(
-    _NoteSortCloudRun run, {
-    required String contextKey,
-    required String revision,
-    required int chunkCount,
-  }) async {
-    try {
-      final manifest = await run.session.repository.readManifest(contextKey);
-      if (manifest?['revision'] != revision) {
-        await run.session.repository.deleteRevision(revision, chunkCount);
-      }
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        '[NOTE_SORT] Failed stale-session candidate cleanup',
         error,
         stackTrace,
       );
@@ -2114,6 +2134,7 @@ class NoteSortService {
 
   Future<void> dispose() async {
     E2EEService.instance.status.removeListener(_handleE2EEStatusChange);
+    AuthService.cloudRecovery.state.removeListener(_handleCloudSessionChange);
     E2EEService.instance.deviceManager.hasUMK.removeListener(
       _handleE2EEStatusChange,
     );
@@ -2150,8 +2171,10 @@ class _NoteSortCloudSession {
     required this.database,
     required this.firestore,
     required this.repository,
+    this.isCurrent,
   });
 
+  final bool Function()? isCurrent;
   final int generation;
   final String userId;
   final Database database;

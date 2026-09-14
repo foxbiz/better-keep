@@ -13,6 +13,27 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('remote sync cache completion', () {
+    test(
+      'failed cache initialization preserves pending pages and can retry',
+      () async {
+        final fs = _MemoryFileSystem();
+        final original = RemoteSyncCacheService.forTesting(() async => fs);
+        await original.init();
+        await original.startNewSync(_cursor);
+        await original.addPage(_page(hasMore: true));
+        final before = fs.files.map(
+          (key, value) => MapEntry(key, value.toList()),
+        );
+        final restarted = RemoteSyncCacheService.forTesting(() async => fs);
+        fs.failReads = true;
+        await expectLater(restarted.init(), throwsStateError);
+        expect(fs.files, before);
+        fs.failReads = false;
+        await restarted.init();
+        expect(restarted.getPendingSyncs().single.remoteDocId, 'note-1');
+      },
+    );
+
     test('an interrupted page cannot become commit-ready', () async {
       final fileSystem = _MemoryFileSystem();
       final cache = RemoteSyncCacheService.forTesting(() async => fileSystem);
@@ -244,6 +265,7 @@ PendingRemoteSyncPage _page({
 }
 
 class _MemoryFileSystem implements FileSystem {
+  bool failReads = false;
   final Map<String, Uint8List> files = {};
   final Set<String> directories = {'/', '/cache'};
 
@@ -281,8 +303,9 @@ class _MemoryFileSystem implements FileSystem {
   }
 
   @override
-  Future<Uint8List> readBytes(String filePath) async =>
-      Uint8List.fromList(files[filePath] ?? (throw StateError('missing')));
+  Future<Uint8List> readBytes(String filePath) async => failReads
+      ? throw StateError('Storage unavailable')
+      : Uint8List.fromList(files[filePath] ?? (throw StateError('missing')));
 
   @override
   Future<bool> delete(String filePath) async => files.remove(filePath) != null;

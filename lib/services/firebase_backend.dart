@@ -302,6 +302,13 @@ class FirebaseBackend {
   }
 
   @visibleForTesting
+  static void configureForTesting(FirebaseBackendConfiguration value) {
+    _active = value;
+    _locked = false;
+    configuration.value = value;
+  }
+
+  @visibleForTesting
   static void resetForTesting() {
     _active = null;
     _locked = false;

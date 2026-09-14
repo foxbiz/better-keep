@@ -28,14 +28,14 @@ bool isTransientFirestoreFailure(Object error) {
 Future<T> retryTransientFirestoreOperation<T>(
   Future<T> Function() operation, {
   FirestoreRetryDelay delay = Future<void>.delayed,
+  bool Function(Object error) shouldRetry = isTransientFirestoreFailure,
   void Function(Object error, int nextAttempt, Duration delay)? onRetry,
 }) async {
   for (var attempt = 0; ; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      if (!isTransientFirestoreFailure(error) ||
-          attempt >= firestoreRetryDelays.length) {
+      if (!shouldRetry(error) || attempt >= firestoreRetryDelays.length) {
         rethrow;
       }
       final retryDelay = firestoreRetryDelays[attempt];

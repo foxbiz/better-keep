@@ -4,6 +4,10 @@
 /// EncryptedSharedPreferences on Android, etc.) to store sensitive data.
 library;
 
+import 'package:better_keep/services/e2ee/device_authorization.dart';
+import 'package:better_keep/services/async_keyed_serializer.dart';
+import 'package:better_keep/services/cloud_operation.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -86,6 +90,7 @@ class E2EESecureStorage {
 
   // Web fallback
   SharedPreferences? _webPrefs;
+  final _mutations = AsyncKeyedSerializer<String>();
 
   /// Initialize storage (required for web platform).
   Future<void> init() async {
@@ -196,28 +201,48 @@ class E2EESecureStorage {
   }
 
   /// Clears all E2EE data (for logout or key rotation).
-  Future<void> clearAll() async {
-    await _delete(_devicePrivateKeyKey);
-    await _delete(_devicePublicKeyKey);
-    await _delete(_deviceIdKey);
-    await _delete(_umkCacheKey);
-    await _delete(_rememberDeviceKey);
-    await _delete(_deviceStatusKey);
-    await _delete(_signInProgressKey);
-  }
+  Future<void> clearAll() => _mutations.run('keys', () async {
+    requireCloudOperation();
+    for (final key in [
+      _devicePrivateKeyKey,
+      _devicePublicKeyKey,
+      _deviceIdKey,
+      _umkCacheKey,
+      _rememberDeviceKey,
+      _deviceStatusKey,
+      _signInProgressKey,
+    ]) {
+      requireCloudOperation();
+      await _deleteDirect(key);
+    }
+  });
 
   /// Checks if device keys exist.
   Future<bool> hasDeviceKeys() async {
     final privateKey = await _read(_devicePrivateKeyKey);
     final publicKey = await _read(_devicePublicKeyKey);
     final deviceId = await _read(_deviceIdKey);
-    return privateKey != null && publicKey != null && deviceId != null;
+    if (privateKey == null && publicKey == null && deviceId == null) {
+      return false;
+    }
+    if (privateKey == null ||
+        publicKey == null ||
+        deviceId == null ||
+        deviceId.isEmpty ||
+        base64Decode(privateKey).length != 32 ||
+        base64Decode(publicKey).length != 32) {
+      throw const FormatException('Incomplete or invalid device keys');
+    }
+    return true;
   }
 
   // Platform-aware read (with decryption on web)
   Future<String?> _read(String key) async {
     final scopedKey = _scopedKey(key);
     if (kIsWeb) {
+      if (_webPrefs == null) {
+        throw const SecureStorageUnavailable('Web storage is not initialized');
+      }
       final encrypted = _webPrefs?.getString(scopedKey);
       if (encrypted == null) return null;
       return await _webDecrypt(encrypted);
@@ -227,19 +252,29 @@ class E2EESecureStorage {
     } catch (e) {
       // Native secure storage can throw on iOS (Keychain errors after backup
       // restore, biometric changes) and Android (KeyStore corruption, OS
-      // updates). Return null so callers degrade gracefully instead of
-      // crashing the E2EE initialization chain.
+      // updates). Preserve the distinction from an absent key so callers
+      // cannot replace existing material after a failed read.
       AppLogger.error('E2EE: Secure storage read failed for key $scopedKey', e);
-      return null;
+      throw SecureStorageUnavailable(e);
     }
   }
 
   // Platform-aware write (with encryption on web)
-  Future<void> _write(String key, String value) async {
+  Future<void> _write(String key, String value) =>
+      _mutations.run('keys', () async {
+        requireCloudOperation();
+        await _writeDirect(key, value);
+      });
+
+  Future<void> _writeDirect(String key, String value) async {
     final scopedKey = _scopedKey(key);
     if (kIsWeb) {
       final encrypted = await _webEncrypt(value);
-      await _webPrefs?.setString(scopedKey, encrypted);
+      requireCloudOperation();
+      if (_webPrefs == null) {
+        throw const SecureStorageUnavailable('Web storage unavailable');
+      }
+      await _webPrefs!.setString(scopedKey, encrypted);
     } else {
       try {
         await _secureStorage.write(key: scopedKey, value: value);
@@ -279,7 +314,7 @@ class E2EESecureStorage {
       const macLength = 16;
       if (combined.length < nonceLength + macLength) {
         // Invalid data or old unencrypted format - return null
-        return null;
+        throw const FormatException('Invalid encrypted key');
       }
       final nonce = combined.sublist(0, nonceLength);
       final cipherText = combined.sublist(
@@ -296,13 +331,17 @@ class E2EESecureStorage {
       );
       return utf8.decode(plaintext);
     } catch (_) {
-      // Decryption failed - might be old unencrypted data, return null
-      return null;
+      throw const FormatException('Stored key could not be decrypted');
     }
   }
 
   // Platform-aware delete
-  Future<void> _delete(String key) async {
+  Future<void> _delete(String key) => _mutations.run('keys', () async {
+    requireCloudOperation();
+    await _deleteDirect(key);
+  });
+
+  Future<void> _deleteDirect(String key) async {
     final scopedKey = _scopedKey(key);
     if (kIsWeb) {
       await _webPrefs?.remove(scopedKey);

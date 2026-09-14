@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'dart:async';
 import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/google_keep_import_card.dart';
@@ -11,8 +12,6 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/pages/home/labels.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
-import 'package:better_keep/services/label_sync_service.dart';
-import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -344,8 +343,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     try {
       _scrollController.jumpTo(0.0);
       await runNotesRefreshSequence(
-        refreshNotes: NoteSyncService().refresh,
-        refreshLabels: LabelSyncService().refresh,
+        refreshNotes: () => refreshSyncFromUser(context),
+        refreshLabels: () async {},
         reloadNotes: _fetchData,
       );
     } catch (e) {

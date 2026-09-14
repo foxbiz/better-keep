@@ -56,6 +56,97 @@ void main() {
     await database.close();
   });
 
+  test('download verification failure preserves the existing file', () async {
+    const original = '/docs/old.bin';
+    const staged = '/docs/new.bin';
+    files.data[original] = Uint8List.fromList([1]);
+    files.corruptSessionWrites = true;
+    final service = NewAttachmentTransactionService(
+      operations: files.operations,
+      journal: journal,
+    );
+    await expectLater(
+      service.prepareDownloaded(
+        bytes: Uint8List.fromList([2]),
+        originalPath: original,
+        stagedPath: staged,
+        readForSession: files.readForSession,
+        writeForSession: files.writeForSession,
+      ),
+      throwsA(isA<NewAttachmentPreparationException>()),
+    );
+    expect(files.data[original], [1]);
+    expect(files.data.containsKey(staged), isFalse);
+    expect(await journal.load(), isEmpty);
+  });
+
+  test(
+    'download cleanup resumes after a committed replacement cannot delete its source',
+    () async {
+      const original = '/docs/old.bin';
+      const staged = '/docs/new.bin';
+      final undeletable = <String>{original};
+      files = _FakeAttachmentFiles(undeletablePaths: undeletable);
+      files.data[original] = Uint8List.fromList([1]);
+      final service = NewAttachmentTransactionService(
+        operations: files.operations,
+        journal: journal,
+      );
+      final prepared = await service.prepareDownloaded(
+        bytes: Uint8List.fromList([2]),
+        originalPath: original,
+        stagedPath: staged,
+        readForSession: files.readForSession,
+        writeForSession: files.writeForSession,
+      );
+      await _insertNote(
+        database,
+        Note(
+          id: 1,
+          title: 'Image',
+          content: _content('image'),
+          attachments: [NoteAttachment.image(_image(staged))],
+        ),
+      );
+      expect(await service.finishCommitted(prepared, database), isFalse);
+      expect(await journal.load(), hasLength(1));
+      expect(files.data.containsKey(original), isTrue);
+      undeletable.clear();
+      await NewAttachmentTransactionRecoveryService.recoverPending(
+        database: database,
+        operations: files.operations,
+        journal: journal,
+      );
+      expect(await journal.load(), isEmpty);
+      expect(files.data.containsKey(original), isFalse);
+      expect(await files.readForSession(staged), [2]);
+    },
+  );
+
+  test(
+    'first download journal removes only an uncommitted staged file on restart',
+    () async {
+      const staged = '/docs/new.bin';
+      final service = NewAttachmentTransactionService(
+        operations: files.operations,
+        journal: journal,
+      );
+      await service.prepareDownloaded(
+        bytes: Uint8List.fromList([2]),
+        stagedPath: staged,
+        readForSession: files.readForSession,
+        writeForSession: files.writeForSession,
+      );
+      await NewAttachmentTransactionRecoveryService.recoverPending(
+        database: database,
+        operations: files.operations,
+        journal: journal,
+      );
+      expect(files.data.containsKey(staged), isFalse);
+      expect(await journal.load(), isEmpty);
+    },
+  );
+
   test('locked image commits only a verified protected staged file', () async {
     const originalPath = '/docs/original.jpg';
     final originalBytes = Uint8List.fromList([1, 2, 3, 4]);

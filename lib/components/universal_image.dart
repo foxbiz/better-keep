@@ -171,7 +171,7 @@ class _UniversalImageState extends State<UniversalImage> {
     final loadingPath = _loadingPath;
 
     try {
-      final fixedPath = await FileUtils.fixPath(path);
+      var fixedPath = await FileUtils.fixPath(path);
 
       // Check if the path changed while we were loading
       if (_loadGeneration != loadGeneration ||
@@ -218,6 +218,7 @@ class _UniversalImageState extends State<UniversalImage> {
               !mounted) {
             return;
           }
+          fixedPath = await FileUtils.fixPath(redownloadedPath);
           exists = await fs.exists(fixedPath);
         }
       }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/cloud_sync_cursor.dart';
@@ -651,6 +652,9 @@ class AppState {
   }
 
   static set db(Database instance) {
+    if (!identical(_state['db'], instance)) {
+      AttachmentRepairCoordinator.instance.reset();
+    }
     set("db", instance);
   }
 

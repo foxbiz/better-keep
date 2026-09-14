@@ -1,3 +1,5 @@
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/models/cloud_sync_cursor.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firestore_operation_retry.dart';
@@ -66,7 +68,15 @@ class NoteCloudRepository {
     FirestoreQueryRetryLogger? onRetry,
   }) {
     return retryTransientFirestoreOperation(
-      () => query.get(const GetOptions(source: Source.server)),
+      () {
+        requireCloudOperation();
+        return query
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 10));
+      },
+      shouldRetry: (error) =>
+          isTransientFirestoreFailure(error) &&
+          !isCloudConnectionFailure(error),
       onRetry: onRetry,
     );
   }

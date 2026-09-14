@@ -6,12 +6,16 @@ class PostSignInRecoveryView extends StatelessWidget {
     required this.onRetry,
     required this.onContinueOffline,
     required this.onSignOut,
+    this.message,
+    this.canContinueOffline = true,
     super.key,
   });
 
   final Future<void> Function() onRetry;
   final Future<void> Function() onContinueOffline;
   final Future<void> Function() onSignOut;
+  final String? message;
+  final bool canContinueOffline;
 
   Future<void> _confirmSignOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -56,7 +60,7 @@ class PostSignInRecoveryView extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          context.l10n.somethingWentWrongTryAgain,
+          message ?? context.l10n.somethingWentWrongTryAgain,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -75,10 +79,11 @@ class PostSignInRecoveryView extends StatelessWidget {
           label: Text(context.l10n.signOut),
         ),
         const SizedBox(height: 8),
-        TextButton(
-          onPressed: onContinueOffline,
-          child: Text(context.l10n.continueOffline),
-        ),
+        if (canContinueOffline)
+          TextButton(
+            onPressed: onContinueOffline,
+            child: Text(context.l10n.continueOffline),
+          ),
       ],
     );
   }

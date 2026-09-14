@@ -1,3 +1,6 @@
+import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -1189,6 +1192,18 @@ class _NoteCardState extends State<NoteCard>
                               final noteId = widget.note.id;
                               if (noteId == null ||
                                   NoteSyncService().isSyncing.value) {
+                                return;
+                              }
+                              final cloud = await AuthService.cloudRecovery
+                                  .check();
+                              if (!mounted) return;
+                              if (cloud != CloudSessionState.ready) {
+                                showSyncRefreshFeedback(
+                                  context,
+                                  cloud == CloudSessionState.unavailable
+                                      ? SyncRefreshOutcome.unavailable
+                                      : SyncRefreshOutcome.deferred,
+                                );
                                 return;
                               }
                               snackbar(context.l10n.retryingDecryption);

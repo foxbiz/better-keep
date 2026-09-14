@@ -1,3 +1,13 @@
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/services/attachment_repair_coordinator.dart';
+import 'package:better_keep/services/downloaded_attachment_batch.dart';
+import 'package:better_keep/services/new_attachment_transaction_service.dart';
+import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:better_keep/services/cloud_read.dart';
+import 'package:better_keep/services/async_initialization_gate.dart';
+import 'package:better_keep/services/async_operation_coalescer.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -161,6 +171,9 @@ class NoteSyncService {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   StreamSubscription<User?>? _userStreamSubscription;
   bool _initialized = false;
+  int _sessionGeneration = 0;
+  int _cloudGeneration = 0;
+  final _initializationGate = AsyncInitializationGate();
   bool _resumingCachedSyncs = false;
   final InitialHydrationGate _initialHydration = InitialHydrationGate();
   final HydrationRetryController _listenerRetry = HydrationRetryController();
@@ -170,6 +183,8 @@ class NoteSyncService {
   final RemoteContentRetryLedger _contentRetryLedger =
       RemoteContentRetryLedger();
   final Map<String, Timer> _contentRetryTimers = {};
+  final _dependencyRechecks =
+      AsyncOperationCoalescer<(Object, String, int, int), void>();
   late final RemoteContentApplyCoordinator _contentApplyCoordinator;
   final AsyncKeyedSerializer<String> _listenerBatchSerializer =
       AsyncKeyedSerializer();
@@ -195,11 +210,50 @@ class NoteSyncService {
   FirebaseFirestore get _firestore => FirebaseBackend.firestore;
 
   FirebaseStorage get _storage => FirebaseBackend.storage;
-  final AttachmentStorageRepository _attachmentStorage =
+  final AttachmentStorageRepository _defaultAttachmentStorage =
       AttachmentStorageRepository();
+  @visibleForTesting
+  static AttachmentStorageRepository? attachmentStorageOverride;
+  AttachmentStorageRepository get _attachmentStorage =>
+      attachmentStorageOverride ?? _defaultAttachmentStorage;
+
+  @visibleForTesting
+  Future<FileDownloadResult> downloadFileForTesting(
+    String source,
+    Note note, {
+    String? expectedContentHash,
+  }) async {
+    final batch = await _newDownloadBatch();
+    try {
+      return await _downloadFile(
+        source,
+        note,
+        batch,
+        expectedContentHash: expectedContentHash,
+      );
+    } finally {
+      await batch.finish();
+    }
+  }
+
+  Future<DownloadedAttachmentBatch> _newDownloadBatch() async {
+    final database = AppState.db;
+    final files = NewAttachmentTransactionService(
+      operations: await NoteLockFileOperations.platform(),
+      journal: NewAttachmentTransactionJournal(await AppState.prefs),
+    );
+    requireCloudOperation();
+    if (!identical(database, AppState.db)) {
+      throw const CloudOperationCancelled();
+    }
+    return DownloadedAttachmentBatch(database: database, files: files);
+  }
 
   /// Cache service for managing pending remote syncs
-  final RemoteSyncCacheService _syncCache = RemoteSyncCacheService();
+  @visibleForTesting
+  static RemoteSyncCacheService? remoteCacheOverride;
+  RemoteSyncCacheService get _syncCache =>
+      remoteCacheOverride ?? RemoteSyncCacheService();
 
   final ValueNotifier<bool> isSyncing = ValueNotifier(false);
   final ValueNotifier<SyncProgress> syncStatus = ValueNotifier(
@@ -241,11 +295,13 @@ class NoteSyncService {
   }
 
   void _markSyncFailed(int noteId) {
+    if (!cloudOperationIsCurrent()) return;
     _transientSyncFailures.add(noteId);
     _publishSyncFailures();
   }
 
   void _clearSyncFailed(int noteId) {
+    if (!cloudOperationIsCurrent()) return;
     _transientSyncFailures.remove(noteId);
     _publishSyncFailures();
   }
@@ -298,11 +354,13 @@ class NoteSyncService {
   }
 
   void _addSyncingOutgoing(int noteId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingOutgoing.value = {...syncingOutgoing.value, noteId};
     _clearSyncFailed(noteId);
   }
 
   void _removeSyncingOutgoing(int noteId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingOutgoing.value = {...syncingOutgoing.value}..remove(noteId);
     if (!contentFailures.value.containsKey(noteId)) {
       _clearNoteStatus(noteId);
@@ -310,10 +368,12 @@ class NoteSyncService {
   }
 
   void _addSyncingIncoming(int noteId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingIncoming.value = {...syncingIncoming.value, noteId};
   }
 
   void _removeSyncingIncoming(int noteId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingIncoming.value = {...syncingIncoming.value}..remove(noteId);
     if (!syncFailed.value.contains(noteId)) {
       _clearNoteStatus(noteId);
@@ -323,10 +383,50 @@ class NoteSyncService {
   /// Track the last user ID to detect login vs session restore
   String? _lastKnownUserId;
 
-  Future<void> init() async {
+  bool Function() _captureSession({bool cloud = true}) {
+    final current = AuthService.captureSession();
+    final generation = _sessionGeneration;
+    final cloudGeneration = _cloudGeneration;
+    return () =>
+        current() &&
+        generation == _sessionGeneration &&
+        (!cloud || cloudGeneration == _cloudGeneration);
+  }
+
+  void _onCloudStateChange() {
+    if (AuthService.canSyncCloud) return;
+    _cloudGeneration++;
+    _syncTimer?.cancel();
+    _pullRetry.cancel();
+    _listenerRetry.cancel();
+    unawaited(_stopRemoteListener());
+    isSyncing.value = false;
+    syncingOutgoing.value = {};
+    syncingIncoming.value = {};
+    syncStatus.value = SyncProgress.idle;
+    for (final timer in _contentRetryTimers.values) {
+      timer.cancel();
+    }
+    _contentRetryTimers.clear();
+    noteStatus.value = {};
+    _resumingCachedSyncs = false;
+  }
+
+  Future<void> init() => _initializationGate.run(() async {
+    final current = _captureSession(cloud: false);
+    try {
+      await runCloudOperation(current, _initialize);
+    } catch (_) {
+      if (current()) await dispose();
+      rethrow;
+    }
+  });
+
+  Future<void> _initialize() async {
     // Prevent duplicate initialization and listener registration
     if (_initialized) return;
     _initialized = true;
+    AuthService.cloudRecovery.state.addListener(_onCloudStateChange);
 
     AppLogger.log("[SYNC] SyncService initialized");
 
@@ -335,9 +435,11 @@ class NoteSyncService {
 
     // Initialize the sync cache
     await _syncCache.init();
+    requireCloudOperation();
 
     // Load last known user ID to detect login vs restore
     final prefs = await SharedPreferences.getInstance();
+    requireCloudOperation();
     _lastKnownUserId = prefs.getString(
       FirebaseScopedPreferences.key('last_synced_user_id'),
     );
@@ -381,6 +483,7 @@ class NoteSyncService {
       }
     }
 
+    requireCloudOperation();
     // Listen for E2EE status changes to trigger sync when ready
     e2ee.status.addListener(_onE2EEReadinessChange);
     e2ee.deviceManager.hasUMK.addListener(_onE2EEReadinessChange);
@@ -391,8 +494,10 @@ class NoteSyncService {
     PlanService.instance.statusNotifier.addListener(_onSubscriptionChange);
 
     _userStreamSubscription = AuthService.userStream.listen((user) async {
+      if (!cloudOperationIsCurrent()) return;
       if (user != null) {
         await _restoreContentRetryState(user.uid);
+        if (!cloudOperationIsCurrent()) return;
         final isNewUser = _lastKnownUserId != user.uid;
         if (isNewUser) {
           // On login (new user or different user), clear lastSynced
@@ -421,6 +526,7 @@ class NoteSyncService {
             }
           } else {
             // E2EE not ready — clear cache now, refresh will run when E2EE becomes ready
+            requireCloudOperation();
             await _syncCache.clear();
             AppLogger.log(
               "[SYNC] Deferring refresh - E2EE not ready (status: ${E2EEService.instance.status.value})",
@@ -437,6 +543,7 @@ class NoteSyncService {
         }
       } else {
         await _stopRemoteListener();
+        requireCloudOperation();
         await _syncCache.clear();
         for (final timer in _contentRetryTimers.values) {
           timer.cancel();
@@ -447,10 +554,13 @@ class NoteSyncService {
   }
 
   /// Resume syncing from cached pending syncs
-  Future<void> _resumePendingSyncs() => _syncOperationSerializer.run(
-    _syncOperationKey,
-    _resumePendingSyncsUnlocked,
-  );
+  Future<void> _resumePendingSyncs() {
+    final current = _captureSession();
+    return _syncOperationSerializer.run(_syncOperationKey, () async {
+      if (!current()) return;
+      await runCloudOperation(current, _resumePendingSyncsUnlocked);
+    });
+  }
 
   Future<void> _resumePendingSyncsUnlocked() async {
     if (currentUser == null) return;
@@ -500,6 +610,7 @@ class NoteSyncService {
             bootstrapped: true,
             cursor: metadata?.lastCursor,
           );
+          requireCloudOperation();
           await _syncCache.clear();
           AppLogger.log(
             "[SYNC] RESUME COMPLETE: Cache cleared after successful sync",
@@ -510,6 +621,7 @@ class NoteSyncService {
           // contents were applied, then a one-time reconciliation establishes
           // the new checkpoint without risking a skipped write.
           syncStatus.value = const SyncProgress(SyncPhase.restarting);
+          requireCloudOperation();
           await _syncCache.clear();
           AppState.noteCloudSyncCheckpoint = null;
           scheduleReconciliation = true;
@@ -523,6 +635,7 @@ class NoteSyncService {
           final legacyCache =
               metadata?.cursorSchemaVersion !=
               CloudSyncCheckpoint.schemaVersion;
+          requireCloudOperation();
           await _syncCache.clear();
           if (legacyCache) {
             AppState.noteCloudSyncCheckpoint = null;
@@ -542,32 +655,44 @@ class NoteSyncService {
           break;
       }
     } catch (e, stack) {
-      syncStatus.value = const SyncProgress(SyncPhase.failed);
+      if (!cloudOperationIsCurrent()) return;
+      if (isCloudConnectionFailure(e)) {
+        AuthService.cloudRecovery.connectionLost();
+        syncStatus.value = SyncProgress.idle;
+      } else {
+        syncStatus.value = const SyncProgress(SyncPhase.failed);
+      }
       AppLogger.log("[SYNC] RESUME FAILED: $e\n$stack");
       scheduleCachedResume =
           _syncCache.hasPendingSyncs &&
           _syncCache.metadata?.allPagesFetched == true;
     } finally {
-      isSyncing.value = false;
-      _resumingCachedSyncs = false;
-      if (scheduleReconciliation) {
-        unawaited(Future<void>.microtask(refresh));
-      } else {
-        if (restoreListener) await _startRemoteListener();
-        if (scheduleCachedResume) {
-          _pullRetry.schedule(() async {
-            if (_initialized && currentUser != null && _canReceiveSync) {
-              await _resumePendingSyncs();
+      if (cloudOperationIsCurrent()) {
+        isSyncing.value = false;
+        _resumingCachedSyncs = false;
+        if (scheduleReconciliation) {
+          unawaited(Future<void>.microtask(refresh));
+        } else {
+          if (restoreListener) await _startRemoteListener();
+          if (scheduleCachedResume && _canReceiveSync) {
+            if (_canReceiveSync) {
+              _pullRetry.schedule(() async {
+                if (_initialized && currentUser != null && _canReceiveSync) {
+                  await _resumePendingSyncs();
+                }
+              });
             }
-          });
+          }
         }
+        Future.delayed(const Duration(seconds: 2), () {
+          // Only clear status message if no failed syncs
+          if (cloudOperationIsCurrent() &&
+              !isSyncing.value &&
+              syncFailed.value.isEmpty) {
+            syncStatus.value = SyncProgress.idle;
+          }
+        });
       }
-      Future.delayed(const Duration(seconds: 2), () {
-        // Only clear status message if no failed syncs
-        if (!isSyncing.value && syncFailed.value.isEmpty) {
-          syncStatus.value = SyncProgress.idle;
-        }
-      });
     }
   }
 
@@ -609,7 +734,13 @@ class NoteSyncService {
         // Use FieldPath.documentId() to query by document IDs
         final querySnapshot = await _notesCollection
             .where(FieldPath.documentId, whereIn: batch)
-            .get();
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 10));
+        requireCloudOperation();
+        if (querySnapshot.metadata.isFromCache ||
+            querySnapshot.metadata.hasPendingWrites) {
+          throw const CloudVerificationUnavailable();
+        }
 
         for (final doc in querySnapshot.docs) {
           final remoteData = doc.data();
@@ -661,7 +792,7 @@ class NoteSyncService {
         }
       } catch (e) {
         AppLogger.log("[SYNC] REFRESH ERROR: Batch $batchNum failed: $e");
-        // Continue with next batch
+        rethrow;
       }
     }
 
@@ -722,9 +853,12 @@ class NoteSyncService {
 
         final user = currentUser;
         if (user != null) {
-          final deferred = (await _contentRetryLedger.listForUser(
-            user.uid,
-          )).where((entry) => entry.state == RemoteContentRetryState.deferred);
+          final deferred = (await _contentRetryLedger.listForUser(user.uid))
+              .where(
+                (entry) =>
+                    entry.state == RemoteContentRetryState.deferred &&
+                    entry.category == RemoteNoteFailureCategory.decryption,
+              );
           for (final entry in deferred) {
             final activated = await _contentRetryLedger.activateDeferred(
               userId: entry.userId,
@@ -797,7 +931,7 @@ class NoteSyncService {
   /// Note: Pro subscription NOT required for receiving sync
   bool get _canReceiveSync {
     // If session is invalid (user deleted/disabled), disable all sync
-    if (AuthService.sessionInvalid.value) {
+    if (!AuthService.canSyncCloud) {
       return false;
     }
 
@@ -837,6 +971,7 @@ class NoteSyncService {
     _contentRetryTimers.clear();
     final previousContentFailureIds = contentFailures.value.keys.toList();
     final entries = await _contentRetryLedger.listForUser(userId);
+    requireCloudOperation();
     contentFailures.value = {for (final entry in entries) entry.localId: entry};
     for (final localId in previousContentFailureIds) {
       if (!contentFailures.value.containsKey(localId) &&
@@ -846,19 +981,24 @@ class NoteSyncService {
     }
     _publishSyncFailures();
     for (final entry in entries) {
-      if (entry.state != RemoteContentRetryState.deferred) {
+      if (entry.state != RemoteContentRetryState.deferred ||
+          entry.isLocalAttachmentDependency) {
         _setNoteStatus(entry.localId, const SyncProgress(SyncPhase.failed));
       }
-      if (entry.state == RemoteContentRetryState.waiting) {
+      if (entry.state == RemoteContentRetryState.waiting &&
+          !entry.isLocalAttachmentDependency) {
         _scheduleContentRetry(entry);
       }
     }
   }
 
   Future<bool> _showContentFailureSummary(String userId) async {
-    final failures = (await _contentRetryLedger.listForUser(
-      userId,
-    )).where((entry) => entry.state != RemoteContentRetryState.deferred);
+    final failures = (await _contentRetryLedger.listForUser(userId)).where(
+      (entry) =>
+          entry.state != RemoteContentRetryState.deferred ||
+          entry.isLocalAttachmentDependency,
+    );
+    requireCloudOperation();
     if (failures.isEmpty) return false;
     final attachmentCount = failures
         .where(
@@ -890,7 +1030,9 @@ class NoteSyncService {
   }
 
   void _scheduleContentRetry(RemoteContentRetryEntry entry) {
-    if (entry.state != RemoteContentRetryState.waiting ||
+    if (!_canReceiveSync ||
+        entry.isLocalAttachmentDependency ||
+        entry.state != RemoteContentRetryState.waiting ||
         entry.nextRetryAt == null) {
       return;
     }
@@ -909,44 +1051,52 @@ class NoteSyncService {
   Future<void> _runScheduledContentRetry(
     RemoteContentRetryEntry scheduled,
   ) async {
-    final user = currentUser;
-    if (!_initialized || user == null || user.uid != scheduled.userId) return;
-    final current = await _contentRetryLedger.get(
-      scheduled.userId,
-      scheduled.remoteDocumentId,
-    );
-    if (current == null ||
-        current.revision != scheduled.revision ||
-        current.state != RemoteContentRetryState.waiting) {
+    final isCurrent = _captureSession();
+    if (!_initialized ||
+        !_canReceiveSync ||
+        currentUser?.uid != scheduled.userId) {
       return;
     }
-
     try {
-      final snapshot = await _notesCollection
-          .doc(scheduled.remoteDocumentId)
-          .get(const GetOptions(source: Source.server));
-      final data = snapshot.data();
-      if (!snapshot.exists || data == null) {
-        await _contentRetryLedger.clear(
+      await runCloudOperation(isCurrent, () async {
+        final current = await _contentRetryLedger.get(
           scheduled.userId,
           scheduled.remoteDocumentId,
         );
-        _clearContentFailureForRemoteDocument(
-          scheduled.remoteDocumentId,
-          resolvedLocalId: scheduled.localId,
+        requireCloudOperation();
+        if (current == null ||
+            current.revision != scheduled.revision ||
+            current.state != RemoteContentRetryState.waiting) {
+          return;
+        }
+        final snapshot = await readCloudDocument(
+          _notesCollection.doc(scheduled.remoteDocumentId),
+          isCurrent: cloudOperationIsCurrent,
         );
-        return;
+        final data = snapshot.data();
+        if (!snapshot.exists || data == null) {
+          await _contentRetryLedger.clear(
+            scheduled.userId,
+            scheduled.remoteDocumentId,
+          );
+          requireCloudOperation();
+          _clearContentFailureForRemoteDocument(
+            scheduled.remoteDocumentId,
+            resolvedLocalId: scheduled.localId,
+          );
+          return;
+        }
+        await _applyRemoteContentAutomatically(
+          data,
+          scheduled.remoteDocumentId,
+        );
+      });
+    } catch (error, stack) {
+      if (!isCurrent() || error is CloudOperationCancelled) return;
+      if (isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
       }
-      await _applyRemoteContentAutomatically(data, scheduled.remoteDocumentId);
-    } on FirebaseException catch (error, stack) {
-      // Firestore transport recovery is independent from content retry budget.
-      AppLogger.error(
-        '[SYNC] CONTENT RETRY: Could not refresh remote note '
-        '${scheduled.remoteDocumentId} (${error.code})',
-        error,
-        stack,
-      );
-      _pullRetry.schedule(() => _runScheduledContentRetry(scheduled));
+      AppLogger.error('[SYNC] Content retry deferred', error, stack);
     }
   }
 
@@ -1019,6 +1169,9 @@ class NoteSyncService {
         'invalid-remote-note-payload',
       );
     } catch (error, stack) {
+      if (error is CloudOperationCancelled || isCloudConnectionFailure(error)) {
+        rethrow;
+      }
       AppLogger.error(
         '[SYNC] Local apply failed for remote note $remoteDocumentId',
         error,
@@ -1060,6 +1213,7 @@ class NoteSyncService {
     Map<String, dynamic> remoteData,
     String remoteDocumentId, {
     int? fallbackLocalId,
+    String? deferredRevision,
   }) async {
     final user = currentUser;
     if (user == null) {
@@ -1074,6 +1228,7 @@ class NoteSyncService {
       userId: user.uid,
       remoteDocumentId: remoteDocumentId,
       revision: revision,
+      deferredRevision: deferredRevision,
       resolveLocalId: (existing) => _resolveIncomingLocalId(
         remoteDocumentId,
         suggestedLocalId,
@@ -1086,14 +1241,88 @@ class NoteSyncService {
     );
   }
 
-  Future<bool> retryFailedRemoteNote(String remoteDocumentId) async {
+  /// Event-driven rechecks also visit revisions behind the committed cursor.
+  /// A still-unreadable local file remains deferred, without a polling timer.
+  Future<void> recheckLocalAttachmentDependencies() {
+    final user = currentUser;
+    if (user == null || !_canReceiveSync || AppState.get('db') == null) {
+      return Future.value();
+    }
+    final sessionCurrent = _captureSession();
+    final database = AppState.db;
+    bool current() =>
+        sessionCurrent() && identical(AppState.get('db'), database);
+    final key = (database, user.uid, _sessionGeneration, _cloudGeneration);
+    return _dependencyRechecks.run(key, () async {
+      try {
+        await runCloudOperation(current, () async {
+          final candidates = (await _contentRetryLedger.listForUser(user.uid))
+              .where(
+                (entry) =>
+                    entry.isLocalAttachmentDependency && !entry.isExhausted,
+              )
+              .toList();
+          requireCloudOperation();
+          for (final entry in candidates) {
+            final pending = await NoteSyncTrack.getByLocalId(entry.localId);
+            requireCloudOperation();
+            if (pending != null &&
+                (pending.status != SyncStatus.synced ||
+                    pending.action == SyncAction.delete)) {
+              continue;
+            }
+            final snapshot = await readCloudDocument(
+              _notesCollection.doc(entry.remoteDocumentId),
+              isCurrent: cloudOperationIsCurrent,
+            );
+            requireCloudOperation();
+            final data = snapshot.data();
+            if (!snapshot.exists || data == null) {
+              await _contentRetryLedger.clearIfRevision(entry);
+              requireCloudOperation();
+              await _restoreContentRetryState(user.uid);
+              continue;
+            }
+            await _applyRemoteContentAutomatically(
+              data,
+              entry.remoteDocumentId,
+              fallbackLocalId: entry.localId,
+              deferredRevision: entry.revision,
+            );
+            requireCloudOperation();
+          }
+        });
+      } catch (error, stack) {
+        if (!current() || error is CloudOperationCancelled) return;
+        if (!isCloudConnectionFailure(error)) {
+          AppLogger.error(
+            '[SYNC] Local dependency recheck deferred',
+            error,
+            stack,
+          );
+        }
+        rethrow;
+      }
+    });
+  }
+
+  Future<bool> retryFailedRemoteNote(String remoteDocumentId) {
+    final current = _captureSession();
+    return runCloudOperation(
+      current,
+      () => _retryFailedRemoteNote(remoteDocumentId),
+    );
+  }
+
+  Future<bool> _retryFailedRemoteNote(String remoteDocumentId) async {
     final user = currentUser;
     if (user == null || !_canReceiveSync) return false;
     final existing = await _contentRetryLedger.get(user.uid, remoteDocumentId);
     try {
-      final snapshot = await _notesCollection
-          .doc(remoteDocumentId)
-          .get(const GetOptions(source: Source.server));
+      final snapshot = await readCloudDocument(
+        _notesCollection.doc(remoteDocumentId),
+        isCurrent: cloudOperationIsCurrent,
+      );
       final remoteData = snapshot.data();
       if (!snapshot.exists || remoteData == null) return false;
       final rawLocalId = remoteData['local_id'];
@@ -1117,6 +1346,11 @@ class NoteSyncService {
       );
       return result.isApplied;
     } catch (error, stack) {
+      if (!cloudOperationIsCurrent()) return false;
+      if (isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+        return false;
+      }
       AppLogger.error(
         '[SYNC] MANUAL CONTENT RETRY FAILED for $remoteDocumentId',
         error,
@@ -1130,8 +1364,15 @@ class NoteSyncService {
   }
 
   /// Start listening for real-time updates from Firebase
-  Future<void> _startRemoteListener() async {
+  Future<void> _startRemoteListener() {
+    final current = _captureSession();
+    if (!current() || !cloudOperationIsCurrent()) return Future.value();
+    return runCloudOperation(current, _startRemoteListenerCurrent);
+  }
+
+  Future<void> _startRemoteListenerCurrent() async {
     await _stopRemoteListener(cancelRetry: false);
+    requireCloudOperation();
     if (currentUser == null) return;
     if (_resumingCachedSyncs) {
       AppLogger.log(
@@ -1167,6 +1408,7 @@ class NoteSyncService {
         .snapshots(includeMetadataChanges: true)
         .listen(
           (snapshot) {
+            if (!cloudOperationIsCurrent()) return;
             _initialHydration.beginWork(
               hydrationGeneration,
               isFromCache: snapshot.metadata.isFromCache,
@@ -1434,6 +1676,10 @@ class NoteSyncService {
                     }
                   }
                 } catch (error, stackTrace) {
+                  if (!cloudOperationIsCurrent()) return;
+                  if (isCloudConnectionFailure(error)) {
+                    AuthService.cloudRecovery.connectionLost();
+                  }
                   hydrationFailed = true;
                   AppLogger.error(
                     '[SYNC] REALTIME hydration attempt failed',
@@ -1467,6 +1713,10 @@ class NoteSyncService {
             );
           },
           onError: (error) {
+            if (!cloudOperationIsCurrent()) return;
+            if (isCloudConnectionFailure(error)) {
+              AuthService.cloudRecovery.connectionLost();
+            }
             AppLogger.error('[SYNC] REALTIME ERROR', error);
             _initialHydration.failAttempt(hydrationGeneration);
             unawaited(_restartRemoteListenerAfterFailure(hydrationGeneration));
@@ -1480,6 +1730,7 @@ class NoteSyncService {
   Future<void> _restartRemoteListenerAfterFailure(int generation) async {
     if (!_initialHydration.isCurrent(generation)) return;
     await _stopRemoteListener(cancelRetry: false);
+    if (!_canReceiveSync) return;
     _listenerRetry.schedule(() async {
       if (_initialized && currentUser != null && _canReceiveSync) {
         AppLogger.log('[SYNC] Restarting remote listener after failure');
@@ -1513,6 +1764,8 @@ class NoteSyncService {
   /// Dispose of all listeners and subscriptions.
   /// Call this when the app is shutting down or user logs out.
   Future<void> dispose() async {
+    _sessionGeneration++;
+    AuthService.cloudRecovery.state.removeListener(_onCloudStateChange);
     await _stopRemoteListener();
     _syncTimer?.cancel();
     _syncTimer = null;
@@ -1524,6 +1777,7 @@ class NoteSyncService {
     );
     PlanService.instance.statusNotifier.removeListener(_onSubscriptionChange);
     _initialized = false;
+    _initializationGate.reset();
     _initialHydration.reset();
     _listenerRetry.cancel();
     _pullRetry.cancel();
@@ -1594,31 +1848,58 @@ class NoteSyncService {
   /// Manual refresh - pushes local changes and pulls remote changes
   /// Used for pull-to-refresh and refresh button
   /// Note: Incoming sync (pull) works for all users, outgoing sync (push) requires Pro
-  Future<void> refresh() =>
-      _syncOperationSerializer.run(_syncOperationKey, _refreshUnlocked);
+  Future<void> refresh() async {
+    await refreshWithOutcome();
+  }
 
-  Future<void> _refreshUnlocked() async {
+  Future<SyncRefreshOutcome> refreshWithOutcome({bool manual = false}) async {
+    if (manual && refreshOperationOverride == null) {
+      final accountCurrent = AuthService.captureSession();
+      final state = await AuthService.cloudRecovery.check();
+      if (!accountCurrent()) return SyncRefreshOutcome.deferred;
+      if (state == CloudSessionState.unavailable) {
+        return SyncRefreshOutcome.unavailable;
+      }
+      if (state != CloudSessionState.ready) return SyncRefreshOutcome.deferred;
+      await init();
+      if (!accountCurrent()) return SyncRefreshOutcome.deferred;
+    }
+    if (refreshOperationOverride != null) {
+      return _syncOperationSerializer.run(_syncOperationKey, _refreshUnlocked);
+    }
+    final current = _captureSession();
+    return _syncOperationSerializer.run(_syncOperationKey, () async {
+      if (!current()) return SyncRefreshOutcome.deferred;
+      return runCloudOperation(current, _refreshUnlocked);
+    });
+  }
+
+  Future<SyncRefreshOutcome> _refreshUnlocked() async {
     final override = refreshOperationOverride;
     if (override != null) {
       await override();
-      return;
+      return SyncRefreshOutcome.complete;
     }
-    if (currentUser == null) return;
+    if (currentUser == null) return SyncRefreshOutcome.deferred;
 
     // Don't sync if E2EE is not ready (pending approval, revoked, etc.)
     if (!_canReceiveSync) {
       AppLogger.log("[SYNC] REFRESH: Skipping - E2EE not ready");
-      return;
+      return SyncRefreshOutcome.deferred;
     }
 
     await Future.microtask(() {});
-    if (currentUser == null || !_canReceiveSync) return;
+    if (currentUser == null || !_canReceiveSync) {
+      return SyncRefreshOutcome.deferred;
+    }
 
     // Retain durable content failures; only transient operation failures are
     // cleared when the user explicitly starts another refresh.
     _clearTransientSyncFailures();
 
     try {
+      await _restoreContentRetryState(currentUser!.uid);
+      requireCloudOperation();
       isSyncing.value = true;
       syncStatus.value = const SyncProgress(SyncPhase.syncing);
       final currentLastSynced = AppState.lastSynced;
@@ -1641,6 +1922,8 @@ class NoteSyncService {
         );
       }
       // Always pull remote changes (available to all users)
+      await recheckLocalAttachmentDependencies();
+      requireCloudOperation();
       await _pullRemoteChanges();
 
       // Only show "Refresh Complete" if there are no failed syncs
@@ -1648,9 +1931,11 @@ class NoteSyncService {
       final hasContentFailures = await _showContentFailureSummary(
         currentUser!.uid,
       );
+      requireCloudOperation();
       if (failedSyncs.isEmpty && !hasContentFailures) {
         syncStatus.value = const SyncProgress(SyncPhase.complete);
         AppLogger.log("[SYNC] REFRESH COMPLETE: All syncs successful");
+        return SyncRefreshOutcome.complete;
       } else {
         final activeFailures = failedSyncs.where(
           (s) =>
@@ -1660,30 +1945,60 @@ class NoteSyncService {
           "[SYNC] REFRESH PARTIAL: ${activeFailures.length} active notes pending (${failedSyncs.length - activeFailures.length} deleted)",
         );
       }
+      return SyncRefreshOutcome.failed;
+    } on CloudOperationCancelled {
+      return SyncRefreshOutcome.deferred;
     } on SyncEncryptionUnavailable {
       syncStatus.value = SyncProgress.idle;
       AppLogger.log(
         '[SYNC] REFRESH DEFERRED: Encryption key unavailable; work retained',
       );
+      return SyncRefreshOutcome.deferred;
     } on FirestoreDocumentFetchException catch (e, stack) {
-      syncStatus.value = const SyncProgress(SyncPhase.failed);
+      if (!cloudOperationIsCurrent()) return SyncRefreshOutcome.deferred;
+      syncStatus.value = isCloudConnectionFailure(e)
+          ? SyncProgress.idle
+          : const SyncProgress(SyncPhase.failed);
       AppLogger.error('[SYNC] FIRESTORE DOCUMENT FETCH FAILED', e, stack);
+      if (isCloudConnectionFailure(e)) {
+        AuthService.cloudRecovery.connectionLost();
+        return SyncRefreshOutcome.unavailable;
+      }
+      return SyncRefreshOutcome.failed;
     } catch (e, stack) {
-      syncStatus.value = const SyncProgress(SyncPhase.failed);
+      if (!cloudOperationIsCurrent()) return SyncRefreshOutcome.deferred;
+      syncStatus.value = isCloudConnectionFailure(e)
+          ? SyncProgress.idle
+          : const SyncProgress(SyncPhase.failed);
       AppLogger.error('[SYNC] REFRESH FAILED', e, stack);
+      if (isCloudConnectionFailure(e)) {
+        AuthService.cloudRecovery.connectionLost();
+        return SyncRefreshOutcome.unavailable;
+      }
+      return SyncRefreshOutcome.failed;
     } finally {
-      isSyncing.value = false;
-      Future.delayed(const Duration(seconds: 2), () {
-        // Only clear status message if no failed syncs
-        if (!isSyncing.value && syncFailed.value.isEmpty) {
-          syncStatus.value = SyncProgress.idle;
-        }
-      });
+      if (cloudOperationIsCurrent()) {
+        isSyncing.value = false;
+        syncingOutgoing.value = {};
+        Future.delayed(const Duration(seconds: 2), () {
+          // Only clear status message if no failed syncs
+          if (cloudOperationIsCurrent() &&
+              !isSyncing.value &&
+              syncFailed.value.isEmpty) {
+            syncStatus.value = SyncProgress.idle;
+          }
+        });
+      }
     }
   }
 
-  Future<void> _sync() =>
-      _syncOperationSerializer.run(_syncOperationKey, _syncUnlocked);
+  Future<void> _sync() {
+    final current = _captureSession();
+    return _syncOperationSerializer.run(_syncOperationKey, () async {
+      if (!current()) return;
+      await runCloudOperation(current, _syncUnlocked);
+    });
+  }
 
   Future<void> _syncUnlocked() async {
     if (currentUser == null) return;
@@ -1715,6 +2030,10 @@ class NoteSyncService {
       );
 
       await _pushLocalChangesWithPending(pendingSyncs);
+      requireCloudOperation();
+
+      await recheckLocalAttachmentDependencies();
+      requireCloudOperation();
 
       syncStatus.value = const SyncProgress(SyncPhase.complete);
       AppLogger.log("[SYNC] PUSH COMPLETE: Local changes synced");
@@ -1727,14 +2046,28 @@ class NoteSyncService {
         '[SYNC] PUSH DEFERRED: Encryption key unavailable; local work retained',
       );
     } catch (e, stack) {
-      syncStatus.value = const SyncProgress(SyncPhase.failed);
+      if (!cloudOperationIsCurrent() || e is CloudOperationCancelled) return;
+      if (isCloudConnectionFailure(e)) {
+        AuthService.cloudRecovery.connectionLost();
+        syncStatus.value = SyncProgress.idle;
+        for (final pending in pendingSyncs) {
+          _removeSyncingOutgoing(pending.localId);
+        }
+      } else {
+        syncStatus.value = const SyncProgress(SyncPhase.failed);
+      }
       AppLogger.error('[SYNC] PUSH FAILED', e, stack);
     } finally {
-      isSyncing.value = false;
-      // Clear message after delay
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!isSyncing.value) syncStatus.value = SyncProgress.idle;
-      });
+      if (cloudOperationIsCurrent()) {
+        isSyncing.value = false;
+        syncingOutgoing.value = {};
+        // Clear message after delay
+        Future.delayed(const Duration(seconds: 2), () {
+          if (cloudOperationIsCurrent() && !isSyncing.value) {
+            syncStatus.value = SyncProgress.idle;
+          }
+        });
+      }
     }
   }
 
@@ -1764,7 +2097,8 @@ class NoteSyncService {
       try {
         final umk = _captureRequiredUMK();
         if (sync.action == SyncAction.delete && sync.remoteId == null) {
-          await sync.delete();
+          requireCloudOperation();
+          await sync.deleteIfUnchanged();
           AppLogger.log(
             "[SYNC] PUSH: Note ${sync.localId} - deleted local track (no remote ID)",
           );
@@ -1775,7 +2109,10 @@ class NoteSyncService {
         late final Map<String, dynamic>? remoteData;
 
         if (sync.remoteId != null) {
-          final docSnapshot = await _notesCollection.doc(sync.remoteId).get();
+          final docSnapshot = await readCloudDocument(
+            _notesCollection.doc(sync.remoteId),
+            isCurrent: cloudOperationIsCurrent,
+          );
           if (docSnapshot.exists) {
             remoteData = docSnapshot.data()!;
           } else {
@@ -1785,7 +2122,7 @@ class NoteSyncService {
           remoteData = null;
         }
 
-        if (remoteData != null) {
+        if (remoteData != null && sync.action != SyncAction.delete) {
           final remoteUpdatedAtStr = remoteData['updated_at'] as String?;
           if (remoteUpdatedAtStr == null) {
             AppLogger.log(
@@ -1839,26 +2176,16 @@ class NoteSyncService {
           // Confirm if note is deleted locally then delete the sync
           final localNote = await Note.findById(sync.localId);
           if (localNote == null) {
-            await sync.delete();
+            requireCloudOperation();
+            await sync.deleteIfUnchanged();
           }
 
           _removeSyncingOutgoing(sync.localId);
           continue;
         }
 
-        if (sync.action == SyncAction.delete && !isRemoteDeleted) {
-          // If remoteData is null, the document doesn't exist on remote
-          // so there's nothing to delete - just clean up the local sync track
-          if (remoteData == null) {
-            await sync.delete();
-            AppLogger.log(
-              "[SYNC] PUSH: Note ${sync.localId} - cleaned up track (remote doesn't exist)",
-            );
-            _removeSyncingOutgoing(sync.localId);
-            continue;
-          }
-          if (sync.remoteId != null) {
-            final localId = sync.localId;
+        if (sync.action == SyncAction.delete) {
+          if (sync.remoteId != null && remoteData != null && !isRemoteDeleted) {
             _ensureUMKAvailable(umk);
             batchUMK ??= umk;
             batch.set(_notesCollection.doc(sync.remoteId), {
@@ -1870,16 +2197,18 @@ class NoteSyncService {
             });
             postCommitActions.add(() async {
               await _deleteNoteStorage(sync.localId);
-              await sync.delete();
-              AppLogger.log(
-                "[SYNC] PUSH: Note ${sync.remoteId} deleted from remote",
-              );
-              _removeSyncingOutgoing(localId);
+              requireCloudOperation();
+              await sync.deleteIfUnchanged();
+              _removeSyncingOutgoing(sync.localId);
             });
             batchCount++;
             pushedCount++;
           } else {
-            await sync.delete();
+            // A tombstone or authoritative absence can follow a successful
+            // document commit whose Storage cleanup was interrupted.
+            if (sync.remoteId != null) await _deleteNoteStorage(sync.localId);
+            requireCloudOperation();
+            await sync.deleteIfUnchanged();
             _removeSyncingOutgoing(sync.localId);
           }
           continue;
@@ -1905,8 +2234,10 @@ class NoteSyncService {
               cloudSyncCommittedAtField: FieldValue.serverTimestamp(),
             });
             postCommitActions.add(() async {
+              requireCloudOperation();
               await _deleteNoteStorage(sync.localId);
-              await sync.delete();
+              requireCloudOperation();
+              await sync.deleteIfUnchanged();
               AppLogger.log(
                 "[SYNC] PUSH: Note ${sync.remoteId} deleted from remote (local note missing)",
               );
@@ -1915,7 +2246,9 @@ class NoteSyncService {
             batchCount++;
             pushedCount++;
           } else {
-            await sync.delete();
+            if (sync.remoteId != null) await _deleteNoteStorage(sync.localId);
+            requireCloudOperation();
+            await sync.deleteIfUnchanged();
             _removeSyncingOutgoing(sync.localId);
           }
           continue;
@@ -1986,6 +2319,7 @@ class NoteSyncService {
             SetOptions(merge: true),
           );
           postCommitActions.add(() async {
+            requireCloudOperation();
             final wasUnchanged = await sync.markSyncedIfUnchanged(
               capturedSyncStartTime,
             );
@@ -2011,6 +2345,7 @@ class NoteSyncService {
           final stableId = note.syncId ?? const Uuid().v4();
           if (note.syncId != stableId) {
             note.syncId = stableId;
+            requireCloudOperation();
             await AppState.db.update(
               Note.model,
               {'sync_id': stableId},
@@ -2022,8 +2357,10 @@ class NoteSyncService {
           batch.set(newDocRef, noteData);
           // Save remoteId immediately to prevent duplicates if another sync runs
           // before the batch commits and markSynced is called
+          requireCloudOperation();
           await sync.claimRemoteId(newDocRef.id);
           postCommitActions.add(() async {
+            requireCloudOperation();
             final wasUnchanged = await sync.markSyncedIfUnchanged(
               capturedSyncStartTime,
             );
@@ -2048,12 +2385,15 @@ class NoteSyncService {
         if (batchCount >= 400) {
           AppLogger.log("[SYNC] PUSH: Committing batch of 400 notes");
           _ensureUMKAvailable(batchUMK);
-          await batch.commit();
+          requireCloudOperation();
+          await batch.commit().timeout(const Duration(seconds: 10));
+          requireCloudOperation();
           for (final action in postCommitActions) {
             try {
               await action();
             } catch (e) {
               AppLogger.error('[SYNC] PUSH: Post-commit action failed', e);
+              rethrow;
             }
           }
           postCommitActions.clear();
@@ -2068,6 +2408,9 @@ class NoteSyncService {
         );
         _removeSyncingOutgoing(sync.localId);
       } catch (e) {
+        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+          rethrow;
+        }
         AppLogger.error('[SYNC] PUSH: Note ${sync.localId} error', e);
         _markSyncFailed(sync.localId);
         _removeSyncingOutgoing(sync.localId);
@@ -2077,16 +2420,22 @@ class NoteSyncService {
 
     if (batchCount > 0) {
       _ensureUMKAvailable(batchUMK!);
-      await batch.commit();
+      requireCloudOperation();
+      await batch.commit().timeout(const Duration(seconds: 10));
+      requireCloudOperation();
       for (final action in postCommitActions) {
         try {
           await action();
         } catch (e) {
           AppLogger.error('[SYNC] PUSH: Post-commit action failed', e);
+          rethrow;
         }
       }
     }
 
+    if (failedCount > 0) {
+      throw StateError('Some outgoing notes could not be synced');
+    }
     if (deferredForEncryption) {
       throw const SyncEncryptionUnavailable();
     }
@@ -2105,6 +2454,7 @@ class NoteSyncService {
   }
 
   void _ensureUMKAvailable(Uint8List captured) {
+    requireCloudOperation();
     final e2ee = E2EEService.instance;
     final current = e2ee.deviceManager.getUMK();
     validateCapturedSyncEncryptionKey(
@@ -2117,10 +2467,27 @@ class NoteSyncService {
   Future<void> _deleteNoteStorage(int noteId) async {
     try {
       final ref = getNoteDocsRef(noteId);
-      final listResult = await ref.listAll();
-      await Future.wait(listResult.items.map((item) => item.delete()));
+      final listResult = await ref.listAll().timeout(
+        const Duration(seconds: 10),
+      );
+      requireCloudOperation();
+      await Future.wait(
+        listResult.items.map((item) async {
+          requireCloudOperation();
+          try {
+            await item.delete().timeout(const Duration(seconds: 10));
+          } on FirebaseException catch (error) {
+            if (error.code != 'object-not-found') rethrow;
+          }
+        }),
+      );
+    } on FirebaseException catch (e) {
+      if (e.code == 'object-not-found') return;
+      AppLogger.error('[SYNC] Error deleting storage for note $noteId', e);
+      rethrow;
     } catch (e) {
       AppLogger.error('[SYNC] Error deleting storage for note $noteId', e);
+      rethrow;
     }
   }
 
@@ -2148,22 +2515,26 @@ class NoteSyncService {
         return RemotePullRecoveryDisposition.restartFull;
       },
       scheduleCachedResume: () {
-        _pullRetry.schedule(() async {
-          if (_initialized && currentUser != null && _canReceiveSync) {
-            AppLogger.log('[SYNC] Retrying remaining cached note revisions');
-            await _resumePendingSyncs();
-          }
-        });
+        if (_canReceiveSync) {
+          _pullRetry.schedule(() async {
+            if (_initialized && currentUser != null && _canReceiveSync) {
+              AppLogger.log('[SYNC] Retrying remaining cached note revisions');
+              await _resumePendingSyncs();
+            }
+          });
+        }
       },
       scheduleFullPull: () {
-        _pullRetry.schedule(() async {
-          if (_initialized && currentUser != null && _canReceiveSync) {
-            AppLogger.log(
-              '[SYNC] Retrying full note pull after Firestore failure',
-            );
-            await refresh();
-          }
-        });
+        if (_canReceiveSync) {
+          _pullRetry.schedule(() async {
+            if (_initialized && currentUser != null && _canReceiveSync) {
+              AppLogger.log(
+                '[SYNC] Retrying full note pull after Firestore failure',
+              );
+              await refresh();
+            }
+          });
+        }
       },
       pull: _performRemotePull,
     );
@@ -2188,6 +2559,7 @@ class NoteSyncService {
     // The bootstrap cursor is the high-water mark captured before the full
     // scan. Concurrent writes after it are intentionally left for the next
     // incremental query/listener.
+    requireCloudOperation();
     await _syncCache.startNewSync(safeCursor);
     await _fetchAndCacheRemoteNotes(
       checkpoint: checkpoint,
@@ -2205,7 +2577,9 @@ class NoteSyncService {
       AppLogger.log(
         "[SYNC] PULL COMPLETE: All remote changes synced successfully",
       );
+      requireCloudOperation();
       await _syncCache.clear();
+      requireCloudOperation();
       checkpointCommit.commit();
       AppLogger.log("[SYNC] Cache cleared after successful sync");
     } else {
@@ -2256,6 +2630,10 @@ class NoteSyncService {
   }) async {
     try {
       final snapshot = await getDocuments();
+      requireCloudOperation();
+      if (snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites) {
+        throw const CloudVerificationUnavailable();
+      }
       _pullRetry.succeeded();
       return snapshot;
     } catch (error) {
@@ -2456,6 +2834,7 @@ class NoteSyncService {
       if (!hasValidCorePayload) {
         _addSyncingIncoming(localId);
         try {
+          requireCloudOperation();
           await _syncCache.updateSync(
             remoteDocId,
             pendingSync.copyWith(status: PendingRemoteSyncStatus.inProgress),
@@ -2477,6 +2856,11 @@ class NoteSyncService {
             syncProgress.value = (syncedCount, totalCount);
           }
         } catch (error) {
+          if (error is CloudOperationCancelled ||
+              isCloudConnectionFailure(error)) {
+            rethrow;
+          }
+          requireCloudOperation();
           await _syncCache.markFailed(remoteDocId, error.toString());
           failedCount++;
           AppLogger.error(
@@ -2574,6 +2958,7 @@ class NoteSyncService {
 
       _addSyncingIncoming(localId);
       try {
+        requireCloudOperation();
         await _syncCache.updateSync(
           remoteDocId,
           pendingSync.copyWith(status: PendingRemoteSyncStatus.inProgress),
@@ -2600,6 +2985,10 @@ class NoteSyncService {
           );
         }
       } catch (e) {
+        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+          rethrow;
+        }
+        requireCloudOperation();
         await _syncCache.markFailed(remoteDocId, e.toString());
         _markSyncFailed(localId);
         failedCount++;
@@ -2699,6 +3088,7 @@ class NoteSyncService {
       await syncTrack.delete();
     }
 
+    requireCloudOperation();
     await note.delete(trackSync: false, origin: ModelChangeOrigin.remoteSync);
     AppLogger.log("Deleted local note from remote deletion: $resolvedLocalId");
   }
@@ -2741,6 +3131,25 @@ class NoteSyncService {
     String remoteDocId,
     int resolvedLocalId,
   ) async {
+    final downloads = await _newDownloadBatch();
+    try {
+      return await _prepareRemoteNote(
+        remoteData,
+        remoteDocId,
+        resolvedLocalId,
+        downloads,
+      );
+    } finally {
+      await downloads.finish();
+    }
+  }
+
+  Future<RemoteNoteApplyResult> _prepareRemoteNote(
+    Map<String, dynamic> remoteData,
+    String remoteDocId,
+    int resolvedLocalId,
+    DownloadedAttachmentBatch downloads,
+  ) async {
     final localId = resolvedLocalId;
 
     // Note: deleted notes should be handled by _handleRemoteDeletedNote
@@ -2776,10 +3185,22 @@ class NoteSyncService {
 
     final tracked = await NoteSyncTrack.getByRemoteId(remoteDocId);
     final stableNote = await Note.findBySyncId(remoteDocId);
-    final note =
-        (tracked == null ? null : await Note.findById(tracked.localId)) ??
-        stableNote ??
-        Note(id: resolvedLocalId, syncId: remoteDocId);
+    final noteId = tracked?.localId ?? stableNote?.id ?? resolvedLocalId;
+    final rows = await downloads.database.query(
+      Note.model,
+      where: 'id = ?',
+      whereArgs: [noteId],
+    );
+    final expectedRow = rows.isEmpty ? null : rows.single;
+    final tracks = await downloads.database.query(
+      NoteSyncTrack.model,
+      where: 'local_id = ?',
+      whereArgs: [noteId],
+    );
+    final expectedSyncRow = tracks.isEmpty ? null : tracks.single;
+    final note = expectedRow == null
+        ? Note(id: noteId, syncId: remoteDocId)
+        : await Note.fromJsonAsync(expectedRow);
     updatedNoteData['sync_id'] = remoteDocId;
 
     if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
@@ -2810,6 +3231,7 @@ class NoteSyncService {
       final attachmentDownload = await _downloadAttachments(
         attachmentData,
         note,
+        downloads,
         incomingNoteLocked: incomingNoteLocked,
       );
       if (!attachmentDownload.isSuccess) {
@@ -2822,29 +3244,30 @@ class NoteSyncService {
 
       updatedNoteData['attachments'] = attachmentDownload.attachments!;
     }
-    await note.updateFromJson(updatedNoteData);
-
-    final persistedLocalId = note.id!;
-    var syncTrack =
-        tracked ?? await NoteSyncTrack.getByLocalId(persistedLocalId);
-    if (syncTrack == null) {
-      syncTrack = NoteSyncTrack(
-        localId: persistedLocalId,
-        remoteId: remoteDocId,
-        action: SyncAction.upload,
-        status: SyncStatus.synced,
-      );
-      await syncTrack.save();
-    } else {
-      if (syncTrack.remoteId != remoteDocId) {
-        await syncTrack.claimRemoteId(remoteDocId);
-      }
-      syncTrack.status = SyncStatus.synced;
-      syncTrack.action = SyncAction.upload;
-      await syncTrack.save();
+    final committed = await note.applyRemoteIfUnchanged(
+      database: downloads.database,
+      expectedRow: expectedRow,
+      expectedSyncRow: expectedSyncRow,
+      incoming: updatedNoteData,
+      commitAttachments: downloads.commitMappings,
+    );
+    downloads.committed = committed == RemoteNoteCommitResult.applied;
+    if (committed == RemoteNoteCommitResult.staleSession) {
+      throw const CloudOperationCancelled();
     }
-
-    if (reminderChanged) {
+    if (committed == RemoteNoteCommitResult.localChanged) {
+      return const RemoteNoteApplyResult.deferred(
+        RemoteNoteFailureCategory.localApply,
+        'local-note-changed',
+      );
+    }
+    if (downloads.committed && cloudOperationIsCurrent()) {
+      note.notifyWithOrigin(
+        expectedRow == null ? 'created' : 'updated',
+        ModelChangeOrigin.remoteSync,
+      );
+    }
+    if (downloads.committed && reminderChanged && cloudOperationIsCurrent()) {
       ReminderCoordinator.instance.requestReconciliation();
     }
 
@@ -2973,7 +3396,8 @@ class NoteSyncService {
   /// Attachments with permanent failures (file doesn't exist) are skipped but don't block sync.
   Future<AttachmentBatchDownloadResult> _downloadAttachments(
     List<NoteAttachment> attachmentData,
-    Note note, {
+    Note note,
+    DownloadedAttachmentBatch downloads, {
     required bool incomingNoteLocked,
   }) async {
     final attachments = <NoteAttachment>[];
@@ -2989,6 +3413,7 @@ class NoteSyncService {
       final result = await _downloadAttachment(
         attachment,
         note,
+        downloads,
         incomingNoteLocked: incomingNoteLocked,
         previousAttachment: previousAttachment,
       );
@@ -3312,11 +3737,17 @@ class NoteSyncService {
         syncStatus.value = const SyncProgress(SyncPhase.uploadingMedia);
         _setNoteStatus(note.id!, const SyncProgress(SyncPhase.uploadingMedia));
         _ensureUMKAvailable(umk);
-        await fileRef.putData(bytes);
-        remoteUrl = await fileRef.getDownloadURL();
+        await fileRef.putData(bytes).timeout(const Duration(seconds: 120));
+        requireCloudOperation();
+        remoteUrl = await fileRef.getDownloadURL().timeout(
+          const Duration(seconds: 10),
+        );
       } on SyncEncryptionUnavailable {
         rethrow;
       } catch (e) {
+        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+          rethrow;
+        }
         AppLogger.error('Error uploading data URI image', e);
         return null;
       }
@@ -3342,10 +3773,15 @@ class NoteSyncService {
           await fileRef
               .putData(fileBytes)
               .timeout(const Duration(seconds: 120));
-          remoteUrl = await fileRef.getDownloadURL();
+          remoteUrl = await fileRef.getDownloadURL().timeout(
+            const Duration(seconds: 10),
+          );
         } on SyncEncryptionUnavailable {
           rethrow;
         } catch (e) {
+          if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+            rethrow;
+          }
           AppLogger.error('Error uploading $fileName', e);
           _markSyncFailed(note.id!);
           return null;
@@ -3358,6 +3794,7 @@ class NoteSyncService {
       }
     }
 
+    requireCloudOperation();
     if (sync == null) {
       final newSync = FileSyncTrack(
         localPath: src,
@@ -3384,7 +3821,8 @@ class NoteSyncService {
   /// (downloading previewImage or using inline strokes) for backward compatibility.
   Future<FileDownloadResult> _downloadAttachment(
     NoteAttachment attachment,
-    Note note, {
+    Note note,
+    DownloadedAttachmentBatch downloads, {
     required bool incomingNoteLocked,
     NoteAttachment? previousAttachment,
   }) async {
@@ -3400,6 +3838,7 @@ class NoteSyncService {
         final result = await _downloadFile(
           sketch.strokesFilePath!,
           note,
+          downloads,
           expectedContentHash: sketch.strokesContentHash,
         );
         if (result.isSuccess && result.localPath != null) {
@@ -3427,10 +3866,14 @@ class NoteSyncService {
       if (sketch.backgroundImage != null &&
           sketch.backgroundImage!.isNotEmpty &&
           _isRemoteStorageLocator(sketch.backgroundImage!)) {
-        final result = await _downloadFile(sketch.backgroundImage!, note);
+        final result = await _downloadFile(
+          sketch.backgroundImage!,
+          note,
+          downloads,
+        );
         if (result.isSuccess && result.localPath != null) {
           sketch.backgroundImage = result.localPath;
-        } else if (result.result == DownloadResult.temporaryFailure) {
+        } else if (result.isTemporaryFailure || result.isDeferred) {
           return result;
         } else {
           backgroundPermanentlyMissing = true;
@@ -3482,7 +3925,7 @@ class NoteSyncService {
     if (attachment.type == AttachmentType.image) {
       final src = attachment.image?.src;
       if (src != null && src.isNotEmpty && _isRemoteStorageLocator(src)) {
-        final result = await _downloadFile(src, note);
+        final result = await _downloadFile(src, note, downloads);
         if (result.isSuccess && result.localPath != null) {
           attachment.image!.src = result.localPath!;
         } else {
@@ -3514,7 +3957,7 @@ class NoteSyncService {
     // Handle audio attachments
     final src = attachment.recording?.src;
     if (src != null && src.isNotEmpty && _isRemoteStorageLocator(src)) {
-      final result = await _downloadFile(src, note);
+      final result = await _downloadFile(src, note, downloads);
       if (result.isSuccess && result.localPath != null) {
         attachment.recording!.src = result.localPath!;
       } else {
@@ -3646,8 +4089,10 @@ class NoteSyncService {
   /// file was updated at the same URL (e.g., sketch re-uploaded to the same path).
   Future<FileDownloadResult> _downloadFile(
     String src,
-    Note note, {
+    Note note,
+    DownloadedAttachmentBatch downloads, {
     String? expectedContentHash,
+    bool force = false,
   }) async {
     if (!_isRemoteStorageLocator(src)) {
       return FileDownloadResult(
@@ -3670,14 +4115,34 @@ class NoteSyncService {
         error.code,
       );
     }
+    final prepared = downloads.prepared(src);
+    if (prepared != null) {
+      if (expectedContentHash != null &&
+          prepared.contentHash != expectedContentHash) {
+        return FileDownloadResult(
+          DownloadResult.temporaryFailure,
+          null,
+          RemoteNoteFailureCategory.attachment,
+          'attachment-hash-mismatch',
+        );
+      }
+      return FileDownloadResult(DownloadResult.success, prepared.localPath);
+    }
     final fs = await fileSystem();
-    final sync = await FileSyncTrack.getByRemotePath(src);
+    final rows = await downloads.database.query(
+      FileSyncTrack.model,
+      where: 'remote_path = ?',
+      whereArgs: [src],
+      limit: 1,
+    );
+    final previous = rows.isEmpty ? null : rows.single;
+    final sync = previous == null ? null : FileSyncTrack.fromJson(previous);
 
     // If we have a sync record, check if the local file actually exists and is valid
     if (sync != null) {
       // On iOS, the container UUID changes between runs - fix the stored path
       final fixedLocalPath = await FileUtils.fixPath(sync.localPath);
-      if (await fs.exists(fixedLocalPath)) {
+      if (!force && await fs.exists(fixedLocalPath)) {
         // Validate the file isn't corrupted (e.g., E2EE encrypted bytes saved by mistake)
         // Use readEncryptedBytes to strip local data encryption first,
         // then check if the underlying bytes are E2EE-encrypted
@@ -3686,8 +4151,8 @@ class NoteSyncService {
           if (classifyAttachmentCiphertext(bytes) ==
               AttachmentCiphertextKind.e2ee) {
             // File appears E2EE-encrypted - it was saved incorrectly, re-download
-            await sync.delete();
-            await fs.delete(fixedLocalPath);
+            requireCloudOperation();
+            // Keep the old bytes until a validated replacement is persisted.
             AppLogger.log(
               "Local file appears E2EE-encrypted, will re-download: $fixedLocalPath",
             );
@@ -3698,10 +4163,7 @@ class NoteSyncService {
             // Also triggers when sync.contentHash is null (pre-update records
             // that lack a hash) — re-downloading populates the hash for future
             // comparisons.
-            await sync.delete();
-            try {
-              await fs.delete(fixedLocalPath);
-            } catch (_) {}
+            // A remote revision must not destroy the downloaded revision.
             AppLogger.log(
               "Remote content changed (hash mismatch), re-downloading: $fixedLocalPath",
             );
@@ -3709,7 +4171,7 @@ class NoteSyncService {
             // Update sync record if path changed (iOS container migration)
             if (fixedLocalPath != sync.localPath) {
               sync.localPath = fixedLocalPath;
-              await sync.save();
+              downloads.add(previous: previous, next: sync);
             }
             return FileDownloadResult(DownloadResult.success, fixedLocalPath);
           }
@@ -3718,14 +4180,16 @@ class NoteSyncService {
           AppLogger.log(
             "Failed to read local file, will re-download: $fixedLocalPath",
           );
-          await sync.delete();
-          try {
-            await fs.delete(fixedLocalPath);
-          } catch (_) {}
+          return FileDownloadResult(
+            DownloadResult.deferredDependency,
+            null,
+            RemoteNoteFailureCategory.localApply,
+            'local-attachment-unavailable',
+          );
         }
       } else {
         // File was deleted, remove the stale sync record and re-download
-        await sync.delete();
+        // Preserve the mapping until the missing local file is replaced.
         AppLogger.log("Local file missing, will re-download: $fixedLocalPath");
       }
     }
@@ -3735,7 +4199,10 @@ class NoteSyncService {
     final extension = path.extension(locator.fullPath);
     final localPath = path.join(documentsDir, '${Uuid().v4()}$extension');
     try {
-      final downloadedBytes = await _attachmentStorage.download(src);
+      final downloadedBytes = await _attachmentStorage
+          .download(src)
+          .timeout(const Duration(seconds: 120));
+      requireCloudOperation();
       if (downloadedBytes == null) {
         return FileDownloadResult(
           DownloadResult.temporaryFailure,
@@ -3796,29 +4263,50 @@ class NoteSyncService {
 
       // Use writeEncryptedBytes to apply local data encryption if enabled
       // This ensures files can be read with readEncryptedBytes elsewhere
-      await writeEncryptedBytes(localPath, bytes);
+      requireCloudOperation();
+      if (expectedContentHash != null &&
+          FileSyncTrack.computeHash(bytes) != expectedContentHash) {
+        return FileDownloadResult(
+          DownloadResult.temporaryFailure,
+          null,
+          RemoteNoteFailureCategory.attachment,
+          'attachment-hash-mismatch',
+        );
+      }
+      final staged = await downloads.files.prepareDownloaded(
+        bytes: bytes,
+        stagedPath: localPath,
+        originalPath: sync?.localPath,
+        readForSession: readEncryptedBytes,
+        writeForSession: writeEncryptedBytes,
+      );
 
-      // Track the downloaded file with content hash for change detection
+      // Keep the mapping private until the note adopts this path.
       final newSync = FileSyncTrack(
+        id: sync?.id,
         localPath: localPath,
         remotePath: src,
         contentHash: FileSyncTrack.computeHash(bytes),
         noteId: note.id!,
       );
-      await newSync.save();
-
+      downloads.add(previous: previous, next: newSync, file: staged);
+      requireCloudOperation();
       return FileDownloadResult(DownloadResult.success, localPath);
+    } on NewAttachmentPreparationException {
+      return FileDownloadResult(
+        DownloadResult.deferredDependency,
+        null,
+        RemoteNoteFailureCategory.localApply,
+        'local-attachment-unavailable',
+      );
     } on FirebaseException catch (e) {
+      if (isCloudConnectionFailure(e)) rethrow;
       AppLogger.log(
         'Failed to download attachment '
         '(${locator.diagnosticDescription}): ${e.code}',
       );
       // If object doesn't exist on remote, this is a permanent failure
       if (e.code == 'object-not-found') {
-        final existingSync = await FileSyncTrack.getByRemotePath(src);
-        if (existingSync != null) {
-          await existingSync.delete();
-        }
         return FileDownloadResult(
           DownloadResult.permanentFailure,
           null,
@@ -3848,6 +4336,7 @@ class NoteSyncService {
         e.code,
       );
     } catch (e) {
+      if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) rethrow;
       AppLogger.error(
         'Failed to download attachment (${locator.diagnosticDescription})',
         e,
@@ -4113,7 +4602,8 @@ class NoteSyncService {
   Future<bool> _verifyRemoteFileExists(String remoteUrl) async {
     try {
       final ref = _attachmentStorage.reference(remoteUrl);
-      await ref.getMetadata();
+      await ref.getMetadata().timeout(const Duration(seconds: 10));
+      requireCloudOperation();
       return true;
     } on StorageObjectLocatorException catch (error) {
       AppLogger.log('Remote attachment locator is invalid: code=${error.code}');
@@ -4124,10 +4614,10 @@ class NoteSyncService {
       }
       // For other errors (network issues, etc.), assume file exists to avoid unnecessary re-uploads
       AppLogger.error('Error verifying remote file exists', e);
-      return true;
+      rethrow;
     } catch (e) {
       AppLogger.error('Error verifying remote file', e);
-      return true;
+      rethrow;
     }
   }
 
@@ -4135,87 +4625,30 @@ class NoteSyncService {
   /// Returns the local path if successful, null otherwise.
   /// This is useful for recovering images that fail to load.
   Future<String?> redownloadFile(String localPath) async {
+    final current = _captureSession();
+    if (!_canReceiveSync) return null;
     try {
-      // On iOS, the container UUID changes between runs - fix the path
-      final fixedPath = await FileUtils.fixPath(localPath);
-
-      // Try lookup with both original and fixed paths
-      var sync = await FileSyncTrack.getByLocalPath(localPath);
-      sync ??= await FileSyncTrack.getByLocalPath(fixedPath);
-      if (sync == null || sync.remotePath == null) {
-        AppLogger.log(
-          "Cannot redownload file: no sync record found for $localPath",
+      return await runCloudOperation(current, () async {
+        final fixedPath = await FileUtils.fixPath(localPath);
+        final sync =
+            await FileSyncTrack.getByLocalPath(localPath) ??
+            await FileSyncTrack.getByLocalPath(fixedPath);
+        requireCloudOperation();
+        if (sync?.remotePath == null) return null;
+        return _repairAttachmentReference(
+          sync!.remotePath!,
+          sync.noteId,
+          oldPath: sync.localPath,
+          force: true,
         );
-        return null;
+      });
+    } catch (error, stack) {
+      if (current() && isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
       }
-
-      final remoteUrl = sync.remotePath!;
-      String remoteDescription = 'invalid locator';
-      try {
-        remoteDescription = _attachmentStorage
-            .parse(remoteUrl)
-            .diagnosticDescription;
-      } on StorageObjectLocatorException catch (error) {
-        remoteDescription = 'locator error=${error.code}';
+      if (error is! CloudOperationCancelled) {
+        AppLogger.error('Attachment repair deferred', error, stack);
       }
-      AppLogger.log("Attempting to redownload file ($remoteDescription)");
-
-      try {
-        final downloadedBytes = await _attachmentStorage.download(remoteUrl);
-        if (downloadedBytes == null) {
-          AppLogger.log("Unable to read remote file ($remoteDescription)");
-          return null;
-        }
-
-        Uint8List bytes = downloadedBytes;
-
-        // Decrypt if E2EE is enabled and file appears encrypted
-        final e2ee = E2EEService.instance;
-        final ciphertextKind = classifyAttachmentCiphertext(bytes);
-
-        if (ciphertextKind == AttachmentCiphertextKind.e2ee) {
-          if (!e2ee.isCryptoReady) {
-            AppLogger.log("Cannot decrypt redownloaded file - E2EE not ready");
-            return null;
-          }
-
-          final umk = e2ee.deviceManager.getUMK();
-          if (umk == null) {
-            AppLogger.log(
-              "Cannot decrypt redownloaded file - UMK not available",
-            );
-            return null;
-          }
-
-          try {
-            bytes = await FileEncryption.decryptBytes(bytes, umk);
-            AppLogger.log("Decrypted redownloaded file: $localPath");
-          } catch (e) {
-            AppLogger.log("Failed to decrypt redownloaded file: $e");
-            return null;
-          }
-        }
-
-        await writeEncryptedBytes(fixedPath, bytes);
-        AppLogger.log("Successfully redownloaded file to $fixedPath");
-
-        // Update sync record with fixed path if it changed
-        if (fixedPath != sync.localPath) {
-          sync.localPath = fixedPath;
-          await sync.save();
-        }
-
-        return fixedPath;
-      } on FirebaseException catch (e) {
-        AppLogger.log("Failed to redownload file: ${e.code} ${e.message}");
-        if (e.code == 'object-not-found') {
-          // File no longer exists on remote - remove the sync record
-          await sync.delete();
-        }
-        return null;
-      }
-    } catch (e) {
-      AppLogger.error('Error redownloading file', e);
       return null;
     }
   }
@@ -4229,7 +4662,89 @@ class NoteSyncService {
     if (!_isRemoteStorageLocator(remotePath)) {
       return null;
     }
-    final result = await _downloadFile(remotePath, note);
-    return result.isSuccess ? result.localPath : null;
+    final current = _captureSession();
+    if (!_canReceiveSync) return null;
+    try {
+      if (note.id == null) return null;
+      return await runCloudOperation(
+        current,
+        () => _repairAttachmentReference(remotePath, note.id!),
+      );
+    } catch (error, stack) {
+      if (current() && isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+      }
+      if (error is! CloudOperationCancelled) {
+        AppLogger.error('Attachment retry deferred', error, stack);
+      }
+      return null;
+    }
+  }
+
+  Future<String?> _repairAttachmentReference(
+    String source,
+    int noteId, {
+    String? oldPath,
+    bool force = false,
+  }) async {
+    final downloads = await _newDownloadBatch();
+    final repairs = AttachmentRepairCoordinator.instance.capture(
+      downloads.database,
+    );
+    try {
+      final rows = await downloads.database.query(
+        Note.model,
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+      if (rows.isEmpty) return null;
+      final expectedRow = rows.single;
+      final note = await Note.fromJsonAsync(expectedRow);
+      final result = await _downloadFile(source, note, downloads, force: force);
+      if (!result.isSuccess || result.localPath == null) return null;
+      final replacement = result.localPath!;
+      final fixedOldPath = oldPath == null
+          ? null
+          : await FileUtils.fixPath(oldPath);
+      final replacements = {
+        for (final value in [source, oldPath, fixedOldPath].whereType<String>())
+          if (value != replacement) value: replacement,
+      };
+      if (!replaceAttachmentPaths(note.attachments, replacements)) {
+        return null;
+      }
+      final attachments = await note.serializeAttachmentsForLocalStorage();
+      await repairs.run(noteId, () async {
+        downloads.committed = await downloads.database.transaction((txn) async {
+          requireCloudOperation();
+          final rows = await txn.query(
+            Note.model,
+            where: 'id = ?',
+            whereArgs: [noteId],
+          );
+          if (rows.isEmpty || !mapEquals(rows.single, expectedRow)) {
+            return false;
+          }
+          if (!await downloads.commitMappings(txn)) return false;
+          await Note.updateAttachmentsIfUnchanged(
+            id: noteId,
+            expectedUpdatedAt: expectedRow['updated_at'],
+            expectedAttachments: expectedRow['attachments'],
+            attachments: attachments,
+            database: txn,
+          );
+          requireCloudOperation();
+          return true;
+        });
+        if (downloads.committed && cloudOperationIsCurrent()) {
+          repairs.committed(noteId, replacements);
+          note.notifyWithOrigin('updated', ModelChangeOrigin.remoteSync);
+        }
+      });
+      if (!downloads.committed) return null;
+      return replacement;
+    } finally {
+      await downloads.finish();
+    }
   }
 }

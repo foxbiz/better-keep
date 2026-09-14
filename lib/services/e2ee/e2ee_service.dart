@@ -4,6 +4,10 @@
 /// It manages initialization, key management, and encryption operations.
 library;
 
+import 'package:better_keep/services/e2ee/device_authorization.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/cloud_operation.dart';
+
 import 'package:better_keep/services/async_initialization_gate.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
@@ -85,6 +89,8 @@ class E2EEService {
 
   /// Tracks whether status change listeners have been registered.
   bool _listenersRegistered = false;
+  int _sessionGeneration = 0;
+  LocalEncryptionState localState = LocalEncryptionState.missing;
 
   final AsyncInitializationGate _initializationGate = AsyncInitializationGate();
 
@@ -115,32 +121,56 @@ class E2EEService {
   /// Call this BEFORE runApp() so returning approved users go directly to Home.
   /// Returns true if user is a returning approved user (can skip loading screen).
   Future<bool> preloadCachedStatus() async {
+    if (AuthService.hasDifferentLocalAccount) {
+      localState = LocalEncryptionState.missing;
+      status.value = E2EEStatus.error;
+      return false;
+    }
+    final uid = AuthService.currentUser?.uid;
+    final generation = _sessionGeneration;
+    bool isCurrent() =>
+        uid != null &&
+        AuthService.currentUser?.uid == uid &&
+        generation == _sessionGeneration;
     try {
       // Initialize secure storage first
       await _secureStorage.init();
 
-      // Check if this device has keys
-      final hasKeys = await _secureStorage.hasDeviceKeys();
-      if (!hasKeys) {
-        AppLogger.log('E2EE: No device keys, user needs setup');
-        return false;
+      final restored = await readLocalEncryption(
+        hasDeviceKeys: _secureStorage.hasDeviceKeys,
+        readDeviceStatus: _secureStorage.getCachedDeviceStatus,
+        loadKey: () => _deviceManager.loadLocalKey(isCurrent: isCurrent),
+        isCurrent: isCurrent,
+      );
+      if (!isCurrent()) return false;
+      localState = restored;
+      isVerifyingInBackground.value = false;
+      backgroundVerificationProgress.value = null;
+      switch (restored) {
+        case LocalEncryptionState.ready:
+          status.value = E2EEStatus.ready;
+          listenForStatusChanges();
+          return true;
+        case LocalEncryptionState.pending:
+          status.value = E2EEStatus.pendingApproval;
+        case LocalEncryptionState.revoked:
+          status.value = E2EEStatus.revoked;
+        case LocalEncryptionState.needsRecovery:
+          status.value = E2EEStatus.needsRecovery;
+        case LocalEncryptionState.corrupt:
+        case LocalEncryptionState.unavailable:
+          status.value = E2EEStatus.error;
+        case LocalEncryptionState.missing:
+        case LocalEncryptionState.stale:
+          break;
       }
-
-      // Check cached status
-      final cachedStatus = await _secureStorage.getCachedDeviceStatus();
-      if (cachedStatus == 'approved') {
-        AppLogger.log('E2EE: Cached approved status, enabling fast startup');
-        // Set status to verifyingInBackground immediately
-        // This allows app.dart to show Home right away
-        status.value = E2EEStatus.verifyingInBackground;
-        isVerifyingInBackground.value = true;
-        backgroundVerificationProgress.value = ProtectionProgress.verifying;
-        return true;
-      }
-
-      AppLogger.log('E2EE: Cached status is $cachedStatus, needs full init');
       return false;
     } catch (e) {
+      if (!isCurrent()) return false;
+      localState = e is FormatException
+          ? LocalEncryptionState.corrupt
+          : LocalEncryptionState.unavailable;
+      status.value = E2EEStatus.error;
       AppLogger.error('E2EE: Error preloading cached status', e);
       return false;
     }
@@ -163,258 +193,95 @@ class E2EEService {
   }
 
   Future<void> _initializeStandardSession() async {
+    final uid = AuthService.currentUser?.uid;
+    final generation = _sessionGeneration;
+    bool current() =>
+        uid != null &&
+        AuthService.currentUser?.uid == uid &&
+        generation == _sessionGeneration;
+    Future<T> checked<T>(Future<T> Function() operation) async {
+      requireCurrentSession(current);
+      final result = await runCloudOperation(current, operation);
+      requireCurrentSession(current);
+      return result;
+    }
+
     try {
-      AppLogger.log('E2EE: Initializing...');
-
-      // Check if preloadCachedStatus() already set verifyingInBackground
-      // In that case, just do device manager init and background verification
-      if (status.value == E2EEStatus.verifyingInBackground) {
-        AppLogger.log(
-          'E2EE: Status already verifyingInBackground, continuing background init',
+      if (AuthService.hasDifferentLocalAccount) {
+        throw StateError('Local account mismatch');
+      }
+      if (await checked(preloadCachedStatus)) return;
+      if (localState == LocalEncryptionState.unavailable) {
+        throw const SecureStorageUnavailable(
+          'Local encryption storage unavailable',
         );
-        // Secure storage already initialized by preloadCachedStatus
-        // Initialize device manager to load cached UMK
-        await _deviceManager.init();
-        // Continue verification in background
-        _verifyApprovedStatusInBackground();
-        return;
       }
-
-      statusProgress.value = ProtectionProgress.gettingReady;
-
-      // Initialize secure storage
-      await _secureStorage.init();
-
-      // Check for interrupted sign-in (app crashed/refreshed during sign-in)
-      final wasInterrupted = await _secureStorage.wasSignInInterrupted();
-      if (wasInterrupted) {
-        AppLogger.log('E2EE: Detected interrupted sign-in, cleaning up...');
-        statusProgress.value = ProtectionProgress.gettingReady;
-        // Clear the flag and any partial state
-        await _secureStorage.setSignInProgress(false);
-        await _secureStorage.clearDeviceStatus();
-        // Continue with fresh initialization
+      if (localState == LocalEncryptionState.corrupt) {
+        throw const FormatException(
+          'Local encryption keys are incomplete or corrupt',
+        );
       }
-
       statusProgress.value = ProtectionProgress.checkingAccount;
-
-      // Check if this device has keys first (before using cached status)
-      final hasKeys = await _secureStorage.hasDeviceKeys();
-
-      // Load cached status for fast startup (only if device has keys)
-      // If no keys, device is new and needs setup
+      // An interrupted sign-in does not invalidate persisted keys or approval.
+      final hasKeys = await checked(_secureStorage.hasDeviceKeys);
       if (hasKeys) {
-        final cachedStatus = await _secureStorage.getCachedDeviceStatus();
-        if (cachedStatus != null) {
-          AppLogger.log('E2EE: Using cached status: $cachedStatus');
-          switch (cachedStatus) {
-            case 'approved':
-              // For returning approved users: set verifyingInBackground and verify async
-              // This allows immediate access to notes while we verify with server
-              status.value = E2EEStatus.verifyingInBackground;
-              isVerifyingInBackground.value = true;
-              backgroundVerificationProgress.value =
-                  ProtectionProgress.verifying;
-              // Initialize device manager to load cached UMK
-              await _deviceManager.init();
-              // Continue verification in background
-              _verifyApprovedStatusInBackground();
-              return;
-            case 'pending':
-              status.value = E2EEStatus.pendingApproval;
-              break;
-            case 'revoked':
-              status.value = E2EEStatus.revoked;
-              break;
-          }
+        await checked(_deviceManager.resumeInterruptedRegistration);
+        final authorization = await checked(
+          () => verifyLocalSessionAuthorization(isCurrent: current),
+        );
+        if (authorization == DeviceAuthorization.unavailable) {
+          throw const CloudVerificationUnavailable();
         }
-        // If has keys but no cached status, keep notInitialized until verified
+        return;
       }
-      // If no keys, keep notInitialized - will be set after registration
-
-      // Initialize device manager
-      statusProgress.value = ProtectionProgress.connecting;
-      await _deviceManager.init();
-
-      if (!hasKeys) {
-        // New device - need to register
-        AppLogger.log('E2EE: New device, checking if E2EE is set up...');
-        statusProgress.value = ProtectionProgress.checkingAccount;
-
-        // Check if E2EE is set up for this user (any devices exist)
-        final isFirst = await _deviceManager.isFirstDevice();
-
-        if (isFirst) {
-          // No devices exist - but check if user has a recovery key
-          // This handles the case where user signed out (device was deleted)
-          // but still has a recovery key to restore their encryption
-          final hasRecoveryKey = await _recoveryKeyService.hasRecoveryKey();
-          if (hasRecoveryKey) {
-            AppLogger.log(
-              'E2EE: No devices but recovery key exists, prompting for recovery',
-            );
-            status.value = E2EEStatus.needsRecovery;
-            await _secureStorage.cacheDeviceStatus('needs_recovery');
-            return;
-          }
-
-          // Truly first device with no recovery key - set up fresh E2EE
-          AppLogger.log('E2EE: First device, automatically setting up E2EE...');
-          statusProgress.value = ProtectionProgress.protectingNotes;
-          await _setupE2EE();
-          return;
-        }
-
-        // Devices exist - check if any are approved
-        final hasApproved = await _deviceManager.hasApprovedDevices();
-
-        if (!hasApproved) {
-          // No approved devices - user needs to recover or start fresh
-          AppLogger.log(
-            'E2EE: No approved devices exist, user needs recovery or fresh start',
-          );
+      // A cached restriction or key cache is evidence of an existing setup.
+      // Recovery is explicit; never overwrite it with first-device registration.
+      final cachedKey = await checked(_secureStorage.getCachedUMK);
+      final cachedStatus = await checked(_secureStorage.getCachedDeviceStatus);
+      if (cachedKey != null || cachedStatus != null) {
+        if (status.value != E2EEStatus.revoked &&
+            status.value != E2EEStatus.pendingApproval) {
           status.value = E2EEStatus.needsRecovery;
-          await _secureStorage.cacheDeviceStatus('needs_recovery');
+        }
+        return;
+      }
+
+      final isFirst = await checked(_deviceManager.isFirstDevice);
+      if (isFirst) {
+        final hasRecovery = await checked(_recoveryKeyService.hasRecoveryKey);
+        if (!hasRecovery) {
+          await checked(_setupE2EE);
           return;
         }
-
-        // Approved devices exist - check if this might be the same device as primary
-        // (user logged out/uninstalled/cleared data on their main device)
-        final matchesPrimary = await _deviceManager
-            .currentDeviceMatchesPrimaryName();
-
-        if (matchesPrimary) {
-          // Device name matches primary - likely same physical device
-          // Show recovery page instead of requiring approval from another device
-          AppLogger.log(
-            'E2EE: Device name matches primary device, showing recovery page',
-          );
-          status.value = E2EEStatus.needsRecovery;
-          await _secureStorage.cacheDeviceStatus('needs_recovery');
+      } else {
+        final hasApproved = await checked(_deviceManager.hasApprovedDevices);
+        if (hasApproved &&
+            !await checked(_deviceManager.currentDeviceMatchesPrimaryName)) {
+          await checked(_deviceManager.registerNewDevice);
+          status.value = E2EEStatus.pendingApproval;
+          await checked(() => _secureStorage.cacheDeviceStatus('pending'));
+          listenForStatusChanges();
           return;
         }
-
-        // Different device - register this device and wait for approval
-        AppLogger.log('E2EE: Registering new device...');
-        statusProgress.value = ProtectionProgress.addingDevice;
-        await _deviceManager.registerNewDevice();
-        status.value = E2EEStatus.pendingApproval;
-        await _secureStorage.cacheDeviceStatus('pending');
-        listenForStatusChanges();
-        return;
       }
-
-      // Device has keys - check if device still exists on server
-      statusProgress.value = ProtectionProgress.verifying;
-      final existsOnServer = await _deviceManager.deviceExistsOnServer();
-
-      if (!existsOnServer) {
-        // Device was deleted from server (user cleared Firestore data)
-        // Clear local data and treat as fresh start
-        AppLogger.log('E2EE: Device not found on server, clearing local data');
-        statusProgress.value = ProtectionProgress.checkingAccount;
-        await _deviceManager.clearLocalData();
-
-        // Check if this would be the first device again
-        final isFirst = await _deviceManager.isFirstDevice();
-        if (isFirst) {
-          // First device - automatically set up E2EE
-          AppLogger.log(
-            'E2EE: First device after reset, automatically setting up E2EE...',
-          );
-          statusProgress.value = ProtectionProgress.protectingNotes;
-          await _setupE2EE();
-        } else {
-          // Devices exist - check if any are approved
-          final hasApproved = await _deviceManager.hasApprovedDevices();
-
-          if (!hasApproved) {
-            // No approved devices - user needs to recover or start fresh
-            AppLogger.log(
-              'E2EE: No approved devices after reset, user needs recovery',
-            );
-            status.value = E2EEStatus.needsRecovery;
-            await _secureStorage.cacheDeviceStatus('needs_recovery');
-          } else {
-            // Approved devices exist - check if this might be the same device as primary
-            final matchesPrimary = await _deviceManager
-                .currentDeviceMatchesPrimaryName();
-
-            if (matchesPrimary) {
-              // Device name matches primary - likely same physical device
-              AppLogger.log(
-                'E2EE: Device name matches primary after reset, showing recovery',
-              );
-              status.value = E2EEStatus.needsRecovery;
-              await _secureStorage.cacheDeviceStatus('needs_recovery');
-            } else {
-              // Different device - needs re-registration
-              statusProgress.value = ProtectionProgress.addingDevice;
-              await _deviceManager.registerNewDevice();
-              status.value = E2EEStatus.pendingApproval;
-              await _secureStorage.cacheDeviceStatus('pending');
-              listenForStatusChanges();
-            }
-          }
-        }
-        return;
+      status.value = E2EEStatus.needsRecovery;
+      await checked(() => _secureStorage.cacheDeviceStatus('needs_recovery'));
+    } catch (error, stack) {
+      if (!current() || error is CloudOperationCancelled) return;
+      AppLogger.error('E2EE: Initialization error', error, stack);
+      if (!isCryptoReady &&
+          status.value != E2EEStatus.pendingApproval &&
+          status.value != E2EEStatus.revoked &&
+          status.value != E2EEStatus.needsRecovery) {
+        status.value = E2EEStatus.error;
       }
-
-      // Device exists - check status
-      statusProgress.value = ProtectionProgress.almostThere;
-      final isRevoked = await _deviceManager.isDeviceRevoked();
-
-      if (isRevoked) {
-        // Device has been revoked - show revoked screen
-        AppLogger.log('E2EE: Device is revoked');
-        status.value = E2EEStatus.revoked;
-        await _secureStorage.cacheDeviceStatus('revoked');
-        _deviceManager.setRevokedFlag();
-        return;
-      }
-
-      final isApproved = await _deviceManager.isDeviceApproved();
-      final isPending = await _deviceManager.isDevicePending();
-
-      if (isPending) {
-        AppLogger.log('E2EE: Device is pending approval');
-        status.value = E2EEStatus.pendingApproval;
-        await _secureStorage.cacheDeviceStatus('pending');
-        listenForStatusChanges();
-        return;
-      }
-
-      if (!isApproved) {
-        // Should not happen if device exists, but handle gracefully
-        throw StateError('Device has an unknown E2EE approval state');
-      }
-
-      // Device is approved - check if UMK is available
-      if (_deviceManager.hasUMK.value) {
-        AppLogger.log('E2EE: UMK available, ready');
-        status.value = E2EEStatus.ready;
-        await _secureStorage.cacheDeviceStatus('approved');
-        // Listen for status changes (revocation, etc.)
-        listenForStatusChanges();
-        return;
-      }
-
-      // Try cached UMK as fallback
-      final cachedUMK = await _secureStorage.getCachedUMK();
-      if (cachedUMK != null) {
-        AppLogger.log('E2EE: Using cached UMK');
-        status.value = E2EEStatus.ready;
-        await _secureStorage.cacheDeviceStatus('approved');
-        // Listen for status changes (revocation, etc.)
-        listenForStatusChanges();
-        return;
-      }
-
-      throw StateError('Could not unlock the user master key');
-    } catch (e, stack) {
-      AppLogger.error('E2EE: Initialization error', e, stack);
-      status.value = E2EEStatus.error;
       rethrow;
+    } finally {
+      if (current()) {
+        statusProgress.value = null;
+        isVerifyingInBackground.value = false;
+        backgroundVerificationProgress.value = null;
+      }
     }
   }
 
@@ -482,104 +349,94 @@ class E2EEService {
     return true;
   }
 
-  /// Verifies approved status in background for returning users.
-  /// User can access notes immediately while this runs.
-  /// If verification fails (revoked, deleted), updates status appropriately.
-  void _verifyApprovedStatusInBackground() {
-    AppLogger.log('E2EE: Starting background verification...');
+  Future<DeviceAuthorization>? _authorizationRun;
+  bool Function()? _authorizationCurrent;
 
-    _performBackgroundVerification()
-        .then((_) {
-          isVerifyingInBackground.value = false;
-          backgroundVerificationProgress.value = null;
-          AppLogger.log('E2EE: Background verification completed');
-        })
-        .catchError((e, stack) {
-          AppLogger.error('E2EE: Background verification error', e, stack);
-          isVerifyingInBackground.value = false;
-          backgroundVerificationProgress.value = null;
-          // Don't change status to error - user can still access cached notes
-          // The error will be caught on next sync attempt
-        });
-  }
-
-  /// Performs the actual background verification.
-  Future<void> _performBackgroundVerification() async {
-    try {
-      backgroundVerificationProgress.value = ProtectionProgress.checkingAccount;
-
-      // Check if device still exists on server
-      final existsOnServer = await _deviceManager.deviceExistsOnServer();
-
-      if (!existsOnServer) {
-        // Device was deleted from server - this is a critical issue
-        // User needs to re-authenticate or recover
-        AppLogger.log(
-          'E2EE: Device not found on server during background verification',
-        );
-        status.value = E2EEStatus.needsRecovery;
-        await _secureStorage.cacheDeviceStatus('needs_recovery');
-        return;
-      }
-
-      backgroundVerificationProgress.value = ProtectionProgress.verifying;
-
-      // Check if device is still approved
-      final isRevoked = await _deviceManager.isDeviceRevoked();
-
-      if (isRevoked) {
-        AppLogger.log('E2EE: Device was revoked (detected in background)');
-        status.value = E2EEStatus.revoked;
-        await _secureStorage.cacheDeviceStatus('revoked');
-        _deviceManager.setRevokedFlag();
-        return;
-      }
-
-      final isApproved = await _deviceManager.isDeviceApproved();
-
-      if (!isApproved) {
-        // Device is no longer approved but not explicitly revoked
-        // This shouldn't happen normally, but handle gracefully
-        AppLogger.log(
-          'E2EE: Device no longer approved (detected in background)',
-        );
-        status.value = E2EEStatus.needsRecovery;
-        await _secureStorage.cacheDeviceStatus('needs_recovery');
-        return;
-      }
-
-      // All good - device is still approved
-      AppLogger.log(
-        'E2EE: Background verification successful, device approved',
-      );
-      status.value = E2EEStatus.ready;
-      await _secureStorage.cacheDeviceStatus('approved');
-
-      // Start listening for status changes (revocation, etc.)
-      listenForStatusChanges();
-    } catch (e) {
-      // Network errors etc - don't change status, just log
-      AppLogger.error('E2EE: Background verification network error', e);
-      // Keep status as verifyingInBackground for now
-      // Status will be rechecked on next app resume or sync
-      status.value = E2EEStatus.ready;
-      listenForStatusChanges();
+  /// Verifies a restored device without conflating offline with revoked.
+  Future<DeviceAuthorization> verifyLocalSessionAuthorization({
+    bool Function()? isCurrent,
+  }) {
+    final running = _authorizationRun;
+    if (running != null && (_authorizationCurrent?.call() ?? false)) {
+      return running;
     }
+    final accountCurrent = AuthService.captureSession();
+    final uid = AuthService.currentUser?.uid;
+    final generation = _sessionGeneration;
+    bool current() =>
+        accountCurrent() &&
+        uid != null &&
+        AuthService.currentUser?.uid == uid &&
+        generation == _sessionGeneration &&
+        (isCurrent?.call() ?? true);
+    _authorizationCurrent = current;
+    late final Future<DeviceAuthorization> operation;
+    operation =
+        runCloudOperation(current, () async {
+          final authorization = await _deviceManager.readServerAuthorization();
+          if (!current()) return DeviceAuthorization.unavailable;
+          switch (authorization) {
+            case DeviceAuthorization.approved:
+              if (!isAvailable) await _deviceManager.init(isCurrent: current);
+              if (!current()) return DeviceAuthorization.unavailable;
+              if (!isAvailable) {
+                localState = LocalEncryptionState.missing;
+                status.value = E2EEStatus.error;
+                throw const FormatException(
+                  'Approved device has no usable master key',
+                );
+              }
+              await _secureStorage.cacheDeviceStatus('approved');
+              if (!current()) return DeviceAuthorization.unavailable;
+              localState = LocalEncryptionState.ready;
+              status.value = E2EEStatus.ready;
+              listenForStatusChanges();
+              await _deviceManager.startListeningForCurrentDevice(
+                isCurrent: current,
+              );
+            case DeviceAuthorization.revoked:
+            case DeviceAuthorization.deleted:
+              status.value = authorization == DeviceAuthorization.revoked
+                  ? E2EEStatus.revoked
+                  : E2EEStatus.needsRecovery;
+              await _secureStorage.cacheDeviceStatus(
+                authorization == DeviceAuthorization.revoked
+                    ? 'revoked'
+                    : 'needs_recovery',
+              );
+              if (current()) await _deviceManager.clearUMK();
+            case DeviceAuthorization.pending:
+              status.value = E2EEStatus.pendingApproval;
+              await _secureStorage.cacheDeviceStatus('pending');
+              if (!current()) return DeviceAuthorization.unavailable;
+              listenForStatusChanges();
+              await _deviceManager.startListeningForApproval(
+                isCurrent: current,
+              );
+            case DeviceAuthorization.unavailable:
+              break;
+          }
+          return authorization;
+        }).whenComplete(() {
+          if (identical(_authorizationRun, operation)) {
+            _authorizationRun = null;
+            _authorizationCurrent = null;
+          }
+        });
+    _authorizationRun = operation;
+    return operation;
   }
 
   /// Re-checks device status (e.g., after coming back from background).
   Future<void> refreshStatus() async {
-    if (status.value == E2EEStatus.pendingApproval) {
-      final isApproved = await _deviceManager.isDeviceApproved();
-      if (isApproved) {
-        // Try to retrieve the UMK if not already cached
-        final hasUMK = await _deviceManager.tryRetrieveUMK();
-        if (hasUMK) {
-          status.value = E2EEStatus.ready;
-          await _secureStorage.cacheDeviceStatus('approved');
-          AppLogger.log('E2EE: Device now approved and ready');
-        }
+    try {
+      final authorization = await verifyLocalSessionAuthorization();
+      if (authorization == DeviceAuthorization.approved) {
+        await AuthService.cloudRecovery.check();
       }
+    } catch (error) {
+      if (!isCloudConnectionFailure(error)) rethrow;
+      AuthService.cloudRecovery.connectionLost();
     }
   }
 
@@ -601,6 +458,7 @@ class E2EEService {
         status.value == E2EEStatus.pendingApproval) {
       status.value = E2EEStatus.ready;
       _secureStorage.cacheDeviceStatus('approved');
+      AuthService.cloudRecovery.check();
     }
   }
 
@@ -615,12 +473,18 @@ class E2EEService {
   /// Resets the initialization guard.
   /// Call this on sign-out to allow re-initialization for a new user.
   void resetInitialization() {
+    _sessionGeneration++;
+    status.value = E2EEStatus.notInitialized;
     _initializationGate.reset();
     AppLogger.log('E2EE: Initialization guard reset');
   }
 
   /// Cleans up resources.
-  Future<void> dispose() async {
+  Future<void> dispose() =>
+      runCloudOperation(AuthService.captureSession(), _dispose);
+
+  Future<void> _dispose() async {
+    _sessionGeneration++;
     if (_listenersRegistered) {
       _deviceManager.hasUMK.removeListener(_onUMKChanged);
       _deviceManager.wasRevoked.removeListener(_onRevokedChanged);
@@ -645,18 +509,21 @@ class E2EEService {
       }
     }
 
+    requireCloudOperation();
     try {
       await _deviceManager.clearUMK();
     } catch (e) {
       AppLogger.error('E2EE: Error clearing UMK during dispose', e);
     }
 
+    requireCloudOperation();
     try {
       await _deviceManager.dispose();
     } catch (e) {
       AppLogger.error('E2EE: Error disposing device manager', e);
     }
 
+    requireCloudOperation();
     RecoveryKeyService.instance.clearFirestoreCache();
 
     try {
@@ -665,6 +532,7 @@ class E2EEService {
       AppLogger.error('E2EE: Error clearing secure storage during dispose', e);
     }
 
+    requireCloudOperation();
     statusProgress.value = null;
     needsRecoveryKeySetup.value = false;
     isVerifyingInBackground.value = false;

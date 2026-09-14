@@ -1,3 +1,6 @@
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/services/attachment_repair_coordinator.dart';
+import 'package:better_keep/services/sync_track_store.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -29,7 +32,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:better_keep/models/reminder.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 
@@ -50,6 +53,8 @@ Reminder? _parseReminder(Object? raw) {
 }
 
 enum _AttachmentSerializationPolicy { standard, lockedPinBoundary }
+
+enum RemoteNoteCommitResult { applied, localChanged, staleSession }
 
 class NoteColor {
   final Color value;
@@ -725,7 +730,7 @@ class Note extends BaseModel<Note> {
     return note;
   }
 
-  Future<Note> updateFromJson(Map<String, dynamic> obj) async {
+  void _assignRemoteJson(Map<String, dynamic> obj) {
     syncId = obj['sync_id'] as String? ?? syncId;
     pinned = obj['pinned'] == 1;
     _locked = obj['locked'] == 1;
@@ -771,11 +776,86 @@ class Note extends BaseModel<Note> {
             .toList();
       }
     }
+  }
 
+  Future<Note> updateFromJson(Map<String, dynamic> obj) async {
+    _assignRemoteJson(obj);
     // Pass false to prevent triggering a sync back to Firebase
     // This method is called when syncing FROM remote, not for local changes
-    await save(false, ModelChangeOrigin.remoteSync);
+    requireCloudOperation();
+    if (await save(false, ModelChangeOrigin.remoteSync) < 0) {
+      throw StateError('Remote note could not be persisted');
+    }
     return this;
+  }
+
+  /// Preparation is detached from the stored row. Local edits and their queue
+  /// marker win even when they commit while remote files are being prepared.
+  Future<RemoteNoteCommitResult> applyRemoteIfUnchanged({
+    required Database database,
+    required Map<String, Object?>? expectedRow,
+    required Map<String, Object?>? expectedSyncRow,
+    required Map<String, dynamic> incoming,
+    required Future<bool> Function(Transaction) commitAttachments,
+  }) async {
+    _assignRemoteJson(incoming);
+    if (isEmpty) throw StateError('Remote note could not be persisted');
+    await _migrateSketchesToStrokesFiles();
+    final row = await toJsonAsync();
+    row['created_at'] ??= DateTime.now().toIso8601String();
+    if (!cloudOperationIsCurrent()) return RemoteNoteCommitResult.staleSession;
+    final result = await database.transaction((txn) async {
+      requireCloudOperation();
+      final notes = await txn.query(model, where: 'id = ?', whereArgs: [id]);
+      final tracks = await txn.query(
+        NoteSyncTrack.model,
+        where: 'local_id = ?',
+        whereArgs: [id],
+      );
+      final currentRow = notes.isEmpty ? null : notes.single;
+      final currentTrack = tracks.isEmpty ? null : tracks.single;
+      if (!mapEquals(currentRow, expectedRow) ||
+          !mapEquals(currentTrack, expectedSyncRow) ||
+          currentTrack?['status'] == SyncStatus.pending.name ||
+          currentTrack?['status'] == SyncStatus.failed.name ||
+          currentTrack?['action'] == SyncAction.delete.name) {
+        return RemoteNoteCommitResult.localChanged;
+      }
+      requireCloudOperation();
+      if (!await commitAttachments(txn)) {
+        return RemoteNoteCommitResult.localChanged;
+      }
+      if (currentRow == null) {
+        await txn.insert(model, row);
+      } else {
+        await txn.update(model, row, where: 'id = ?', whereArgs: [id]);
+      }
+      final syncRow = {
+        ...?currentTrack,
+        'local_id': id,
+        'remote_id': syncId,
+        'action': SyncAction.upload.name,
+        'status': SyncStatus.synced.name,
+        'created_at':
+            currentTrack?['created_at'] ?? DateTime.now().toIso8601String(),
+        'updated_at':
+            currentTrack?['updated_at'] ?? DateTime.now().toIso8601String(),
+      };
+      if (currentTrack == null) {
+        await txn.insert(NoteSyncTrack.model, syncRow);
+      } else {
+        await txn.update(
+          NoteSyncTrack.model,
+          syncRow,
+          where: 'id = ?',
+          whereArgs: [currentTrack['id']],
+        );
+      }
+      // Throwing here rolls back every write if the session changed mid-commit.
+      requireCloudOperation();
+      return RemoteNoteCommitResult.applied;
+    });
+    return result;
   }
 
   static Future<Note> fromJsonAsync(Map<String, dynamic> obj) async {
@@ -838,25 +918,6 @@ class Note extends BaseModel<Note> {
           AppLogger.error('Error decrypting sketch metadata', e);
         }
       }
-    }
-  }
-
-  Future<void> _updateSyncTrack(SyncAction action) async {
-    if (id == null) {
-      AppLogger.log(
-        "Cannot create SyncTrack for note without ID for action $action",
-      );
-      return;
-    }
-
-    final track =
-        await syncTrack ?? NoteSyncTrack(localId: id!, action: action);
-    await track.setAction(action);
-    final triggerSync = syncTriggerOverride;
-    if (triggerSync != null) {
-      triggerSync();
-    } else {
-      NoteSyncService().sync();
     }
   }
 
@@ -1080,7 +1141,11 @@ class Note extends BaseModel<Note> {
     if (committedNotifier != null) {
       committedNotifier(this, wasNew);
     } else {
-      notify(wasNew ? 'created' : 'updated');
+      _notifyPersistedChange(
+        wasNew ? 'created' : 'updated',
+        true,
+        ModelChangeOrigin.local,
+      );
     }
 
     // The committed note references only verified encrypted copies. Cleanup is
@@ -1152,6 +1217,13 @@ class Note extends BaseModel<Note> {
           throw StateError('The locked note could not be persisted');
         }
       }
+
+      await SyncTrackStore.queueInTransaction(
+        transaction: transaction,
+        table: NoteSyncTrack.model,
+        localId: noteId,
+        action: SyncAction.upload.name,
+      );
 
       for (final replacement in replacements) {
         final oldPath = replacement.oldPath;
@@ -2639,7 +2711,18 @@ class Note extends BaseModel<Note> {
   }
 
   Future<T> _enqueueMutation<T>(Future<T> Function() action) {
-    return _mutationQueue.run(action);
+    final database = AppState.get('db') as Database?;
+    final repairs = database == null
+        ? null
+        : AttachmentRepairCoordinator.instance.capture(database);
+    return _mutationQueue.run(() {
+      final noteId = id;
+      if (noteId == null || repairs == null) return action();
+      return repairs.run(noteId, () {
+        repairs.reconcile(noteId, attachments);
+        return action();
+      });
+    });
   }
 
   /// Runs a complete sketch file/model update in the same per-note ordering
@@ -2668,6 +2751,41 @@ class Note extends BaseModel<Note> {
     ModelChangeOrigin origin = ModelChangeOrigin.local,
   ]) => _enqueueMutation(() => _saveWithinMutation(trackSync, origin));
 
+  Future<int> _persistLocalChange(
+    Future<int> Function(Transaction transaction) write, {
+    required bool trackSync,
+    required SyncAction action,
+  }) => AppState.db.transaction((transaction) async {
+    requireCloudOperation();
+    final result = await write(transaction);
+    if (trackSync && id != null) {
+      await SyncTrackStore.queueInTransaction(
+        transaction: transaction,
+        table: NoteSyncTrack.model,
+        localId: id!,
+        action: action.name,
+      );
+    }
+    return result;
+  });
+
+  void _notifyPersistedChange(
+    String event,
+    bool trackSync,
+    ModelChangeOrigin origin,
+  ) {
+    requireCloudOperation();
+    super.notifyWithOrigin(event, origin);
+    if (trackSync) {
+      final trigger = syncTriggerOverride;
+      if (trigger != null) {
+        trigger();
+      } else {
+        unawaited(NoteSyncService().sync());
+      }
+    }
+  }
+
   Future<int> _saveWithinMutation([
     bool trackSync = true,
     ModelChangeOrigin origin = ModelChangeOrigin.local,
@@ -2682,6 +2800,7 @@ class Note extends BaseModel<Note> {
     try {
       await _migrateSketchesToStrokesFiles();
     } catch (error, stackTrace) {
+      if (!cloudOperationIsCurrent()) rethrow;
       AppLogger.error(
         'Failed to persist sketch source data',
         error,
@@ -2702,6 +2821,7 @@ class Note extends BaseModel<Note> {
     try {
       jsonObj = await toJsonAsync();
     } catch (error, stackTrace) {
+      if (!cloudOperationIsCurrent()) rethrow;
       updatedAt = previousUpdatedAt;
       AppLogger.error('Failed to serialize note safely', error, stackTrace);
       snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
@@ -2718,15 +2838,20 @@ class Note extends BaseModel<Note> {
 
       if (count != null && count > 0) {
         try {
-          await AppState.db.update(
-            model,
-            jsonObj,
-            where: "id = ?",
-            whereArgs: [id],
+          await _persistLocalChange(
+            (transaction) => transaction.update(
+              model,
+              jsonObj,
+              where: 'id = ?',
+              whereArgs: [id],
+            ),
+            trackSync: trackSync,
+            action: SyncAction.upload,
           );
-          notify("updated", trackSync, origin);
+          _notifyPersistedChange('updated', trackSync, origin);
           return id!;
         } catch (e) {
+          if (!cloudOperationIsCurrent()) rethrow;
           updatedAt = previousUpdatedAt;
           AppLogger.log("Error updating note: $e");
           snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
@@ -2745,10 +2870,15 @@ class Note extends BaseModel<Note> {
     }
 
     try {
-      await AppState.db.insert(model, jsonObj);
-      notify("created", trackSync, origin);
+      await _persistLocalChange(
+        (transaction) => transaction.insert(model, jsonObj),
+        trackSync: trackSync,
+        action: SyncAction.upload,
+      );
+      _notifyPersistedChange('created', trackSync, origin);
       return id!;
     } catch (e) {
+      if (!cloudOperationIsCurrent()) rethrow;
       updatedAt = previousUpdatedAt;
       snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
       AppLogger.log("Error saving note: $e");
@@ -2849,15 +2979,20 @@ class Note extends BaseModel<Note> {
     // Capture the note id before deletion for sync tracking
     final noteId = id!;
 
-    if (trackSync) {
-      await _updateSyncTrack(SyncAction.delete);
-    }
-
-    int result = await AppState.db.delete(
-      model,
-      where: "id = ?",
-      whereArgs: [noteId],
+    final result = await _persistLocalChange(
+      (transaction) =>
+          transaction.delete(model, where: 'id = ?', whereArgs: [noteId]),
+      trackSync: trackSync,
+      action: SyncAction.delete,
     );
+    if (trackSync) {
+      final trigger = syncTriggerOverride;
+      if (trigger != null) {
+        trigger();
+      } else {
+        unawaited(NoteSyncService().sync());
+      }
+    }
     try {
       await ReminderCoordinator.instance.forget(noteId);
     } catch (error, stackTrace) {
@@ -2867,7 +3002,9 @@ class Note extends BaseModel<Note> {
         stackTrace,
       );
     }
+    requireCloudOperation();
     await _deleteLocalFiles();
+    requireCloudOperation();
     super.notifyWithOrigin("deleted", origin);
     return result;
   }
@@ -3011,8 +3148,9 @@ class Note extends BaseModel<Note> {
     required Object? expectedUpdatedAt,
     required Object? expectedAttachments,
     required String attachments,
+    DatabaseExecutor? database,
   }) async {
-    final updatedRows = await AppState.db.rawUpdate(
+    final updatedRows = await (database ?? AppState.db).rawUpdate(
       '''
       UPDATE note
       SET attachments = ?
