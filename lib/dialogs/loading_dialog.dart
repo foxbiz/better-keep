@@ -31,12 +31,14 @@ class LoadingDialogResult<T> {
   final T? data;
   final bool cancelled;
   final bool timedOut;
+  final Object? error;
 
   const LoadingDialogResult({
     required this.success,
     this.data,
     this.cancelled = false,
     this.timedOut = false,
+    this.error,
   });
 
   factory LoadingDialogResult.successful(T data) =>
@@ -48,8 +50,8 @@ class LoadingDialogResult<T> {
   factory LoadingDialogResult.timedOut() =>
       const LoadingDialogResult(success: false, timedOut: true);
 
-  factory LoadingDialogResult.failed() =>
-      const LoadingDialogResult(success: false);
+  factory LoadingDialogResult.failed([Object? error]) =>
+      LoadingDialogResult(success: false, error: error);
 }
 
 /// Shows a loading dialog that can be cancelled and has a timeout.
@@ -131,7 +133,7 @@ Future<LoadingDialogResult<T>> showLoadingDialog<T>({
         Navigator.of(context).pop();
       }
       if (!completer.isCompleted) {
-        completer.complete(LoadingDialogResult.failed());
+        completer.complete(LoadingDialogResult.failed(error));
       }
     }
   }

@@ -13,16 +13,12 @@ enum AuthenticatedStartupRoute {
 /// Resolves post-sign-in and encryption state into one stable UI destination.
 ///
 /// Once encryption is usable, successful background initialization must not
-/// replace Home with a blocking loading screen. Required-stage failures still
-/// take priority so the user can retry, continue offline, or sign out.
+/// replace Home with a blocking loading screen. Cloud startup failures must not displace usable local notes.
+/// Encryption approval and recovery states retain their own destinations.
 AuthenticatedStartupRoute resolveAuthenticatedStartupRoute({
   required PostSignInState postSignInState,
   required E2EEStatus e2eeStatus,
 }) {
-  if (postSignInState.hasRecoverableFailure) {
-    return AuthenticatedStartupRoute.recovery;
-  }
-
   return switch (e2eeStatus) {
     E2EEStatus.pendingApproval ||
     E2EEStatus.revoked => AuthenticatedStartupRoute.pendingApproval,
@@ -30,7 +26,9 @@ AuthenticatedStartupRoute resolveAuthenticatedStartupRoute({
     E2EEStatus.error => AuthenticatedStartupRoute.recovery,
     E2EEStatus.ready ||
     E2EEStatus.verifyingInBackground => AuthenticatedStartupRoute.home,
-    E2EEStatus.notInitialized ||
-    E2EEStatus.notSetUp => AuthenticatedStartupRoute.loading,
+    E2EEStatus.notInitialized || E2EEStatus.notSetUp =>
+      postSignInState.hasRecoverableFailure
+          ? AuthenticatedStartupRoute.recovery
+          : AuthenticatedStartupRoute.loading,
   };
 }

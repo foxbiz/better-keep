@@ -1,3 +1,5 @@
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/cloud_operation.dart';
 import 'dart:convert';
 
 import 'package:better_keep/models/cloud_sync_cursor.dart';
@@ -97,9 +99,10 @@ class RemoteSyncCacheService {
       _initialized = true;
     } catch (e) {
       AppLogger.error('[SYNC] CACHE ERROR: Initializing cache', e);
-      // Clear corrupted cache
-      await clear();
-      _initialized = true;
+      // A failed read is not evidence that pending work can be discarded.
+      // Leave the durable cache intact so initialization can be retried.
+      _initialized = false;
+      rethrow;
     }
   }
 
@@ -463,9 +466,11 @@ class RemoteSyncCacheService {
       final files = await fs.list(cacheDir);
       for (final fileName in files) {
         final filePath = path.join(cacheDir, fileName);
+        requireCloudOperation();
         await fs.delete(filePath);
       }
     } catch (e) {
+      if (e is CloudOperationCancelled) rethrow;
       // Directory might not exist yet
     }
 
@@ -488,7 +493,7 @@ class RemoteSyncCacheService {
       }
     } catch (e) {
       AppLogger.error('[SYNC] CACHE ERROR: Loading metadata', e);
-      _metadata = null;
+      rethrow;
     }
   }
 
@@ -524,6 +529,7 @@ class RemoteSyncCacheService {
         }
       } catch (e) {
         AppLogger.error('[SYNC] CACHE ERROR: Loading page $i', e);
+        rethrow;
       }
     }
   }
@@ -548,14 +554,12 @@ class RemoteSyncCacheService {
 
       // Write to temp file first, then rename for atomicity
       final tempPath = '$filePath.tmp';
+      requireCloudOperation();
       await fs.writeString(tempPath, content);
 
-      // Delete original if exists
-      if (await fs.exists(filePath)) {
-        await fs.delete(filePath);
-      }
-
-      // Rename temp to final
+      // Keep the previous file until the replacement bytes are ready.
+      requireCloudOperation();
+      // Replace from the staged file
       await fs.copy(tempPath, filePath);
       await fs.delete(tempPath);
     } finally {

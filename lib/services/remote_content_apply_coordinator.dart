@@ -1,3 +1,4 @@
+import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/async_keyed_serializer.dart';
 import 'package:better_keep/services/async_operation_coalescer.dart';
 import 'package:better_keep/services/remote_content_retry_ledger.dart';
@@ -49,11 +50,14 @@ class RemoteContentApplyCoordinator {
     required String userId,
     required String remoteDocumentId,
     required String revision,
+    String? deferredRevision,
     required RemoteContentLocalIdResolver resolveLocalId,
     required RemoteContentAttempt attempt,
     required RemoteContentHandledCallback onHandled,
   }) {
-    final revisionKey = 'automatic:$userId:$remoteDocumentId:$revision';
+    final revisionKey =
+        '${deferredRevision == null ? 'automatic' : 'dependency'}'
+        ':$userId:$remoteDocumentId:$revision';
     final documentKey = '$userId:$remoteDocumentId';
     return _coalescer.run(
       revisionKey,
@@ -63,6 +67,7 @@ class RemoteContentApplyCoordinator {
           userId: userId,
           remoteDocumentId: remoteDocumentId,
           revision: revision,
+          deferredRevision: deferredRevision,
           resolveLocalId: resolveLocalId,
           attempt: attempt,
           onHandled: onHandled,
@@ -75,11 +80,40 @@ class RemoteContentApplyCoordinator {
     required String userId,
     required String remoteDocumentId,
     required String revision,
+    String? deferredRevision,
     required RemoteContentLocalIdResolver resolveLocalId,
     required RemoteContentAttempt attempt,
     required RemoteContentHandledCallback onHandled,
   }) async {
     var existing = await _ledger.get(userId, remoteDocumentId);
+    requireCloudOperation();
+    if (deferredRevision != null) {
+      // A listener or another retry may have handled this entry while the
+      // dependency pass was fetching the authoritative document.
+      if (existing == null) {
+        final localId = await resolveLocalId(null);
+        requireCloudOperation();
+        return RemoteContentHandlingResult(
+          revision: revision,
+          localId: localId,
+          disposition: RemoteContentHandlingDisposition.applied,
+        );
+      }
+      if (existing.revision != deferredRevision ||
+          !existing.isLocalAttachmentDependency ||
+          existing.isExhausted) {
+        return _fromEntry(existing);
+      }
+      if (existing.revision == revision) {
+        existing = await _ledger.activateDeferred(
+          userId: userId,
+          remoteDocumentId: remoteDocumentId,
+          expectedRevision: deferredRevision,
+          now: _now(),
+        );
+        requireCloudOperation();
+      }
+    }
     if (existing != null && existing.revision == revision) {
       if (existing.state == RemoteContentRetryState.exhausted ||
           existing.state == RemoteContentRetryState.deferred ||
@@ -91,12 +125,14 @@ class RemoteContentApplyCoordinator {
     }
 
     final localId = await resolveLocalId(existing);
+    requireCloudOperation();
     if (existing != null && existing.revision != revision) {
       await _ledger.clear(userId, remoteDocumentId);
       existing = null;
     }
 
     final applyResult = await attempt(localId);
+    requireCloudOperation();
     late final RemoteContentHandlingResult handled;
     if (applyResult.isSuccess) {
       await _ledger.clear(userId, remoteDocumentId);
@@ -131,6 +167,7 @@ class RemoteContentApplyCoordinator {
             );
       handled = _fromEntry(entry);
     }
+    requireCloudOperation();
     await onHandled(handled);
     return handled;
   }
@@ -150,7 +187,9 @@ class RemoteContentApplyCoordinator {
       () => _serializer.run(documentKey, () async {
         final existing = await _ledger.get(userId, remoteDocumentId);
         final localId = await resolveLocalId(existing);
+        requireCloudOperation();
         final applyResult = await attempt(localId);
+        requireCloudOperation();
         late final RemoteContentHandlingResult handled;
         if (applyResult.isSuccess) {
           await _ledger.clear(userId, remoteDocumentId);
@@ -184,6 +223,7 @@ class RemoteContentApplyCoordinator {
                 );
           handled = _fromEntry(entry);
         }
+        requireCloudOperation();
         await onHandled(handled);
         return handled;
       }),

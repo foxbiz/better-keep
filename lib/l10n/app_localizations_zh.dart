@@ -3518,4 +3518,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get couldNotSaveLabel => '无法保存标签。请重试。';
+
+  @override
+  String get noConnectionAvailable => '无可用网络连接。';
+
+  @override
+  String get localEncryptionUnavailable => '无法读取已保存的加密密钥。请解锁设备后重试。本地数据已保留。';
+
+  @override
+  String get localEncryptionMissing =>
+      '打开已保存笔记所需的密钥丢失或损坏。请重新连接以恢复访问，或使用账户恢复。本地数据已保留。';
 }

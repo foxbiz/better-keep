@@ -3710,4 +3710,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get couldNotSaveLabel => 'Tidak dapat menyimpan label. Coba lagi.';
+
+  @override
+  String get noConnectionAvailable => 'Tidak ada koneksi yang tersedia.';
+
+  @override
+  String get localEncryptionUnavailable =>
+      'Kunci enkripsi tersimpan tidak dapat dibaca. Buka kunci perangkat dan coba lagi. Data lokal Anda tetap disimpan.';
+
+  @override
+  String get localEncryptionMissing =>
+      'Kunci untuk membuka catatan tersimpan hilang atau rusak. Sambungkan kembali untuk memulihkan akses atau gunakan pemulihan akun. Data lokal Anda tetap disimpan.';
 }

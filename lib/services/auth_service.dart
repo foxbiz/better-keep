@@ -1,3 +1,8 @@
+import 'package:better_keep/services/attachment_repair_coordinator.dart';
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/services/cloud_read.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:alarm/alarm.dart';
@@ -106,12 +111,131 @@ class AuthService {
   // Cached token auth time to detect revocation
   static DateTime? _cachedTokenAuthTime;
   // Current user ID for revocation checks
-  static String? _currentUserId;
   static _PostSignInRequest? _postSignInRequest;
   static Future<void>? _postSignInFuture;
+  static int _postSignInGeneration = 0;
+  static int _sessionEpoch = 0;
+  static String? _observedUid;
+
+  /// Captures identity transitions even when no Firebase account is loaded.
+  static bool Function() captureSessionIdentity() {
+    final epoch = _sessionEpoch;
+    return () => epoch == _sessionEpoch;
+  }
+
+  static bool Function() captureSession() {
+    final uid = currentUser?.uid;
+    final epoch = _sessionEpoch;
+    return () =>
+        uid != null && currentUser?.uid == uid && epoch == _sessionEpoch;
+  }
+
   // Flag to indicate session is invalid (user deleted/disabled)
   // When true, sync should be disabled and user should be warned to re-login
   static final ValueNotifier<bool> sessionInvalid = ValueNotifier(false);
+
+  static String? _cachedUserId;
+  static bool get hasDifferentLocalAccount =>
+      _cachedUserId != null && currentUser?.uid != _cachedUserId;
+
+  static bool get canRestoreLocalSession =>
+      currentUser != null &&
+      currentUser!.uid == _cachedUserId &&
+      !ReviewAccess.isReviewIdentity(currentUser!);
+
+  static final CloudSessionRecovery cloudRecovery = CloudSessionRecovery(
+    verify: (isCurrent) async {
+      final user = currentUser;
+      if (user == null ||
+          sessionInvalid.value ||
+          ReviewAccess.isReviewIdentity(user)) {
+        return CloudSessionState.blocked;
+      }
+      try {
+        final token = await user.getIdTokenResult(true);
+        if (!isCurrent()) return CloudSessionState.pending;
+        _cachedTokenAuthTime = token.authTime;
+        final authorization = await E2EEService.instance
+            .verifyLocalSessionAuthorization(isCurrent: isCurrent);
+        if (!isCurrent()) return CloudSessionState.pending;
+        return switch (authorization) {
+          DeviceAuthorization.approved => CloudSessionState.ready,
+          DeviceAuthorization.unavailable => CloudSessionState.unavailable,
+          DeviceAuthorization.pending => CloudSessionState.pending,
+          _ => CloudSessionState.blocked,
+        };
+      } catch (error) {
+        if (isCurrent() && _isDefinitiveIdentityFailure(error)) {
+          sessionInvalid.value = true;
+          _stopTokenRevocationListener();
+          return CloudSessionState.blocked;
+        }
+        rethrow;
+      }
+    },
+    onReady: (isCurrent) async {
+      if (!isCurrent()) return;
+      final user = currentUser!;
+      _startTokenRevocationListener(user.uid);
+      // Each service has its own initialization guard; wait for all outcomes so
+      // partial startup is retried without launching overlapping restarts.
+      final services = <Future<void> Function()>[
+        () async {
+          await NoteSyncService().init();
+          if (isCurrent()) await NoteSyncService().refresh();
+        },
+        () async {
+          await LabelSyncService().init();
+          if (isCurrent()) await LabelSyncService().resumeCloudSync();
+        },
+        () => NoteSortService().startCloudSync(),
+        refreshLinkedProviders,
+        () => PlanService.instance.startSubscriptionListener(),
+        () => DeviceApprovalNotificationService().init(),
+        // Returning sessions update presence only; login owns account creation
+        // and cancellation of scheduled deletion.
+        () => FirebaseBackend.firestore
+            .collection('users')
+            .doc(user.uid)
+            .update({'lastSeen': FieldValue.serverTimestamp()})
+            .timeout(const Duration(seconds: 10)),
+      ];
+      await Future.wait(
+        services.map((start) async {
+          requireCurrentSession(isCurrent);
+          await start();
+        }),
+      );
+    },
+    onFailure: (error, stack) {
+      AppLogger.error('[CLOUD_RECOVERY] Verification deferred', error, stack);
+    },
+  );
+
+  static bool get canSyncCloud =>
+      !sessionInvalid.value &&
+      cloudRecovery.state.value == CloudSessionState.ready;
+
+  static void setAppForeground(bool foreground) {
+    cloudRecovery.setForeground(foreground);
+    if (foreground && canSyncCloud && AppState.get('db') != null) {
+      final current = captureSession();
+      unawaited(
+        NoteSyncService().recheckLocalAttachmentDependencies().catchError((
+          Object error,
+          StackTrace stack,
+        ) {
+          if (!current()) return;
+          if (isCloudConnectionFailure(error)) cloudRecovery.connectionLost();
+          AppLogger.error(
+            '[SYNC] Foreground dependency retry deferred',
+            error,
+            stack,
+          );
+        }),
+      );
+    }
+  }
 
   static Map<String, String>? get cachedProfile => _cachedProfile;
   static String? get localPhotoPath => _localPhotoPath;
@@ -369,10 +493,18 @@ class AuthService {
     }
 
     // Start GoogleSignIn initialization (doesn't need to complete before continuing)
-    Future<void>? googleSignInFuture;
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
-      googleSignInFuture = _googleSignIn.initialize(
-        serverClientId: _serverClientId,
+      unawaited(
+        _googleSignIn.initialize(serverClientId: _serverClientId).catchError((
+          Object error,
+          StackTrace stack,
+        ) {
+          AppLogger.error(
+            'Google sign-in initialization deferred',
+            error,
+            stack,
+          );
+        }),
       );
     }
 
@@ -403,6 +535,7 @@ class AuthService {
       FirebaseScopedPreferences.key('user_uid'),
     );
 
+    _cachedUserId = uid;
     if (email != null) {
       _cachedProfile = {
         'email': email,
@@ -430,25 +563,9 @@ class AuthService {
     // Start token revocation listener if user is already logged in
     final currentUser = _auth.currentUser;
     if (currentUser != null) {
-      // Use cached token first for fast startup, then validate in background
-      // This avoids blocking on network for token refresh
-      try {
-        // Get cached token (no network call) to start the revocation listener immediately
-        final idTokenResult = await currentUser.getIdTokenResult(false);
-        _cachedTokenAuthTime = idTokenResult.authTime;
-        _startTokenRevocationListener(currentUser.uid);
-        AppLogger.log(
-          "Initialized token revocation listener for existing user: ${currentUser.uid}",
-        );
-
-        // Validate session in background (force refresh) - this catches deleted users
-        // but doesn't block startup
-        _validateSessionInBackground(currentUser);
-      } catch (e) {
-        AppLogger.error("Error getting cached token: $e");
-        // If even cached token fails, try to validate session synchronously
-        await _validateAndHandleSession(currentUser);
-      }
+      // Token refresh (even getIdTokenResult(false) after expiry) may require
+      // a network. Local startup never waits for it.
+      cloudRecovery.start(currentUser.uid);
     } else if (uid != null && email != null) {
       // We have cached user data but currentUser is null.
       // On all native platforms Firebase Auth may restore the session
@@ -491,33 +608,26 @@ class AuthService {
           AppLogger.log(
             "Firebase Auth session restored for user: ${restoredUser.uid}",
           );
-          _startTokenRevocationListener(restoredUser.uid);
-          try {
-            final idTokenResult = await restoredUser.getIdTokenResult(false);
-            _cachedTokenAuthTime = idTokenResult.authTime;
-          } catch (e) {
-            AppLogger.error("Error getting token after session restore: $e");
-          }
-          _validateSessionInBackground(restoredUser);
+          cloudRecovery.start(restoredUser.uid);
         } else {
-          // No user after waiting — session is truly invalid.
+          // Authentication may still restore later.
           AppLogger.log(
-            "No currentUser after waiting, marking session as invalid",
+            "Authentication restoration deferred; retaining cached profile",
           );
           AppLogger.log(
-            "Session invalid: cached user data exists but Firebase currentUser is null",
+            "Cached user profile is waiting for Firebase authentication",
           );
-          sessionInvalid.value = true;
+          // Keep the auth stream active for a delayed local restore.
         }
       } else {
-        // On web, mark session as invalid immediately (no async restore).
+        // A delayed web auth restore is not a revoked session.
         AppLogger.log(
-          "No currentUser but have cached profile (uid: $uid), marking session as invalid",
+          "Waiting for authentication for cached profile (uid: $uid)",
         );
         AppLogger.log(
-          "Session invalid: cached user data exists but Firebase currentUser is null",
+          "Cached user profile is waiting for Firebase authentication",
         );
-        sessionInvalid.value = true;
+        // A cached profile alone is not proof of a revoked identity.
       }
     }
 
@@ -528,8 +638,20 @@ class AuthService {
 
     // Listen for auth state changes to start/stop the revocation listener
     _authStateSubscription?.cancel();
+    _observedUid = _auth.currentUser?.uid;
     _authStateSubscription = _auth.authStateChanges().listen((user) async {
+      if (user?.uid != _observedUid) {
+        _observedUid = user?.uid;
+        _sessionEpoch++;
+        AttachmentRepairCoordinator.instance.reset();
+        E2EEService.instance.resetInitialization();
+        E2EEService.instance.deviceManager.invalidateSession();
+        cloudRecovery.stop();
+        _stopTokenRevocationListener();
+      }
+      final eventUid = user?.uid;
       await ReminderSessionService.setSignedIn(user != null);
+      if (currentUser?.uid != eventUid) return;
       if (user != null && _tokenRevocationSubscription == null) {
         // If we're in the middle of sign-in, defer starting the listener
         // _completeSignIn will handle this after auth is fully complete
@@ -540,25 +662,26 @@ class AuthService {
           return;
         }
 
-        // Recovery path: if sessionInvalid was set due to a timeout during
-        // init but Firebase Auth restored the session later, clear the flag
-        // so sync resumes normally.
-        if (sessionInvalid.value) {
-          AppLogger.log(
-            "Auth state restored valid user after session was marked invalid — recovering session",
+        cloudRecovery.start(user.uid);
+        if (canRestoreLocalSession &&
+            _postSignInFuture == null &&
+            E2EEService.instance.status.value == E2EEStatus.notInitialized) {
+          unawaited(
+            initializeCurrentUserServices().catchError((
+              Object error,
+              StackTrace stack,
+            ) {
+              AppLogger.error(
+                'Deferred local session restoration failed',
+                error,
+                stack,
+              );
+            }),
           );
-          sessionInvalid.value = false;
-        }
-
-        // User logged in and listener not running - start it
-        _startTokenRevocationListener(user.uid);
-        try {
-          final idTokenResult = await user.getIdTokenResult();
-          _cachedTokenAuthTime = idTokenResult.authTime;
-        } catch (e) {
-          AppLogger.error("Error getting token auth time on auth change: $e");
         }
       } else if (user == null) {
+        _postSignInGeneration++;
+        cloudRecovery.stop();
         // User logged out - stop the listener
         _stopTokenRevocationListener();
         _postSignInRequest = null;
@@ -566,60 +689,6 @@ class AuthService {
         ReviewAccess.clear();
       }
     });
-
-    // Wait for GoogleSignIn to finish initialization if it was started
-    if (googleSignInFuture != null) {
-      await googleSignInFuture;
-    }
-  }
-
-  /// Validates the user session in the background without blocking startup.
-  /// This catches cases where the user was deleted/disabled on another device.
-  static void _validateSessionInBackground(User user) {
-    user
-        .getIdTokenResult(true)
-        .then((idTokenResult) {
-          _cachedTokenAuthTime = idTokenResult.authTime;
-          AppLogger.log("Background session validation successful");
-        })
-        .catchError((e) {
-          AppLogger.error("Background session validation failed: $e");
-          if (e.toString().contains('user-not-found') ||
-              e.toString().contains('user-disabled') ||
-              e.toString().contains('invalid-user-token') ||
-              e.toString().contains('user-token-expired') ||
-              e.toString().contains('400')) {
-            AppLogger.log(
-              "User session invalid (detected in background), disabling sync",
-            );
-            sessionInvalid.value = true;
-            _stopTokenRevocationListener();
-          }
-        });
-  }
-
-  /// Validates and handles session synchronously (fallback when cached token fails).
-  static Future<void> _validateAndHandleSession(User user) async {
-    try {
-      final idTokenResult = await user.getIdTokenResult(true);
-      _cachedTokenAuthTime = idTokenResult.authTime;
-      _startTokenRevocationListener(user.uid);
-      AppLogger.log(
-        "Initialized token revocation listener for existing user: ${user.uid}",
-      );
-    } catch (e) {
-      AppLogger.error("Error validating user session: $e");
-      if (e.toString().contains('user-not-found') ||
-          e.toString().contains('user-disabled') ||
-          e.toString().contains('invalid-user-token') ||
-          e.toString().contains('user-token-expired') ||
-          e.toString().contains('400')) {
-        AppLogger.log("User session invalid during init, disabling sync: $e");
-        sessionInvalid.value = true;
-      } else {
-        AppLogger.log("Non-fatal error getting token auth time: $e");
-      }
-    }
   }
 
   /// Downloads profile image in background if needed.
@@ -1164,9 +1233,13 @@ class AuthService {
       return;
     }
 
+    final isCurrent = captureSession();
     try {
       final firestore = FirebaseBackend.firestore;
-      final userDoc = await firestore.collection('users').doc(user.uid).get();
+      final userDoc = await readCloudDocument(
+        firestore.collection('users').doc(user.uid),
+        isCurrent: isCurrent,
+      );
 
       if (userDoc.exists) {
         final data = userDoc.data();
@@ -1196,6 +1269,8 @@ class AuthService {
         _primaryProvider = data?['provider'] as String?;
       }
     } catch (e) {
+      if (!isCurrent()) return;
+      if (isCloudConnectionFailure(e)) cloudRecovery.connectionLost();
       AppLogger.error('Failed to refresh linked providers: $e');
     }
   }
@@ -1552,11 +1627,41 @@ class AuthService {
   /// session. This uses the same recoverable pipeline as a fresh sign-in.
   static Future<void> initializeCurrentUserServices() async {
     final user = currentUser;
+    final current = captureSession();
     if (user == null) {
       postSignInState.value = PostSignInState.idle;
       return;
     }
 
+    if (canRestoreLocalSession &&
+        await E2EEService.instance.preloadCachedStatus()) {
+      if (!current()) return;
+      postSignInState.value = PostSignInState.ready;
+      cloudRecovery.start(user.uid);
+      unawaited(cloudRecovery.check());
+      return;
+    }
+
+    if (!current()) return;
+    if (canRestoreLocalSession) {
+      final local = E2EEService.instance.localState;
+      if (local == LocalEncryptionState.pending ||
+          local == LocalEncryptionState.revoked ||
+          local == LocalEncryptionState.needsRecovery ||
+          local == LocalEncryptionState.unavailable ||
+          local == LocalEncryptionState.corrupt) {
+        postSignInState.value = PostSignInState.recoverableFailure(
+          PostSignInStage.encryptionInitialization,
+          operation: 'restore-local-encryption',
+        );
+        if (local != LocalEncryptionState.unavailable &&
+            local != LocalEncryptionState.corrupt) {
+          cloudRecovery.start(user.uid);
+          unawaited(cloudRecovery.check());
+        }
+        return;
+      }
+    }
     await _startPostSignInInitialization(
       user: user,
       provider: _providerNameFor(user),
@@ -1566,6 +1671,16 @@ class AuthService {
   /// Retries the complete authenticated startup sequence after a transient
   /// identity, account, or encryption failure.
   static Future<void> retryPostSignInInitialization() async {
+    final current = captureSession();
+    if (canRestoreLocalSession &&
+        await E2EEService.instance.preloadCachedStatus()) {
+      if (!current()) return;
+      postSignInState.value = PostSignInState.ready;
+      cloudRecovery.start(currentUser!.uid);
+      unawaited(cloudRecovery.check());
+      return;
+    }
+    if (!current()) return;
     final inFlight = _postSignInFuture;
     if (inFlight != null) {
       await inFlight;
@@ -1599,21 +1714,13 @@ class AuthService {
   }
 
   static Future<void> continueOfflineAfterInitializationFailure() async {
-    final canUseE2EEStorage =
-        !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
-    if (canUseE2EEStorage) {
-      try {
-        await E2EESecureStorage.instance.setSignInProgress(false);
-      } catch (error, stackTrace) {
-        await AppLogger.error(
-          '[POST_SIGN_IN] Failed to clear sign-in progress for offline mode',
-          error,
-          stackTrace,
-        );
-      }
+    if (!canRestoreLocalSession) return;
+    if (!await E2EEService.instance.preloadCachedStatus()) {
+      return;
     }
-    postSignInState.value = PostSignInState.idle;
-    sessionInvalid.value = true;
+    postSignInState.value = PostSignInState.ready;
+    cloudRecovery.start(currentUser!.uid);
+    unawaited(cloudRecovery.check());
   }
 
   static Future<void> _startPostSignInInitialization({
@@ -1650,23 +1757,35 @@ class AuthService {
       return;
     }
 
+    cloudRecovery.start(user.uid);
+    final sessionCurrent = captureSession();
+    final generation = ++_postSignInGeneration;
+    bool isCurrent() =>
+        sessionCurrent() &&
+        generation == _postSignInGeneration &&
+        currentUser?.uid == request.uid;
     var isReviewSession = false;
     final canUseE2EEStorage =
         !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
     final coordinator = PostSignInCoordinator(
       validateIdentity: PostSignInOperation('validate-identity', () async {
         request.onStatusChange?.call(AuthProgress.verifying);
-        await user.getIdToken(true);
+        await user.getIdToken(true).timeout(const Duration(seconds: 10));
+        requireCurrentSession(isCurrent);
         if (kIsWeb) {
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
+        requireCurrentSession(isCurrent);
         await _setEmulatorProClaims(user, request.onStatusChange);
+        requireCurrentSession(isCurrent);
         isReviewSession = await ReviewAccess.authorize(user);
+        requireCurrentSession(isCurrent);
         ReviewAccess.requireAuthorizedReviewIdentity(user, isReviewSession);
       }),
       initializeAccount: PostSignInOperation('initialize-account', () async {
         request.onStatusChange?.call(AuthProgress.checkingAccount);
         await FirebaseEmulatorConfig.verifyAuthenticatedFirestore(user);
+        requireCurrentSession(isCurrent);
         if (isReviewSession) {
           final reviewAuthorization = ReviewAccess.authorizationFor(user);
           if (reviewAuthorization == null) {
@@ -1703,7 +1822,11 @@ class AuthService {
           }
         }),
         PostSignInOperation('note-sync', () async {
-          if (!isReviewSession) await NoteSyncService().init();
+          if (!isReviewSession) {
+            cloudRecovery.start(user.uid);
+            await cloudRecovery.check();
+            await NoteSyncService().init();
+          }
         }),
         PostSignInOperation('label-sync', () async {
           if (!isReviewSession) await LabelSyncService().init();
@@ -1713,7 +1836,7 @@ class AuthService {
         }),
       ],
       isFatalIdentityFailure: _isDefinitiveIdentityFailure,
-      isSessionCurrent: () => currentUser?.uid == request.uid,
+      isSessionCurrent: isCurrent,
       signOut: signOut,
       clearSignInProgress: () async {
         if (canUseE2EEStorage) {
@@ -1721,6 +1844,7 @@ class AuthService {
         }
       },
       onStateChanged: (state) {
+        if (!isCurrent()) return;
         postSignInState.value = state;
       },
       reportFailure: (stage, operation, error, stackTrace) => AppLogger.error(
@@ -1730,15 +1854,17 @@ class AuthService {
       ),
     );
 
-    await coordinator.run();
-    if (currentUser?.uid != request.uid) return;
+    await runCloudOperation(isCurrent, coordinator.run);
+    if (!isCurrent()) return;
 
     // Token revocation remains active even while the user is on a recoverable
     // startup screen.
     _startTokenRevocationListener(request.uid);
     try {
-      final idTokenResult = await user.getIdTokenResult();
-      _cachedTokenAuthTime = idTokenResult.authTime;
+      final idTokenResult = await user.getIdTokenResult().timeout(
+        const Duration(seconds: 10),
+      );
+      if (isCurrent()) _cachedTokenAuthTime = idTokenResult.authTime;
     } catch (error, stackTrace) {
       await AppLogger.error(
         '[POST_SIGN_IN] Failed to cache token auth time',
@@ -1782,6 +1908,9 @@ class AuthService {
     ValueChanged<AuthProgress>? onStatusChange,
     String provider,
   ) async {
+    if (hasDifferentLocalAccount) {
+      throw StateError('Sign out before opening a different local account');
+    }
     final firestore = FirebaseBackend.firestore;
     AppLogger.log(
       "AuthService using databaseId: ${FirebaseBackend.databaseId}",
@@ -1795,12 +1924,14 @@ class AuthService {
 
         onStatusChange?.call(AuthProgress.checkingAccount);
 
-        // We remove Source.server to allow the SDK to optimize,
-        // but we still expect a connection for the first login.
+        // Account creation requires confirmed absence on the server.
         AppLogger.log(
           "[AUTH] Fetching user document for UID: ${user.uid} (Attempt $attempts)",
         );
-        final doc = await userRef.get().timeout(const Duration(seconds: 30));
+        final doc = await readCloudDocument(
+          userRef,
+          isCurrent: cloudOperationIsCurrent,
+        );
         AppLogger.log(
           "[AUTH] Fetched user document for UID: ${user.uid}, exists: ${doc.exists}",
         );
@@ -1863,27 +1994,34 @@ class AuthService {
           }
         }
 
+        requireCloudOperation();
         // Cache user profile locally
         final prefs = await SharedPreferences.getInstance();
         final fs = await fileSystem();
 
+        requireCloudOperation();
         await prefs.setString(
           FirebaseScopedPreferences.key('user_email'),
           user.email ?? '',
         );
+        requireCloudOperation();
         await prefs.setString(
           FirebaseScopedPreferences.key('user_displayName'),
           user.displayName ?? '',
         );
+        requireCloudOperation();
         await prefs.setString(
           FirebaseScopedPreferences.key('user_photoURL'),
           user.photoURL ?? '',
         );
+        requireCloudOperation();
         await prefs.setString(
           FirebaseScopedPreferences.key('user_uid'),
           user.uid,
         );
 
+        requireCloudOperation();
+        _cachedUserId = user.uid;
         _cachedProfile = {
           'email': user.email ?? '',
           'displayName': user.displayName ?? '',
@@ -1898,6 +2036,7 @@ class AuthService {
               _localPhotoPath == null ||
               !await fs.exists(_localPhotoPath!)) {
             await _downloadProfileImage(user.photoURL!, uid: user.uid);
+            requireCloudOperation();
             await prefs.setString(
               FirebaseScopedPreferences.key('user_photoURL_downloaded'),
               user.photoURL!,
@@ -1907,6 +2046,9 @@ class AuthService {
 
         return; // Success
       } catch (e) {
+        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+          rethrow;
+        }
         AppLogger.log("[AUTH] Attempt $attempts failed: $e");
 
         // If it's the last attempt, or if it's a permission error (not transient), fail.
@@ -1927,18 +2069,36 @@ class AuthService {
   /// it means our session has been invalidated and we should sign out.
   static void _startTokenRevocationListener(String userId) {
     // Cancel any existing listener
-    _stopTokenRevocationListener();
-    _currentUserId = userId;
+    _tokenRevocationSubscription?.cancel();
 
     final firestore = FirebaseBackend.firestore;
+    final isCurrent = captureSession();
 
     _tokenRevocationSubscription = firestore
         .collection('users')
         .doc(userId)
-        .snapshots()
-        .listen((snapshot) async {
-          await _checkAndHandleRevocation(snapshot.data());
-        });
+        .snapshots(includeMetadataChanges: true)
+        .listen(
+          (snapshot) async {
+            if (!isCurrent() ||
+                currentUser?.uid != userId ||
+                snapshot.metadata.isFromCache ||
+                snapshot.metadata.hasPendingWrites) {
+              return;
+            }
+            await _checkAndHandleRevocation(snapshot.data());
+          },
+          onError: (Object error, StackTrace stack) {
+            if (currentUser?.uid == userId && isCloudConnectionFailure(error)) {
+              cloudRecovery.connectionLost();
+            }
+            AppLogger.error(
+              'Token revocation listener unavailable',
+              error,
+              stack,
+            );
+          },
+        );
 
     AppLogger.log("Started token revocation listener for user: $userId");
   }
@@ -1965,39 +2125,10 @@ class AuthService {
 
   /// Call this when app resumes from background to check for revocation
   static Future<void> checkTokenRevocationOnResume() async {
-    // Recovery: if session was marked invalid (e.g. due to init timeout)
-    // but Firebase Auth now has a valid user, attempt to recover the session.
-    if (sessionInvalid.value) {
-      final user = _auth.currentUser;
-      if (user != null) {
-        try {
-          final idTokenResult = await user.getIdTokenResult(true);
-          _cachedTokenAuthTime = idTokenResult.authTime;
-          _startTokenRevocationListener(user.uid);
-          AppLogger.log(
-            "Session recovered on resume — Firebase Auth user is valid",
-          );
-          sessionInvalid.value = false;
-          return;
-        } catch (e) {
-          AppLogger.error("Session recovery on resume failed: $e");
-          // Fall through — session remains invalid
-        }
-      }
-    }
-
-    if (_currentUserId == null || _cachedTokenAuthTime == null) return;
-
-    try {
-      final firestore = FirebaseBackend.firestore;
-
-      final doc = await firestore.collection('users').doc(_currentUserId).get();
-      if (doc.exists) {
-        await _checkAndHandleRevocation(doc.data());
-      }
-    } catch (e) {
-      AppLogger.error("Error checking token revocation on resume: $e");
-    }
+    final user = currentUser;
+    if (user == null) return;
+    cloudRecovery.start(user.uid);
+    await cloudRecovery.check();
   }
 
   /// Stops the token revocation listener
@@ -2005,7 +2136,6 @@ class AuthService {
     _tokenRevocationSubscription?.cancel();
     _tokenRevocationSubscription = null;
     _cachedTokenAuthTime = null;
-    _currentUserId = null;
   }
 
   /// Ensures Firestore network is enabled (may have been left disabled after signout)
@@ -2019,6 +2149,13 @@ class AuthService {
   }
 
   static Future<void> signOut() async {
+    _sessionEpoch++;
+    AttachmentRepairCoordinator.instance.reset();
+    E2EEService.instance.resetInitialization();
+    E2EEService.instance.deviceManager.invalidateSession();
+    _postSignInGeneration++;
+    cloudRecovery.stop();
+    _cachedUserId = null;
     _postSignInRequest = null;
     _postSignInFuture = null;
     postSignInState.value = PostSignInState.idle;

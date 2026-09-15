@@ -1086,5 +1086,8 @@
 	"matchAnySelectedLabelHint": "Mostrar notas que contenham pelo menos uma das etiquetas selecionadas.",
 	"createLabelConfirmation": "Criar “{name}”?",
 	"createAndApplyLabelConfirmation": "Criar “{name}” e adicionar a esta nota?",
-	"couldNotSaveLabel": "Não foi possível salvar a etiqueta. Tente novamente."
+	"couldNotSaveLabel": "Não foi possível salvar a etiqueta. Tente novamente.",
+	"noConnectionAvailable": "Sem conexão disponível.",
+	"localEncryptionUnavailable": "Não foi possível ler as chaves de criptografia salvas. Desbloqueie o dispositivo e tente novamente. Seus dados locais foram mantidos.",
+	"localEncryptionMissing": "As chaves necessárias para abrir suas notas salvas estão ausentes ou danificadas. Reconecte-se para restaurar o acesso ou use a recuperação de conta. Seus dados locais foram mantidos."
 }

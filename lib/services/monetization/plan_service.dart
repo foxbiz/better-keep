@@ -1,5 +1,8 @@
+import 'package:better_keep/services/cloud_read.dart';
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:better_keep/services/cloud_session_recovery.dart';
 
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/firebase_backend.dart';
@@ -42,6 +45,8 @@ class PlanService {
 
   /// Whether the service has been initialized
   bool _initialized = false;
+  int _subscriptionGeneration = 0;
+  Future<void>? _listenerStart;
 
   /// Firestore listener subscription
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
@@ -109,8 +114,21 @@ class PlanService {
       }
 
       // If an ordinary user is logged in, start listening for changes.
-      if (user != null && reviewAuthorization == null) {
-        await _startSubscriptionListener(user.uid);
+      if (user != null &&
+          reviewAuthorization == null &&
+          AuthService.canSyncCloud) {
+        unawaited(
+          _startSubscriptionListener(user.uid).catchError((
+            Object error,
+            StackTrace stack,
+          ) {
+            AppLogger.error(
+              'Subscription listener initialization deferred',
+              error,
+              stack,
+            );
+          }),
+        );
 
         // Validate subscription with backend (async, don't block init)
         // This catches cases where webhook failed to update status
@@ -137,7 +155,15 @@ class PlanService {
             );
             return;
           }
-          _startSubscriptionListener(user.uid);
+          if (!AuthService.canSyncCloud) return;
+          unawaited(
+            _startSubscriptionListener(user.uid).catchError((
+              Object error,
+              StackTrace stack,
+            ) {
+              AppLogger.error('Subscription listener deferred', error, stack);
+            }),
+          );
           // Validate when user signs in
           _validateSubscriptionWithBackend();
         } else {
@@ -273,13 +299,24 @@ class PlanService {
     }
   }
 
+  bool Function() _captureSession() {
+    final accountCurrent = AuthService.captureSession();
+    final generation = _subscriptionGeneration;
+    return () => accountCurrent() && generation == _subscriptionGeneration;
+  }
+
   /// Load subscription from local cache
   Future<void> _loadCachedSubscription({String? uid}) async {
+    final current = _captureSession();
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!current()) return;
       final cachedJson = prefs.getString(_cacheKey);
 
-      if (cachedJson != null) {
+      if (cachedJson != null &&
+          uid != null &&
+          prefs.getString(FirebaseScopedPreferences.key('user_uid')) == uid &&
+          AuthService.currentUser?.uid == uid) {
         final cached = json.decode(cachedJson) as Map<String, dynamic>;
         final status = SubscriptionStatus.fromFirestore(cached);
         _setSubscription(status);
@@ -290,7 +327,7 @@ class PlanService {
 
       if (uid != null) {
         _activeSubscriptionUid = uid;
-        await _loadVerifiedEntitlement(prefs, uid);
+        await _loadVerifiedEntitlement(prefs, uid, isCurrent: current);
       }
     } catch (e) {
       AppLogger.error('PlanService: Error loading cached subscription', e);
@@ -299,8 +336,10 @@ class PlanService {
 
   Future<void> _loadVerifiedEntitlement(
     SharedPreferences preferences,
-    String uid,
-  ) async {
+    String uid, {
+    bool Function()? isCurrent,
+  }) async {
+    if (!(isCurrent?.call() ?? true)) return;
     final encoded = preferences.getString(_verifiedCacheKey(uid));
     if (encoded == null) {
       _verifiedEntitlement = null;
@@ -317,18 +356,21 @@ class PlanService {
           : null;
       if (snapshot == null) {
         await preferences.remove(_verifiedCacheKey(uid));
+        if (!(isCurrent?.call() ?? true)) return;
         _verifiedEntitlement = null;
         return;
       }
 
       _verifiedEntitlement = snapshot;
       _setSubscription(snapshot.status);
-      await _cacheSubscription(snapshot.status);
+      await _cacheSubscription(snapshot.status, isCurrent: isCurrent);
       AppLogger.log(
         'PlanService: Restored UID-scoped verified ${snapshot.status.purchasePlatform} entitlement',
       );
     } catch (error) {
+      if (!(isCurrent?.call() ?? true)) return;
       await preferences.remove(_verifiedCacheKey(uid));
+      if (!(isCurrent?.call() ?? true)) return;
       _verifiedEntitlement = null;
       AppLogger.error(
         'PlanService: Rejected invalid verified entitlement cache',
@@ -338,9 +380,13 @@ class PlanService {
   }
 
   /// Save subscription to local cache
-  Future<void> _cacheSubscription(SubscriptionStatus status) async {
+  Future<void> _cacheSubscription(
+    SubscriptionStatus status, {
+    bool Function()? isCurrent,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!(isCurrent?.call() ?? true)) return;
       final json = jsonEncode(status.toFirestore());
       await prefs.setString(_cacheKey, json);
     } catch (e) {
@@ -368,7 +414,9 @@ class PlanService {
     SubscriptionStatus? incoming, {
     required String origin,
     bool explicitTerminal = false,
+    bool Function()? isCurrent,
   }) async {
+    if (!(isCurrent?.call() ?? true)) return;
     final uid = _activeSubscriptionUid;
     final verified = uid != null && _verifiedEntitlement?.uid == uid
         ? _verifiedEntitlement!.status
@@ -381,7 +429,8 @@ class PlanService {
     );
 
     _setSubscription(resolution.status);
-    await _cacheSubscription(resolution.status);
+    await _cacheSubscription(resolution.status, isCurrent: isCurrent);
+    if (!(isCurrent?.call() ?? true)) return;
 
     if (!resolution.retainVerifiedSnapshot && uid != null) {
       await _clearVerifiedEntitlement(uid);
@@ -439,106 +488,89 @@ class PlanService {
   }
 
   /// Start listening for subscription changes from Firebase
-  Future<void> _startSubscriptionListener(String uid) async {
+  Future<void> _startSubscriptionListener(String uid) {
+    if (_activeSubscriptionUid == uid && _subscriptionListener != null) {
+      return Future.value();
+    }
+    if (_activeSubscriptionUid == uid && _listenerStart != null) {
+      return _listenerStart!;
+    }
     _stopSubscriptionListener();
     if (_activeSubscriptionUid != null && _activeSubscriptionUid != uid) {
       _verifiedEntitlement = null;
       _setSubscription(SubscriptionStatus.free);
     }
     _activeSubscriptionUid = uid;
-
-    final preferences = await SharedPreferences.getInstance();
-    await _loadVerifiedEntitlement(preferences, uid);
-
-    try {
-      final db = FirebaseBackend.firestore;
-      final docRef = db
-          .collection('users')
-          .doc(uid)
-          .collection('subscription')
-          .doc('status');
-
-      AppLogger.log(
-        'PlanService: Fetching subscription for user $uid from database: ${FirebaseBackend.databaseId}',
-      );
-
-      // First, fetch from server to ensure fresh data (bypasses cache)
-      // This is important for web page refresh to get the latest state
-      try {
-        final serverSnapshot = await docRef.get(
-          const GetOptions(source: Source.server),
-        );
-        AppLogger.log(
-          'PlanService: Server snapshot exists: ${serverSnapshot.exists}, data: ${serverSnapshot.data()}',
-        );
-        if (serverSnapshot.exists) {
-          final status = SubscriptionStatus.fromFirestore(
-            serverSnapshot.data(),
-          );
-          await _applyIncomingSubscription(status, origin: 'server');
-          AppLogger.log(
-            'PlanService: Initial server fetch: ${status.plan.displayName}',
-          );
-        } else {
-          await _applyIncomingSubscription(null, origin: 'server missing');
-          AppLogger.log(
-            'PlanService: Initial server fetch returned no canonical document',
-          );
-        }
-      } catch (e) {
-        AppLogger.error(
-          'PlanService: Error fetching initial subscription from server',
-          e,
-        );
-        // Fall back to cache if server fetch fails
-      }
-
-      // Then start listening for real-time updates
-      _subscriptionListener = docRef
-          .snapshots(includeMetadataChanges: true)
-          .listen(
-            (snapshot) async {
-              if (snapshot.exists) {
-                final status = SubscriptionStatus.fromFirestore(
-                  snapshot.data(),
-                );
-                await _applyIncomingSubscription(
-                  status,
-                  origin: snapshot.metadata.isFromCache
-                      ? 'cached Firestore'
-                      : 'Firestore',
-                );
-                AppLogger.log(
-                  'PlanService: Subscription updated: ${status.plan.displayName}',
-                );
-              } else {
-                if (snapshot.metadata.isFromCache) {
-                  AppLogger.log(
-                    'PlanService: Ignoring cached missing subscription document',
+    final generation = _subscriptionGeneration;
+    final sessionCurrent = AuthService.captureSession();
+    bool current() =>
+        sessionCurrent() &&
+        generation == _subscriptionGeneration &&
+        _activeSubscriptionUid == uid;
+    late final Future<void> operation;
+    operation =
+        (() async {
+          final preferences = await SharedPreferences.getInstance();
+          if (!current()) return;
+          await _loadVerifiedEntitlement(preferences, uid, isCurrent: current);
+          if (!current()) return;
+          // The listener supplies both cache and server state without a blocking
+          // first fetch, and cached misses cannot erase a verified entitlement.
+          final reference = FirebaseBackend.firestore
+              .collection('users')
+              .doc(uid)
+              .collection('subscription')
+              .doc('status');
+          _subscriptionListener = reference
+              .snapshots(includeMetadataChanges: true)
+              .listen(
+                (snapshot) async {
+                  if (!current() || snapshot.metadata.hasPendingWrites) return;
+                  if (!snapshot.exists && snapshot.metadata.isFromCache) return;
+                  try {
+                    await _applyIncomingSubscription(
+                      snapshot.exists
+                          ? SubscriptionStatus.fromFirestore(snapshot.data())
+                          : null,
+                      origin: snapshot.metadata.isFromCache
+                          ? 'cached Firestore'
+                          : 'Firestore',
+                      isCurrent: current,
+                    );
+                  } catch (error, stack) {
+                    if (current()) {
+                      AppLogger.error(
+                        'Subscription update failed',
+                        error,
+                        stack,
+                      );
+                    }
+                  }
+                },
+                onError: (Object error, StackTrace stack) {
+                  if (!current()) return;
+                  _stopSubscriptionListener();
+                  if (isCloudConnectionFailure(error)) {
+                    AuthService.cloudRecovery.connectionLost();
+                  }
+                  AppLogger.error(
+                    'Subscription listener deferred',
+                    error,
+                    stack,
                   );
-                  return;
-                }
-                await _applyIncomingSubscription(
-                  null,
-                  origin: 'Firestore missing',
-                );
-              }
-            },
-            onError: (e) {
-              AppLogger.error(
-                'PlanService: Error listening to subscription',
-                e,
+                },
               );
-              // Keep using cached/current subscription on error
-            },
-          );
-    } catch (e) {
-      AppLogger.error('PlanService: Error starting subscription listener', e);
-    }
+        })().whenComplete(() {
+          if (identical(_listenerStart, operation)) _listenerStart = null;
+        });
+    _listenerStart = operation;
+    return operation;
   }
 
   /// Stop listening for subscription changes
   void _stopSubscriptionListener() {
+    _subscriptionGeneration++;
+    _listenerStart = null;
     _subscriptionListener?.cancel();
     _subscriptionListener = null;
     _reconciliationTimer?.cancel();
@@ -609,6 +641,7 @@ class PlanService {
   /// Force refresh subscription status from Firebase
   /// Also validates with Google Play if user appears to have a subscription
   Future<void> refreshSubscription({bool validateWithBackend = false}) async {
+    final current = _captureSession();
     final user = AuthService.currentUser;
     if (user == null) {
       _setSubscription(SubscriptionStatus.free);
@@ -632,13 +665,15 @@ class PlanService {
           .doc('status');
 
       // Bypass Firestore cache to get fresh data from server
-      final snapshot = await docRef.get(
-        const GetOptions(source: Source.server),
-      );
+      final snapshot = await readCloudDocument(docRef, isCurrent: current);
 
       if (snapshot.exists) {
         final status = SubscriptionStatus.fromFirestore(snapshot.data());
-        await _applyIncomingSubscription(status, origin: 'server refresh');
+        await _applyIncomingSubscription(
+          status,
+          origin: 'server refresh',
+          isCurrent: current,
+        );
 
         // If user appears to have a paid subscription and validation requested,
         // verify with backend (catches cases where webhook failed)
@@ -649,6 +684,7 @@ class PlanService {
         await _applyIncomingSubscription(
           null,
           origin: 'server refresh missing',
+          isCurrent: current,
         );
       }
     } catch (e) {
@@ -662,6 +698,7 @@ class PlanService {
   /// Firestore and custom claims remain authoritative. This is a local fallback
   /// for the short window where the canonical status read still returns trial.
   Future<bool> applyVerifiedEntitlement(Map<String, dynamic>? data) async {
+    final current = _captureSession();
     final user = AuthService.currentUser;
     final snapshot = user == null
         ? null
@@ -676,8 +713,9 @@ class PlanService {
     _activeSubscriptionUid = user!.uid;
     _verifiedEntitlement = snapshot;
     await _persistVerifiedEntitlement(snapshot);
+    if (!current()) return false;
     _setSubscription(snapshot.status);
-    await _cacheSubscription(snapshot.status);
+    await _cacheSubscription(snapshot.status, isCurrent: current);
     AppLogger.log(
       'PlanService: Applied verified ${snapshot.status.purchasePlatform} entitlement',
     );
@@ -697,9 +735,11 @@ class PlanService {
   }
 
   Future<void> applyOwnershipConflict({required String source}) async {
+    final current = _captureSession();
     final user = AuthService.currentUser;
     if (user == null) return;
     await _clearVerifiedEntitlement(user.uid);
+    if (!current()) return;
     if (status.purchasePlatform == source) {
       await _applyIncomingSubscription(
         SubscriptionStatus.free,
@@ -713,6 +753,7 @@ class PlanService {
   /// Use this when user manually requests a refresh or for debugging
   /// Existing access is retained if backend/Firestore transport is unavailable.
   Future<void> forceValidateSubscription() async {
+    final current = _captureSession();
     final user = AuthService.currentUser;
     if (user == null) {
       _setSubscription(SubscriptionStatus.free);
@@ -729,6 +770,7 @@ class PlanService {
       // document cannot win the race during manual recovery.
       final backend = await SubscriptionService.instance
           .checkExistingSubscription();
+      if (!current()) return;
       if (backend.hasSubscription && backend.localEntitlementActive) {
         AppLogger.log(
           'PlanService: Force refresh confirmed active provider entitlement',
@@ -750,18 +792,24 @@ class PlanService {
           .doc('status');
 
       // Force fetch from server, not cache
-      final snapshot = await docRef.get(
-        const GetOptions(source: Source.server),
-      );
+      final snapshot = await readCloudDocument(docRef, isCurrent: current);
 
       if (snapshot.exists) {
         final status = SubscriptionStatus.fromFirestore(snapshot.data());
-        await _applyIncomingSubscription(status, origin: 'force refresh');
+        await _applyIncomingSubscription(
+          status,
+          origin: 'force refresh',
+          isCurrent: current,
+        );
         AppLogger.log(
           'PlanService: Force refresh - found subscription: ${status.plan}',
         );
       } else {
-        await _applyIncomingSubscription(null, origin: 'force refresh missing');
+        await _applyIncomingSubscription(
+          null,
+          origin: 'force refresh missing',
+          isCurrent: current,
+        );
         AppLogger.log(
           'PlanService: Force refresh found no canonical subscription document',
         );

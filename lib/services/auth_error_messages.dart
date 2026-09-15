@@ -28,6 +28,89 @@ enum VerificationFailureKind {
   unknown,
 }
 
+enum AccountLinkFailureKind {
+  signInRequired,
+  missingEmail,
+  alreadyLinked,
+  accountExists,
+  tooManyRequests,
+  expired,
+  network,
+  cancelled,
+  unknown,
+}
+
+AccountLinkFailureKind resolveAccountLinkFailure(Object? error) {
+  if ((error is GoogleSignInException &&
+          error.code == GoogleSignInExceptionCode.canceled) ||
+      (error is SignInWithAppleAuthorizationException &&
+          error.code == AuthorizationErrorCode.canceled)) {
+    return AccountLinkFailureKind.cancelled;
+  }
+  final code = switch (error) {
+    FirebaseFunctionsException() => error.code,
+    FirebaseAuthException() => error.code,
+    _ => null,
+  };
+  // Older callbacks return a single OAuth code. Recognize only our known
+  // messages; never display arbitrary provider or server diagnostic text.
+  if (error is FirebaseAuthException && code == 'oauth-error') {
+    final message = error.message;
+    if (message == 'User not found. Please sign in again.') {
+      return AccountLinkFailureKind.signInRequired;
+    }
+    if (message ==
+        'Account-link authorization is invalid, expired, or already used') {
+      return AccountLinkFailureKind.expired;
+    }
+    for (final provider in ['github', 'facebook', 'twitter']) {
+      if (message ==
+          'This $provider account is already associated with a different user. '
+              'Please use a different $provider account.') {
+        return AccountLinkFailureKind.accountExists;
+      }
+      if (message ==
+          'A different $provider account is already linked. '
+              'Please unlink it first before linking a new one.') {
+        return AccountLinkFailureKind.alreadyLinked;
+      }
+    }
+  }
+  return switch (code) {
+    'unauthenticated' ||
+    'requires-recent-login' => AccountLinkFailureKind.signInRequired,
+    'failed-precondition' => AccountLinkFailureKind.missingEmail,
+    'already-exists' ||
+    'provider-already-linked' => AccountLinkFailureKind.alreadyLinked,
+    'credential-already-in-use' ||
+    'email-already-in-use' ||
+    'account-exists-with-different-credential' =>
+      AccountLinkFailureKind.accountExists,
+    'resource-exhausted' ||
+    'too-many-requests' => AccountLinkFailureKind.tooManyRequests,
+    'deadline-exceeded' ||
+    'timeout' ||
+    'oauth-completion-invalid' => AccountLinkFailureKind.expired,
+    'unavailable' || 'network-request-failed' => AccountLinkFailureKind.network,
+    'cancelled' ||
+    'popup-closed-by-user' ||
+    'user-cancelled' => AccountLinkFailureKind.cancelled,
+    _ => AccountLinkFailureKind.unknown,
+  };
+}
+
+int? accountLinkRetrySeconds(Object? error) {
+  if (error is! FirebaseFunctionsException ||
+      error.code != 'resource-exhausted') {
+    return null;
+  }
+  final match = RegExp(
+    r'^Please wait (\d+) seconds before requesting a new code\.$',
+  ).firstMatch(error.message ?? '');
+  final seconds = int.tryParse(match?.group(1) ?? '');
+  return seconds != null && seconds > 0 && seconds <= 60 ? seconds : null;
+}
+
 VerificationFailureKind resolveVerificationFailure(
   Object error, {
   bool codeWasSubmitted = false,

@@ -1,3 +1,7 @@
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/services/cloud_read.dart';
+import 'package:better_keep/services/async_initialization_gate.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'dart:async';
 import 'package:better_keep/models/cloud_sync_cursor.dart';
 import 'package:better_keep/models/app_progress.dart';
@@ -30,6 +34,9 @@ class LabelSyncService {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   StreamSubscription<User?>? _userStreamSubscription;
   bool _initialized = false;
+  int _sessionGeneration = 0;
+  int _cloudGeneration = 0;
+  final _initializationGate = AsyncInitializationGate();
   final InitialHydrationGate _initialHydration = InitialHydrationGate();
   final HydrationRetryController _listenerRetry = HydrationRetryController();
   final ExponentialBackoffRetryController _pullRetry =
@@ -74,28 +81,34 @@ class LabelSyncService {
       _userRef.collection('labels');
 
   void _markSyncFailed(int labelId) {
+    if (!cloudOperationIsCurrent()) return;
     syncFailed.value = {...syncFailed.value, labelId};
   }
 
   void _clearSyncFailed(int labelId) {
+    if (!cloudOperationIsCurrent()) return;
     syncFailed.value = {...syncFailed.value}..remove(labelId);
   }
 
   void _addSyncingOutgoing(int labelId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingOutgoing.value = {...syncingOutgoing.value, labelId};
     _clearSyncFailed(labelId);
   }
 
   void _removeSyncingOutgoing(int labelId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingOutgoing.value = {...syncingOutgoing.value}..remove(labelId);
   }
 
   void _addSyncingIncoming(int labelId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingIncoming.value = {...syncingIncoming.value, labelId};
     _clearSyncFailed(labelId);
   }
 
   void _removeSyncingIncoming(int labelId) {
+    if (!cloudOperationIsCurrent()) return;
     syncingIncoming.value = {...syncingIncoming.value}..remove(labelId);
   }
 
@@ -107,7 +120,7 @@ class LabelSyncService {
   /// Note: Pro subscription NOT required for receiving sync
   bool get _canReceiveSync {
     // If session is invalid (user deleted/disabled), disable all sync
-    if (AuthService.sessionInvalid.value) {
+    if (!AuthService.canSyncCloud) {
       return false;
     }
 
@@ -134,10 +147,44 @@ class LabelSyncService {
   /// Track the previous subscription state to detect upgrades
   bool _wasPreviouslyPaid = false;
 
-  Future<void> init() async {
+  bool Function() _captureSession({bool cloud = true}) {
+    final current = AuthService.captureSession();
+    final generation = _sessionGeneration;
+    final cloudGeneration = _cloudGeneration;
+    return () =>
+        current() &&
+        generation == _sessionGeneration &&
+        (!cloud || cloudGeneration == _cloudGeneration);
+  }
+
+  void _onCloudStateChange() {
+    if (AuthService.canSyncCloud) return;
+    _cloudGeneration++;
+    _syncTimer?.cancel();
+    _pullRetry.cancel();
+    _listenerRetry.cancel();
+    unawaited(_stopRemoteListener());
+    isSyncing.value = false;
+    syncingOutgoing.value = {};
+    syncingIncoming.value = {};
+    syncStatus.value = SyncProgress.idle;
+  }
+
+  Future<void> init() => _initializationGate.run(() async {
+    final current = _captureSession(cloud: false);
+    try {
+      await runCloudOperation(current, _initialize);
+    } catch (_) {
+      if (current()) await dispose();
+      rethrow;
+    }
+  });
+
+  Future<void> _initialize() async {
     // Prevent duplicate initialization and listener registration
     if (_initialized) return;
     _initialized = true;
+    AuthService.cloudRecovery.state.addListener(_onCloudStateChange);
 
     AppLogger.log("[LABEL_SYNC] LabelSyncService initialized");
 
@@ -175,11 +222,13 @@ class LabelSyncService {
       }
     }
 
+    requireCloudOperation();
     // Listen for E2EE status changes to trigger sync when ready
     e2ee.status.addListener(_onE2EEReadinessChange);
     e2ee.deviceManager.hasUMK.addListener(_onE2EEReadinessChange);
 
     _userStreamSubscription = AuthService.userStream.listen((user) async {
+      if (!cloudOperationIsCurrent()) return;
       if (user != null) {
         // Review sessions are intentionally local-only.
         if (_isReviewSession) {
@@ -265,8 +314,15 @@ class LabelSyncService {
   }
 
   /// Start listening for real-time updates from Firebase
-  Future<void> _startRemoteListener() async {
+  Future<void> _startRemoteListener() {
+    final current = _captureSession();
+    if (!current() || !cloudOperationIsCurrent()) return Future.value();
+    return runCloudOperation(current, _startRemoteListenerCurrent);
+  }
+
+  Future<void> _startRemoteListenerCurrent() async {
     await _stopRemoteListener(cancelRetry: false);
+    requireCloudOperation();
     if (currentUser == null || !_canReceiveSync) return;
 
     final checkpoint = AppState.labelCloudSyncCheckpoint;
@@ -290,6 +346,7 @@ class LabelSyncService {
         .snapshots(includeMetadataChanges: true)
         .listen(
           (snapshot) {
+            if (!cloudOperationIsCurrent()) return;
             _initialHydration.beginWork(
               hydrationGeneration,
               isFromCache: snapshot.metadata.isFromCache,
@@ -481,6 +538,10 @@ class LabelSyncService {
                     );
                   }
                 } catch (error, stackTrace) {
+                  if (!cloudOperationIsCurrent()) return;
+                  if (isCloudConnectionFailure(error)) {
+                    AuthService.cloudRecovery.connectionLost();
+                  }
                   hydrationFailed = true;
                   AppLogger.error(
                     '[LABEL_SYNC] Hydration attempt failed',
@@ -514,6 +575,10 @@ class LabelSyncService {
             );
           },
           onError: (error) {
+            if (!cloudOperationIsCurrent()) return;
+            if (isCloudConnectionFailure(error)) {
+              AuthService.cloudRecovery.connectionLost();
+            }
             AppLogger.error('LabelSync: Remote listener error', error);
             _initialHydration.failAttempt(hydrationGeneration);
             unawaited(_restartRemoteListenerAfterFailure(hydrationGeneration));
@@ -526,6 +591,7 @@ class LabelSyncService {
   Future<void> _restartRemoteListenerAfterFailure(int generation) async {
     if (!_initialHydration.isCurrent(generation)) return;
     await _stopRemoteListener(cancelRetry: false);
+    if (!_canReceiveSync) return;
     _listenerRetry.schedule(() async {
       if (_initialized && currentUser != null && _canReceiveSync) {
         AppLogger.log('[LABEL_SYNC] Restarting remote listener after failure');
@@ -559,6 +625,8 @@ class LabelSyncService {
   /// Dispose of all listeners and subscriptions.
   /// Call this when the app is shutting down or user logs out.
   Future<void> dispose() async {
+    _sessionGeneration++;
+    AuthService.cloudRecovery.state.removeListener(_onCloudStateChange);
     await _stopRemoteListener();
     _syncTimer?.cancel();
     _syncTimer = null;
@@ -570,6 +638,7 @@ class LabelSyncService {
       _onE2EEReadinessChange,
     );
     _initialized = false;
+    _initializationGate.reset();
     _initialHydration.reset();
     _listenerRetry.cancel();
     _pullRetry.cancel();
@@ -598,22 +667,40 @@ class LabelSyncService {
     });
   }
 
-  Future<void> refresh() =>
-      _syncOperationSerializer.run(_syncOperationKey, _refreshUnlocked);
+  Future<void> resumeCloudSync() async {
+    if (!_canReceiveSync) return;
+    await _startRemoteListener();
+    await refresh();
+  }
 
-  Future<void> _refreshUnlocked() async {
+  Future<void> refresh() async {
+    await refreshWithOutcome();
+  }
+
+  Future<SyncRefreshOutcome> refreshWithOutcome() {
+    if (refreshOperationOverride != null) {
+      return _syncOperationSerializer.run(_syncOperationKey, _refreshUnlocked);
+    }
+    final current = _captureSession();
+    return _syncOperationSerializer.run(_syncOperationKey, () async {
+      if (!current()) return SyncRefreshOutcome.deferred;
+      return runCloudOperation(current, _refreshUnlocked);
+    });
+  }
+
+  Future<SyncRefreshOutcome> _refreshUnlocked() async {
     final override = refreshOperationOverride;
     if (override != null) {
       await override();
-      return;
+      return SyncRefreshOutcome.complete;
     }
-    if (currentUser == null) return;
+    if (currentUser == null) return SyncRefreshOutcome.deferred;
 
     if (!_canReceiveSync) {
       AppLogger.log(
         '[LABEL_SYNC] Skipping refresh - incoming sync unavailable',
       );
-      return;
+      return SyncRefreshOutcome.deferred;
     }
 
     await Future.microtask(() {});
@@ -621,7 +708,7 @@ class LabelSyncService {
       AppLogger.log(
         '[LABEL_SYNC] Skipping refresh - incoming sync became unavailable',
       );
-      return;
+      return SyncRefreshOutcome.deferred;
     }
 
     try {
@@ -645,29 +732,50 @@ class LabelSyncService {
         AppLogger.log(
           '[LABEL_SYNC] Deferring pull - incoming sync became unavailable',
         );
-        return;
+        return SyncRefreshOutcome.deferred;
       }
       // Always pull remote changes (available to all users)
       await _pullRemoteChanges();
 
-      syncStatus.value = const SyncProgress(SyncPhase.complete);
-      AppLogger.log("[LABEL_SYNC] Manual refresh complete");
-    } on FirestoreDocumentFetchException catch (e, stack) {
+      requireCloudOperation();
+      syncStatus.value = syncFailed.value.isEmpty
+          ? const SyncProgress(SyncPhase.complete)
+          : const SyncProgress(SyncPhase.failed);
+      return syncFailed.value.isEmpty
+          ? SyncRefreshOutcome.complete
+          : SyncRefreshOutcome.failed;
+    } on CloudOperationCancelled {
+      return SyncRefreshOutcome.deferred;
+    } catch (error, stack) {
+      if (!cloudOperationIsCurrent()) return SyncRefreshOutcome.deferred;
+      if (isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+        syncStatus.value = SyncProgress.idle;
+        return SyncRefreshOutcome.unavailable;
+      }
       syncStatus.value = const SyncProgress(SyncPhase.failed);
-      AppLogger.error('LabelSync: Firestore document fetch failed', e, stack);
-    } catch (e, stack) {
-      syncStatus.value = const SyncProgress(SyncPhase.failed);
-      AppLogger.error('LabelSync: Refresh Failed', e, stack);
+      AppLogger.error('LabelSync: Refresh failed', error, stack);
+      return SyncRefreshOutcome.failed;
     } finally {
-      isSyncing.value = false;
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!isSyncing.value) syncStatus.value = SyncProgress.idle;
-      });
+      if (cloudOperationIsCurrent()) {
+        isSyncing.value = false;
+        syncingOutgoing.value = {};
+        Future.delayed(const Duration(seconds: 2), () {
+          if (cloudOperationIsCurrent() && !isSyncing.value) {
+            syncStatus.value = SyncProgress.idle;
+          }
+        });
+      }
     }
   }
 
-  Future<void> _sync() =>
-      _syncOperationSerializer.run(_syncOperationKey, _syncUnlocked);
+  Future<void> _sync() {
+    final current = _captureSession();
+    return _syncOperationSerializer.run(_syncOperationKey, () async {
+      if (!current()) return;
+      await runCloudOperation(current, _syncUnlocked);
+    });
+  }
 
   Future<void> _syncUnlocked() async {
     if (currentUser == null) return;
@@ -695,17 +803,29 @@ class LabelSyncService {
       );
 
       await _pushLocalChangesWithPending(pendingSyncs);
+      requireCloudOperation();
 
       syncStatus.value = const SyncProgress(SyncPhase.complete);
       AppLogger.log("[LABEL_SYNC] Sync Complete");
     } catch (e, stack) {
-      syncStatus.value = const SyncProgress(SyncPhase.failed);
+      if (!cloudOperationIsCurrent() || e is CloudOperationCancelled) return;
+      if (isCloudConnectionFailure(e)) {
+        AuthService.cloudRecovery.connectionLost();
+        syncStatus.value = SyncProgress.idle;
+      } else {
+        syncStatus.value = const SyncProgress(SyncPhase.failed);
+      }
       AppLogger.error('LabelSync: Sync Failed', e, stack);
     } finally {
-      isSyncing.value = false;
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!isSyncing.value) syncStatus.value = SyncProgress.idle;
-      });
+      if (cloudOperationIsCurrent()) {
+        isSyncing.value = false;
+        syncingOutgoing.value = {};
+        Future.delayed(const Duration(seconds: 2), () {
+          if (cloudOperationIsCurrent() && !isSyncing.value) {
+            syncStatus.value = SyncProgress.idle;
+          }
+        });
+      }
     }
   }
 
@@ -717,6 +837,7 @@ class LabelSyncService {
 
     WriteBatch batch = _firestore.batch();
     int batchCount = 0;
+    Object? pushFailure;
     final List<Future<void> Function()> postCommitActions = [];
 
     for (final sync in pendingSyncs) {
@@ -724,6 +845,7 @@ class LabelSyncService {
       _addSyncingOutgoing(sync.localId);
       try {
         if (sync.action == LabelSyncAction.delete && sync.remoteId == null) {
+          requireCloudOperation();
           await sync.delete();
           AppLogger.log(
             "[LABEL_SYNC] Deleted local sync track for label without remote ID: ${sync.localId}",
@@ -735,7 +857,10 @@ class LabelSyncService {
         late final Map<String, dynamic>? remoteData;
 
         if (sync.remoteId != null) {
-          final docSnapshot = await _labelsCollection.doc(sync.remoteId).get();
+          final docSnapshot = await readCloudDocument(
+            _labelsCollection.doc(sync.remoteId),
+            isCurrent: cloudOperationIsCurrent,
+          );
           if (docSnapshot.exists) {
             remoteData = docSnapshot.data()!;
           } else {
@@ -771,6 +896,7 @@ class LabelSyncService {
             remoteData?['deleted'] == true || remoteData?['deleted'] == 1;
         if (sync.action == LabelSyncAction.delete && !isRemoteDeleted) {
           if (remoteData == null) {
+            requireCloudOperation();
             await sync.delete();
             AppLogger.log(
               "[LABEL_SYNC] Remote document doesn't exist, cleaning up sync track for: ${sync.localId}",
@@ -788,6 +914,8 @@ class LabelSyncService {
               cloudSyncCommittedAtField: FieldValue.serverTimestamp(),
             });
             postCommitActions.add(() async {
+              requireCloudOperation();
+              requireCloudOperation();
               await sync.delete();
               AppLogger.log(
                 "[LABEL_SYNC] Deleted remote label: ${sync.remoteId}",
@@ -796,6 +924,7 @@ class LabelSyncService {
             });
             batchCount++;
           } else {
+            requireCloudOperation();
             await sync.delete();
             _removeSyncingOutgoing(sync.localId);
           }
@@ -805,6 +934,7 @@ class LabelSyncService {
         final label = await Label.findById(sync.localId);
 
         if (label == null) {
+          requireCloudOperation();
           await sync.delete();
           _removeSyncingOutgoing(sync.localId);
           continue;
@@ -827,6 +957,7 @@ class LabelSyncService {
             SetOptions(merge: true),
           );
           postCommitActions.add(() async {
+            requireCloudOperation();
             final wasUnchanged = await sync.markSyncedIfUnchanged(
               capturedSyncStartTime,
             );
@@ -846,6 +977,7 @@ class LabelSyncService {
           final stableId = label.syncId ?? const Uuid().v4();
           if (label.syncId != stableId) {
             label.syncId = stableId;
+            requireCloudOperation();
             await AppState.db.update(
               Label.model,
               {'sync_id': stableId},
@@ -855,8 +987,10 @@ class LabelSyncService {
           }
           final newDocRef = _labelsCollection.doc(stableId);
           batch.set(newDocRef, labelData);
+          requireCloudOperation();
           await sync.claimRemoteId(newDocRef.id);
           postCommitActions.add(() async {
+            requireCloudOperation();
             final wasUnchanged = await sync.markSyncedIfUnchanged(
               capturedSyncStartTime,
             );
@@ -877,7 +1011,9 @@ class LabelSyncService {
         batchCount++;
 
         if (batchCount >= 400) {
-          await batch.commit();
+          requireCloudOperation();
+          await batch.commit().timeout(const Duration(seconds: 10));
+          requireCloudOperation();
           for (final action in postCommitActions) {
             await action();
           }
@@ -886,6 +1022,10 @@ class LabelSyncService {
           batchCount = 0;
         }
       } catch (e) {
+        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+          rethrow;
+        }
+        pushFailure = e;
         AppLogger.error("[LABEL_SYNC] Error syncing label ${sync.localId}: $e");
         _markSyncFailed(sync.localId);
         _removeSyncingOutgoing(sync.localId);
@@ -893,11 +1033,14 @@ class LabelSyncService {
     }
 
     if (batchCount > 0) {
-      await batch.commit();
+      requireCloudOperation();
+      await batch.commit().timeout(const Duration(seconds: 10));
+      requireCloudOperation();
       for (final action in postCommitActions) {
         await action();
       }
     }
+    if (pushFailure != null) throw pushFailure;
   }
 
   Future<void> _pushLocalChanges() async {
@@ -918,14 +1061,16 @@ class LabelSyncService {
       },
       scheduleCachedResume: () {},
       scheduleFullPull: () {
-        _pullRetry.schedule(() async {
-          if (_initialized && currentUser != null && _canReceiveSync) {
-            AppLogger.log(
-              '[LABEL_SYNC] Retrying full label pull after Firestore failure',
-            );
-            await refresh();
-          }
-        });
+        if (_canReceiveSync) {
+          _pullRetry.schedule(() async {
+            if (_initialized && currentUser != null && _canReceiveSync) {
+              AppLogger.log(
+                '[LABEL_SYNC] Retrying full label pull after Firestore failure',
+              );
+              await refresh();
+            }
+          });
+        }
       },
       pull: _performRemotePull,
     );
@@ -1077,6 +1222,7 @@ class LabelSyncService {
     checkpointCommit.stage(
       CloudSyncCheckpoint(bootstrapped: true, cursor: committedCursor),
     );
+    requireCloudOperation();
     checkpointCommit.commit();
   }
 
@@ -1106,7 +1252,15 @@ class LabelSyncService {
   }) async {
     try {
       final snapshot = await retryTransientFirestoreOperation(
-        () => query.get(const GetOptions(source: Source.server)),
+        () {
+          requireCloudOperation();
+          return query
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 10));
+        },
+        shouldRetry: (error) =>
+            isTransientFirestoreFailure(error) &&
+            !isCloudConnectionFailure(error),
         onRetry: (error, nextAttempt, delay) {
           AppLogger.log(
             '[LABEL_SYNC] Firestore $operation failed transiently; '
@@ -1115,6 +1269,10 @@ class LabelSyncService {
           );
         },
       );
+      requireCloudOperation();
+      if (snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites) {
+        throw const CloudVerificationUnavailable();
+      }
       _pullRetry.succeeded();
       return snapshot;
     } catch (error) {
@@ -1208,6 +1366,7 @@ class LabelSyncService {
           ? DateTime.parse(remoteData['updated_at'])
           : DateTime.now();
 
+      requireCloudOperation();
       await AppState.db.update(
         Label.model,
         label.toJson(),
@@ -1229,10 +1388,12 @@ class LabelSyncService {
       );
     } else {
       if (syncTrack.remoteId != remoteDocId) {
+        requireCloudOperation();
         await syncTrack.claimRemoteId(remoteDocId);
       }
       syncTrack.status = LabelSyncStatus.synced;
     }
+    requireCloudOperation();
     await syncTrack.save();
 
     AppLogger.log(
@@ -1254,6 +1415,7 @@ class LabelSyncService {
         action: LabelSyncAction.upload,
         status: LabelSyncStatus.pending,
       );
+      requireCloudOperation();
       await syncTrack.save();
     }
 
@@ -1275,6 +1437,7 @@ class LabelSyncService {
         action: LabelSyncAction.delete,
         status: LabelSyncStatus.pending,
       );
+      requireCloudOperation();
       await syncTrack.save();
     }
 

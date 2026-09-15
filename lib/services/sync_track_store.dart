@@ -1,3 +1,4 @@
+import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -77,6 +78,30 @@ class SyncTrackStore {
     'syncing': 2,
     'synced': 3,
   };
+
+  /// Records pending local work in the same transaction as its content.
+  static Future<void> queueInTransaction({
+    required Transaction transaction,
+    required String table,
+    required int localId,
+    required String action,
+  }) async {
+    final current = await _findByLocalId(transaction, table, localId);
+    await _saveInTransaction(
+      transaction: transaction,
+      table: table,
+      incoming: SyncTrackRow(
+        id: current?.id,
+        localId: localId,
+        remoteId: current?.remoteId,
+        action: current?.action == 'delete' ? 'delete' : action,
+        status: 'pending',
+        createdAt: current?.createdAt,
+        updatedAt: current?.updatedAt,
+      ),
+      forceStatus: 'pending',
+    );
+  }
 
   static Future<SyncTrackRow> save({
     required Database database,
@@ -166,6 +191,7 @@ class SyncTrackStore {
           'created_at': (incoming.createdAt ?? now).toIso8601String(),
           'updated_at': (incoming.updatedAt ?? now).toIso8601String(),
         };
+        requireCloudOperation();
         final id = await transaction.insert(table, values);
         return SyncTrackRow(
           id: id,
@@ -177,6 +203,8 @@ class SyncTrackStore {
           updatedAt: incoming.updatedAt ?? now,
         );
       }
+
+      requireCloudOperation();
 
       await transaction.update(
         table,
@@ -233,6 +261,7 @@ class SyncTrackStore {
       }
 
       if (current.action == 'delete') {
+        requireCloudOperation();
         await transaction.delete(
           table,
           where: 'id = ?',
@@ -242,6 +271,7 @@ class SyncTrackStore {
       }
 
       final now = DateTime.now();
+      requireCloudOperation();
       await transaction.update(
         table,
         {
@@ -281,6 +311,7 @@ class SyncTrackStore {
         return current;
       }
       final now = DateTime.now();
+      requireCloudOperation();
       await transaction.update(
         table,
         {'status': status, 'updated_at': now.toIso8601String()},
@@ -347,6 +378,7 @@ class SyncTrackStore {
       'updated_at': row.updatedAt?.toIso8601String(),
     };
     if (row.id == null) {
+      requireCloudOperation();
       final id = await transaction.insert(table, values);
       return SyncTrackRow(
         id: id,
@@ -358,6 +390,7 @@ class SyncTrackStore {
         updatedAt: row.updatedAt,
       );
     }
+    requireCloudOperation();
     await transaction.update(
       table,
       values,

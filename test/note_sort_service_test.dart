@@ -1333,7 +1333,8 @@ void main() {
     releaseWrite.complete();
     await oldUpload;
 
-    expect(oldCloud.deletedRevisions, ['old-user-revision']);
+    // Expired sessions retain cleanup for recovery instead of issuing cloud writes.
+    expect(oldCloud.deletedRevisions, isEmpty);
     expect(newCloud.writeCalls, 0);
     expect(newCloud.commitCalls, 0);
     expect(newCloud.readManifestCalls, 0);

@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:better_keep/services/cloud_operation.dart';
 
 import 'package:better_keep/state.dart';
 import 'package:better_keep/services/remote_note_apply_result.dart';
@@ -32,6 +33,10 @@ class RemoteContentRetryEntry {
   final DateTime updatedAt;
 
   bool get isExhausted => state == RemoteContentRetryState.exhausted;
+
+  bool get isLocalAttachmentDependency =>
+      category == RemoteNoteFailureCategory.localApply &&
+      errorCode == 'local-attachment-unavailable';
 
   factory RemoteContentRetryEntry.fromRow(Map<String, Object?> row) {
     return RemoteContentRetryEntry(
@@ -186,7 +191,9 @@ class RemoteContentRetryLedger {
   }) async {
     final timestamp = (now ?? DateTime.now()).toUtc();
     return _database().transaction((transaction) async {
+      requireCloudOperation();
       final existing = await _getFrom(transaction, userId, remoteDocumentId);
+      requireCloudOperation();
       if (existing?.revision == revision && existing!.isExhausted) {
         return existing;
       }
@@ -223,6 +230,7 @@ class RemoteContentRetryLedger {
         entry.toRow(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+      requireCloudOperation();
       return entry;
     });
   }
@@ -270,24 +278,29 @@ class RemoteContentRetryLedger {
     DateTime? now,
   }) async {
     final timestamp = (now ?? DateTime.now()).toUtc();
-    final existing = await get(userId, remoteDocumentId);
-    final entry = RemoteContentRetryEntry(
-      userId: userId,
-      remoteDocumentId: remoteDocumentId,
-      revision: revision,
-      localId: localId,
-      attempts: existing?.revision == revision ? existing!.attempts : 0,
-      category: category,
-      errorCode: errorCode,
-      state: RemoteContentRetryState.deferred,
-      updatedAt: timestamp,
-    );
-    await _database().insert(
-      table,
-      entry.toRow(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    return entry;
+    return _database().transaction((txn) async {
+      requireCloudOperation();
+      final existing = await _getFrom(txn, userId, remoteDocumentId);
+      requireCloudOperation();
+      final entry = RemoteContentRetryEntry(
+        userId: userId,
+        remoteDocumentId: remoteDocumentId,
+        revision: revision,
+        localId: localId,
+        attempts: existing?.revision == revision ? existing!.attempts : 0,
+        category: category,
+        errorCode: errorCode,
+        state: RemoteContentRetryState.deferred,
+        updatedAt: timestamp,
+      );
+      await txn.insert(
+        table,
+        entry.toRow(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      requireCloudOperation();
+      return entry;
+    });
   }
 
   /// Makes a durable dependency deferral eligible for an immediate attempt.
@@ -298,13 +311,17 @@ class RemoteContentRetryLedger {
   Future<RemoteContentRetryEntry?> activateDeferred({
     required String userId,
     required String remoteDocumentId,
+    String? expectedRevision,
     DateTime? now,
   }) {
     final timestamp = (now ?? DateTime.now()).toUtc();
     return _database().transaction((transaction) async {
+      requireCloudOperation();
       final existing = await _getFrom(transaction, userId, remoteDocumentId);
+      requireCloudOperation();
       if (existing == null ||
-          existing.state != RemoteContentRetryState.deferred) {
+          existing.state != RemoteContentRetryState.deferred ||
+          (expectedRevision != null && existing.revision != expectedRevision)) {
         return existing;
       }
       final entry = RemoteContentRetryEntry(
@@ -324,6 +341,7 @@ class RemoteContentRetryLedger {
         entry.toRow(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+      requireCloudOperation();
       return entry;
     });
   }
@@ -334,6 +352,18 @@ class RemoteContentRetryLedger {
       where: 'user_id = ? AND remote_document_id = ?',
       whereArgs: [userId, remoteDocumentId],
     );
+  }
+
+  Future<void> clearIfRevision(RemoteContentRetryEntry entry) {
+    return _database().transaction((txn) async {
+      requireCloudOperation();
+      await txn.delete(
+        table,
+        where: 'user_id = ? AND remote_document_id = ? AND revision = ?',
+        whereArgs: [entry.userId, entry.remoteDocumentId, entry.revision],
+      );
+      requireCloudOperation();
+    });
   }
 
   Future<void> clearForUser(String userId) {

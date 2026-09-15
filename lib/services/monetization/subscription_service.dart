@@ -1,3 +1,4 @@
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1548,6 +1549,7 @@ Expected IDs: ${ProductIds.all}
 
   /// Check if user has an existing subscription (server-side verification)
   Future<ExistingSubscriptionResult> checkExistingSubscription() async {
+    final current = AuthService.captureSession();
     final user = AuthService.currentUser;
     if (user == null) {
       return ExistingSubscriptionResult(hasSubscription: false);
@@ -1555,6 +1557,7 @@ Expected IDs: ${ProductIds.all}
 
     try {
       final result = await callCloudFunction('checkExistingSubscription');
+      requireCurrentSession(current);
 
       // Convert from Map<Object?, Object?> to Map<String, dynamic>
       final data = Map<String, dynamic>.from(result.data as Map);

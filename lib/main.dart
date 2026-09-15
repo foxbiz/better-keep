@@ -25,7 +25,6 @@ import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:better_keep/services/reminder_permission_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
-import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -145,7 +144,7 @@ Future<void> _finishFirebaseStartup(SharedPreferences preferences) async {
   }
 
   final currentUser = AuthService.currentUser;
-  if (currentUser != null && !ReviewAccess.isReviewIdentity(currentUser)) {
+  if (currentUser != null && AuthService.canRestoreLocalSession) {
     await E2EEService.instance.preloadCachedStatus();
   }
 }
@@ -405,7 +404,14 @@ class _BetterKeepState extends State<BetterKeep> {
 
     // Initialize subscription service for IAP early (doesn't require auth)
     // This allows products to load while user is logging in
-    await SubscriptionService.instance.init();
+    unawaited(
+      SubscriptionService.instance.init().catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        AppLogger.error('[Main] Store initialization deferred', error, stack);
+      }),
+    );
 
     // Initialize subscription/plan tracking - this sets up auth state listener
     // so it will react when users sign in/out, even if not currently logged in

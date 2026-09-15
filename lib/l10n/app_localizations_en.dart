@@ -3703,4 +3703,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get couldNotSaveLabel => 'Couldn’t save label. Try again.';
+
+  @override
+  String get noConnectionAvailable => 'No connection available.';
+
+  @override
+  String get localEncryptionUnavailable =>
+      'Your saved encryption keys could not be read. Unlock your device and retry. Your local data has been kept.';
+
+  @override
+  String get localEncryptionMissing =>
+      'The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept.';
 }

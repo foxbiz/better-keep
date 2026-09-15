@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'dart:async';
 import 'dart:ui';
 
@@ -372,7 +373,7 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
                               color: Colors.transparent,
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
-                                onTap: () => NoteSyncService().refresh(),
+                                onTap: () => refreshSyncFromUser(context),
                                 child: Padding(
                                   padding: const EdgeInsets.all(6),
                                   child: Icon(

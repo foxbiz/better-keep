@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:better_keep/services/attachment_repair_coordinator.dart';
 
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/config.dart';
@@ -434,6 +435,13 @@ class _NoteEditorState extends State<NoteEditor>
     );
     _quillScrollController.addListener(_requestChecklistPopupLayout);
     _note.sub("changed", _onNoteChanged);
+    if (AppState.get('db') != null) {
+      _attachmentRepairScope = AttachmentRepairCoordinator.instance.capture(
+        AppState.db,
+      );
+    }
+    _attachmentRepairSubscription = AttachmentRepairCoordinator.instance.repairs
+        .listen(_onAttachmentRepaired);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_showOverdueReminderDialogIfNeeded());
@@ -1327,6 +1335,20 @@ class _NoteEditorState extends State<NoteEditor>
     );
   }
 
+  StreamSubscription<AttachmentRepairNotification>?
+  _attachmentRepairSubscription;
+  AttachmentRepairScope? _attachmentRepairScope;
+
+  void _onAttachmentRepaired(AttachmentRepairNotification event) {
+    if (!mounted ||
+        event.noteId != _note.id ||
+        !event.scope.isCurrent ||
+        !identical(event.scope, _attachmentRepairScope)) {
+      return;
+    }
+    if (event.scope.reconcile(event.noteId, _note.attachments)) setState(() {});
+  }
+
   void _onNoteChanged(NoteEvent event) {
     if (!mounted || event.note.id != _note.id) return;
     if (!identical(event.note, _note)) {
@@ -1567,6 +1589,7 @@ class _NoteEditorState extends State<NoteEditor>
     _titleFocusNode.dispose();
     _checklistPopupFocusNode.dispose();
     _note.unsub("changed", _onNoteChanged);
+    _attachmentRepairSubscription?.cancel();
     _quillScrollController.dispose();
     _carouselScrollController.dispose();
     _toolbarScrollController.dispose();

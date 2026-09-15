@@ -4,6 +4,12 @@
 /// access to encrypted notes if all devices are lost.
 library;
 
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/e2ee/device_authorization.dart';
+
+import 'package:better_keep/services/cloud_read.dart';
+
 import 'dart:convert';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
@@ -103,6 +109,12 @@ class RecoveryKeyService {
 
   RecoveryKeyService._();
 
+  Future<T> _runForCurrentAccount<T>(Future<T> Function() operation) {
+    final current = AuthService.captureSession();
+    final parent = captureCloudOperation();
+    return runCloudOperation(() => current() && parent(), operation);
+  }
+
   FirebaseFirestore get _firestore => FirebaseBackend.firestore;
 
   final DeviceManager _deviceManager = DeviceManager.instance;
@@ -110,8 +122,10 @@ class RecoveryKeyService {
 
   User? get _currentUser => AuthService.currentUser;
 
-  DocumentReference<Map<String, dynamic>> get _userRef =>
-      _firestore.collection('users').doc(_currentUser!.uid);
+  DocumentReference<Map<String, dynamic>> get _userRef {
+    requireCloudOperation();
+    return _firestore.collection('users').doc(_currentUser!.uid);
+  }
 
   DocumentReference<Map<String, dynamic>> get _recoveryKeyRef =>
       _userRef.collection('e2ee').doc('recovery_key');
@@ -119,7 +133,10 @@ class RecoveryKeyService {
   /// Checks if a recovery key has been set up.
   Future<bool> hasRecoveryKey() async {
     if (_currentUser == null) return false;
-    final doc = await _recoveryKeyRef.get();
+    final doc = await readCloudDocument(
+      _recoveryKeyRef,
+      isCurrent: AuthService.captureSession(),
+    );
     return doc.exists;
   }
 
@@ -235,7 +252,10 @@ class RecoveryKeyService {
   ///
   /// [passphrase] - User-chosen recovery passphrase (should be strong).
   /// [hint] - Optional hint to help user remember the passphrase.
-  Future<void> createRecoveryKey(String passphrase, {String? hint}) async {
+  Future<void> createRecoveryKey(String passphrase, {String? hint}) =>
+      _runForCurrentAccount(() => _createRecoveryKey(passphrase, hint: hint));
+
+  Future<void> _createRecoveryKey(String passphrase, {String? hint}) async {
     if (_currentUser == null) throw StateError('User not logged in');
 
     final umk = _deviceManager.getUMK();
@@ -289,6 +309,14 @@ class RecoveryKeyService {
     String currentPassphrase,
     String newPassphrase, {
     String? hint,
+  }) => _runForCurrentAccount(
+    () => _updateRecoveryKey(currentPassphrase, newPassphrase, hint: hint),
+  );
+
+  Future<void> _updateRecoveryKey(
+    String currentPassphrase,
+    String newPassphrase, {
+    String? hint,
   }) async {
     // Verify current passphrase first
     final isValid = await verifyPassphrase(currentPassphrase);
@@ -307,7 +335,10 @@ class RecoveryKeyService {
   /// [currentPassphrase] - The current passphrase (required for security).
   ///
   /// Warning: This means the user cannot recover their notes if all devices are lost.
-  Future<void> removeRecoveryKey(String currentPassphrase) async {
+  Future<void> removeRecoveryKey(String currentPassphrase) =>
+      _runForCurrentAccount(() => _removeRecoveryKey(currentPassphrase));
+
+  Future<void> _removeRecoveryKey(String currentPassphrase) async {
     if (_currentUser == null) throw StateError('User not logged in');
 
     // Verify current passphrase first
@@ -332,6 +363,13 @@ class RecoveryKeyService {
   Future<bool> recoverWithPassphrase(
     String passphrase, {
     ValueChanged<RecoveryProgress>? onStatusChange,
+  }) => _runForCurrentAccount(
+    () => _recoverWithPassphrase(passphrase, onStatusChange: onStatusChange),
+  );
+
+  Future<bool> _recoverWithPassphrase(
+    String passphrase, {
+    ValueChanged<RecoveryProgress>? onStatusChange,
   }) async {
     if (_currentUser == null) throw StateError('User not logged in');
 
@@ -339,7 +377,10 @@ class RecoveryKeyService {
     onStatusChange?.call(RecoveryProgress.checkingAccount);
 
     // Get recovery key data
-    final doc = await _recoveryKeyRef.get();
+    final doc = await readCloudDocument(
+      _recoveryKeyRef,
+      isCurrent: cloudOperationIsCurrent,
+    );
     if (!doc.exists) {
       AppLogger.log('E2EE: No recovery key found');
       return false;
@@ -357,6 +398,7 @@ class RecoveryKeyService {
         recoveryData,
       );
 
+      requireCloudOperation();
       if (umk == null) {
         AppLogger.log('E2EE: Decryption failed - incorrect passphrase');
         return false;
@@ -375,6 +417,11 @@ class RecoveryKeyService {
       // Re-throw UnsupportedError (e.g., Argon2id on web)
       rethrow;
     } catch (e, stack) {
+      if (e is CloudOperationCancelled ||
+          isCloudConnectionFailure(e) ||
+          e is SecureStorageUnavailable) {
+        rethrow;
+      }
       AppLogger.error('E2EE: Recovery failed', e, stack);
       return false;
     }
@@ -388,31 +435,24 @@ class RecoveryKeyService {
     AppLogger.log('E2EE: Registering device with recovered UMK');
     onStatusChange?.call(RecoveryProgress.protectingNotes);
 
-    // Check if there's an existing pending device that needs to be cleaned up
-    final existingDeviceId = await _secureStorage.getDeviceId();
-    if (existingDeviceId != null) {
-      try {
-        // Delete the old pending device from Firestore
-        await _userRef.collection('devices').doc(existingDeviceId).delete();
-        AppLogger.log(
-          'E2EE: Deleted existing pending device $existingDeviceId before recovery',
-        );
-      } catch (e) {
-        // If deletion fails (e.g., device doesn't exist), just log and continue
-        AppLogger.log(
-          'E2EE: Could not delete existing device $existingDeviceId: $e',
-        );
-      }
-      // Clear local storage for the old device
-      await _secureStorage.clearAll();
+    // Successful passphrase recovery may replace corrupt keys, but a failed
+    // secure-storage read must not erase or replace an existing identity.
+    var hasKeys = false;
+    try {
+      hasKeys = await _secureStorage.hasDeviceKeys();
+    } on FormatException {
+      // Corrupt material is retained until the recovered identity is accepted.
     }
-
-    onStatusChange?.call(RecoveryProgress.protectingNotes);
-    // Generate device keypair
-    final keyPair = await KeyExchange.generateKeyPair();
-
-    // Generate device ID
-    final deviceId = Uuid().v4();
+    final keyPair = hasKeys
+        ? DeviceKeyPair(
+            publicKey: (await _secureStorage.getDevicePublicKey())!,
+            privateKey: (await _secureStorage.getDevicePrivateKey())!,
+          )
+        : await KeyExchange.generateKeyPair();
+    final deviceId = hasKeys
+        ? (await _secureStorage.getDeviceId())!
+        : Uuid().v4();
+    requireCloudOperation();
 
     // Wrap UMK for this device
     final sharedSecret = await KeyExchange.deriveSharedSecret(
@@ -431,17 +471,22 @@ class RecoveryKeyService {
     onStatusChange?.call(RecoveryProgress.addingDevice);
     // Store device document in Firestore FIRST
     // This ensures we don't have local keys without a server record
-    await _userRef.collection('devices').doc(deviceId).set({
-      'name': deviceName,
-      'platform': platform,
-      'public_key': keyPair.publicKeyBase64,
-      'wrapped_umk': wrappedResult.ciphertext,
-      'wrapped_umk_nonce': wrappedResult.nonce,
-      'status': DeviceStatus.approved.name,
-      'created_at': DateTime.now().toIso8601String(),
-      'approved_at': DateTime.now().toIso8601String(),
-      'recovered': true, // Mark as recovered device
-    });
+    await _userRef
+        .collection('devices')
+        .doc(deviceId)
+        .set({
+          'name': deviceName,
+          'platform': platform,
+          'public_key': keyPair.publicKeyBase64,
+          'wrapped_umk': wrappedResult.ciphertext,
+          'wrapped_umk_nonce': wrappedResult.nonce,
+          'status': DeviceStatus.approved.name,
+          'created_at': DateTime.now().toIso8601String(),
+          'approved_at': DateTime.now().toIso8601String(),
+          'recovered': true, // Mark as recovered device
+        })
+        .timeout(const Duration(seconds: 10));
+    requireCloudOperation();
 
     onStatusChange?.call(RecoveryProgress.protectingNotes);
     // Store device info locally AFTER Firestore write succeeds
@@ -449,6 +494,8 @@ class RecoveryKeyService {
     await _secureStorage.storeDevicePublicKey(keyPair.publicKey);
     await _secureStorage.storeDeviceId(deviceId);
     await _secureStorage.cacheUnwrappedUMK(umk);
+    await _secureStorage.cacheDeviceStatus('approved');
+    requireCloudOperation();
 
     // Update device manager state - set both the cached UMK and the flag
     _deviceManager.setCachedUMK(umk);

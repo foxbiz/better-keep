@@ -1,3 +1,5 @@
+import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/async_initialization_gate.dart';
 import 'dart:async';
 
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -17,17 +19,24 @@ class DeviceApprovalNotificationService {
 
   List<DeviceApprovalRequest> _lastKnownApprovals = [];
   bool _initialized = false;
+  int _generation = 0;
+  final _initializationGate = AsyncInitializationGate();
   bool _listenerAttached = false;
 
   /// Initialize the notification service
-  Future<void> init() async {
+  Future<void> init() => _initializationGate.run(_init);
+
+  Future<void> _init() async {
     if (_initialized) return;
     if (!LocalNotificationService
         .instance
         .supportsDeviceApprovalNotifications) {
       return;
     }
+    final current = AuthService.captureSession();
+    final generation = _generation;
     await ReminderCoordinator.instance.init();
+    if (!current() || generation != _generation) return;
 
     // Listen to pending approvals changes
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
@@ -44,6 +53,8 @@ class DeviceApprovalNotificationService {
   }
 
   void dispose() {
+    _generation++;
+    _initializationGate.reset();
     if (_listenerAttached) {
       E2EEService.instance.deviceManager.pendingApprovals.removeListener(
         _onPendingApprovalsChanged,
@@ -67,7 +78,10 @@ class DeviceApprovalNotificationService {
 
   Future<void> _handlePendingApprovalsChanged() async {
     // Only show notifications on master device
+    final current = AuthService.captureSession();
+    final generation = _generation;
     final isMaster = await E2EEService.instance.deviceManager.isMasterDevice();
+    if (!current() || generation != _generation) return;
     if (!isMaster) return;
 
     final currentApprovals =
@@ -79,11 +93,13 @@ class DeviceApprovalNotificationService {
         (old) => old.deviceId == approval.deviceId,
       );
 
+      if (!current() || generation != _generation) return;
       if (isNew) {
         await _showApprovalNotification(approval);
       }
     }
 
+    if (!current() || generation != _generation) return;
     // Update last known state
     _lastKnownApprovals = List.from(currentApprovals);
   }

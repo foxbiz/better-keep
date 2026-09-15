@@ -338,6 +338,53 @@ class NewAttachmentTransactionService {
     required this.journal,
   });
 
+  /// Stages validated cloud bytes without reading or overwriting the previous
+  /// download. The existing journal also handles a first download: identical
+  /// original/staged paths mean there is no superseded source to remove.
+  Future<PreparedNewAttachmentFile> prepareDownloaded({
+    required Uint8List bytes,
+    required String stagedPath,
+    String? originalPath,
+    required AttachmentSessionRead readForSession,
+    required AttachmentSessionWrite writeForSession,
+  }) async {
+    final prepared = PreparedNewAttachmentFile(
+      record: NewAttachmentTransactionRecord(
+        transactionId: operations.newId(),
+        originalPath: originalPath ?? stagedPath,
+        stagedPath: stagedPath,
+      ),
+    );
+    try {
+      await journal.put(prepared.record);
+      final resolved = await operations.resolve(stagedPath);
+      await writeForSession(resolved, bytes);
+      if (!listEquals(bytes, await readForSession(resolved))) {
+        throw const NewAttachmentPreparationException(
+          NewAttachmentPreparationFailure.verification,
+          'The downloaded attachment failed local verification',
+        );
+      }
+      return prepared;
+    } catch (error) {
+      try {
+        await rollback(prepared);
+      } catch (error, stack) {
+        AppLogger.error(
+          'Downloaded attachment rollback deferred',
+          error,
+          stack,
+        );
+      }
+      if (error is NewAttachmentPreparationException) rethrow;
+      throw NewAttachmentPreparationException(
+        NewAttachmentPreparationFailure.protection,
+        'Failed to persist the downloaded attachment safely',
+        error,
+      );
+    }
+  }
+
   Future<PreparedNewAttachmentFile> prepare({
     required String sourcePath,
     required AttachmentSessionRead readForSession,

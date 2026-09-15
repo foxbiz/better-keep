@@ -6611,6 +6611,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn’t save label. Try again.'**
   String get couldNotSaveLabel;
+
+  /// No description provided for @noConnectionAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection available.'**
+  String get noConnectionAvailable;
+
+  /// No description provided for @localEncryptionUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Your saved encryption keys could not be read. Unlock your device and retry. Your local data has been kept.'**
+  String get localEncryptionUnavailable;
+
+  /// No description provided for @localEncryptionMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept.'**
+  String get localEncryptionMissing;
 }
 
 class _AppLocalizationsDelegate

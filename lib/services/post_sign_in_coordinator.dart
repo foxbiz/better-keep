@@ -172,6 +172,7 @@ class PostSignInCoordinator {
       await operation.run();
     } catch (error, stackTrace) {
       await reportFailure(stage, operation.name, error, stackTrace);
+      if (!isSessionCurrent()) return _handleSessionChanged();
       if (allowFatalIdentityFailure && isFatalIdentityFailure(error)) {
         try {
           await signOut();

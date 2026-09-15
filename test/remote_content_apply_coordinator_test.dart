@@ -27,12 +27,14 @@ void main() {
 
   Future<RemoteContentHandlingResult> automatic({
     String revision = 'revision-1',
+    String? deferredRevision,
     required RemoteContentAttempt attempt,
   }) {
     return coordinator.handleAutomatic(
       userId: 'user-1',
       remoteDocumentId: 'note-1',
       revision: revision,
+      deferredRevision: deferredRevision,
       resolveLocalId: (existing) async => existing?.localId ?? 42,
       attempt: attempt,
       onHandled: (_) async {},
@@ -67,6 +69,54 @@ void main() {
     expect(entry?.attempts, 1);
     expect(entry?.nextRetryAt, now.add(const Duration(seconds: 1)));
   });
+
+  test(
+    'local dependency rechecks preserve budget and skip superseded entries',
+    () async {
+      await automatic(
+        attempt: (_) async => const RemoteNoteApplyResult.retryable(
+          RemoteNoteFailureCategory.attachment,
+          'decode-failed',
+        ),
+      );
+      currentTime = currentTime.add(const Duration(seconds: 2));
+      await automatic(
+        attempt: (_) async => const RemoteNoteApplyResult.deferred(
+          RemoteNoteFailureCategory.localApply,
+          'local-attachment-unavailable',
+        ),
+      );
+      var attempts = 0;
+      Future<RemoteNoteApplyResult> unreadable(int _) async {
+        attempts++;
+        return const RemoteNoteApplyResult.deferred(
+          RemoteNoteFailureCategory.localApply,
+          'local-attachment-unavailable',
+        );
+      }
+
+      for (var pass = 0; pass < 2; pass++) {
+        final result = await automatic(
+          deferredRevision: 'revision-1',
+          attempt: unreadable,
+        );
+        expect(result.ledgerEntry!.attempts, 1);
+        expect(result.disposition, RemoteContentHandlingDisposition.deferred);
+      }
+      expect(attempts, 2);
+      await automatic(
+        revision: 'newer',
+        attempt: (_) async => const RemoteNoteApplyResult.permanent(
+          RemoteNoteFailureCategory.invalidPayload,
+          'invalid',
+        ),
+      );
+      await automatic(deferredRevision: 'revision-1', attempt: unreadable);
+      expect(attempts, 2);
+      expect((await ledger.get('user-1', 'note-1'))!.revision, 'newer');
+      expect((await ledger.get('user-1', 'note-1'))!.isExhausted, isTrue);
+    },
+  );
 
   test(
     'different revisions are serialized and receive fresh budgets',

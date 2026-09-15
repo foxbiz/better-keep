@@ -66,7 +66,7 @@ void main() {
     },
   );
 
-  test('required-stage failures retain the recovery destination', () {
+  test('cloud startup failures cannot replace locally usable Home', () {
     for (final stage in [
       PostSignInStage.identityValidation,
       PostSignInStage.accountInitialization,
@@ -80,7 +80,7 @@ void main() {
           ),
           e2eeStatus: E2EEStatus.ready,
         ),
-        AuthenticatedStartupRoute.recovery,
+        AuthenticatedStartupRoute.home,
       );
     }
   });

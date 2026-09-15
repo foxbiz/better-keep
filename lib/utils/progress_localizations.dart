@@ -42,6 +42,30 @@ extension VerificationFailureLocalizations on VerificationFailureKind {
   };
 }
 
+String accountLinkFailureMessage(
+  Object? error,
+  AppLocalizations l10n, {
+  required String providerName,
+  bool sendingCode = false,
+}) {
+  final retrySeconds = accountLinkRetrySeconds(error);
+  if (retrySeconds != null) return l10n.resendCodeIn(retrySeconds);
+  return switch (resolveAccountLinkFailure(error)) {
+    AccountLinkFailureKind.signInRequired => l10n.pleaseSignInAgain,
+    AccountLinkFailureKind.missingEmail => l10n.noEmailAssociated,
+    AccountLinkFailureKind.alreadyLinked => l10n.providerAlreadyLinked(
+      providerName,
+    ),
+    AccountLinkFailureKind.accountExists => l10n.emailAlreadyInUse,
+    AccountLinkFailureKind.tooManyRequests => l10n.pleaseWaitBeforeRequesting,
+    AccountLinkFailureKind.expired => l10n.sessionExpired_,
+    AccountLinkFailureKind.network => l10n.noInternetConnection,
+    AccountLinkFailureKind.cancelled => l10n.signInCancelledMessage,
+    AccountLinkFailureKind.unknown =>
+      sendingCode ? l10n.failedSendVerificationCode : l10n.failedLinkAccount,
+  };
+}
+
 extension ProtectionProgressLocalizations on ProtectionProgress {
   String localized(AppLocalizations l10n) => switch (this) {
     ProtectionProgress.checkingAccount => l10n.checkingAccountStatus,

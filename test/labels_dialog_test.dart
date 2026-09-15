@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:better_keep/dialogs/labels.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/label.dart';
+import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/state.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -28,6 +29,7 @@ void main() {
   setUp(() async {
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await Label.createTable(database);
+    await LabelSyncTrack.createTable(database);
     saves = _SaveDatabase(database);
     AppState.db = saves;
     await Label(name: 'Existing').save(sync: false);
@@ -352,6 +354,17 @@ class _SaveDatabase implements Database {
   int attempts = 0;
   Future<void>? delay;
   bool fail = false;
+
+  @override
+  Future<T> transaction<T>(
+    Future<T> Function(Transaction) action, {
+    bool? exclusive,
+  }) async {
+    attempts++;
+    if (delay != null) await delay;
+    if (fail) throw StateError('Simulated label save failure');
+    return delegate.transaction(action, exclusive: exclusive);
+  }
 
   @override
   Future<int> insert(

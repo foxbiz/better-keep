@@ -14,7 +14,6 @@ import 'package:better_keep/pages/setup_recovery_key_page.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/services/auth_service.dart';
-import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -34,7 +33,6 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/device_localizations.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/services/cloud_functions_helper.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1764,6 +1762,7 @@ class _UserPageState extends State<UserPage> {
       return;
     }
 
+    bool linkingDialogOpen = false;
     try {
       // Step 1: Show loading and request OTP
       if (!mounted) return;
@@ -1795,7 +1794,15 @@ class _UserPageState extends State<UserPage> {
         return;
       }
       if (!loadingResult.success) {
-        snackbar(context.l10n.failedSendCode, Colors.red);
+        snackbar(
+          accountLinkFailureMessage(
+            loadingResult.error,
+            context.l10n,
+            providerName: providerName,
+            sendingCode: true,
+          ),
+          Colors.red,
+        );
         return;
       }
 
@@ -1850,6 +1857,8 @@ class _UserPageState extends State<UserPage> {
         ),
       );
 
+      linkingDialogOpen = true;
+
       // Perform the OAuth linking - this opens the provider's auth page
       // and stores the link in Firestore upon success
       switch (providerName.toLowerCase()) {
@@ -1875,6 +1884,7 @@ class _UserPageState extends State<UserPage> {
         if (Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
         }
+        linkingDialogOpen = false;
 
         await _fetchE2EEInfo(); // Refresh user data including linked providers
         if (mounted) {
@@ -1885,53 +1895,22 @@ class _UserPageState extends State<UserPage> {
           );
         }
       }
-    } on FirebaseFunctionsException catch (e) {
-      if (!mounted) return;
-
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      String errorMessage = context.l10n.failedLinkAccount;
-
-      switch (e.code) {
-        case 'unauthenticated':
-          errorMessage = context.l10n.pleaseSignInAgain;
-          break;
-        case 'failed-precondition':
-          errorMessage = context.l10n.noEmailAssociated;
-          break;
-        case 'already-exists':
-          errorMessage = context.l10n.providerAlreadyLinked(providerName);
-          break;
-        case 'resource-exhausted':
-          errorMessage = context.l10n.pleaseWaitBeforeRequesting;
-          break;
-        case 'deadline-exceeded':
-          errorMessage = context.l10n.sessionExpired_;
-          break;
-        default:
-          errorMessage = context.l10n.failedLinkAccount;
-      }
-
-      AppLogger.error('Account link request failed', e);
-      if (mounted) snackbar(errorMessage, Colors.red);
     } catch (error, stackTrace) {
       if (!mounted) return;
 
-      if (Navigator.of(context).canPop()) {
+      if (linkingDialogOpen && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
 
       AppLogger.error('Account linking failed', error, stackTrace);
-      final errorMessage = resolveSignInFailure(
-        provider: providerId,
-        error: error,
-      ).localized(context.l10n);
-
-      if (mounted) {
-        snackbar(errorMessage, Colors.red);
-      }
+      snackbar(
+        accountLinkFailureMessage(
+          error,
+          context.l10n,
+          providerName: providerName,
+        ),
+        Colors.red,
+      );
     }
   }
 

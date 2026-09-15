@@ -153,6 +153,35 @@ void main() {
     expect(fresh.state, RemoteContentRetryState.waiting);
   });
 
+  test(
+    'dependency activation and absence cleanup cannot change a newer revision',
+    () async {
+      final old = await ledger.recordDeferred(
+        userId: 'user-1',
+        remoteDocumentId: 'note-1',
+        revision: 'old',
+        localId: 42,
+        category: RemoteNoteFailureCategory.localApply,
+        errorCode: 'local-attachment-unavailable',
+      );
+      final newer = await ledger.recordDeferred(
+        userId: 'user-1',
+        remoteDocumentId: 'note-1',
+        revision: 'newer',
+        localId: 42,
+        category: RemoteNoteFailureCategory.decryption,
+        errorCode: 'e2ee-not-ready',
+      );
+      await ledger.activateDeferred(
+        userId: 'user-1',
+        remoteDocumentId: 'note-1',
+        expectedRevision: old.revision,
+      );
+      await ledger.clearIfRevision(old);
+      expect((await ledger.get('user-1', 'note-1'))!.toRow(), newer.toRow());
+    },
+  );
+
   test('manual failure remains exhausted and schedules nothing', () async {
     await fail();
     final entry = await ledger.recordManualFailure(
