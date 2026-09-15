@@ -11,7 +11,7 @@ import cloud_firestore
 import cloud_functions
 import cryptography_flutter
 import device_info_plus
-import file_picker
+import file_picker_darwin
 import file_selector_macos
 import firebase_app_check
 import firebase_auth

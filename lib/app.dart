@@ -181,13 +181,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     final isDark = themeData.brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
         statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-        systemNavigationBarColor: Colors.transparent,
         systemNavigationBarIconBrightness: isDark
             ? Brightness.light
             : Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
       ),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

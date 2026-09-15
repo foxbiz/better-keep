@@ -1,0 +1,28 @@
+name: quill_native_bridge_android
+description: "Android implementation of the quill_native_bridge plugin."
+version: 0.0.2
+publish_to: none
+homepage: https://github.com/FlutterQuill/quill-native-bridge/tree/main/quill_native_bridge_android
+repository: https://github.com/FlutterQuill/quill-native-bridge/tree/main/quill_native_bridge_android
+issue_tracker: https://github.com/FlutterQuill/quill-native-bridge/issues?q=is%3Aissue+is%3Aopen+label%3A%22platform-android%22
+documentation: https://github.com/FlutterQuill/quill-native-bridge/tree/main/quill_native_bridge_android
+topics: [clipboard, os-integration, quill-native-bridge, quill, flutter-quill]
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  quill_native_bridge_platform_interface: ^0.0.1+1
+
+
+flutter:
+  plugin:
+    implements: quill_native_bridge
+    platforms:
+      android:
+        package: dev.flutterquill.quill_native_bridge
+        pluginClass: QuillNativeBridgePlugin
+        dartPluginClass: QuillNativeBridgeAndroid
