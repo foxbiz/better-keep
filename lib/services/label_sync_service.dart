@@ -112,7 +112,18 @@ class LabelSyncService {
     syncingIncoming.value = {...syncingIncoming.value}..remove(labelId);
   }
 
-  bool get _isReviewSession => ReviewAccess.isAuthorizedSessionFor(currentUser);
+  bool get _isReviewSession =>
+      FirebaseBackend.isConfigured &&
+      ReviewAccess.isAuthorizedSessionFor(currentUser);
+
+  String get _incomingSyncState =>
+      'backendConfigured=${FirebaseBackend.isConfigured}, '
+      'cloud=${AuthService.cloudRecovery.state.value.name}, '
+      'cryptoReady=${E2EEService.instance.isCryptoReady}, '
+      'sessionInvalid=${AuthService.sessionInvalid.value}, review=$_isReviewSession';
+
+  String get _pushSyncState =>
+      '$_incomingSyncState, paid=${PlanService.instance.isPaid}';
 
   /// Check if we can receive/download sync (incoming):
   /// - Not an authorized review session
@@ -156,6 +167,26 @@ class LabelSyncService {
         generation == _sessionGeneration &&
         (!cloud || cloudGeneration == _cloudGeneration);
   }
+
+  Future<void> Function() _background(
+    Future<void> Function() operation, {
+    bool cloud = true,
+  }) => bindBackgroundCloudOperation(
+    _captureSession(cloud: cloud),
+    operation,
+    onError: (error, stack) {
+      if (isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+      } else {
+        syncStatus.value = const SyncProgress(SyncPhase.failed);
+      }
+      AppLogger.error(
+        '[LABEL_SYNC] Background operation deferred',
+        error,
+        stack,
+      );
+    },
+  );
 
   void _onCloudStateChange() {
     if (AuthService.canSyncCloud) return;
@@ -207,11 +238,11 @@ class LabelSyncService {
       if (E2EEService.instance.isCryptoReady) {
         final checkpoint = AppState.labelCloudSyncCheckpoint;
         if (checkpoint == null || checkpoint.requiresBootstrap) {
-          unawaited(refresh());
+          unawaited(_background(refresh)());
         } else {
           // Push sync requires Pro, but start listener for incoming sync
           if (_canPushSync) {
-            unawaited(_sync());
+            unawaited(_background(_sync)());
           }
           await _startRemoteListener();
         }
@@ -227,30 +258,35 @@ class LabelSyncService {
     e2ee.status.addListener(_onE2EEReadinessChange);
     e2ee.deviceManager.hasUMK.addListener(_onE2EEReadinessChange);
 
-    _userStreamSubscription = AuthService.userStream.listen((user) async {
+    _userStreamSubscription = AuthService.userStream.listen((user) {
       if (!cloudOperationIsCurrent()) return;
-      if (user != null) {
-        // Review sessions are intentionally local-only.
-        if (_isReviewSession) {
-          AppLogger.log("[LABEL_SYNC] Skipping sync - review session");
-          return;
-        }
-        AppState.lastLabelSynced = null;
-        // Ensure system labels exist immediately on login
-        // (before remote sync which may take time or fail)
-        Label.fixLabels();
-        // Only sync if E2EE is ready - otherwise wait for E2EE status change
-        if (E2EEService.instance.isCryptoReady) {
-          await _startRemoteListener();
-          unawaited(refresh());
-        } else {
-          AppLogger.log(
-            "[LABEL_SYNC] Deferring sync on login - E2EE not ready (status: ${E2EEService.instance.status.value})",
-          );
-        }
-      } else {
-        await _stopRemoteListener();
-      }
+      unawaited(
+        _background(() async {
+          if (user != null) {
+            // Review sessions are intentionally local-only.
+            if (_isReviewSession) {
+              AppLogger.log("[LABEL_SYNC] Skipping sync - review session");
+              return;
+            }
+            AppState.lastLabelSynced = null;
+            // Ensure system labels exist immediately on login
+            // (before remote sync which may take time or fail)
+            await Label.fixLabels();
+            requireCloudOperation();
+            // Only sync if E2EE is ready - otherwise wait for E2EE status change
+            if (E2EEService.instance.isCryptoReady) {
+              await _startRemoteListener();
+              unawaited(_background(refresh)());
+            } else {
+              AppLogger.log(
+                "[LABEL_SYNC] Deferring sync on login - E2EE not ready (status: ${E2EEService.instance.status.value})",
+              );
+            }
+          } else {
+            await _stopRemoteListener();
+          }
+        }, cloud: false)(),
+      );
     });
   }
 
@@ -276,10 +312,15 @@ class LabelSyncService {
     // Trigger sync when E2EE becomes ready
     if (isNowReady && !wasReady && currentUser != null) {
       AppLogger.log("[LABEL_SYNC] E2EE just became ready, triggering sync");
-      Future.microtask(() async {
-        await _stopRemoteListener();
-        await refresh();
-      });
+      unawaited(
+        Future<void>.microtask(
+          _background(() async {
+            await _stopRemoteListener();
+            requireCloudOperation();
+            await refresh();
+          }),
+        ),
+      );
     } else if (!isNowReady && wasReady) {
       unawaited(_stopRemoteListener());
     }
@@ -298,8 +339,8 @@ class LabelSyncService {
       _wasPreviouslyPaid = true;
 
       if (currentUser != null) {
-        unawaited(_startRemoteListener());
-        unawaited(refresh());
+        unawaited(_background(_startRemoteListener)());
+        unawaited(_background(refresh)());
       }
     }
     // User downgraded or subscription expired
@@ -557,8 +598,10 @@ class LabelSyncService {
                     case HydrationWorkOutcome.retry:
                       unawaited(
                         Future<void>.microtask(
-                          () => _restartRemoteListenerAfterFailure(
-                            hydrationGeneration,
+                          _background(
+                            () => _restartRemoteListenerAfterFailure(
+                              hydrationGeneration,
+                            ),
                           ),
                         ),
                       );
@@ -581,7 +624,11 @@ class LabelSyncService {
             }
             AppLogger.error('LabelSync: Remote listener error', error);
             _initialHydration.failAttempt(hydrationGeneration);
-            unawaited(_restartRemoteListenerAfterFailure(hydrationGeneration));
+            unawaited(
+              _background(
+                () => _restartRemoteListenerAfterFailure(hydrationGeneration),
+              )(),
+            );
           },
         );
 
@@ -591,13 +638,18 @@ class LabelSyncService {
   Future<void> _restartRemoteListenerAfterFailure(int generation) async {
     if (!_initialHydration.isCurrent(generation)) return;
     await _stopRemoteListener(cancelRetry: false);
+    requireCloudOperation();
     if (!_canReceiveSync) return;
-    _listenerRetry.schedule(() async {
-      if (_initialized && currentUser != null && _canReceiveSync) {
-        AppLogger.log('[LABEL_SYNC] Restarting remote listener after failure');
-        await _startRemoteListener();
-      }
-    });
+    _listenerRetry.schedule(
+      _background(() async {
+        if (_initialized && currentUser != null && _canReceiveSync) {
+          AppLogger.log(
+            '[LABEL_SYNC] Restarting remote listener after failure',
+          );
+          await _startRemoteListener();
+        }
+      }),
+    );
   }
 
   bool _hasValidRemoteDate(Object? value) {
@@ -652,7 +704,7 @@ class LabelSyncService {
 
     // Don't push sync if not allowed (requires Pro)
     if (!_canPushSync) {
-      AppLogger.log("[LABEL_SYNC]Skipping sync - push sync not allowed");
+      AppLogger.log("[LABEL_SYNC] Skipping sync - $_pushSyncState");
       return;
     }
 
@@ -662,9 +714,7 @@ class LabelSyncService {
       return;
     }
 
-    _syncTimer = Timer(const Duration(seconds: 5), () async {
-      await _sync();
-    });
+    _syncTimer = Timer(const Duration(seconds: 5), _background(_sync));
   }
 
   Future<void> resumeCloudSync() async {
@@ -697,17 +747,13 @@ class LabelSyncService {
     if (currentUser == null) return SyncRefreshOutcome.deferred;
 
     if (!_canReceiveSync) {
-      AppLogger.log(
-        '[LABEL_SYNC] Skipping refresh - incoming sync unavailable',
-      );
+      AppLogger.log('[LABEL_SYNC] Skipping refresh - $_incomingSyncState');
       return SyncRefreshOutcome.deferred;
     }
 
     await Future.microtask(() {});
     if (currentUser == null || !_canReceiveSync) {
-      AppLogger.log(
-        '[LABEL_SYNC] Skipping refresh - incoming sync became unavailable',
-      );
+      AppLogger.log('[LABEL_SYNC] Skipping refresh - $_incomingSyncState');
       return SyncRefreshOutcome.deferred;
     }
 
@@ -725,7 +771,7 @@ class LabelSyncService {
       if (_canPushSync) {
         await _pushLocalChanges();
       } else {
-        AppLogger.log("[LABEL_SYNC]Skipping push - Pro subscription required");
+        AppLogger.log("[LABEL_SYNC] Skipping push - $_pushSyncState");
       }
       if (!_canReceiveSync) {
         syncStatus.value = SyncProgress.idle;
@@ -738,6 +784,15 @@ class LabelSyncService {
       await _pullRemoteChanges();
 
       requireCloudOperation();
+      final uploadRestricted =
+          syncFailed.value.isEmpty &&
+          !PlanService.instance.isPaid &&
+          await LabelSyncTrack.count(pending: true) > 0;
+      requireCloudOperation();
+      if (uploadRestricted) {
+        syncStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+        return SyncRefreshOutcome.uploadRestricted;
+      }
       syncStatus.value = syncFailed.value.isEmpty
           ? const SyncProgress(SyncPhase.complete)
           : const SyncProgress(SyncPhase.failed);
@@ -782,7 +837,7 @@ class LabelSyncService {
 
     // Don't push sync if not allowed (requires Pro)
     if (!_canPushSync) {
-      AppLogger.log("[LABEL_SYNC]Skipping _sync - push sync not allowed");
+      AppLogger.log("[LABEL_SYNC] Skipping _sync - $_pushSyncState");
       return;
     }
 
@@ -1062,14 +1117,16 @@ class LabelSyncService {
       scheduleCachedResume: () {},
       scheduleFullPull: () {
         if (_canReceiveSync) {
-          _pullRetry.schedule(() async {
-            if (_initialized && currentUser != null && _canReceiveSync) {
-              AppLogger.log(
-                '[LABEL_SYNC] Retrying full label pull after Firestore failure',
-              );
-              await refresh();
-            }
-          });
+          _pullRetry.schedule(
+            _background(() async {
+              if (_initialized && currentUser != null && _canReceiveSync) {
+                AppLogger.log(
+                  '[LABEL_SYNC] Retrying full label pull after Firestore failure',
+                );
+                await refresh();
+              }
+            }),
+          );
         }
       },
       pull: _performRemotePull,

@@ -3721,4 +3721,17 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get localEncryptionMissing =>
       'Kunci untuk membuka catatan tersimpan hilang atau rusak. Sambungkan kembali untuk memulihkan akses atau gunakan pemulihan akun. Data lokal Anda tetap disimpan.';
+
+  @override
+  String get syncCheckingConnection => 'Memeriksa koneksi…';
+
+  @override
+  String get syncPreparing => 'Menyiapkan sinkronisasi…';
+
+  @override
+  String get syncUploadRestricted =>
+      'Perubahan disimpan di perangkat ini. Mengunggah memerlukan Pro.';
+
+  @override
+  String get syncPaused => 'Sinkronisasi dijeda. Silakan coba lagi.';
 }

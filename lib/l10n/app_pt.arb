@@ -1089,5 +1089,9 @@
 	"couldNotSaveLabel": "Não foi possível salvar a etiqueta. Tente novamente.",
 	"noConnectionAvailable": "Sem conexão disponível.",
 	"localEncryptionUnavailable": "Não foi possível ler as chaves de criptografia salvas. Desbloqueie o dispositivo e tente novamente. Seus dados locais foram mantidos.",
-	"localEncryptionMissing": "As chaves necessárias para abrir suas notas salvas estão ausentes ou danificadas. Reconecte-se para restaurar o acesso ou use a recuperação de conta. Seus dados locais foram mantidos."
+	"localEncryptionMissing": "As chaves necessárias para abrir suas notas salvas estão ausentes ou danificadas. Reconecte-se para restaurar o acesso ou use a recuperação de conta. Seus dados locais foram mantidos.",
+	"syncCheckingConnection": "Verificando conexão…",
+	"syncPreparing": "Preparando sincronização…",
+	"syncUploadRestricted": "Alterações salvas neste dispositivo. O envio requer o Pro.",
+	"syncPaused": "Sincronização pausada. Tente novamente."
 }

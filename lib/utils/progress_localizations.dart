@@ -91,6 +91,13 @@ extension RecoveryProgressLocalizations on RecoveryProgress {
 extension SyncProgressLocalizations on SyncProgress {
   String localized(AppLocalizations l10n) => switch (phase) {
     SyncPhase.idle => '',
+    SyncPhase.checkingConnection => l10n.syncCheckingConnection,
+    SyncPhase.preparing => l10n.syncPreparing,
+    SyncPhase.unavailable => l10n.noConnectionAvailable,
+    SyncPhase.waitingForApproval => l10n.waitingForDeviceApproval,
+    SyncPhase.signInRequired => l10n.pleaseSignInAgain,
+    SyncPhase.deferred => l10n.syncPaused,
+    SyncPhase.uploadRestricted => l10n.syncUploadRestricted,
     SyncPhase.complete => l10n.syncComplete,
     SyncPhase.failed when failedCount > 0 => l10n.syncFailedCount(failedCount),
     SyncPhase.failed => l10n.syncFailed,

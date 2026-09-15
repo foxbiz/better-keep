@@ -3797,5 +3797,9 @@
 	"@couldNotSaveLabel": { "description": "Label save failure shown without discarding the pending name" },
 	"noConnectionAvailable": "No connection available.",
 	"localEncryptionUnavailable": "Your saved encryption keys could not be read. Unlock your device and retry. Your local data has been kept.",
-	"localEncryptionMissing": "The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept."
+	"localEncryptionMissing": "The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept.",
+	"syncCheckingConnection": "Checking connection…",
+	"syncPreparing": "Preparing sync…",
+	"syncUploadRestricted": "Changes saved on this device. Uploading requires Pro.",
+	"syncPaused": "Sync paused. Please retry."
 }

@@ -51,6 +51,26 @@ void main() {
     );
   });
 
+  test(
+    'connection, preparation, and upload restriction have localized copy',
+    () {
+      for (final locale in AppLocalizations.supportedLocales) {
+        final l10n = lookupAppLocalizations(locale);
+        for (final phase in [
+          SyncPhase.checkingConnection,
+          SyncPhase.preparing,
+          SyncPhase.uploadRestricted,
+        ]) {
+          final text = SyncProgress(phase).localized(l10n);
+          expect(text, isNotEmpty);
+          if (locale.languageCode != 'en') {
+            expect(text, isNot(SyncProgress(phase).localized(en)));
+          }
+        }
+      }
+    },
+  );
+
   test('export and purchase outcomes ignore diagnostic provider text', () {
     expect(ExportPhase.preparing.localized(ja), ja.exportingData);
     expect(ExportPhase.failed.localized(en), en.exportFailed);

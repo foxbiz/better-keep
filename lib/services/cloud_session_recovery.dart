@@ -8,7 +8,15 @@ import 'package:flutter/foundation.dart';
 
 enum CloudSessionState { pending, ready, unavailable, blocked }
 
-enum SyncRefreshOutcome { complete, unavailable, deferred, failed }
+enum CloudRecoveryActivity { idle, verifying, resuming }
+
+enum SyncRefreshOutcome {
+  complete,
+  uploadRestricted,
+  unavailable,
+  deferred,
+  failed,
+}
 
 /// A remote read supplied no authoritative result (for example a cache miss).
 class CloudVerificationUnavailable implements Exception {
@@ -32,6 +40,7 @@ SyncRefreshOutcome combineSyncRefreshOutcomes(
     SyncRefreshOutcome.failed,
     SyncRefreshOutcome.unavailable,
     SyncRefreshOutcome.deferred,
+    SyncRefreshOutcome.uploadRestricted,
   ]) {
     if (outcomes.contains(outcome)) return outcome;
   }
@@ -69,6 +78,9 @@ class CloudSessionRecovery {
   final void Function(Object, StackTrace) onFailure;
   final Duration timeout;
   final state = ValueNotifier(CloudSessionState.pending);
+  final activity = ValueNotifier(CloudRecoveryActivity.idle);
+  final sessionRevision = ValueNotifier(0);
+  bool get hasSession => _uid != null;
   final _retry = ExponentialBackoffRetryController(
     delayForAttempt: (attempt) =>
         Duration(seconds: const [5, 15, 30, 60][attempt.clamp(0, 3)]),
@@ -101,6 +113,7 @@ class CloudSessionRecovery {
     final generation = ++_generation;
     var active = true;
     bool isCurrent() => active && generation == _generation && _uid != null;
+    activity.value = CloudRecoveryActivity.verifying;
     late final Future<CloudSessionState> operation;
     operation = (() async {
       try {
@@ -128,7 +141,10 @@ class CloudSessionRecovery {
         return state.value;
       } finally {
         active = false;
-        if (identical(_running, operation)) _running = null;
+        if (identical(_running, operation)) {
+          _running = null;
+          _updateActivity();
+        }
       }
     })();
     _running = operation;
@@ -139,6 +155,7 @@ class CloudSessionRecovery {
     if (_uid == null || state.value == CloudSessionState.blocked) return;
     _needsResume = true;
     state.value = CloudSessionState.unavailable;
+    _updateActivity();
     _schedule();
   }
 
@@ -149,12 +166,16 @@ class CloudSessionRecovery {
     }
     if (_resuming != null) return;
     _needsResume = false;
+    activity.value = CloudRecoveryActivity.resuming;
     final isCurrent = captureSession();
     late final Future<void> operation;
     operation = Future<void>.sync(() => onReady(isCurrent))
         .catchError((Object error, StackTrace stack) {
-          if (!isCurrent() || error is CloudOperationCancelled) return;
+          if (!isCurrent()) return;
           _needsResume = true;
+          // A cancelled partial restart is still unfinished for this account.
+          // whenComplete schedules the next coalesced recovery attempt.
+          if (error is CloudOperationCancelled) return;
           onFailure(error, stack);
           if (isCloudConnectionFailure(error)) {
             connectionLost();
@@ -165,6 +186,7 @@ class CloudSessionRecovery {
         .whenComplete(() {
           if (!identical(_resuming, operation)) return;
           _resuming = null;
+          _updateActivity();
           if (isCurrent()) {
             if (_needsResume) {
               _schedule();
@@ -174,6 +196,14 @@ class CloudSessionRecovery {
           }
         });
     _resuming = operation;
+  }
+
+  void _updateActivity() {
+    activity.value = _running != null
+        ? CloudRecoveryActivity.verifying
+        : _resuming != null && state.value == CloudSessionState.ready
+        ? CloudRecoveryActivity.resuming
+        : CloudRecoveryActivity.idle;
   }
 
   void _schedule() {
@@ -198,5 +228,7 @@ class CloudSessionRecovery {
     _needsResume = true;
     _retry.cancel();
     state.value = CloudSessionState.pending;
+    activity.value = CloudRecoveryActivity.idle;
+    sessionRevision.value++;
   }
 }

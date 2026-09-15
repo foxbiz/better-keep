@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:better_keep/models/app_progress.dart';
-import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -21,6 +21,7 @@ class SyncProgressWidget extends StatefulWidget {
 
 class _SyncProgressWidgetState extends State<SyncProgressWidget>
     with SingleTickerProviderStateMixin {
+  late SyncProgress _progress;
   bool _dismissed = false;
   bool _shouldShow = false;
   Timer? _hideTimer;
@@ -43,164 +44,100 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
         .animate(
           CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
         );
+    _progress = SyncPresentation.instance.value;
+    _shouldShow = !_progress.isEmpty;
+    if (_shouldShow) _animationController.value = 1;
+    if (_shouldShow && !_progress.isActive) _scheduleHide();
+    SyncPresentation.instance.addListener(_onProgressChanged);
   }
 
   @override
   void dispose() {
+    SyncPresentation.instance.removeListener(_onProgressChanged);
     _hideTimer?.cancel();
     _animationController.dispose();
     super.dispose();
   }
 
-  void _show() {
-    if (!_shouldShow) {
-      setState(() => _shouldShow = true);
-      _animationController.forward();
+  void _onProgressChanged() {
+    final next = SyncPresentation.instance.value;
+    if (next.isEmpty) {
+      _hideTimer?.cancel();
+      _animationController.reset();
+      setState(() {
+        _progress = next;
+        _dismissed = false;
+        _shouldShow = false;
+      });
+      return;
     }
-  }
-
-  void _hide() {
-    _animationController.reverse().then((_) {
-      if (mounted) {
-        setState(() => _shouldShow = false);
-      }
+    final starting =
+        next.isActive &&
+        (!_progress.isActive || SyncPresentation.instance.isManualRefresh);
+    _hideTimer?.cancel();
+    setState(() {
+      _progress = next;
+      if (starting) _dismissed = false;
+      if (!_dismissed) _shouldShow = true;
     });
+    if (!_dismissed) _animationController.forward();
+    if (!next.isActive) _scheduleHide();
   }
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && !_dismissed) {
-        _hide();
+    _hideTimer = Timer(const Duration(seconds: 3), () async {
+      await _animationController.reverse();
+      if (mounted && !_progress.isActive) {
+        setState(() => _shouldShow = false);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Check if sync progress is disabled in settings
-    if (!AppState.showSyncProgress) {
+    if (!AppState.showSyncProgress || !_shouldShow) {
       return const SizedBox.shrink();
     }
-
-    final syncService = NoteSyncService();
-    final e2eeService = E2EEService.instance;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
     return Positioned(
       left: 0,
       right: 0,
-      bottom: 32 + bottomPadding,
-      // First, listen for E2EE background verification
-      child: ValueListenableBuilder<bool>(
-        valueListenable: e2eeService.isVerifyingInBackground,
-        builder: (context, isVerifyingE2EE, child) {
-          // Show E2EE verification status when verifying in background
-          if (isVerifyingE2EE && !_dismissed) {
-            _hideTimer?.cancel();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _show();
-            });
-          }
-
-          return ValueListenableBuilder<bool>(
-            valueListenable: syncService.isSyncing,
-            builder: (context, isSyncing, child) {
-              // Reset dismissed state and show widget when a new sync starts
-              if (isSyncing) {
-                if (_dismissed) _dismissed = false;
+      bottom: 32 + MediaQuery.of(context).padding.bottom,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Center(
+            child: Dismissible(
+              key: const ValueKey('sync_progress'),
+              direction: DismissDirection.down,
+              onDismissed: (_) {
                 _hideTimer?.cancel();
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _show();
-                });
-              } else if (_shouldShow && !_dismissed && !isVerifyingE2EE) {
-                // Sync finished and not verifying E2EE, schedule hide after delay
-                _scheduleHide();
-              }
-
-              return ValueListenableBuilder<Set<int>>(
-                valueListenable: syncService.syncFailed,
-                builder: (context, failedSet, child) {
-                  // Keep visible if there are failed syncs
-                  if (failedSet.isNotEmpty && !_dismissed) {
-                    _hideTimer?.cancel();
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _show();
-                    });
-                  }
-
-                  return ValueListenableBuilder<(int, int)>(
-                    valueListenable: syncService.syncProgress,
-                    builder: (context, progress, child) {
-                      final (syncedCount, totalCount) = progress;
-
-                      return ValueListenableBuilder<SyncProgress>(
-                        valueListenable: syncService.syncStatus,
-                        builder: (context, syncStatus, child) {
-                          return ValueListenableBuilder<ProtectionProgress?>(
-                            valueListenable:
-                                e2eeService.backgroundVerificationProgress,
-                            builder: (context, protectionProgress, child) {
-                              // Check if there's meaningful content to show
-                              final hasContent =
-                                  totalCount > 0 ||
-                                  !syncStatus.isEmpty ||
-                                  protectionProgress != null ||
-                                  (failedSet.isNotEmpty && !isSyncing) ||
-                                  isVerifyingE2EE;
-
-                              // Don't render if not showing or no content
-                              if (!_shouldShow || !hasContent) {
-                                return const SizedBox.shrink();
-                              }
-
-                              return SlideTransition(
-                                position: _slideAnimation,
-                                child: FadeTransition(
-                                  opacity: _fadeAnimation,
-                                  child: Center(
-                                    child: Dismissible(
-                                      key: const ValueKey('sync_progress'),
-                                      direction: DismissDirection.down,
-                                      onDismissed: (_) {
-                                        _hideTimer?.cancel();
-                                        _dismissed = true;
-                                        setState(() => _shouldShow = false);
-                                      },
-                                      child: AnimatedSize(
-                                        duration: const Duration(
-                                          milliseconds: 200,
-                                        ),
-                                        curve: Curves.easeInOut,
-                                        child: _SyncProgressCard(
-                                          syncedCount: syncedCount,
-                                          totalCount: totalCount,
-                                          syncStatus: syncStatus,
-                                          protectionProgress:
-                                              protectionProgress,
-                                          isSyncing: isSyncing,
-                                          failedCount:
-                                              syncStatus.failedCount > 0
-                                              ? syncStatus.failedCount
-                                              : failedSet.length,
-                                          isVerifyingE2EE: isVerifyingE2EE,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      );
-                    },
+                _dismissed = true;
+                setState(() => _shouldShow = false);
+              },
+              child: ListenableBuilder(
+                listenable: Listenable.merge([
+                  NoteSyncService().syncProgress,
+                  NoteSyncService().isSyncing,
+                ]),
+                builder: (context, _) {
+                  final counts = NoteSyncService().syncProgress.value;
+                  final showCounts =
+                      _progress.phase == SyncPhase.syncing &&
+                      NoteSyncService().isSyncing.value;
+                  return _SyncProgressCard(
+                    syncedCount: showCounts ? counts.$1 : 0,
+                    totalCount: showCounts ? counts.$2 : 0,
+                    syncStatus: _progress,
+                    isSyncing: _progress.isActive,
+                    failedCount: _progress.failedCount,
                   );
                 },
-              );
-            },
-          );
-        },
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -210,19 +147,15 @@ class _SyncProgressCard extends StatefulWidget {
   final int syncedCount;
   final int totalCount;
   final SyncProgress syncStatus;
-  final ProtectionProgress? protectionProgress;
   final bool isSyncing;
   final int failedCount;
-  final bool isVerifyingE2EE;
 
   const _SyncProgressCard({
     required this.syncedCount,
     required this.totalCount,
     required this.syncStatus,
-    required this.protectionProgress,
     required this.isSyncing,
     required this.failedCount,
-    this.isVerifyingE2EE = false,
   });
 
   @override
@@ -260,7 +193,7 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
   }
 
   void _syncRotationAnimation() {
-    final shouldAnimate = widget.isSyncing || widget.isVerifyingE2EE;
+    final shouldAnimate = widget.isSyncing;
     if (!shouldAnimate) {
       _rotationController.stop();
       _rotationController.reset();
@@ -281,10 +214,8 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
   int get syncedCount => widget.syncedCount;
   int get totalCount => widget.totalCount;
   SyncProgress get syncStatus => widget.syncStatus;
-  ProtectionProgress? get protectionProgress => widget.protectionProgress;
   bool get isSyncing => widget.isSyncing;
   int get failedCount => widget.failedCount;
-  bool get isVerifyingE2EE => widget.isVerifyingE2EE;
 
   /// Determines the message type based on current state
   _MessageType get _messageType {
@@ -344,19 +275,21 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
                 ),
                 const SizedBox(width: 10),
                 // Animated text switcher
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  switchInCurve: Curves.easeInOut,
-                  switchOutCurve: Curves.easeInOut,
-                  transitionBuilder: (child, animation) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  child: Text(
-                    statusText,
-                    key: ValueKey(statusText),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: accentColor,
+                Flexible(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    switchInCurve: Curves.easeInOut,
+                    switchOutCurve: Curves.easeInOut,
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    child: Text(
+                      statusText,
+                      key: ValueKey(statusText),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: accentColor,
+                      ),
                     ),
                   ),
                 ),
@@ -397,9 +330,6 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
   }
 
   String _buildStatusText(BuildContext context) {
-    if (isVerifyingE2EE && protectionProgress != null) {
-      return protectionProgress!.localized(context.l10n);
-    }
     if (hasFailed && syncStatus.isEmpty) {
       return context.l10n.syncFailedCount(failedCount);
     }
@@ -445,3 +375,30 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
 }
 
 enum _MessageType { info, success, error }
+
+/// The same immediate activity indicator for desktop and web refresh actions.
+class SyncRefreshButton extends StatelessWidget {
+  const SyncRefreshButton({super.key, required this.onRefresh});
+
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<SyncProgress>(
+    valueListenable: SyncPresentation.instance,
+    builder: (context, progress, _) => IconButton(
+      onPressed: progress.isActive ? null : onRefresh,
+      tooltip: progress.isActive
+          ? progress.localized(context.l10n)
+          : context.l10n.refresh,
+      icon: progress.isActive
+          ? SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                semanticsLabel: progress.localized(context.l10n),
+              ),
+            )
+          : const Icon(Icons.refresh),
+    ),
+  );
+}

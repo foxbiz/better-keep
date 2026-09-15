@@ -221,11 +221,11 @@ class AuthService {
     if (foreground && canSyncCloud && AppState.get('db') != null) {
       final current = captureSession();
       unawaited(
-        NoteSyncService().recheckLocalAttachmentDependencies().catchError((
+        NoteSyncService().recheckReadyDependencies().catchError((
           Object error,
           StackTrace stack,
         ) {
-          if (!current()) return;
+          if (!current() || error is CloudOperationCancelled) return;
           if (isCloudConnectionFailure(error)) cloudRecovery.connectionLost();
           AppLogger.error(
             '[SYNC] Foreground dependency retry deferred',
@@ -1235,43 +1235,42 @@ class AuthService {
 
     final isCurrent = captureSession();
     try {
-      final firestore = FirebaseBackend.firestore;
-      final userDoc = await readCloudDocument(
-        firestore.collection('users').doc(user.uid),
-        isCurrent: isCurrent,
-      );
-
-      if (userDoc.exists) {
-        final data = userDoc.data();
-        final linkedProviders =
-            data?['linkedProviders'] as Map<String, dynamic>?;
-        if (linkedProviders != null) {
-          // Convert Firestore keys (e.g., 'facebook') to Firebase provider ID format (e.g., 'facebook.com')
-          _firestoreLinkedProviders = linkedProviders.keys.map((key) {
-            switch (key) {
-              case 'google':
-                return 'google.com';
-              case 'facebook':
-                return 'facebook.com';
-              case 'github':
-                return 'github.com';
-              case 'twitter':
-                return 'twitter.com';
-              default:
-                return key.contains('.') ? key : '$key.com';
-            }
-          }).toSet();
-        } else {
-          _firestoreLinkedProviders = {};
-        }
-        // Cache the primary provider (original sign-up method)
-        // The primary provider is stored in the 'provider' field
-        _primaryProvider = data?['provider'] as String?;
-      }
+      final userDoc = await FirebaseBackend.firestore
+          .collection('users')
+          .doc(user.uid)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 10));
+      if (!isCurrent()) return;
+      _cacheLinkedProviders(userDoc);
     } catch (e) {
       if (!isCurrent()) return;
       if (isCloudConnectionFailure(e)) cloudRecovery.connectionLost();
       AppLogger.error('Failed to refresh linked providers: $e');
+    }
+  }
+
+  /// Presence writes can appear in server reads before acknowledgement. Keep
+  /// the previous metadata until this read or the user listener is authoritative.
+  static void _cacheLinkedProviders(
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    if (!snapshot.exists ||
+        snapshot.metadata.isFromCache ||
+        snapshot.metadata.hasPendingWrites) {
+      return;
+    }
+    try {
+      final data = snapshot.data();
+      final linkedProviders = data?['linkedProviders'] as Map<String, dynamic>?;
+      final primaryProvider = data?['provider'] as String?;
+      final providers = linkedProviders?.keys
+          .map((key) => key.contains('.') ? key : '$key.com')
+          .toSet();
+      _firestoreLinkedProviders = providers ?? {};
+      _primaryProvider = primaryProvider;
+    } catch (error) {
+      // Malformed profile metadata must not interrupt revocation handling.
+      AppLogger.error('Failed to parse linked providers: $error');
     }
   }
 
@@ -2086,10 +2085,12 @@ class AuthService {
                 snapshot.metadata.hasPendingWrites) {
               return;
             }
+            _cacheLinkedProviders(snapshot);
             await _checkAndHandleRevocation(snapshot.data());
           },
           onError: (Object error, StackTrace stack) {
-            if (currentUser?.uid == userId && isCloudConnectionFailure(error)) {
+            if (!isCurrent()) return;
+            if (isCloudConnectionFailure(error)) {
               cloudRecovery.connectionLost();
             }
             AppLogger.error(

@@ -20,7 +20,7 @@ and other platform implementations remain upstream packages.
   compression policy is introduced.
 - Use header inspection for gallery-save validation and remove the unused
   bitmap decoding helpers.
-- Align the Android module with the app's AGP 9.0.1/Kotlin 2.2.20 compatibility
+- Align the Android module with the app's AGP 9.0.1/Kotlin 2.3.20 compatibility
   configuration. Robolectric is a test-only dependency.
 
 ## Validation

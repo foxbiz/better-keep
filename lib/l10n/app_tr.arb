@@ -3663,5 +3663,9 @@
 	"couldNotSaveLabel": "Etiket kaydedilemedi. Tekrar deneyin.",
 	"noConnectionAvailable": "Bağlantı yok.",
 	"localEncryptionUnavailable": "Kaydedilen şifreleme anahtarları okunamadı. Cihazınızın kilidini açıp tekrar deneyin. Yerel verileriniz korundu.",
-	"localEncryptionMissing": "Kayıtlı notlarınızı açmak için gereken anahtarlar eksik veya hasarlı. Erişimi geri yüklemek için yeniden bağlanın veya hesap kurtarmayı kullanın. Yerel verileriniz korundu."
+	"localEncryptionMissing": "Kayıtlı notlarınızı açmak için gereken anahtarlar eksik veya hasarlı. Erişimi geri yüklemek için yeniden bağlanın veya hesap kurtarmayı kullanın. Yerel verileriniz korundu.",
+	"syncCheckingConnection": "Bağlantı kontrol ediliyor…",
+	"syncPreparing": "Senkronizasyon hazırlanıyor…",
+	"syncUploadRestricted": "Değişiklikler bu cihaza kaydedildi. Yüklemek için Pro gerekir.",
+	"syncPaused": "Senkronizasyon duraklatıldı. Lütfen tekrar deneyin."
 }

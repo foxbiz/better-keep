@@ -326,36 +326,40 @@ class DeviceManager {
 
   /// Listens for status changes on the current device (revocation, deletion).
   void _listenForCurrentDeviceStatus(String deviceId) {
+    requireCloudOperation();
     final current = _captureSession();
     _currentDeviceStatusSubscription?.cancel();
-    _currentDeviceStatusSubscription = _devicesCollection
-        .doc(deviceId)
-        .snapshots(includeMetadataChanges: true)
-        .listen(
-          (snapshot) {
-            if (!current() ||
-                !isAuthoritativeDeviceSnapshot(
-                  isFromCache: snapshot.metadata.isFromCache,
-                  hasPendingWrites: snapshot.metadata.hasPendingWrites,
-                )) {
-              return;
-            }
-            unawaited(
-              E2EEService.instance
-                  .verifyLocalSessionAuthorization(isCurrent: current)
-                  .catchError((Object error, StackTrace stack) {
-                    _handleListenerError(error, stack, current);
-                    return DeviceAuthorization.unavailable;
-                  }),
-            );
-          },
-          onError: (Object error, StackTrace stack) {
-            if (!current()) return;
-            unawaited(_currentDeviceStatusSubscription?.cancel());
-            _currentDeviceStatusSubscription = null;
-            _handleListenerError(error, stack, current);
-          },
-        );
+    _currentDeviceStatusSubscription = runCloudCallback(
+      current,
+      () => _devicesCollection
+          .doc(deviceId)
+          .snapshots(includeMetadataChanges: true)
+          .listen(
+            (snapshot) {
+              if (!current() ||
+                  !isAuthoritativeDeviceSnapshot(
+                    isFromCache: snapshot.metadata.isFromCache,
+                    hasPendingWrites: snapshot.metadata.hasPendingWrites,
+                  )) {
+                return;
+              }
+              unawaited(
+                E2EEService.instance
+                    .verifyLocalSessionAuthorization(isCurrent: current)
+                    .catchError((Object error, StackTrace stack) {
+                      _handleListenerError(error, stack, current);
+                      return DeviceAuthorization.unavailable;
+                    }),
+              );
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!current()) return;
+              unawaited(_currentDeviceStatusSubscription?.cancel());
+              _currentDeviceStatusSubscription = null;
+              _handleListenerError(error, stack, current);
+            },
+          ),
+    );
   }
 
   void _handleListenerError(
@@ -1189,41 +1193,45 @@ class DeviceManager {
   /// Listens for approval of the current device.
   void _listenForApproval(String deviceId) {
     if (_approvalSubscription != null) return;
+    requireCloudOperation();
     final current = _captureSession();
-    _approvalSubscription = _devicesCollection
-        .doc(deviceId)
-        .snapshots(includeMetadataChanges: true)
-        .listen(
-          (snapshot) {
-            if (!current() ||
-                !isAuthoritativeDeviceSnapshot(
-                  isFromCache: snapshot.metadata.isFromCache,
-                  hasPendingWrites: snapshot.metadata.hasPendingWrites,
-                )) {
-              return;
-            }
-            unawaited(
-              E2EEService.instance
-                  .verifyLocalSessionAuthorization(isCurrent: current)
-                  .then((authorization) {
-                    if (current() &&
-                        authorization == DeviceAuthorization.approved) {
-                      unawaited(AuthService.cloudRecovery.check());
-                    }
-                  })
-                  .catchError(
-                    (Object error, StackTrace stack) =>
-                        _handleListenerError(error, stack, current),
-                  ),
-            );
-          },
-          onError: (Object error, StackTrace stack) {
-            if (!current()) return;
-            unawaited(_approvalSubscription?.cancel());
-            _approvalSubscription = null;
-            _handleListenerError(error, stack, current);
-          },
-        );
+    _approvalSubscription = runCloudCallback(
+      current,
+      () => _devicesCollection
+          .doc(deviceId)
+          .snapshots(includeMetadataChanges: true)
+          .listen(
+            (snapshot) {
+              if (!current() ||
+                  !isAuthoritativeDeviceSnapshot(
+                    isFromCache: snapshot.metadata.isFromCache,
+                    hasPendingWrites: snapshot.metadata.hasPendingWrites,
+                  )) {
+                return;
+              }
+              unawaited(
+                E2EEService.instance
+                    .verifyLocalSessionAuthorization(isCurrent: current)
+                    .then((authorization) {
+                      if (current() &&
+                          authorization == DeviceAuthorization.approved) {
+                        unawaited(AuthService.cloudRecovery.check());
+                      }
+                    })
+                    .catchError(
+                      (Object error, StackTrace stack) =>
+                          _handleListenerError(error, stack, current),
+                    ),
+              );
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!current()) return;
+              unawaited(_approvalSubscription?.cancel());
+              _approvalSubscription = null;
+              _handleListenerError(error, stack, current);
+            },
+          ),
+    );
   }
 
   /// Notifier for when the device is revoked or deleted.
@@ -1241,28 +1249,32 @@ class DeviceManager {
 
   /// Listens for pending approval requests from other devices.
   void _listenForPendingApprovals() {
+    requireCloudOperation();
     final current = _captureSession();
     _pendingApprovalsSubscription?.cancel();
-    _pendingApprovalsSubscription = _devicesCollection
-        .where('status', isEqualTo: DeviceStatus.pending.name)
-        .snapshots()
-        .listen(
-          (snapshot) {
-            if (!current()) return;
-            final requests = snapshot.docs
-                .map((doc) => DeviceDocument.fromFirestore(doc))
-                .map((doc) => DeviceApprovalRequest.fromDocument(doc))
-                .toList();
+    _pendingApprovalsSubscription = runCloudCallback(
+      current,
+      () => _devicesCollection
+          .where('status', isEqualTo: DeviceStatus.pending.name)
+          .snapshots()
+          .listen(
+            (snapshot) {
+              if (!current()) return;
+              final requests = snapshot.docs
+                  .map((doc) => DeviceDocument.fromFirestore(doc))
+                  .map((doc) => DeviceApprovalRequest.fromDocument(doc))
+                  .toList();
 
-            pendingApprovals.value = requests;
-          },
-          onError: (Object error, StackTrace stack) {
-            if (!current()) return;
-            unawaited(_pendingApprovalsSubscription?.cancel());
-            _pendingApprovalsSubscription = null;
-            _handleListenerError(error, stack, current);
-          },
-        );
+              pendingApprovals.value = requests;
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!current()) return;
+              unawaited(_pendingApprovalsSubscription?.cancel());
+              _pendingApprovalsSubscription = null;
+              _handleListenerError(error, stack, current);
+            },
+          ),
+    );
   }
 
   /// Refreshes the pending approvals list.

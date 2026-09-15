@@ -2,3 +2,10 @@
 analyzer:
   exclude:
     - pigeons/**
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

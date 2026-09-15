@@ -1089,5 +1089,9 @@
 	"couldNotSaveLabel": "无法保存标签。请重试。",
 	"noConnectionAvailable": "无可用网络连接。",
 	"localEncryptionUnavailable": "无法读取已保存的加密密钥。请解锁设备后重试。本地数据已保留。",
-	"localEncryptionMissing": "打开已保存笔记所需的密钥丢失或损坏。请重新连接以恢复访问，或使用账户恢复。本地数据已保留。"
+	"localEncryptionMissing": "打开已保存笔记所需的密钥丢失或损坏。请重新连接以恢复访问，或使用账户恢复。本地数据已保留。",
+	"syncCheckingConnection": "正在检查连接…",
+	"syncPreparing": "正在准备同步…",
+	"syncUploadRestricted": "更改已保存在此设备上。上传需要 Pro。",
+	"syncPaused": "同步已暂停。请重试。"
 }

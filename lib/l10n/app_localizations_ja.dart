@@ -3587,4 +3587,16 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get localEncryptionMissing =>
       '保存されたノートを開くためのキーが見つからないか破損しています。再接続してアクセスを復元するか、アカウント復元を使用してください。ローカルデータは保持されています。';
+
+  @override
+  String get syncCheckingConnection => '接続を確認中…';
+
+  @override
+  String get syncPreparing => '同期を準備中…';
+
+  @override
+  String get syncUploadRestricted => '変更はこのデバイスに保存されました。アップロードにはProが必要です。';
+
+  @override
+  String get syncPaused => '同期を一時停止しました。再試行してください。';
 }

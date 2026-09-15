@@ -3528,4 +3528,16 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get localEncryptionMissing =>
       '打开已保存笔记所需的密钥丢失或损坏。请重新连接以恢复访问，或使用账户恢复。本地数据已保留。';
+
+  @override
+  String get syncCheckingConnection => '正在检查连接…';
+
+  @override
+  String get syncPreparing => '正在准备同步…';
+
+  @override
+  String get syncUploadRestricted => '更改已保存在此设备上。上传需要 Pro。';
+
+  @override
+  String get syncPaused => '同步已暂停。请重试。';
 }

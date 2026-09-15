@@ -1089,5 +1089,9 @@
 	"couldNotSaveLabel": "Tidak dapat menyimpan label. Coba lagi.",
 	"noConnectionAvailable": "Tidak ada koneksi yang tersedia.",
 	"localEncryptionUnavailable": "Kunci enkripsi tersimpan tidak dapat dibaca. Buka kunci perangkat dan coba lagi. Data lokal Anda tetap disimpan.",
-	"localEncryptionMissing": "Kunci untuk membuka catatan tersimpan hilang atau rusak. Sambungkan kembali untuk memulihkan akses atau gunakan pemulihan akun. Data lokal Anda tetap disimpan."
+	"localEncryptionMissing": "Kunci untuk membuka catatan tersimpan hilang atau rusak. Sambungkan kembali untuk memulihkan akses atau gunakan pemulihan akun. Data lokal Anda tetap disimpan.",
+	"syncCheckingConnection": "Memeriksa koneksi…",
+	"syncPreparing": "Menyiapkan sinkronisasi…",
+	"syncUploadRestricted": "Perubahan disimpan di perangkat ini. Mengunggah memerlukan Pro.",
+	"syncPaused": "Sinkronisasi dijeda. Silakan coba lagi."
 }
