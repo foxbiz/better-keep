@@ -1008,6 +1008,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
 
     int index = _notes!.toList().indexWhere((note) => note.id == event.note.id);
+    // A database load may already include a committed note before its creation
+    // event arrives. Keep that model, which may also contain newer local edits.
+    if (event.event == 'created' && index != -1) return;
     final newNote = event.note;
 
     final shouldRemove =

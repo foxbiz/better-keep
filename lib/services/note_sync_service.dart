@@ -393,6 +393,22 @@ class NoteSyncService {
         (!cloud || cloudGeneration == _cloudGeneration);
   }
 
+  Future<void> Function() _background(
+    Future<void> Function() operation, {
+    bool cloud = true,
+  }) => bindBackgroundCloudOperation(
+    _captureSession(cloud: cloud),
+    operation,
+    onError: (error, stack) {
+      if (isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+      } else {
+        syncStatus.value = const SyncProgress(SyncPhase.failed);
+      }
+      AppLogger.error('[SYNC] Background operation deferred', error, stack);
+    },
+  );
+
   void _onCloudStateChange() {
     if (AuthService.canSyncCloud) return;
     _cloudGeneration++;
@@ -456,23 +472,25 @@ class NoteSyncService {
       // Sync if E2EE is ready or verifying in background
       // (verifyingInBackground means user can access notes while we verify)
       if (E2EEService.instance.isCryptoReady) {
+        await recheckReadyDependencies();
+        requireCloudOperation();
         // Check if there are pending syncs from previous session
         if (_syncCache.hasPendingSyncs) {
           final pendingCount = _syncCache.getPendingSyncs().length;
           AppLogger.log(
             "[SYNC] Found $pendingCount pending syncs from previous session, resuming...",
           );
-          unawaited(_resumePendingSyncs());
+          unawaited(_background(_resumePendingSyncs)());
         } else {
           final checkpoint = AppState.noteCloudSyncCheckpoint;
           if (checkpoint == null || checkpoint.requiresBootstrap) {
             AppLogger.log(
               "[SYNC] No durable note checkpoint, reconciling remote notes",
             );
-            unawaited(refresh());
+            unawaited(_background(refresh)());
           } else {
             AppLogger.log("[SYNC] No pending syncs, starting fresh sync");
-            unawaited(_sync());
+            unawaited(_background(_sync)());
           }
           await _startRemoteListener();
         }
@@ -493,63 +511,69 @@ class NoteSyncService {
     _wasPreviouslyPaid = PlanService.instance.isPaid;
     PlanService.instance.statusNotifier.addListener(_onSubscriptionChange);
 
-    _userStreamSubscription = AuthService.userStream.listen((user) async {
+    _userStreamSubscription = AuthService.userStream.listen((user) {
       if (!cloudOperationIsCurrent()) return;
-      if (user != null) {
-        await _restoreContentRetryState(user.uid);
-        if (!cloudOperationIsCurrent()) return;
-        final isNewUser = _lastKnownUserId != user.uid;
-        if (isNewUser) {
-          // On login (new user or different user), clear lastSynced
-          // Cache will be cleared by refresh() → startNewSync() when sync runs
-          AppLogger.log(
-            "[SYNC] New user login detected (was: $_lastKnownUserId, now: ${user.uid}), clearing sync state",
-          );
-          AppState.lastSynced = null;
-          AppState.noteCloudSyncCheckpoint = null;
+      unawaited(
+        _background(() async {
+          if (user != null) {
+            await _restoreContentRetryState(user.uid);
+            if (!cloudOperationIsCurrent()) return;
+            final isNewUser = _lastKnownUserId != user.uid;
+            if (isNewUser) {
+              // On login (new user or different user), clear lastSynced
+              // Cache will be cleared by refresh() → startNewSync() when sync runs
+              AppLogger.log(
+                "[SYNC] New user login detected (was: $_lastKnownUserId, now: ${user.uid}), clearing sync state",
+              );
+              AppState.lastSynced = null;
+              AppState.noteCloudSyncCheckpoint = null;
 
-          // Save new user ID
-          _lastKnownUserId = user.uid;
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-            FirebaseScopedPreferences.key('last_synced_user_id'),
-            user.uid,
-          );
+              // Save new user ID
+              _lastKnownUserId = user.uid;
+              final prefs = await SharedPreferences.getInstance();
+              requireCloudOperation();
+              await prefs.setString(
+                FirebaseScopedPreferences.key('last_synced_user_id'),
+                user.uid,
+              );
+              requireCloudOperation();
 
-          // Only refresh if E2EE is ready - otherwise wait for E2EE status change
-          // This prevents Firestore connections before E2EE initialization completes
-          if (E2EEService.instance.isCryptoReady) {
-            // Don't clear cache separately — refresh() handles it via startNewSync()
-            // Calling clear() here races with concurrent sync from E2EE ready handler
-            if (!isSyncing.value) {
-              unawaited(refresh()); // Do a full refresh on login
+              // Only refresh if E2EE is ready - otherwise wait for E2EE status change
+              // This prevents Firestore connections before E2EE initialization completes
+              if (E2EEService.instance.isCryptoReady) {
+                // Don't clear cache separately — refresh() handles it via startNewSync()
+                // Calling clear() here races with concurrent sync from E2EE ready handler
+                if (!isSyncing.value) {
+                  unawaited(_background(refresh)()); // Full refresh on login.
+                }
+              } else {
+                // E2EE not ready — clear cache now, refresh will run when E2EE becomes ready
+                requireCloudOperation();
+                await _syncCache.clear();
+                AppLogger.log(
+                  "[SYNC] Deferring refresh - E2EE not ready (status: ${E2EEService.instance.status.value})",
+                );
+              }
+            } else {
+              AppLogger.log(
+                "[SYNC] Session restored for same user (${user.uid}), keeping sync state",
+              );
+            }
+            // Only start remote listener if E2EE is ready
+            if (E2EEService.instance.isCryptoReady) {
+              await _startRemoteListener();
             }
           } else {
-            // E2EE not ready — clear cache now, refresh will run when E2EE becomes ready
+            await _stopRemoteListener();
             requireCloudOperation();
             await _syncCache.clear();
-            AppLogger.log(
-              "[SYNC] Deferring refresh - E2EE not ready (status: ${E2EEService.instance.status.value})",
-            );
+            for (final timer in _contentRetryTimers.values) {
+              timer.cancel();
+            }
+            _contentRetryTimers.clear();
           }
-        } else {
-          AppLogger.log(
-            "[SYNC] Session restored for same user (${user.uid}), keeping sync state",
-          );
-        }
-        // Only start remote listener if E2EE is ready
-        if (E2EEService.instance.isCryptoReady) {
-          await _startRemoteListener();
-        }
-      } else {
-        await _stopRemoteListener();
-        requireCloudOperation();
-        await _syncCache.clear();
-        for (final timer in _contentRetryTimers.values) {
-          timer.cancel();
-        }
-        _contentRetryTimers.clear();
-      }
+        }, cloud: false)(),
+      );
     });
   }
 
@@ -671,16 +695,18 @@ class NoteSyncService {
         isSyncing.value = false;
         _resumingCachedSyncs = false;
         if (scheduleReconciliation) {
-          unawaited(Future<void>.microtask(refresh));
+          unawaited(Future<void>.microtask(_background(refresh)));
         } else {
           if (restoreListener) await _startRemoteListener();
           if (scheduleCachedResume && _canReceiveSync) {
             if (_canReceiveSync) {
-              _pullRetry.schedule(() async {
-                if (_initialized && currentUser != null && _canReceiveSync) {
-                  await _resumePendingSyncs();
-                }
-              });
+              _pullRetry.schedule(
+                _background(() async {
+                  if (_initialized && currentUser != null && _canReceiveSync) {
+                    await _resumePendingSyncs();
+                  }
+                }),
+              );
             }
           }
         }
@@ -829,60 +855,49 @@ class NoteSyncService {
 
       // Schedule sync in a microtask to avoid blocking the listener callback
       // and to ensure proper async handling
-      Future.microtask(() async {
-        // Wait for any in-progress sync to complete before starting recovery sync
-        // This prevents race conditions and ensures clean state
-        int waitAttempts = 0;
-        const maxWaitAttempts = 10;
-        while (isSyncing.value && waitAttempts < maxWaitAttempts) {
-          AppLogger.log(
-            "[SYNC] E2EE ready: Waiting for in-progress sync to complete (attempt ${waitAttempts + 1}/$maxWaitAttempts)",
-          );
-          await Future.delayed(const Duration(milliseconds: 500));
-          waitAttempts++;
-        }
-
-        // If sync is still running after waiting, skip — the in-progress sync
-        // already has E2EE ready and will complete correctly
-        if (isSyncing.value) {
-          AppLogger.log(
-            "[SYNC] E2EE ready: Sync still in progress after waiting, skipping redundant sync",
-          );
-          return;
-        }
-
-        final user = currentUser;
-        if (user != null) {
-          final deferred = (await _contentRetryLedger.listForUser(user.uid))
-              .where(
-                (entry) =>
-                    entry.state == RemoteContentRetryState.deferred &&
-                    entry.category == RemoteNoteFailureCategory.decryption,
+      unawaited(
+        Future<void>.microtask(
+          _background(() async {
+            // Wait for any in-progress sync to complete before starting recovery sync
+            // This prevents race conditions and ensures clean state
+            int waitAttempts = 0;
+            const maxWaitAttempts = 10;
+            while (isSyncing.value && waitAttempts < maxWaitAttempts) {
+              AppLogger.log(
+                "[SYNC] E2EE ready: Waiting for in-progress sync to complete (attempt ${waitAttempts + 1}/$maxWaitAttempts)",
               );
-          for (final entry in deferred) {
-            final activated = await _contentRetryLedger.activateDeferred(
-              userId: entry.userId,
-              remoteDocumentId: entry.remoteDocumentId,
-            );
-            if (activated != null) {
-              _setContentFailure(activated);
-              _scheduleContentRetry(activated);
+              await Future.delayed(const Duration(milliseconds: 500));
+              requireCloudOperation();
+              waitAttempts++;
             }
-          }
-        }
 
-        // Resume the smallest safe unit of work. A complete cached pagination
-        // run must not be discarded merely because its key was unavailable.
-        await _stopRemoteListener();
+            // If sync is still running after waiting, skip — the in-progress sync
+            // already has E2EE ready and will complete correctly
+            if (isSyncing.value) {
+              AppLogger.log(
+                "[SYNC] E2EE ready: Sync still in progress after waiting, skipping redundant sync",
+              );
+              return;
+            }
 
-        if (_syncCache.hasPendingSyncs) {
-          await _resumePendingSyncs();
-        } else {
-          await refresh();
-        }
+            await recheckReadyDependencies();
+            requireCloudOperation();
 
-        AppLogger.log("[SYNC] E2EE ready sync completed");
-      });
+            // Resume the smallest safe unit of work. A complete cached pagination
+            // run must not be discarded merely because its key was unavailable.
+            await _stopRemoteListener();
+            requireCloudOperation();
+
+            if (_syncCache.hasPendingSyncs) {
+              await _resumePendingSyncs();
+            } else {
+              await refresh();
+            }
+
+            AppLogger.log("[SYNC] E2EE ready sync completed");
+          }),
+        ),
+      );
     } else if (!isNowReady && wasReady) {
       // E2EE not ready - stop syncing encrypted content
       AppLogger.log('[SYNC] Encryption key unavailable, pausing remote sync');
@@ -907,8 +922,8 @@ class NoteSyncService {
 
       // Trigger a full sync if E2EE is also ready
       if (currentUser != null && E2EEService.instance.isCryptoReady) {
-        unawaited(refresh());
-        unawaited(_startRemoteListener());
+        unawaited(_background(refresh)());
+        unawaited(_background(_startRemoteListener)());
       }
     }
     // User downgraded or subscription expired
@@ -922,7 +937,18 @@ class NoteSyncService {
     }
   }
 
-  bool get _isReviewSession => ReviewAccess.isAuthorizedSessionFor(currentUser);
+  bool get _isReviewSession =>
+      FirebaseBackend.isConfigured &&
+      ReviewAccess.isAuthorizedSessionFor(currentUser);
+
+  String get _incomingSyncState =>
+      'backendConfigured=${FirebaseBackend.isConfigured}, '
+      'cloud=${AuthService.cloudRecovery.state.value.name}, '
+      'cryptoReady=${E2EEService.instance.isCryptoReady}, '
+      'sessionInvalid=${AuthService.sessionInvalid.value}, review=$_isReviewSession';
+
+  String get _pushSyncState =>
+      '$_incomingSyncState, paid=${PlanService.instance.isPaid}';
 
   /// Check if we can receive/download sync (incoming):
   /// - E2EE must be ready
@@ -1027,6 +1053,16 @@ class NoteSyncService {
       );
     }
     return true;
+  }
+
+  Future<bool> _hasEncryptionDependencies(String userId) async {
+    final entries = await _contentRetryLedger.listForUser(userId);
+    requireCloudOperation();
+    return entries.any(
+      (entry) =>
+          entry.state == RemoteContentRetryState.deferred &&
+          entry.isEncryptionDependency,
+    );
   }
 
   void _scheduleContentRetry(RemoteContentRetryEntry entry) {
@@ -1241,9 +1277,13 @@ class NoteSyncService {
     );
   }
 
-  /// Event-driven rechecks also visit revisions behind the committed cursor.
-  /// A still-unreadable local file remains deferred, without a polling timer.
-  Future<void> recheckLocalAttachmentDependencies() {
+  /// Compatibility entry point; all ready dependencies share a coalesced pass.
+  Future<void> recheckLocalAttachmentDependencies() =>
+      recheckReadyDependencies();
+
+  /// Rechecks durable dependencies even behind the committed cursor. Content
+  /// failures keep their budgets; a readiness transition is not required.
+  Future<void> recheckReadyDependencies() {
     final user = currentUser;
     if (user == null || !_canReceiveSync || AppState.get('db') == null) {
       return Future.value();
@@ -1259,11 +1299,17 @@ class NoteSyncService {
           final candidates = (await _contentRetryLedger.listForUser(user.uid))
               .where(
                 (entry) =>
-                    entry.isLocalAttachmentDependency && !entry.isExhausted,
+                    !entry.isExhausted &&
+                    (entry.isLocalAttachmentDependency ||
+                        (entry.state == RemoteContentRetryState.deferred &&
+                            entry.isEncryptionDependency &&
+                            E2EEService.instance.isCryptoReady)),
               )
               .toList();
           requireCloudOperation();
           for (final entry in candidates) {
+            requireCloudOperation();
+            if (!_canReceiveSync) return;
             final pending = await NoteSyncTrack.getByLocalId(entry.localId);
             requireCloudOperation();
             if (pending != null &&
@@ -1295,11 +1341,7 @@ class NoteSyncService {
       } catch (error, stack) {
         if (!current() || error is CloudOperationCancelled) return;
         if (!isCloudConnectionFailure(error)) {
-          AppLogger.error(
-            '[SYNC] Local dependency recheck deferred',
-            error,
-            stack,
-          );
+          AppLogger.error('[SYNC] Dependency recheck deferred', error, stack);
         }
         rethrow;
       }
@@ -1383,7 +1425,7 @@ class NoteSyncService {
 
     // Don't listen for remote changes if we can't decrypt them
     if (!_canReceiveSync) {
-      AppLogger.log("[SYNC] LISTENER: Skipping - E2EE not ready");
+      AppLogger.log("[SYNC] LISTENER: Skipping - $_incomingSyncState");
       return;
     }
 
@@ -1695,8 +1737,10 @@ class NoteSyncService {
                     case HydrationWorkOutcome.retry:
                       unawaited(
                         Future<void>.microtask(
-                          () => _restartRemoteListenerAfterFailure(
-                            hydrationGeneration,
+                          _background(
+                            () => _restartRemoteListenerAfterFailure(
+                              hydrationGeneration,
+                            ),
                           ),
                         ),
                       );
@@ -1719,7 +1763,11 @@ class NoteSyncService {
             }
             AppLogger.error('[SYNC] REALTIME ERROR', error);
             _initialHydration.failAttempt(hydrationGeneration);
-            unawaited(_restartRemoteListenerAfterFailure(hydrationGeneration));
+            unawaited(
+              _background(
+                () => _restartRemoteListenerAfterFailure(hydrationGeneration),
+              )(),
+            );
           },
         );
 
@@ -1730,13 +1778,16 @@ class NoteSyncService {
   Future<void> _restartRemoteListenerAfterFailure(int generation) async {
     if (!_initialHydration.isCurrent(generation)) return;
     await _stopRemoteListener(cancelRetry: false);
+    requireCloudOperation();
     if (!_canReceiveSync) return;
-    _listenerRetry.schedule(() async {
-      if (_initialized && currentUser != null && _canReceiveSync) {
-        AppLogger.log('[SYNC] Restarting remote listener after failure');
-        await _startRemoteListener();
-      }
-    });
+    _listenerRetry.schedule(
+      _background(() async {
+        if (_initialized && currentUser != null && _canReceiveSync) {
+          AppLogger.log('[SYNC] Restarting remote listener after failure');
+          await _startRemoteListener();
+        }
+      }),
+    );
   }
 
   bool _hasValidRemoteDate(Object? value) {
@@ -1803,7 +1854,7 @@ class NoteSyncService {
 
     // Don't push sync if not allowed (requires Pro)
     if (!_canPushSync) {
-      AppLogger.log("[SYNC] Skipping sync request - push sync not allowed");
+      AppLogger.log("[SYNC] Skipping sync request - $_pushSyncState");
       return;
     }
 
@@ -1813,9 +1864,7 @@ class NoteSyncService {
       return;
     }
 
-    _syncTimer = Timer(const Duration(seconds: 5), () async {
-      await _sync();
-    });
+    _syncTimer = Timer(const Duration(seconds: 5), _background(_sync));
   }
 
   /// Retry remote content for a specific note that previously failed.
@@ -1824,7 +1873,7 @@ class NoteSyncService {
   Future<bool> retryFailedRemoteNoteForLocalId(int noteId) async {
     if (currentUser == null) return false;
     if (!_canReceiveSync) {
-      AppLogger.log("[SYNC] RETRY: Skipping - E2EE not ready");
+      AppLogger.log("[SYNC] RETRY: Skipping - $_incomingSyncState");
       return false;
     }
 
@@ -1861,7 +1910,11 @@ class NoteSyncService {
         return SyncRefreshOutcome.unavailable;
       }
       if (state != CloudSessionState.ready) return SyncRefreshOutcome.deferred;
-      await init();
+      try {
+        await init();
+      } on CloudOperationCancelled {
+        return SyncRefreshOutcome.deferred;
+      }
       if (!accountCurrent()) return SyncRefreshOutcome.deferred;
     }
     if (refreshOperationOverride != null) {
@@ -1884,7 +1937,7 @@ class NoteSyncService {
 
     // Don't sync if E2EE is not ready (pending approval, revoked, etc.)
     if (!_canReceiveSync) {
-      AppLogger.log("[SYNC] REFRESH: Skipping - E2EE not ready");
+      AppLogger.log("[SYNC] REFRESH: Skipping - $_incomingSyncState");
       return SyncRefreshOutcome.deferred;
     }
 
@@ -1917,12 +1970,10 @@ class NoteSyncService {
       if (_canPushSync) {
         await _pushLocalChanges();
       } else {
-        AppLogger.log(
-          "[SYNC] REFRESH: Skipping push - Pro subscription required",
-        );
+        AppLogger.log("[SYNC] REFRESH: Skipping push - $_pushSyncState");
       }
       // Always pull remote changes (available to all users)
-      await recheckLocalAttachmentDependencies();
+      await recheckReadyDependencies();
       requireCloudOperation();
       await _pullRemoteChanges();
 
@@ -1933,6 +1984,21 @@ class NoteSyncService {
       );
       requireCloudOperation();
       if (failedSyncs.isEmpty && !hasContentFailures) {
+        if (await _hasEncryptionDependencies(currentUser!.uid)) {
+          syncStatus.value = SyncProgress.idle;
+          return SyncRefreshOutcome.deferred;
+        }
+        final uploadRestricted =
+            !PlanService.instance.isPaid &&
+            await NoteSyncTrack.count(pending: true) > 0;
+        requireCloudOperation();
+        if (uploadRestricted) {
+          syncStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+          AppLogger.log(
+            '[SYNC] REFRESH: Downloads complete; local uploads require Pro',
+          );
+          return SyncRefreshOutcome.uploadRestricted;
+        }
         syncStatus.value = const SyncProgress(SyncPhase.complete);
         AppLogger.log("[SYNC] REFRESH COMPLETE: All syncs successful");
         return SyncRefreshOutcome.complete;
@@ -2005,7 +2071,7 @@ class NoteSyncService {
 
     // Don't push sync if not allowed (requires Pro)
     if (!_canPushSync) {
-      AppLogger.log("[SYNC] Skipping sync - push sync not allowed");
+      AppLogger.log("[SYNC] Skipping sync - $_pushSyncState");
       return;
     }
 
@@ -2032,7 +2098,7 @@ class NoteSyncService {
       await _pushLocalChangesWithPending(pendingSyncs);
       requireCloudOperation();
 
-      await recheckLocalAttachmentDependencies();
+      await recheckReadyDependencies();
       requireCloudOperation();
 
       syncStatus.value = const SyncProgress(SyncPhase.complete);
@@ -2516,24 +2582,30 @@ class NoteSyncService {
       },
       scheduleCachedResume: () {
         if (_canReceiveSync) {
-          _pullRetry.schedule(() async {
-            if (_initialized && currentUser != null && _canReceiveSync) {
-              AppLogger.log('[SYNC] Retrying remaining cached note revisions');
-              await _resumePendingSyncs();
-            }
-          });
+          _pullRetry.schedule(
+            _background(() async {
+              if (_initialized && currentUser != null && _canReceiveSync) {
+                AppLogger.log(
+                  '[SYNC] Retrying remaining cached note revisions',
+                );
+                await _resumePendingSyncs();
+              }
+            }),
+          );
         }
       },
       scheduleFullPull: () {
         if (_canReceiveSync) {
-          _pullRetry.schedule(() async {
-            if (_initialized && currentUser != null && _canReceiveSync) {
-              AppLogger.log(
-                '[SYNC] Retrying full note pull after Firestore failure',
-              );
-              await refresh();
-            }
-          });
+          _pullRetry.schedule(
+            _background(() async {
+              if (_initialized && currentUser != null && _canReceiveSync) {
+                AppLogger.log(
+                  '[SYNC] Retrying full note pull after Firestore failure',
+                );
+                await refresh();
+              }
+            }),
+          );
         }
       },
       pull: _performRemotePull,

@@ -3756,4 +3756,17 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get localEncryptionMissing =>
       'As chaves necessárias para abrir suas notas salvas estão ausentes ou danificadas. Reconecte-se para restaurar o acesso ou use a recuperação de conta. Seus dados locais foram mantidos.';
+
+  @override
+  String get syncCheckingConnection => 'Verificando conexão…';
+
+  @override
+  String get syncPreparing => 'Preparando sincronização…';
+
+  @override
+  String get syncUploadRestricted =>
+      'Alterações salvas neste dispositivo. O envio requer o Pro.';
+
+  @override
+  String get syncPaused => 'Sincronização pausada. Tente novamente.';
 }

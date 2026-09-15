@@ -87,6 +87,8 @@ class OfflineFirestore implements FirebaseFirestore {
   Future<QuerySnapshot<Map<String, dynamic>>> Function(String, GetOptions?)?
   queryResponse;
   final queryReads = <String>[];
+  final queryEvents =
+      <String, StreamController<QuerySnapshot<Map<String, dynamic>>>>{};
   Future<DocumentSnapshot<Map<String, dynamic>>> Function(
     String path,
     GetOptions? options,
@@ -97,6 +99,8 @@ class OfflineFirestore implements FirebaseFirestore {
   final documents = <String, Map<String, dynamic>>{};
   final events =
       StreamController<DocumentSnapshot<Map<String, dynamic>>>.broadcast();
+  final documentEvents =
+      <String, StreamController<DocumentSnapshot<Map<String, dynamic>>>>{};
   bool emitAcknowledgements = false;
   int acknowledgements = 0;
   Future<void> Function()? commit;
@@ -158,7 +162,7 @@ class _Collection implements CollectionReference<Map<String, dynamic>> {
   Stream<QuerySnapshot<Map<String, dynamic>>> snapshots({
     bool includeMetadataChanges = false,
     ListenSource source = ListenSource.defaultSource,
-  }) => const Stream.empty();
+  }) => owner.queryEvents[path]?.stream ?? const Stream.empty();
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -189,7 +193,7 @@ class _Document implements DocumentReference<Map<String, dynamic>> {
   Stream<DocumentSnapshot<Map<String, dynamic>>> snapshots({
     bool includeMetadataChanges = false,
     ListenSource source = ListenSource.defaultSource,
-  }) => owner.events.stream;
+  }) => owner.documentEvents[path]?.stream ?? owner.events.stream;
   @override
   Future<void> update(Map<Object, Object?> data) async {
     owner.writes.add(path);
@@ -244,7 +248,20 @@ class OfflineQuerySnapshot implements QuerySnapshot<Map<String, dynamic>> {
   @override
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   @override
+  List<DocumentChange<Map<String, dynamic>>> get docChanges =>
+      docs.map(_DocumentChange.new).toList();
+  @override
   SnapshotMetadata get metadata => _Metadata(false, false);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DocumentChange implements DocumentChange<Map<String, dynamic>> {
+  _DocumentChange(this.doc);
+  @override
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  @override
+  DocumentChangeType get type => DocumentChangeType.added;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

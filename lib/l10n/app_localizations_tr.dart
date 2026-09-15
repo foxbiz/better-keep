@@ -3725,4 +3725,18 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get localEncryptionMissing =>
       'Kayıtlı notlarınızı açmak için gereken anahtarlar eksik veya hasarlı. Erişimi geri yüklemek için yeniden bağlanın veya hesap kurtarmayı kullanın. Yerel verileriniz korundu.';
+
+  @override
+  String get syncCheckingConnection => 'Bağlantı kontrol ediliyor…';
+
+  @override
+  String get syncPreparing => 'Senkronizasyon hazırlanıyor…';
+
+  @override
+  String get syncUploadRestricted =>
+      'Değişiklikler bu cihaza kaydedildi. Yüklemek için Pro gerekir.';
+
+  @override
+  String get syncPaused =>
+      'Senkronizasyon duraklatıldı. Lütfen tekrar deneyin.';
 }

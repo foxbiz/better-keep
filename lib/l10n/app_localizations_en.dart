@@ -3714,4 +3714,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get localEncryptionMissing =>
       'The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept.';
+
+  @override
+  String get syncCheckingConnection => 'Checking connection…';
+
+  @override
+  String get syncPreparing => 'Preparing sync…';
+
+  @override
+  String get syncUploadRestricted =>
+      'Changes saved on this device. Uploading requires Pro.';
+
+  @override
+  String get syncPaused => 'Sync paused. Please retry.';
 }

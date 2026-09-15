@@ -6,6 +6,67 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('cancelled partial startup retries in the current account', (
+    tester,
+  ) async {
+    final release = Completer<void>();
+    var starts = 0;
+    final recovery = CloudSessionRecovery(
+      verify: (_) async => CloudSessionState.ready,
+      onReady: (_) async {
+        starts++;
+        if (starts == 1) {
+          await release.future;
+          throw const CloudOperationCancelled();
+        }
+      },
+      onFailure: (_, _) => fail('Cancellation is not a verification failure'),
+    );
+    recovery.start('account-a');
+    await recovery.check();
+    await recovery.check();
+    expect(starts, 1);
+    release.complete();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    expect(starts, 2);
+    await recovery.check();
+    expect(starts, 2);
+    expect(recovery.state.value, CloudSessionState.ready);
+    recovery.stop();
+  });
+
+  test(
+    'manual checks retry cancellation, but ignore old-account completion',
+    () async {
+      final old = Completer<void>();
+      var starts = 0;
+      final recovery = CloudSessionRecovery(
+        verify: (_) async => CloudSessionState.ready,
+        onReady: (_) async {
+          starts++;
+          if (starts == 1) throw const CloudOperationCancelled();
+          if (starts == 2) await old.future;
+        },
+        onFailure: (_, _) => fail('Cancellation must be handled'),
+      )..setForeground(false);
+      recovery.start('account-a');
+      await recovery.check();
+      await pumpEventQueue();
+      await recovery.check();
+      expect(starts, 2);
+      recovery.start('account-b');
+      await recovery.check();
+      await pumpEventQueue();
+      old.completeError(const CloudOperationCancelled());
+      await pumpEventQueue();
+      await recovery.check();
+      expect(starts, 3);
+      expect(recovery.state.value, CloudSessionState.ready);
+      recovery.stop();
+    },
+  );
+
   testWidgets('partial service startup retries without overlapping restarts', (
     tester,
   ) async {

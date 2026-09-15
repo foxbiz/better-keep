@@ -3587,4 +3587,16 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get localEncryptionMissing =>
       '저장된 노트를 여는 데 필요한 키가 없거나 손상되었습니다. 다시 연결하여 접근을 복원하거나 계정 복구를 사용하세요. 로컬 데이터는 보존되었습니다.';
+
+  @override
+  String get syncCheckingConnection => '연결 확인 중…';
+
+  @override
+  String get syncPreparing => '동기화 준비 중…';
+
+  @override
+  String get syncUploadRestricted => '변경 사항이 이 기기에 저장되었습니다. 업로드하려면 Pro가 필요합니다.';
+
+  @override
+  String get syncPaused => '동기화가 일시 중지되었습니다. 다시 시도해 주세요.';
 }

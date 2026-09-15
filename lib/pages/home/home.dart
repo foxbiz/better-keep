@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/components/logo.dart';
@@ -19,6 +20,8 @@ import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -37,6 +40,8 @@ import 'package:better_keep/pages/home/sidebar.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/pages/user_page.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sync_presentation.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/reminder_navigation_service.dart';
 import 'package:better_keep/state.dart';
@@ -63,6 +68,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   bool _searchMode = false;
   bool _shrinkDrawer = false;
   bool _hasPendingApprovals = false;
+  int _approvalCheckGeneration = 0;
   bool _isBubbleMenuOpen = false;
 
   bool get _selectedNotesPinned {
@@ -261,20 +267,34 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   }
 
   void _onPendingApprovalsChanged() {
-    _checkPendingApprovals();
+    unawaited(_checkPendingApprovals());
   }
 
   Future<void> _checkPendingApprovals() async {
     if (!FirebaseBackend.isConfigured) return;
-    final pendingApprovals =
-        E2EEService.instance.deviceManager.pendingApprovals.value;
-    final isFirst = await E2EEService.instance.deviceManager.isFirstDevice();
-
-    if (mounted) {
-      setState(() {
-        _hasPendingApprovals = pendingApprovals.isNotEmpty && isFirst;
-      });
-    }
+    final accountCurrent = AuthService.captureSession();
+    final generation = ++_approvalCheckGeneration;
+    bool current() =>
+        mounted && accountCurrent() && generation == _approvalCheckGeneration;
+    await bindBackgroundCloudOperation(
+      current,
+      () async {
+        final pendingApprovals =
+            E2EEService.instance.deviceManager.pendingApprovals.value;
+        final isFirst =
+            pendingApprovals.isNotEmpty &&
+            await E2EEService.instance.deviceManager.isFirstDevice();
+        if (!current()) return;
+        setState(() => _hasPendingApprovals = isFirst);
+      },
+      onError: (error, stack) {
+        AppLogger.error(
+          'Could not check pending device approvals',
+          error,
+          stack,
+        );
+      },
+    )();
   }
 
   void _onRecoveryKeySetupNeeded() {
@@ -385,10 +405,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           actions: _buildActions(),
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(4.0),
-            child: ValueListenableBuilder<bool>(
-              valueListenable: NoteSyncService().isSyncing,
-              builder: (context, isSyncing, child) {
-                if (isSyncing) {
+            child: ValueListenableBuilder<SyncProgress>(
+              valueListenable: SyncPresentation.instance,
+              builder: (context, progress, child) {
+                if (progress.isActive) {
                   return const LinearProgressIndicator();
                 }
                 return const SizedBox(height: 4.0);
@@ -635,11 +655,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     if (AppState.showNotes == NoteType.trashed) {
       return [
         if (showRefresh)
-          IconButton(
-            onPressed: _notesKey.currentState?.refresh,
-            icon: const Icon(Icons.refresh),
-            tooltip: context.l10n.refresh,
-          ),
+          SyncRefreshButton(onRefresh: _notesKey.currentState?.refresh),
         IconButton(
           onPressed: () async {
             final confirmation = await showDeleteDialog(
@@ -666,11 +682,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
     return [
       if (showRefresh)
-        IconButton(
-          onPressed: _notesKey.currentState?.refresh,
-          icon: const Icon(Icons.refresh),
-          tooltip: context.l10n.refresh,
-        ),
+        SyncRefreshButton(onRefresh: _notesKey.currentState?.refresh),
       Container(
         margin: const EdgeInsets.symmetric(horizontal: 8.0),
         child: GestureDetector(

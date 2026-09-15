@@ -100,7 +100,8 @@ class RemoteContentApplyCoordinator {
         );
       }
       if (existing.revision != deferredRevision ||
-          !existing.isLocalAttachmentDependency ||
+          !(existing.isLocalAttachmentDependency ||
+              existing.isEncryptionDependency) ||
           existing.isExhausted) {
         return _fromEntry(existing);
       }

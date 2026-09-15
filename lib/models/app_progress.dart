@@ -32,6 +32,13 @@ enum RecoveryProgress {
 
 enum SyncPhase {
   idle,
+  checkingConnection,
+  preparing,
+  unavailable,
+  waitingForApproval,
+  signInRequired,
+  deferred,
+  uploadRestricted,
   resuming,
   checkingForUpdates,
   syncing,
@@ -69,6 +76,17 @@ class SyncProgress {
   bool get isEmpty => phase == SyncPhase.idle;
   bool get isSuccess => phase == SyncPhase.complete;
   bool get isFailure => phase == SyncPhase.failed;
+  bool get isActive => const {
+    SyncPhase.checkingConnection,
+    SyncPhase.preparing,
+    SyncPhase.resuming,
+    SyncPhase.checkingForUpdates,
+    SyncPhase.syncing,
+    SyncPhase.restarting,
+    SyncPhase.savingChanges,
+    SyncPhase.fetchingUpdates,
+    SyncPhase.uploadingMedia,
+  }.contains(phase);
 
   @override
   bool operator ==(Object other) =>

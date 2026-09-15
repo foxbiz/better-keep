@@ -38,6 +38,10 @@ class RemoteContentRetryEntry {
       category == RemoteNoteFailureCategory.localApply &&
       errorCode == 'local-attachment-unavailable';
 
+  bool get isEncryptionDependency =>
+      category == RemoteNoteFailureCategory.decryption &&
+      (errorCode == 'e2ee-not-ready' || errorCode == 'umk-unavailable');
+
   factory RemoteContentRetryEntry.fromRow(Map<String, Object?> row) {
     return RemoteContentRetryEntry(
       userId: row['user_id']! as String,

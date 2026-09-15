@@ -1,5 +1,6 @@
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/async_initialization_gate.dart';
+import 'package:better_keep/services/cloud_operation.dart';
 import 'dart:async';
 
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -65,14 +66,20 @@ class DeviceApprovalNotificationService {
   }
 
   void _onPendingApprovalsChanged() {
+    final accountCurrent = AuthService.captureSession();
+    final generation = _generation;
     unawaited(
-      _handlePendingApprovalsChanged().catchError(
-        (Object error, StackTrace stackTrace) => AppLogger.error(
-          'Failed to process device approval notification update',
-          error,
-          stackTrace,
-        ),
-      ),
+      bindBackgroundCloudOperation(
+        () => accountCurrent() && generation == _generation && _initialized,
+        _handlePendingApprovalsChanged,
+        onError: (error, stackTrace) {
+          AppLogger.error(
+            'Failed to process device approval notification update',
+            error,
+            stackTrace,
+          );
+        },
+      )(),
     );
   }
 

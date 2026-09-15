@@ -1,8 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:better_keep/components/note_card.dart';
+import 'package:better_keep/components/sync_progress_widget.dart';
+import 'package:better_keep/utils/manual_sync_refresh.dart';
+import 'package:better_keep/services/sync_presentation.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/l10n/app_localization_config.dart';
+import 'package:better_keep/pages/home/notes.dart';
+import 'package:better_keep/pages/home/home.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/models/cloud_sync_cursor.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
@@ -20,8 +27,11 @@ import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/attachment_storage_repository.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/services/remote_sync_cache_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
 import 'package:better_keep/utils/encryption.dart';
@@ -32,7 +42,11 @@ import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/remote_content_retry_ledger.dart';
 import 'package:better_keep/services/storage_object_locator.dart';
+import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:better_keep/state.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'
+    show DocumentSnapshot, Source, Timestamp;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -58,6 +72,12 @@ void main() {
   );
   late _Attachments attachments;
   setUpAll(sqfliteFfiInit);
+  tearDownAll(() async {
+    // Refresh/upload status resets outlive their futures by two seconds. Keep
+    // the signed-out fake backend available until all guarded callbacks drain.
+    await Future<void>.delayed(const Duration(milliseconds: 2100));
+    FirebaseBackend.resetForTesting();
+  });
   setUp(() async {
     backend = OfflineFirebase()..configure();
     dir = await Directory.systemTemp.createTemp('offline-probe-data-');
@@ -108,6 +128,7 @@ void main() {
     await e2ee.deviceManager.dispose();
     e2ee.resetInitialization();
     await NoteSyncService().dispose();
+    await LabelSyncService().dispose();
     await NoteSortService().dispose();
     PlanService.instance.dispose();
     NoteSortService.cloudRepositoryOverride = null;
@@ -119,10 +140,17 @@ void main() {
     AppState.db = db;
     await db.close();
     await backend.firestore.events.close();
+    for (final events in backend.firestore.documentEvents.values) {
+      await events.close();
+    }
+    for (final events in backend.firestore.queryEvents.values) {
+      await events.close();
+    }
+    backend.auth.currentUser = null;
+    await AuthService.refreshLinkedProviders();
     await backend.auth.changes.close();
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await dir.delete(recursive: true);
-    FirebaseBackend.resetForTesting();
   });
   Future<Note> saved({List<NoteAttachment> items = const []}) async {
     final n = Note(
@@ -192,6 +220,875 @@ void main() {
       errorCode: 'local-attachment-unavailable',
     );
   }
+
+  group('recovery callback lifetimes', () {
+    late Map<String, dynamic> encrypted;
+    final ledger = RemoteContentRetryLedger();
+
+    setUp(() async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      AppState.noteCloudSyncCheckpoint = null;
+      AppState.labelCloudSyncCheckpoint = null;
+      await RemoteSyncCacheService().clear();
+      (backend.auth.currentUser! as OfflineUser).tokenResponse = () async =>
+          OfflineToken();
+      encrypted = await e2ee.noteEncryption.prepareNoteForUpload(payload());
+      backend.firestore.response = (path, _) async => OfflineSnapshot(
+        value: path.contains('/devices/')
+            ? {
+                'status': 'approved',
+                'public_key': base64Encode(Uint8List(32)),
+                'created_at': '2026-01-01T00:00:00Z',
+              }
+            : path.contains('/notes/')
+            ? encrypted
+            : {},
+      );
+      backend.firestore.queryResponse = (_, _) async =>
+          OfflineQuerySnapshot({});
+    });
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    Future<void> seedEncryptionDependency() async {
+      AppState.noteCloudSyncCheckpoint = const CloudSyncCheckpoint(
+        bootstrapped: true,
+        cursor: CloudSyncCursor(
+          seconds: 2000000000,
+          nanoseconds: 0,
+          documentId: 'later-note',
+        ),
+      );
+      final revision = remoteDocumentRevision(encrypted, 'remote-note');
+      await ledger.recordAutomaticFailure(
+        userId: 'account-a',
+        remoteDocumentId: 'remote-note',
+        revision: revision,
+        localId: 101,
+        category: RemoteNoteFailureCategory.decryption,
+        errorCode: 'note-decryption-failed',
+        permanent: false,
+      );
+      await ledger.recordDeferred(
+        userId: 'account-a',
+        remoteDocumentId: 'remote-note',
+        revision: revision,
+        localId: 101,
+        category: RemoteNoteFailureCategory.decryption,
+        errorCode: 'e2ee-not-ready',
+      );
+    }
+
+    Future<void> drainRecovery() async {
+      await NoteSyncService().init();
+      await LabelSyncService().init();
+      await NoteSyncService().refresh();
+      await LabelSyncService().refresh();
+    }
+
+    testWidgets(
+      'refresh shows feedback while actual token verification waits',
+      (tester) async {
+        final token = Completer<IdTokenResult>();
+        (backend.auth.currentUser! as OfflineUser).tokenResponse = () =>
+            token.future;
+        AuthService.cloudRecovery.state.value = CloudSessionState.pending;
+        await tester.pumpWidget(
+          MaterialApp(
+            scaffoldMessengerKey: AppState.scaffoldMessengerKey,
+            localizationsDelegates: betterKeepLocalizationDelegates,
+            supportedLocales: betterKeepSupportedLocales,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    SyncRefreshButton(
+                      onRefresh: () => refreshSyncFromUser(context),
+                    ),
+                    const SyncProgressWidget(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.byType(IconButton));
+        await tester.pump();
+        expect((backend.auth.currentUser! as OfflineUser).tokenRequests, 1);
+        expect(find.text('Checking connection…'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(NoteSyncService().isSyncing.value, isFalse);
+        token.completeError(TimeoutException('synthetic offline verification'));
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(SyncPresentation.instance.value.phase, SyncPhase.unavailable);
+        expect(find.byType(SnackBar), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
+
+    test(
+      'listener failure replaces manual completion and clears after recovery',
+      () async {
+        final events = StreamController<OfflineQuerySnapshot>.broadcast();
+        backend.firestore.queryEvents['users/account-a/notes'] = events;
+        await drainRecovery();
+        final sync = NoteSyncService();
+        final presentation = SyncPresentation.instance;
+        final request = presentation.beginManual(
+          AuthService.captureSessionIdentity(),
+        );
+        final outcome = await runManualSyncRefresh(
+          notes: () => sync.refreshWithOutcome(manual: true),
+          labels: () => LabelSyncService().refreshWithOutcome(),
+        );
+        presentation.finishManual(request, outcome);
+        expect(outcome, SyncRefreshOutcome.complete);
+        expect(presentation.value.phase, SyncPhase.complete);
+        expect(events.hasListener, isTrue);
+
+        // Real-time application reports content failures without a global
+        // isSyncing transition to invalidate the previous manual result.
+        events.add(
+          OfflineQuerySnapshot({
+            'remote-note': {
+              ...encrypted,
+              'updated_at': 'invalid timestamp',
+              cloudSyncCommittedAtField: Timestamp(2000000000, 0),
+            },
+          }),
+        );
+        await waitUntil(() => sync.syncFailed.value.contains(101));
+        expect(sync.isSyncing.value, isFalse);
+        expect(presentation.value.phase, SyncPhase.failed);
+        expect(presentation.value.failedCount, 1);
+
+        events.add(
+          OfflineQuerySnapshot({
+            'remote-note': {
+              ...encrypted,
+              cloudSyncCommittedAtField: Timestamp(2000000001, 0),
+            },
+          }),
+        );
+        await waitUntil(() => sync.syncFailed.value.isEmpty);
+        expect((await Note.findById(101))!.title, 'Remote');
+        expect(await ledger.get('account-a', 'remote-note'), isNull);
+        expect(await sync.refreshWithOutcome(), SyncRefreshOutcome.complete);
+        expect(presentation.value.phase, SyncPhase.complete);
+        expect(presentation.value.isActive, isFalse);
+      },
+    );
+
+    test(
+      'free refresh downloads but reports and preserves restricted local work',
+      () async {
+        await Note(
+          id: 202,
+          title: 'Local only',
+          content: '[{"insert":"Local\\n"}]',
+        ).save();
+        final label = Label(name: 'Local label');
+        await label.save();
+        final pendingNote = (await db.query(NoteSyncTrack.model)).single;
+        final pendingLabel = (await db.query(LabelSyncTrack.model)).single;
+        backend.firestore.queryResponse = (path, _) async =>
+            OfflineQuerySnapshot(
+              path.endsWith('/notes')
+                  ? {
+                      'remote-note': {
+                        ...encrypted,
+                        cloudSyncCommittedAtField: Timestamp.fromDate(
+                          DateTime.utc(2026, 9, 11),
+                        ),
+                      },
+                    }
+                  : {},
+            );
+        expect(PlanService.instance.isPaid, isFalse);
+        expect(
+          await NoteSyncService().refreshWithOutcome(),
+          SyncRefreshOutcome.uploadRestricted,
+        );
+        expect(
+          await LabelSyncService().refreshWithOutcome(),
+          SyncRefreshOutcome.uploadRestricted,
+        );
+        expect((await Note.findById(101))!.title, 'Remote');
+        expect(await Note.count(NoteType.all), 2);
+        expect(
+          (await db.query(
+            NoteSyncTrack.model,
+            where: 'local_id = ?',
+            whereArgs: [202],
+          )).single,
+          pendingNote,
+        );
+        expect((await db.query(LabelSyncTrack.model)).single, pendingLabel);
+        expect(
+          backend.firestore.writes.where(
+            (path) => path.contains('/notes/') || path.contains('/labels/'),
+          ),
+          isEmpty,
+        );
+        expect(
+          NoteSyncService().syncStatus.value.phase,
+          SyncPhase.uploadRestricted,
+        );
+        expect(
+          LabelSyncService().syncStatus.value.phase,
+          SyncPhase.uploadRestricted,
+        );
+      },
+    );
+
+    test(
+      'device callbacks survive verification and reject account switches',
+      () async {
+        final events = StreamController<OfflineQuerySnapshot>.broadcast();
+        backend.firestore.queryEvents['users/account-a/devices'] = events;
+        final reads = <Future<bool>>[];
+        final callbackCurrent = <bool>[];
+        void changed() {
+          callbackCurrent.add(cloudOperationIsCurrent());
+          reads.add(e2ee.deviceManager.isFirstDevice());
+        }
+
+        e2ee.deviceManager.pendingApprovals.addListener(changed);
+        try {
+          expect(
+            await AuthService.cloudRecovery.check(),
+            CloudSessionState.ready,
+          );
+          await drainRecovery();
+          events.add(OfflineQuerySnapshot({}));
+          await pumpEventQueue();
+          expect(callbackCurrent, [true]);
+          expect(await Future.wait(reads), [true]);
+          backend.auth.currentUser = OfflineUser('account-b');
+          events.add(OfflineQuerySnapshot({}));
+          await pumpEventQueue();
+          expect(reads, hasLength(1));
+        } finally {
+          e2ee.deviceManager.pendingApprovals.removeListener(changed);
+        }
+      },
+    );
+
+    test(
+      'pause during subscription callbacks is handled and recovery resumes',
+      () async {
+        AuthService.cloudRecovery.state.value = CloudSessionState.pending;
+        AppState.noteCloudSyncCheckpoint = const CloudSyncCheckpoint(
+          bootstrapped: true,
+        );
+        AppState.labelCloudSyncCheckpoint = const CloudSyncCheckpoint(
+          bootstrapped: true,
+        );
+        final errors = <Object>[];
+        await runZonedGuarded(() async {
+          await NoteSyncService().init();
+          await LabelSyncService().init();
+          AuthService.cloudRecovery.state.value = CloudSessionState.ready;
+          allowPaid();
+          AuthService.cloudRecovery.connectionLost();
+          await pumpEventQueue();
+          expect(
+            await AuthService.cloudRecovery.check(),
+            CloudSessionState.ready,
+          );
+          await drainRecovery();
+        }, (error, _) => errors.add(error));
+        expect(errors, isEmpty);
+        expect(NoteSyncService().isSyncing.value, isFalse);
+        expect(LabelSyncService().isSyncing.value, isFalse);
+      },
+    );
+
+    test(
+      'actual free-account recovery downloads notes automatically',
+      () async {
+        backend.firestore.queryResponse = (path, _) async =>
+            OfflineQuerySnapshot(
+              path.endsWith('/notes')
+                  ? {
+                      'remote-note': {
+                        ...encrypted,
+                        cloudSyncCommittedAtField: Timestamp.fromDate(
+                          DateTime.utc(2026, 9, 11),
+                        ),
+                      },
+                    }
+                  : {},
+            );
+        expect(PlanService.instance.isPaid, isFalse);
+        expect(
+          await AuthService.cloudRecovery.check(),
+          CloudSessionState.ready,
+        );
+        await NoteSyncService().init();
+        await waitUntil(
+          () => AppState.noteCloudSyncCheckpoint?.bootstrapped == true,
+        );
+        expect((await Note.findById(101))!.title, 'Remote');
+        await drainRecovery();
+        expect(await Note.count(NoteType.all), 1);
+        expect(
+          await NoteSyncService().refreshWithOutcome(),
+          SyncRefreshOutcome.complete,
+        );
+      },
+    );
+
+    test(
+      'approval recovers deferred encryption work after verification ends',
+      () async {
+        await seedEncryptionDependency();
+        e2ee.status.value = E2EEStatus.pendingApproval;
+        AuthService.cloudRecovery.state.value = CloudSessionState.pending;
+        final errors = <Object>[];
+        await runZonedGuarded(() async {
+          await NoteSyncService().init();
+          await LabelSyncService().init();
+          expect(
+            await AuthService.cloudRecovery.check(),
+            CloudSessionState.ready,
+          );
+          await drainRecovery();
+          for (var retry = 0; retry < 3; retry++) {
+            expect(
+              await NoteSyncService().refreshWithOutcome(manual: true),
+              SyncRefreshOutcome.complete,
+            );
+          }
+        }, (error, _) => errors.add(error));
+        expect(errors, isEmpty);
+        expect(await ledger.get('account-a', 'remote-note'), isNull);
+        expect((await Note.findById(101))!.title, 'Remote');
+        expect(await Note.count(NoteType.all), 1);
+      },
+    );
+
+    for (final trigger in ['refresh', 'foreground', 'restart']) {
+      test(
+        '$trigger recovers encryption deferrals behind the cursor',
+        () async {
+          await seedEncryptionDependency();
+          switch (trigger) {
+            case 'refresh':
+              expect(
+                await NoteSyncService().refreshWithOutcome(),
+                SyncRefreshOutcome.complete,
+              );
+            case 'foreground':
+              AuthService.setAppForeground(true);
+              await AuthService.cloudRecovery.check();
+              await drainRecovery();
+            case 'restart':
+              await NoteSyncService().dispose();
+              await NoteSyncService().init();
+              await NoteSyncService().refresh();
+          }
+          expect(await ledger.get('account-a', 'remote-note'), isNull);
+          expect((await Note.findById(101))!.title, 'Remote');
+          expect(await Note.count(NoteType.all), 1);
+        },
+      );
+    }
+
+    test(
+      'pending edits and deletions keep encryption deferrals truthful',
+      () async {
+        await seedEncryptionDependency();
+        final local = await saved();
+        local.title = 'Newer local work';
+        await local.save();
+        for (final action in [SyncAction.upload, SyncAction.delete]) {
+          final track = (await NoteSyncTrack.getByLocalId(101))!;
+          track.action = action;
+          await track.save();
+          final before = (await db.query(NoteSyncTrack.model)).single;
+          expect(
+            await NoteSyncService().refreshWithOutcome(),
+            SyncRefreshOutcome.deferred,
+          );
+          expect((await db.query(NoteSyncTrack.model)).single, before);
+          expect((await ledger.get('account-a', 'remote-note'))!.attempts, 1);
+          expect((await Note.findById(101))!.title, 'Newer local work');
+        }
+        expect(
+          backend.firestore.reads.where((r) => r.$1.contains('/notes/')),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      'dependency reads coalesce and ignore late account completions',
+      () async {
+        await seedEncryptionDependency();
+        final entered = Completer<void>(), release = Completer<void>();
+        backend.firestore.response = (_, _) async {
+          entered.complete();
+          await release.future;
+          return OfflineSnapshot(value: encrypted);
+        };
+        final first = NoteSyncService().recheckReadyDependencies();
+        await entered.future;
+        final second = NoteSyncService().recheckReadyDependencies();
+        expect(identical(first, second), isTrue);
+        backend.auth.currentUser = OfflineUser('account-b');
+        release.complete();
+        await Future.wait([first, second]);
+        expect(backend.firestore.reads, hasLength(1));
+        expect(await Note.count(NoteType.all), 0);
+        final entry = (await ledger.get('account-a', 'remote-note'))!;
+        expect(entry.state, RemoteContentRetryState.deferred);
+        expect(entry.attempts, 1);
+      },
+    );
+
+    test('transport loss retains deferred budgets until recovery', () async {
+      await seedEncryptionDependency();
+      final response = backend.firestore.response;
+      backend.firestore.response = (_, _) async =>
+          throw TimeoutException('offline');
+      expect(
+        await NoteSyncService().refreshWithOutcome(),
+        SyncRefreshOutcome.unavailable,
+      );
+      final entry = (await ledger.get('account-a', 'remote-note'))!;
+      expect(entry.state, RemoteContentRetryState.deferred);
+      expect(entry.attempts, 1);
+      backend.firestore.response = response;
+      AuthService.cloudRecovery.state.value = CloudSessionState.ready;
+      expect(
+        await NoteSyncService().refreshWithOutcome(),
+        SyncRefreshOutcome.complete,
+      );
+      expect(await ledger.get('account-a', 'remote-note'), isNull);
+    });
+
+    test(
+      'missing keys and exhausted content failures keep their retry budgets',
+      () async {
+        await seedEncryptionDependency();
+        e2ee.deviceManager.setCachedUMKForTesting(null);
+        for (var retry = 0; retry < 3; retry++) {
+          expect(
+            await NoteSyncService().refreshWithOutcome(),
+            SyncRefreshOutcome.deferred,
+          );
+        }
+        final deferred = (await ledger.get('account-a', 'remote-note'))!;
+        expect(deferred.attempts, 1);
+        expect(deferred.state, RemoteContentRetryState.deferred);
+        e2ee.deviceManager.setCachedUMKForTesting(Uint8List(32));
+        final exhausted = await ledger.recordManualFailure(
+          userId: deferred.userId,
+          remoteDocumentId: deferred.remoteDocumentId,
+          revision: deferred.revision,
+          localId: deferred.localId,
+          category: RemoteNoteFailureCategory.decryption,
+          errorCode: 'note-decryption-failed',
+        );
+        expect(
+          await NoteSyncService().refreshWithOutcome(),
+          SyncRefreshOutcome.failed,
+        );
+        expect(
+          (await ledger.get('account-a', 'remote-note'))!.toRow(),
+          exhausted.toRow(),
+        );
+        expect(backend.firestore.reads, isEmpty);
+      },
+    );
+
+    testWidgets('Home handles approval read cancellation and late disposal', (
+      tester,
+    ) async {
+      late StreamController<OfflineQuerySnapshot> events;
+      late Completer<void> cancelledRead;
+      late Completer<OfflineQuerySnapshot> lateRead;
+      await tester.runAsync(() async {
+        events = StreamController<OfflineQuerySnapshot>.broadcast();
+        cancelledRead = Completer<void>();
+        lateRead = Completer<OfflineQuerySnapshot>();
+        backend.firestore.queryEvents['users/account-a/devices'] = events;
+        expect(
+          await AuthService.cloudRecovery.check(),
+          CloudSessionState.ready,
+        );
+        await drainRecovery();
+      });
+      // This widget regression owns approval callbacks; startup and actual
+      // refresh I/O are covered above without Flutter's fake widget clock.
+      NoteSyncService.refreshOperationOverride = () async {};
+      addTearDown(() => NoteSyncService.refreshOperationOverride = null);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: betterKeepLocalizationDelegates,
+          supportedLocales: betterKeepSupportedLocales,
+          home: const Home(),
+        ),
+      );
+      var approvalReads = 0;
+      backend.firestore.queryResponse = (path, _) async {
+        if (path.endsWith('/devices')) {
+          approvalReads++;
+          if (approvalReads == 1) {
+            cancelledRead.complete();
+            throw const CloudOperationCancelled();
+          }
+          return lateRead.future;
+        }
+        return OfflineQuerySnapshot({});
+      };
+      final pending = OfflineQuerySnapshot({
+        'pending-device': {
+          'status': 'pending',
+          'public_key': base64Encode(Uint8List(32)),
+          'created_at': '2026-01-01T00:00:00Z',
+        },
+      });
+      await tester.runAsync(() async {
+        events.add(pending);
+        await cancelledRead.future;
+        await pumpEventQueue();
+      });
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(AuthService.cloudRecovery.state.value, CloudSessionState.ready);
+      await tester.runAsync(() async {
+        events.add(pending);
+        await waitUntil(() => approvalReads == 2);
+      });
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() async {
+        lateRead.complete(OfflineQuerySnapshot({}));
+        await pumpEventQueue();
+      });
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(tester.takeException(), isNull);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  });
+
+  group('login recovery provider metadata', () {
+    late StreamController<DocumentSnapshot<Map<String, dynamic>>> userEvents;
+    final originalProviders = {
+      'provider': 'email',
+      'linkedProviders': {'google': <String, dynamic>{}},
+    };
+    final changedProviders = {
+      'provider': 'github',
+      'linkedProviders': {
+        'facebook': <String, dynamic>{},
+        'apple.com': <String, dynamic>{},
+      },
+    };
+
+    setUp(() async {
+      // Native notification plugins are outside these in-process sync tests.
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      userEvents = StreamController.broadcast();
+      backend.firestore.documentEvents['users/account-a'] = userEvents;
+      backend.firestore.response = (_, _) async =>
+          OfflineSnapshot(value: originalProviders);
+      await AuthService.refreshLinkedProviders();
+      backend.firestore.queryResponse = (path, _) async => OfflineQuerySnapshot(
+        path.endsWith('/notes')
+            ? {
+                'remote-note': {
+                  ...payload(),
+                  cloudSyncCommittedAtField: Timestamp.fromDate(
+                    DateTime.utc(2026, 9, 11),
+                  ),
+                },
+              }
+            : {},
+      );
+    });
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    for (final cached in [false, true]) {
+      test(
+        '${cached ? 'cached' : 'pending'} profile reads keep recovery ready until acknowledgement',
+        () async {
+          backend.firestore.response = (path, options) async {
+            expect(options?.source, Source.server);
+            expect(path, 'users/account-a');
+            await waitUntil(() => backend.firestore.writes.contains(path));
+            return OfflineSnapshot(
+              value: changedProviders,
+              cached: cached,
+              pending: !cached,
+            );
+          };
+          for (var attempt = 0; attempt < 3; attempt++) {
+            await AuthService.cloudRecovery.onReady(
+              AuthService.captureSession(),
+            );
+            expect(
+              AuthService.cloudRecovery.state.value,
+              CloudSessionState.ready,
+            );
+            expect(e2ee.isCryptoReady, isTrue);
+            expect(AuthService.sessionInvalid.value, isFalse);
+            expect(AppState.noteCloudSyncCheckpoint?.bootstrapped, isTrue);
+            expect(await Note.count(NoteType.all), 1);
+            expect(
+              AuthService.getLinkedProviderIds(),
+              unorderedEquals(['google.com', 'password']),
+            );
+          }
+          final readsBeforeAcknowledgement = backend.firestore.reads.length;
+          for (final snapshot in [
+            OfflineSnapshot(value: changedProviders, pending: true),
+            OfflineSnapshot(value: changedProviders, cached: true),
+            OfflineSnapshot(value: {'provider': 123, 'linkedProviders': {}}),
+          ]) {
+            userEvents.add(snapshot);
+            await pumpEventQueue();
+            expect(
+              AuthService.getLinkedProviderIds(),
+              unorderedEquals(['google.com', 'password']),
+            );
+          }
+          userEvents.add(OfflineSnapshot(value: changedProviders));
+          await pumpEventQueue();
+          expect(
+            AuthService.getLinkedProviderIds(),
+            unorderedEquals(['github.com', 'facebook.com', 'apple.com']),
+          );
+          expect(backend.firestore.reads.length, readsBeforeAcknowledgement);
+          expect(
+            AuthService.cloudRecovery.state.value,
+            CloudSessionState.ready,
+          );
+        },
+      );
+    }
+
+    test(
+      'transport failures still pause recovery and retain providers',
+      () async {
+        await AuthService.cloudRecovery.onReady(AuthService.captureSession());
+        backend.firestore.response = (_, _) async =>
+            throw TimeoutException('offline');
+        await AuthService.refreshLinkedProviders();
+        expect(
+          AuthService.cloudRecovery.state.value,
+          CloudSessionState.unavailable,
+        );
+        expect(
+          AuthService.getLinkedProviderIds(),
+          unorderedEquals(['google.com', 'password']),
+        );
+        expect(e2ee.isCryptoReady, isTrue);
+        expect(AuthService.sessionInvalid.value, isFalse);
+      },
+    );
+
+    test(
+      'late reads and listener events cannot update another account',
+      () async {
+        await AuthService.cloudRecovery.onReady(AuthService.captureSession());
+        final pending = Completer<DocumentSnapshot<Map<String, dynamic>>>();
+        backend.firestore.response = (_, _) => pending.future;
+        final oldRefresh = AuthService.refreshLinkedProviders();
+        backend.auth.currentUser = OfflineUser('account-b');
+        backend.firestore.response = (_, _) async =>
+            OfflineSnapshot(value: changedProviders);
+        await AuthService.refreshLinkedProviders();
+        pending.complete(OfflineSnapshot(value: originalProviders));
+        await oldRefresh;
+        userEvents.add(OfflineSnapshot(value: originalProviders));
+        userEvents.addError(TimeoutException('old account listener'));
+        await pumpEventQueue();
+        expect(
+          AuthService.getLinkedProviderIds(),
+          unorderedEquals(['github.com', 'facebook.com', 'apple.com']),
+        );
+        expect(AuthService.cloudRecovery.state.value, CloudSessionState.ready);
+      },
+    );
+  });
+
+  test(
+    'upgraded note identities survive repeated bootstrap refreshes',
+    () async {
+      final originals = <Note>[];
+      for (var i = 1; i <= 3; i++) {
+        final note = Note(
+          id: i,
+          syncId: 'remote-$i',
+          title: 'Note $i',
+          content: '[{"insert":"Body\\n"}]',
+        );
+        await note.save(false);
+        await NoteSyncTrack(
+          localId: i,
+          remoteId: 'remote-$i',
+          action: SyncAction.upload,
+          status: SyncStatus.synced,
+        ).save();
+        originals.add(note);
+      }
+      // A pre-stable-ID database still has its historical remote track IDs.
+      await db.update(Note.model, {'sync_id': null});
+      await SyncIdentityMigration.migrate(db);
+      final remoteNotes = {
+        for (final note in originals)
+          note.syncId!: {
+            ...payload(),
+            'local_id': note.id,
+            'title': note.title,
+          },
+      };
+      for (var pass = 0; pass < 3; pass++) {
+        AppState.noteCloudSyncCheckpoint = null;
+        var queries = 0;
+        backend.firestore.queryResponse = (_, _) async =>
+            OfflineQuerySnapshot(queries++ == 0 ? {} : remoteNotes);
+        expect(
+          await NoteSyncService().refreshWithOutcome(),
+          SyncRefreshOutcome.complete,
+        );
+        expect(await Note.count(NoteType.all), 3);
+        expect(await NoteSyncTrack.count(), 3);
+        for (final note in originals) {
+          expect((await Note.findById(note.id!))!.syncId, note.syncId);
+        }
+      }
+    },
+  );
+
+  test(
+    'lost upload acknowledgement retries the same remote document',
+    () async {
+      allowPaid();
+      final note = Note(
+        id: 101,
+        title: 'Offline',
+        content: '[{"insert":"Offline\\n"}]',
+      );
+      await note.save();
+      final remoteId = note.syncId!;
+      backend.firestore.commit = () async {
+        backend.firestore.documents['users/account-a/notes/$remoteId'] = {
+          ...payload(),
+          'title': 'Offline',
+        };
+        throw TimeoutException('acknowledgement lost after server commit');
+      };
+      await NoteSyncService().sync(true);
+      expect((await NoteSyncTrack.getByLocalId(101))!.remoteId, remoteId);
+      expect(
+        (await NoteSyncTrack.getByLocalId(101))!.status,
+        SyncStatus.pending,
+      );
+      await NoteSyncService().dispose();
+      backend.firestore.commit = null;
+      AuthService.cloudRecovery.state.value = CloudSessionState.ready;
+      await NoteSyncService().sync(true);
+      expect(
+        backend.firestore.documents.keys.where(
+          (key) => key.contains('/notes/'),
+        ),
+        hasLength(1),
+      );
+      expect(await Note.count(NoteType.all), 1);
+      expect(
+        (await NoteSyncTrack.getByLocalId(101))!.status,
+        SyncStatus.synced,
+      );
+    },
+  );
+
+  testWidgets(
+    'Home keeps one current card when loading precedes a creation event',
+    (tester) async {
+      final proxy = _TransactionBarrierDatabase(db);
+      late Completer<void> entered, release;
+      late Future<bool> remoteApply;
+      await tester.runAsync(() async {
+        AppState.db = proxy;
+        NoteSortService.canReceiveCloudOverride = false;
+        NoteSortService.canPushCloudOverride = false;
+        entered = Completer<void>();
+        release = Completer<void>();
+        proxy.afterTransaction = () async {
+          if ((await db.query(Note.model)).isNotEmpty) {
+            proxy.afterTransaction = null;
+            entered.complete();
+            await release.future;
+          }
+        };
+        backend.firestore.response = (_, _) async =>
+            OfflineSnapshot(value: payload());
+        remoteApply = NoteSyncService().retryFailedRemoteNote('remote-note');
+        await entered.future;
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: betterKeepLocalizationDelegates,
+          supportedLocales: betterKeepSupportedLocales,
+          home: const Scaffold(body: Notes()),
+        ),
+      );
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(find.byType(NoteCard), findsOneWidget);
+      late Note newer;
+      await tester.runAsync(() async {
+        newer = (await Note.findById(101))!;
+        newer.title = 'Newer local edit';
+        newer.pinned = true;
+        await newer.save();
+        release.complete();
+        expect(await remoteApply, isTrue);
+      });
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(NoteCard), findsOneWidget);
+      expect(tester.widget<NoteCard>(find.byType(NoteCard)).note, same(newer));
+      final stale = Note(id: 101, title: 'Old creation', archived: true);
+      stale.notify('created', false);
+      stale.notify('created', false);
+      await tester.pump();
+      expect(find.byType(NoteCard), findsOneWidget);
+      expect(
+        tester.widget<NoteCard>(find.byType(NoteCard)).note.title,
+        'Newer local edit',
+      );
+      await tester.runAsync(() async {
+        expect(await Note.count(NoteType.all), 1);
+        expect(
+          (await NoteSyncTrack.getByLocalId(101))!.status,
+          SyncStatus.pending,
+        );
+        // Equal content in a genuinely different note must remain separate.
+        await Note(id: 102, title: newer.title, content: newer.content).save();
+      });
+      await tester.pump();
+      expect(find.byType(NoteCard), findsNWidgets(2));
+      await tester.runAsync(() => newer.delete());
+      await tester.pump();
+      expect(find.byType(NoteCard), findsOneWidget);
+      expect(tester.widget<NoteCard>(find.byType(NoteCard)).note.id, 102);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    },
+  );
 
   test('stale editor models adopt chained repairs before saving', () async {
     final old = '${dir.path}/missing.png';
@@ -1148,6 +2045,7 @@ class _TransactionBarrierDatabase implements Database {
   _TransactionBarrierDatabase(this.db);
   final Database db;
   Future<void> Function()? beforeTransaction;
+  Future<void> Function()? afterTransaction;
   int interceptions = 0;
   @override
   Future<T> transaction<T>(
@@ -1160,7 +2058,9 @@ class _TransactionBarrierDatabase implements Database {
       interceptions++;
       await hook();
     }
-    return db.transaction(action, exclusive: exclusive);
+    final result = await db.transaction(action, exclusive: exclusive);
+    await afterTransaction?.call();
+    return result;
   }
 
   @override

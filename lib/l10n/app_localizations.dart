@@ -6629,6 +6629,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept.'**
   String get localEncryptionMissing;
+
+  /// No description provided for @syncCheckingConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking connection…'**
+  String get syncCheckingConnection;
+
+  /// No description provided for @syncPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing sync…'**
+  String get syncPreparing;
+
+  /// No description provided for @syncUploadRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes saved on this device. Uploading requires Pro.'**
+  String get syncUploadRestricted;
+
+  /// No description provided for @syncPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync paused. Please retry.'**
+  String get syncPaused;
 }
 
 class _AppLocalizationsDelegate
