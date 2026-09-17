@@ -506,7 +506,10 @@ void main() {
         await tester.pump();
         expect(find.byType(CircularProgressIndicator), findsNothing);
         expect(SyncPresentation.instance.value.phase, SyncPhase.unavailable);
-        expect(find.byType(SnackBar), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text('No connection available.'), findsOneWidget);
+        expect(find.byKey(const ValueKey('sync_progress')), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
         await tester.pumpWidget(const SizedBox());
         debugDefaultTargetPlatformOverride = null;
       },

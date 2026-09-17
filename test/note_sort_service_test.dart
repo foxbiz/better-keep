@@ -1065,11 +1065,113 @@ void main() {
     },
   );
 
+  for (final laterMode in [null, NoteSortMode.updatedNewest]) {
+    test(
+      'repair preserves multiple pending moves and mode intent ($laterMode)',
+      () async {
+        await _seedPendingMoves(database, grid);
+        if (laterMode != null) await service.setMode(grid, laterMode);
+        final expectedIds = ['note-3', 'note-2', 'note-1', 'note-4'];
+        expect(service.snapshotFor(grid).orderedNoteIds, expectedIds);
+        final cloud = _FakeNoteSortCloudRepository()
+          ..enforceBaseRevision = true;
+        cloud.manifests[grid.key] = {
+          ..._orderManifest(grid, 'broken', 4),
+          'sort_mode': NoteSortMode.createdNewest.name,
+        };
+        NoteSortService.cloudRepositoryOverride = cloud;
+        NoteSortService.canReceiveCloudOverride = true;
+        NoteSortService.canPushCloudOverride = true;
+
+        expect(
+          await service.receiveRemoteContextForTesting(grid.key),
+          'missingChunks',
+        );
+        await service.flushCloudForTesting();
+
+        final repaired = service.snapshotFor(grid);
+        final expectedMode = laterMode ?? NoteSortMode.custom;
+        expect(repaired.orderedNoteIds, expectedIds);
+        expect(repaired.mode, expectedMode);
+        expect(repaired.dirty, isFalse);
+        expect(
+          cloud.chunks[repaired.revision]!.single['note_ids'],
+          expectedIds,
+        );
+        expect(cloud.manifests[grid.key]?['sort_mode'], expectedMode.name);
+        expect(cloud.commitCalls, 1);
+        expect(
+          await database.query(NoteSortService.operationTableName),
+          isEmpty,
+        );
+      },
+    );
+  }
+
+  for (final pendingMembership in [false, true]) {
+    test(
+      'repair preserves server mode with membership edits: $pendingMembership',
+      () async {
+        await _insertNote(
+          database,
+          id: 2,
+          updatedAt: DateTime.utc(2026, 7, 24),
+        );
+        expect(service.snapshotFor(grid).mode, NoteSortMode.custom);
+        expect(
+          await database.query(NoteSortService.operationTableName),
+          isEmpty,
+        );
+        if (pendingMembership) {
+          final deleted = Note(id: 1, syncId: 'note-1');
+          final inserted = (await Note.get(NoteType.all)).single;
+          for (final event in [
+            ModelEvent('created', deleted),
+            ModelEvent('created', inserted),
+            ModelEvent('deleted', deleted),
+          ]) {
+            await service.applyNoteEventForTesting(event);
+          }
+        }
+        final cloud = _FakeNoteSortCloudRepository()
+          ..enforceBaseRevision = true;
+        cloud.manifests[grid.key] = {
+          ..._orderManifest(grid, 'broken', 1),
+          'sort_mode': NoteSortMode.createdNewest.name,
+        };
+        NoteSortService.cloudRepositoryOverride = cloud;
+        NoteSortService.canReceiveCloudOverride = true;
+        NoteSortService.canPushCloudOverride = true;
+
+        expect(
+          await service.receiveRemoteContextForTesting(grid.key),
+          'missingChunks',
+        );
+        await service.flushCloudForTesting();
+
+        final repaired = service.snapshotFor(grid);
+        expect(repaired.mode, NoteSortMode.createdNewest);
+        expect(repaired.orderedNoteIds, ['note-2']);
+        expect(repaired.dirty, isFalse);
+        expect(cloud.manifests[grid.key]?['sort_mode'], 'createdNewest');
+        expect(cloud.chunks[repaired.revision]!.single['note_ids'], ['note-2']);
+        expect(
+          await database.query(NoteSortService.operationTableName),
+          isEmpty,
+        );
+      },
+    );
+  }
+
   test(
     'failed repair retains its snapshot and operations until retry commits',
     () async {
-      await _seedImportedOrder(database, grid);
+      await _seedPendingMoves(database, grid);
       await service.setMode(grid, NoteSortMode.updatedNewest);
+      final expectedIds = service.snapshotFor(grid).orderedNoteIds;
+      final operations = await database.query(
+        NoteSortService.operationTableName,
+      );
       final cloud = _FakeNoteSortCloudRepository()
         ..enforceBaseRevision = true
         ..failWrites = true;
@@ -1082,15 +1184,20 @@ void main() {
       final candidate = service.snapshotFor(grid);
       expect(candidate.dirty, isTrue);
       expect(candidate.baseRevision, 'broken');
+      expect(candidate.orderedNoteIds, expectedIds);
       expect(
         await database.query(NoteSortService.operationTableName),
-        isNotEmpty,
+        operations,
       );
       expect(cloud.manifests[grid.key]?['revision'], 'broken');
       cloud.failWrites = false;
       await service.flushCloudForTesting();
       expect(service.snapshotFor(grid).revision, candidate.revision);
       expect(service.snapshotFor(grid).dirty, isFalse);
+      expect(service.snapshotFor(grid).orderedNoteIds, expectedIds);
+      expect(service.snapshotFor(grid).mode, NoteSortMode.updatedNewest);
+      expect(cloud.chunks[candidate.revision]!.single['note_ids'], expectedIds);
+      expect(cloud.manifests[grid.key]?['sort_mode'], 'updatedNewest');
       expect(await database.query(NoteSortService.operationTableName), isEmpty);
     },
   );
@@ -1983,6 +2090,42 @@ Future<List<Note>> _seedImportedOrder(
     ),
   );
   return Note.get(NoteType.all);
+}
+
+Future<void> _seedPendingMoves(
+  Database database,
+  NoteOrderContext context,
+) async {
+  for (var id = 1; id <= 4; id++) {
+    await _insertNote(database, id: id, updatedAt: DateTime.utc(2026, 7, id));
+  }
+  final service = NoteSortService();
+  await service.applyRemoteSnapshotForTesting(
+    NoteOrderSnapshot(
+      context: context,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['note-1', 'note-2', 'note-3', 'note-4'],
+      revision: 'before-offline-edits',
+      baseRevision: 'before-offline-edits',
+      updatedAt: DateTime.utc(2026, 7, 1),
+      hydrated: true,
+    ),
+  );
+  final notes = await Note.get(NoteType.all);
+  await service.reorderVisibleNotes(
+    context: context,
+    draggedId: 1,
+    targetId: 2,
+    placeAfter: true,
+    visibleNotes: notes,
+  );
+  await service.reorderVisibleNotes(
+    context: context,
+    draggedId: 3,
+    targetId: 2,
+    placeAfter: false,
+    visibleNotes: notes,
+  );
 }
 
 Future<void> _insertNote(

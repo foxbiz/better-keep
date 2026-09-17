@@ -1415,8 +1415,9 @@ class NoteSortService {
   (List<String>, NoteSortMode) _replayOrderOperations(
     Iterable<String> base,
     NoteSortMode mode,
-    List<NoteOrderOperation> operations,
-  ) {
+    List<NoteOrderOperation> operations, {
+    bool applyMoves = true,
+  }) {
     final ids = base.toList();
     for (final operation in operations) {
       switch (operation.type) {
@@ -1430,19 +1431,21 @@ class NoteSortService {
         case NoteOrderOperationType.moveNote:
           final noteId = operation.noteId;
           if (noteId == null) continue;
-          ids.remove(noteId);
-          final beforeIndex = operation.beforeId == null
-              ? -1
-              : ids.indexOf(operation.beforeId!);
-          final afterIndex = operation.afterId == null
-              ? -1
-              : ids.indexOf(operation.afterId!);
-          if (beforeIndex >= 0) {
-            ids.insert(beforeIndex, noteId);
-          } else if (afterIndex >= 0) {
-            ids.insert(afterIndex + 1, noteId);
-          } else {
-            ids.add(noteId);
+          if (applyMoves) {
+            ids.remove(noteId);
+            final beforeIndex = operation.beforeId == null
+                ? -1
+                : ids.indexOf(operation.beforeId!);
+            final afterIndex = operation.afterId == null
+                ? -1
+                : ids.indexOf(operation.afterId!);
+            if (beforeIndex >= 0) {
+              ids.insert(beforeIndex, noteId);
+            } else if (afterIndex >= 0) {
+              ids.insert(afterIndex + 1, noteId);
+            } else {
+              ids.add(noteId);
+            }
           }
           mode = operation.mode ?? mode;
       }
@@ -1882,8 +1885,10 @@ class NoteSortService {
       if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
       final (orderedIds, mode) = _replayOrderOperations(
         ids,
-        local?.mode ?? manifest.mode,
+        manifest.mode,
         operations,
+        // Local snapshots already contain their journaled moves.
+        applyMoves: local == null,
       );
       final repaired = NoteOrderSnapshot(
         context: manifest.context,

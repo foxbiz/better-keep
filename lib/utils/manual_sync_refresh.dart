@@ -78,7 +78,9 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
   if (!context.mounted) return;
   switch (outcome) {
     case SyncRefreshOutcome.unavailable:
-      snackbar(context.l10n.noConnectionAvailable);
+      if (!AppState.showSyncProgress) {
+        snackbar(context.l10n.noConnectionAvailable);
+      }
     case SyncRefreshOutcome.deferred:
       snackbar(
         AuthService.sessionInvalid.value
