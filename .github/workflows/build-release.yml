@@ -130,6 +130,9 @@ jobs:
       - name: Build APK
         run: flutter build apk --release --dart-define-from-file=.env
 
+      - name: Verify shrunk Android resources
+        run: node tool/verify_android_release_resources.mjs
+
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:

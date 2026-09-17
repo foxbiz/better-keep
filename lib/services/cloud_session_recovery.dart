@@ -90,6 +90,7 @@ class CloudSessionRecovery {
   int _accountGeneration = 0;
   bool _foreground = true;
   Future<CloudSessionState>? _running;
+  Future<CloudSessionState>? _recheck;
   Future<void>? _resuming;
   bool _needsResume = true;
 
@@ -104,6 +105,8 @@ class CloudSessionRecovery {
     stop();
     _uid = uid;
     state.value = CloudSessionState.pending;
+    // Pending may already be the state; publish the newly available session.
+    sessionRevision.value++;
   }
 
   Future<CloudSessionState> check() {
@@ -148,6 +151,26 @@ class CloudSessionRecovery {
       }
     })();
     _running = operation;
+    return operation;
+  }
+
+  /// Initialization may finish while an earlier check is still observing the
+  /// missing device identity. Queue one fresh check instead of reusing it.
+  Future<CloudSessionState> recheckAfterInitialization() {
+    final queued = _recheck;
+    if (queued != null) return queued;
+    final current = captureSession();
+    final running = _running;
+    late final Future<CloudSessionState> operation;
+    operation =
+        (() async {
+          if (running != null) await running;
+          if (!current()) return CloudSessionState.pending;
+          return await check();
+        })().whenComplete(() {
+          if (identical(_recheck, operation)) _recheck = null;
+        });
+    _recheck = operation;
     return operation;
   }
 
@@ -224,6 +247,7 @@ class CloudSessionRecovery {
     _accountGeneration++;
     _uid = null;
     _running = null;
+    _recheck = null;
     _resuming = null;
     _needsResume = true;
     _retry.cancel();

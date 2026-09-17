@@ -200,6 +200,7 @@ class DeviceManager {
   final Uuid _uuid = const Uuid();
   int _sessionGeneration = 0;
   String? _publishedCapabilities;
+  String? _lastAuthorizationDiagnostic;
   final Map<String, Future<void>> _capabilityPublications = {};
 
   /// Stream subscriptions for cleanup
@@ -245,6 +246,7 @@ class DeviceManager {
   void invalidateSession() {
     _sessionGeneration++;
     _publishedCapabilities = null;
+    _lastAuthorizationDiagnostic = null;
     _capabilityPublications.clear();
     _cachedUMK = null;
     hasUMK.value = false;
@@ -271,10 +273,11 @@ class DeviceManager {
   }
 
   Future<DeviceAuthorization> readServerAuthorization() async {
+    final current = _captureSession();
     final uid = _currentUser?.uid;
     final deviceId = await _secureStorage.getDeviceId();
     if (uid == null || deviceId == null || _currentUser?.uid != uid) {
-      return DeviceAuthorization.unavailable;
+      return DeviceAuthorization.initializing;
     }
     final snapshot = await _firestore
         .collection('users')
@@ -283,19 +286,45 @@ class DeviceManager {
         .doc(deviceId)
         .get(const GetOptions(source: Source.server))
         .timeout(const Duration(seconds: 10));
-    if (_currentUser?.uid != uid ||
-        !isAuthoritativeDeviceSnapshot(
-          isFromCache: snapshot.metadata.isFromCache,
-          hasPendingWrites: snapshot.metadata.hasPendingWrites,
-        )) {
-      return DeviceAuthorization.unavailable;
+    if (!current()) return DeviceAuthorization.unavailable;
+    final metadata = snapshot.metadata;
+    DeviceAuthorization result(DeviceAuthorization authorization) {
+      final diagnostic =
+          '${authorization.name}: '
+          'cache=${metadata.isFromCache}, pendingWrites=${metadata.hasPendingWrites}';
+      if (_lastAuthorizationDiagnostic != diagnostic) {
+        _lastAuthorizationDiagnostic = diagnostic;
+        AppLogger.log('[DEVICE_AUTH] $diagnostic');
+      }
+      return authorization;
     }
-    if (!snapshot.exists) return DeviceAuthorization.deleted;
+
+    if (!isAuthoritativeDeviceSnapshot(
+      isFromCache: snapshot.metadata.isFromCache,
+      hasPendingWrites: snapshot.metadata.hasPendingWrites,
+    )) {
+      return result(DeviceAuthorization.unconfirmed);
+    }
+    if (!snapshot.exists) {
+      // Registration persists its identity before the server write. Do not
+      // treat that unconfirmed identity as a previously deleted device.
+      final unconfirmed =
+          await _secureStorage.getCachedDeviceStatus() == null &&
+          await _secureStorage.wasSignInInterrupted();
+      if (!current()) return DeviceAuthorization.unavailable;
+      return result(
+        unconfirmed
+            ? DeviceAuthorization.initializing
+            : DeviceAuthorization.deleted,
+      );
+    }
     final device = DeviceDocument.fromFirestore(snapshot);
-    if (device.isRevoked) return DeviceAuthorization.revoked;
-    return device.isApproved
-        ? DeviceAuthorization.approved
-        : DeviceAuthorization.pending;
+    if (device.isRevoked) return result(DeviceAuthorization.revoked);
+    return result(
+      device.isApproved
+          ? DeviceAuthorization.approved
+          : DeviceAuthorization.pending,
+    );
   }
 
   /// Initializes the device manager.
@@ -343,14 +372,7 @@ class DeviceManager {
                   )) {
                 return;
               }
-              unawaited(
-                E2EEService.instance
-                    .verifyLocalSessionAuthorization(isCurrent: current)
-                    .catchError((Object error, StackTrace stack) {
-                      _handleListenerError(error, stack, current);
-                      return DeviceAuthorization.unavailable;
-                    }),
-              );
+              unawaited(_verifyCurrentDevice(current));
             },
             onError: (Object error, StackTrace stack) {
               if (!current()) return;
@@ -372,6 +394,20 @@ class DeviceManager {
       AuthService.cloudRecovery.connectionLost();
     }
     AppLogger.error('E2EE: Device listener deferred', error, stack);
+  }
+
+  Future<void> _verifyCurrentDevice(bool Function() current) async {
+    try {
+      final authorization = await E2EEService.instance
+          .verifyLocalSessionAuthorization(isCurrent: current);
+      if (current() &&
+          authorization == DeviceAuthorization.approved &&
+          AuthService.cloudRecovery.state.value != CloudSessionState.ready) {
+        await E2EEService.instance.recheckCloudReadinessAfterDeviceChange();
+      }
+    } catch (error, stack) {
+      _handleListenerError(error, stack, current);
+    }
   }
 
   /// Starts listening for status changes and pending approvals for the current device.
@@ -543,7 +579,9 @@ class DeviceManager {
   Future<bool> deviceExistsOnServer() async {
     final authorization = await readServerAuthorization();
     return authorization != DeviceAuthorization.deleted &&
-        authorization != DeviceAuthorization.unavailable;
+        authorization != DeviceAuthorization.unavailable &&
+        authorization != DeviceAuthorization.unconfirmed &&
+        authorization != DeviceAuthorization.initializing;
   }
 
   /// Checks current device authorization status and triggers revocation if needed.
@@ -1090,6 +1128,7 @@ class DeviceManager {
   Future<void> dispose() async {
     _sessionGeneration++;
     _publishedCapabilities = null;
+    _lastAuthorizationDiagnostic = null;
     _capabilityPublications.clear();
     final subscriptions = [
       _currentDeviceStatusSubscription,
@@ -1209,20 +1248,7 @@ class DeviceManager {
                   )) {
                 return;
               }
-              unawaited(
-                E2EEService.instance
-                    .verifyLocalSessionAuthorization(isCurrent: current)
-                    .then((authorization) {
-                      if (current() &&
-                          authorization == DeviceAuthorization.approved) {
-                        unawaited(AuthService.cloudRecovery.check());
-                      }
-                    })
-                    .catchError(
-                      (Object error, StackTrace stack) =>
-                          _handleListenerError(error, stack, current),
-                    ),
-              );
+              unawaited(_verifyCurrentDevice(current));
             },
             onError: (Object error, StackTrace stack) {
               if (!current()) return;

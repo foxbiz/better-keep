@@ -6,6 +6,82 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('session start notifies after the new session is installed', () {
+    final recovery = CloudSessionRecovery(
+      verify: (_) async => CloudSessionState.ready,
+      onReady: (_) async {},
+      onFailure: (_, _) {},
+    );
+    final sessions = <bool>[];
+    recovery.sessionRevision.addListener(
+      () => sessions.add(recovery.hasSession),
+    );
+    recovery.start('account-a');
+    expect(sessions.last, isTrue);
+    final count = sessions.length;
+    recovery.start('account-a');
+    expect(sessions.length, count);
+    final current = recovery.captureSession();
+    recovery.start('account-b');
+    expect(current(), isFalse);
+    expect(sessions.last, isTrue);
+    recovery.stop();
+    expect(sessions.last, isFalse);
+  });
+
+  test(
+    'initialization queues one fresh check after an unfinished check',
+    () async {
+      final first = Completer<CloudSessionState>();
+      var checks = 0;
+      var resumes = 0;
+      final recovery = CloudSessionRecovery(
+        verify: (_) async =>
+            ++checks == 1 ? await first.future : CloudSessionState.ready,
+        onReady: (_) async {
+          resumes++;
+        },
+        onFailure: (_, _) => fail('Initialization is not a connection failure'),
+      )..setForeground(false);
+      addTearDown(recovery.stop);
+      recovery.start('account-a');
+      final checking = recovery.check();
+      final queued = recovery.recheckAfterInitialization();
+      expect(identical(queued, recovery.recheckAfterInitialization()), isTrue);
+      first.complete(CloudSessionState.pending);
+      expect(await checking, CloudSessionState.pending);
+      expect(await queued, CloudSessionState.ready);
+      await pumpEventQueue();
+      expect(checks, 2);
+      expect(resumes, 1);
+    },
+  );
+
+  test(
+    'queued initialization check cannot verify a different account',
+    () async {
+      final first = Completer<CloudSessionState>();
+      var checks = 0;
+      final recovery = CloudSessionRecovery(
+        verify: (_) {
+          checks++;
+          return first.future;
+        },
+        onReady: (_) async {},
+        onFailure: (_, _) {},
+      )..setForeground(false);
+      addTearDown(recovery.stop);
+      recovery.start('account-a');
+      final checking = recovery.check();
+      final queued = recovery.recheckAfterInitialization();
+      recovery.start('account-b');
+      first.complete(CloudSessionState.pending);
+      await checking;
+      expect(await queued, CloudSessionState.pending);
+      expect(checks, 1);
+    },
+  );
+
   testWidgets('cancelled partial startup retries in the current account', (
     tester,
   ) async {

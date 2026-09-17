@@ -4,6 +4,8 @@
 /// It manages initialization, key management, and encryption operations.
 library;
 
+import 'dart:async';
+
 import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/cloud_operation.dart';
@@ -189,7 +191,14 @@ class E2EEService {
       return initializeReviewSession();
     }
 
-    return _initializationGate.run(_initializeStandardSession);
+    return _initializationGate.run(() async {
+      final current = AuthService.captureSession();
+      final generation = _sessionGeneration;
+      await _initializeStandardSession();
+      if (current() && generation == _sessionGeneration) {
+        unawaited(AuthService.cloudRecovery.recheckAfterInitialization());
+      }
+    });
   }
 
   Future<void> _initializeStandardSession() async {
@@ -413,6 +422,8 @@ class E2EEService {
               await _deviceManager.startListeningForApproval(
                 isCurrent: current,
               );
+            case DeviceAuthorization.initializing:
+            case DeviceAuthorization.unconfirmed:
             case DeviceAuthorization.unavailable:
               break;
           }
@@ -425,6 +436,24 @@ class E2EEService {
         });
     _authorizationRun = operation;
     return operation;
+  }
+
+  /// Recovery and approval must not reuse authorization read before the change.
+  Future<CloudSessionState> recheckCloudReadinessAfterDeviceChange() async {
+    final current = AuthService.captureSession();
+    final generation = _sessionGeneration;
+    final authorization = _authorizationRun;
+    if (authorization != null) {
+      // Its caller owns error reporting; a fresh check is still required.
+      await authorization.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {},
+      );
+    }
+    if (!current() || generation != _sessionGeneration) {
+      return CloudSessionState.pending;
+    }
+    return AuthService.cloudRecovery.recheckAfterInitialization();
   }
 
   /// Re-checks device status (e.g., after coming back from background).
@@ -458,7 +487,7 @@ class E2EEService {
         status.value == E2EEStatus.pendingApproval) {
       status.value = E2EEStatus.ready;
       _secureStorage.cacheDeviceStatus('approved');
-      AuthService.cloudRecovery.check();
+      unawaited(recheckCloudReadinessAfterDeviceChange());
     }
   }
 

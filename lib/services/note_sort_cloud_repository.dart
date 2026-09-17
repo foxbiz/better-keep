@@ -133,8 +133,9 @@ class FirestoreNoteSortCloudRepository implements NoteSortCloudRepository {
               ? chunkCountValue
               : 0;
           if (current.exists &&
-              previousRevision != baseRevision &&
-              previousRevision != revision) {
+              (currentData?['schema_version'] != schemaVersion ||
+                  (previousRevision != baseRevision &&
+                      previousRevision != revision))) {
             return NoteSortCloudCommitResult.conflict(
               previousRevision: previousRevision,
               previousChunkCount: previousChunkCount,

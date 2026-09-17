@@ -10,11 +10,13 @@ import 'package:better_keep/services/e2ee/device_authorization.dart';
 
 import 'package:better_keep/services/cloud_read.dart';
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/utils/logger.dart';
@@ -410,6 +412,8 @@ class RecoveryKeyService {
         umk,
         onStatusChange: onStatusChange,
       );
+      requireCloudOperation();
+      unawaited(E2EEService.instance.recheckCloudReadinessAfterDeviceChange());
 
       AppLogger.log('E2EE: Recovery successful');
       return true;

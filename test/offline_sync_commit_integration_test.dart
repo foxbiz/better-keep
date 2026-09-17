@@ -221,6 +221,118 @@ void main() {
     );
   }
 
+  group('empty cloud notes', () {
+    for (final sample in [
+      (name: 'blank', title: '', text: '', content: '[{"insert":"\\n"}]'),
+      (
+        name: 'whitespace',
+        title: '  ',
+        text: '\n ',
+        content: '[{"insert":"  \\n"}]',
+      ),
+      (
+        name: 'rich text without plain text',
+        title: '',
+        text: null,
+        content:
+            '[{"insert":"Preserved body","attributes":{"bold":true}},{"insert":"\\n"}]',
+      ),
+    ]) {
+      test(
+        '${sample.name} persists without duplicate notes or failed syncs',
+        () async {
+          final data = {
+            ...payload(),
+            'title': sample.title,
+            'plain_text': sample.text,
+            'content': sample.content,
+          };
+          final encrypted = await e2ee.noteEncryption.prepareNoteForUpload(
+            data,
+          );
+          backend.firestore.response = (_, _) async =>
+              OfflineSnapshot(value: encrypted);
+          for (var attempt = 0; attempt < 2; attempt++) {
+            expect(
+              await NoteSyncService().retryFailedRemoteNote('remote-note'),
+              isTrue,
+            );
+          }
+          final note = (await Note.findById(101))!;
+          expect(note.title, sample.title);
+          expect(note.plainText, switch (sample.name) {
+            'blank' => '\n',
+            'whitespace' => '  \n',
+            _ => 'Preserved body\n',
+          });
+          expect(note.content, sample.content);
+          expect(note.syncId, 'remote-note');
+          expect(await Note.count(NoteType.all), 1);
+          expect(
+            (await NoteSyncTrack.getByLocalId(101))!.status,
+            SyncStatus.synced,
+          );
+          expect(
+            await RemoteContentRetryLedger().get('account-a', 'remote-note'),
+            isNull,
+          );
+          expect(NoteSyncService().syncFailed.value, isEmpty);
+        },
+      );
+    }
+
+    test(
+      'saved empty notes support Trash, restore, and editing; drafts are discarded',
+      () async {
+        backend.firestore.response = (_, _) async => OfflineSnapshot(
+          value: {
+            ...payload(),
+            'title': '',
+            'plain_text': '',
+            'content': '[{"insert":"\\n"}]',
+          },
+        );
+        expect(
+          await NoteSyncService().retryFailedRemoteNote('remote-note'),
+          isTrue,
+        );
+        final note = (await Note.findById(101))!;
+        await note.moveToTrash();
+        expect((await Note.findById(101))!.trashed, isTrue);
+        await note.restoreFromTrash();
+        expect((await Note.findById(101))!.trashed, isFalse);
+        expect(
+          await note.saveEditorSnapshot(
+            title: 'Edited',
+            content: '[{"insert":"Body\\n"}]',
+            plainText: 'Body',
+          ),
+          101,
+        );
+        expect((await Note.findById(101))!.plainText, 'Body\n');
+        expect(
+          await note.saveEditorSnapshot(
+            title: '',
+            content: '[{"insert":"\\n"}]',
+            plainText: '',
+          ),
+          101,
+        );
+        expect((await Note.findById(101))!.isEmpty, isTrue);
+        expect(
+          (await NoteSyncTrack.getByLocalId(101))!.status,
+          SyncStatus.pending,
+        );
+        for (final id in [null, 102]) {
+          final draft = Note(id: id, title: ' ', plainText: '\n');
+          expect(await draft.save(), -1);
+        }
+        expect(await Note.count(NoteType.all), 1);
+        expect(await NoteSyncTrack.getByLocalId(102), isNull);
+      },
+    );
+  });
+
   group('recovery callback lifetimes', () {
     late Map<String, dynamic> encrypted;
     final ledger = RemoteContentRetryLedger();
@@ -285,13 +397,81 @@ void main() {
       await LabelSyncService().refresh();
     }
 
+    for (final failWrite in [false, true]) {
+      test(
+        'manual refresh retries an exhausted local apply once (write failure: $failWrite)',
+        () async {
+          encrypted = await e2ee.noteEncryption.prepareNoteForUpload({
+            ...payload(),
+            'title': '',
+            'plain_text': '',
+            'content': '[{"insert":"\\n"}]',
+          });
+          AppState.noteCloudSyncCheckpoint = const CloudSyncCheckpoint(
+            bootstrapped: true,
+          );
+          await ledger.recordManualFailure(
+            userId: 'account-a',
+            remoteDocumentId: 'remote-note',
+            revision: remoteDocumentRevision(encrypted, 'remote-note'),
+            localId: 101,
+            category: RemoteNoteFailureCategory.localApply,
+            errorCode: 'local-note-apply-failed',
+          );
+          await drainRecovery();
+          expect(await Note.findById(101), isNull);
+          expect(
+            (await ledger.get('account-a', 'remote-note'))!.isExhausted,
+            isTrue,
+          );
+          if (failWrite) {
+            await db.execute(
+              "CREATE TEMP TRIGGER reject_empty_note BEFORE INSERT ON note BEGIN SELECT RAISE(FAIL, 'synthetic write failure'); END",
+            );
+          }
+          backend.firestore.reads.clear();
+          final outcome = await NoteSyncService().refreshWithOutcome(
+            manual: true,
+          );
+          expect(
+            backend.firestore.reads.where(
+              (read) => read.$1.endsWith('/notes/remote-note'),
+            ),
+            hasLength(1),
+          );
+          if (failWrite) {
+            expect(outcome, SyncRefreshOutcome.failed);
+            expect(await Note.findById(101), isNull);
+            expect(
+              (await ledger.get('account-a', 'remote-note'))!.isExhausted,
+              isTrue,
+            );
+            await NoteSyncService().refreshWithOutcome();
+            expect(
+              backend.firestore.reads.where(
+                (read) => read.$1.endsWith('/notes/remote-note'),
+              ),
+              hasLength(1),
+            );
+          } else {
+            expect(outcome, SyncRefreshOutcome.complete);
+            expect((await Note.findById(101))!.isEmpty, isTrue);
+            expect(await ledger.get('account-a', 'remote-note'), isNull);
+            expect(NoteSyncService().syncFailed.value, isEmpty);
+            await NoteSyncService().refreshWithOutcome(manual: true);
+            expect(await Note.count(NoteType.all), 1);
+          }
+        },
+      );
+    }
+
     testWidgets(
       'refresh shows feedback while actual token verification waits',
       (tester) async {
         final token = Completer<IdTokenResult>();
         (backend.auth.currentUser! as OfflineUser).tokenResponse = () =>
             token.future;
-        AuthService.cloudRecovery.state.value = CloudSessionState.pending;
+        AuthService.cloudRecovery.state.value = CloudSessionState.unavailable;
         await tester.pumpWidget(
           MaterialApp(
             scaffoldMessengerKey: AppState.scaffoldMessengerKey,
@@ -311,6 +491,10 @@ void main() {
               ),
             ),
           ),
+        );
+        expect(
+          tester.widget<IconButton>(find.byType(IconButton)).onPressed,
+          isNotNull,
         );
         await tester.tap(find.byType(IconButton));
         await tester.pump();

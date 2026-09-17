@@ -25,6 +25,25 @@ void main() {
     Note.pinContentDecryptOverride = null;
   });
 
+  for (final id in [null, 101]) {
+    testWidgets('closing an empty note does not save or delete it (id: $id)', (
+      tester,
+    ) async {
+      final note = Note(id: id, content: '[{"insert":"\\n"}]');
+      await _pumpEditorLauncher(tester, note);
+      await tester.tap(find.text('Open editor'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Open editor'), findsOneWidget);
+      expect(note.id, id);
+      expect(note.isEmpty, isTrue);
+      // No database is installed in this suite: saving or deleting would fail
+      // and leave the editor open.
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('unchanged locked editor re-locks before its route closes', (
     tester,
   ) async {

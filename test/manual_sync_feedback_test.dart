@@ -7,6 +7,8 @@ import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'package:flutter/material.dart';
@@ -48,6 +50,50 @@ void main() {
   );
 
   for (final cardEnabled in [true, false]) {
+    testWidgets(
+      'post-login preparation remains visible with progress card $cardEnabled',
+      (tester) async {
+        final oldEncryption = E2EEService.instance.status.value;
+        addTearDown(() {
+          AuthService.postSignInState.value = PostSignInState.idle;
+          E2EEService.instance.status.value = oldEncryption;
+        });
+        AppState.set('show_sync_progress', cardEnabled);
+        E2EEService.instance.status.value = E2EEStatus.ready;
+        AuthService.postSignInState.value = PostSignInState.running(
+          PostSignInStage.auxiliaryServices,
+        );
+        AuthService.cloudRecovery.start('synthetic-account');
+        await mountFeedback(tester);
+        await tester.pump(const Duration(seconds: 10));
+        expect(
+          find.text('Preparing sync…'),
+          cardEnabled ? findsOneWidget : findsNothing,
+        );
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.text('Sync complete'), findsNothing);
+        AuthService.cloudRecovery.state.value = CloudSessionState.ready;
+        NoteSyncService().isSyncing.value = true;
+        await tester.pump();
+        expect(
+          find.text('Syncing...'),
+          cardEnabled ? findsOneWidget : findsNothing,
+        );
+        AuthService.postSignInState.value = PostSignInState.ready;
+        NoteSyncService().syncStatus.value = const SyncProgress(
+          SyncPhase.complete,
+        );
+        NoteSyncService().isSyncing.value = false;
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(
+          find.text('Sync complete'),
+          cardEnabled ? findsOneWidget : findsNothing,
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
     testWidgets(
       'restricted result is visible with progress card $cardEnabled',
       (tester) async {
