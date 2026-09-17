@@ -7,6 +7,8 @@ import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
+import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'package:flutter/material.dart';
@@ -48,6 +50,82 @@ void main() {
   );
 
   for (final cardEnabled in [true, false]) {
+    testWidgets(
+      'offline refresh shows one message with progress card $cardEnabled',
+      (tester) async {
+        final response = Completer<void>();
+        var calls = 0;
+        NoteSyncService.refreshOperationOverride = () {
+          calls++;
+          return response.future;
+        };
+        LabelSyncService.refreshOperationOverride = () async {};
+        AppState.set('show_sync_progress', cardEnabled);
+        await mountFeedback(tester);
+
+        await tester.tap(find.byType(IconButton));
+        await tester.tap(find.byType(IconButton));
+        expect(calls, 1);
+        response.completeError(TimeoutException('offline'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('No connection available.'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('sync_progress')),
+          cardEnabled ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byType(SnackBar),
+          cardEnabled ? findsNothing : findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
+    testWidgets(
+      'post-login preparation remains visible with progress card $cardEnabled',
+      (tester) async {
+        final oldEncryption = E2EEService.instance.status.value;
+        addTearDown(() {
+          AuthService.postSignInState.value = PostSignInState.idle;
+          E2EEService.instance.status.value = oldEncryption;
+        });
+        AppState.set('show_sync_progress', cardEnabled);
+        E2EEService.instance.status.value = E2EEStatus.ready;
+        AuthService.postSignInState.value = PostSignInState.running(
+          PostSignInStage.auxiliaryServices,
+        );
+        AuthService.cloudRecovery.start('synthetic-account');
+        await mountFeedback(tester);
+        await tester.pump(const Duration(seconds: 10));
+        expect(
+          find.text('Preparing sync…'),
+          cardEnabled ? findsOneWidget : findsNothing,
+        );
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.text('Sync complete'), findsNothing);
+        AuthService.cloudRecovery.state.value = CloudSessionState.ready;
+        NoteSyncService().isSyncing.value = true;
+        await tester.pump();
+        expect(
+          find.text('Syncing...'),
+          cardEnabled ? findsOneWidget : findsNothing,
+        );
+        AuthService.postSignInState.value = PostSignInState.ready;
+        NoteSyncService().syncStatus.value = const SyncProgress(
+          SyncPhase.complete,
+        );
+        NoteSyncService().isSyncing.value = false;
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(
+          find.text('Sync complete'),
+          cardEnabled ? findsOneWidget : findsNothing,
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
     testWidgets(
       'restricted result is visible with progress card $cardEnabled',
       (tester) async {
@@ -110,6 +188,32 @@ void main() {
       },
     );
   }
+
+  testWidgets('offline refresh shows the pill again after dismissal', (
+    tester,
+  ) async {
+    NoteSyncService.refreshOperationOverride = () async {
+      throw TimeoutException('offline');
+    };
+    LabelSyncService.refreshOperationOverride = () async {};
+    await mountFeedback(tester);
+    await tester.tap(find.byType(IconButton));
+    await tester.pumpAndSettle();
+    final pill = find.byKey(const ValueKey('sync_progress'));
+    expect(pill, findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+
+    await tester.drag(pill, const Offset(0, 100));
+    await tester.pumpAndSettle();
+    expect(pill, findsNothing);
+    await tester.tap(find.byType(IconButton));
+    await tester.pumpAndSettle();
+
+    expect(pill, findsOneWidget);
+    expect(find.text('No connection available.'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('label-only activity is visible without old note counts', (
     tester,
@@ -224,6 +328,7 @@ void main() {
   testWidgets('overlapping refresh taps share work and show one snackbar', (
     tester,
   ) async {
+    AppState.set('show_sync_progress', false);
     final response = Completer<void>();
     var calls = 0;
     NoteSyncService.refreshOperationOverride = () {
@@ -258,6 +363,7 @@ void main() {
   testWidgets('explicit unavailable refresh shows one localized snackbar', (
     tester,
   ) async {
+    AppState.set('show_sync_progress', false);
     await tester.pumpWidget(
       MaterialApp(
         scaffoldMessengerKey: AppState.scaffoldMessengerKey,

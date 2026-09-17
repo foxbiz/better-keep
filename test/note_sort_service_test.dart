@@ -10,6 +10,7 @@ import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:better_keep/state.dart';
@@ -992,6 +993,471 @@ void main() {
     expect(applied.dirty, isFalse);
   });
 
+  test(
+    'missing chunks repair preserves local order, pending moves, and notes',
+    () async {
+      final notes = await _seedImportedOrder(database, grid);
+      await service.reorderVisibleNotes(
+        context: grid,
+        draggedId: 1,
+        targetId: 2,
+        placeAfter: true,
+        visibleNotes: notes.where((note) => note.id! <= 2),
+      );
+      final before = await database.query('note');
+      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+
+      expect(
+        await service.receiveRemoteContextForTesting(grid.key),
+        'missingChunks',
+      );
+      await service.flushCloudForTesting();
+
+      final repaired = service.snapshotFor(grid);
+      expect(repaired.orderedNoteIds, [
+        'hidden-note',
+        'note-2',
+        'note-1',
+        'note-3',
+        'note-4',
+      ]);
+      expect(repaired.dirty, isFalse);
+      expect(repaired.baseRevision, repaired.revision);
+      expect(cloud.manifests[grid.key]?['revision'], repaired.revision);
+      expect(cloud.commitCalls, 1);
+      expect(await database.query(NoteSortService.operationTableName), isEmpty);
+      expect(await database.query('note'), before);
+      expect(await service.receiveRemoteContextForTesting(grid.key), 'valid');
+      await service.flushCloudForTesting();
+      expect(cloud.commitCalls, 1);
+    },
+  );
+
+  test(
+    'repair waits for hydration and upload permission and seeds a new folder',
+    () async {
+      final context = NoteOrderContext.label('__unlabeled__');
+      await _insertNote(database, id: 1, updatedAt: DateTime.utc(2026, 7, 21));
+      await _insertNote(database, id: 2, updatedAt: DateTime.utc(2026, 7, 22));
+      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      cloud.manifests[context.key] = _orderManifest(context, 'broken', 2);
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      await service.receiveRemoteContextForTesting(
+        context.key,
+        hydrated: false,
+      );
+      await service.flushCloudForTesting(hydrated: false);
+      expect(cloud.writeCalls, 0);
+      NoteSortService.canPushCloudOverride = false;
+      await service.flushCloudForTesting();
+      expect(cloud.writeCalls, 0);
+      NoteSortService.canPushCloudOverride = true;
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(context).orderedNoteIds, ['note-2', 'note-1']);
+      expect(service.snapshotFor(context).dirty, isFalse);
+      expect(cloud.commitCalls, 1);
+    },
+  );
+
+  for (final laterMode in [null, NoteSortMode.updatedNewest]) {
+    test(
+      'repair preserves multiple pending moves and mode intent ($laterMode)',
+      () async {
+        await _seedPendingMoves(database, grid);
+        if (laterMode != null) await service.setMode(grid, laterMode);
+        final expectedIds = ['note-3', 'note-2', 'note-1', 'note-4'];
+        expect(service.snapshotFor(grid).orderedNoteIds, expectedIds);
+        final cloud = _FakeNoteSortCloudRepository()
+          ..enforceBaseRevision = true;
+        cloud.manifests[grid.key] = {
+          ..._orderManifest(grid, 'broken', 4),
+          'sort_mode': NoteSortMode.createdNewest.name,
+        };
+        NoteSortService.cloudRepositoryOverride = cloud;
+        NoteSortService.canReceiveCloudOverride = true;
+        NoteSortService.canPushCloudOverride = true;
+
+        expect(
+          await service.receiveRemoteContextForTesting(grid.key),
+          'missingChunks',
+        );
+        await service.flushCloudForTesting();
+
+        final repaired = service.snapshotFor(grid);
+        final expectedMode = laterMode ?? NoteSortMode.custom;
+        expect(repaired.orderedNoteIds, expectedIds);
+        expect(repaired.mode, expectedMode);
+        expect(repaired.dirty, isFalse);
+        expect(
+          cloud.chunks[repaired.revision]!.single['note_ids'],
+          expectedIds,
+        );
+        expect(cloud.manifests[grid.key]?['sort_mode'], expectedMode.name);
+        expect(cloud.commitCalls, 1);
+        expect(
+          await database.query(NoteSortService.operationTableName),
+          isEmpty,
+        );
+      },
+    );
+  }
+
+  for (final pendingMembership in [false, true]) {
+    test(
+      'repair preserves server mode with membership edits: $pendingMembership',
+      () async {
+        await _insertNote(
+          database,
+          id: 2,
+          updatedAt: DateTime.utc(2026, 7, 24),
+        );
+        expect(service.snapshotFor(grid).mode, NoteSortMode.custom);
+        expect(
+          await database.query(NoteSortService.operationTableName),
+          isEmpty,
+        );
+        if (pendingMembership) {
+          final deleted = Note(id: 1, syncId: 'note-1');
+          final inserted = (await Note.get(NoteType.all)).single;
+          for (final event in [
+            ModelEvent('created', deleted),
+            ModelEvent('created', inserted),
+            ModelEvent('deleted', deleted),
+          ]) {
+            await service.applyNoteEventForTesting(event);
+          }
+        }
+        final cloud = _FakeNoteSortCloudRepository()
+          ..enforceBaseRevision = true;
+        cloud.manifests[grid.key] = {
+          ..._orderManifest(grid, 'broken', 1),
+          'sort_mode': NoteSortMode.createdNewest.name,
+        };
+        NoteSortService.cloudRepositoryOverride = cloud;
+        NoteSortService.canReceiveCloudOverride = true;
+        NoteSortService.canPushCloudOverride = true;
+
+        expect(
+          await service.receiveRemoteContextForTesting(grid.key),
+          'missingChunks',
+        );
+        await service.flushCloudForTesting();
+
+        final repaired = service.snapshotFor(grid);
+        expect(repaired.mode, NoteSortMode.createdNewest);
+        expect(repaired.orderedNoteIds, ['note-2']);
+        expect(repaired.dirty, isFalse);
+        expect(cloud.manifests[grid.key]?['sort_mode'], 'createdNewest');
+        expect(cloud.chunks[repaired.revision]!.single['note_ids'], ['note-2']);
+        expect(
+          await database.query(NoteSortService.operationTableName),
+          isEmpty,
+        );
+      },
+    );
+  }
+
+  test(
+    'failed repair retains its snapshot and operations until retry commits',
+    () async {
+      await _seedPendingMoves(database, grid);
+      await service.setMode(grid, NoteSortMode.updatedNewest);
+      final expectedIds = service.snapshotFor(grid).orderedNoteIds;
+      final operations = await database.query(
+        NoteSortService.operationTableName,
+      );
+      final cloud = _FakeNoteSortCloudRepository()
+        ..enforceBaseRevision = true
+        ..failWrites = true;
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      await service.receiveRemoteContextForTesting(grid.key);
+      await service.flushCloudForTesting();
+      final candidate = service.snapshotFor(grid);
+      expect(candidate.dirty, isTrue);
+      expect(candidate.baseRevision, 'broken');
+      expect(candidate.orderedNoteIds, expectedIds);
+      expect(
+        await database.query(NoteSortService.operationTableName),
+        operations,
+      );
+      expect(cloud.manifests[grid.key]?['revision'], 'broken');
+      cloud.failWrites = false;
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(grid).revision, candidate.revision);
+      expect(service.snapshotFor(grid).dirty, isFalse);
+      expect(service.snapshotFor(grid).orderedNoteIds, expectedIds);
+      expect(service.snapshotFor(grid).mode, NoteSortMode.updatedNewest);
+      expect(cloud.chunks[candidate.revision]!.single['note_ids'], expectedIds);
+      expect(cloud.manifests[grid.key]?['sort_mode'], 'updatedNewest');
+      expect(await database.query(NoteSortService.operationTableName), isEmpty);
+    },
+  );
+
+  test(
+    'another device winning repair is rebased without overwriting its order',
+    () async {
+      await _seedImportedOrder(database, grid);
+      await service.setMode(grid, NoteSortMode.updatedNewest);
+      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
+      cloud.beforeCommit = () async {
+        if (cloud.commitCalls != 1) return;
+        cloud.manifests[grid.key] = _orderManifest(grid, 'other-device', 2);
+        cloud.chunks['other-device'] = [
+          _orderChunk('other-device', ['remote-new', 'note-1']),
+        ];
+      };
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      await service.receiveRemoteContextForTesting(grid.key);
+      await service.flushCloudForTesting();
+      expect(cloud.manifests[grid.key]?['revision'], 'other-device');
+      expect(service.snapshotFor(grid).orderedNoteIds, [
+        'remote-new',
+        'note-1',
+      ]);
+      expect(service.snapshotFor(grid).mode, NoteSortMode.updatedNewest);
+      expect(service.snapshotFor(grid).dirty, isTrue);
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(grid).dirty, isFalse);
+      expect(cloud.commitCalls, 2);
+    },
+  );
+
+  test(
+    'local changes during repair upload remain pending and supersede the candidate',
+    () async {
+      await _seedImportedOrder(database, grid);
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final cloud = _FakeNoteSortCloudRepository()
+        ..enforceBaseRevision = true
+        ..writeStarted = started
+        ..writeBarrier = release;
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      await service.receiveRemoteContextForTesting(grid.key);
+      final upload = service.flushCloudForTesting();
+      await started.future;
+      await service.setMode(grid, NoteSortMode.createdNewest);
+      final edited = service.snapshotFor(grid);
+      release.complete();
+      await upload;
+      expect(cloud.commitCalls, 0);
+      expect(service.snapshotFor(grid).revision, edited.revision);
+      expect(service.snapshotFor(grid).dirty, isTrue);
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(grid).mode, NoteSortMode.createdNewest);
+      expect(service.snapshotFor(grid).dirty, isFalse);
+    },
+  );
+
+  test(
+    'absent, invalid, and unsupported remote orders are never repaired',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository();
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      expect(await service.receiveRemoteContextForTesting(grid.key), 'absent');
+      await service.setMode(grid, NoteSortMode.updatedNewest);
+      cloud.manifests[grid.key] = {
+        ..._orderManifest(grid, 'unknown', 1),
+        'schema_version': 99,
+      };
+      expect(
+        await service.receiveRemoteContextForTesting(grid.key),
+        'unsupportedSchema',
+      );
+      await service.flushCloudForTesting();
+      cloud.manifests[grid.key] = _orderManifest(grid, 'invalid', 1);
+      cloud.chunks['invalid'] = [
+        _orderChunk('different-revision', ['note-1']),
+      ];
+      expect(await service.receiveRemoteContextForTesting(grid.key), 'invalid');
+      await service.flushCloudForTesting();
+      expect(cloud.writeCalls, 0);
+      expect(service.snapshotFor(grid).dirty, isTrue);
+      expect(
+        await database.query(NoteSortService.operationTableName),
+        isNotEmpty,
+      );
+    },
+  );
+
+  test('unavailable chunk reads are not evidence for repair', () async {
+    final cloud = _FakeNoteSortCloudRepository()
+      ..readChunksError = const CloudVerificationUnavailable();
+    cloud.manifests[grid.key] = _orderManifest(grid, 'offline', 1);
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = true;
+    final before = service.snapshotFor(grid);
+    await expectLater(
+      service.receiveRemoteContextForTesting(grid.key),
+      throwsA(isA<CloudVerificationUnavailable>()),
+    );
+    await service.flushCloudForTesting();
+    expect(service.snapshotFor(grid), same(before));
+    expect(cloud.writeCalls, 0);
+  });
+
+  test(
+    'cleanup waits for an in-flight upload before checking its manifest',
+    () async {
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final cloud = _FakeNoteSortCloudRepository()
+        ..writeStarted = started
+        ..writeBarrier = release;
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      final snapshot = service.snapshotFor(grid).copyWith(dirty: true);
+      final upload = service.uploadSnapshotWithRetryForTesting(snapshot);
+      await started.future;
+      final cleanup = service.drainCloudCleanupForTesting();
+      await pumpEventQueue();
+      expect(cloud.deletedRevisions, isEmpty);
+      release.complete();
+      await Future.wait([upload, cleanup]);
+      expect(cloud.manifests[grid.key]?['revision'], snapshot.revision);
+      expect(cloud.chunks.containsKey(snapshot.revision), isTrue);
+      expect(cloud.deletedRevisions, isEmpty);
+    },
+  );
+
+  test('upload waits until earlier cleanup of its revision finishes', () async {
+    final started = Completer<void>();
+    final release = Completer<void>();
+    final cloud = _FakeNoteSortCloudRepository()
+      ..deleteStarted = started
+      ..deleteBarrier = release;
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = true;
+    final snapshot = service.snapshotFor(grid).copyWith(dirty: true);
+    await _insertCleanup(
+      database,
+      contextKey: grid.key,
+      revision: snapshot.revision,
+      chunkCount: 1,
+    );
+    final cleanup = service.drainCloudCleanupForTesting();
+    await started.future;
+    final upload = service.uploadSnapshotWithRetryForTesting(snapshot);
+    await pumpEventQueue();
+    expect(cloud.writeCalls, 0);
+    release.complete();
+    await Future.wait([cleanup, upload]);
+    expect(cloud.manifests[grid.key]?['revision'], snapshot.revision);
+    expect(cloud.chunks.containsKey(snapshot.revision), isTrue);
+  });
+
+  test(
+    'no-base conflict with missing chunks recovers without another edit',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 1);
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      final snapshot = service
+          .snapshotFor(grid)
+          .copyWith(orderedNoteIds: ['local-note'], dirty: true);
+      await service.uploadSnapshotWithRetryForTesting(snapshot);
+      await _waitUntil(() => !service.snapshotFor(grid).dirty);
+      expect(service.snapshotFor(grid).dirty, isFalse);
+      expect(service.snapshotFor(grid).orderedNoteIds, ['local-note']);
+      expect(cloud.commitCalls, 2);
+      expect(
+        cloud.manifests[grid.key]?['revision'],
+        service.snapshotFor(grid).revision,
+      );
+    },
+  );
+
+  test(
+    'repair permission failure leaves local order and the manifest intact',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository();
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 1);
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      await service.receiveRemoteContextForTesting(grid.key);
+      final before = service.snapshotFor(grid);
+      cloud.readChunksError = FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'permission-denied',
+      );
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(grid), same(before));
+      expect(cloud.writeCalls, 0);
+      expect(cloud.manifests[grid.key]?['revision'], 'broken');
+    },
+  );
+
+  test(
+    'repair rechecks a changed manifest before staging a replacement',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 1);
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      await service.receiveRemoteContextForTesting(grid.key);
+      final before = service.snapshotFor(grid);
+      cloud.onReadManifest = () {
+        if (cloud.readManifestCalls != 3) return;
+        cloud.manifests[grid.key] = _orderManifest(grid, 'healthy', 1);
+        cloud.chunks['healthy'] = [
+          _orderChunk('healthy', ['remote-note']),
+        ];
+      };
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(grid), same(before));
+      expect(cloud.writeCalls, 0);
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(grid).orderedNoteIds, ['remote-note']);
+      expect(service.snapshotFor(grid).dirty, isFalse);
+      expect(cloud.writeCalls, 0);
+    },
+  );
+
+  test(
+    'repair cannot overwrite an unsupported schema introduced during upload',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 1);
+      cloud.beforeCommit = () async {
+        cloud.manifests[grid.key]!['schema_version'] = 99;
+      };
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = true;
+      await service.receiveRemoteContextForTesting(grid.key);
+      await service.flushCloudForTesting();
+      expect(cloud.manifests[grid.key]?['schema_version'], 99);
+      expect(cloud.manifests[grid.key]?['revision'], 'broken');
+      expect(service.snapshotFor(grid).dirty, isTrue);
+      await service.flushCloudForTesting();
+      expect(cloud.commitCalls, 1);
+    },
+  );
+
   test('failed chunk upload is journaled and cleaned safely', () async {
     final cloud = _FakeNoteSortCloudRepository()..failWrites = true;
     NoteSortService.cloudRepositoryOverride = cloud;
@@ -1626,6 +2092,42 @@ Future<List<Note>> _seedImportedOrder(
   return Note.get(NoteType.all);
 }
 
+Future<void> _seedPendingMoves(
+  Database database,
+  NoteOrderContext context,
+) async {
+  for (var id = 1; id <= 4; id++) {
+    await _insertNote(database, id: id, updatedAt: DateTime.utc(2026, 7, id));
+  }
+  final service = NoteSortService();
+  await service.applyRemoteSnapshotForTesting(
+    NoteOrderSnapshot(
+      context: context,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: const ['note-1', 'note-2', 'note-3', 'note-4'],
+      revision: 'before-offline-edits',
+      baseRevision: 'before-offline-edits',
+      updatedAt: DateTime.utc(2026, 7, 1),
+      hydrated: true,
+    ),
+  );
+  final notes = await Note.get(NoteType.all);
+  await service.reorderVisibleNotes(
+    context: context,
+    draggedId: 1,
+    targetId: 2,
+    placeAfter: true,
+    visibleNotes: notes,
+  );
+  await service.reorderVisibleNotes(
+    context: context,
+    draggedId: 3,
+    targetId: 2,
+    placeAfter: false,
+    visibleNotes: notes,
+  );
+}
+
 Future<void> _insertNote(
   Database database, {
   required int id,
@@ -1666,6 +2168,25 @@ Future<void> _insertCleanup(
   });
 }
 
+Map<String, dynamic> _orderManifest(
+  NoteOrderContext context,
+  String revision,
+  int noteCount,
+) => {
+  'schema_version': NoteSortService.cloudSchemaVersion,
+  'context_key': context.key,
+  'sort_mode': NoteSortMode.custom.name,
+  'revision': revision,
+  'chunk_count': 1,
+  'note_count': noteCount,
+};
+
+Map<String, dynamic> _orderChunk(String revision, List<String> ids) => {
+  'schema_version': NoteSortService.cloudSchemaVersion,
+  'revision': revision,
+  'note_ids': ids,
+};
+
 class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
   @override
   int get schemaVersion => NoteSortService.cloudSchemaVersion;
@@ -1682,6 +2203,10 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
   int commitCalls = 0;
   int readManifestCalls = 0;
   Object? writeError;
+  Object? readChunksError;
+  bool enforceBaseRevision = false;
+  Future<void> Function()? beforeCommit;
+  void Function()? onReadManifest;
   Completer<void>? writeStarted;
   Completer<void>? writeBarrier;
   Completer<void>? deleteStarted;
@@ -1698,15 +2223,21 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
     required int noteCount,
   }) async {
     commitCalls++;
-    if (conflictOnCommit || conflictCount > 0) {
+    await beforeCommit?.call();
+    final previous = manifests[contextKey];
+    if (conflictOnCommit ||
+        conflictCount > 0 ||
+        (enforceBaseRevision &&
+            previous != null &&
+            (previous['schema_version'] != schemaVersion ||
+                (previous['revision'] != baseRevision &&
+                    previous['revision'] != revision)))) {
       if (conflictCount > 0) conflictCount--;
-      final previous = manifests[contextKey];
       return NoteSortCloudCommitResult.conflict(
         previousRevision: previous?['revision'] as String?,
         previousChunkCount: previous?['chunk_count'] as int? ?? 0,
       );
     }
-    final previous = manifests[contextKey];
     manifests[contextKey] = {
       'schema_version': schemaVersion,
       'context_key': contextKey,
@@ -1735,12 +2266,14 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
     String revision,
     int chunkCount,
   ) async {
-    return chunks[revision];
+    if (readChunksError != null) throw readChunksError!;
+    return chunkCount == 0 ? [] : chunks[revision];
   }
 
   @override
   Future<Map<String, dynamic>?> readManifest(String contextKey) async {
     readManifestCalls++;
+    onReadManifest?.call();
     if (failReadManifestCalls.contains(readManifestCalls)) {
       throw StateError('manifest read failed');
     }

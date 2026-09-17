@@ -799,7 +799,6 @@ class Note extends BaseModel<Note> {
     required Future<bool> Function(Transaction) commitAttachments,
   }) async {
     _assignRemoteJson(incoming);
-    if (isEmpty) throw StateError('Remote note could not be persisted');
     await _migrateSketchesToStrokesFiles();
     final row = await toJsonAsync();
     row['created_at'] ??= DateTime.now().toIso8601String();
@@ -2790,9 +2789,18 @@ class Note extends BaseModel<Note> {
     bool trackSync = true,
     ModelChangeOrigin origin = ModelChangeOrigin.local,
   ]) async {
-    if (isEmpty) {
-      return Future.value(-1);
-    }
+    final exists =
+        id != null &&
+        (await AppState.db.query(
+          model,
+          columns: ['id'],
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1,
+        )).isNotEmpty;
+    requireCloudOperation();
+    // Empty cloud notes are valid saved records; only discard unsaved drafts.
+    if (isEmpty && !exists) return -1;
     syncId ??= const Uuid().v4();
 
     // Migrate any old sketches to new strokes file format before saving. A
@@ -2829,14 +2837,7 @@ class Note extends BaseModel<Note> {
     }
 
     if (id != null) {
-      // Check if record exists
-      final count = Sqflite.firstIntValue(
-        await AppState.db.rawQuery('SELECT COUNT(*) FROM note WHERE id = ?', [
-          id,
-        ]),
-      );
-
-      if (count != null && count > 0) {
+      if (exists) {
         try {
           await _persistLocalChange(
             (transaction) => transaction.update(

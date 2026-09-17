@@ -2425,13 +2425,7 @@ class _NoteEditorState extends State<NoteEditor>
     }
 
     if (_note.isEmpty && snapshot.isEmpty) {
-      if (_note.id == null) return true;
-      try {
-        return await _note.delete() >= 0;
-      } catch (error, stackTrace) {
-        AppLogger.error('Error deleting empty note', error, stackTrace);
-        return false;
-      }
+      return true;
     }
 
     if (_note.content == snapshot.content &&

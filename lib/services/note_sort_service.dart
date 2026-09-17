@@ -1115,19 +1115,14 @@ class NoteSortService {
           return;
         }
         if (document.metadata.hasPendingWrites) continue;
-        final remote = await _decodeRemoteDocument(run, document);
+        // Even an unreadable existing manifest must suppress legacy seeding.
+        _remoteContextKeys.add(document.id);
+        final result = await _decodeRemoteDocument(run, document);
         if (!_isCurrentCloudRun(run) ||
             !_remoteHydration.isCurrent(hydrationGeneration)) {
           return;
         }
-        if (remote == null) continue;
-        _remoteContextKeys.add(remote.context.key);
-        _remoteChunkCounts[remote.revision] =
-            document.data()['chunk_count'] as int;
-        await _mutations.run(
-          remote.context.key,
-          () => _receiveRemote(run, remote),
-        );
+        await _receiveRemoteRead(run, document.id, result);
       }
     } catch (error, stackTrace) {
       hydrationFailed = true;
@@ -1181,23 +1176,25 @@ class NoteSortService {
     _scheduleCloudWrite(run);
   }
 
-  Future<NoteOrderSnapshot?> _decodeRemoteDocument(
+  Future<_RemoteOrderRead> _decodeRemoteDocument(
     _NoteSortCloudRun run,
     DocumentSnapshot<Map<String, dynamic>> document,
   ) async {
     final data = document.data();
-    if (data == null) return null;
+    if (data == null) return const _RemoteOrderRead(_RemoteOrderKind.absent);
     return _decodeRemoteData(run, document.id, data);
   }
 
-  Future<NoteOrderSnapshot?> _decodeRemoteData(
+  Future<_RemoteOrderRead> _decodeRemoteData(
     _NoteSortCloudRun run,
     String documentId,
     Map<String, dynamic> data,
   ) async {
-    if (!_isCurrentCloudRun(run)) return null;
+    if (!_isCurrentCloudRun(run)) {
+      return const _RemoteOrderRead(_RemoteOrderKind.stale);
+    }
     if (data['schema_version'] != cloudSchemaVersion) {
-      return null;
+      return const _RemoteOrderRead(_RemoteOrderKind.unsupportedSchema);
     }
     final contextKey = data['context_key'];
     final revision = data['revision'];
@@ -1213,40 +1210,119 @@ class NoteSortService {
         chunkCount < 0 ||
         chunkCount > maxCloudChunks ||
         noteCount is! int ||
-        noteCount < 0) {
-      return null;
+        noteCount < 0 ||
+        noteCount > chunkCount * cloudChunkSize ||
+        (noteCount == 0 && chunkCount != 0)) {
+      return const _RemoteOrderRead(_RemoteOrderKind.invalid);
     }
     final context = NoteOrderContext.tryParse(contextKey);
     final mode = NoteSortMode.values
         .where((candidate) => candidate.name == modeName)
         .firstOrNull;
-    if (context == null || mode == null) return null;
+    if (context == null || mode == null) {
+      return const _RemoteOrderRead(_RemoteOrderKind.invalid);
+    }
+    final timestamp = data['updated_at'];
+    final manifest = _NoteSortManifest(
+      context: context,
+      mode: context.reorderable ? mode : _dateMode(mode),
+      revision: revision,
+      chunkCount: chunkCount,
+      noteCount: noteCount,
+      updatedAt: timestamp is Timestamp
+          ? timestamp.toDate().toUtc()
+          : DateTime.now().toUtc(),
+    );
 
     final chunks = await run.session.repository.readChunks(
       revision,
       chunkCount,
     );
-    if (!_isCurrentCloudRun(run)) return null;
-    if (chunks == null) return null;
+    if (!_isCurrentCloudRun(run)) {
+      return const _RemoteOrderRead(_RemoteOrderKind.stale);
+    }
+    if (chunks == null) {
+      return _RemoteOrderRead(
+        _RemoteOrderKind.missingChunks,
+        manifest: manifest,
+      );
+    }
     final ids = decodeCloudChunks(
       revision: revision,
       noteCount: noteCount,
       chunkCount: chunkCount,
       chunks: chunks,
     );
-    if (ids == null) return null;
-    final timestamp = data['updated_at'];
-    return NoteOrderSnapshot(
-      context: context,
-      mode: context.reorderable ? mode : _dateMode(mode),
-      orderedNoteIds: ids,
-      revision: revision,
-      baseRevision: revision,
-      updatedAt: timestamp is Timestamp
-          ? timestamp.toDate().toUtc()
-          : DateTime.now().toUtc(),
-      hydrated: true,
+    if (ids == null) {
+      return _RemoteOrderRead(_RemoteOrderKind.invalid, manifest: manifest);
+    }
+    return _RemoteOrderRead(
+      _RemoteOrderKind.valid,
+      manifest: manifest,
+      snapshot: NoteOrderSnapshot(
+        context: manifest.context,
+        mode: manifest.mode,
+        orderedNoteIds: ids,
+        revision: revision,
+        baseRevision: revision,
+        updatedAt: manifest.updatedAt,
+        hydrated: true,
+      ),
     );
+  }
+
+  Future<void> _receiveRemoteRead(
+    _NoteSortCloudRun run,
+    String contextKey,
+    _RemoteOrderRead result,
+  ) async {
+    if (!_isCurrentCloudRun(run)) return;
+    switch (result.kind) {
+      case _RemoteOrderKind.valid:
+        run.missingContexts.remove(contextKey);
+        run.blockedContexts.remove(contextKey);
+        final remote = result.snapshot!;
+        _remoteChunkCounts[remote.revision] = result.manifest!.chunkCount;
+        await _mutations.run(contextKey, () => _receiveRemote(run, remote));
+      case _RemoteOrderKind.missingChunks:
+        run.blockedContexts.remove(contextKey);
+        run.missingContexts.add(contextKey);
+        _logOrderRecovery(
+          run,
+          contextKey,
+          result.manifest!.revision,
+          'missing chunks',
+        );
+        _scheduleCloudWrite(run);
+      case _RemoteOrderKind.invalid:
+      case _RemoteOrderKind.unsupportedSchema:
+        run.missingContexts.remove(contextKey);
+        run.blockedContexts.add(contextKey);
+        _logOrderRecovery(
+          run,
+          contextKey,
+          result.manifest?.revision,
+          result.kind.name,
+        );
+      case _RemoteOrderKind.absent:
+        run.missingContexts.remove(contextKey);
+        run.blockedContexts.remove(contextKey);
+      case _RemoteOrderKind.stale:
+        break;
+    }
+  }
+
+  void _logOrderRecovery(
+    _NoteSortCloudRun run,
+    String contextKey,
+    String? revision,
+    String message,
+  ) {
+    if (run.recoveryLogs.add('$contextKey:$revision:$message')) {
+      AppLogger.log(
+        '[NOTE_SORT] $contextKey (${revision ?? 'unknown revision'}): $message',
+      );
+    }
   }
 
   Future<void> _receiveRemote(
@@ -1315,37 +1391,11 @@ class NoteSortService {
       return;
     }
 
-    var mode = remote.mode;
-    final ids = remote.orderedNoteIds.toList();
-    for (final operation in operations) {
-      switch (operation.type) {
-        case NoteOrderOperationType.setMode:
-          mode = operation.mode ?? mode;
-        case NoteOrderOperationType.insertNote:
-          final noteId = operation.noteId;
-          if (noteId != null && !ids.contains(noteId)) ids.insert(0, noteId);
-        case NoteOrderOperationType.deleteNote:
-          ids.remove(operation.noteId);
-        case NoteOrderOperationType.moveNote:
-          final noteId = operation.noteId;
-          if (noteId == null) continue;
-          ids.remove(noteId);
-          final beforeIndex = operation.beforeId == null
-              ? -1
-              : ids.indexOf(operation.beforeId!);
-          final afterIndex = operation.afterId == null
-              ? -1
-              : ids.indexOf(operation.afterId!);
-          if (beforeIndex >= 0) {
-            ids.insert(beforeIndex, noteId);
-          } else if (afterIndex >= 0) {
-            ids.insert(afterIndex + 1, noteId);
-          } else {
-            ids.add(noteId);
-          }
-          mode = operation.mode ?? mode;
-      }
-    }
+    final (ids, mode) = _replayOrderOperations(
+      remote.orderedNoteIds,
+      remote.mode,
+      operations,
+    );
     final rebased = NoteOrderSnapshot(
       context: remote.context,
       mode: mode,
@@ -1360,6 +1410,47 @@ class NoteSortService {
     if (run != null && !_isCurrentCloudRun(run)) return;
     _publishSnapshot(rebased);
     _scheduleCloudWrite(run);
+  }
+
+  (List<String>, NoteSortMode) _replayOrderOperations(
+    Iterable<String> base,
+    NoteSortMode mode,
+    List<NoteOrderOperation> operations, {
+    bool applyMoves = true,
+  }) {
+    final ids = base.toList();
+    for (final operation in operations) {
+      switch (operation.type) {
+        case NoteOrderOperationType.setMode:
+          mode = operation.mode ?? mode;
+        case NoteOrderOperationType.insertNote:
+          final noteId = operation.noteId;
+          if (noteId != null && !ids.contains(noteId)) ids.insert(0, noteId);
+        case NoteOrderOperationType.deleteNote:
+          ids.remove(operation.noteId);
+        case NoteOrderOperationType.moveNote:
+          final noteId = operation.noteId;
+          if (noteId == null) continue;
+          if (applyMoves) {
+            ids.remove(noteId);
+            final beforeIndex = operation.beforeId == null
+                ? -1
+                : ids.indexOf(operation.beforeId!);
+            final afterIndex = operation.afterId == null
+                ? -1
+                : ids.indexOf(operation.afterId!);
+            if (beforeIndex >= 0) {
+              ids.insert(beforeIndex, noteId);
+            } else if (afterIndex >= 0) {
+              ids.insert(afterIndex + 1, noteId);
+            } else {
+              ids.add(noteId);
+            }
+          }
+          mode = operation.mode ?? mode;
+      }
+    }
+    return (ids, mode);
   }
 
   void _handlePlanChange() {
@@ -1417,9 +1508,33 @@ class NoteSortService {
     var retryableFailure = false;
     var authorizationStop = false;
     try {
+      for (final contextKey in run.missingContexts.toList()) {
+        if (!_isCurrentCloudRun(run)) return;
+        try {
+          await _prepareMissingOrderRepair(run, contextKey);
+        } catch (error, stack) {
+          if (!_isCurrentCloudRun(run)) return;
+          final outcome = _uploadFailureOutcome(error);
+          authorizationStop |=
+              outcome == _NoteSortUploadOutcome.authorizationStop;
+          retryableFailure |=
+              outcome == _NoteSortUploadOutcome.retryableFailure;
+          if (run.recoveryLogs.add('$contextKey:repair:${error.runtimeType}')) {
+            AppLogger.error(
+              '[NOTE_SORT] Order repair deferred for $contextKey',
+              error,
+              stack,
+            );
+          }
+        }
+      }
       for (final snapshot in snapshots.value.values.toList()) {
         if (!_isCurrentCloudRun(run)) return;
-        if (!snapshot.dirty) continue;
+        if (!snapshot.dirty ||
+            run.missingContexts.contains(snapshot.context.key) ||
+            run.blockedContexts.contains(snapshot.context.key)) {
+          continue;
+        }
         final outcome = await _uploadSnapshot(run, snapshot);
         switch (outcome) {
           case _NoteSortUploadOutcome.retryableFailure:
@@ -1430,6 +1545,7 @@ class NoteSortService {
           case _NoteSortUploadOutcome.conflictRebased:
           case _NoteSortUploadOutcome.supersededSnapshot:
           case _NoteSortUploadOutcome.staleSession:
+          case _NoteSortUploadOutcome.remoteDataBlocked:
             break;
         }
       }
@@ -1449,7 +1565,13 @@ class NoteSortService {
 
     final uploadAgain = run.uploadAgain;
     run.uploadAgain = false;
-    final hasDirty = snapshots.value.values.any((snapshot) => snapshot.dirty);
+    final hasDirty =
+        snapshots.value.values.any(
+          (snapshot) =>
+              snapshot.dirty &&
+              !run.blockedContexts.contains(snapshot.context.key),
+        ) ||
+        run.missingContexts.isNotEmpty;
     if (authorizationStop) {
       run.uploadRetry.cancel();
     } else if (retryableFailure) {
@@ -1474,6 +1596,14 @@ class NoteSortService {
   Future<_NoteSortUploadOutcome> _uploadSnapshot(
     _NoteSortCloudRun run,
     NoteOrderSnapshot local,
+  ) => run.revisionOperations.run(
+    local.revision,
+    () => _uploadSnapshotUnlocked(run, local),
+  );
+
+  Future<_NoteSortUploadOutcome> _uploadSnapshotUnlocked(
+    _NoteSortCloudRun run,
+    NoteOrderSnapshot local,
   ) async {
     if (!_isCurrentCloudRun(run)) {
       return _NoteSortUploadOutcome.staleSession;
@@ -1496,7 +1626,7 @@ class NoteSortService {
 
       final currentBeforeCommit = snapshots.value[local.context.key];
       if (currentBeforeCommit?.revision != local.revision) {
-        await _cleanupCloudRevision(
+        await _cleanupCloudRevisionUnlocked(
           run,
           contextKey: local.context.key,
           revision: local.revision,
@@ -1569,6 +1699,16 @@ class NoteSortService {
         }
       }
       _remoteContextKeys.add(local.context.key);
+      if (run.repairBases.containsKey(local.context.key) &&
+          run.repairBases[local.context.key] == local.baseRevision) {
+        _logOrderRecovery(
+          run,
+          local.context.key,
+          local.baseRevision,
+          'repaired',
+        );
+        run.repairBases.remove(local.context.key);
+      }
       _remoteChunkCounts[local.revision] = chunks.length;
       final previousRevision = commit.previousRevision;
       if (previousRevision != null && previousRevision != local.revision) {
@@ -1597,7 +1737,7 @@ class NoteSortService {
         error,
         stackTrace,
       );
-      await _cleanupCloudRevision(
+      await _cleanupCloudRevisionUnlocked(
         run,
         contextKey: local.context.key,
         revision: local.revision,
@@ -1616,12 +1756,7 @@ class NoteSortService {
     required int chunkCount,
     required String? remoteRevision,
   }) async {
-    AppLogger.log(
-      '[NOTE_SORT] Rebasing ${local.context.key} from '
-      '${local.baseRevision ?? 'no base'} onto '
-      '${remoteRevision ?? 'the latest remote revision'}',
-    );
-    await _cleanupCloudRevision(
+    await _cleanupCloudRevisionUnlocked(
       run,
       contextKey: local.context.key,
       revision: local.revision,
@@ -1632,16 +1767,28 @@ class NoteSortService {
     }
 
     try {
-      final remote = await _readRemoteSnapshot(run, local.context.key);
+      final result = await _readRemoteOrder(run, local.context.key);
       if (!_isCurrentCloudRun(run)) {
         return _NoteSortUploadOutcome.staleSession;
       }
-      if (remote == null) {
+      await _receiveRemoteRead(run, local.context.key, result);
+      if (result.kind == _RemoteOrderKind.missingChunks) {
+        await _prepareMissingOrderRepair(run, local.context.key);
+      } else if (result.kind == _RemoteOrderKind.invalid ||
+          result.kind == _RemoteOrderKind.unsupportedSchema) {
+        return _NoteSortUploadOutcome.remoteDataBlocked;
+      }
+      if (run.blockedContexts.contains(local.context.key)) {
+        return _NoteSortUploadOutcome.remoteDataBlocked;
+      }
+      if (run.missingContexts.contains(local.context.key)) {
         return _NoteSortUploadOutcome.retryableFailure;
       }
-      await _mutations.run(
+      _logOrderRecovery(
+        run,
         local.context.key,
-        () => _applyOrRebaseRemote(remote, run: run),
+        remoteRevision,
+        'conflict recovered',
       );
       return _isCurrentCloudRun(run)
           ? _NoteSortUploadOutcome.conflictRebased
@@ -1673,15 +1820,93 @@ class NoteSortService {
       error is FirebaseException &&
       (error.code == 'unauthenticated' || error.code == 'permission-denied');
 
-  Future<NoteOrderSnapshot?> _readRemoteSnapshot(
+  Future<_RemoteOrderRead> _readRemoteOrder(
     _NoteSortCloudRun run,
     String contextKey,
   ) async {
-    if (!_isCurrentCloudRun(run)) return null;
+    if (!_isCurrentCloudRun(run)) {
+      return const _RemoteOrderRead(_RemoteOrderKind.stale);
+    }
     final data = await run.session.repository.readManifest(contextKey);
-    if (!_isCurrentCloudRun(run)) return null;
-    if (data == null) return null;
+    if (!_isCurrentCloudRun(run)) {
+      return const _RemoteOrderRead(_RemoteOrderKind.stale);
+    }
+    if (data == null) return const _RemoteOrderRead(_RemoteOrderKind.absent);
+    _remoteContextKeys.add(contextKey);
     return _decodeRemoteData(run, contextKey, data);
+  }
+
+  Future<void> _prepareMissingOrderRepair(
+    _NoteSortCloudRun run,
+    String contextKey,
+  ) async {
+    if (!_isCurrentCloudRun(run) ||
+        !run.bootstrapReady ||
+        !_canPushCloud ||
+        _activeDragContexts.contains(contextKey)) {
+      return;
+    }
+    // Re-read from the server: a cached listener may reference an old revision
+    // whose chunks were legitimately cleaned up by another device.
+    final result = await _readRemoteOrder(run, contextKey);
+    if (!_isCurrentCloudRun(run)) return;
+    if (result.kind != _RemoteOrderKind.missingChunks) {
+      await _receiveRemoteRead(run, contextKey, result);
+      return;
+    }
+    final manifest = result.manifest!;
+    await _mutations.run(contextKey, () async {
+      if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
+      final latest = await run.session.repository.readManifest(contextKey);
+      if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
+      if (latest?['revision'] != manifest.revision ||
+          latest?['schema_version'] != cloudSchemaVersion ||
+          latest?['context_key'] != contextKey ||
+          latest?['chunk_count'] != manifest.chunkCount ||
+          latest?['note_count'] != manifest.noteCount) {
+        return;
+      }
+      final local = snapshots.value[contextKey];
+      if (local?.dirty == true &&
+          local?.baseRevision == manifest.revision &&
+          run.repairBases[contextKey] == manifest.revision) {
+        run.missingContexts.remove(contextKey);
+        return;
+      }
+      final notes = await _loadNotesForContext(manifest.context);
+      if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
+      notes.sort(_compareSeedOrder);
+      final ids = <String>{...local?.orderedNoteIds ?? const <String>[]};
+      ids.addAll(notes.map(_stableId).whereType<String>());
+      final operations = await _loadOperations(
+        contextKey,
+        database: run.session.database,
+      );
+      if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
+      final (orderedIds, mode) = _replayOrderOperations(
+        ids,
+        manifest.mode,
+        operations,
+        // Local snapshots already contain their journaled moves.
+        applyMoves: local == null,
+      );
+      final repaired = NoteOrderSnapshot(
+        context: manifest.context,
+        mode: mode,
+        orderedNoteIds: List.unmodifiable(orderedIds),
+        revision: const Uuid().v4(),
+        baseRevision: manifest.revision,
+        updatedAt: DateTime.now().toUtc(),
+        dirty: true,
+        hydrated: true,
+      );
+      await _persistSnapshot(repaired, database: run.session.database);
+      if (!_isCurrentCloudRun(run)) return;
+      _publishSnapshot(repaired);
+      run.repairBases[contextKey] = manifest.revision;
+      run.missingContexts.remove(contextKey);
+      _logOrderRecovery(run, contextKey, manifest.revision, 'repair prepared');
+    });
   }
 
   Future<void> _journalCloudRevision(
@@ -1714,6 +1939,21 @@ class NoteSortService {
   }
 
   Future<void> _cleanupCloudRevision(
+    _NoteSortCloudRun run, {
+    required String contextKey,
+    required String revision,
+    required int chunkCount,
+  }) => run.revisionOperations.run(
+    revision,
+    () => _cleanupCloudRevisionUnlocked(
+      run,
+      contextKey: contextKey,
+      revision: revision,
+      chunkCount: chunkCount,
+    ),
+  );
+
+  Future<void> _cleanupCloudRevisionUnlocked(
     _NoteSortCloudRun run, {
     required String contextKey,
     required String revision,
@@ -1858,6 +2098,25 @@ class NoteSortService {
   @visibleForTesting
   Future<void> drainCloudCleanupForTesting() {
     return _drainCloudCleanup(_cloudRunForTesting());
+  }
+
+  @visibleForTesting
+  Future<String> receiveRemoteContextForTesting(
+    String contextKey, {
+    bool hydrated = true,
+  }) async {
+    final run = _cloudRunForTesting();
+    run.bootstrapReady = hydrated;
+    final result = await _readRemoteOrder(run, contextKey);
+    await _receiveRemoteRead(run, contextKey, result);
+    return result.kind.name;
+  }
+
+  @visibleForTesting
+  Future<void> flushCloudForTesting({bool hydrated = true}) {
+    final run = _cloudRunForTesting();
+    run.bootstrapReady = hydrated;
+    return _uploadDirtyContexts(run);
   }
 
   @visibleForTesting
@@ -2187,6 +2446,11 @@ class _NoteSortCloudRun {
 
   final _NoteSortCloudSession session;
   final ExponentialBackoffRetryController uploadRetry;
+  final revisionOperations = AsyncKeyedSerializer<String>();
+  final missingContexts = <String>{};
+  final blockedContexts = <String>{};
+  final repairBases = <String, String>{};
+  final recoveryLogs = <String>{};
   bool remoteInitialResolved = false;
   bool dataHydrated = false;
   bool bootstrapReady = false;
@@ -2204,4 +2468,38 @@ enum _NoteSortUploadOutcome {
   retryableFailure,
   authorizationStop,
   staleSession,
+  remoteDataBlocked,
+}
+
+enum _RemoteOrderKind {
+  valid,
+  absent,
+  missingChunks,
+  invalid,
+  unsupportedSchema,
+  stale,
+}
+
+class _RemoteOrderRead {
+  const _RemoteOrderRead(this.kind, {this.manifest, this.snapshot});
+  final _RemoteOrderKind kind;
+  final _NoteSortManifest? manifest;
+  final NoteOrderSnapshot? snapshot;
+}
+
+class _NoteSortManifest {
+  const _NoteSortManifest({
+    required this.context,
+    required this.mode,
+    required this.revision,
+    required this.chunkCount,
+    required this.noteCount,
+    required this.updatedAt,
+  });
+  final NoteOrderContext context;
+  final NoteSortMode mode;
+  final String revision;
+  final int chunkCount;
+  final int noteCount;
+  final DateTime updatedAt;
 }

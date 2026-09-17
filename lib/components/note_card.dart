@@ -142,22 +142,42 @@ class NoteCardBodyCache {
 
   QuillController? get controller => _controller;
 
-  void update({required bool locked, required Document? document}) {
+  void update({
+    required bool locked,
+    required Document? document,
+    int maxChars = 500,
+  }) {
     if (locked || document == null) {
       _controller?.dispose();
       _controller = null;
       return;
     }
 
+    final preview = _createPreview(document, maxChars);
     if (_controller == null) {
       _controller = QuillController(
         readOnly: true,
-        document: document,
+        document: preview,
         selection: const TextSelection.collapsed(offset: 0),
       );
     } else {
-      _controller!.document = document;
+      _controller!.document = preview;
     }
+  }
+
+  Document _createPreview(Document document, int maxChars) {
+    final text = document.toPlainText();
+    final end = text.characters.take(maxChars).string.length;
+    // Quill's final newline is structural, not additional preview content.
+    if (end >= text.length - 1) return document;
+
+    final source = document.toDelta();
+    final preview = source.slice(0, end)
+      ..insert('...', {'italic': true, 'color': 'grey'});
+    // Retain the truncated line's block attributes, including checklists.
+    final newline = text.indexOf('\n', end);
+    preview.insert('\n', source.slice(newline, newline + 1).first.attributes);
+    return Document.fromDelta(preview);
   }
 
   void dispose() {
@@ -449,68 +469,9 @@ class _NoteCardState extends State<NoteCard>
     return screenWidth > 600 ? 1000 : 500;
   }
 
-  /// Creates a truncated document limited to maxChars characters
-  /// Preserves Delta attributes (checkboxes, formatting, etc.) during truncation
-  Document? _createTruncatedDocument(Document? doc, {int maxChars = 500}) {
-    if (doc == null) return null;
-
-    final plainText = doc.toPlainText();
-    if (plainText.length <= maxChars) return doc;
-
-    // Iterate through Delta operations preserving attributes
-    final delta = doc.toDelta();
-    final newOps = <Map<String, dynamic>>[];
-    int charCount = 0;
-    bool truncated = false;
-
-    for (final op in delta.toList()) {
-      if (!op.isInsert || truncated) continue;
-
-      final data = op.data;
-      final attributes = op.attributes;
-
-      if (data is String) {
-        final remaining = maxChars - charCount;
-        if (remaining <= 0) {
-          truncated = true;
-          continue;
-        }
-
-        if (data.length <= remaining) {
-          // Include entire operation with its attributes
-          newOps.add(op.toJson());
-          charCount += data.length;
-        } else {
-          // Truncate this text segment and add ellipsis
-          newOps.add({
-            'insert': '...',
-            'attributes': {'italic': true, 'color': 'grey'},
-          });
-          truncated = true;
-        }
-      } else {
-        // Embeds (images, etc.) - include as-is, don't count toward char limit
-        newOps.add({'insert': data, 'attributes': ?attributes});
-      }
-    }
-
-    // Ensure document ends with newline (required by Quill)
-    if (newOps.isEmpty) {
-      newOps.add({'insert': '\n'});
-    } else {
-      final lastInsert = newOps.last['insert'];
-      if (lastInsert is String && !lastInsert.endsWith('\n')) {
-        newOps.add({'insert': '\n'});
-      }
-    }
-
-    return Document.fromJson(newOps);
-  }
-
   @override
   void initState() {
     final selectedNotes = AppState.selectedNotes;
-    final doc = widget.note.document;
     final note = widget.note;
 
     _lastContent = note.content;
@@ -527,10 +488,7 @@ class _NoteCardState extends State<NoteCard>
 
     _scheduleReminderExpiration();
 
-    _bodyCache.update(
-      locked: note.locked,
-      document: doc == null ? null : _createTruncatedDocument(doc) ?? doc,
-    );
+    _syncBodyController();
 
     _selectionMode = selectedNotes.isNotEmpty;
     if (selectedNotes.isNotEmpty) {
@@ -557,6 +515,16 @@ class _NoteCardState extends State<NoteCard>
     WidgetsBinding.instance.addPostFrameCallback((_) => _anim.forward());
 
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final maxChars = _getMaxChars(context);
+    if (maxChars != _lastMaxChars) {
+      _lastMaxChars = maxChars;
+      _syncBodyController();
+    }
   }
 
   @override
@@ -600,9 +568,8 @@ class _NoteCardState extends State<NoteCard>
     final document = widget.note.document;
     _bodyCache.update(
       locked: widget.note.locked,
-      document: document == null
-          ? null
-          : _createTruncatedDocument(document) ?? document,
+      document: document,
+      maxChars: _lastMaxChars,
     );
   }
 
@@ -654,17 +621,6 @@ class _NoteCardState extends State<NoteCard>
 
   @override
   Widget build(BuildContext context) {
-    // Update truncation if screen size changed
-    final maxChars = _getMaxChars(context);
-    if (maxChars != _lastMaxChars && _controller != null) {
-      _lastMaxChars = maxChars;
-      final doc = widget.note.document;
-      if (!widget.note.locked && doc != null) {
-        _controller!.document =
-            _createTruncatedDocument(doc, maxChars: maxChars) ?? doc;
-      }
-    }
-
     final reorderConfig = widget.reorderConfig;
     final canReorder = reorderConfig?.enabled == true && !_selectionMode;
     final motionDuration = MediaQuery.disableAnimationsOf(context)

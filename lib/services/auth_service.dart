@@ -161,6 +161,8 @@ class AuthService {
         return switch (authorization) {
           DeviceAuthorization.approved => CloudSessionState.ready,
           DeviceAuthorization.unavailable => CloudSessionState.unavailable,
+          DeviceAuthorization.initializing ||
+          DeviceAuthorization.unconfirmed ||
           DeviceAuthorization.pending => CloudSessionState.pending,
           _ => CloudSessionState.blocked,
         };

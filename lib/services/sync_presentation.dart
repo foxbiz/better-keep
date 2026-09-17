@@ -4,6 +4,7 @@ import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:flutter/foundation.dart';
 
 /// One presentation of verification, manual refresh, and both sync services.
@@ -19,6 +20,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     required this.labelFailures,
     required this.sessionInvalid,
     required this.encryptionStatus,
+    required this.postSignInState,
   }) : super(SyncProgress.idle) {
     _sources = Listenable.merge([
       recovery.state,
@@ -31,6 +33,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
       labelFailures,
       sessionInvalid,
       encryptionStatus,
+      postSignInState,
     ]);
     _sources.addListener(_update);
     recovery.sessionRevision.addListener(_resetSession);
@@ -47,6 +50,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     labelFailures: LabelSyncService().syncFailed,
     sessionInvalid: AuthService.sessionInvalid,
     encryptionStatus: E2EEService.instance.status,
+    postSignInState: AuthService.postSignInState,
   );
 
   final CloudSessionRecovery recovery;
@@ -54,6 +58,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
   final ValueListenable<SyncProgress> noteStatus, labelStatus;
   final ValueListenable<Set<int>> noteFailures, labelFailures;
   final ValueListenable<E2EEStatus> encryptionStatus;
+  final ValueListenable<PostSignInState> postSignInState;
   late final Listenable _sources;
   Object? _manual;
   bool Function()? _current;
@@ -98,7 +103,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     _current = null;
     _noteUploadRestricted = false;
     _labelUploadRestricted = false;
-    value = SyncProgress.idle;
+    _update();
   }
 
   void _update({SyncProgress? completion}) {
@@ -133,12 +138,23 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     } else if (cloud == CloudSessionState.unavailable) {
       value = const SyncProgress(SyncPhase.unavailable);
     } else if (cloud == CloudSessionState.blocked ||
-        (cloud == CloudSessionState.pending &&
-            encryptionStatus.value == E2EEStatus.pendingApproval)) {
+        const {
+          E2EEStatus.pendingApproval,
+          E2EEStatus.revoked,
+          E2EEStatus.needsRecovery,
+          E2EEStatus.error,
+        }.contains(encryptionStatus.value) ||
+        postSignInState.value.hasRecoverableFailure) {
       value = SyncProgress(_waitingPhase);
+    } else if (completion != null && !completion.isSuccess) {
+      value = completion;
+    } else if (postSignInState.value.isRunning ||
+        activity == CloudRecoveryActivity.resuming ||
+        cloud == CloudSessionState.pending) {
+      value = const SyncProgress(SyncPhase.preparing);
     } else if (completion != null) {
       value = completion;
-    } else if (manual || activity == CloudRecoveryActivity.resuming) {
+    } else if (manual) {
       value = const SyncProgress(SyncPhase.preparing);
     } else {
       final failures = noteFailures.value.length + labelFailures.value.length;

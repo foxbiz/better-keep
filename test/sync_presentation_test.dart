@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,7 @@ void main() {
   late ValueNotifier<bool> notes, labels;
   late ValueNotifier<SyncProgress> noteStatus, labelStatus;
   late ValueNotifier<E2EEStatus> encryption;
+  late ValueNotifier<PostSignInState> postSignIn;
 
   setUp(() {
     verification = Completer();
@@ -29,6 +31,7 @@ void main() {
     noteStatus = ValueNotifier(SyncProgress.idle);
     labelStatus = ValueNotifier(SyncProgress.idle);
     encryption = ValueNotifier(E2EEStatus.ready);
+    postSignIn = ValueNotifier(PostSignInState.idle);
     presentation = SyncPresentation(
       recovery: recovery,
       noteBusy: notes,
@@ -39,6 +42,7 @@ void main() {
       labelFailures: ValueNotifier({}),
       sessionInvalid: ValueNotifier(false),
       encryptionStatus: encryption,
+      postSignInState: postSignIn,
     );
     recovery.start('account-a');
   });
@@ -46,6 +50,96 @@ void main() {
     recovery.stop();
     presentation.dispose();
   });
+
+  test('new session immediately prepares before any verification event', () {
+    expect(recovery.state.value, CloudSessionState.pending);
+    expect(recovery.activity.value, CloudRecoveryActivity.idle);
+    expect(presentation.value.phase, SyncPhase.preparing);
+    recovery.stop();
+    expect(presentation.value.phase, SyncPhase.idle);
+    recovery.start('account-b');
+    expect(presentation.value.phase, SyncPhase.preparing);
+  });
+
+  test('post-login stages stay visible with encryption ready', () async {
+    final phases = <SyncPhase>[];
+    presentation.addListener(() => phases.add(presentation.value.phase));
+    for (final stage in [
+      PostSignInStage.identityValidation,
+      PostSignInStage.accountInitialization,
+      PostSignInStage.encryptionInitialization,
+      PostSignInStage.auxiliaryServices,
+    ]) {
+      postSignIn.value = PostSignInState.running(stage);
+      expect(presentation.value.phase, SyncPhase.preparing);
+    }
+    final check = recovery.check();
+    verification.complete(CloudSessionState.ready);
+    await check;
+    initialization.complete();
+    await pumpEventQueue();
+    noteStatus.value = const SyncProgress(SyncPhase.complete);
+    final request = presentation.beginManual(() => true);
+    presentation.finishManual(request, SyncRefreshOutcome.complete);
+    expect(presentation.value.phase, SyncPhase.preparing);
+    notes.value = true;
+    expect(presentation.value.phase, SyncPhase.syncing);
+    postSignIn.value = PostSignInState.ready;
+    notes.value = false;
+    expect(presentation.value.phase, SyncPhase.complete);
+    expect(phases, isNot(contains(SyncPhase.idle)));
+  });
+
+  test('initialization failure ends preparation and retry restores it', () {
+    postSignIn.value = PostSignInState.recoverableFailure(
+      PostSignInStage.accountInitialization,
+      operation: 'initialize-account',
+    );
+    expect(presentation.value.phase, SyncPhase.deferred);
+    expect(presentation.value.isActive, isFalse);
+    postSignIn.value = PostSignInState.running(
+      PostSignInStage.accountInitialization,
+    );
+    expect(presentation.value.phase, SyncPhase.preparing);
+    recovery.connectionLost();
+    expect(presentation.value.phase, SyncPhase.unavailable);
+    expect(presentation.value.isActive, isFalse);
+  });
+
+  test('approval and encryption failures stop the preparation indicator', () {
+    postSignIn.value = PostSignInState.running(
+      PostSignInStage.encryptionInitialization,
+    );
+    for (final state in [
+      E2EEStatus.pendingApproval,
+      E2EEStatus.revoked,
+      E2EEStatus.needsRecovery,
+      E2EEStatus.error,
+    ]) {
+      encryption.value = state;
+      expect(presentation.value.isActive, isFalse);
+      expect(
+        presentation.value.phase,
+        state == E2EEStatus.pendingApproval
+            ? SyncPhase.waitingForApproval
+            : SyncPhase.deferred,
+      );
+    }
+  });
+
+  test(
+    'unfinished device initialization shows preparing rather than offline',
+    () async {
+      encryption.value = E2EEStatus.notInitialized;
+      final check = recovery.check();
+      verification.complete(CloudSessionState.pending);
+      await check;
+      expect(presentation.value.phase, SyncPhase.preparing);
+      expect(presentation.value.isActive, isTrue);
+      encryption.value = E2EEStatus.pendingApproval;
+      expect(presentation.value.phase, SyncPhase.waitingForApproval);
+    },
+  );
 
   test(
     'startup shows verification, initialization, and label-only activity',

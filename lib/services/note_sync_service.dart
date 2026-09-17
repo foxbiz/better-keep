@@ -1923,11 +1923,11 @@ class NoteSyncService {
     final current = _captureSession();
     return _syncOperationSerializer.run(_syncOperationKey, () async {
       if (!current()) return SyncRefreshOutcome.deferred;
-      return runCloudOperation(current, _refreshUnlocked);
+      return runCloudOperation(current, () => _refreshUnlocked(manual: manual));
     });
   }
 
-  Future<SyncRefreshOutcome> _refreshUnlocked() async {
+  Future<SyncRefreshOutcome> _refreshUnlocked({bool manual = false}) async {
     final override = refreshOperationOverride;
     if (override != null) {
       await override();
@@ -1977,6 +1977,22 @@ class NoteSyncService {
       requireCloudOperation();
       await _pullRemoteChanges();
 
+      if (manual) {
+        // Older revisions may already be behind the cloud cursor and have
+        // exhausted their budget before a local persistence fix was installed.
+        final failures = await _contentRetryLedger.listForUser(
+          currentUser!.uid,
+        );
+        requireCloudOperation();
+        for (final failure in failures) {
+          if (failure.category == RemoteNoteFailureCategory.localApply &&
+              failure.errorCode == 'local-note-apply-failed') {
+            await retryFailedRemoteNote(failure.remoteDocumentId);
+            requireCloudOperation();
+          }
+        }
+      }
+
       // Only show "Refresh Complete" if there are no failed syncs
       final failedSyncs = _syncCache.getPendingSyncs();
       final hasContentFailures = await _showContentFailureSummary(
@@ -2008,7 +2024,7 @@ class NoteSyncService {
               s.remoteData['deleted'] != true && s.remoteData['deleted'] != 1,
         );
         AppLogger.log(
-          "[SYNC] REFRESH PARTIAL: ${activeFailures.length} active notes pending (${failedSyncs.length - activeFailures.length} deleted)",
+          "[SYNC] REFRESH PARTIAL: ${activeFailures.length} active notes pending (${failedSyncs.length - activeFailures.length} deleted), ${contentFailures.value.length} recorded content failures",
         );
       }
       return SyncRefreshOutcome.failed;

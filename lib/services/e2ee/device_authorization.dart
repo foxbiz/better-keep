@@ -4,7 +4,15 @@ bool isAuthoritativeDeviceSnapshot({
   required bool hasPendingWrites,
 }) => !isFromCache && !hasPendingWrites;
 
-enum DeviceAuthorization { approved, pending, revoked, deleted, unavailable }
+enum DeviceAuthorization {
+  initializing,
+  unconfirmed,
+  approved,
+  pending,
+  revoked,
+  deleted,
+  unavailable,
+}
 
 enum LocalEncryptionState {
   ready,

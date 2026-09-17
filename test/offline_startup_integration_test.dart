@@ -9,6 +9,7 @@ import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/device_authorization.dart';
@@ -17,6 +18,8 @@ import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/post_sign_in_coordinator.dart';
+import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/authenticated_startup_routing.dart';
@@ -104,6 +107,64 @@ void main() {
     );
     AuthService.cloudRecovery.state.value = CloudSessionState.ready;
   }
+
+  test(
+    'unconfirmed registration stays initializing until its server write arrives',
+    () async {
+      storage.data.remove('e2ee_device_status');
+      storage.data['e2ee_sign_in_progress'] = 'true';
+      (backend.auth.currentUser! as OfflineUser).tokenResponse = () async =>
+          OfflineToken();
+      backend.firestore.response = (_, _) async => OfflineSnapshot();
+      final before = Map.of(storage.data);
+      expect(
+        await e2ee.verifyLocalSessionAuthorization(),
+        DeviceAuthorization.initializing,
+      );
+      expect(
+        await AuthService.cloudRecovery.check(),
+        CloudSessionState.pending,
+      );
+      expect(e2ee.status.value, E2EEStatus.notInitialized);
+      expect(storage.data, before);
+      expect(storage.deletes, 0);
+
+      backend.firestore.response = (_, _) async => OfflineSnapshot(
+        value: {
+          'status': 'pending',
+          'public_key': storage.data['e2ee_device_public_key'],
+          'created_at': '2026-01-01T00:00:00.000Z',
+        },
+      );
+      expect(
+        await e2ee.verifyLocalSessionAuthorization(),
+        DeviceAuthorization.pending,
+      );
+      expect(e2ee.status.value, E2EEStatus.pendingApproval);
+    },
+  );
+
+  test(
+    'missing device identity is initializing without offline or approval state',
+    () async {
+      (backend.auth.currentUser! as OfflineUser).tokenResponse = () async =>
+          OfflineToken();
+      storage.data.remove('e2ee_device_id');
+      final before = Map.of(storage.data);
+      expect(
+        await e2ee.verifyLocalSessionAuthorization(),
+        DeviceAuthorization.initializing,
+      );
+      expect(e2ee.status.value, E2EEStatus.notInitialized);
+      expect(await e2ee.deviceManager.deviceExistsOnServer(), isFalse);
+      expect(
+        await AuthService.cloudRecovery.check(),
+        CloudSessionState.pending,
+      );
+      expect(backend.firestore.reads, isEmpty);
+      expect(storage.data, before);
+    },
+  );
 
   test(
     'returning startup opens local Home before a forced token refresh fails',
@@ -237,12 +298,13 @@ void main() {
   test(
     'cache-only absence preserves keys; confirmed server deletion restricts access',
     () async {
+      storage.data['e2ee_sign_in_progress'] = 'true';
       await e2ee.preloadCachedStatus();
       backend.firestore.response = (_, _) async =>
           OfflineSnapshot(cached: true);
       expect(
         await e2ee.verifyLocalSessionAuthorization(),
-        DeviceAuthorization.unavailable,
+        DeviceAuthorization.unconfirmed,
       );
       expect(e2ee.isCryptoReady, isTrue);
       expect(storage.deletes, 0);
@@ -258,6 +320,158 @@ void main() {
         backend.firestore.reads.every((read) => read.$2 == Source.server),
         isTrue,
       );
+    },
+  );
+
+  test(
+    'unconfirmed snapshots cannot approve, revoke, delete, or report offline',
+    () async {
+      (backend.auth.currentUser! as OfflineUser).tokenResponse = () async =>
+          OfflineToken();
+      AuthService.postSignInState.value = PostSignInState.idle;
+      await e2ee.preloadCachedStatus();
+      final before = Map.of(storage.data);
+      for (final cached in [false, true]) {
+        for (final status in [null, 'approved', 'pending', 'revoked']) {
+          backend.firestore.response = (_, _) async => OfflineSnapshot(
+            cached: cached,
+            pending: !cached,
+            value: status == null
+                ? null
+                : {
+                    'status': status,
+                    'public_key': storage.data['e2ee_device_public_key'],
+                    'created_at': '2026-01-01T00:00:00.000Z',
+                  },
+          );
+          expect(
+            await e2ee.verifyLocalSessionAuthorization(),
+            DeviceAuthorization.unconfirmed,
+          );
+          expect(await e2ee.deviceManager.deviceExistsOnServer(), isFalse);
+          expect(
+            await AuthService.cloudRecovery.check(),
+            CloudSessionState.pending,
+          );
+          expect(SyncPresentation.instance.value.phase, SyncPhase.preparing);
+          expect(e2ee.isCryptoReady, isTrue);
+          expect(storage.data, before);
+          expect(storage.deletes, 0);
+          expect(backend.firestore.writes, isEmpty);
+        }
+      }
+    },
+  );
+
+  test(
+    'device changes coalesce a fresh read after an older authorization',
+    () async {
+      (backend.auth.currentUser! as OfflineUser).tokenResponse = () async =>
+          OfflineToken();
+      final first = Completer<DocumentSnapshot<Map<String, dynamic>>>();
+      var reads = 0;
+      backend.firestore.response = (_, _) async {
+        if (++reads == 1) return first.future;
+        return OfflineSnapshot(
+          value: {
+            'status': 'pending',
+            'public_key': storage.data['e2ee_device_public_key'],
+            'created_at': '2026-01-01T00:00:00.000Z',
+          },
+        );
+      };
+      final old = e2ee.verifyLocalSessionAuthorization();
+      await pumpEventQueue();
+      final rechecks = List.generate(
+        3,
+        (_) => e2ee.recheckCloudReadinessAfterDeviceChange(),
+      );
+      expect(reads, 1);
+      first.complete(OfflineSnapshot(pending: true));
+      expect(await old, DeviceAuthorization.unconfirmed);
+      expect(
+        await Future.wait(rechecks),
+        everyElement(CloudSessionState.pending),
+      );
+      expect(reads, 2);
+      expect(e2ee.status.value, E2EEStatus.pendingApproval);
+    },
+  );
+
+  test('queued device recheck cannot read or alter the next account', () async {
+    final first = Completer<DocumentSnapshot<Map<String, dynamic>>>();
+    backend.firestore.response = (_, _) => first.future;
+    final old = e2ee.verifyLocalSessionAuthorization();
+    await pumpEventQueue();
+    final recheck = e2ee.recheckCloudReadinessAfterDeviceChange();
+    e2ee.resetInitialization();
+    backend.auth.currentUser = OfflineUser('account-b');
+    final before = Map.of(storage.data);
+    first.complete(OfflineSnapshot());
+    expect(await old, DeviceAuthorization.unavailable);
+    expect(await recheck, CloudSessionState.pending);
+    expect(backend.firestore.reads, hasLength(1));
+    expect(storage.data, before);
+    expect(storage.deletes, 0);
+  });
+
+  test(
+    'recovery waits for pending capability writes and resumes on approval',
+    () async {
+      final user = backend.auth.currentUser! as OfflineUser;
+      user.tokenResponse = () async => OfflineToken();
+      AuthService.postSignInState.value = PostSignInState.idle;
+      await e2ee.preloadCachedStatus();
+      backend.firestore.write = (path, data) async {
+        backend.firestore.documents[path] = Map.of(data);
+      };
+      await RecoveryKeyService.instance.createRecoveryKey(
+        'synthetic recovery phrase',
+      );
+      final capabilityWrite = Completer<void>();
+      var pending = true;
+      backend.firestore.write = (path, data) async {
+        if (data.containsKey('capabilities')) {
+          await capabilityWrite.future;
+        } else {
+          backend.firestore.documents[path] = Map.of(data);
+        }
+      };
+      backend.firestore.queryResponse = (_, _) async =>
+          OfflineQuerySnapshot({});
+      backend.firestore.response = (path, _) async => OfflineSnapshot(
+        value: backend.firestore.documents[path],
+        pending: path.endsWith('/devices/device-a') && pending,
+      );
+      final states = <CloudSessionState>[];
+      void record() => states.add(AuthService.cloudRecovery.state.value);
+      AuthService.cloudRecovery.state.addListener(record);
+      addTearDown(() => AuthService.cloudRecovery.state.removeListener(record));
+      expect(
+        await RecoveryKeyService.instance.recoverWithPassphrase(
+          'synthetic recovery phrase',
+        ),
+        isTrue,
+      );
+      await pumpEventQueue();
+      expect(AuthService.cloudRecovery.state.value, CloudSessionState.pending);
+      expect(SyncPresentation.instance.value.phase, SyncPhase.preparing);
+      expect(e2ee.isCryptoReady, isTrue);
+
+      pending = false;
+      capabilityWrite.complete();
+      final approved = OfflineSnapshot(
+        value: backend.firestore.documents['users/account-a/devices/device-a'],
+      );
+      backend.firestore.events.add(approved);
+      await pumpEventQueue(times: 40);
+      expect(AuthService.cloudRecovery.state.value, CloudSessionState.ready);
+      expect(states, isNot(contains(CloudSessionState.unavailable)));
+      final tokenRequests = user.tokenRequests;
+      backend.firestore.events.add(approved);
+      backend.firestore.events.add(approved);
+      await pumpEventQueue();
+      expect(user.tokenRequests, tokenRequests);
     },
   );
 
