@@ -2,11 +2,79 @@ import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/pages/image_viewer.dart';
+import 'package:better_keep/themes/theme_registry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('viewer surfaces and toolbar contrast follow every app theme', (
+    tester,
+  ) async {
+    final image = _image(
+      src:
+          'data:image/png;base64,'
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      aspectRatio: '1:1',
+    );
+    for (final entry in {
+      ...ThemeRegistry.lightThemes,
+      ...ThemeRegistry.darkThemes,
+    }.entries) {
+      await tester.pumpWidget(
+        _localizedApp(
+          theme: entry.value,
+          home: ImageViewer(note: Note(), image: image),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = entry.value.colorScheme.surface;
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+        surface,
+        reason: entry.key,
+      );
+      expect(
+        tester.widget<AppBar>(find.byType(AppBar)).backgroundColor,
+        surface,
+        reason: entry.key,
+      );
+      expect(
+        tester
+            .widget<ColoredBox>(
+              find.descendant(
+                of: find.byKey(imageViewerHeroFrameKey),
+                matching: find.byType(ColoredBox),
+              ),
+            )
+            .color,
+        surface,
+        reason: entry.key,
+      );
+      final icons = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(Icon),
+      );
+      expect(icons, findsNWidgets(3));
+      for (final icon in icons.evaluate()) {
+        final text = tester.widget<RichText>(
+          find.descendant(
+            of: find.byWidget(icon.widget),
+            matching: find.byType(RichText),
+          ),
+        );
+        final rendered = Color.alphaBlend(text.text.style!.color!, surface);
+        final a = rendered.computeLuminance();
+        final b = surface.computeLuminance();
+        final contrast = a > b
+            ? (a + 0.05) / (b + 0.05)
+            : (b + 0.05) / (a + 0.05);
+        expect(contrast, greaterThanOrEqualTo(3), reason: entry.key);
+      }
+    }
+  });
 
   group('calculateImageViewerFrameSize', () {
     test('contains landscape, portrait, and square ratios', () {
@@ -123,11 +191,13 @@ void main() {
   });
 }
 
-MaterialApp _localizedApp({required Widget home}) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
-);
+MaterialApp _localizedApp({required Widget home, ThemeData? theme}) =>
+    MaterialApp(
+      theme: theme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
 
 NoteImage _image({required String src, required String aspectRatio}) =>
     NoteImage(
