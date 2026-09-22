@@ -1,10 +1,14 @@
-import 'package:better_keep/services/auth_service.dart';
-import 'package:better_keep/services/cloud_session_recovery.dart';
-import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
+
+import 'package:better_keep/pages/note_editor/embeds/note_attachment_embed.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_table_embed.dart';
+import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/utils/manual_sync_refresh.dart';
+import 'package:better_keep/utils/note_embed_rules.dart';
 import 'package:better_keep/components/animated_icon.dart';
 import 'package:better_keep/components/note_image_grid.dart';
 import 'package:better_keep/dialogs/unlock_note_dialog.dart';
@@ -177,7 +181,7 @@ class NoteCardBodyCache {
     // Retain the truncated line's block attributes, including checklists.
     final newline = text.indexOf('\n', end);
     preview.insert('\n', source.slice(newline, newline + 1).first.attributes);
-    return Document.fromDelta(preview);
+    return Document.fromDelta(normalizeNoteBlocks(preview));
   }
 
   void dispose() {
@@ -1367,77 +1371,88 @@ class _NoteCardState extends State<NoteCard>
                                 backgroundColor: noteColor,
                                 secondaryColor: secondaryColor,
                               ),
-                              embedBuilders: kIsWeb
-                                  ? FlutterQuillEmbeds.editorWebBuilders()
-                                  : FlutterQuillEmbeds.editorBuilders(
-                                      imageEmbedConfig: QuillEditorImageEmbedConfig(
-                                        imageProviderBuilder: (context, imageUrl) {
-                                          if (imageUrl.startsWith('http://') ||
-                                              imageUrl.startsWith('https://')) {
-                                            return NetworkImage(imageUrl);
-                                          } else if (imageUrl.startsWith(
-                                            'data:image/',
-                                          )) {
-                                            // Check cache first
-                                            if (_base64ImageCache.containsKey(
-                                              imageUrl,
+                              embedBuilders: [
+                                NoteTableEmbedBuilder(
+                                  note: widget.note,
+                                  previewMaxHeight: 160 / scale,
+                                ),
+                                NoteAttachmentEmbedBuilder(widget.note),
+                                ...kIsWeb
+                                    ? FlutterQuillEmbeds.editorWebBuilders()
+                                    : FlutterQuillEmbeds.editorBuilders(
+                                        imageEmbedConfig: QuillEditorImageEmbedConfig(
+                                          imageProviderBuilder: (context, imageUrl) {
+                                            if (imageUrl.startsWith(
+                                                  'http://',
+                                                ) ||
+                                                imageUrl.startsWith(
+                                                  'https://',
+                                                )) {
+                                              return NetworkImage(imageUrl);
+                                            } else if (imageUrl.startsWith(
+                                              'data:image/',
                                             )) {
-                                              return _base64ImageCache[imageUrl];
-                                            }
-                                            try {
-                                              final regex = RegExp(
-                                                r'^data:image/[^;]+;base64,(.+)$',
-                                              );
-                                              final match = regex.firstMatch(
+                                              // Check cache first
+                                              if (_base64ImageCache.containsKey(
                                                 imageUrl,
-                                              );
-                                              if (match != null) {
-                                                final base64Data = match.group(
-                                                  1,
-                                                )!;
-                                                final bytes = base64Decode(
-                                                  base64Data,
-                                                );
-                                                final image = MemoryImage(
-                                                  bytes,
-                                                );
-                                                // Cache with size limit
-                                                if (_base64ImageCache.length >=
-                                                    _maxImageCacheSize) {
-                                                  _base64ImageCache.remove(
-                                                    _base64ImageCache
-                                                        .keys
-                                                        .first,
-                                                  );
-                                                }
-                                                _base64ImageCache[imageUrl] =
-                                                    image;
-                                                return image;
+                                              )) {
+                                                return _base64ImageCache[imageUrl];
                                               }
-                                            } catch (e) {
-                                              AppLogger.error(
-                                                '[NoteCard] Failed to decode data URL',
-                                                e,
-                                              );
+                                              try {
+                                                final regex = RegExp(
+                                                  r'^data:image/[^;]+;base64,(.+)$',
+                                                );
+                                                final match = regex.firstMatch(
+                                                  imageUrl,
+                                                );
+                                                if (match != null) {
+                                                  final base64Data = match
+                                                      .group(1)!;
+                                                  final bytes = base64Decode(
+                                                    base64Data,
+                                                  );
+                                                  final image = MemoryImage(
+                                                    bytes,
+                                                  );
+                                                  // Cache with size limit
+                                                  if (_base64ImageCache
+                                                          .length >=
+                                                      _maxImageCacheSize) {
+                                                    _base64ImageCache.remove(
+                                                      _base64ImageCache
+                                                          .keys
+                                                          .first,
+                                                    );
+                                                  }
+                                                  _base64ImageCache[imageUrl] =
+                                                      image;
+                                                  return image;
+                                                }
+                                              } catch (e) {
+                                                AppLogger.error(
+                                                  '[NoteCard] Failed to decode data URL',
+                                                  e,
+                                                );
+                                              }
                                             }
-                                          }
-                                          return null;
-                                        },
-                                        imageErrorWidgetBuilder:
-                                            (context, error, stackTrace) {
-                                              return Container(
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                child: Icon(
-                                                  Icons.broken_image_outlined,
-                                                  size: 14,
-                                                  color: Colors.grey,
-                                                ),
-                                              );
-                                            },
+                                            return null;
+                                          },
+                                          imageErrorWidgetBuilder:
+                                              (context, error, stackTrace) {
+                                                return Container(
+                                                  padding: const EdgeInsets.all(
+                                                    4,
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.broken_image_outlined,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
+                                                );
+                                              },
+                                        ),
                                       ),
-                                    ),
+                              ],
                             ),
                           ),
                         ),

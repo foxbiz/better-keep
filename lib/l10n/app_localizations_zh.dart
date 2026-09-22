@@ -3540,4 +3540,123 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncPaused => '同步已暂停。请重试。';
+
+  @override
+  String get insertTable => '插入表格';
+
+  @override
+  String get tablePickerHint => '点按单元格插入，或自定义大小。';
+
+  @override
+  String tableDimensions(int rows, int columns) {
+    return '$rows 行 × $columns 列';
+  }
+
+  @override
+  String get tableRows => '行数';
+
+  @override
+  String get tableColumns => '列数';
+
+  @override
+  String get tableSizeLimit => '行数和列数均为 1–256';
+
+  @override
+  String get inNoteImage => '笔记内图片';
+
+  @override
+  String get imagePlacement => '图片位置';
+
+  @override
+  String get imageInline => '与文字同行';
+
+  @override
+  String get imageNewLine => '单独一行';
+
+  @override
+  String get removeImageReference => '从正文移除';
+
+  @override
+  String get inlineAttachmentUnavailable => '附件不可用';
+
+  @override
+  String get chooseAttachment => '选择现有附件';
+
+  @override
+  String get noVisualAttachments => '请先为此笔记添加图片或草图。';
+
+  @override
+  String tableRowOptions(int number) {
+    return '第 $number 行选项';
+  }
+
+  @override
+  String tableColumnOptions(int number) {
+    return '第 $number 列选项';
+  }
+
+  @override
+  String tableCellLabel(int row, int column) {
+    return '第 $row 行，第 $column 列';
+  }
+
+  @override
+  String get insertRowAbove => '在上方插入行';
+
+  @override
+  String get insertRowBelow => '在下方插入行';
+
+  @override
+  String get insertColumnBefore => '在前方插入列';
+
+  @override
+  String get insertColumnAfter => '在后方插入列';
+
+  @override
+  String get duplicateRow => '复制行';
+
+  @override
+  String get duplicateColumn => '复制列';
+
+  @override
+  String get deleteRow => '删除行';
+
+  @override
+  String get deleteColumn => '删除列';
+
+  @override
+  String get resizeRow => '拖动以调整行高';
+
+  @override
+  String get resizeColumn => '拖动以调整列宽';
+
+  @override
+  String get fitTableColumns => '使列宽适应可用宽度';
+
+  @override
+  String get deleteTable => '删除表格';
+
+  @override
+  String get showTableHeaders => '显示表格标题';
+
+  @override
+  String get showTableHeadersDescription => '在笔记中显示列字母和行号';
+
+  @override
+  String get settingsAppearanceLanguage => '外观与语言';
+
+  @override
+  String get settingsNotesEditing => '笔记与编辑';
+
+  @override
+  String get settingsSync => '同步';
+
+  @override
+  String get settingsPrivacySecurity => '隐私与安全';
+
+  @override
+  String get settingsAdvanced => '高级';
+
+  @override
+  String get settingsHelpAbout => '帮助与关于';
 }

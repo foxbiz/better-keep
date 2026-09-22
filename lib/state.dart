@@ -62,6 +62,7 @@ final _defaultState = {
   "toolbar_grid_modes": <String, bool>{},
   "locale": null,
   "editor_full_screen": false,
+  "table_headers": false,
 };
 
 class AppState {
@@ -290,6 +291,8 @@ class AppState {
     _state["editor_full_screen"] =
         prefsInstance.getBool("editor_full_screen") ?? false;
     editorFullScreenNotifier.value = _state["editor_full_screen"] as bool;
+    _state["table_headers"] = prefsInstance.getBool("table_headers") ?? false;
+    tableHeadersNotifier.value = _state["table_headers"] as bool;
 
     // Load locale preference
     final localeString = prefsInstance.getString("locale");
@@ -488,6 +491,16 @@ class AppState {
     set("editor_full_screen", value);
     editorFullScreenNotifier.value = value;
     _persistToPrefs((p) async => p.setBool("editor_full_screen", value));
+  }
+
+  static final tableHeadersNotifier = ValueNotifier(false);
+
+  static bool get tableHeaders => _state["table_headers"] as bool? ?? false;
+
+  static set tableHeaders(bool value) {
+    set("table_headers", value);
+    tableHeadersNotifier.value = value;
+    _persistToPrefs((p) async => p.setBool("table_headers", value));
   }
 
   static SketchTool get sketchTool {

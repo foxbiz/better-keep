@@ -3599,4 +3599,123 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncPaused => '동기화가 일시 중지되었습니다. 다시 시도해 주세요.';
+
+  @override
+  String get insertTable => '표 삽입';
+
+  @override
+  String get tablePickerHint => '셀을 탭하여 삽입하거나 크기를 직접 입력하세요.';
+
+  @override
+  String tableDimensions(int rows, int columns) {
+    return '$rows행 × $columns열';
+  }
+
+  @override
+  String get tableRows => '행';
+
+  @override
+  String get tableColumns => '열';
+
+  @override
+  String get tableSizeLimit => '행과 열 각각 1–256개';
+
+  @override
+  String get inNoteImage => '노트 내 이미지';
+
+  @override
+  String get imagePlacement => '이미지 배치';
+
+  @override
+  String get imageInline => '텍스트와 같은 줄';
+
+  @override
+  String get imageNewLine => '별도의 줄';
+
+  @override
+  String get removeImageReference => '본문에서 제거';
+
+  @override
+  String get inlineAttachmentUnavailable => '첨부 파일을 사용할 수 없습니다';
+
+  @override
+  String get chooseAttachment => '기존 첨부 파일 선택';
+
+  @override
+  String get noVisualAttachments => '먼저 노트에 이미지나 스케치를 추가하세요.';
+
+  @override
+  String tableRowOptions(int number) {
+    return '$number행 옵션';
+  }
+
+  @override
+  String tableColumnOptions(int number) {
+    return '$number열 옵션';
+  }
+
+  @override
+  String tableCellLabel(int row, int column) {
+    return '$row행, $column열';
+  }
+
+  @override
+  String get insertRowAbove => '위에 행 삽입';
+
+  @override
+  String get insertRowBelow => '아래에 행 삽입';
+
+  @override
+  String get insertColumnBefore => '앞에 열 삽입';
+
+  @override
+  String get insertColumnAfter => '뒤에 열 삽입';
+
+  @override
+  String get duplicateRow => '행 복제';
+
+  @override
+  String get duplicateColumn => '열 복제';
+
+  @override
+  String get deleteRow => '행 삭제';
+
+  @override
+  String get deleteColumn => '열 삭제';
+
+  @override
+  String get resizeRow => '드래그하여 행 높이 조절';
+
+  @override
+  String get resizeColumn => '드래그하여 열 너비 조절';
+
+  @override
+  String get fitTableColumns => '열 너비 맞추기';
+
+  @override
+  String get deleteTable => '표 삭제';
+
+  @override
+  String get showTableHeaders => '표 머리글 표시';
+
+  @override
+  String get showTableHeadersDescription => '노트에 열 문자와 행 번호를 표시합니다';
+
+  @override
+  String get settingsAppearanceLanguage => '화면 및 언어';
+
+  @override
+  String get settingsNotesEditing => '노트 및 편집';
+
+  @override
+  String get settingsSync => '동기화';
+
+  @override
+  String get settingsPrivacySecurity => '개인정보 보호 및 보안';
+
+  @override
+  String get settingsAdvanced => '고급';
+
+  @override
+  String get settingsHelpAbout => '도움말 및 앱 정보';
 }

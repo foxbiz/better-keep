@@ -3599,4 +3599,123 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncPaused => '同期を一時停止しました。再試行してください。';
+
+  @override
+  String get insertTable => '表を挿入';
+
+  @override
+  String get tablePickerHint => 'セルをタップして挿入するか、サイズを指定してください。';
+
+  @override
+  String tableDimensions(int rows, int columns) {
+    return '$rows 行 × $columns 列';
+  }
+
+  @override
+  String get tableRows => '行';
+
+  @override
+  String get tableColumns => '列';
+
+  @override
+  String get tableSizeLimit => '行と列はそれぞれ1～256';
+
+  @override
+  String get inNoteImage => 'ノート内の画像';
+
+  @override
+  String get imagePlacement => '画像の配置';
+
+  @override
+  String get imageInline => 'テキストと同じ行';
+
+  @override
+  String get imageNewLine => '独立した行';
+
+  @override
+  String get removeImageReference => '本文から削除';
+
+  @override
+  String get inlineAttachmentUnavailable => '添付ファイルを利用できません';
+
+  @override
+  String get chooseAttachment => '既存の添付ファイルを選択';
+
+  @override
+  String get noVisualAttachments => 'まず画像かスケッチをノートに追加してください。';
+
+  @override
+  String tableRowOptions(int number) {
+    return '行 $number のオプション';
+  }
+
+  @override
+  String tableColumnOptions(int number) {
+    return '列 $number のオプション';
+  }
+
+  @override
+  String tableCellLabel(int row, int column) {
+    return '行 $row、列 $column';
+  }
+
+  @override
+  String get insertRowAbove => '上に行を挿入';
+
+  @override
+  String get insertRowBelow => '下に行を挿入';
+
+  @override
+  String get insertColumnBefore => '前に列を挿入';
+
+  @override
+  String get insertColumnAfter => '後に列を挿入';
+
+  @override
+  String get duplicateRow => '行を複製';
+
+  @override
+  String get duplicateColumn => '列を複製';
+
+  @override
+  String get deleteRow => '行を削除';
+
+  @override
+  String get deleteColumn => '列を削除';
+
+  @override
+  String get resizeRow => 'ドラッグして行の高さを変更';
+
+  @override
+  String get resizeColumn => 'ドラッグして列の幅を変更';
+
+  @override
+  String get fitTableColumns => '列を幅に合わせる';
+
+  @override
+  String get deleteTable => '表を削除';
+
+  @override
+  String get showTableHeaders => '表の見出しを表示';
+
+  @override
+  String get showTableHeadersDescription => 'ノート内の表に列の文字と行番号を表示します';
+
+  @override
+  String get settingsAppearanceLanguage => '外観と言語';
+
+  @override
+  String get settingsNotesEditing => 'ノートと編集';
+
+  @override
+  String get settingsSync => '同期';
+
+  @override
+  String get settingsPrivacySecurity => 'プライバシーとセキュリティ';
+
+  @override
+  String get settingsAdvanced => '詳細設定';
+
+  @override
+  String get settingsHelpAbout => 'ヘルプとアプリ情報';
 }

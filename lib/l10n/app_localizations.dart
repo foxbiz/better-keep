@@ -6653,6 +6653,228 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync paused. Please retry.'**
   String get syncPaused;
+
+  /// No description provided for @insertTable.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert table'**
+  String get insertTable;
+
+  /// No description provided for @tablePickerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a cell to insert, or choose a custom size.'**
+  String get tablePickerHint;
+
+  /// No description provided for @tableDimensions.
+  ///
+  /// In en, this message translates to:
+  /// **'{rows} rows × {columns} columns'**
+  String tableDimensions(int rows, int columns);
+
+  /// No description provided for @tableRows.
+  ///
+  /// In en, this message translates to:
+  /// **'Rows'**
+  String get tableRows;
+
+  /// No description provided for @tableColumns.
+  ///
+  /// In en, this message translates to:
+  /// **'Columns'**
+  String get tableColumns;
+
+  /// No description provided for @tableSizeLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'1–256 rows and columns'**
+  String get tableSizeLimit;
+
+  /// No description provided for @inNoteImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image in note'**
+  String get inNoteImage;
+
+  /// No description provided for @imagePlacement.
+  ///
+  /// In en, this message translates to:
+  /// **'Image placement'**
+  String get imagePlacement;
+
+  /// No description provided for @imageInline.
+  ///
+  /// In en, this message translates to:
+  /// **'Inline with text'**
+  String get imageInline;
+
+  /// No description provided for @imageNewLine.
+  ///
+  /// In en, this message translates to:
+  /// **'On a new line'**
+  String get imageNewLine;
+
+  /// No description provided for @removeImageReference.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from text'**
+  String get removeImageReference;
+
+  /// No description provided for @inlineAttachmentUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment unavailable'**
+  String get inlineAttachmentUnavailable;
+
+  /// No description provided for @chooseAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose existing attachment'**
+  String get chooseAttachment;
+
+  /// No description provided for @noVisualAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an image or sketch to this note first.'**
+  String get noVisualAttachments;
+
+  /// No description provided for @tableRowOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Row {number} options'**
+  String tableRowOptions(int number);
+
+  /// No description provided for @tableColumnOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Column {number} options'**
+  String tableColumnOptions(int number);
+
+  /// No description provided for @tableCellLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Row {row}, column {column}'**
+  String tableCellLabel(int row, int column);
+
+  /// No description provided for @insertRowAbove.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert row above'**
+  String get insertRowAbove;
+
+  /// No description provided for @insertRowBelow.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert row below'**
+  String get insertRowBelow;
+
+  /// No description provided for @insertColumnBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert column before'**
+  String get insertColumnBefore;
+
+  /// No description provided for @insertColumnAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert column after'**
+  String get insertColumnAfter;
+
+  /// No description provided for @duplicateRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate row'**
+  String get duplicateRow;
+
+  /// No description provided for @duplicateColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate column'**
+  String get duplicateColumn;
+
+  /// No description provided for @deleteRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete row'**
+  String get deleteRow;
+
+  /// No description provided for @deleteColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete column'**
+  String get deleteColumn;
+
+  /// No description provided for @resizeRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to resize row'**
+  String get resizeRow;
+
+  /// No description provided for @resizeColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to resize column'**
+  String get resizeColumn;
+
+  /// No description provided for @fitTableColumns.
+  ///
+  /// In en, this message translates to:
+  /// **'Fit columns to width'**
+  String get fitTableColumns;
+
+  /// No description provided for @deleteTable.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete table'**
+  String get deleteTable;
+
+  /// No description provided for @showTableHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Show table headers'**
+  String get showTableHeaders;
+
+  /// No description provided for @showTableHeadersDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Display column letters and row numbers in notes'**
+  String get showTableHeadersDescription;
+
+  /// Appearance & language settings section heading
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance & language'**
+  String get settingsAppearanceLanguage;
+
+  /// Notes & editing settings section heading
+  ///
+  /// In en, this message translates to:
+  /// **'Notes & editing'**
+  String get settingsNotesEditing;
+
+  /// Sync settings section heading
+  ///
+  /// In en, this message translates to:
+  /// **'Sync'**
+  String get settingsSync;
+
+  /// Privacy & security settings section heading
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy & security'**
+  String get settingsPrivacySecurity;
+
+  /// Advanced settings section heading
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get settingsAdvanced;
+
+  /// Help & about settings section heading
+  ///
+  /// In en, this message translates to:
+  /// **'Help & about'**
+  String get settingsHelpAbout;
 }
 
 class _AppLocalizationsDelegate

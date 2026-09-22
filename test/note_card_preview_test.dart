@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/note_table.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_table_embed.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -37,6 +39,28 @@ void main() {
         {'insert': '${'a' * limit}\n'},
       ]);
       expect(preview(source, limit: limit).toPlainText(), source.toPlainText());
+    });
+
+    test('truncation at $limit keeps a table separate from the ellipsis', () {
+      final table = NoteTableData(rows: 2, columns: 2).withCell(1, 1, [
+        {'insert': 'Preserved cell\n'},
+      ]);
+      final prefix = '${'a' * (limit - 2)}\n';
+      final source = Document.fromJson([
+        {'insert': prefix},
+        {
+          'insert': {NoteTableData.type: table.toJson()},
+        },
+        {'insert': '\nFollowing text\n'},
+      ]);
+      addTearDown(source.close);
+      final original = source.toDelta().toJson();
+      final result = preview(source, limit: limit);
+      expect(result.toPlainText(), '$prefix\uFFFC\n...\n');
+      final line = result.queryChild(prefix.length).node as Line;
+      expect(line.childCount, 1);
+      expect((line.children.single as Embed).value.data, table.toJson());
+      expect(source.toDelta().toJson(), original);
     });
   }
 
@@ -172,4 +196,87 @@ void main() {
     expect(body(), '${'b' * 1000}...\n');
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'table card previews crop large and nested tables without scrollbars or data changes',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await AppState.init();
+      final nested = NoteTableData(rows: 256, columns: 256);
+      final large = NoteTableData(rows: 256, columns: 256, rowHeights: {0: 260})
+          .withCell(0, 0, [
+            {
+              'insert': {NoteTableData.type: nested.toJson()},
+            },
+            {'insert': '\n'},
+          ]);
+      final small = NoteTableData(rows: 1, columns: 1);
+      for (final width in [180.0, 300.0]) {
+        for (final table in [large, small]) {
+          final content = jsonEncode([
+            {
+              'insert': {NoteTableData.type: table.toJson()},
+            },
+            {'insert': '\n'},
+          ]);
+          final note = Note(id: 42, content: content);
+          await tester.pumpWidget(
+            MaterialApp(
+              localizationsDelegates: [
+                ...AppLocalizations.localizationsDelegates,
+                FlutterQuillLocalizations.delegate,
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: SizedBox(
+                      width: width,
+                      child: NoteCard(note: note, index: 0),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pump(const Duration(milliseconds: 300));
+          final rootTable = find.byKey(ValueKey(table.id));
+          final displayedHeight =
+              tester.getBottomRight(rootTable).dy -
+              tester.getTopLeft(rootTable).dy;
+          expect(displayedHeight, lessThanOrEqualTo(160));
+          expect(tester.getSize(find.byType(NoteCard)).height, lessThan(300));
+          expect(
+            displayedHeight,
+            table == small ? lessThan(160) : closeTo(160, 0.1),
+          );
+          expect(
+            find.descendant(
+              of: rootTable,
+              matching: find.byWidgetPredicate(
+                (widget) => widget is RawScrollbar,
+              ),
+            ),
+            findsNothing,
+          );
+          final cells = find.descendant(
+            of: rootTable,
+            matching: find.byType(QuillEditor),
+          );
+          expect(cells.evaluate().length, lessThan(40));
+          expect(
+            tester.widget<NoteTableView>(rootTable).table.rows,
+            table.rows,
+          );
+          for (final editor in tester.widgetList<QuillEditor>(cells)) {
+            expect(editor.controller.readOnly, isTrue);
+          }
+          expect(note.content, content);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        }
+      }
+    },
+  );
 }

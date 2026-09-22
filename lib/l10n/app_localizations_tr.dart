@@ -3739,4 +3739,126 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get syncPaused =>
       'Senkronizasyon duraklatıldı. Lütfen tekrar deneyin.';
+
+  @override
+  String get insertTable => 'Tablo ekle';
+
+  @override
+  String get tablePickerHint =>
+      'Eklemek için bir hücreye dokunun veya özel bir boyut seçin.';
+
+  @override
+  String tableDimensions(int rows, int columns) {
+    return '$rows satır × $columns sütun';
+  }
+
+  @override
+  String get tableRows => 'Satırlar';
+
+  @override
+  String get tableColumns => 'Sütunlar';
+
+  @override
+  String get tableSizeLimit => 'Satır ve sütun sayısı 1–256 arasında olmalıdır';
+
+  @override
+  String get inNoteImage => 'Not içi resim';
+
+  @override
+  String get imagePlacement => 'Resim yerleşimi';
+
+  @override
+  String get imageInline => 'Metinle aynı satırda';
+
+  @override
+  String get imageNewLine => 'Ayrı bir satırda';
+
+  @override
+  String get removeImageReference => 'Metinden kaldır';
+
+  @override
+  String get inlineAttachmentUnavailable => 'Ek kullanılamıyor';
+
+  @override
+  String get chooseAttachment => 'Mevcut eki seç';
+
+  @override
+  String get noVisualAttachments =>
+      'Önce bu nota bir resim veya çizim ekleyin.';
+
+  @override
+  String tableRowOptions(int number) {
+    return '$number. satır seçenekleri';
+  }
+
+  @override
+  String tableColumnOptions(int number) {
+    return '$number. sütun seçenekleri';
+  }
+
+  @override
+  String tableCellLabel(int row, int column) {
+    return '$row. satır, $column. sütun';
+  }
+
+  @override
+  String get insertRowAbove => 'Üste satır ekle';
+
+  @override
+  String get insertRowBelow => 'Alta satır ekle';
+
+  @override
+  String get insertColumnBefore => 'Öncesine sütun ekle';
+
+  @override
+  String get insertColumnAfter => 'Sonrasına sütun ekle';
+
+  @override
+  String get duplicateRow => 'Satırı çoğalt';
+
+  @override
+  String get duplicateColumn => 'Sütunu çoğalt';
+
+  @override
+  String get deleteRow => 'Satırı sil';
+
+  @override
+  String get deleteColumn => 'Sütunu sil';
+
+  @override
+  String get resizeRow => 'Satır yüksekliğini değiştirmek için sürükleyin';
+
+  @override
+  String get resizeColumn => 'Sütun genişliğini değiştirmek için sürükleyin';
+
+  @override
+  String get fitTableColumns => 'Sütunları genişliğe sığdır';
+
+  @override
+  String get deleteTable => 'Tabloyu sil';
+
+  @override
+  String get showTableHeaders => 'Tablo başlıklarını göster';
+
+  @override
+  String get showTableHeadersDescription =>
+      'Notlarda sütun harflerini ve satır numaralarını göster';
+
+  @override
+  String get settingsAppearanceLanguage => 'Görünüm ve dil';
+
+  @override
+  String get settingsNotesEditing => 'Notlar ve düzenleme';
+
+  @override
+  String get settingsSync => 'Senkronizasyon';
+
+  @override
+  String get settingsPrivacySecurity => 'Gizlilik ve güvenlik';
+
+  @override
+  String get settingsAdvanced => 'Gelişmiş';
+
+  @override
+  String get settingsHelpAbout => 'Yardım ve hakkında';
 }

@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'package:better_keep/pages/content_preview_page.dart';
 import 'dart:ui' show PointerDeviceKind;
 
+import 'package:better_keep/models/note_table.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_table_embed.dart';
 import 'package:better_keep/components/sketch_painter.dart';
 import 'package:better_keep/l10n/app_localization_config.dart';
 import 'package:better_keep/models/note.dart';
@@ -24,6 +27,494 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await AppState.init(prefs: await SharedPreferences.getInstance());
   });
+
+  testWidgets(
+    'table cells keep the main toolbar and keyboard focused on the cell',
+    (tester) async {
+      final table = NoteTableData(rows: 2, columns: 2);
+      await _pumpNoteEditor(
+        tester,
+        bodyDelta: [
+          {
+            'insert': {NoteTableData.type: table.toJson()},
+          },
+          {'insert': '\n'},
+        ],
+      );
+      final cellFinder = find
+          .descendant(
+            of: find.byType(NoteTableView),
+            matching: find.byType(QuillEditor),
+          )
+          .first;
+      await tester.tap(cellFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+      final cell = tester.widget<QuillEditor>(cellFinder);
+      final toolbar = tester.widget<NoteEditorToolbar>(
+        find.byKey(const Key('note_editor_toolbar')),
+      );
+      expect(toolbar.controller, same(cell.controller));
+      expect(cell.focusNode.hasPrimaryFocus, true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pump();
+      expect(cell.focusNode.hasPrimaryFocus, true);
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'Table text\n',
+          selection: TextSelection.collapsed(offset: 10),
+        ),
+      );
+      await tester.pump();
+      final root = tester.widget<QuillEditor>(find.byType(QuillEditor).first);
+      expect(root.config.showCursor, isFalse);
+      expect(tester.widget<QuillEditor>(cellFinder).config.showCursor, isTrue);
+      expect(
+        noteDeltaPlainText(root.controller.document.toDelta().toJson()),
+        contains('Table text'),
+      );
+      final rootSelection = root.controller.selection;
+      await tester.tap(cellFinder);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(cellFinder);
+      await tester.pump();
+      expect(cell.focusNode.hasPrimaryFocus, isTrue);
+      expect(root.controller.selection, rootSelection);
+      root.focusNode.requestFocus();
+      await tester.pump();
+      final mainToolbar = tester.widget<NoteEditorToolbar>(
+        find.byKey(const Key('note_editor_toolbar')),
+      );
+      expect(mainToolbar.controller, same(root.controller));
+      expect(
+        tester
+            .widget<QuillEditor>(find.byType(QuillEditor).first)
+            .config
+            .showCursor,
+        isTrue,
+      );
+      expect(tester.widget<QuillEditor>(cellFinder).config.showCursor, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('inserted tables stay block and taps return typing to the note', (
+    tester,
+  ) async {
+    await _pumpNoteEditor(
+      tester,
+      bodyDelta: [
+        {'insert': 'BeforeAfter\n'},
+      ],
+    );
+    final root = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    root.focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    root.controller.updateSelection(
+      const TextSelection.collapsed(offset: 6),
+      ChangeSource.local,
+    );
+    await tester.tap(find.byKey(const ValueKey('insert_table')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('table_picker_2_2')));
+    await tester.pumpAndSettle();
+    expect(root.controller.document.toPlainText(), 'Before\n\uFFFC\nAfter\n');
+    expect((root.controller.document.queryChild(7).node as Line).childCount, 1);
+    final table = find.byType(NoteTableView);
+    final cells = find.descendant(
+      of: table,
+      matching: find.byType(QuillEditor),
+    );
+    expect(
+      tester.getSize(table).width,
+      closeTo(tester.getSize(find.byType(QuillEditor).first).width - 32, 0.1),
+    );
+    await tester.tap(cells.first);
+    await tester.pump();
+    expect(
+      tester.widget<QuillEditor>(cells.first).focusNode.hasPrimaryFocus,
+      isTrue,
+    );
+    final afterText = find.byWidgetPredicate(
+      (widget) => widget is RichText && widget.text.toPlainText() == 'After',
+    );
+    await tester.tapAt(_globalTextPosition(tester, afterText, 2));
+    await tester.pump();
+    expect(root.focusNode.hasPrimaryFocus, isTrue);
+    expect(
+      tester
+          .widget<NoteEditorToolbar>(
+            find.byKey(const Key('note_editor_toolbar')),
+          )
+          .controller,
+      same(root.controller),
+    );
+    // The table margin is also a reliable way to resume after the block.
+    await tester.tap(cells.first);
+    await tester.pump();
+    await tester.tapAt(tester.getRect(table).bottomLeft + const Offset(36, 4));
+    await tester.pump();
+    expect(root.focusNode.hasPrimaryFocus, isTrue);
+    expect(root.controller.selection.baseOffset, 9);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'Before\n\uFFFC\nOutside After\n',
+        selection: TextSelection.collapsed(offset: 17),
+      ),
+    );
+    await tester.pump();
+    expect(
+      root.controller.document.toPlainText(),
+      'Before\n\uFFFC\nOutside After\n',
+    );
+    expect(
+      tester.widget<QuillEditor>(cells.first).controller.document.toPlainText(),
+      '\n',
+    );
+    expect((root.controller.document.queryChild(7).node as Line).childCount, 1);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets(
+    'table-only and adjacent tables expose writing space in notes and nested cells',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      for (final nested in [false, true]) {
+        for (final adjacent in [false, true]) {
+          for (final before in [true, false]) {
+            final table = NoteTableData(rows: 1, columns: 1);
+            final neighbor = [
+              {
+                'insert': {
+                  NoteTableData.type: NoteTableData(
+                    rows: 1,
+                    columns: 1,
+                  ).toJson(),
+                },
+              },
+              {'insert': '\n'},
+            ];
+            final tableDelta = [
+              if (adjacent && before) ...neighbor,
+              {
+                'insert': {NoteTableData.type: table.toJson()},
+              },
+              {'insert': '\n'},
+              if (adjacent && !before) ...neighbor,
+            ];
+            final outer = NoteTableData(
+              rows: 1,
+              columns: 1,
+              rowHeights: {0: adjacent ? 400 : 240},
+            ).withCell(0, 0, tableDelta);
+            await _pumpNoteEditor(
+              tester,
+              bodyDelta: nested
+                  ? [
+                      {
+                        'insert': {NoteTableData.type: outer.toJson()},
+                      },
+                      {'insert': '\n'},
+                    ]
+                  : tableDelta,
+            );
+            final root = tester.widget<QuillEditor>(
+              find.byType(QuillEditor).first,
+            );
+            final owner = nested
+                ? tester.widget<QuillEditor>(
+                    find
+                        .descendant(
+                          of: find.byKey(ValueKey(outer.id)),
+                          matching: find.byType(QuillEditor),
+                        )
+                        .first,
+                  )
+                : root;
+            final original = adjacent ? '\uFFFC\n\uFFFC\n' : '\uFFFC\n';
+            expect(owner.controller.document.toPlainText(), original);
+            final cell = find
+                .descendant(
+                  of: find.byKey(ValueKey(table.id)),
+                  matching: find.byType(QuillEditor),
+                )
+                .first;
+            final boundary = find.byKey(
+              ValueKey('table_${before ? 'before' : 'after'}_${table.id}'),
+            );
+            expect(tester.getSize(boundary).height, greaterThanOrEqualTo(40));
+            await tester.tap(cell);
+            await tester.pump();
+            root.controller.document.history.clear();
+            await tester.tap(boundary);
+            await tester.pump();
+            expect(owner.focusNode.hasPrimaryFocus, isTrue);
+            expect(
+              tester
+                  .widget<NoteEditorToolbar>(
+                    find.byKey(const Key('note_editor_toolbar')),
+                  )
+                  .controller,
+              same(owner.controller),
+            );
+            final prefix = adjacent && before ? '\uFFFC\n' : '';
+            final suffix = adjacent && !before ? '\uFFFC\n' : '';
+            final blankParagraph =
+                '$prefix${before ? '\n\uFFFC\n' : '\uFFFC\n\n'}$suffix';
+            expect(owner.controller.document.toPlainText(), blankParagraph);
+            // Repeated and rapid taps reuse the paragraph, including after returning from a cell.
+            await tester.tap(boundary);
+            await tester.pump();
+            expect(owner.controller.document.toPlainText(), blankParagraph);
+            final text =
+                '$prefix${before ? 'Before\n\uFFFC\n' : '\uFFFC\nAfter\n'}$suffix';
+            tester.testTextInput.updateEditingValue(
+              TextEditingValue(
+                text: text,
+                selection: TextSelection.collapsed(
+                  offset: prefix.length + (before ? 6 : 7),
+                ),
+              ),
+            );
+            await tester.pump();
+            expect(owner.controller.document.toPlainText(), text);
+            expect(
+              tester
+                  .widget<QuillEditor>(cell)
+                  .controller
+                  .document
+                  .toPlainText(),
+              '\n',
+            );
+            root.controller.undo();
+            await tester.pump();
+            await tester.pump();
+            expect(owner.controller.document.toPlainText(), original);
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pump(const Duration(milliseconds: 600));
+          }
+        }
+      }
+    },
+  );
+
+  testWidgets(
+    'diagonal divider drags resize without scrolling the table or note',
+    (tester) async {
+      tester.view.physicalSize = const Size(420, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final data = NoteTableData(
+        rows: 8,
+        columns: 4,
+        columnWidths: {for (var c = 0; c < 4; c++) c: 160},
+      );
+      await _pumpNoteEditor(
+        tester,
+        bodyDelta: [
+          {
+            'insert': {NoteTableData.type: data.toJson()},
+          },
+          {
+            'insert':
+                '\n${List.filled(30, 'Following paragraph').join('\n')}\n',
+          },
+        ],
+      );
+      final root = tester.widget<QuillEditor>(find.byType(QuillEditor).first);
+      final firstCell = find
+          .descendant(
+            of: find.byType(NoteTableView),
+            matching: find.byType(QuillEditor),
+          )
+          .first;
+      final horizontal = tester
+          .widget<SingleChildScrollView>(
+            find.byKey(ValueKey('table_horizontal_${data.id}')),
+          )
+          .controller!;
+      final vertical = tester
+          .widget<SingleChildScrollView>(
+            find.byKey(ValueKey('table_vertical_${data.id}')),
+          )
+          .controller!;
+      final viewport = find.byKey(ValueKey('table_horizontal_${data.id}'));
+      final horizontalBar = find.byKey(
+        ValueKey('table_horizontal_scrollbar_${data.id}'),
+      );
+      final verticalBar = find.byKey(
+        ValueKey('table_vertical_scrollbar_${data.id}'),
+      );
+      expect(
+        tester.getRect(horizontalBar).bottom - tester.getRect(viewport).bottom,
+        16,
+      );
+      expect(
+        tester.getRect(verticalBar).right - tester.getRect(viewport).right,
+        16,
+      );
+      final verticalEdge = tester.getRect(verticalBar).right;
+      for (final kind in [PointerDeviceKind.touch, PointerDeviceKind.mouse]) {
+        final before = tester.getRect(firstCell);
+        // Start slightly across the divider, with mostly vertical initial movement.
+        final column = await tester.startGesture(
+          Offset(before.right + 3, before.center.dy),
+          kind: kind,
+        );
+        await column.moveBy(const Offset(6, -50));
+        await tester.pump();
+        await column.up();
+        await tester.pump();
+        expect(tester.getSize(firstCell).width, closeTo(before.width + 6, 0.1));
+        final changed = tester.getRect(firstCell);
+        final row = await tester.startGesture(
+          Offset(changed.center.dx, changed.bottom + 3),
+          kind: kind,
+        );
+        await row.moveBy(const Offset(-60, 6));
+        await tester.pump();
+        await row.up();
+        await tester.pump();
+        expect(
+          tester.getSize(firstCell).height,
+          closeTo(before.height + 6, 0.1),
+        );
+        final saved = NoteTableData.fromJson(
+          (root.controller.document.toDelta().first.data
+              as Map)[NoteTableData.type],
+        );
+        expect(saved.columnWidths[0], closeTo(before.width + 6, 0.1));
+        expect(saved.rowHeights[0], closeTo(before.height + 6, 0.1));
+        expect(root.scrollController.offset, 0);
+        expect(horizontal.offset, 0);
+        expect(vertical.offset, 0);
+      }
+      // Ordinary swipes through a cell's body still scroll wide tables.
+      await tester.dragFrom(tester.getCenter(firstCell), const Offset(-60, 0));
+      await tester.pumpAndSettle();
+      expect(horizontal.offset, greaterThan(0));
+      expect(tester.getRect(verticalBar).right, verticalEdge);
+      horizontal.jumpTo(0);
+      await tester.pumpAndSettle();
+      final gridBounds = tester.getRect(viewport);
+      await tester.dragFrom(
+        Offset(gridBounds.left + 30, gridBounds.bottom + 8),
+        const Offset(50, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(horizontal.offset, greaterThan(0));
+      await tester.dragFrom(
+        Offset(gridBounds.right + 8, gridBounds.top + 30),
+        const Offset(0, 50),
+      );
+      await tester.pumpAndSettle();
+      expect(vertical.offset, greaterThan(0));
+      expect(root.scrollController.offset, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'Paste as formatted previews and inserts Markdown tables in notes and cells',
+    (tester) async {
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      tester.view.physicalSize = const Size(1000, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpNoteEditor(
+        tester,
+        bodyDelta: [
+          {'insert': 'BeforeAfter\n'},
+        ],
+      );
+      final root = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final offset =
+          root.controller.document.toPlainText().indexOf('BeforeAfter') + 6;
+      root.controller.updateSelection(
+        TextSelection.collapsed(offset: offset),
+        ChangeSource.local,
+      );
+
+      Future<void> pasteTable() async {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async => call.method == 'Clipboard.getData'
+              ? {
+                  'text':
+                      '| **Task** | Status |\n| --- | --- |\n| Build | Ready |',
+                }
+              : null,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('note_editor_overflow_menu')),
+        );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Paste as'));
+        await tester.tap(find.text('Paste as'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Formatted text'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ContentPreviewPage), findsOneWidget);
+        expect(find.byType(NoteTableView), findsOneWidget);
+        final preview = tester.widget<NoteTableView>(
+          find.byType(NoteTableView),
+        );
+        expect(preview.readOnly, isTrue);
+        expect(preview.table.cell(1, 0).first['insert'], 'Build');
+        await tester.tap(find.byTooltip('Insert'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ContentPreviewPage), findsNothing);
+      }
+
+      await pasteTable();
+      expect(find.byType(NoteTableView), findsOneWidget);
+      expect(
+        root.controller.document.toPlainText(),
+        contains('Before\n\uFFFC\nAfter'),
+      );
+      final cellFinder = find
+          .descendant(
+            of: find.byType(NoteTableView),
+            matching: find.byType(QuillEditor),
+          )
+          .last;
+      await tester.tap(cellFinder);
+      await tester.pump();
+      final cell = tester.widget<QuillEditor>(cellFinder);
+      cell.controller.updateSelection(
+        const TextSelection.collapsed(offset: 5),
+        ChangeSource.local,
+      );
+      root.controller.document.history.clear();
+      await pasteTable();
+      expect(find.byType(NoteTableView), findsNWidgets(2));
+      expect(
+        cell.controller.document.toPlainText(),
+        contains('Ready\n\uFFFC\n'),
+      );
+      root.controller.undo();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(NoteTableView), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
 
   testWidgets('blank space focuses short notes at the document end', (
     tester,

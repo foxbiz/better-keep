@@ -1,5 +1,9 @@
 import 'package:better_keep/components/adaptive_toolbar.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/dialogs/insert_table_dialog.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_attachment_embed.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
+import 'package:better_keep/models/note_table.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/pages/note_editor/toolbar/align_button.dart';
 import 'package:better_keep/pages/note_editor/toolbar/attach_button.dart';
@@ -102,6 +106,7 @@ class NoteEditorToolbar extends StatelessWidget {
     this.showChecklist = true,
     this.showBlockLists = true,
     this.showIndent = true,
+    this.showDocumentEmbeds = false,
   });
 
   final QuillController controller;
@@ -121,6 +126,7 @@ class NoteEditorToolbar extends StatelessWidget {
   final bool showChecklist;
   final bool showBlockLists;
   final bool showIndent;
+  final bool showDocumentEmbeds;
 
   Widget _styleButton(Attribute attribute) => StyleButton(
     attribute: attribute,
@@ -167,6 +173,48 @@ class NoteEditorToolbar extends StatelessWidget {
             onAppendTranscript: onAppendTranscript,
             onAttachmentAdded: onAttachmentAdded,
           ),
+        if (showDocumentEmbeds) ...[
+          IconButton(
+            key: const ValueKey('insert_table'),
+            tooltip: context.l10n.insertTable,
+            icon: const Icon(Icons.table_chart_outlined),
+            onPressed: readOnly
+                ? null
+                : () async {
+                    final table = await showInsertTableDialog(context);
+                    if (table == null ||
+                        !context.mounted ||
+                        controller.readOnly) {
+                      return;
+                    }
+                    insertNoteEmbed(
+                      controller,
+                      NoteTableData.type,
+                      table.toJson(),
+                      block: true,
+                    );
+                    focusNode.requestFocus();
+                  },
+          ),
+          if (note != null)
+            AttachButton(
+              key: const ValueKey('insert_note_image'),
+              readOnly: readOnly,
+              note: note!,
+              imageAttachmentPreparationService:
+                  imageAttachmentPreparationService,
+              onAttachmentAdded: onAttachmentAdded,
+              onInsertReference: (attachment) {
+                insertNoteEmbed(
+                  controller,
+                  noteAttachmentEmbedType,
+                  attachmentReference(attachment),
+                  block: true,
+                );
+                focusNode.requestFocus();
+              },
+            ),
+        ],
         TextColorButton(
           color: foregroundColor,
           focusNode: focusNode,

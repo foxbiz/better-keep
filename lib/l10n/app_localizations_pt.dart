@@ -3769,4 +3769,126 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncPaused => 'Sincronização pausada. Tente novamente.';
+
+  @override
+  String get insertTable => 'Inserir tabela';
+
+  @override
+  String get tablePickerHint =>
+      'Toque em uma célula para inserir ou escolha um tamanho personalizado.';
+
+  @override
+  String tableDimensions(int rows, int columns) {
+    return '$rows linhas × $columns colunas';
+  }
+
+  @override
+  String get tableRows => 'Linhas';
+
+  @override
+  String get tableColumns => 'Colunas';
+
+  @override
+  String get tableSizeLimit => 'De 1 a 256 linhas e colunas';
+
+  @override
+  String get inNoteImage => 'Imagem na nota';
+
+  @override
+  String get imagePlacement => 'Posição da imagem';
+
+  @override
+  String get imageInline => 'Na mesma linha do texto';
+
+  @override
+  String get imageNewLine => 'Em uma linha separada';
+
+  @override
+  String get removeImageReference => 'Remover do texto';
+
+  @override
+  String get inlineAttachmentUnavailable => 'Anexo indisponível';
+
+  @override
+  String get chooseAttachment => 'Escolher anexo existente';
+
+  @override
+  String get noVisualAttachments =>
+      'Adicione uma imagem ou um desenho a esta nota primeiro.';
+
+  @override
+  String tableRowOptions(int number) {
+    return 'Opções da linha $number';
+  }
+
+  @override
+  String tableColumnOptions(int number) {
+    return 'Opções da coluna $number';
+  }
+
+  @override
+  String tableCellLabel(int row, int column) {
+    return 'Linha $row, coluna $column';
+  }
+
+  @override
+  String get insertRowAbove => 'Inserir linha acima';
+
+  @override
+  String get insertRowBelow => 'Inserir linha abaixo';
+
+  @override
+  String get insertColumnBefore => 'Inserir coluna antes';
+
+  @override
+  String get insertColumnAfter => 'Inserir coluna depois';
+
+  @override
+  String get duplicateRow => 'Duplicar linha';
+
+  @override
+  String get duplicateColumn => 'Duplicar coluna';
+
+  @override
+  String get deleteRow => 'Excluir linha';
+
+  @override
+  String get deleteColumn => 'Excluir coluna';
+
+  @override
+  String get resizeRow => 'Arraste para ajustar a altura da linha';
+
+  @override
+  String get resizeColumn => 'Arraste para ajustar a largura da coluna';
+
+  @override
+  String get fitTableColumns => 'Ajustar colunas à largura';
+
+  @override
+  String get deleteTable => 'Excluir tabela';
+
+  @override
+  String get showTableHeaders => 'Mostrar cabeçalhos de tabela';
+
+  @override
+  String get showTableHeadersDescription =>
+      'Exibir letras das colunas e números das linhas nas notas';
+
+  @override
+  String get settingsAppearanceLanguage => 'Aparência e idioma';
+
+  @override
+  String get settingsNotesEditing => 'Notas e edição';
+
+  @override
+  String get settingsSync => 'Sincronização';
+
+  @override
+  String get settingsPrivacySecurity => 'Privacidade e segurança';
+
+  @override
+  String get settingsAdvanced => 'Avançado';
+
+  @override
+  String get settingsHelpAbout => 'Ajuda e sobre';
 }

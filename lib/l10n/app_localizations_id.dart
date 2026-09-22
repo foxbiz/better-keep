@@ -3734,4 +3734,126 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncPaused => 'Sinkronisasi dijeda. Silakan coba lagi.';
+
+  @override
+  String get insertTable => 'Sisipkan tabel';
+
+  @override
+  String get tablePickerHint =>
+      'Ketuk sel untuk menyisipkan, atau tentukan ukuran sendiri.';
+
+  @override
+  String tableDimensions(int rows, int columns) {
+    return '$rows baris × $columns kolom';
+  }
+
+  @override
+  String get tableRows => 'Baris';
+
+  @override
+  String get tableColumns => 'Kolom';
+
+  @override
+  String get tableSizeLimit => 'Masing-masing 1–256 baris dan kolom';
+
+  @override
+  String get inNoteImage => 'Gambar dalam catatan';
+
+  @override
+  String get imagePlacement => 'Penempatan gambar';
+
+  @override
+  String get imageInline => 'Sejajar dengan teks';
+
+  @override
+  String get imageNewLine => 'Di baris tersendiri';
+
+  @override
+  String get removeImageReference => 'Hapus dari teks';
+
+  @override
+  String get inlineAttachmentUnavailable => 'Lampiran tidak tersedia';
+
+  @override
+  String get chooseAttachment => 'Pilih lampiran yang ada';
+
+  @override
+  String get noVisualAttachments =>
+      'Tambahkan gambar atau sketsa ke catatan ini terlebih dahulu.';
+
+  @override
+  String tableRowOptions(int number) {
+    return 'Opsi baris $number';
+  }
+
+  @override
+  String tableColumnOptions(int number) {
+    return 'Opsi kolom $number';
+  }
+
+  @override
+  String tableCellLabel(int row, int column) {
+    return 'Baris $row, kolom $column';
+  }
+
+  @override
+  String get insertRowAbove => 'Sisipkan baris di atas';
+
+  @override
+  String get insertRowBelow => 'Sisipkan baris di bawah';
+
+  @override
+  String get insertColumnBefore => 'Sisipkan kolom sebelum';
+
+  @override
+  String get insertColumnAfter => 'Sisipkan kolom sesudah';
+
+  @override
+  String get duplicateRow => 'Duplikat baris';
+
+  @override
+  String get duplicateColumn => 'Duplikat kolom';
+
+  @override
+  String get deleteRow => 'Hapus baris';
+
+  @override
+  String get deleteColumn => 'Hapus kolom';
+
+  @override
+  String get resizeRow => 'Seret untuk mengubah tinggi baris';
+
+  @override
+  String get resizeColumn => 'Seret untuk mengubah lebar kolom';
+
+  @override
+  String get fitTableColumns => 'Sesuaikan lebar kolom';
+
+  @override
+  String get deleteTable => 'Hapus tabel';
+
+  @override
+  String get showTableHeaders => 'Tampilkan header tabel';
+
+  @override
+  String get showTableHeadersDescription =>
+      'Tampilkan huruf kolom dan nomor baris dalam catatan';
+
+  @override
+  String get settingsAppearanceLanguage => 'Tampilan & bahasa';
+
+  @override
+  String get settingsNotesEditing => 'Catatan & pengeditan';
+
+  @override
+  String get settingsSync => 'Sinkronisasi';
+
+  @override
+  String get settingsPrivacySecurity => 'Privasi & keamanan';
+
+  @override
+  String get settingsAdvanced => 'Lanjutan';
+
+  @override
+  String get settingsHelpAbout => 'Bantuan & tentang';
 }

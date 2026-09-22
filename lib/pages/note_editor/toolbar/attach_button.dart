@@ -4,6 +4,8 @@ import 'package:better_keep/utils/utils.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/note_attachment.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_attachment_embed.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -26,6 +28,7 @@ class AttachButton extends StatefulWidget {
   final void Function(String text, NoteRecording recording)? onAppendTranscript;
   final VoidCallback? onAttachmentAdded;
   final ImageAttachmentPreparationService? imageAttachmentPreparationService;
+  final ValueChanged<NoteAttachment>? onInsertReference;
 
   const AttachButton({
     super.key,
@@ -35,6 +38,7 @@ class AttachButton extends StatefulWidget {
     this.onAppendTranscript,
     this.onAttachmentAdded,
     this.imageAttachmentPreparationService,
+    this.onInsertReference,
   });
 
   @override
@@ -57,6 +61,12 @@ class _AttachButtonState extends State<AttachButton> {
   }
 
   @override
+  void didUpdateWidget(AttachButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.isDisabled = widget.readOnly;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AdaptivePopupMenu(
       controller: _controller,
@@ -64,16 +74,32 @@ class _AttachButtonState extends State<AttachButton> {
       showLabels: true,
       fitContent: true,
       items: (context) => [
+        if (widget.onInsertReference != null)
+          AdaptiveMenuItem(
+            icon: Icons.collections_outlined,
+            label: context.l10n.chooseAttachment,
+            onTap: () async {
+              _controller.close();
+              final attachment = await showNoteAttachmentPicker(
+                context,
+                widget.note,
+              );
+              if (attachment != null && mounted && !widget.readOnly) {
+                widget.onInsertReference?.call(attachment);
+              }
+            },
+          ),
         AdaptiveMenuItem(
           icon: Icons.image,
           label: context.l10n.image,
           onTap: _showImageSourceDialog,
         ),
-        AdaptiveMenuItem(
-          icon: Icons.mic,
-          label: context.l10n.audio,
-          onTap: _handleAudio,
-        ),
+        if (widget.onInsertReference == null)
+          AdaptiveMenuItem(
+            icon: Icons.mic,
+            label: context.l10n.audio,
+            onTap: _handleAudio,
+          ),
         AdaptiveMenuItem(
           icon: Icons.draw,
           label: context.l10n.sketch,
@@ -82,8 +108,16 @@ class _AttachButtonState extends State<AttachButton> {
       ],
       child: IconButton(
         onPressed: _controller.isDisabled ? null : _controller.toggle,
-        icon: _buildIconWithIndicator(const Icon(Icons.attach_file)),
-        tooltip: context.l10n.attach,
+        icon: _buildIconWithIndicator(
+          Icon(
+            widget.onInsertReference == null
+                ? Icons.attach_file
+                : Icons.add_photo_alternate_outlined,
+          ),
+        ),
+        tooltip: widget.onInsertReference == null
+            ? context.l10n.attach
+            : context.l10n.inNoteImage,
       ),
     );
   }
@@ -171,7 +205,15 @@ class _AttachButtonState extends State<AttachButton> {
         beforeRetry: () async => showProcessing(),
         sourceLease: preparedImage.sourceLease,
       );
-      if (added && mounted) widget.onAttachmentAdded?.call();
+      if (added && mounted) {
+        widget.onAttachmentAdded?.call();
+        final attachment = widget.note.attachments
+            .where((a) => identical(a.image, noteImage))
+            .firstOrNull;
+        if (attachment != null && !widget.readOnly) {
+          widget.onInsertReference?.call(attachment);
+        }
+      }
     } catch (error, stackTrace) {
       AppLogger.error(
         'Failed to prepare an image attachment',
@@ -287,6 +329,8 @@ class _AttachButtonState extends State<AttachButton> {
 
     _controller.close();
 
+    final previous = widget.note.attachments.toSet();
+
     await showPage(
       context,
       SketchPage(
@@ -299,5 +343,13 @@ class _AttachButtonState extends State<AttachButton> {
     );
     // Scroll to attachment after returning from sketch page if sketch was added
     widget.onAttachmentAdded?.call();
+    if (mounted && !widget.readOnly && widget.onInsertReference != null) {
+      final attachment = widget.note.attachments
+          .where(
+            (a) => !previous.contains(a) && a.type == AttachmentType.sketch,
+          )
+          .firstOrNull;
+      if (attachment != null) widget.onInsertReference!(attachment);
+    }
   }
 }

@@ -3727,4 +3727,126 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPaused => 'Sync paused. Please retry.';
+
+  @override
+  String get insertTable => 'Insert table';
+
+  @override
+  String get tablePickerHint =>
+      'Tap a cell to insert, or choose a custom size.';
+
+  @override
+  String tableDimensions(int rows, int columns) {
+    return '$rows rows × $columns columns';
+  }
+
+  @override
+  String get tableRows => 'Rows';
+
+  @override
+  String get tableColumns => 'Columns';
+
+  @override
+  String get tableSizeLimit => '1–256 rows and columns';
+
+  @override
+  String get inNoteImage => 'Image in note';
+
+  @override
+  String get imagePlacement => 'Image placement';
+
+  @override
+  String get imageInline => 'Inline with text';
+
+  @override
+  String get imageNewLine => 'On a new line';
+
+  @override
+  String get removeImageReference => 'Remove from text';
+
+  @override
+  String get inlineAttachmentUnavailable => 'Attachment unavailable';
+
+  @override
+  String get chooseAttachment => 'Choose existing attachment';
+
+  @override
+  String get noVisualAttachments =>
+      'Add an image or sketch to this note first.';
+
+  @override
+  String tableRowOptions(int number) {
+    return 'Row $number options';
+  }
+
+  @override
+  String tableColumnOptions(int number) {
+    return 'Column $number options';
+  }
+
+  @override
+  String tableCellLabel(int row, int column) {
+    return 'Row $row, column $column';
+  }
+
+  @override
+  String get insertRowAbove => 'Insert row above';
+
+  @override
+  String get insertRowBelow => 'Insert row below';
+
+  @override
+  String get insertColumnBefore => 'Insert column before';
+
+  @override
+  String get insertColumnAfter => 'Insert column after';
+
+  @override
+  String get duplicateRow => 'Duplicate row';
+
+  @override
+  String get duplicateColumn => 'Duplicate column';
+
+  @override
+  String get deleteRow => 'Delete row';
+
+  @override
+  String get deleteColumn => 'Delete column';
+
+  @override
+  String get resizeRow => 'Drag to resize row';
+
+  @override
+  String get resizeColumn => 'Drag to resize column';
+
+  @override
+  String get fitTableColumns => 'Fit columns to width';
+
+  @override
+  String get deleteTable => 'Delete table';
+
+  @override
+  String get showTableHeaders => 'Show table headers';
+
+  @override
+  String get showTableHeadersDescription =>
+      'Display column letters and row numbers in notes';
+
+  @override
+  String get settingsAppearanceLanguage => 'Appearance & language';
+
+  @override
+  String get settingsNotesEditing => 'Notes & editing';
+
+  @override
+  String get settingsSync => 'Sync';
+
+  @override
+  String get settingsPrivacySecurity => 'Privacy & security';
+
+  @override
+  String get settingsAdvanced => 'Advanced';
+
+  @override
+  String get settingsHelpAbout => 'Help & about';
 }

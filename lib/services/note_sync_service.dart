@@ -4521,7 +4521,7 @@ class NoteSyncService {
         cleanedData.remove('strokes');
         cleanedData.remove('bgColor');
         cleanedData.remove('pagePattern');
-        result.add({'type': type, 'data': cleanedData});
+        result.add({...att, 'data': cleanedData});
         continue;
       }
 
@@ -4555,7 +4555,7 @@ class NoteSyncService {
         'e2ee_sketch_nonce': encryptedData.nonce,
       };
 
-      result.add({'type': type, 'data': newData});
+      result.add({...att, 'data': newData});
     }
 
     return result;
@@ -4674,7 +4674,7 @@ class NoteSyncService {
         newData.remove('e2ee_sketch_nonce');
         newData.addAll(sensitiveData);
 
-        result.add({'type': type, 'data': newData});
+        result.add({...att, 'data': newData});
       } catch (e) {
         AppLogger.error('E2EE: Failed to decrypt sketch data', e);
         // Keep as-is on failure
