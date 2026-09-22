@@ -73,11 +73,11 @@ class _ImageViewerState extends State<ImageViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor = Theme.of(context).colorScheme.surface;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: backgroundColor,
         leading: BackButton(onPressed: () => Navigator.pop(context)),
         actions: [
           IconButton(
@@ -118,7 +118,7 @@ class _ImageViewerState extends State<ImageViewer> {
                     width: imageFrame.width,
                     height: imageFrame.height,
                     child: ColoredBox(
-                      color: Colors.black,
+                      color: backgroundColor,
                       child: UniversalImage(
                         path: _currentImage.src,
                         fit: BoxFit.contain,

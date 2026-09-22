@@ -17,6 +17,7 @@ import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/services/sketch_renderer.dart';
 import 'package:better_keep/services/sketch_strokes_file_service.dart';
 import 'package:better_keep/ui/custom_icons.dart';
+import 'package:better_keep/utils/file_utils.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
@@ -65,6 +66,12 @@ class SketchPage extends StatefulWidget {
   @visibleForTesting
   static Future<void> Function(SketchSaveToken token)?
   beforeCapturedSaveOverride;
+
+  @visibleForTesting
+  static Future<String> Function(String path)? backgroundPathResolverOverride;
+
+  @visibleForTesting
+  static Future<String?> Function(String path)? backgroundRecoveryOverride;
 
   @override
   State<SketchPage> createState() => _SketchPageState();
@@ -1069,7 +1076,7 @@ class _SketchPageState extends State<SketchPage>
         if (didPop) return;
         if (_isClosing || _isDeleting) return;
         _isClosing = true;
-        await _assetPreparation;
+        if (_isDirty) await _assetPreparation;
         if (!mounted || !context.mounted) return;
         var saved = await _save();
         while (saved && _isDirty) {
@@ -1125,7 +1132,10 @@ class _SketchPageState extends State<SketchPage>
                           ),
                     child: Stack(
                       children: [
-                        if (_sketchData.backgroundImage != null)
+                        // The loader owns recovery; displaying the original
+                        // path early could start a competing image download.
+                        if (_sketchData.backgroundImage != null &&
+                            _loadedBackgroundImage != null)
                           Positioned.fill(
                             child: UniversalImage(
                               path: _sketchData.backgroundImage!,
@@ -2005,13 +2015,17 @@ class _SketchPageState extends State<SketchPage>
 
   Future<void> _loadBackgroundImage(SketchSourceActivation activation) async {
     final sketch = activation.sketch;
-    final bgImage = sketch.backgroundImage!;
+    final originalPath = sketch.backgroundImage!;
+    final resolvePath =
+        SketchPage.backgroundPathResolverOverride ?? FileUtils.fixPath;
+    var bgImage = await resolvePath(originalPath);
+    if (!_canApplySourceResult(activation)) return;
 
     // Check cache first
     if (!widget.note.locked && _backgroundImageCache.containsKey(bgImage)) {
       final cachedImage = _backgroundImageCache[bgImage]!;
-      if (!_canApplySourceResult(activation)) return;
       setState(() {
+        sketch.backgroundImage = bgImage;
         _loadedBackgroundImage = cachedImage;
         _ownsLoadedBackgroundImage = false;
         _backgroundUnavailable = false;
@@ -2027,15 +2041,42 @@ class _SketchPageState extends State<SketchPage>
     }
 
     final fs = await fileSystem();
-
-    if (!await fs.exists(bgImage)) {
+    final exists = await fs.exists(bgImage);
+    if (!_canApplySourceResult(activation)) return;
+    if (!exists) {
+      final recover = SketchPage.backgroundRecoveryOverride;
+      String? recoveredPath;
+      if (recover != null) {
+        recoveredPath = await recover(originalPath);
+      } else if (originalPath.startsWith('http://') ||
+          originalPath.startsWith('https://')) {
+        recoveredPath = await NoteSyncService().retryRemoteAttachmentDownload(
+          originalPath,
+          widget.note,
+        );
+      } else {
+        recoveredPath = await NoteSyncService().redownloadFile(originalPath);
+      }
+      if (!_canApplySourceResult(activation)) return;
+      if (recoveredPath != null && recoveredPath.isNotEmpty) {
+        bgImage = await resolvePath(recoveredPath);
+      }
+    }
+    final available = exists || await fs.exists(bgImage);
+    if (!_canApplySourceResult(activation)) return;
+    if (!available) {
       throw "$bgImage not found";
     }
 
     final data = await widget.note.readAttachmentForSession(bgImage);
+    if (!_canApplySourceResult(activation)) return;
     final codec = await ui.instantiateImageCodec(data);
     final frame = await codec.getNextFrame();
     codec.dispose();
+    if (!_canApplySourceResult(activation)) {
+      frame.image.dispose();
+      return;
+    }
 
     // Authenticated plaintext must remain scoped to this page. Public image
     // backgrounds retain the global cache used for smooth navigation.
@@ -2047,12 +2088,8 @@ class _SketchPageState extends State<SketchPage>
       _backgroundImageCache[bgImage] = frame.image;
     }
 
-    if (!_canApplySourceResult(activation)) {
-      if (widget.note.locked) frame.image.dispose();
-      return;
-    }
-
     setState(() {
+      sketch.backgroundImage = bgImage;
       _loadedBackgroundImage = frame.image;
       _ownsLoadedBackgroundImage = widget.note.locked;
       _backgroundUnavailable = false;
@@ -2075,24 +2112,6 @@ class _SketchPageState extends State<SketchPage>
 
     setState(() => _isRetryingBackground = true);
     try {
-      String? recoveredPath;
-      if (originalPath.startsWith('http://') ||
-          originalPath.startsWith('https://')) {
-        recoveredPath = await NoteSyncService().retryRemoteAttachmentDownload(
-          originalPath,
-          widget.note,
-        );
-      } else {
-        final fs = await fileSystem();
-        if (!await fs.exists(originalPath)) {
-          recoveredPath = await NoteSyncService().redownloadFile(originalPath);
-        }
-      }
-      if (!_isCurrentActivation(activation)) return;
-      if (recoveredPath != null && recoveredPath.isNotEmpty) {
-        activation.sketch.backgroundImage = recoveredPath;
-      }
-
       await _loadBackgroundImage(activation);
       if (!_isCurrentActivation(activation)) return;
       if (widget.note.locked && widget.note.unlocked) {
