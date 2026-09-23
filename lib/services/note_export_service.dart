@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:better_keep/models/note_table.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/export_data_service.dart';
@@ -39,7 +40,7 @@ class NoteExportService {
           extensionSet: md.ExtensionSet.gitHubFlavored,
         );
       case ExportFormat.text:
-        return controller.document.toPlainText();
+        return noteDeltaPlainText(controller.document.toDelta().toJson());
     }
   }
 

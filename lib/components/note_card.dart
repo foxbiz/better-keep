@@ -1,10 +1,13 @@
-import 'package:better_keep/services/auth_service.dart';
-import 'package:better_keep/services/cloud_session_recovery.dart';
-import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
+
+import 'package:better_keep/pages/note_editor/embeds/note_attachment_embed.dart';
+import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/utils/manual_sync_refresh.dart';
+import 'package:better_keep/utils/note_embed_rules.dart';
 import 'package:better_keep/components/animated_icon.dart';
 import 'package:better_keep/components/note_image_grid.dart';
 import 'package:better_keep/dialogs/unlock_note_dialog.dart';
@@ -21,7 +24,6 @@ import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/state.dart';
-import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/thumbnail_generator.dart';
@@ -34,7 +36,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
-import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
+import 'package:flutter_quill/quill_delta.dart';
 
 @immutable
 class NoteCardReorderConfig {
@@ -139,6 +141,10 @@ class NoteCard extends StatefulWidget {
 @visibleForTesting
 class NoteCardBodyCache {
   QuillController? _controller;
+  int tableCount = 0;
+  int otherComponentCount = 0;
+  final imageSources = <String>{};
+  final attachmentSources = <String>{};
 
   QuillController? get controller => _controller;
 
@@ -147,6 +153,10 @@ class NoteCardBodyCache {
     required Document? document,
     int maxChars = 500,
   }) {
+    tableCount = 0;
+    otherComponentCount = 0;
+    imageSources.clear();
+    attachmentSources.clear();
     if (locked || document == null) {
       _controller?.dispose();
       _controller = null;
@@ -161,17 +171,53 @@ class NoteCardBodyCache {
         selection: const TextSelection.collapsed(offset: 0),
       );
     } else {
+      final previous = _controller!.document;
       _controller!.document = preview;
+      previous.close();
     }
   }
 
   Document _createPreview(Document document, int maxChars) {
-    final text = document.toPlainText();
+    // Cards summarize embeds without building media, tables, or cell editors.
+    // Work on a separate delta so the note and complete table payload stay intact.
+    final source = Delta();
+    var lineStart = true;
+    var skipEmbedNewline = false;
+    for (final op in document.toDelta().toList()) {
+      final data = op.data;
+      if (data is! String) {
+        if (isNoteTable(data)) {
+          tableCount++;
+        } else if (data is Map && data['image'] is String) {
+          imageSources.add(data['image'] as String);
+        } else if (data is Map &&
+            data[noteAttachmentEmbedType] is Map &&
+            data[noteAttachmentEmbedType]['src'] is String) {
+          attachmentSources.add(data[noteAttachmentEmbedType]['src'] as String);
+        } else {
+          otherComponentCount++;
+        }
+        skipEmbedNewline = lineStart;
+        if (!lineStart) source.insert(' ');
+        continue;
+      }
+      final value = skipEmbedNewline && data.startsWith('\n')
+          ? data.substring(1)
+          : data;
+      skipEmbedNewline = false;
+      if (value.isNotEmpty) {
+        source.insert(value, op.attributes);
+        lineStart = value.endsWith('\n');
+      }
+    }
+    if (source.isEmpty || !(source.last.data as String).endsWith('\n')) {
+      source.insert('\n');
+    }
+    final text = source.toList().map((op) => op.data as String).join();
     final end = text.characters.take(maxChars).string.length;
     // Quill's final newline is structural, not additional preview content.
-    if (end >= text.length - 1) return document;
+    if (end >= text.length - 1) return Document.fromDelta(source);
 
-    final source = document.toDelta();
     final preview = source.slice(0, end)
       ..insert('...', {'italic': true, 'color': 'grey'});
     // Retain the truncated line's block attributes, including checklists.
@@ -1031,6 +1077,72 @@ class _NoteCardState extends State<NoteCard>
     return RichText(text: TextSpan(children: spans));
   }
 
+  Widget _buildComponentIndicators(Color foregroundColor) {
+    final imageSources = {..._bodyCache.imageSources};
+    final sketchSources = <String>{};
+    for (final src in _bodyCache.attachmentSources) {
+      final attachment = resolveNoteAttachment(widget.note, src);
+      if (attachment?.sketch != null) {
+        sketchSources.add(src);
+      } else {
+        imageSources.add(attachment?.image?.src ?? src);
+      }
+    }
+    final indicators = <(IconData, String)>[
+      if (imageSources.isNotEmpty)
+        (Icons.image_outlined, context.l10n.imageCount(imageSources.length)),
+      if (sketchSources.isNotEmpty)
+        (Icons.draw_outlined, context.l10n.sketchCount(sketchSources.length)),
+      if (_bodyCache.tableCount > 0)
+        (
+          Icons.table_chart_outlined,
+          context.l10n.tableCount(_bodyCache.tableCount),
+        ),
+      if (_bodyCache.otherComponentCount > 0)
+        (
+          Icons.attach_file,
+          context.l10n.attachmentCount(_bodyCache.otherComponentCount),
+        ),
+    ];
+    if (indicators.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final (icon, label) in indicators)
+            Tooltip(
+              message: label,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: foregroundColor.withAlpha(10),
+                  border: Border.all(color: foregroundColor.withAlpha(30)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 15, color: foregroundColor.withAlpha(180)),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: foregroundColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCard() {
     final note = widget.note;
     final noteColor = note.color == Colors.transparent
@@ -1343,7 +1455,8 @@ class _NoteCardState extends State<NoteCard>
                   ],
                 ),
               )
-            else if (_controller != null)
+            else if (_controller != null &&
+                _controller!.document.toPlainText().trim().isNotEmpty)
               IgnorePointer(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -1367,77 +1480,6 @@ class _NoteCardState extends State<NoteCard>
                                 backgroundColor: noteColor,
                                 secondaryColor: secondaryColor,
                               ),
-                              embedBuilders: kIsWeb
-                                  ? FlutterQuillEmbeds.editorWebBuilders()
-                                  : FlutterQuillEmbeds.editorBuilders(
-                                      imageEmbedConfig: QuillEditorImageEmbedConfig(
-                                        imageProviderBuilder: (context, imageUrl) {
-                                          if (imageUrl.startsWith('http://') ||
-                                              imageUrl.startsWith('https://')) {
-                                            return NetworkImage(imageUrl);
-                                          } else if (imageUrl.startsWith(
-                                            'data:image/',
-                                          )) {
-                                            // Check cache first
-                                            if (_base64ImageCache.containsKey(
-                                              imageUrl,
-                                            )) {
-                                              return _base64ImageCache[imageUrl];
-                                            }
-                                            try {
-                                              final regex = RegExp(
-                                                r'^data:image/[^;]+;base64,(.+)$',
-                                              );
-                                              final match = regex.firstMatch(
-                                                imageUrl,
-                                              );
-                                              if (match != null) {
-                                                final base64Data = match.group(
-                                                  1,
-                                                )!;
-                                                final bytes = base64Decode(
-                                                  base64Data,
-                                                );
-                                                final image = MemoryImage(
-                                                  bytes,
-                                                );
-                                                // Cache with size limit
-                                                if (_base64ImageCache.length >=
-                                                    _maxImageCacheSize) {
-                                                  _base64ImageCache.remove(
-                                                    _base64ImageCache
-                                                        .keys
-                                                        .first,
-                                                  );
-                                                }
-                                                _base64ImageCache[imageUrl] =
-                                                    image;
-                                                return image;
-                                              }
-                                            } catch (e) {
-                                              AppLogger.error(
-                                                '[NoteCard] Failed to decode data URL',
-                                                e,
-                                              );
-                                            }
-                                          }
-                                          return null;
-                                        },
-                                        imageErrorWidgetBuilder:
-                                            (context, error, stackTrace) {
-                                              return Container(
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                child: Icon(
-                                                  Icons.broken_image_outlined,
-                                                  size: 14,
-                                                  color: Colors.grey,
-                                                ),
-                                              );
-                                            },
-                                      ),
-                                    ),
                             ),
                           ),
                         ),
@@ -1447,6 +1489,7 @@ class _NoteCardState extends State<NoteCard>
                 ),
               ),
             SizedBox(height: 10),
+            _buildComponentIndicators(foregroundColor),
             NoteCardAudioGroup(
               recordings: note.recordings,
               locked: note.locked,

@@ -3801,5 +3801,116 @@
 	"syncCheckingConnection": "Checking connection…",
 	"syncPreparing": "Preparing sync…",
 	"syncUploadRestricted": "Changes saved on this device. Uploading requires Pro.",
-	"syncPaused": "Sync paused. Please retry."
+	"syncPaused": "Sync paused. Please retry.",
+  "insertTable": "Insert table",
+  "tablePickerHint": "Tap a cell to insert, or choose a custom size.",
+  "tableDimensions": "{rows} rows × {columns} columns",
+  "@tableDimensions": {
+    "placeholders": {
+      "rows": {
+        "type": "int"
+      },
+      "columns": {
+        "type": "int"
+      }
+    }
+  },
+  "tableRows": "Rows",
+  "tableColumns": "Columns",
+  "tableSizeLimit": "1–256 rows and columns",
+  "inNoteImage": "Image in note",
+  "resizeImage": "Drag to resize image",
+  "removeImageReference": "Remove from text",
+  "inlineAttachmentUnavailable": "Attachment unavailable",
+  "chooseAttachment": "Choose existing attachment",
+  "noVisualAttachments": "Add an image or sketch to this note first.",
+  "tableRowOptions": "Row {number} options",
+  "@tableRowOptions": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "tableColumnOptions": "Column {number} options",
+  "@tableColumnOptions": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "tableCellLabel": "Row {row}, column {column}",
+  "@tableCellLabel": {
+    "placeholders": {
+      "row": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      }
+    }
+  },
+  "insertRowAbove": "Insert row above",
+  "insertRowBelow": "Insert row below",
+  "insertColumnBefore": "Insert column before",
+  "insertColumnAfter": "Insert column after",
+  "duplicateRow": "Duplicate row",
+  "duplicateColumn": "Duplicate column",
+  "deleteRow": "Delete row",
+  "deleteColumn": "Delete column",
+  "resizeRow": "Drag to resize row",
+  "resizeColumn": "Drag to resize column",
+  "fitTableColumns": "Fit columns to width",
+  "deleteTable": "Delete table",
+  "showTableHeaders": "Show table headers",
+  "showTableHeadersDescription": "Display column letters and row numbers in notes",
+  "settingsAppearanceLanguage": "Appearance & language",
+  "@settingsAppearanceLanguage": {"description": "Appearance & language settings section heading"},
+  "settingsNotesEditing": "Notes & editing",
+  "@settingsNotesEditing": {"description": "Notes & editing settings section heading"},
+  "settingsSync": "Sync",
+  "@settingsSync": {"description": "Sync settings section heading"},
+  "settingsPrivacySecurity": "Privacy & security",
+  "@settingsPrivacySecurity": {"description": "Privacy & security settings section heading"},
+  "settingsAdvanced": "Advanced",
+  "@settingsAdvanced": {"description": "Advanced settings section heading"},
+  "settingsHelpAbout": "Help & about",
+  "@settingsHelpAbout": {"description": "Help & about settings section heading"},
+  "imageCount": "{count, plural, =1{1 image} other{{count} images}}",
+  "@imageCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sketchCount": "{count, plural, =1{1 sketch} other{{count} sketches}}",
+  "@sketchCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tableCount": "{count, plural, =1{1 table} other{{count} tables}}",
+  "@tableCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attachmentCount": "{count, plural, =1{1 attachment} other{{count} attachments}}",
+  "@attachmentCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

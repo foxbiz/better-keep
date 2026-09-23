@@ -1,4 +1,5 @@
 import 'package:better_keep/models/label.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_table_embed.dart';
 import 'package:better_keep/services/markdown_import_service.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/models/note.dart';
@@ -139,6 +140,9 @@ class _ContentPreviewPageState extends State<ContentPreviewPage> {
           showCursor: false,
           enableInteractiveSelection: true,
           enableSelectionToolbar: false,
+          embedBuilders: [
+            NoteTableEmbedBuilder(note: Note(color: backgroundColor)),
+          ],
           customLeadingBlockBuilder: customLeadingBlockBuilder,
           customStyles: buildQuillStyles(
             foregroundColor: foregroundColor,

@@ -1,3 +1,4 @@
+import 'package:better_keep/utils/note_embed_rules.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -36,7 +37,11 @@ List<dynamic> ensureDeltaEndsWithNewline(List<dynamic> ops) {
 /// This safely handles corrupted or malformed content that might not end
 /// with the required '\n' character.
 Document documentFromJsonSafe(List<dynamic> ops) {
-  return Document.fromJson(ensureDeltaEndsWithNewline(ops));
+  return Document.fromJson(
+    normalizeNoteBlocks(
+      Delta.fromJson(ensureDeltaEndsWithNewline(ops)),
+    ).toJson(),
+  );
 }
 
 /// Custom leading block builder that fixes ordered list numbering when
@@ -400,4 +405,9 @@ class _NewLineResult {
 
 /// List of custom rules to be applied to Quill documents.
 /// These rules are applied before the default flutter_quill rules.
-const List<Rule> customQuillRules = [ResetHeadingOnNewEmptyLineRule()];
+const List<Rule> customQuillRules = [
+  InsertNoteBlockRule(),
+  InsertAroundNoteBlockRule(),
+  PreserveNoteBlockLineRule(),
+  ResetHeadingOnNewEmptyLineRule(),
+];

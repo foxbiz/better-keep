@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:better_keep/services/attachment_repair_coordinator.dart';
 
+import 'package:better_keep/pages/note_editor/embeds/note_embed_builders.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
+import 'package:better_keep/models/note_table.dart';
+import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/audio_recorder_dialog.dart';
@@ -40,7 +43,6 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/quill_vertical_selection_action.dart';
 import 'package:better_keep/utils/utils.dart';
-import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/components/note_attachments_carousel.dart';
 import 'package:better_keep/components/note_audio_player.dart';
@@ -59,7 +61,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
-import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
 import 'package:path/path.dart' as path;
@@ -144,6 +145,7 @@ class _NoteEditorState extends State<NoteEditor>
   late FocusNode _titleFocusNode;
   late TextEditingController _titleController;
   late QuillController _controller;
+  final _embedEditing = NoteEmbedEditing();
   QuillVerticalSelectionAction? _verticalSelectionAction;
   late final NoteFindController _findController;
   late Color _backgroundColor;
@@ -172,6 +174,9 @@ class _NoteEditorState extends State<NoteEditor>
   /// Handles keyboard events to block formatting shortcuts when editing title
   /// and to handle Backspace at start of content to move focus to title
   KeyEventResult _handleKeyPressed(FocusNode node, KeyEvent event) {
+    if (_embedEditing.focusNode?.hasFocus ?? false) {
+      return KeyEventResult.ignored;
+    }
     // Only intercept key down events
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
@@ -287,6 +292,15 @@ class _NoteEditorState extends State<NoteEditor>
 
   void _focusEditorAtEnd() {
     if (_note.readOnly || _note.trashed || !_focusNode.canRequestFocus) return;
+    final last = _controller.document
+        .queryChild(_controller.document.length - 1)
+        .node;
+    if (last is Line &&
+        last.childCount == 1 &&
+        last.children.first is Embed &&
+        (last.children.first as Embed).value.type == NoteTableData.type) {
+      _controller.replaceText(_controller.document.length - 1, 0, '\n', null);
+    }
     final endOffset = _controller.document.length - 1;
     _controller.updateSelection(
       TextSelection.collapsed(offset: endOffset),
@@ -389,7 +403,7 @@ class _NoteEditorState extends State<NoteEditor>
 
     _titleController = TextEditingController(text: initialTitle);
 
-    _controller = QuillController(
+    _controller = NoteEditorController(
       readOnly: _note.readOnly || _note.trashed,
       document: document,
       selection: TextSelection.collapsed(offset: document.length - 1),
@@ -413,6 +427,8 @@ class _NoteEditorState extends State<NoteEditor>
       _initialPlainText = _captureSaveSnapshot().plainText;
     }
 
+    _embedEditing.rootController = _controller;
+    _embedEditing.addListener(_onEmbedFocusChanged);
     _controller.addListener(_didChangeSelection);
     _changesSubscription = _controller.changes.listen(
       _controllerChangesListener,
@@ -470,6 +486,9 @@ class _NoteEditorState extends State<NoteEditor>
       hasCollapsedSelection: _hasCollapsedChecklistSelection,
     );
     if (_focusNode.hasFocus) {
+      if (_focusNode.hasPrimaryFocus) {
+        _embedEditing.release(_embedEditing.controller ?? _controller);
+      }
       setState(() {
         _showAttachmentFab = false;
       });
@@ -482,6 +501,17 @@ class _NoteEditorState extends State<NoteEditor>
     }
     _scheduleChecklistPopupLayout();
   }
+
+  void _onEmbedFocusChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_embedEditing.controller != null) _showAttachmentFab = false;
+    });
+    _scrollToCaretAfterKeyboard();
+  }
+
+  bool get _hasEditorCaretFocus =>
+      (_embedEditing.focusNode ?? _focusNode).hasPrimaryFocus;
 
   bool get _hasChecklistPromptFocus =>
       _focusNode.hasFocus || _checklistPopupFocusNode.hasFocus;
@@ -1246,12 +1276,15 @@ class _NoteEditorState extends State<NoteEditor>
 
   /// Scrolls the editor to ensure the caret is visible above the toolbar
   void _scrollToCaret() {
-    if (!mounted || !_focusNode.hasFocus) return;
+    if (!mounted || !_hasEditorCaretFocus) return;
 
-    final editorState = _editorKey.currentState;
+    final cellFocus = _embedEditing.focusNode;
+    final editorState = cellFocus == null
+        ? _editorKey.currentState
+        : cellFocus.context?.findAncestorStateOfType<EditorState>();
     if (editorState == null) return;
 
-    final selection = _controller.selection;
+    final selection = (_embedEditing.controller ?? _controller).selection;
     if (!selection.isValid || !selection.isCollapsed) return;
 
     try {
@@ -1297,7 +1330,7 @@ class _NoteEditorState extends State<NoteEditor>
 
   /// Scrolls to caret with keyboard-aware timing
   void _scrollToCaretAfterKeyboard() {
-    if (!mounted || !_focusNode.hasFocus) return;
+    if (!mounted || !_hasEditorCaretFocus) return;
 
     // Cancel any pending scroll timers to prevent conflicts
     for (final timer in _scrollTimers) {
@@ -1307,16 +1340,16 @@ class _NoteEditorState extends State<NoteEditor>
 
     // First scroll immediately after layout settles
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_focusNode.hasFocus) return;
+      if (!mounted || !_hasEditorCaretFocus) return;
       _scrollToCaret();
     });
 
     // Second scroll during keyboard animation (~250ms)
     _scrollTimers.add(
       Timer(const Duration(milliseconds: 250), () {
-        if (!mounted || !_focusNode.hasFocus) return;
+        if (!mounted || !_hasEditorCaretFocus) return;
         SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_focusNode.hasFocus) return;
+          if (!mounted || !_hasEditorCaretFocus) return;
           _scrollToCaret();
         });
       }),
@@ -1326,9 +1359,9 @@ class _NoteEditorState extends State<NoteEditor>
     // Some devices have slower keyboard animations
     _scrollTimers.add(
       Timer(const Duration(milliseconds: 500), () {
-        if (!mounted || !_focusNode.hasFocus) return;
+        if (!mounted || !_hasEditorCaretFocus) return;
         SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_focusNode.hasFocus) return;
+          if (!mounted || !_hasEditorCaretFocus) return;
           _scrollToCaret();
         });
       }),
@@ -1574,6 +1607,8 @@ class _NoteEditorState extends State<NoteEditor>
     _controller.removeListener(_didChangeSelection);
     _findController.removeListener(_onFindChanged);
     _findController.dispose();
+    _embedEditing.removeListener(_onEmbedFocusChanged);
+    _embedEditing.dispose();
     _controller.dispose();
     _titleController.dispose();
     _focusNode.removeListener(_focusListener);
@@ -1626,7 +1661,7 @@ class _NoteEditorState extends State<NoteEditor>
       });
 
       // Keyboard just appeared while editor has focus - scroll to caret
-      if (keyboardVisible && wasHidden && _focusNode.hasFocus) {
+      if (keyboardVisible && wasHidden && _hasEditorCaretFocus) {
         _scrollToCaretAfterKeyboard();
       }
     }
@@ -1888,6 +1923,35 @@ class _NoteEditorState extends State<NoteEditor>
                                     controller: _controller,
                                     config: QuillEditorConfig(
                                       editorKey: _editorKey,
+                                      onTapDown: (details, _) =>
+                                          _embedEditing.handlesTapDown(
+                                            _controller,
+                                            details,
+                                            _editorKey.currentState,
+                                            _focusNode,
+                                          ),
+                                      onTapUp: (details, _) =>
+                                          _embedEditing.handlesTapUp(
+                                            _controller,
+                                            details,
+                                            _focusNode,
+                                            _editorKey.currentState,
+                                          ),
+                                      onSingleLongTapStart: (details, _) =>
+                                          _embedEditing.handlesGesture(
+                                            _controller,
+                                            details.globalPosition,
+                                          ),
+                                      onSingleLongTapMoveUpdate: (details, _) =>
+                                          _embedEditing.handlesGesture(
+                                            _controller,
+                                            details.globalPosition,
+                                          ),
+                                      onSingleLongTapEnd: (details, _) =>
+                                          _embedEditing.handlesGesture(
+                                            _controller,
+                                            details.globalPosition,
+                                          ),
                                       checkBoxReadOnly: _note.trashed,
                                       scrollable: false,
                                       padding: EdgeInsets.only(
@@ -1899,9 +1963,12 @@ class _NoteEditorState extends State<NoteEditor>
                                       readOnlyMouseCursor:
                                           SystemMouseCursors.alias,
                                       showCursor:
-                                          !_note.readOnly && !_note.trashed,
+                                          !_note.readOnly &&
+                                          !_note.trashed &&
+                                          _embedEditing.controller == null,
                                       enableInteractiveSelection: true,
-                                      enableSelectionToolbar: true,
+                                      enableSelectionToolbar:
+                                          _embedEditing.controller == null,
                                       placeholder: context.l10n.startWriting,
                                       customLeadingBlockBuilder:
                                           customLeadingBlockBuilder,
@@ -1956,17 +2023,10 @@ class _NoteEditorState extends State<NoteEditor>
                                         placeholderColor: placeholderColor,
                                         comfortableLists: true,
                                       ),
-                                      embedBuilders: kIsWeb
-                                          ? FlutterQuillEmbeds.editorWebBuilders()
-                                          : FlutterQuillEmbeds.editorBuilders(
-                                              imageEmbedConfig:
-                                                  QuillEditorImageEmbedConfig(
-                                                    imageProviderBuilder:
-                                                        buildQuillImageProvider,
-                                                    imageErrorWidgetBuilder:
-                                                        buildQuillImageErrorWidget,
-                                                  ),
-                                            ),
+                                      embedBuilders: noteEmbedBuilders(
+                                        note: _note,
+                                        editing: _embedEditing,
+                                      ),
                                       customLinkPrefixes: const ['audio://'],
                                       linkActionPickerDelegate:
                                           _audioLinkActionPicker,
@@ -2230,20 +2290,27 @@ class _NoteEditorState extends State<NoteEditor>
   }
 
   Widget _buildToolbar() {
-    return NoteEditorToolbar(
-      key: const Key('note_editor_toolbar'),
-      controller: _controller,
-      focusNode: _focusNode,
-      readOnly: _note.readOnly,
-      parentColor: _note.color,
-      scrollController: _toolbarScrollController,
-      note: _note,
-      imageAttachmentPreparationService:
-          widget.imageAttachmentPreparationService,
-      onAppendTranscript: _appendTranscriptToNote,
-      onAttachmentAdded: _scrollToAttachments,
-      showKeyboardHide: _isKeyboardVisible,
-      onHideKeyboard: _focusNode.unfocus,
+    final controller = _embedEditing.controller ?? _controller;
+    final focusNode = _embedEditing.focusNode ?? _focusNode;
+    return KeyedSubtree(
+      key: ObjectKey(controller),
+      child: NoteEditorToolbar(
+        key: const Key('note_editor_toolbar'),
+        controller: controller,
+        focusNode: focusNode,
+        showDocumentEmbeds: true,
+        historyBinding: NoteEditorHistoryBinding.quill(_controller),
+        readOnly: _note.readOnly,
+        parentColor: _note.color,
+        scrollController: _toolbarScrollController,
+        note: _note,
+        imageAttachmentPreparationService:
+            widget.imageAttachmentPreparationService,
+        onAppendTranscript: _appendTranscriptToNote,
+        onAttachmentAdded: _scrollToAttachments,
+        showKeyboardHide: _isKeyboardVisible,
+        onHideKeyboard: focusNode.unfocus,
+      ),
     );
   }
 
@@ -2274,8 +2341,8 @@ class _NoteEditorState extends State<NoteEditor>
     return _NoteEditorSaveSnapshot(
       title: title,
       content: json.encode(combinedDeltaJson),
-      plainText: combinedDoc.toPlainText().trim(),
-      bodyPlainText: _controller.document.toPlainText().trim(),
+      plainText: noteDeltaPlainText(combinedDoc.toDelta().toJson()).trim(),
+      bodyPlainText: noteDeltaPlainText(contentDelta).trim(),
     );
   }
 
@@ -3024,10 +3091,16 @@ class _NoteEditorState extends State<NoteEditor>
   Future<void> _handlePasteAs(BuildContext context) async {
     // Capture navigator before async gap to avoid using stale context
     final navigator = Navigator.of(context);
+    final pasteController = _embedEditing.controller ?? _controller;
+    bool canPaste() =>
+        mounted &&
+        !pasteController.readOnly &&
+        (identical(pasteController, _controller) ||
+            identical(pasteController, _embedEditing.controller));
 
     final result = await showPasteOptions(context);
 
-    if (!context.mounted) return;
+    if (!context.mounted || !canPaste()) return;
 
     switch (result) {
       case PasteCancelled():
@@ -3036,7 +3109,7 @@ class _NoteEditorState extends State<NoteEditor>
 
       case PastePlainText(:final text):
         try {
-          insertPlainTextIntoController(_controller, text);
+          insertPlainTextIntoController(pasteController, text);
           snackbar(context.l10n.pastedAsPlainText, Colors.green);
         } catch (error, stackTrace) {
           AppLogger.error('Failed to paste plain text', error, stackTrace);
@@ -3057,11 +3130,11 @@ class _NoteEditorState extends State<NoteEditor>
           ),
         );
 
-        if (!context.mounted) return;
+        if (!context.mounted || !canPaste()) return;
 
         if (document != null) {
           try {
-            insertDocumentIntoController(_controller, document);
+            insertDocumentIntoController(pasteController, document);
             snackbar(context.l10n.contentInserted, Colors.green);
           } catch (error, stackTrace) {
             AppLogger.error(

@@ -1,0 +1,1014 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
+
+import 'package:better_keep/models/note.dart';
+import 'package:better_keep/state.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_embed_builders.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
+import 'package:better_keep/models/note_table.dart';
+import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/note_embed_rules.dart';
+import 'package:flutter_quill/quill_delta.dart';
+import 'package:better_keep/utils/quill_config.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_quill/flutter_quill.dart';
+
+class NoteTableEmbedBuilder extends EmbedBuilder {
+  const NoteTableEmbedBuilder({
+    required this.note,
+    this.editing,
+    this.previewMaxHeight,
+  });
+  final Note note;
+  final NoteEmbedEditing? editing;
+
+  /// Unscaled viewport limit; non-null opts into a static card preview.
+  final double? previewMaxHeight;
+  @override
+  String get key => NoteTableData.type;
+
+  @override
+  Widget build(BuildContext context, EmbedContext embedContext) {
+    final table = NoteTableData.fromJson(embedContext.node.value.data);
+    final offset = embedContext.node.documentOffset;
+    final child = NoteTableView(
+      key: ValueKey(table.id),
+      table: table,
+      note: note,
+      readOnly: embedContext.readOnly || editing == null,
+      editing: editing,
+      previewMaxHeight: previewMaxHeight,
+      onChanged: (value) => replaceNoteEmbed(
+        embedContext.controller,
+        key,
+        table.id,
+        value?.toJson(),
+        offsetHint: offset,
+      ),
+    );
+    final focus = context
+        .findAncestorWidgetOfExactType<QuillEditor>()
+        ?.focusNode;
+    if (embedContext.readOnly || editing == null || focus == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: child,
+      );
+    }
+    final owner = embedContext.controller;
+    final text = owner.document.toPlainText();
+    final previousStart = offset > 1
+        ? text.lastIndexOf('\n', offset - 2) + 1
+        : 0;
+    final after = offset + 2;
+    final nextEnd = after < text.length ? text.indexOf('\n', after) : -1;
+    bool hasNoText(String paragraph) =>
+        paragraph.replaceAll('\uFFFC', '').trim().isEmpty;
+    Widget boundary(bool before) {
+      final empty = before
+          ? offset == 0 || hasNoText(text.substring(previousStart, offset - 1))
+          : nextEnd < 0 || hasNoText(text.substring(after, nextEnd));
+      return MouseRegion(
+        cursor: SystemMouseCursors.text,
+        child: GestureDetector(
+          key: ValueKey('table_${before ? 'before' : 'after'}_${table.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => focusBesideNoteTable(
+            owner,
+            focus,
+            table.id,
+            before: before,
+            offsetHint: offset,
+          ),
+          child: SizedBox(height: empty ? 40 : 10),
+        ),
+      );
+    }
+
+    return NoteEmbedGestureRegion(
+      editing: editing!,
+      owner: owner,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [boundary(true), child, boundary(false)],
+      ),
+    );
+  }
+}
+
+class NoteTableView extends StatefulWidget {
+  const NoteTableView({
+    super.key,
+    required this.table,
+    required this.note,
+    required this.readOnly,
+    required this.onChanged,
+    this.editing,
+    this.previewMaxHeight,
+  });
+  final NoteTableData table;
+  final Note note;
+  final bool readOnly;
+  final NoteEmbedEditing? editing;
+  final double? previewMaxHeight;
+  final ValueChanged<NoteTableData?> onChanged;
+  @override
+  State<NoteTableView> createState() => _NoteTableViewState();
+}
+
+class _NoteTableViewState extends State<NoteTableView> {
+  static const _edge = 32.0;
+  static const _dragDevices = {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+  };
+  final _horizontal = ScrollController();
+  final _ancestorPositions = <ScrollPosition>[];
+  double _visibleTop = 0;
+  double? _visibleBottom;
+  bool _viewportUpdatePending = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    for (final position in _ancestorPositions) {
+      position.removeListener(_scheduleViewportUpdate);
+    }
+    _ancestorPositions.clear();
+    context.visitAncestorElements((element) {
+      if (element is StatefulElement && element.state is ScrollableState) {
+        final position = (element.state as ScrollableState).position;
+        _ancestorPositions.add(position);
+        position.addListener(_scheduleViewportUpdate);
+      }
+      return true;
+    });
+    _scheduleViewportUpdate();
+  }
+
+  // The note owns vertical scrolling. Cull rows against its containing viewports.
+  void _scheduleViewportUpdate() {
+    if (_viewportUpdatePending || widget.previewMaxHeight != null) return;
+    _viewportUpdatePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewportUpdatePending = false;
+      if (!mounted) return;
+      final box = context.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      var visible = Offset.zero & box.size;
+      RenderObject? ancestor = box.parent;
+      while (ancestor != null) {
+        if (ancestor is RenderAbstractViewport && ancestor is RenderBox) {
+          final bounds = MatrixUtils.transformRect(
+            ancestor.getTransformTo(null),
+            ancestor.paintBounds,
+          );
+          visible = visible.intersect(
+            Rect.fromPoints(
+              box.globalToLocal(bounds.topLeft),
+              box.globalToLocal(bounds.bottomRight),
+            ),
+          );
+        }
+        ancestor = ancestor.parent;
+      }
+      final top = math.max(0.0, visible.top);
+      final bottom = math.max(top, visible.bottom + 72);
+      if (top != _visibleTop || bottom != _visibleBottom) {
+        setState(() {
+          _visibleTop = top;
+          _visibleBottom = bottom;
+        });
+      }
+    });
+  }
+
+  String? _activeCell;
+  QuillController? _activeController;
+  NoteTableData? _resizeBase;
+  double _resizeOrigin = 0;
+  double _resizeSize = 0;
+  NoteTableData? _resizing;
+  late NoteTableData _current;
+  int _structureRevision = 0;
+  NoteTableData get _table => _resizing ?? _current;
+  bool get _hasActiveCell =>
+      !widget.readOnly &&
+      _activeCell != null &&
+      _activeController != null &&
+      identical(widget.editing?.controller, _activeController);
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.table;
+    AppState.tableHeadersNotifier.addListener(_refresh);
+    widget.editing?.addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  void _commit(NoteTableData? value) {
+    if (value != null) _current = value;
+    widget.onChanged(value);
+  }
+
+  @override
+  void didUpdateWidget(NoteTableView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _current = widget.table;
+    if (oldWidget.editing != widget.editing) {
+      oldWidget.editing?.removeListener(_refresh);
+      widget.editing?.addListener(_refresh);
+    }
+    if (oldWidget.table.rows != widget.table.rows ||
+        oldWidget.table.columns != widget.table.columns) {
+      _structureRevision++;
+      _activeCell = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    AppState.tableHeadersNotifier.removeListener(_refresh);
+    widget.editing?.removeListener(_refresh);
+    _horizontal.dispose();
+    for (final position in _ancestorPositions) {
+      position.removeListener(_scheduleViewportUpdate);
+    }
+    super.dispose();
+  }
+
+  void _changeAxis(bool row, int index, String action) {
+    if (widget.readOnly) return;
+    if (action == 'delete-table') {
+      _commit(null);
+      return;
+    }
+    if (action == 'fit') {
+      _commit(_table.fitColumns());
+      return;
+    }
+    final delete = action == 'delete';
+    final duplicate = action == 'duplicate';
+    final at = action == 'after' ? index + 1 : index;
+    final next = _table.changeAxis(
+      row: row,
+      index: at,
+      delete: delete,
+      duplicate: duplicate,
+    );
+    if (!identical(next, _table)) _commit(next);
+  }
+
+  Widget _menu({required bool row, required int index}) {
+    final l10n = context.l10n;
+    final count = row ? _table.rows : _table.columns;
+    return PopupMenuButton<String>(
+      key: ValueKey('table_${row ? 'row' : 'column'}_$index'),
+      tooltip: row
+          ? l10n.tableRowOptions(index + 1)
+          : l10n.tableColumnOptions(index + 1),
+      onSelected: (action) => _changeAxis(row, index, action),
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'before',
+          enabled: count < NoteTableData.maxDimension,
+          child: Text(row ? l10n.insertRowAbove : l10n.insertColumnBefore),
+        ),
+        PopupMenuItem(
+          value: 'after',
+          enabled: count < NoteTableData.maxDimension,
+          child: Text(row ? l10n.insertRowBelow : l10n.insertColumnAfter),
+        ),
+        PopupMenuItem(
+          value: 'duplicate',
+          enabled: count < NoteTableData.maxDimension,
+          child: Text(row ? l10n.duplicateRow : l10n.duplicateColumn),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          enabled: count > 1,
+          child: Text(row ? l10n.deleteRow : l10n.deleteColumn),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(value: 'fit', child: Text(l10n.fitTableColumns)),
+        PopupMenuItem(value: 'delete-table', child: Text(l10n.deleteTable)),
+      ],
+      child: Align(
+        alignment: row ? Alignment.centerLeft : Alignment.topCenter,
+        child: Container(
+          width: row ? 10 : 28,
+          height: row ? 28 : 10,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: OverflowBox(
+            minWidth: 18,
+            maxWidth: 18,
+            minHeight: 18,
+            maxHeight: 18,
+            child: Icon(row ? Icons.more_vert : Icons.more_horiz, size: 18),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _resizeHandle({
+    required bool row,
+    required int index,
+    required double size,
+  }) {
+    void start(DragStartDetails details) {
+      _resizeBase = _table;
+      _resizeOrigin = row
+          ? details.globalPosition.dy
+          : details.globalPosition.dx;
+      _resizeSize = size;
+    }
+
+    void update(DragUpdateDetails details) {
+      final base = _resizeBase;
+      if (base == null) return;
+      final position = row
+          ? details.globalPosition.dy
+          : details.globalPosition.dx;
+      final next = (_resizeSize + position - _resizeOrigin).clamp(
+        row ? NoteTableData.minRowHeight : NoteTableData.minColumnWidth,
+        4096.0,
+      );
+      setState(
+        () => _resizing = row
+            ? base.resizeRow(index, next)
+            : base.resizeColumn(index, next),
+      );
+    }
+
+    return MouseRegion(
+      cursor: row
+          ? SystemMouseCursors.resizeUpDown
+          : SystemMouseCursors.resizeLeftRight,
+      child: Tooltip(
+        message: row ? context.l10n.resizeRow : context.l10n.resizeColumn,
+        child: RawGestureDetector(
+          key: ValueKey('table_resize_${row ? 'row' : 'column'}_$index'),
+          behavior: HitTestBehavior.opaque,
+          gestures: {
+            _TableResizeGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<
+                  _TableResizeGestureRecognizer
+                >(
+                  _TableResizeGestureRecognizer.new,
+                  (recognizer) => recognizer
+                    ..dragStartBehavior = DragStartBehavior.down
+                    ..onStart = start
+                    ..onUpdate = update
+                    ..onCancel = _finishResize
+                    ..onEnd = ((_) => _finishResize()),
+                ),
+          },
+          child: _resizeGrip(row: row),
+        ),
+      ),
+    );
+  }
+
+  Widget _resizeGrip({required bool row}) => IgnorePointer(
+    child: Align(
+      alignment: row ? Alignment.bottomCenter : Alignment.centerRight,
+      child: Container(
+        width: row ? 24 : 3,
+        height: row ? 3 : 24,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    ),
+  );
+
+  void _finishResize() {
+    final value = _resizing;
+    _resizeBase = null;
+    if (value == null) return;
+    setState(() => _resizing = null);
+    _commit(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final showHeaders = AppState.tableHeaders;
+    final edge = showHeaders ? _edge : 0.0;
+    final activeIndices = _hasActiveCell
+        ? _activeCell!.split(':').map(int.parse).toList()
+        : null;
+    _scheduleViewportUpdate();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final preview = widget.previewMaxHeight != null;
+        final heights = List.generate(
+          _table.rows,
+          (i) => _table.rowHeights[i] ?? 72.0,
+        );
+        final ys = <double>[edge];
+        for (final height in heights) {
+          ys.add(ys.last + height);
+        }
+        final border = showHeaders ? 2.0 : 0.0;
+        final viewportHeight = preview
+            ? math.min(ys.last, widget.previewMaxHeight! - border)
+            : ys.last;
+        final available = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 320.0;
+        final defaultWidth = math.max(
+          NoteTableData.minColumnWidth,
+          (available - edge - 2) / _table.columns,
+        );
+        final widths = List.generate(
+          _table.columns,
+          (i) => _table.columnWidths[i] ?? defaultWidth,
+        );
+        final xs = <double>[edge];
+        for (final width in widths) {
+          xs.add(xs.last + width);
+        }
+        final horizontalOverflow = xs.last > available;
+        final horizontalGutter = !preview && horizontalOverflow ? 16.0 : 0.0;
+        Widget grid = DecoratedBox(
+          decoration: BoxDecoration(
+            border: showHeaders
+                ? Border.all(color: colors.outlineVariant)
+                : null,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(showHeaders ? 9 : 0),
+            child: SizedBox(
+              width: available,
+              height: viewportHeight + border,
+              child: SingleChildScrollView(
+                key: ValueKey('table_horizontal_${_table.id}'),
+                controller: _horizontal,
+                scrollDirection: Axis.horizontal,
+                physics: preview ? const NeverScrollableScrollPhysics() : null,
+                child: SizedBox(
+                  width: xs.last,
+                  child: AnimatedBuilder(
+                    animation: _horizontal,
+                    builder: (context, _) {
+                      final left = _horizontal.hasClients
+                          ? _horizontal.offset
+                          : 0.0;
+                      final top = preview ? 0.0 : _visibleTop;
+                      final bottom = preview
+                          ? viewportHeight
+                          : (_visibleBottom ??
+                                MediaQuery.sizeOf(context).height);
+                      final columns = [
+                        for (var c = 0; c < widths.length; c++)
+                          if (xs[c + 1] >= left && xs[c] <= left + available) c,
+                      ];
+                      final rows = [
+                        for (var r = 0; r < heights.length; r++)
+                          if (ys[r + 1] >= top - 72 && ys[r] <= bottom) r,
+                      ];
+                      final cells = <String>{
+                        for (final r in rows)
+                          for (final c in columns) '$r:$c',
+                        ?_activeCell,
+                      };
+                      return SizedBox(
+                        width: xs.last,
+                        height: ys.last,
+                        child: Stack(
+                          children: [
+                            for (final position in cells)
+                              _buildCell(
+                                position,
+                                xs,
+                                ys,
+                                widths,
+                                heights,
+                                colors,
+                              ),
+                            if (showHeaders) ...[
+                              for (final c in columns)
+                                Positioned(
+                                  left: xs[c],
+                                  top: top,
+                                  width: widths[c],
+                                  height: edge,
+                                  child: ColoredBox(
+                                    color: colors.surfaceContainerHigh,
+                                    child: Center(
+                                      child: Text(
+                                        _columnLabel(c),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              for (final r in rows)
+                                Positioned(
+                                  left: left,
+                                  top: ys[r],
+                                  width: edge,
+                                  height: heights[r],
+                                  child: ColoredBox(
+                                    color: colors.surfaceContainerHigh,
+                                    child: Center(
+                                      child: Text(
+                                        '${r + 1}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                            if (activeIndices != null) ...[
+                              // Only the selected cell exposes edge actions and resize grips.
+                              Positioned(
+                                left:
+                                    xs[activeIndices[1]] +
+                                    (widths[activeIndices[1]] - 32) / 2,
+                                top: top + edge,
+                                width: 32,
+                                height: 24,
+                                child: _menu(
+                                  row: false,
+                                  index: activeIndices[1],
+                                ),
+                              ),
+                              Positioned(
+                                left: left + edge,
+                                top:
+                                    ys[activeIndices[0]] +
+                                    (heights[activeIndices[0]] - 32) / 2,
+                                width: 24,
+                                height: 32,
+                                child: _menu(
+                                  row: true,
+                                  index: activeIndices[0],
+                                ),
+                              ),
+                              Positioned(
+                                key: const ValueKey(
+                                  'table_column_resize_control',
+                                ),
+                                left: xs[activeIndices[1] + 1] - 20,
+                                top:
+                                    ys[activeIndices[0]] +
+                                    (heights[activeIndices[0]] - 32) / 2,
+                                width: 20,
+                                height: 32,
+                                child: _resizeHandle(
+                                  row: false,
+                                  index: activeIndices[1],
+                                  size: widths[activeIndices[1]],
+                                ),
+                              ),
+                              Positioned(
+                                key: const ValueKey('table_row_resize_control'),
+                                left:
+                                    xs[activeIndices[1]] +
+                                    (widths[activeIndices[1]] - 32) / 2,
+                                top: ys[activeIndices[0] + 1] - 20,
+                                width: 32,
+                                height: 20,
+                                child: _resizeHandle(
+                                  row: true,
+                                  index: activeIndices[0],
+                                  size: heights[activeIndices[0]],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        // Keep these wrappers mounted when overflow changes during a drag, so
+        // scroll positions and resize controls retain their identity.
+        if (!preview) {
+          grid = _scrollbar(
+            scrollable: horizontalOverflow,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: horizontalGutter),
+              child: grid,
+            ),
+          );
+        }
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(
+            context,
+          ).copyWith(scrollbars: false, dragDevices: _dragDevices),
+          child: preview ? IgnorePointer(child: grid) : grid,
+        );
+      },
+    );
+  }
+
+  Widget _scrollbar({
+    required bool scrollable,
+    required Widget child,
+  }) => RawScrollbar(
+    key: ValueKey('table_horizontal_scrollbar_${_table.id}'),
+    controller: _horizontal,
+    thumbVisibility: false,
+    interactive: scrollable,
+    // The table owns its gutter; screen safe-area padding belongs outside it.
+    padding: EdgeInsets.zero,
+    thickness: 4,
+    radius: const Radius.circular(2),
+    thumbColor: Theme.of(
+      context,
+    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+    crossAxisMargin: 6,
+    mainAxisMargin: 4,
+    scrollbarOrientation: ScrollbarOrientation.bottom,
+    notificationPredicate: (notification) =>
+        notification.depth == 0 && notification.metrics.axis == Axis.horizontal,
+    child: child,
+  );
+
+  Widget _buildCell(
+    String position,
+    List<double> xs,
+    List<double> ys,
+    List<double> widths,
+    List<double> heights,
+    ColorScheme colors,
+  ) {
+    final indices = position.split(':').map(int.parse).toList();
+    final row = indices[0];
+    final column = indices[1];
+    return Positioned(
+      key: ValueKey('$_structureRevision:$position'),
+      left: xs[column],
+      top: ys[row],
+      width: widths[column],
+      height: heights[row],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: _hasActiveCell && _activeCell == position
+              ? colors.primary.withValues(alpha: 0.035)
+              : null,
+          border: _hasActiveCell && _activeCell == position
+              ? Border.all(color: colors.primary, width: 1.5)
+              : Border(
+                  top: row == 0
+                      ? BorderSide(color: colors.outlineVariant)
+                      : BorderSide.none,
+                  left: column == 0
+                      ? BorderSide(color: colors.outlineVariant)
+                      : BorderSide.none,
+                  right: BorderSide(color: colors.outlineVariant),
+                  bottom: BorderSide(color: colors.outlineVariant),
+                ),
+        ),
+        child: ScrollConfiguration(
+          // Suppress automatic bars for the grid, but retain the containing
+          // editor's cell-scroll behavior outside compact previews.
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: widget.previewMaxHeight != null ? false : null,
+            dragDevices: _dragDevices,
+          ),
+          child: _TableCell(
+            delta: _table.cell(row, column),
+            note: widget.note,
+            readOnly: widget.readOnly,
+            editing: widget.editing,
+            label: context.l10n.tableCellLabel(row + 1, column + 1),
+            width: widths[column] - 16,
+            height: heights[row] - 16,
+            onFocus: (controller) {
+              setState(() {
+                _activeCell = position;
+                _activeController = controller;
+              });
+            },
+            onChanged: (delta) => _commit(_table.withCell(row, column, delta)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _columnLabel(int index) {
+  var label = '';
+  for (var value = index + 1; value > 0; value = (value - 1) ~/ 26) {
+    label = String.fromCharCode(65 + (value - 1) % 26) + label;
+  }
+  return label;
+}
+
+class _TableCell extends StatefulWidget {
+  const _TableCell({
+    required this.delta,
+    required this.note,
+    required this.readOnly,
+    required this.editing,
+    required this.onChanged,
+    required this.onFocus,
+    required this.label,
+    required this.width,
+    required this.height,
+  });
+  final List<dynamic> delta;
+  final Note note;
+  final bool readOnly;
+  final NoteEmbedEditing? editing;
+  final ValueChanged<List<dynamic>> onChanged;
+  final ValueChanged<QuillController> onFocus;
+  final String label;
+  final double width;
+  final double height;
+  @override
+  State<_TableCell> createState() => _TableCellState();
+}
+
+class _TableCellState extends State<_TableCell> {
+  late final QuillController _controller;
+  final _focus = FocusNode();
+  final _editorKey = GlobalKey<EditorState>();
+  final _scroll = ScrollController();
+  late StreamSubscription<DocChange> _changes;
+  bool _applying = false;
+
+  List<dynamic> get _cellDelta =>
+      flattenNoteTables(Delta.fromJson(widget.delta)).toJson();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = NoteEditorController(
+      document: documentFromJsonSafe(_cellDelta)
+        ..setCustomRules(customQuillRules),
+      selection: const TextSelection.collapsed(offset: 0),
+      readOnly: widget.readOnly,
+      allowTables: false,
+    );
+    _listen();
+    _focus.addListener(_focused);
+  }
+
+  void _listen() {
+    _changes = _controller.changes.listen((_) {
+      if (!_applying && !widget.readOnly) {
+        widget.onChanged(_controller.document.toDelta().toJson());
+      }
+    });
+  }
+
+  void _focused() {
+    if (!_focus.hasPrimaryFocus || widget.readOnly) return;
+    widget.editing?.activate(_controller, _focus);
+    widget.onFocus(_controller);
+  }
+
+  bool get _matchesSnapshot =>
+      jsonEncode(_controller.document.toDelta().toJson()) ==
+      jsonEncode(normalizeNoteBlocks(Delta.fromJson(_cellDelta)).toJson());
+
+  @override
+  void didUpdateWidget(_TableCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.readOnly = widget.readOnly;
+    if (widget.readOnly) widget.editing?.release(_controller);
+    if (!_matchesSnapshot) {
+      // Undo updates the parent during build. Notify the shared toolbar only
+      // once the frame is complete, using the latest cell snapshot.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _matchesSnapshot) return;
+        _applySnapshot();
+      });
+    }
+  }
+
+  void _applySnapshot() {
+    _applying = true;
+    _changes.cancel();
+    final selection = _controller.selection;
+    final previousDocument = _controller.document;
+    _controller.document = documentFromJsonSafe(_cellDelta)
+      ..setCustomRules(customQuillRules);
+    _controller.updateSelection(
+      TextSelection.collapsed(
+        offset: selection.baseOffset.clamp(0, _controller.document.length - 1),
+      ),
+      ChangeSource.remote,
+    );
+    previousDocument.close();
+    _listen();
+    _applying = false;
+  }
+
+  @override
+  void dispose() {
+    widget.editing?.release(_controller);
+    _focus.removeListener(_focused);
+    _changes.cancel();
+    _controller.dispose();
+    _focus.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: widget.label,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.readOnly ? null : _focus.requestFocus,
+      child: ListenableBuilder(
+        listenable: widget.editing ?? _focus,
+        builder: (context, _) => _TableCellInputScope(
+          child: QuillEditor(
+            controller: _controller,
+            focusNode: _focus,
+            scrollController: _scroll,
+            config: QuillEditorConfig(
+              editorKey: _editorKey,
+              padding: const EdgeInsets.all(8),
+              scrollable: true,
+              expands: true,
+              autoFocus: false,
+              showCursor:
+                  !widget.readOnly &&
+                  identical(widget.editing?.controller, _controller),
+              enableSelectionToolbar:
+                  widget.editing?.controller == null ||
+                  identical(widget.editing?.controller, _controller),
+              onTapDown: (details, _) =>
+                  widget.editing?.handlesTapDown(
+                    _controller,
+                    details,
+                    _editorKey.currentState,
+                    _focus,
+                  ) ??
+                  false,
+              onTapUp: (details, _) =>
+                  widget.editing?.handlesTapUp(
+                    _controller,
+                    details,
+                    _focus,
+                    _editorKey.currentState,
+                  ) ??
+                  false,
+              onSingleLongTapStart: (details, _) =>
+                  widget.editing?.handlesGesture(
+                    _controller,
+                    details.globalPosition,
+                  ) ??
+                  false,
+              onSingleLongTapMoveUpdate: (details, _) =>
+                  widget.editing?.handlesGesture(
+                    _controller,
+                    details.globalPosition,
+                  ) ??
+                  false,
+              onSingleLongTapEnd: (details, _) =>
+                  widget.editing?.handlesGesture(
+                    _controller,
+                    details.globalPosition,
+                  ) ??
+                  false,
+              customActions: widget.editing?.rootController == null
+                  ? null
+                  : {
+                      UndoTextIntent: CallbackAction<UndoTextIntent>(
+                        onInvoke: (_) {
+                          if (!widget.readOnly) {
+                            widget.editing!.rootController!.undo();
+                          }
+                          return null;
+                        },
+                      ),
+                      RedoTextIntent: CallbackAction<RedoTextIntent>(
+                        onInvoke: (_) {
+                          if (!widget.readOnly) {
+                            widget.editing!.rootController!.redo();
+                          }
+                          return null;
+                        },
+                      ),
+                    },
+              customLeadingBlockBuilder: customLeadingBlockBuilder,
+              customStyles: buildQuillStyles(
+                foregroundColor:
+                    DefaultTextStyle.of(context).style.color ??
+                    Theme.of(context).colorScheme.onSurface,
+                backgroundColor: widget.note.color,
+              ),
+              embedBuilders: noteEmbedBuilders(
+                note: widget.note,
+                editing: widget.editing,
+                inlineWidth: widget.width,
+                includeTables: false,
+                // Leave room for the embed's padding and the text line descent.
+                mediaMaxHeight: math.max(1, widget.height - 16),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Cell editors are visually embedded, but must not inherit the note's focus
+/// or its overridable text actions. Otherwise a parent action can apply the
+/// note's editing value to the cell through the cell's ReplaceTextIntent.
+class _TableCellInputScope extends StatelessWidget {
+  const _TableCellInputScope({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    parentNode: FocusScope.of(context),
+    canRequestFocus: false,
+    skipTraversal: true,
+    child: Actions(
+      actions: {
+        DeleteCharacterIntent: _CellTextAction<DeleteCharacterIntent>(),
+        DeleteToNextWordBoundaryIntent:
+            _CellTextAction<DeleteToNextWordBoundaryIntent>(),
+        DeleteToLineBreakIntent: _CellTextAction<DeleteToLineBreakIntent>(),
+        ExtendSelectionByCharacterIntent:
+            _CellTextAction<ExtendSelectionByCharacterIntent>(),
+        ExtendSelectionToNextWordBoundaryIntent:
+            _CellTextAction<ExtendSelectionToNextWordBoundaryIntent>(),
+        ExtendSelectionToLineBreakIntent:
+            _CellTextAction<ExtendSelectionToLineBreakIntent>(),
+        ExtendSelectionVerticallyToAdjacentLineIntent:
+            _CellTextAction<ExtendSelectionVerticallyToAdjacentLineIntent>(),
+        ExtendSelectionToDocumentBoundaryIntent:
+            _CellTextAction<ExtendSelectionToDocumentBoundaryIntent>(),
+        ExtendSelectionToNextWordBoundaryOrCaretLocationIntent:
+            _CellTextAction<
+              ExtendSelectionToNextWordBoundaryOrCaretLocationIntent
+            >(),
+        ExpandSelectionToDocumentBoundaryIntent:
+            _CellTextAction<ExpandSelectionToDocumentBoundaryIntent>(),
+        ExpandSelectionToLineBreakIntent:
+            _CellTextAction<ExpandSelectionToLineBreakIntent>(),
+        SelectAllTextIntent: _CellTextAction<SelectAllTextIntent>(),
+        CopySelectionTextIntent: _CellTextAction<CopySelectionTextIntent>(),
+        PasteTextIntent: _CellTextAction<PasteTextIntent>(),
+      },
+      child: child,
+    ),
+  );
+}
+
+/// Quill supplies the cell's default action as callingAction, including its
+/// invocation context. Keep that action instead of resolving to the note's.
+class _CellTextAction<T extends Intent> extends Action<T> {
+  @override
+  Object? invoke(T intent) => callingAction?.invoke(intent);
+
+  @override
+  bool get isActionEnabled => callingAction?.isActionEnabled ?? false;
+
+  @override
+  bool isEnabled(T intent) => callingAction?.isEnabled(intent) ?? false;
+
+  @override
+  bool consumesKey(T intent) => callingAction?.consumesKey(intent) ?? false;
+}
+
+/// A drag that starts on a resize grip belongs to resizing even if the first
+/// movement is diagonal. Scrolling remains available through the cell bodies.
+class _TableResizeGestureRecognizer extends PanGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
+}

@@ -764,6 +764,52 @@ void main() {
     expect(service.snapshotFor(folder).orderedNoteIds, ['note-1']);
   });
 
+  test(
+    'new notes precede imports without changing saved order after rebase',
+    () async {
+      final existing = await _seedImportedOrder(database, grid);
+      final before = service
+          .sortNotes(grid, existing)
+          .map((note) => note.syncId)
+          .toList();
+      final base = service.snapshotFor(grid);
+      final first = Note(id: 5, syncId: 'new-first', title: 'First');
+      final second = Note(id: 6, syncId: 'new-second', title: 'Second');
+      await Future.wait([first.save(false), second.save(false)]);
+      await _waitUntil(
+        () => service.snapshotFor(grid).orderedNoteIds.contains(second.syncId),
+      );
+      Future<Iterable<String?>> visibleIds() async => service
+          .sortNotes(grid, await Note.get(NoteType.all))
+          .map((note) => note.syncId);
+      final expected = ['new-second', 'new-first', ...before];
+      expect(await visibleIds(), expected);
+      expect(service.snapshotFor(grid).orderedNoteIds, [
+        'new-second',
+        'new-first',
+        'note-3',
+        'note-4',
+        'note-1',
+        'hidden-note',
+        'note-2',
+      ]);
+
+      // A remote revision must replay the same prefix without losing hidden IDs.
+      await service.applyRemoteSnapshotForTesting(
+        base.copyWith(revision: 'remote-update'),
+      );
+      expect(await visibleIds(), expected);
+      expect(service.snapshotFor(grid).orderedNoteIds, contains('hidden-note'));
+      first.title = 'Edited existing note';
+      await first.save(false);
+      expect(await visibleIds(), expected);
+
+      await service.dispose();
+      await service.init();
+      expect(await visibleIds(), expected);
+    },
+  );
+
   test('rapid lifecycle events always mutate the latest snapshot', () async {
     await service.setMode(grid, NoteSortMode.custom);
     final first = Note(id: 1, syncId: 'note-1');
