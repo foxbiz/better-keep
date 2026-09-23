@@ -173,7 +173,44 @@ class NoteEditorToolbar extends StatelessWidget {
             onAppendTranscript: onAppendTranscript,
             onAttachmentAdded: onAttachmentAdded,
           ),
-        if (showDocumentEmbeds) ...[
+        if (showDocumentEmbeds && note != null)
+          AttachButton(
+            key: const ValueKey('insert_note_image'),
+            readOnly: readOnly,
+            note: note!,
+            imageAttachmentPreparationService:
+                imageAttachmentPreparationService,
+            onAttachmentAdded: onAttachmentAdded,
+            onInsertReference: (attachment) {
+              insertNoteEmbed(
+                controller,
+                noteAttachmentEmbedType,
+                attachmentReference(attachment),
+                block: true,
+              );
+              focusNode.requestFocus();
+            },
+          ),
+        TextColorButton(
+          color: foregroundColor,
+          focusNode: focusNode,
+          readOnly: readOnly,
+          controller: controller,
+        ),
+        if (showChecklist)
+          CheckListButton(
+            focusNode: focusNode,
+            controller: controller,
+            readOnly: readOnly,
+          ),
+        LinkButton(
+          controller: controller,
+          focusNode: focusNode,
+          readOnly: readOnly,
+        ),
+        if (showDocumentEmbeds &&
+            (controller is! NoteEditorController ||
+                (controller as NoteEditorController).allowTables))
           IconButton(
             key: const ValueKey('insert_table'),
             tooltip: context.l10n.insertTable,
@@ -196,42 +233,6 @@ class NoteEditorToolbar extends StatelessWidget {
                     focusNode.requestFocus();
                   },
           ),
-          if (note != null)
-            AttachButton(
-              key: const ValueKey('insert_note_image'),
-              readOnly: readOnly,
-              note: note!,
-              imageAttachmentPreparationService:
-                  imageAttachmentPreparationService,
-              onAttachmentAdded: onAttachmentAdded,
-              onInsertReference: (attachment) {
-                insertNoteEmbed(
-                  controller,
-                  noteAttachmentEmbedType,
-                  attachmentReference(attachment),
-                  block: true,
-                );
-                focusNode.requestFocus();
-              },
-            ),
-        ],
-        TextColorButton(
-          color: foregroundColor,
-          focusNode: focusNode,
-          readOnly: readOnly,
-          controller: controller,
-        ),
-        if (showChecklist)
-          CheckListButton(
-            focusNode: focusNode,
-            controller: controller,
-            readOnly: readOnly,
-          ),
-        LinkButton(
-          controller: controller,
-          focusNode: focusNode,
-          readOnly: readOnly,
-        ),
         if (showBlockLists) ...[
           _styleButton(Attribute.ul),
           _styleButton(Attribute.ol),

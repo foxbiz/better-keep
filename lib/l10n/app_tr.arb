@@ -3675,9 +3675,7 @@
   "tableColumns": "Sütunlar",
   "tableSizeLimit": "Satır ve sütun sayısı 1–256 arasında olmalıdır",
   "inNoteImage": "Not içi resim",
-  "imagePlacement": "Resim yerleşimi",
-  "imageInline": "Metinle aynı satırda",
-  "imageNewLine": "Ayrı bir satırda",
+  "resizeImage": "Görseli yeniden boyutlandırmak için sürükleyin",
   "removeImageReference": "Metinden kaldır",
   "inlineAttachmentUnavailable": "Ek kullanılamıyor",
   "chooseAttachment": "Mevcut eki seç",
@@ -3704,5 +3702,9 @@
   "settingsSync": "Senkronizasyon",
   "settingsPrivacySecurity": "Gizlilik ve güvenlik",
   "settingsAdvanced": "Gelişmiş",
-  "settingsHelpAbout": "Yardım ve hakkında"
+  "settingsHelpAbout": "Yardım ve hakkında",
+  "imageCount": "{count} görsel",
+  "sketchCount": "{count} çizim",
+  "tableCount": "{count} tablo",
+  "attachmentCount": "{count} ek"
 }

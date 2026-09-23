@@ -1,12 +1,10 @@
+import 'package:better_keep/models/note_table.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/internal.dart' show DeleteRule, InsertRule;
 import 'package:flutter_quill/quill_delta.dart';
 
 bool isNoteBlock(Object? data) =>
-    data is Map &&
-    (isNoteTable(data) ||
-        (data['note-attachment'] is Map &&
-            (data['note-attachment'] as Map)['placement'] != 'inline'));
+    data is Map && (isNoteTable(data) || data['note-attachment'] is Map);
 
 Object? _at(Document document, int offset) {
   if (offset < 0 || offset >= document.length) return null;
@@ -68,7 +66,50 @@ class PreserveNoteBlockLineRule extends DeleteRule {
 
 bool isNoteTable(Object? data) => data is Map && data.containsKey('note-table');
 
-/// Tables and block images occupy their own line, including pasted content.
+/// Keeps rich content from pasted or legacy nested tables, without a nested grid.
+/// Only populated cells are visited, in reading order. The source is not changed.
+Delta flattenNoteTables(Delta source) {
+  if (!source.toList().any((op) => isNoteTable(op.data))) return source;
+  final result = Delta();
+  var afterTable = false;
+  for (final op in normalizeNoteBlocks(source).toList()) {
+    final data = op.data;
+    if (isNoteTable(data)) {
+      final table = NoteTableData.fromJson((data as Map)[NoteTableData.type]);
+      int position(String key) {
+        final parts = key.split(':').map(int.parse).toList();
+        return parts[0] * NoteTableData.maxDimension + parts[1];
+      }
+
+      final cells = table.cells.keys.toList()
+        ..sort((a, b) => position(a).compareTo(position(b)));
+      if (cells.isEmpty) result.insert('\n');
+      for (final key in cells) {
+        final cell = flattenNoteTables(Delta.fromJson(table.cells[key]!));
+        for (final cellOp in cell.toList()) {
+          result.push(cellOp);
+        }
+        if (cell.isEmpty ||
+            cell.last.data is! String ||
+            !(cell.last.data as String).endsWith('\n')) {
+          result.insert('\n');
+        }
+      }
+      afterTable = true;
+    } else {
+      // The last cell already supplies the table paragraph's line ending.
+      if (afterTable && data is String && data.startsWith('\n')) {
+        if (data.length > 1) result.insert(data.substring(1), op.attributes);
+      } else {
+        result.push(op);
+      }
+      afterTable = false;
+    }
+  }
+  return normalizeNoteBlocks(result);
+}
+
+/// Tables and attachment images occupy their own line, including pasted content.
 Delta normalizeNoteBlocks(Delta source) {
   if (!source.toList().any((op) => isNoteBlock(op.data))) return source;
   final result = Delta();

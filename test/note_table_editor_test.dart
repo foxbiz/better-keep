@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/quill_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/note_attachment.dart';
@@ -15,7 +16,9 @@ import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_table_embed.dart';
 import 'package:better_keep/pages/note_editor/note_editor_toolbar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -74,7 +77,7 @@ void main() {
   );
 
   testWidgets(
-    'cell formatting uses the shared toolbar and nested tables persist through root undo',
+    'cell formatting keeps media tools but omits nested table insertion',
     (tester) async {
       final table = NoteTableData(rows: 2, columns: 2);
       final root = _controller(table);
@@ -86,6 +89,7 @@ void main() {
         focus.dispose();
       });
       await tester.pumpWidget(_editor(root, editing, focus));
+      expect(find.byKey(const ValueKey('insert_table')), findsOneWidget);
       final cellFinder = find
           .descendant(
             of: find.byType(NoteTableView),
@@ -96,6 +100,8 @@ void main() {
       cell.focusNode.requestFocus();
       await tester.pump();
       expect(editing.controller, same(cell.controller));
+      expect(find.byKey(const ValueKey('insert_table')), findsNothing);
+      expect(find.byKey(const ValueKey('insert_note_image')), findsOneWidget);
       await tester.ensureVisible(find.byTooltip('Bold'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Bold'));
@@ -111,81 +117,37 @@ void main() {
         noteDeltaPlainText(root.document.toDelta().toJson()),
         contains('Cell text'),
       );
-      var restored = NoteTableData.fromJson(
+      final restored = NoteTableData.fromJson(
         (root.document.toDelta().first.data as Map)[NoteTableData.type],
       );
       expect(restored.cell(0, 0).first['attributes']['bold'], true);
       root.document.history.clear();
-      final nested = NoteTableData(rows: 1, columns: 1);
+      final pasted = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
+        {'insert': 'Pasted text\n'},
+      ]);
       insertNoteEmbed(
         cell.controller,
         NoteTableData.type,
-        nested.toJson(),
+        pasted.toJson(),
         block: true,
       );
-      await tester.pump();
-      expect(find.byType(NoteTableView), findsNWidgets(2));
-      final withNested = NoteTableData.fromJson(
-        (root.document.toDelta().first.data as Map)[NoteTableData.type],
-      );
-      replaceNoteEmbed(
-        root,
-        NoteTableData.type,
-        table.id,
-        withNested.resizeRow(0, 180).toJson(),
+      expect(cell.controller.document.toPlainText(), 'Cell text\n');
+      cell.controller.replaceText(
+        9,
+        0,
+        Delta()..insert({NoteTableData.type: pasted.toJson()}),
+        const TextSelection.collapsed(offset: 9),
       );
       await tester.pump();
-      final nestedCellFinder = find
-          .descendant(
-            of: find.byType(NoteTableView).last,
-            matching: find.byType(QuillEditor),
-          )
-          .last;
-      await tester.ensureVisible(nestedCellFinder);
-      await tester.pump();
-      await tester.tap(nestedCellFinder);
-      await tester.pump();
-      final nestedCell = tester.widget<QuillEditor>(nestedCellFinder);
-      expect(editing.controller, same(nestedCell.controller));
-      final cellEditors = tester.widgetList<QuillEditor>(
-        find.descendant(
-          of: find.byType(NoteTableView).first,
-          matching: find.byType(QuillEditor),
-        ),
-      );
-      expect(
-        cellEditors
-            .where((editor) => editor.config.showCursor == true)
-            .single
-            .controller,
-        same(nestedCell.controller),
-      );
-      tester.testTextInput.updateEditingValue(
-        const TextEditingValue(
-          text: 'Nested text\n',
-          selection: TextSelection.collapsed(offset: 11),
-        ),
-      );
-      await tester.pump();
+      expect(find.byType(NoteTableView), findsOneWidget);
       expect(
         noteDeltaPlainText(root.document.toDelta().toJson()),
-        contains('Nested text'),
+        contains('Pasted text'),
       );
-      expect(
-        NoteTableData.fromJson(
-          (root.document.toDelta().first.data as Map)[NoteTableData.type],
-        ).rowHeights[0],
-        180,
-      );
-      await tester.pumpAndSettle();
-      await tester.tapAt(
-        tester.getRect(find.byType(NoteTableView).last).bottomLeft +
-            const Offset(36, 4),
-      );
-      await tester.pump();
-      expect(cell.focusNode.hasPrimaryFocus, isTrue);
-      expect(editing.controller, same(cell.controller));
-      root.undo();
+      // Quill groups history by wall time; undo all edits since insertion.
+      while (root.document.hasUndo) {
+        root.undo();
+      }
       await tester.pump();
       await tester.pump();
       expect(find.byType(NoteTableView), findsOneWidget);
@@ -193,9 +155,73 @@ void main() {
         noteDeltaPlainText(root.document.toDelta().toJson()),
         contains('Cell text'),
       );
+      expect(cell.controller.document.toPlainText(), 'Cell text\n');
+      editing.release(cell.controller);
+      focus.requestFocus();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('insert_table')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       // Quill defers web caret work for the keyboard animation.
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'legacy nested cells display rich content without rewriting saved data',
+    (tester) async {
+      final nested = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
+        {
+          'insert': 'Legacy text',
+          'attributes': {'bold': true},
+        },
+        {'insert': '\n'},
+      ]);
+      final table = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
+        {
+          'insert': {NoteTableData.type: nested.toJson()},
+        },
+        {'insert': '\n'},
+      ]);
+      final root = _controller(table);
+      final editing = NoteEmbedEditing();
+      final focus = FocusNode();
+      addTearDown(() {
+        root.dispose();
+        editing.dispose();
+        focus.dispose();
+      });
+      final original = jsonEncode(root.document.toDelta().toJson());
+      await tester.pumpWidget(_editor(root, editing, focus));
+      expect(find.byType(NoteTableView), findsOneWidget);
+      final cell = tester.widget<QuillEditor>(
+        find.descendant(
+          of: find.byType(NoteTableView),
+          matching: find.byType(QuillEditor),
+        ),
+      );
+      expect(cell.controller.document.toPlainText(), 'Legacy text\n');
+      expect(cell.controller.document.toDelta().first.attributes, {
+        'bold': true,
+      });
+      expect(jsonEncode(root.document.toDelta().toJson()), original);
+      cell.focusNode.requestFocus();
+      await tester.pumpAndSettle();
+      expect(jsonEncode(root.document.toDelta().toJson()), original);
+      cell.controller.replaceText(0, 0, 'Edited ', null);
+      await tester.pump();
+      expect(
+        noteDeltaPlainText(root.document.toDelta().toJson()),
+        contains('Edited Legacy text'),
+      );
+      root.undo();
+      await tester.pump();
+      await tester.pump();
+      expect(jsonEncode(root.document.toDelta().toJson()), original);
+      expect(cell.controller.document.toPlainText(), 'Legacy text\n');
+      expect(find.byType(NoteTableView), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 600));
     },
   );
@@ -321,7 +347,7 @@ void main() {
           lastModified: '1',
         ),
       );
-      final reference = attachmentReference(attachment, inline: true);
+      final reference = attachmentReference(attachment);
       final table = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
         {
           'insert': {noteAttachmentEmbedType: reference},
@@ -367,11 +393,6 @@ void main() {
       }
 
       expectImageFits();
-      // Switching between inline and block must keep the whole image in the cell.
-      final cell = tester.widget<QuillEditor>(cellFinder);
-      changeAttachmentPlacement(cell.controller, reference, inline: false);
-      await tester.pump();
-      expectImageFits();
       final saved = jsonEncode(root.document.toDelta().toJson());
       attachment.type = AttachmentType.sketch;
       attachment.sketch = SketchData(
@@ -392,6 +413,166 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       // Quill defers web caret work for the keyboard animation.
       await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'attachment resizing preserves block layout, aspect ratio, and undo in notes and cells',
+    (tester) async {
+      for (final inCell in [false, true]) {
+        final ratio = inCell ? 4.0 : 1.0;
+        final note = Note(
+          attachments: [
+            NoteAttachment.sketch(SketchData(aspectRatio: ratio))
+              ..id = 'missing',
+          ],
+        );
+        final reference = <String, dynamic>{
+          'id': 'resizable',
+          'src': 'attachment://missing',
+          'placement': 'inline',
+          'width': 120.0,
+        };
+        final delta = [
+          {'insert': 'Before '},
+          {
+            'insert': {noteAttachmentEmbedType: reference},
+          },
+          {'insert': ' after\n'},
+        ];
+        final root = inCell
+            ? _controller(
+                NoteTableData(
+                  rows: 1,
+                  columns: 1,
+                  rowHeights: {0: 220},
+                ).withCell(0, 0, delta),
+              )
+            : QuillController(
+                document: documentFromJsonSafe(delta),
+                selection: const TextSelection.collapsed(offset: 0),
+              );
+        final editing = NoteEmbedEditing()..rootController = root;
+        final focus = FocusNode();
+        await tester.pumpWidget(
+          _editor(root, editing, focus, note: note, rebuildOnController: false),
+        );
+        await tester.pumpAndSettle();
+        final owner = inCell
+            ? tester
+                  .widget<QuillEditor>(
+                    find
+                        .descendant(
+                          of: find.byType(NoteTableView),
+                          matching: find.byType(QuillEditor),
+                        )
+                        .first,
+                  )
+                  .controller
+            : root;
+        final image = find.byKey(const ValueKey('attachment_image_resizable'));
+        final originalSize = tester.getSize(image);
+        expect(originalSize, Size(120, 120 / ratio));
+        expect(owner.document.toPlainText(), 'Before \n\uFFFC\n after\n');
+        final handle = find.byKey(
+          const ValueKey('attachment_resize_resizable'),
+        );
+        expect(handle, findsNothing);
+        final ownerEditor = find.byWidgetPredicate(
+          (widget) =>
+              widget is QuillEditor && identical(widget.controller, owner),
+        );
+        expect(
+          tester.getCenter(image).dx,
+          closeTo(tester.getCenter(ownerEditor).dx, 0.1),
+        );
+        await tester.tap(image);
+        await tester.pumpAndSettle();
+        expect(handle, findsOneWidget);
+        expect(find.text('Remove from text'), findsNothing);
+        await tester.pump(const Duration(seconds: 4));
+        expect(handle, findsNothing);
+        final imageFocus = Focus.of(tester.element(image));
+        imageFocus.unfocus();
+        await tester.pumpAndSettle();
+        imageFocus.requestFocus();
+        await tester.pumpAndSettle();
+        expect(handle, findsOneWidget);
+        await tester.pump(const Duration(seconds: 4));
+        expect(handle, findsNothing);
+        // Keyboard activation also reveals controls after they time out.
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(handle, findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey('attachment_options_resizable')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(CheckedPopupMenuItem<String>), findsNothing);
+        expect(find.text('Remove from text'), findsOneWidget);
+        await tester.tap(find.text('Remove from text'));
+        await tester.pumpAndSettle();
+        expect(image, findsNothing);
+        root.undo();
+        await tester.pumpAndSettle();
+        expect(tester.getSize(image), originalSize);
+        await tester.tap(image);
+        await tester.pump();
+        root.document.history.clear();
+        final blockSnapshot = jsonEncode(root.document.toDelta().toJson());
+        final drag = await tester.startGesture(tester.getCenter(handle));
+        await drag.moveBy(const Offset(-48, -16));
+        await tester.pump(const Duration(seconds: 5));
+        expect(handle, findsOneWidget);
+        await drag.moveBy(const Offset(-16, -16));
+        await drag.up();
+        await tester.pumpAndSettle();
+        expect(tester.getSize(image).width, lessThan(originalSize.width));
+        expect(handle.hitTestable(), findsOneWidget);
+        expect(
+          find
+              .byKey(const ValueKey('attachment_options_resizable'))
+              .hitTestable(),
+          findsOneWidget,
+        );
+        root.undo();
+        await tester.pumpAndSettle();
+        expect(jsonEncode(root.document.toDelta().toJson()), blockSnapshot);
+        expect(tester.getSize(image), originalSize);
+        await tester.tap(image);
+        await tester.pump();
+        root.document.history.clear();
+        final before = jsonEncode(root.document.toDelta().toJson());
+        await tester.drag(handle, const Offset(32, 32));
+        await tester.pumpAndSettle();
+        final resized = tester.getSize(image);
+        expect(resized.width, greaterThan(originalSize.width));
+        expect(resized.height, resized.width / ratio);
+        final saved = owner.document.toDelta().toJson().firstWhere(
+          (op) => op['insert'] is Map,
+        )['insert'][noteAttachmentEmbedType];
+        expect(saved['width'], resized.width);
+        expect(saved['src'], reference['src']);
+        expect(saved['placement'], 'inline');
+        expect(owner.document.toPlainText(), 'Before \n\uFFFC\n after\n');
+        root.undo();
+        await tester.pumpAndSettle();
+        expect(jsonEncode(root.document.toDelta().toJson()), before);
+        expect(tester.getSize(image), originalSize);
+        root.readOnly = true;
+        await tester.pumpWidget(
+          _editor(root, editing, focus, note: note, rebuildOnController: false),
+        );
+        await tester.pumpAndSettle();
+        expect(handle, findsNothing);
+        expect(tester.getSize(image), originalSize);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 600));
+        root.dispose();
+        editing.dispose();
+        focus.dispose();
+      }
     },
   );
 
@@ -431,13 +612,42 @@ void main() {
       await AppState.init(prefs: prefs);
       expect(AppState.tableHeaders, isTrue);
       expect(find.byIcon(Icons.more_horiz), findsNothing);
-      await tester.drag(
-        find.byKey(ValueKey('table_horizontal_${table.id}')),
-        const Offset(-600, 0),
+      final horizontal = tester
+          .widget<SingleChildScrollView>(
+            find.byKey(ValueKey('table_horizontal_${table.id}')),
+          )
+          .controller!;
+      await tester.dragFrom(
+        tester.getCenter(cells.first),
+        const Offset(-250, 0),
       );
       await tester.pumpAndSettle();
+      expect(horizontal.offset, greaterThan(0));
       expect(tester.takeException(), isNull);
       expect(cells.evaluate().length, lessThan(80));
+      final snapshot = jsonEncode(root.document.toDelta().toJson());
+      final parentScroll = Scrollable.of(
+        tester.element(find.byType(NoteTableView)),
+        axis: Axis.vertical,
+      ).position;
+      parentScroll.jumpTo(72 * 220);
+      await tester.pumpAndSettle();
+      expect(cells.evaluate().length, lessThan(80));
+      expect(find.text('221'), findsOneWidget);
+      final columnHeading = find
+          .descendant(
+            of: find.byType(NoteTableView),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Text &&
+                  RegExp(r'^[A-Z]+$').hasMatch(widget.data ?? ''),
+            ),
+          )
+          .first;
+      expect(tester.getRect(columnHeading).top, greaterThanOrEqualTo(0));
+      expect(find.text('1'), findsNothing);
+      expect(jsonEncode(root.document.toDelta().toJson()), snapshot);
+      expect(find.byKey(ValueKey('table_vertical_${table.id}')), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       // Quill defers web caret work for the keyboard animation.
       await tester.pump(const Duration(milliseconds: 600));
@@ -464,6 +674,7 @@ Widget _editor(
   NoteEmbedEditing editing,
   FocusNode focus, {
   Note? note,
+  bool rebuildOnController = true,
 }) {
   final currentNote = note ?? Note();
   final editorKey = GlobalKey<EditorState>();
@@ -476,7 +687,10 @@ Widget _editor(
             Expanded(
               child: SingleChildScrollView(
                 child: ListenableBuilder(
-                  listenable: Listenable.merge([editing, root]),
+                  listenable: Listenable.merge([
+                    editing,
+                    if (rebuildOnController) root,
+                  ]),
                   builder: (_, _) => QuillEditor.basic(
                     controller: root,
                     focusNode: focus,

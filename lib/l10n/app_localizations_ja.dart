@@ -3624,13 +3624,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get inNoteImage => 'ノート内の画像';
 
   @override
-  String get imagePlacement => '画像の配置';
-
-  @override
-  String get imageInline => 'テキストと同じ行';
-
-  @override
-  String get imageNewLine => '独立した行';
+  String get resizeImage => 'ドラッグして画像のサイズを変更';
 
   @override
   String get removeImageReference => '本文から削除';
@@ -3718,4 +3712,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsHelpAbout => 'ヘルプとアプリ情報';
+
+  @override
+  String imageCount(int count) {
+    return '画像 $count 件';
+  }
+
+  @override
+  String sketchCount(int count) {
+    return 'スケッチ $count 件';
+  }
+
+  @override
+  String tableCount(int count) {
+    return '表 $count 件';
+  }
+
+  @override
+  String attachmentCount(int count) {
+    return '添付ファイル $count 件';
+  }
 }

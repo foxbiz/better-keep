@@ -607,6 +607,33 @@ class NoteSortService {
     return result;
   }
 
+  List<String> _missingNoteIds(
+    NoteOrderSnapshot current,
+    Iterable<Note> notes,
+  ) {
+    final included = current.orderedNoteIds.toSet();
+    return [
+      for (final note in sortNotes(current.context, notes))
+        if (_stableId(note) case final String id when included.add(id)) id,
+    ];
+  }
+
+  List<NoteOrderOperation> _insertOperations(
+    NoteOrderContext context,
+    List<String> ids,
+    DateTime createdAt,
+  ) => [
+    // Each insert prepends during rebase, so journal the prefix in reverse.
+    for (final stableId in ids.reversed)
+      NoteOrderOperation(
+        id: const Uuid().v4(),
+        contextKey: context.key,
+        type: NoteOrderOperationType.insertNote,
+        noteId: stableId,
+        createdAt: createdAt,
+      ),
+  ];
+
   Future<bool> reorderVisibleNotes({
     required NoteOrderContext context,
     required int draggedId,
@@ -629,14 +656,9 @@ class NoteSortService {
     final targetStableId = _stableId(target);
     if (draggedStableId == null || targetStableId == null) return false;
 
-    final included = current.orderedNoteIds.toSet();
-    final missingIds = <String>[];
     // Custom sorting displays unpositioned notes before the saved order.
     // Materialize that same prefix before applying the previewed move.
-    for (final note in sortNotes(context, visibleById.values)) {
-      final stableId = _stableId(note);
-      if (stableId != null && included.add(stableId)) missingIds.add(stableId);
-    }
+    final missingIds = _missingNoteIds(current, visibleById.values);
     final ids = [...missingIds, ...current.orderedNoteIds];
     ids.remove(draggedStableId);
     final targetIndex = ids.indexOf(targetStableId);
@@ -660,17 +682,7 @@ class NoteSortService {
         mode: NoteSortMode.custom,
         createdAt: createdAt,
       ),
-      precedingOperations: [
-        // Each insert prepends during rebase, so journal the prefix in reverse.
-        for (final stableId in missingIds.reversed)
-          NoteOrderOperation(
-            id: const Uuid().v4(),
-            contextKey: context.key,
-            type: NoteOrderOperationType.insertNote,
-            noteId: stableId,
-            createdAt: createdAt,
-          ),
-      ],
+      precedingOperations: _insertOperations(context, missingIds, createdAt),
     );
     return true;
   }, visibleNotes: visibleNotes);
@@ -812,17 +824,25 @@ class NoteSortService {
               !await _noteBelongsToContext(event.note, context)) {
             return;
           }
+          // Downloaded notes can still be outside the saved custom order.
+          // Preserve their visible prefix so they cannot hide a new note below it.
+          final missingIds = current.mode == NoteSortMode.custom
+              ? _missingNoteIds(current, [
+                  ...await _loadNotesForContext(context),
+                  event.note,
+                ])
+              : [stableId];
+          final operations = _insertOperations(
+            context,
+            missingIds,
+            DateTime.now().toUtc(),
+          );
           await _commit(
             current.copyWith(
-              orderedNoteIds: [stableId, ...current.orderedNoteIds],
+              orderedNoteIds: [...missingIds, ...current.orderedNoteIds],
             ),
-            NoteOrderOperation(
-              id: const Uuid().v4(),
-              contextKey: context.key,
-              type: NoteOrderOperationType.insertNote,
-              noteId: stableId,
-              createdAt: DateTime.now().toUtc(),
-            ),
+            operations.last,
+            precedingOperations: operations.take(operations.length - 1),
           );
         });
       }

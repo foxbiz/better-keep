@@ -3765,13 +3765,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get inNoteImage => 'Not içi resim';
 
   @override
-  String get imagePlacement => 'Resim yerleşimi';
-
-  @override
-  String get imageInline => 'Metinle aynı satırda';
-
-  @override
-  String get imageNewLine => 'Ayrı bir satırda';
+  String get resizeImage => 'Görseli yeniden boyutlandırmak için sürükleyin';
 
   @override
   String get removeImageReference => 'Metinden kaldır';
@@ -3861,4 +3855,24 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get settingsHelpAbout => 'Yardım ve hakkında';
+
+  @override
+  String imageCount(int count) {
+    return '$count görsel';
+  }
+
+  @override
+  String sketchCount(int count) {
+    return '$count çizim';
+  }
+
+  @override
+  String tableCount(int count) {
+    return '$count tablo';
+  }
+
+  @override
+  String attachmentCount(int count) {
+    return '$count ek';
+  }
 }

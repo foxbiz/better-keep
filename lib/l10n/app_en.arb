@@ -3819,9 +3819,7 @@
   "tableColumns": "Columns",
   "tableSizeLimit": "1–256 rows and columns",
   "inNoteImage": "Image in note",
-  "imagePlacement": "Image placement",
-  "imageInline": "Inline with text",
-  "imageNewLine": "On a new line",
+  "resizeImage": "Drag to resize image",
   "removeImageReference": "Remove from text",
   "inlineAttachmentUnavailable": "Attachment unavailable",
   "chooseAttachment": "Choose existing attachment",
@@ -3878,5 +3876,41 @@
   "settingsAdvanced": "Advanced",
   "@settingsAdvanced": {"description": "Advanced settings section heading"},
   "settingsHelpAbout": "Help & about",
-  "@settingsHelpAbout": {"description": "Help & about settings section heading"}
+  "@settingsHelpAbout": {"description": "Help & about settings section heading"},
+  "imageCount": "{count, plural, =1{1 image} other{{count} images}}",
+  "@imageCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sketchCount": "{count, plural, =1{1 sketch} other{{count} sketches}}",
+  "@sketchCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tableCount": "{count, plural, =1{1 table} other{{count} tables}}",
+  "@tableCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attachmentCount": "{count, plural, =1{1 attachment} other{{count} attachments}}",
+  "@attachmentCount": {
+    "description": "Compact component count on a note card",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

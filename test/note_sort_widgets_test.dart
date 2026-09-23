@@ -2,6 +2,7 @@ import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
+import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
@@ -377,6 +378,80 @@ void main() {
   });
 
   for (final viewMode in [NoteViewMode.grid, NoteViewMode.list]) {
+    for (final sortMode in [NoteSortMode.custom, NoteSortMode.createdNewest]) {
+      testWidgets(
+        'new note stays first in ${viewMode.name} with ${sortMode.name} order',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+          AppState.set('notes_view_mode', viewMode);
+          AppState.showNotes = NoteType.all;
+          AppState.currentFolder = null;
+          final context = viewMode == NoteViewMode.grid
+              ? const NoteOrderContext.mainGrid()
+              : const NoteOrderContext.mainList();
+          await tester.runAsync(() async {
+            await Label.createTable(database);
+            await service.ensureContext(context, visibleNotes: const []);
+            await service.setMode(context, sortMode);
+            // Downloads may arrive after the initially empty order was seeded.
+            for (var id = 1; id <= 2; id++) {
+              await (_note(
+                id,
+                'Downloaded $id',
+              )..syncId = 'note-$id').save(false, ModelChangeOrigin.remoteSync);
+            }
+          });
+          await tester.pumpWidget(_app(const Notes()));
+          await _waitForNoteWork(
+            tester,
+            () => find.byType(NoteCard).evaluate().length == 2,
+          );
+          await tester.pumpAndSettle();
+          List<int?> displayedIds() => tester
+              .widgetList<NoteCard>(find.byType(NoteCard))
+              .map((card) => card.note.id)
+              .toList();
+          final before = displayedIds();
+          final note = Note(title: 'New note', content: '[]');
+          await tester.runAsync(() async {
+            expect(await note.save(false), isPositive);
+          });
+          await _waitForNoteWork(
+            tester,
+            () => service
+                .snapshotFor(context)
+                .orderedNoteIds
+                .contains(note.syncId),
+          );
+          await tester.pumpAndSettle();
+          expect(displayedIds(), [note.id, ...before]);
+
+          // Reloading must keep the same order and creation timestamp.
+          final createdAt = note.createdAt;
+          await tester.runAsync(() async {
+            note.title = 'Edited new note';
+            expect(await note.save(false), isPositive);
+            expect(
+              (await Note.get(
+                NoteType.all,
+              )).firstWhere((saved) => saved.id == note.id).createdAt,
+              createdAt,
+            );
+          });
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpWidget(_app(const Notes()));
+          await _waitForNoteWork(
+            tester,
+            () => find.byType(NoteCard).evaluate().length == 3,
+          );
+          await tester.pumpAndSettle();
+          expect(displayedIds(), [note.id, ...before]);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
     testWidgets(
       'imported bottom note stays first after ${viewMode.name} drop',
       (tester) async {

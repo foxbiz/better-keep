@@ -1101,9 +1101,7 @@
   "tableColumns": "Kolom",
   "tableSizeLimit": "Masing-masing 1–256 baris dan kolom",
   "inNoteImage": "Gambar dalam catatan",
-  "imagePlacement": "Penempatan gambar",
-  "imageInline": "Sejajar dengan teks",
-  "imageNewLine": "Di baris tersendiri",
+  "resizeImage": "Seret untuk mengubah ukuran gambar",
   "removeImageReference": "Hapus dari teks",
   "inlineAttachmentUnavailable": "Lampiran tidak tersedia",
   "chooseAttachment": "Pilih lampiran yang ada",
@@ -1130,5 +1128,9 @@
   "settingsSync": "Sinkronisasi",
   "settingsPrivacySecurity": "Privasi & keamanan",
   "settingsAdvanced": "Lanjutan",
-  "settingsHelpAbout": "Bantuan & tentang"
+  "settingsHelpAbout": "Bantuan & tentang",
+  "imageCount": "{count} gambar",
+  "sketchCount": "{count} sketsa",
+  "tableCount": "{count} tabel",
+  "attachmentCount": "{count} lampiran"
 }

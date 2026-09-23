@@ -1,4 +1,5 @@
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
 import 'package:better_keep/utils/note_embed_rules.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
@@ -143,7 +144,9 @@ void insertDocumentIntoController(
   final index = controller.selection.baseOffset >= 0
       ? controller.selection.baseOffset
       : controller.document.length - 1;
-  final deltaToInsert = normalizeNoteBlocks(document.toDelta());
+  final deltaToInsert = controller is NoteEditorController
+      ? controller.prepareContent(document.toDelta())
+      : normalizeNoteBlocks(document.toDelta());
 
   // Get the operations from the delta
   final ops = deltaToInsert.toList();

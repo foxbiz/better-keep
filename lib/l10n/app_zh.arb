@@ -1101,9 +1101,7 @@
   "tableColumns": "列数",
   "tableSizeLimit": "行数和列数均为 1–256",
   "inNoteImage": "笔记内图片",
-  "imagePlacement": "图片位置",
-  "imageInline": "与文字同行",
-  "imageNewLine": "单独一行",
+  "resizeImage": "拖动以调整图片大小",
   "removeImageReference": "从正文移除",
   "inlineAttachmentUnavailable": "附件不可用",
   "chooseAttachment": "选择现有附件",
@@ -1130,5 +1128,9 @@
   "settingsSync": "同步",
   "settingsPrivacySecurity": "隐私与安全",
   "settingsAdvanced": "高级",
-  "settingsHelpAbout": "帮助与关于"
+  "settingsHelpAbout": "帮助与关于",
+  "imageCount": "{count} 张图片",
+  "sketchCount": "{count} 幅草图",
+  "tableCount": "{count} 个表格",
+  "attachmentCount": "{count} 个附件"
 }

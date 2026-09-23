@@ -3795,13 +3795,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get inNoteImage => 'Imagem na nota';
 
   @override
-  String get imagePlacement => 'Posição da imagem';
-
-  @override
-  String get imageInline => 'Na mesma linha do texto';
-
-  @override
-  String get imageNewLine => 'Em uma linha separada';
+  String get resizeImage => 'Arraste para redimensionar a imagem';
 
   @override
   String get removeImageReference => 'Remover do texto';
@@ -3891,4 +3885,48 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settingsHelpAbout => 'Ajuda e sobre';
+
+  @override
+  String imageCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count imagens',
+      one: '1 imagem',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sketchCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count esboços',
+      one: '1 esboço',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tableCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tabelas',
+      one: '1 tabela',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String attachmentCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count anexos',
+      one: '1 anexo',
+    );
+    return '$_temp0';
+  }
 }

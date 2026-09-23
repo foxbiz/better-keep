@@ -3760,13 +3760,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get inNoteImage => 'Gambar dalam catatan';
 
   @override
-  String get imagePlacement => 'Penempatan gambar';
-
-  @override
-  String get imageInline => 'Sejajar dengan teks';
-
-  @override
-  String get imageNewLine => 'Di baris tersendiri';
+  String get resizeImage => 'Seret untuk mengubah ukuran gambar';
 
   @override
   String get removeImageReference => 'Hapus dari teks';
@@ -3856,4 +3850,24 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get settingsHelpAbout => 'Bantuan & tentang';
+
+  @override
+  String imageCount(int count) {
+    return '$count gambar';
+  }
+
+  @override
+  String sketchCount(int count) {
+    return '$count sketsa';
+  }
+
+  @override
+  String tableCount(int count) {
+    return '$count tabel';
+  }
+
+  @override
+  String attachmentCount(int count) {
+    return '$count lampiran';
+  }
 }

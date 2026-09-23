@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 
-/// Routes the existing toolbar to the focused document, including nested cells.
+/// Routes the existing toolbar to the focused note or table cell.
 class NoteEmbedEditing extends ChangeNotifier {
   final _regions = <GlobalKey, QuillController>{};
 
@@ -139,7 +139,13 @@ class NoteEditorController extends QuillController {
     required super.document,
     required super.selection,
     super.readOnly,
+    this.allowTables = true,
   });
+
+  final bool allowTables;
+
+  Delta prepareContent(Delta content) =>
+      normalizeNoteBlocks(allowTables ? content : flattenNoteTables(content));
 
   @override
   void replaceText(
@@ -150,8 +156,11 @@ class NoteEditorController extends QuillController {
     bool ignoreFocus = false,
     bool shouldNotifyListeners = true,
   }) {
+    if (!allowTables && data is Embeddable && isNoteTable(data.toJson())) {
+      data = Delta()..insert(data.toJson());
+    }
     if (data is Delta && data.toList().any((op) => isNoteBlock(op.data))) {
-      final normalized = normalizeNoteBlocks(data);
+      final normalized = prepareContent(data);
       final insert = Delta();
       if (isNoteBlock(normalized.first.data) &&
           index > 0 &&
@@ -246,10 +255,11 @@ void replaceNoteEmbed(
   if (data != null) delta.insert({type: data});
   delta.delete(1);
   final selection = controller.selection;
-  // Editing an embed must not reveal the surrounding document's caret. That
+  // Updating an embed must not reveal the surrounding document's caret. That
   // scroll animation temporarily blocks further cell and divider gestures.
+  // Deletion needs Quill's normal rebuild to remove the embed from the screen.
   final ignoreFocus = controller.ignoreFocusOnTextChange;
-  controller.ignoreFocusOnTextChange = true;
+  controller.ignoreFocusOnTextChange = data != null || ignoreFocus;
   try {
     controller.compose(delta, selection, ChangeSource.local);
     if (data != null) {
@@ -279,6 +289,11 @@ void insertNoteEmbed(
   required bool block,
 }) {
   if (controller.readOnly) return;
+  if (type == 'note-table' &&
+      controller is NoteEditorController &&
+      !controller.allowTables) {
+    return;
+  }
   final selection = controller.selection;
   final start = selection.isValid
       ? selection.start.clamp(0, controller.document.length - 1)

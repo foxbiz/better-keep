@@ -1,25 +1,25 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
-import 'package:better_keep/utils/note_embed_rules.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
-import 'package:flutter_quill/quill_delta.dart';
 import 'package:uuid/uuid.dart';
 
 const noteAttachmentEmbedType = 'note-attachment';
 
-Map<String, dynamic> attachmentReference(
-  NoteAttachment attachment, {
-  bool inline = false,
-}) {
+Map<String, dynamic> attachmentReference(NoteAttachment attachment) {
   attachment.id ??= const Uuid().v4();
   return {
     'id': const Uuid().v4(),
     'src': 'attachment://${attachment.id}',
-    'placement': inline ? 'inline' : 'block',
+    'placement': 'block',
   };
 }
 
@@ -35,7 +35,7 @@ NoteAttachment? resolveNoteAttachment(Note note, String src) {
 class NoteAttachmentEmbedBuilder extends EmbedBuilder {
   const NoteAttachmentEmbedBuilder(
     this.note, {
-    this.inlineWidth = 128,
+    this.inlineWidth = 640,
     this.mediaMaxHeight,
     this.editing,
   });
@@ -50,7 +50,6 @@ class NoteAttachmentEmbedBuilder extends EmbedBuilder {
   Widget build(BuildContext context, EmbedContext embedContext) {
     final data = Map<String, dynamic>.from(embedContext.node.value.data as Map);
     final offset = embedContext.node.documentOffset;
-    final inline = data['placement'] == 'inline';
     final attachment = resolveNoteAttachment(note, data['src'] as String);
     final image = attachment?.image;
     final sketch = attachment?.sketch;
@@ -79,132 +78,328 @@ class NoteAttachmentEmbedBuilder extends EmbedBuilder {
                   : null,
             ),
     );
-    Widget frame(double available) {
-      var width = inline
-          ? available.clamp(40.0, 128.0)
-          : available.clamp(40.0, 640.0);
-      var height = (width / (ratio > 0 && ratio.isFinite ? ratio : 1)).clamp(
-        40.0,
-        inline ? 100.0 : 400.0,
-      );
-      if (mediaMaxHeight != null && height > mediaMaxHeight!) {
-        width *= mediaMaxHeight! / height;
-        height = mediaMaxHeight!;
-      }
-      final imageWidget = SizedBox(
-        width: width,
-        height: height,
-        child: content,
-      );
-      if (embedContext.readOnly || editing == null) return imageWidget;
-      return Semantics(
-        label: context.l10n.inNoteImage,
-        child: NoteEmbedGestureRegion(
-          editing: editing!,
-          owner: embedContext.controller,
-          child: PopupMenuButton<String>(
-            tooltip: context.l10n.imagePlacement,
-            onSelected: (action) {
-              if (action == 'remove') {
-                replaceNoteEmbed(
-                  embedContext.controller,
-                  key,
-                  data['id'] as String,
-                  null,
-                  offsetHint: offset,
-                );
-              } else {
-                changeAttachmentPlacement(
-                  embedContext.controller,
-                  data,
-                  inline: action == 'inline',
-                  offsetHint: offset,
-                );
-              }
-            },
-            itemBuilder: (_) => [
-              CheckedPopupMenuItem(
-                value: 'inline',
-                checked: inline,
-                child: Text(context.l10n.imageInline),
-              ),
-              CheckedPopupMenuItem(
-                value: 'block',
-                checked: !inline,
-                child: Text(context.l10n.imageNewLine),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'remove',
-                child: Text(context.l10n.removeImageReference),
-              ),
-            ],
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: inline ? 3 : 0,
-                vertical: 4,
-              ),
-              child: imageWidget,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Inline spans have unbounded width; a block receives its actual cell/editor width.
-    if (embedContext.inline || inline) return frame(inlineWidth - 6);
-    return LayoutBuilder(
-      builder: (_, constraints) => Align(
-        alignment: Alignment.centerLeft,
-        child: frame(constraints.maxWidth),
-      ),
+    return _AttachmentFrame(
+      key: ValueKey('${data['id']}:$offset'),
+      data: data,
+      ratio: ratio > 0 && ratio.isFinite ? ratio : 1,
+      inlineWidth: inlineWidth,
+      maxHeight: mediaMaxHeight ?? 400,
+      controller: embedContext.controller,
+      readOnly: embedContext.readOnly,
+      editing: editing,
+      offset: offset,
+      child: content,
     );
   }
 }
 
-void changeAttachmentPlacement(
-  QuillController controller,
-  Map<String, dynamic> data, {
-  required bool inline,
-  int? offsetHint,
-}) {
-  if (controller.readOnly || (data['placement'] == 'inline') == inline) return;
-  final offset = noteEmbedOffset(
-    controller,
-    noteAttachmentEmbedType,
-    data['id'] as String,
-    offsetHint: offsetHint,
-  );
-  if (offset == null) return;
-  final plain = controller.document.toPlainText();
-  final beforeBreak = offset > 0 && plain[offset - 1] == '\n';
-  final afterBreak = offset + 1 < plain.length - 1 && plain[offset + 1] == '\n';
-  bool canJoin(int position) {
-    final line = controller.document.queryChild(position).node;
-    return line is Line &&
-        !line.children.any(
-          (child) => child is Embed && isNoteBlock(child.value.toJson()),
-        );
+class _AttachmentFrame extends StatefulWidget {
+  const _AttachmentFrame({
+    super.key,
+    required this.data,
+    required this.ratio,
+    required this.inlineWidth,
+    required this.maxHeight,
+    required this.controller,
+    required this.readOnly,
+    required this.editing,
+    required this.offset,
+    required this.child,
+  });
+  final Map<String, dynamic> data;
+  final double ratio;
+  final double inlineWidth;
+  final double maxHeight;
+  final QuillController controller;
+  final bool readOnly;
+  final NoteEmbedEditing? editing;
+  final int offset;
+  final Widget child;
+
+  @override
+  State<_AttachmentFrame> createState() => _AttachmentFrameState();
+}
+
+class _AttachmentFrameState extends State<_AttachmentFrame> {
+  // Quill skips rebuilding embeds while focus-preserving changes are applied.
+  // Keep the committed reference visible until its next document snapshot.
+  late Map<String, dynamic> _data = widget.data;
+  double? _resizingWidth;
+  final _focus = FocusNode();
+  Timer? _hideTimer;
+  bool _controlsVisible = false;
+  bool _resizing = false;
+  bool _menuOpen = false;
+
+  void _showControls() {
+    if (widget.readOnly) return;
+    setState(() => _controlsVisible = true);
+    _scheduleHide();
   }
 
-  final joinBefore = inline && beforeBreak && canJoin(offset - 1);
-  final joinAfter = inline && afterBreak && canJoin(offset + 2);
-  final start = joinBefore ? offset - 1 : offset;
-  final delta = Delta()..retain(start);
-  if (!inline && offset > 0 && !beforeBreak) delta.insert('\n');
-  delta.insert({
-    noteAttachmentEmbedType: {
-      ...data,
-      'placement': inline ? 'inline' : 'block',
-    },
-  });
-  if (!inline && offset + 1 < plain.length && plain[offset + 1] != '\n') {
-    delta.insert('\n');
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    if (!_resizing && !_menuOpen) {
+      _hideTimer = Timer(const Duration(seconds: 4), _hideControls);
+    }
   }
-  delta.delete(1 + (joinBefore ? 1 : 0) + (joinAfter ? 1 : 0));
-  final selection = TextSelection.collapsed(offset: start + 1);
-  controller.compose(delta, selection, ChangeSource.local);
-  controller.updateSelection(selection, ChangeSource.local);
+
+  void _hideControls() {
+    _hideTimer?.cancel();
+    if (mounted && !_resizing && !_menuOpen) {
+      setState(() => _controlsVisible = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_AttachmentFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _data = widget.data;
+    if (widget.readOnly) {
+      _hideTimer?.cancel();
+      _controlsVisible = false;
+    }
+  }
+
+  double _startWidth = 0;
+  Offset _drag = Offset.zero;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final available = constraints.maxWidth.isFinite
+          ? constraints.maxWidth
+          : widget.inlineWidth;
+      final maximum = math.max(
+        1.0,
+        math.min(available, widget.maxHeight * widget.ratio),
+      );
+      final stored = _data['width'];
+      final requested =
+          _resizingWidth ??
+          (stored is num && stored.isFinite && stored > 0
+              ? stored.toDouble()
+              : 640.0);
+      final width = requested
+          .clamp(math.min(40.0, maximum), maximum)
+          .toDouble();
+      final compactControls = width / widget.ratio < 76;
+      final image = SizedBox(
+        key: ValueKey('attachment_image_${_data['id']}'),
+        width: width,
+        height: width / widget.ratio,
+        child: widget.child,
+      );
+      if (widget.readOnly || widget.editing == null) {
+        return Align(
+          alignment: Alignment.center,
+          heightFactor: 1,
+          child: image,
+        );
+      }
+      return Align(
+        alignment: Alignment.center,
+        heightFactor: 1,
+        child: NoteEmbedGestureRegion(
+          editing: widget.editing!,
+          owner: widget.controller,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Focus(
+              focusNode: _focus,
+              onKeyEvent: (_, event) {
+                if (_focus.hasPrimaryFocus &&
+                    event is KeyDownEvent &&
+                    (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                        event.logicalKey == LogicalKeyboardKey.space)) {
+                  _showControls();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              onFocusChange: (focused) =>
+                  focused ? _showControls() : _hideControls(),
+              child: Stack(
+                children: [
+                  Semantics(
+                    label: context.l10n.inNoteImage,
+                    button: true,
+                    child: GestureDetector(
+                      onTap: _showControls,
+                      behavior: HitTestBehavior.opaque,
+                      child: SizedBox(
+                        // Keep the menu and grip tappable even on small images.
+                        width: math.min(available, math.max(width, 76)),
+                        height: math.max(width / widget.ratio, 48),
+                        child: Center(child: image),
+                      ),
+                    ),
+                  ),
+                  if (_controlsVisible)
+                    PositionedDirectional(
+                      start: compactControls ? 0 : null,
+                      end: compactControls ? null : 0,
+                      top: 0,
+                      child: PopupMenuButton<String>(
+                        key: ValueKey('attachment_options_${_data['id']}'),
+                        tooltip: context.l10n.inNoteImage,
+                        icon: const Icon(Icons.more_horiz),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surface.withValues(alpha: 0.95),
+                        ),
+                        onOpened: () {
+                          _menuOpen = true;
+                          _hideTimer?.cancel();
+                        },
+                        onCanceled: () {
+                          _menuOpen = false;
+                          _scheduleHide();
+                        },
+                        onSelected: (action) {
+                          _menuOpen = false;
+                          _scheduleHide();
+                          if (action == 'remove') {
+                            replaceNoteEmbed(
+                              widget.controller,
+                              noteAttachmentEmbedType,
+                              _data['id'] as String,
+                              null,
+                              offsetHint: widget.offset,
+                            );
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: 'remove',
+                            child: Text(context.l10n.removeImageReference),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_controlsVisible)
+                    PositionedDirectional(
+                      end: 0,
+                      bottom: 0,
+                      child: Semantics(
+                        label: context.l10n.resizeImage,
+                        child: Tooltip(
+                          message: context.l10n.resizeImage,
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.resizeUpLeftDownRight,
+                            child: RawGestureDetector(
+                              key: ValueKey('attachment_resize_${_data['id']}'),
+                              behavior: HitTestBehavior.opaque,
+                              gestures: {
+                                _ImageResizeGestureRecognizer:
+                                    GestureRecognizerFactoryWithHandlers<
+                                      _ImageResizeGestureRecognizer
+                                    >(
+                                      _ImageResizeGestureRecognizer.new,
+                                      (recognizer) => recognizer
+                                        ..onStart = (_) {
+                                          _resizing = true;
+                                          _hideTimer?.cancel();
+                                          _startWidth = width;
+                                          _drag = Offset.zero;
+                                        }
+                                        ..onUpdate = (details) {
+                                          _drag += details.delta;
+                                          final dx =
+                                              Directionality.of(context) ==
+                                                  TextDirection.rtl
+                                              ? -_drag.dx * 2
+                                              : _drag.dx * 2;
+                                          final delta =
+                                              dx.abs() >=
+                                                  (_drag.dy * widget.ratio)
+                                                      .abs()
+                                              ? dx
+                                              : _drag.dy * widget.ratio;
+                                          setState(
+                                            () => _resizingWidth =
+                                                (_startWidth + delta).clamp(
+                                                  math.min(40.0, maximum),
+                                                  maximum,
+                                                ),
+                                          );
+                                        }
+                                        ..onEnd = (_) {
+                                          _finishResize();
+                                        }
+                                        ..onCancel = () {
+                                          _resizing = false;
+                                          setState(() => _resizingWidth = null);
+                                          _scheduleHide();
+                                        },
+                                    ),
+                              },
+                              child: Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.surface.withValues(alpha: 0.95),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outlineVariant,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.open_in_full,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  void _finishResize() {
+    _resizing = false;
+    _scheduleHide();
+    final width = _resizingWidth;
+    if (width == null) return;
+    _data = {..._data, 'width': width};
+    replaceNoteEmbed(
+      widget.controller,
+      noteAttachmentEmbedType,
+      _data['id'] as String,
+      _data,
+      offsetHint: widget.offset,
+    );
+    if (mounted) setState(() => _resizingWidth = null);
+  }
+}
+
+class _ImageResizeGestureRecognizer extends PanGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
 }
 
 Future<NoteAttachment?> showNoteAttachmentPicker(

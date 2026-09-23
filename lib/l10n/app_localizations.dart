@@ -6696,23 +6696,11 @@ abstract class AppLocalizations {
   /// **'Image in note'**
   String get inNoteImage;
 
-  /// No description provided for @imagePlacement.
+  /// No description provided for @resizeImage.
   ///
   /// In en, this message translates to:
-  /// **'Image placement'**
-  String get imagePlacement;
-
-  /// No description provided for @imageInline.
-  ///
-  /// In en, this message translates to:
-  /// **'Inline with text'**
-  String get imageInline;
-
-  /// No description provided for @imageNewLine.
-  ///
-  /// In en, this message translates to:
-  /// **'On a new line'**
-  String get imageNewLine;
+  /// **'Drag to resize image'**
+  String get resizeImage;
 
   /// No description provided for @removeImageReference.
   ///
@@ -6875,6 +6863,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Help & about'**
   String get settingsHelpAbout;
+
+  /// Compact component count on a note card
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 image} other{{count} images}}'**
+  String imageCount(int count);
+
+  /// Compact component count on a note card
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 sketch} other{{count} sketches}}'**
+  String sketchCount(int count);
+
+  /// Compact component count on a note card
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 table} other{{count} tables}}'**
+  String tableCount(int count);
+
+  /// Compact component count on a note card
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 attachment} other{{count} attachments}}'**
+  String attachmentCount(int count);
 }
 
 class _AppLocalizationsDelegate

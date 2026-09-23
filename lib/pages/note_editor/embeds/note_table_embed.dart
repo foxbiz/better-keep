@@ -13,6 +13,7 @@ import 'package:flutter_quill/quill_delta.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 class NoteTableEmbedBuilder extends EmbedBuilder {
@@ -128,7 +129,66 @@ class _NoteTableViewState extends State<NoteTableView> {
     PointerDeviceKind.stylus,
   };
   final _horizontal = ScrollController();
-  final _vertical = ScrollController();
+  final _ancestorPositions = <ScrollPosition>[];
+  double _visibleTop = 0;
+  double? _visibleBottom;
+  bool _viewportUpdatePending = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    for (final position in _ancestorPositions) {
+      position.removeListener(_scheduleViewportUpdate);
+    }
+    _ancestorPositions.clear();
+    context.visitAncestorElements((element) {
+      if (element is StatefulElement && element.state is ScrollableState) {
+        final position = (element.state as ScrollableState).position;
+        _ancestorPositions.add(position);
+        position.addListener(_scheduleViewportUpdate);
+      }
+      return true;
+    });
+    _scheduleViewportUpdate();
+  }
+
+  // The note owns vertical scrolling. Cull rows against its containing viewports.
+  void _scheduleViewportUpdate() {
+    if (_viewportUpdatePending || widget.previewMaxHeight != null) return;
+    _viewportUpdatePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewportUpdatePending = false;
+      if (!mounted) return;
+      final box = context.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      var visible = Offset.zero & box.size;
+      RenderObject? ancestor = box.parent;
+      while (ancestor != null) {
+        if (ancestor is RenderAbstractViewport && ancestor is RenderBox) {
+          final bounds = MatrixUtils.transformRect(
+            ancestor.getTransformTo(null),
+            ancestor.paintBounds,
+          );
+          visible = visible.intersect(
+            Rect.fromPoints(
+              box.globalToLocal(bounds.topLeft),
+              box.globalToLocal(bounds.bottomRight),
+            ),
+          );
+        }
+        ancestor = ancestor.parent;
+      }
+      final top = math.max(0.0, visible.top);
+      final bottom = math.max(top, visible.bottom + 72);
+      if (top != _visibleTop || bottom != _visibleBottom) {
+        setState(() {
+          _visibleTop = top;
+          _visibleBottom = bottom;
+        });
+      }
+    });
+  }
+
   String? _activeCell;
   QuillController? _activeController;
   NoteTableData? _resizeBase;
@@ -181,7 +241,9 @@ class _NoteTableViewState extends State<NoteTableView> {
     AppState.tableHeadersNotifier.removeListener(_refresh);
     widget.editing?.removeListener(_refresh);
     _horizontal.dispose();
-    _vertical.dispose();
+    for (final position in _ancestorPositions) {
+      position.removeListener(_scheduleViewportUpdate);
+    }
     super.dispose();
   }
 
@@ -318,7 +380,7 @@ class _NoteTableViewState extends State<NoteTableView> {
                     ..onEnd = ((_) => _finishResize()),
                 ),
           },
-          child: const SizedBox.expand(),
+          child: _resizeGrip(row: row),
         ),
       ),
     );
@@ -354,10 +416,10 @@ class _NoteTableViewState extends State<NoteTableView> {
     final activeIndices = _hasActiveCell
         ? _activeCell!.split(':').map(int.parse).toList()
         : null;
+    _scheduleViewportUpdate();
     return LayoutBuilder(
       builder: (context, constraints) {
         final preview = widget.previewMaxHeight != null;
-        final maxHeight = widget.previewMaxHeight ?? 432.0;
         final heights = List.generate(
           _table.rows,
           (i) => _table.rowHeights[i] ?? 72.0,
@@ -367,12 +429,12 @@ class _NoteTableViewState extends State<NoteTableView> {
           ys.add(ys.last + height);
         }
         final border = showHeaders ? 2.0 : 0.0;
-        final viewportHeight = math.min(ys.last, maxHeight - border);
-        final verticalOverflow = ys.last > viewportHeight;
-        final verticalGutter = !preview && verticalOverflow ? 16.0 : 0.0;
-        final available =
-            (constraints.maxWidth.isFinite ? constraints.maxWidth : 320.0) -
-            verticalGutter;
+        final viewportHeight = preview
+            ? math.min(ys.last, widget.previewMaxHeight! - border)
+            : ys.last;
+        final available = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 320.0;
         final defaultWidth = math.max(
           NoteTableData.minColumnWidth,
           (available - edge - 2) / _table.columns,
@@ -406,167 +468,143 @@ class _NoteTableViewState extends State<NoteTableView> {
                 physics: preview ? const NeverScrollableScrollPhysics() : null,
                 child: SizedBox(
                   width: xs.last,
-                  child: SingleChildScrollView(
-                    key: ValueKey('table_vertical_${_table.id}'),
-                    controller: _vertical,
-                    physics: preview
-                        ? const NeverScrollableScrollPhysics()
-                        : null,
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge([_horizontal, _vertical]),
-                      builder: (context, _) {
-                        final left = _horizontal.hasClients
-                            ? _horizontal.offset
-                            : 0.0;
-                        final top = _vertical.hasClients
-                            ? _vertical.offset
-                            : 0.0;
-                        final columns = [
-                          for (var c = 0; c < widths.length; c++)
-                            if (xs[c + 1] >= left && xs[c] <= left + available)
-                              c,
-                        ];
-                        final rows = [
-                          for (var r = 0; r < heights.length; r++)
-                            if (ys[r + 1] >= top &&
-                                ys[r] <= top + viewportHeight)
-                              r,
-                        ];
-                        final cells = <String>{
-                          for (final r in rows)
-                            for (final c in columns) '$r:$c',
-                          ?_activeCell,
-                        };
-                        return SizedBox(
-                          width: xs.last,
-                          height: ys.last,
-                          child: Stack(
-                            children: [
-                              for (final position in cells)
-                                _buildCell(
-                                  position,
-                                  xs,
-                                  ys,
-                                  widths,
-                                  heights,
-                                  colors,
-                                ),
-                              if (showHeaders) ...[
-                                for (final c in columns)
-                                  Positioned(
-                                    left: xs[c],
-                                    top: top,
-                                    width: widths[c],
-                                    height: edge,
-                                    child: ColoredBox(
-                                      color: colors.surfaceContainerHigh,
-                                      child: Center(
-                                        child: Text(
-                                          _columnLabel(c),
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.labelSmall,
-                                        ),
+                  child: AnimatedBuilder(
+                    animation: _horizontal,
+                    builder: (context, _) {
+                      final left = _horizontal.hasClients
+                          ? _horizontal.offset
+                          : 0.0;
+                      final top = preview ? 0.0 : _visibleTop;
+                      final bottom = preview
+                          ? viewportHeight
+                          : (_visibleBottom ??
+                                MediaQuery.sizeOf(context).height);
+                      final columns = [
+                        for (var c = 0; c < widths.length; c++)
+                          if (xs[c + 1] >= left && xs[c] <= left + available) c,
+                      ];
+                      final rows = [
+                        for (var r = 0; r < heights.length; r++)
+                          if (ys[r + 1] >= top - 72 && ys[r] <= bottom) r,
+                      ];
+                      final cells = <String>{
+                        for (final r in rows)
+                          for (final c in columns) '$r:$c',
+                        ?_activeCell,
+                      };
+                      return SizedBox(
+                        width: xs.last,
+                        height: ys.last,
+                        child: Stack(
+                          children: [
+                            for (final position in cells)
+                              _buildCell(
+                                position,
+                                xs,
+                                ys,
+                                widths,
+                                heights,
+                                colors,
+                              ),
+                            if (showHeaders) ...[
+                              for (final c in columns)
+                                Positioned(
+                                  left: xs[c],
+                                  top: top,
+                                  width: widths[c],
+                                  height: edge,
+                                  child: ColoredBox(
+                                    color: colors.surfaceContainerHigh,
+                                    child: Center(
+                                      child: Text(
+                                        _columnLabel(c),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
                                       ),
                                     ),
                                   ),
-                                for (final r in rows)
-                                  Positioned(
-                                    left: left,
-                                    top: ys[r],
-                                    width: edge,
-                                    height: heights[r],
-                                    child: ColoredBox(
-                                      color: colors.surfaceContainerHigh,
-                                      child: Center(
-                                        child: Text(
-                                          '${r + 1}',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.labelSmall,
-                                        ),
+                                ),
+                              for (final r in rows)
+                                Positioned(
+                                  left: left,
+                                  top: ys[r],
+                                  width: edge,
+                                  height: heights[r],
+                                  child: ColoredBox(
+                                    color: colors.surfaceContainerHigh,
+                                    child: Center(
+                                      child: Text(
+                                        '${r + 1}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
                                       ),
                                     ),
                                   ),
-                              ],
-                              if (!widget.readOnly) ...[
-                                for (final c in columns)
-                                  Positioned(
-                                    key: ValueKey('table_column_divider_$c'),
-                                    left:
-                                        xs[c + 1] -
-                                        (c == widths.length - 1 ? 20 : 10),
-                                    top: edge,
-                                    width: 20,
-                                    height: ys.last - edge,
-                                    child: _resizeHandle(
-                                      row: false,
-                                      index: c,
-                                      size: widths[c],
-                                    ),
-                                  ),
-                                for (final r in rows)
-                                  Positioned(
-                                    key: ValueKey('table_row_divider_$r'),
-                                    left: edge,
-                                    top:
-                                        ys[r + 1] -
-                                        (r == heights.length - 1 ? 20 : 10),
-                                    width: xs.last - edge,
-                                    height: 20,
-                                    child: _resizeHandle(
-                                      row: true,
-                                      index: r,
-                                      size: heights[r],
-                                    ),
-                                  ),
-                              ],
-                              if (activeIndices != null) ...[
-                                // Only the selected cell exposes edge actions and border grips.
-                                Positioned(
-                                  left:
-                                      xs[activeIndices[1]] +
-                                      (widths[activeIndices[1]] - 32) / 2,
-                                  top: top + edge,
-                                  width: 32,
-                                  height: 24,
-                                  child: _menu(
-                                    row: false,
-                                    index: activeIndices[1],
-                                  ),
                                 ),
-                                Positioned(
-                                  left: left + edge,
-                                  top:
-                                      ys[activeIndices[0]] +
-                                      (heights[activeIndices[0]] - 32) / 2,
-                                  width: 24,
-                                  height: 32,
-                                  child: _menu(
-                                    row: true,
-                                    index: activeIndices[0],
-                                  ),
-                                ),
-                                Positioned(
-                                  left: xs[activeIndices[1] + 1] - 16,
-                                  top: ys[activeIndices[0]] + 8,
-                                  width: 16,
-                                  height: heights[activeIndices[0]] - 24,
-                                  child: _resizeGrip(row: false),
-                                ),
-                                Positioned(
-                                  left: xs[activeIndices[1]] + 8,
-                                  top: ys[activeIndices[0] + 1] - 16,
-                                  width: widths[activeIndices[1]] - 24,
-                                  height: 16,
-                                  child: _resizeGrip(row: true),
-                                ),
-                              ],
                             ],
-                          ),
-                        );
-                      },
-                    ),
+                            if (activeIndices != null) ...[
+                              // Only the selected cell exposes edge actions and resize grips.
+                              Positioned(
+                                left:
+                                    xs[activeIndices[1]] +
+                                    (widths[activeIndices[1]] - 32) / 2,
+                                top: top + edge,
+                                width: 32,
+                                height: 24,
+                                child: _menu(
+                                  row: false,
+                                  index: activeIndices[1],
+                                ),
+                              ),
+                              Positioned(
+                                left: left + edge,
+                                top:
+                                    ys[activeIndices[0]] +
+                                    (heights[activeIndices[0]] - 32) / 2,
+                                width: 24,
+                                height: 32,
+                                child: _menu(
+                                  row: true,
+                                  index: activeIndices[0],
+                                ),
+                              ),
+                              Positioned(
+                                key: const ValueKey(
+                                  'table_column_resize_control',
+                                ),
+                                left: xs[activeIndices[1] + 1] - 20,
+                                top:
+                                    ys[activeIndices[0]] +
+                                    (heights[activeIndices[0]] - 32) / 2,
+                                width: 20,
+                                height: 32,
+                                child: _resizeHandle(
+                                  row: false,
+                                  index: activeIndices[1],
+                                  size: widths[activeIndices[1]],
+                                ),
+                              ),
+                              Positioned(
+                                key: const ValueKey('table_row_resize_control'),
+                                left:
+                                    xs[activeIndices[1]] +
+                                    (widths[activeIndices[1]] - 32) / 2,
+                                top: ys[activeIndices[0] + 1] - 20,
+                                width: 32,
+                                height: 20,
+                                child: _resizeHandle(
+                                  row: true,
+                                  index: activeIndices[0],
+                                  size: heights[activeIndices[0]],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -574,22 +612,12 @@ class _NoteTableViewState extends State<NoteTableView> {
           ),
         );
         // Keep these wrappers mounted when overflow changes during a drag, so
-        // scroll positions and divider recognizers retain their identity.
+        // scroll positions and resize controls retain their identity.
         if (!preview) {
           grid = _scrollbar(
-            row: true,
-            visible: horizontalOverflow,
+            scrollable: horizontalOverflow,
             child: Padding(
               padding: EdgeInsets.only(bottom: horizontalGutter),
-              child: grid,
-            ),
-          );
-          grid = _scrollbar(
-            row: false,
-            visible: verticalOverflow,
-            bottomPadding: horizontalGutter,
-            child: Padding(
-              padding: EdgeInsets.only(right: verticalGutter),
               child: grid,
             ),
           );
@@ -605,17 +633,15 @@ class _NoteTableViewState extends State<NoteTableView> {
   }
 
   Widget _scrollbar({
-    required bool row,
-    required bool visible,
+    required bool scrollable,
     required Widget child,
-    double bottomPadding = 0,
   }) => RawScrollbar(
-    key: ValueKey(
-      'table_${row ? 'horizontal' : 'vertical'}_scrollbar_${_table.id}',
-    ),
-    controller: row ? _horizontal : _vertical,
-    thumbVisibility: visible,
-    interactive: visible,
+    key: ValueKey('table_horizontal_scrollbar_${_table.id}'),
+    controller: _horizontal,
+    thumbVisibility: false,
+    interactive: scrollable,
+    // The table owns its gutter; screen safe-area padding belongs outside it.
+    padding: EdgeInsets.zero,
     thickness: 4,
     radius: const Radius.circular(2),
     thumbColor: Theme.of(
@@ -623,13 +649,9 @@ class _NoteTableViewState extends State<NoteTableView> {
     ).colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
     crossAxisMargin: 6,
     mainAxisMargin: 4,
-    padding: EdgeInsets.only(bottom: bottomPadding),
-    scrollbarOrientation: row
-        ? ScrollbarOrientation.bottom
-        : ScrollbarOrientation.right,
+    scrollbarOrientation: ScrollbarOrientation.bottom,
     notificationPredicate: (notification) =>
-        notification.depth == (row ? 0 : 1) &&
-        notification.metrics.axis == (row ? Axis.horizontal : Axis.vertical),
+        notification.depth == 0 && notification.metrics.axis == Axis.horizontal,
     child: child,
   );
 
@@ -680,7 +702,6 @@ class _NoteTableViewState extends State<NoteTableView> {
             note: widget.note,
             readOnly: widget.readOnly,
             editing: widget.editing,
-            previewMaxHeight: widget.previewMaxHeight,
             label: context.l10n.tableCellLabel(row + 1, column + 1),
             width: widths[column] - 16,
             height: heights[row] - 16,
@@ -690,19 +711,7 @@ class _NoteTableViewState extends State<NoteTableView> {
                 _activeController = controller;
               });
             },
-            onChanged: (delta) {
-              var next = _table.withCell(row, column, delta);
-              if (delta.any(
-                    (op) =>
-                        op is Map &&
-                        op['insert'] is Map &&
-                        (op['insert'] as Map).containsKey(NoteTableData.type),
-                  ) &&
-                  !next.rowHeights.containsKey(row)) {
-                next = next.resizeRow(row, 240);
-              }
-              _commit(next);
-            },
+            onChanged: (delta) => _commit(_table.withCell(row, column, delta)),
           ),
         ),
       ),
@@ -729,7 +738,6 @@ class _TableCell extends StatefulWidget {
     required this.label,
     required this.width,
     required this.height,
-    this.previewMaxHeight,
   });
   final List<dynamic> delta;
   final Note note;
@@ -740,7 +748,6 @@ class _TableCell extends StatefulWidget {
   final String label;
   final double width;
   final double height;
-  final double? previewMaxHeight;
   @override
   State<_TableCell> createState() => _TableCellState();
 }
@@ -753,14 +760,18 @@ class _TableCellState extends State<_TableCell> {
   late StreamSubscription<DocChange> _changes;
   bool _applying = false;
 
+  List<dynamic> get _cellDelta =>
+      flattenNoteTables(Delta.fromJson(widget.delta)).toJson();
+
   @override
   void initState() {
     super.initState();
     _controller = NoteEditorController(
-      document: documentFromJsonSafe(widget.delta)
+      document: documentFromJsonSafe(_cellDelta)
         ..setCustomRules(customQuillRules),
       selection: const TextSelection.collapsed(offset: 0),
       readOnly: widget.readOnly,
+      allowTables: false,
     );
     _listen();
     _focus.addListener(_focused);
@@ -782,7 +793,7 @@ class _TableCellState extends State<_TableCell> {
 
   bool get _matchesSnapshot =>
       jsonEncode(_controller.document.toDelta().toJson()) ==
-      jsonEncode(normalizeNoteBlocks(Delta.fromJson(widget.delta)).toJson());
+      jsonEncode(normalizeNoteBlocks(Delta.fromJson(_cellDelta)).toJson());
 
   @override
   void didUpdateWidget(_TableCell oldWidget) {
@@ -804,7 +815,7 @@ class _TableCellState extends State<_TableCell> {
     _changes.cancel();
     final selection = _controller.selection;
     final previousDocument = _controller.document;
-    _controller.document = documentFromJsonSafe(widget.delta)
+    _controller.document = documentFromJsonSafe(_cellDelta)
       ..setCustomRules(customQuillRules);
     _controller.updateSelection(
       TextSelection.collapsed(
@@ -836,90 +847,92 @@ class _TableCellState extends State<_TableCell> {
       onTap: widget.readOnly ? null : _focus.requestFocus,
       child: ListenableBuilder(
         listenable: widget.editing ?? _focus,
-        builder: (context, _) => QuillEditor(
-          controller: _controller,
-          focusNode: _focus,
-          scrollController: _scroll,
-          config: QuillEditorConfig(
-            editorKey: _editorKey,
-            padding: const EdgeInsets.all(8),
-            scrollable: true,
-            expands: true,
-            autoFocus: false,
-            showCursor:
-                !widget.readOnly &&
-                identical(widget.editing?.controller, _controller),
-            enableSelectionToolbar:
-                widget.editing?.controller == null ||
-                identical(widget.editing?.controller, _controller),
-            onTapDown: (details, _) =>
-                widget.editing?.handlesTapDown(
-                  _controller,
-                  details,
-                  _editorKey.currentState,
-                  _focus,
-                ) ??
-                false,
-            onTapUp: (details, _) =>
-                widget.editing?.handlesTapUp(
-                  _controller,
-                  details,
-                  _focus,
-                  _editorKey.currentState,
-                ) ??
-                false,
-            onSingleLongTapStart: (details, _) =>
-                widget.editing?.handlesGesture(
-                  _controller,
-                  details.globalPosition,
-                ) ??
-                false,
-            onSingleLongTapMoveUpdate: (details, _) =>
-                widget.editing?.handlesGesture(
-                  _controller,
-                  details.globalPosition,
-                ) ??
-                false,
-            onSingleLongTapEnd: (details, _) =>
-                widget.editing?.handlesGesture(
-                  _controller,
-                  details.globalPosition,
-                ) ??
-                false,
-            customActions: widget.editing?.rootController == null
-                ? null
-                : {
-                    UndoTextIntent: CallbackAction<UndoTextIntent>(
-                      onInvoke: (_) {
-                        if (!widget.readOnly) {
-                          widget.editing!.rootController!.undo();
-                        }
-                        return null;
-                      },
-                    ),
-                    RedoTextIntent: CallbackAction<RedoTextIntent>(
-                      onInvoke: (_) {
-                        if (!widget.readOnly) {
-                          widget.editing!.rootController!.redo();
-                        }
-                        return null;
-                      },
-                    ),
-                  },
-            customLeadingBlockBuilder: customLeadingBlockBuilder,
-            customStyles: buildQuillStyles(
-              foregroundColor:
-                  DefaultTextStyle.of(context).style.color ??
-                  Theme.of(context).colorScheme.onSurface,
-              backgroundColor: widget.note.color,
-            ),
-            embedBuilders: noteEmbedBuilders(
-              note: widget.note,
-              editing: widget.editing,
-              inlineWidth: widget.width,
-              tablePreviewMaxHeight: widget.previewMaxHeight,
-              // Leave room for the embed's padding and the text line descent.
-              mediaMaxHeight: math.max(1, widget.height - 16),
+        builder: (context, _) => _TableCellInputScope(
+          child: QuillEditor(
+            controller: _controller,
+            focusNode: _focus,
+            scrollController: _scroll,
+            config: QuillEditorConfig(
+              editorKey: _editorKey,
+              padding: const EdgeInsets.all(8),
+              scrollable: true,
+              expands: true,
+              autoFocus: false,
+              showCursor:
+                  !widget.readOnly &&
+                  identical(widget.editing?.controller, _controller),
+              enableSelectionToolbar:
+                  widget.editing?.controller == null ||
+                  identical(widget.editing?.controller, _controller),
+              onTapDown: (details, _) =>
+                  widget.editing?.handlesTapDown(
+                    _controller,
+                    details,
+                    _editorKey.currentState,
+                    _focus,
+                  ) ??
+                  false,
+              onTapUp: (details, _) =>
+                  widget.editing?.handlesTapUp(
+                    _controller,
+                    details,
+                    _focus,
+                    _editorKey.currentState,
+                  ) ??
+                  false,
+              onSingleLongTapStart: (details, _) =>
+                  widget.editing?.handlesGesture(
+                    _controller,
+                    details.globalPosition,
+                  ) ??
+                  false,
+              onSingleLongTapMoveUpdate: (details, _) =>
+                  widget.editing?.handlesGesture(
+                    _controller,
+                    details.globalPosition,
+                  ) ??
+                  false,
+              onSingleLongTapEnd: (details, _) =>
+                  widget.editing?.handlesGesture(
+                    _controller,
+                    details.globalPosition,
+                  ) ??
+                  false,
+              customActions: widget.editing?.rootController == null
+                  ? null
+                  : {
+                      UndoTextIntent: CallbackAction<UndoTextIntent>(
+                        onInvoke: (_) {
+                          if (!widget.readOnly) {
+                            widget.editing!.rootController!.undo();
+                          }
+                          return null;
+                        },
+                      ),
+                      RedoTextIntent: CallbackAction<RedoTextIntent>(
+                        onInvoke: (_) {
+                          if (!widget.readOnly) {
+                            widget.editing!.rootController!.redo();
+                          }
+                          return null;
+                        },
+                      ),
+                    },
+              customLeadingBlockBuilder: customLeadingBlockBuilder,
+              customStyles: buildQuillStyles(
+                foregroundColor:
+                    DefaultTextStyle.of(context).style.color ??
+                    Theme.of(context).colorScheme.onSurface,
+                backgroundColor: widget.note.color,
+              ),
+              embedBuilders: noteEmbedBuilders(
+                note: widget.note,
+                editing: widget.editing,
+                inlineWidth: widget.width,
+                includeTables: false,
+                // Leave room for the embed's padding and the text line descent.
+                mediaMaxHeight: math.max(1, widget.height - 16),
+              ),
             ),
           ),
         ),
@@ -928,7 +941,69 @@ class _TableCellState extends State<_TableCell> {
   );
 }
 
-/// A drag that starts on a cell divider belongs to resizing even if the first
+/// Cell editors are visually embedded, but must not inherit the note's focus
+/// or its overridable text actions. Otherwise a parent action can apply the
+/// note's editing value to the cell through the cell's ReplaceTextIntent.
+class _TableCellInputScope extends StatelessWidget {
+  const _TableCellInputScope({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    parentNode: FocusScope.of(context),
+    canRequestFocus: false,
+    skipTraversal: true,
+    child: Actions(
+      actions: {
+        DeleteCharacterIntent: _CellTextAction<DeleteCharacterIntent>(),
+        DeleteToNextWordBoundaryIntent:
+            _CellTextAction<DeleteToNextWordBoundaryIntent>(),
+        DeleteToLineBreakIntent: _CellTextAction<DeleteToLineBreakIntent>(),
+        ExtendSelectionByCharacterIntent:
+            _CellTextAction<ExtendSelectionByCharacterIntent>(),
+        ExtendSelectionToNextWordBoundaryIntent:
+            _CellTextAction<ExtendSelectionToNextWordBoundaryIntent>(),
+        ExtendSelectionToLineBreakIntent:
+            _CellTextAction<ExtendSelectionToLineBreakIntent>(),
+        ExtendSelectionVerticallyToAdjacentLineIntent:
+            _CellTextAction<ExtendSelectionVerticallyToAdjacentLineIntent>(),
+        ExtendSelectionToDocumentBoundaryIntent:
+            _CellTextAction<ExtendSelectionToDocumentBoundaryIntent>(),
+        ExtendSelectionToNextWordBoundaryOrCaretLocationIntent:
+            _CellTextAction<
+              ExtendSelectionToNextWordBoundaryOrCaretLocationIntent
+            >(),
+        ExpandSelectionToDocumentBoundaryIntent:
+            _CellTextAction<ExpandSelectionToDocumentBoundaryIntent>(),
+        ExpandSelectionToLineBreakIntent:
+            _CellTextAction<ExpandSelectionToLineBreakIntent>(),
+        SelectAllTextIntent: _CellTextAction<SelectAllTextIntent>(),
+        CopySelectionTextIntent: _CellTextAction<CopySelectionTextIntent>(),
+        PasteTextIntent: _CellTextAction<PasteTextIntent>(),
+      },
+      child: child,
+    ),
+  );
+}
+
+/// Quill supplies the cell's default action as callingAction, including its
+/// invocation context. Keep that action instead of resolving to the note's.
+class _CellTextAction<T extends Intent> extends Action<T> {
+  @override
+  Object? invoke(T intent) => callingAction?.invoke(intent);
+
+  @override
+  bool get isActionEnabled => callingAction?.isActionEnabled ?? false;
+
+  @override
+  bool isEnabled(T intent) => callingAction?.isEnabled(intent) ?? false;
+
+  @override
+  bool consumesKey(T intent) => callingAction?.consumesKey(intent) ?? false;
+}
+
+/// A drag that starts on a resize grip belongs to resizing even if the first
 /// movement is diagonal. Scrolling remains available through the cell bodies.
 class _TableResizeGestureRecognizer extends PanGestureRecognizer {
   @override

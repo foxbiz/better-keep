@@ -107,6 +107,7 @@ class _AttachButtonState extends State<AttachButton> {
         ),
       ],
       child: IconButton(
+        padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 2, 8),
         onPressed: _controller.isDisabled ? null : _controller.toggle,
         icon: _buildIconWithIndicator(
           Icon(

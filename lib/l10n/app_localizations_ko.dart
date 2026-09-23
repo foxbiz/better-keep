@@ -3624,13 +3624,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get inNoteImage => '노트 내 이미지';
 
   @override
-  String get imagePlacement => '이미지 배치';
-
-  @override
-  String get imageInline => '텍스트와 같은 줄';
-
-  @override
-  String get imageNewLine => '별도의 줄';
+  String get resizeImage => '드래그하여 이미지 크기 조절';
 
   @override
   String get removeImageReference => '본문에서 제거';
@@ -3718,4 +3712,24 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsHelpAbout => '도움말 및 앱 정보';
+
+  @override
+  String imageCount(int count) {
+    return '이미지 $count개';
+  }
+
+  @override
+  String sketchCount(int count) {
+    return '스케치 $count개';
+  }
+
+  @override
+  String tableCount(int count) {
+    return '표 $count개';
+  }
+
+  @override
+  String attachmentCount(int count) {
+    return '첨부 파일 $count개';
+  }
 }

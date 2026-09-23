@@ -1101,9 +1101,7 @@
   "tableColumns": "列",
   "tableSizeLimit": "行と列はそれぞれ1～256",
   "inNoteImage": "ノート内の画像",
-  "imagePlacement": "画像の配置",
-  "imageInline": "テキストと同じ行",
-  "imageNewLine": "独立した行",
+  "resizeImage": "ドラッグして画像のサイズを変更",
   "removeImageReference": "本文から削除",
   "inlineAttachmentUnavailable": "添付ファイルを利用できません",
   "chooseAttachment": "既存の添付ファイルを選択",
@@ -1130,5 +1128,9 @@
   "settingsSync": "同期",
   "settingsPrivacySecurity": "プライバシーとセキュリティ",
   "settingsAdvanced": "詳細設定",
-  "settingsHelpAbout": "ヘルプとアプリ情報"
+  "settingsHelpAbout": "ヘルプとアプリ情報",
+  "imageCount": "画像 {count} 件",
+  "sketchCount": "スケッチ {count} 件",
+  "tableCount": "表 {count} 件",
+  "attachmentCount": "添付ファイル {count} 件"
 }

@@ -2879,6 +2879,7 @@ class Note extends BaseModel<Note> {
         trackSync: trackSync,
         action: SyncAction.upload,
       );
+      createdAt ??= DateTime.parse(jsonObj['created_at'] as String);
       _notifyPersistedChange('created', trackSync, origin);
       return id!;
     } catch (e) {

@@ -507,7 +507,11 @@ class _NoteEditorState extends State<NoteEditor>
     setState(() {
       if (_embedEditing.controller != null) _showAttachmentFab = false;
     });
+    _scrollToCaretAfterKeyboard();
   }
+
+  bool get _hasEditorCaretFocus =>
+      (_embedEditing.focusNode ?? _focusNode).hasPrimaryFocus;
 
   bool get _hasChecklistPromptFocus =>
       _focusNode.hasFocus || _checklistPopupFocusNode.hasFocus;
@@ -1272,12 +1276,15 @@ class _NoteEditorState extends State<NoteEditor>
 
   /// Scrolls the editor to ensure the caret is visible above the toolbar
   void _scrollToCaret() {
-    if (!mounted || !_focusNode.hasFocus) return;
+    if (!mounted || !_hasEditorCaretFocus) return;
 
-    final editorState = _editorKey.currentState;
+    final cellFocus = _embedEditing.focusNode;
+    final editorState = cellFocus == null
+        ? _editorKey.currentState
+        : cellFocus.context?.findAncestorStateOfType<EditorState>();
     if (editorState == null) return;
 
-    final selection = _controller.selection;
+    final selection = (_embedEditing.controller ?? _controller).selection;
     if (!selection.isValid || !selection.isCollapsed) return;
 
     try {
@@ -1323,7 +1330,7 @@ class _NoteEditorState extends State<NoteEditor>
 
   /// Scrolls to caret with keyboard-aware timing
   void _scrollToCaretAfterKeyboard() {
-    if (!mounted || !_focusNode.hasFocus) return;
+    if (!mounted || !_hasEditorCaretFocus) return;
 
     // Cancel any pending scroll timers to prevent conflicts
     for (final timer in _scrollTimers) {
@@ -1333,16 +1340,16 @@ class _NoteEditorState extends State<NoteEditor>
 
     // First scroll immediately after layout settles
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_focusNode.hasFocus) return;
+      if (!mounted || !_hasEditorCaretFocus) return;
       _scrollToCaret();
     });
 
     // Second scroll during keyboard animation (~250ms)
     _scrollTimers.add(
       Timer(const Duration(milliseconds: 250), () {
-        if (!mounted || !_focusNode.hasFocus) return;
+        if (!mounted || !_hasEditorCaretFocus) return;
         SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_focusNode.hasFocus) return;
+          if (!mounted || !_hasEditorCaretFocus) return;
           _scrollToCaret();
         });
       }),
@@ -1352,9 +1359,9 @@ class _NoteEditorState extends State<NoteEditor>
     // Some devices have slower keyboard animations
     _scrollTimers.add(
       Timer(const Duration(milliseconds: 500), () {
-        if (!mounted || !_focusNode.hasFocus) return;
+        if (!mounted || !_hasEditorCaretFocus) return;
         SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_focusNode.hasFocus) return;
+          if (!mounted || !_hasEditorCaretFocus) return;
           _scrollToCaret();
         });
       }),
@@ -1654,7 +1661,7 @@ class _NoteEditorState extends State<NoteEditor>
       });
 
       // Keyboard just appeared while editor has focus - scroll to caret
-      if (keyboardVisible && wasHidden && _focusNode.hasFocus) {
+      if (keyboardVisible && wasHidden && _hasEditorCaretFocus) {
         _scrollToCaretAfterKeyboard();
       }
     }

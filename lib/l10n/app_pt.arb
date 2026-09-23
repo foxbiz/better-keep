@@ -1101,9 +1101,7 @@
   "tableColumns": "Colunas",
   "tableSizeLimit": "De 1 a 256 linhas e colunas",
   "inNoteImage": "Imagem na nota",
-  "imagePlacement": "Posição da imagem",
-  "imageInline": "Na mesma linha do texto",
-  "imageNewLine": "Em uma linha separada",
+  "resizeImage": "Arraste para redimensionar a imagem",
   "removeImageReference": "Remover do texto",
   "inlineAttachmentUnavailable": "Anexo indisponível",
   "chooseAttachment": "Escolher anexo existente",
@@ -1130,5 +1128,9 @@
   "settingsSync": "Sincronização",
   "settingsPrivacySecurity": "Privacidade e segurança",
   "settingsAdvanced": "Avançado",
-  "settingsHelpAbout": "Ajuda e sobre"
+  "settingsHelpAbout": "Ajuda e sobre",
+  "imageCount": "{count, plural, =1{1 imagem} other{{count} imagens}}",
+  "sketchCount": "{count, plural, =1{1 esboço} other{{count} esboços}}",
+  "tableCount": "{count, plural, =1{1 tabela} other{{count} tabelas}}",
+  "attachmentCount": "{count, plural, =1{1 anexo} other{{count} anexos}}"
 }

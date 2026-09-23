@@ -1,4 +1,6 @@
 import 'package:better_keep/utils/quill_config.dart';
+import 'package:better_keep/dialogs/paste_dialog.dart';
+import 'package:better_keep/utils/note_embed_rules.dart';
 import 'dart:convert';
 import 'package:flutter_quill/quill_delta.dart';
 
@@ -15,7 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'sparse tables round trip rich nested cells and preserve references through axis edits',
+    'sparse tables preserve legacy nested content through storage and axis edits',
     () {
       final nested = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
         {'insert': 'Nested\n'},
@@ -68,6 +70,95 @@ void main() {
   );
 
   test(
+    'cell paste flattens tables in reading order and preserves rich media',
+    () {
+      final image = {
+        noteAttachmentEmbedType: {
+          'id': 'image-reference',
+          'src': 'attachment://image',
+          'placement': 'block',
+          'width': 120,
+        },
+      };
+      final nested = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
+        {'insert': 'Checklist'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'checked'},
+        },
+        {'insert': image},
+        {'insert': '\n'},
+      ]);
+      final table = NoteTableData(rows: 256, columns: 256)
+          .withCell(255, 255, [
+            {'insert': 'Last\n'},
+          ])
+          .withCell(0, 10, [
+            {
+              'insert': {NoteTableData.type: nested.toJson()},
+            },
+            {'insert': '\n'},
+          ])
+          .withCell(0, 2, [
+            {
+              'insert': 'First',
+              'attributes': {'bold': true},
+            },
+            {'insert': '\n'},
+          ]);
+      final source = documentFromJsonSafe([
+        {
+          'insert': {NoteTableData.type: table.toJson()},
+        },
+        {'insert': '\n'},
+      ]);
+      addTearDown(source.close);
+      final original = jsonEncode(source.toDelta().toJson());
+      for (final method in ['native', 'formatted', 'embed']) {
+        final controller = NoteEditorController(
+          document: Document()..setCustomRules(customQuillRules),
+          selection: const TextSelection.collapsed(offset: 0),
+          allowTables: false,
+        );
+        addTearDown(controller.dispose);
+        if (method == 'formatted') {
+          insertDocumentIntoController(controller, source);
+        } else {
+          controller.replaceText(
+            0,
+            0,
+            method == 'native'
+                ? source.toDelta()
+                : Embeddable(NoteTableData.type, table.toJson()),
+            const TextSelection.collapsed(offset: 0),
+          );
+        }
+        final ops = controller.document.toDelta().toList();
+        expect(ops.any((op) => isNoteTable(op.data)), isFalse);
+        expect(
+          controller.document.toPlainText(),
+          'First\nChecklist\n\uFFFC\nLast\n\n',
+        );
+        expect(ops.first.attributes, {'bold': true});
+        expect(
+          ops.where((op) => op.attributes?['list'] == 'checked'),
+          hasLength(1),
+        );
+        expect(ops.where((op) => op.data is Map).single.data, image);
+        expect(controller.selection.baseOffset, controller.document.length - 1);
+        expect(jsonEncode(source.toDelta().toJson()), original);
+        controller.undo();
+        expect(controller.document.toPlainText(), '\n');
+        controller.redo();
+        expect(
+          controller.document.toPlainText(),
+          contains('Checklist\n\uFFFC\nLast'),
+        );
+      }
+    },
+  );
+
+  test(
     'insertion, cell edits and undo keep the surrounding document intact',
     () {
       final controller = QuillController(
@@ -112,115 +203,65 @@ void main() {
     },
   );
 
-  for (final type in [NoteTableData.type, noteAttachmentEmbedType]) {
-    test('reopened and native-pasted $type remains a block paragraph', () {
-      final data = type == NoteTableData.type
-          ? NoteTableData(rows: 1, columns: 1).toJson()
-          : {'id': 'ref', 'src': 'attachment://image', 'placement': 'block'};
-      final embed = {type: data};
-      final reopened = documentFromJsonSafe([
-        {'insert': 'Before'},
-        {'insert': embed},
-        {'insert': 'After\n'},
-        {'insert': embed},
-        {'insert': '\n'},
-      ]);
-      addTearDown(reopened.close);
-      expect(reopened.toPlainText(), 'Before\n\uFFFC\nAfter\n\uFFFC\n');
-      final controller = NoteEditorController(
-        document: Document()..insert(0, 'BeforeAfter'),
-        selection: const TextSelection.collapsed(offset: 6),
-      );
-      addTearDown(controller.dispose);
-      controller.document.setCustomRules(customQuillRules);
-      controller.document.history.clear();
-      controller.replaceText(
-        6,
-        0,
-        Delta()..insert(embed),
-        const TextSelection.collapsed(offset: 6),
-      );
-      expect(controller.document.toPlainText(), 'Before\n\uFFFC\nAfter\n');
-      expect(controller.selection.baseOffset, 9);
-      expect((controller.document.queryChild(7).node as Line).childCount, 1);
-      controller.undo();
-      expect(controller.document.toPlainText(), 'BeforeAfter\n');
-      controller.replaceText(6, 0, Embeddable(type, data), null);
-      expect(controller.document.toPlainText(), 'Before\n\uFFFC\nAfter\n');
-    });
+  for (final (type, placement) in [
+    (NoteTableData.type, 'block'),
+    (noteAttachmentEmbedType, 'block'),
+    (noteAttachmentEmbedType, 'inline'),
+  ]) {
+    test(
+      'reopened and native-pasted $type ($placement) remains a block paragraph',
+      () {
+        final data = type == NoteTableData.type
+            ? NoteTableData(rows: 1, columns: 1).toJson()
+            : {
+                'id': 'ref',
+                'src': 'attachment://image',
+                'placement': placement,
+              };
+        final embed = {type: data};
+        final original = [
+          {'insert': 'Before'},
+          {'insert': embed},
+          {'insert': 'After\n'},
+          {'insert': embed},
+          {'insert': '\n'},
+        ];
+        final snapshot = jsonEncode(original);
+        final reopened = documentFromJsonSafe(original);
+        addTearDown(reopened.close);
+        expect(reopened.toPlainText(), 'Before\n\uFFFC\nAfter\n\uFFFC\n');
+        expect(jsonEncode(original), snapshot);
+        expect(
+          reopened
+              .toDelta()
+              .toList()
+              .where((op) => op.data is Map)
+              .map((op) => op.data),
+          [embed, embed],
+        );
+        final controller = NoteEditorController(
+          document: Document()..insert(0, 'BeforeAfter'),
+          selection: const TextSelection.collapsed(offset: 6),
+        );
+        addTearDown(controller.dispose);
+        controller.document.setCustomRules(customQuillRules);
+        controller.document.history.clear();
+        controller.replaceText(
+          6,
+          0,
+          Delta()..insert(embed),
+          const TextSelection.collapsed(offset: 6),
+        );
+        expect(controller.document.toPlainText(), 'Before\n\uFFFC\nAfter\n');
+        expect(controller.selection.baseOffset, 9);
+        expect((controller.document.queryChild(7).node as Line).childCount, 1);
+        controller.undo();
+        expect(controller.document.toPlainText(), 'BeforeAfter\n');
+        controller.replaceText(6, 0, Embeddable(type, data), null);
+        expect(controller.document.toPlainText(), 'Before\n\uFFFC\nAfter\n');
+      },
+    );
   }
-
-  test('native-pasted inline images still flow with surrounding text', () {
-    final controller = NoteEditorController(
-      document: Document()..insert(0, 'BeforeAfter'),
-      selection: const TextSelection.collapsed(offset: 6),
-    );
-    addTearDown(controller.dispose);
-    controller.document.setCustomRules(customQuillRules);
-    controller.document.history.clear();
-    controller.replaceText(
-      6,
-      0,
-      Delta()..insert({
-        noteAttachmentEmbedType: {
-          'id': 'ref',
-          'src': 'attachment://image',
-          'placement': 'inline',
-        },
-      }),
-      const TextSelection.collapsed(offset: 7),
-    );
-    expect(controller.document.toPlainText(), 'Before\uFFfcAfter\n');
-    expect(controller.selection.baseOffset, 7);
-    controller.undo();
-    expect(controller.document.toPlainText(), 'BeforeAfter\n');
-  });
-
-  test(
-    'inline image placement preserves neighboring block separators and undo',
-    () {
-      final reference = {
-        'id': 'ref',
-        'src': 'attachment://image',
-        'placement': 'block',
-      };
-      for (final neighbor in [
-        {NoteTableData.type: NoteTableData(rows: 1, columns: 1).toJson()},
-        {
-          noteAttachmentEmbedType: {...reference, 'id': 'neighbor'},
-        },
-      ]) {
-        for (final (before, after, expected) in [
-          (neighbor, 'After', '\uFFFC\n\uFFFCAfter\n'),
-          ('Before', neighbor, 'Before\uFFFC\n\uFFFC\n'),
-          (neighbor, neighbor, '\uFFFC\n\uFFFC\n\uFFFC\n'),
-        ]) {
-          final controller = QuillController(
-            document: Document.fromJson([
-              {'insert': before},
-              {'insert': '\n'},
-              {
-                'insert': {noteAttachmentEmbedType: reference},
-              },
-              {'insert': '\n'},
-              {'insert': after},
-              {'insert': '\n'},
-            ]),
-            selection: const TextSelection.collapsed(offset: 0),
-          );
-          addTearDown(controller.dispose);
-          final original = controller.document.toDelta().toJson();
-          controller.document.history.clear();
-          changeAttachmentPlacement(controller, reference, inline: true);
-          expect(controller.document.toPlainText(), expected);
-          controller.undo();
-          expect(controller.document.toDelta().toJson(), original);
-          controller.redo();
-          expect(controller.document.toPlainText(), expected);
-        }
-      }
-    },
-  );
 
   test('pasted embeds with the same payload edit their own occurrence', () {
     final table = NoteTableData(rows: 1, columns: 1);
@@ -263,7 +304,7 @@ void main() {
   });
 
   test(
-    'attachment IDs survive serialization and file replacement; placement preserves text',
+    'attachment IDs survive serialization and file replacement; block insertion preserves text',
     () {
       final attachment = NoteAttachment.image(
         NoteImage(
@@ -274,7 +315,7 @@ void main() {
           lastModified: '1',
         ),
       );
-      final reference = attachmentReference(attachment, inline: true);
+      final reference = attachmentReference(attachment);
       final restored = NoteAttachment.fromJson(attachment.toJson());
       restored.image!.src = '/updated.png';
       final note = Note(attachments: [restored]);
@@ -293,16 +334,10 @@ void main() {
         controller,
         noteAttachmentEmbedType,
         reference,
-        block: false,
+        block: true,
       );
-      expect(controller.document.toPlainText(), 'Before\uFFfcAfter\n');
-      changeAttachmentPlacement(controller, reference, inline: false);
+      expect(reference['placement'], 'block');
       expect(controller.document.toPlainText(), 'Before\n\uFFfc\nAfter\n');
-      changeAttachmentPlacement(controller, {
-        ...reference,
-        'placement': 'block',
-      }, inline: true);
-      expect(controller.document.toPlainText(), 'Before\uFFfcAfter\n');
       controller.readOnly = true;
       replaceNoteEmbed(
         controller,
@@ -310,19 +345,27 @@ void main() {
         reference['id'] as String,
         null,
       );
-      expect(controller.document.toPlainText(), 'Before\uFFfcAfter\n');
+      expect(controller.document.toPlainText(), 'Before\n\uFFfc\nAfter\n');
       note.attachments.clear();
       expect(resolveNoteAttachment(note, reference['src'] as String), isNull);
     },
   );
 
   test(
-    'block tables and images keep their own line while inline images flow with text',
+    'tables and all attachment images keep their own line while editing',
     () {
-      for (final type in [NoteTableData.type, noteAttachmentEmbedType]) {
+      for (final (type, placement) in [
+        (NoteTableData.type, 'block'),
+        (noteAttachmentEmbedType, 'block'),
+        (noteAttachmentEmbedType, 'inline'),
+      ]) {
         final data = type == NoteTableData.type
             ? NoteTableData(rows: 1, columns: 1).toJson()
-            : {'id': 'ref', 'src': 'attachment://image', 'placement': 'block'};
+            : {
+                'id': 'ref',
+                'src': 'attachment://image',
+                'placement': placement,
+              };
         final doc = Document.fromJson([
           {'insert': 'Before\n'},
           {

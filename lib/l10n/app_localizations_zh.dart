@@ -3565,13 +3565,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get inNoteImage => '笔记内图片';
 
   @override
-  String get imagePlacement => '图片位置';
-
-  @override
-  String get imageInline => '与文字同行';
-
-  @override
-  String get imageNewLine => '单独一行';
+  String get resizeImage => '拖动以调整图片大小';
 
   @override
   String get removeImageReference => '从正文移除';
@@ -3659,4 +3653,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsHelpAbout => '帮助与关于';
+
+  @override
+  String imageCount(int count) {
+    return '$count 张图片';
+  }
+
+  @override
+  String sketchCount(int count) {
+    return '$count 幅草图';
+  }
+
+  @override
+  String tableCount(int count) {
+    return '$count 个表格';
+  }
+
+  @override
+  String attachmentCount(int count) {
+    return '$count 个附件';
+  }
 }

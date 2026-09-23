@@ -10,15 +10,17 @@ import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 List<EmbedBuilder> noteEmbedBuilders({
   required Note note,
   NoteEmbedEditing? editing,
-  double inlineWidth = 128,
+  double inlineWidth = 640,
   double? mediaMaxHeight,
   double? tablePreviewMaxHeight,
+  bool includeTables = true,
 }) => [
-  NoteTableEmbedBuilder(
-    note: note,
-    editing: editing,
-    previewMaxHeight: tablePreviewMaxHeight,
-  ),
+  if (includeTables)
+    NoteTableEmbedBuilder(
+      note: note,
+      editing: editing,
+      previewMaxHeight: tablePreviewMaxHeight,
+    ),
   NoteAttachmentEmbedBuilder(
     note,
     inlineWidth: inlineWidth,
