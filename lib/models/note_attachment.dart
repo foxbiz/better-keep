@@ -5,12 +5,20 @@ import 'package:better_keep/models/sketch.dart';
 enum AttachmentType { image, sketch, audio }
 
 class NoteAttachment {
+  /// Assigned when referenced from note content; independent of local file paths.
+  String? id;
   AttachmentType type;
   SketchData? sketch;
   NoteImage? image;
   NoteRecording? recording;
 
-  NoteAttachment({required this.type, this.sketch, this.image, this.recording});
+  NoteAttachment({
+    required this.type,
+    this.sketch,
+    this.image,
+    this.recording,
+    this.id,
+  });
 
   factory NoteAttachment.image(NoteImage image) {
     return NoteAttachment(type: AttachmentType.image, image: image);
@@ -25,6 +33,12 @@ class NoteAttachment {
   }
 
   factory NoteAttachment.fromJson(Map<String, dynamic> json) {
+    final attachment = NoteAttachment._fromJson(json);
+    attachment.id = json['id'] as String?;
+    return attachment;
+  }
+
+  factory NoteAttachment._fromJson(Map<String, dynamic> json) {
     final typeStr = json['type'] as String;
     switch (typeStr) {
       case 'image':
@@ -45,6 +59,10 @@ class NoteAttachment {
   }
 
   Map<String, dynamic> toJson() {
+    return {if (id != null) 'id': id, ..._payloadJson()};
+  }
+
+  Map<String, dynamic> _payloadJson() {
     switch (type) {
       case AttachmentType.image:
         return {'type': 'image', 'data': image!.toJson()};

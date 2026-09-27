@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:better_keep/models/note_table.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:archive/archive.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/app_progress.dart';
@@ -311,6 +313,7 @@ class ExportDataService {
       case AttachmentType.image:
         return {
           'type': 'image',
+          if (attachment.id != null) 'id': attachment.id,
           'fileName': _getFileNameFromPath(attachment.image!.src),
           'originalPath': attachment.image!.src,
           'aspectRatio': attachment.image!.aspectRatio,
@@ -319,6 +322,7 @@ class ExportDataService {
       case AttachmentType.sketch:
         return {
           'type': 'sketch',
+          if (attachment.id != null) 'id': attachment.id,
           'fileName': _getFileNameFromPath(
             attachment.sketch!.previewImage ?? '',
           ),
@@ -490,7 +494,7 @@ class ExportDataService {
     if (note.content != null && note.content!.isNotEmpty) {
       try {
         final deltaJson = json.decode(note.content!) as List;
-        buffer.write(_deltaToMarkdown(deltaJson, note.id));
+        buffer.write(_deltaToMarkdown(deltaJson, note));
       } catch (e) {
         // Fallback to plain text if delta parsing fails
         // Add title as heading if using plain text fallback
@@ -627,7 +631,7 @@ class ExportDataService {
   }
 
   /// Convert Quill Delta JSON to Markdown
-  String _deltaToMarkdown(List<dynamic> delta, int? noteId) {
+  String _deltaToMarkdown(List<dynamic> delta, Note note) {
     final buffer = StringBuffer();
     String currentLine = '';
     Map<String, dynamic>? pendingLineAttributes;
@@ -650,7 +654,7 @@ class ExportDataService {
               buffer,
               currentLine,
               pendingLineAttributes,
-              noteId,
+              note.id,
             );
             currentLine = '';
             pendingLineAttributes = null;
@@ -666,7 +670,33 @@ class ExportDataService {
         }
       } else if (insert is Map) {
         // Handle embeds (images, videos, etc.)
-        if (insert.containsKey('image')) {
+        if (insert.containsKey(NoteTableData.type)) {
+          final table = NoteTableData.fromJson(insert[NoteTableData.type]);
+          final markup = StringBuffer('\n<table>\n');
+          for (var row = 0; row < table.rows; row++) {
+            markup.write('<tr>');
+            for (var column = 0; column < table.columns; column++) {
+              final cell = _deltaToMarkdown(table.cell(row, column), note);
+              markup.write(
+                '<td>${md.markdownToHtml(cell, extensionSet: md.ExtensionSet.gitHubFlavored)}</td>',
+              );
+            }
+            markup.write('</tr>\n');
+          }
+          markup.write('</table>\n');
+          currentLine += markup.toString();
+        } else if (insert['note-attachment'] is Map) {
+          final src =
+              (insert['note-attachment'] as Map)['src'] as String? ?? '';
+          final id = src.startsWith('attachment://') ? src.substring(13) : '';
+          final attachment = note.attachments
+              .where((a) => a.id == id)
+              .firstOrNull;
+          if (attachment != null) {
+            final fileName = _getAttachmentFileName(attachment);
+            currentLine += '![](../attachments/note_${note.id}/$fileName)';
+          }
+        } else if (insert.containsKey('image')) {
           final imageSrc = insert['image'] as String;
           currentLine += '![]($imageSrc)';
         }
@@ -675,7 +705,7 @@ class ExportDataService {
 
     // Write any remaining content
     if (currentLine.isNotEmpty) {
-      _writeMarkdownLine(buffer, currentLine, pendingLineAttributes, noteId);
+      _writeMarkdownLine(buffer, currentLine, pendingLineAttributes, note.id);
     }
 
     return buffer.toString();

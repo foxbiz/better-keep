@@ -1,3 +1,4 @@
+import 'package:better_keep/models/note_table.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/services/sync_track_store.dart';
@@ -516,7 +517,9 @@ class Note extends BaseModel<Note> {
     if (_locked) {
       return currentAppLocalizations().lockedNoteReminder;
     } else if (content != null) {
-      var plainText = document?.toPlainText() ?? '';
+      var plainText = noteDeltaPlainText(
+        document?.toDelta().toJson() ?? const [],
+      );
       if (plainText.length > 240) {
         plainText = '${plainText.substring(0, 240)}...';
       }
@@ -2876,6 +2879,7 @@ class Note extends BaseModel<Note> {
         trackSync: trackSync,
         action: SyncAction.upload,
       );
+      createdAt ??= DateTime.parse(jsonObj['created_at'] as String);
       _notifyPersistedChange('created', trackSync, origin);
       return id!;
     } catch (e) {
@@ -3032,7 +3036,9 @@ class Note extends BaseModel<Note> {
 
     if (!_locked) {
       try {
-        plainTextToSave = document?.toPlainText() ?? '';
+        plainTextToSave = noteDeltaPlainText(
+          document?.toDelta().toJson() ?? const [],
+        );
         plainText = plainTextToSave;
       } catch (e) {
         plainTextToSave = '';
@@ -3165,7 +3171,9 @@ class Note extends BaseModel<Note> {
   }
 
   Map<String, dynamic> toJson() {
-    final plainTextValue = _locked ? '' : (document?.toPlainText() ?? '');
+    final plainTextValue = _locked
+        ? ''
+        : (noteDeltaPlainText(document?.toDelta().toJson() ?? const []));
 
     return {
       'id': id,
@@ -3280,13 +3288,14 @@ class _AsyncMutationQueue {
 Map<String, Object?> _attachmentLockFingerprint(NoteAttachment attachment) {
   switch (attachment.type) {
     case AttachmentType.image:
-      return {'type': 'image', 'data': attachment.image!.toJson()};
+      return attachment.toJson();
     case AttachmentType.audio:
-      return {'type': 'audio', 'data': attachment.recording!.toJson()};
+      return attachment.toJson();
     case AttachmentType.sketch:
       final sketch = attachment.sketch!;
       return {
         'type': 'sketch',
+        if (attachment.id != null) 'id': attachment.id,
         'previewImage': sketch.previewImage,
         'backgroundImage': sketch.backgroundImage,
         'aspectRatio': sketch.aspectRatio,
@@ -3322,7 +3331,7 @@ List<NoteAttachment> _deepCopyAttachments(List<NoteAttachment> attachments) =>
                   lastModified: image.lastModified,
                   blurredThumbnail: image.blurredThumbnail,
                 ),
-              );
+              )..id = attachment.id;
             case AttachmentType.audio:
               final recording = attachment.recording!;
               return NoteAttachment.audio(
@@ -3332,7 +3341,7 @@ List<NoteAttachment> _deepCopyAttachments(List<NoteAttachment> attachments) =>
                   title: recording.title,
                   transcript: recording.transcript,
                 ),
-              );
+              )..id = attachment.id;
             case AttachmentType.sketch:
               final sketch = attachment.sketch!;
               return NoteAttachment.sketch(
@@ -3361,7 +3370,7 @@ List<NoteAttachment> _deepCopyAttachments(List<NoteAttachment> attachments) =>
                   legacyMigrationError: sketch.legacyMigrationError,
                   strokesHydrated: sketch.hasHydratedStrokeSource,
                 ),
-              );
+              )..id = attachment.id;
           }
         })
         .toList(growable: false);
@@ -3381,6 +3390,7 @@ bool _publishAttachments(
       return false;
     }
 
+    target.id = source.id;
     switch (target.type) {
       case AttachmentType.image:
         final targetImage = target.image!;

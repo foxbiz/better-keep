@@ -1,4 +1,6 @@
 import 'package:better_keep/dialogs/snackbar.dart';
+import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
+import 'package:better_keep/utils/note_embed_rules.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -142,7 +144,9 @@ void insertDocumentIntoController(
   final index = controller.selection.baseOffset >= 0
       ? controller.selection.baseOffset
       : controller.document.length - 1;
-  final deltaToInsert = document.toDelta();
+  final deltaToInsert = controller is NoteEditorController
+      ? controller.prepareContent(document.toDelta())
+      : normalizeNoteBlocks(document.toDelta());
 
   // Get the operations from the delta
   final ops = deltaToInsert.toList();
@@ -155,13 +159,25 @@ void insertDocumentIntoController(
     composeDelta.retain(index);
   }
 
-  // Add all operations from the document to insert (except trailing newline)
+  // Blocks must keep their own line when pasted into an existing paragraph.
   int insertedLength = 0;
+  if (ops.isNotEmpty &&
+      isNoteBlock(ops.first.data) &&
+      index > 0 &&
+      controller.document.toPlainText()[index - 1] != '\n') {
+    composeDelta.insert('\n');
+    insertedLength++;
+  }
+
+  // Keep a final block's line break to separate any following note text.
   for (int i = 0; i < ops.length; i++) {
     final op = ops[i];
     if (op.isInsert) {
       // Skip the final trailing newline that every Quill document has
-      if (i == ops.length - 1 && op.data == '\n' && op.attributes == null) {
+      if (i == ops.length - 1 &&
+          op.data == '\n' &&
+          op.attributes == null &&
+          (i == 0 || !isNoteBlock(ops[i - 1].data))) {
         continue;
       }
 

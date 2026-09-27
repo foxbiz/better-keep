@@ -33,6 +33,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+# Gradle build cache in vendored/third-party Android modules
+third_party/**/android/.gradle/
 /node_modules/
 /site/node_modules/
 /site/.astro/

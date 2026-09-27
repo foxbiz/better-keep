@@ -1,4 +1,6 @@
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:better_keep/models/note_table.dart';
+import 'package:markdown/markdown.dart' as md;
 
 /// Utility class for converting markdown to Quill Delta format
 class MarkdownConverter {
@@ -21,8 +23,13 @@ class MarkdownConverter {
     );
 
     // Split markdown into lines and process
-    final lines = processed.split('\n');
+    final lines = processed.split(RegExp(r'\r\n?|\n'));
+    final markdownDocument = md.Document(
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+      encodeHtml: false,
+    );
     bool inCodeBlock = false;
+    String codeFence = '```';
     String codeBlockContent = '';
     bool lastWasHeader = false;
 
@@ -30,10 +37,12 @@ class MarkdownConverter {
       final line = lines[i];
 
       // Check for code block fence
-      if (line.trim().startsWith('```')) {
+      if (line.trim().startsWith(inCodeBlock ? codeFence : '```') ||
+          (!inCodeBlock && line.trim().startsWith('~~~'))) {
         if (!inCodeBlock) {
           // Starting a code block
           inCodeBlock = true;
+          codeFence = line.trim().substring(0, 3);
           codeBlockContent = '';
           lastWasHeader = false;
         } else {
@@ -61,6 +70,18 @@ class MarkdownConverter {
       if (inCodeBlock) {
         // Accumulate code block content
         codeBlockContent += '$line\n';
+        continue;
+      }
+
+      final table = _parseTable(lines, i, markdownDocument);
+      if (table != null) {
+        delta.add({
+          'insert': {NoteTableData.type: table.toJson()},
+        });
+        delta.add({'insert': '\n'});
+        // Each data row uses one source line; the delimiter adds one more.
+        i += table.rows;
+        lastWasHeader = false;
         continue;
       }
 
@@ -105,6 +126,93 @@ class MarkdownConverter {
     }
 
     return delta;
+  }
+
+  /// Let the existing Markdown parser handle escaped pipes, optional outer
+  /// pipes, alignment, and incomplete rows without changing other paste blocks.
+  static NoteTableData? _parseTable(
+    List<String> lines,
+    int start,
+    md.Document document,
+  ) {
+    if (start + 1 >= lines.length) return null;
+    const syntax = md.TableSyntax();
+    final probe = md.BlockParser([
+      md.Line(lines[start]),
+      md.Line(lines[start + 1]),
+    ], document);
+    if (!syntax.canParse(probe)) return null;
+    final parser = md.BlockParser(
+      lines.skip(start).map(md.Line.new).toList(),
+      document,
+    );
+    final node = syntax.parse(parser);
+    if (node is! md.Element) return null;
+    final rows = [
+      for (final section in node.children!.cast<md.Element>())
+        ...section.children!.cast<md.Element>(),
+    ];
+    final columns = rows.first.children!.length;
+    // Keep oversized source as text instead of silently losing cells.
+    if (rows.length > NoteTableData.maxDimension ||
+        columns > NoteTableData.maxDimension) {
+      return null;
+    }
+    final cells = <String, List<dynamic>>{};
+    for (var r = 0; r < rows.length; r++) {
+      final row = rows[r].children!.cast<md.Element>();
+      for (var c = 0; c < row.length; c++) {
+        final cell = row[c];
+        final delta = <Map<String, dynamic>>[];
+        _addTableInline(
+          delta,
+          document.parseInline(cell.textContent),
+          r == 0 ? {'bold': true} : {},
+        );
+        final alignment = cell.attributes['align'];
+        delta.add({
+          'insert': '\n',
+          if (alignment != null) 'attributes': {'align': alignment},
+        });
+        if (delta.length > 1 || alignment != null) cells['$r:$c'] = delta;
+      }
+    }
+    return NoteTableData(rows: rows.length, columns: columns, cells: cells);
+  }
+
+  static void _addTableInline(
+    List<Map<String, dynamic>> delta,
+    List<md.Node> nodes,
+    Map<String, dynamic> attributes,
+  ) {
+    for (final node in nodes) {
+      if (node is md.Text) {
+        delta.add({
+          'insert': node.text,
+          if (attributes.isNotEmpty) 'attributes': attributes,
+        });
+      } else if (node is md.Element) {
+        final next = {...attributes};
+        switch (node.tag) {
+          case 'strong':
+            next['bold'] = true;
+          case 'em':
+            next['italic'] = true;
+          case 'code':
+            next['code'] = true;
+          case 'del':
+            next['strike'] = true;
+          case 'a':
+            next['link'] = node.attributes['href'];
+        }
+        if (node.tag == 'img') {
+          next['link'] = node.attributes['src'];
+          _addTableInline(delta, [md.Text(node.attributes['alt'] ?? '')], next);
+        } else {
+          _addTableInline(delta, node.children ?? [], next);
+        }
+      }
+    }
   }
 
   /// Create a Quill Document from markdown text
