@@ -122,6 +122,7 @@ class NoteTableView extends StatefulWidget {
 
 class _NoteTableViewState extends State<NoteTableView> {
   static const _edge = 32.0;
+  static const _controlExtent = 44.0;
   static const _dragDevices = {
     PointerDeviceKind.touch,
     PointerDeviceKind.mouse,
@@ -271,6 +272,7 @@ class _NoteTableViewState extends State<NoteTableView> {
 
   Widget _menu({required bool row, required int index}) {
     final l10n = context.l10n;
+    final colors = Theme.of(context).colorScheme;
     final count = row ? _table.rows : _table.columns;
     return PopupMenuButton<String>(
       key: ValueKey('table_${row ? 'row' : 'column'}_$index'),
@@ -303,24 +305,25 @@ class _NoteTableViewState extends State<NoteTableView> {
         PopupMenuItem(value: 'fit', child: Text(l10n.fitTableColumns)),
         PopupMenuItem(value: 'delete-table', child: Text(l10n.deleteTable)),
       ],
-      child: Align(
-        alignment: row ? Alignment.centerLeft : Alignment.topCenter,
+      child: Center(
         child: Container(
-          width: row ? 10 : 28,
-          height: row ? 28 : 10,
+          width: row ? 14 : 28,
+          height: row ? 28 : 14,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh,
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-            borderRadius: BorderRadius.circular(6),
+            color: colors.surfaceContainerHigh,
+            border: Border.all(color: colors.outlineVariant),
+            borderRadius: BorderRadius.circular(7),
           ),
           child: OverflowBox(
-            minWidth: 18,
-            maxWidth: 18,
-            minHeight: 18,
-            maxHeight: 18,
-            child: Icon(row ? Icons.more_vert : Icons.more_horiz, size: 18),
+            minWidth: 16,
+            maxWidth: 16,
+            minHeight: 16,
+            maxHeight: 16,
+            child: Icon(
+              row ? Icons.more_vert : Icons.more_horiz,
+              size: 16,
+              color: colors.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -387,14 +390,16 @@ class _NoteTableViewState extends State<NoteTableView> {
   }
 
   Widget _resizeGrip({required bool row}) => IgnorePointer(
-    child: Align(
-      alignment: row ? Alignment.bottomCenter : Alignment.centerRight,
-      child: Container(
-        width: row ? 24 : 3,
-        height: row ? 3 : 24,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary,
-          borderRadius: BorderRadius.circular(2),
+    child: Center(
+      child: RotatedBox(
+        quarterTurns: row ? 0 : 1,
+        child: Container(
+          width: 28,
+          height: 5,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary,
+            borderRadius: BorderRadius.circular(2.5),
+          ),
         ),
       ),
     ),
@@ -420,11 +425,18 @@ class _NoteTableViewState extends State<NoteTableView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final preview = widget.previewMaxHeight != null;
+        final controlGutter = !preview && !widget.readOnly
+            ? _controlExtent / 2
+            : 0.0;
+        // Header bands already leave room for centered controls. Reserve the
+        // same space on the leading edges when those bands are hidden.
+        final leadingGutter = showHeaders ? 0.0 : controlGutter;
+        final origin = edge + leadingGutter;
         final heights = List.generate(
           _table.rows,
           (i) => _table.rowHeights[i] ?? 72.0,
         );
-        final ys = <double>[edge];
+        final ys = <double>[origin];
         for (final height in heights) {
           ys.add(ys.last + height);
         }
@@ -437,17 +449,18 @@ class _NoteTableViewState extends State<NoteTableView> {
             : 320.0;
         final defaultWidth = math.max(
           NoteTableData.minColumnWidth,
-          (available - edge - 2) / _table.columns,
+          (available - origin - 2 - controlGutter) / _table.columns,
         );
         final widths = List.generate(
           _table.columns,
           (i) => _table.columnWidths[i] ?? defaultWidth,
         );
-        final xs = <double>[edge];
+        final xs = <double>[origin];
         for (final width in widths) {
           xs.add(xs.last + width);
         }
-        final horizontalOverflow = xs.last > available;
+        final contentWidth = xs.last + controlGutter;
+        final horizontalOverflow = contentWidth > available;
         final horizontalGutter = !preview && horizontalOverflow ? 16.0 : 0.0;
         Widget grid = DecoratedBox(
           decoration: BoxDecoration(
@@ -460,14 +473,14 @@ class _NoteTableViewState extends State<NoteTableView> {
             borderRadius: BorderRadius.circular(showHeaders ? 9 : 0),
             child: SizedBox(
               width: available,
-              height: viewportHeight + border,
+              height: viewportHeight + border + controlGutter,
               child: SingleChildScrollView(
                 key: ValueKey('table_horizontal_${_table.id}'),
                 controller: _horizontal,
                 scrollDirection: Axis.horizontal,
                 physics: preview ? const NeverScrollableScrollPhysics() : null,
                 child: SizedBox(
-                  width: xs.last,
+                  width: contentWidth,
                   child: AnimatedBuilder(
                     animation: _horizontal,
                     builder: (context, _) {
@@ -493,8 +506,8 @@ class _NoteTableViewState extends State<NoteTableView> {
                         ?_activeCell,
                       };
                       return SizedBox(
-                        width: xs.last,
-                        height: ys.last,
+                        width: contentWidth,
+                        height: ys.last + controlGutter,
                         child: Stack(
                           children: [
                             for (final position in cells)
@@ -549,22 +562,26 @@ class _NoteTableViewState extends State<NoteTableView> {
                               Positioned(
                                 left:
                                     xs[activeIndices[1]] +
-                                    (widths[activeIndices[1]] - 32) / 2,
-                                top: top + edge,
-                                width: 32,
-                                height: 24,
+                                    (widths[activeIndices[1]] -
+                                            _controlExtent) /
+                                        2,
+                                top: top + origin - _controlExtent / 2,
+                                width: _controlExtent,
+                                height: _controlExtent,
                                 child: _menu(
                                   row: false,
                                   index: activeIndices[1],
                                 ),
                               ),
                               Positioned(
-                                left: left + edge,
+                                left: left + origin - _controlExtent / 2,
                                 top:
                                     ys[activeIndices[0]] +
-                                    (heights[activeIndices[0]] - 32) / 2,
-                                width: 24,
-                                height: 32,
+                                    (heights[activeIndices[0]] -
+                                            _controlExtent) /
+                                        2,
+                                width: _controlExtent,
+                                height: _controlExtent,
                                 child: _menu(
                                   row: true,
                                   index: activeIndices[0],
@@ -574,12 +591,14 @@ class _NoteTableViewState extends State<NoteTableView> {
                                 key: const ValueKey(
                                   'table_column_resize_control',
                                 ),
-                                left: xs[activeIndices[1] + 1] - 20,
+                                left:
+                                    xs[activeIndices[1] + 1] -
+                                    _controlExtent / 2,
                                 top:
                                     ys[activeIndices[0]] +
-                                    (heights[activeIndices[0]] - 32) / 2,
-                                width: 20,
-                                height: 32,
+                                    (heights[activeIndices[0]] - 56) / 2,
+                                width: _controlExtent,
+                                height: 56,
                                 child: _resizeHandle(
                                   row: false,
                                   index: activeIndices[1],
@@ -590,10 +609,12 @@ class _NoteTableViewState extends State<NoteTableView> {
                                 key: const ValueKey('table_row_resize_control'),
                                 left:
                                     xs[activeIndices[1]] +
-                                    (widths[activeIndices[1]] - 32) / 2,
-                                top: ys[activeIndices[0] + 1] - 20,
-                                width: 32,
-                                height: 20,
+                                    (widths[activeIndices[1]] - 56) / 2,
+                                top:
+                                    ys[activeIndices[0] + 1] -
+                                    _controlExtent / 2,
+                                width: 56,
+                                height: _controlExtent,
                                 child: _resizeHandle(
                                   row: true,
                                   index: activeIndices[0],
@@ -759,6 +780,60 @@ class _TableCellState extends State<_TableCell> {
   final _scroll = ScrollController();
   late StreamSubscription<DocChange> _changes;
   bool _applying = false;
+  final _imageFrames = <int, GlobalKey>{};
+  double? _imageHeight;
+  double _imageTopPadding = 0;
+  bool _imageLayoutPending = false;
+
+  void _scheduleImageLayout() {
+    if (_imageLayoutPending) return;
+    _imageLayoutPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _imageLayoutPending = false;
+      if (!mounted) return;
+      _imageFrames.removeWhere((_, key) => key.currentContext == null);
+      final frames = _imageFrames.values
+          .map((key) => key.currentContext?.findRenderObject())
+          .whereType<RenderBox>()
+          .where((box) => box.hasSize)
+          .toList();
+      if (frames.isEmpty) {
+        if (_imageTopPadding != 0) setState(() => _imageTopPadding = 0);
+        return;
+      }
+      final render = _editorKey.currentState?.renderEditor;
+      final viewport = context.size;
+      if (render == null || viewport == null) return;
+      var contentHeight =
+          (render.resolvedPadding?.vertical ?? 0) - _imageTopPadding;
+      var child = render.firstChild;
+      while (child != null) {
+        contentHeight += child.size.height;
+        child = render.childAfter(child);
+      }
+      final imageHeight = frames.fold(0.0, (sum, box) => sum + box.size.height);
+      // Reserve actual wrapped text, rich styles and paragraph spacing before
+      // sharing the remaining height between the cell's images.
+      final available = math.max(
+        1.0,
+        (viewport.height - contentHeight + imageHeight) / frames.length,
+      );
+      // Only a sole image is centered. Even an empty surrounding paragraph
+      // restores normal text flow, without changing the document or caret size.
+      final topPadding = _controller.document.length == 2 && frames.length == 1
+          ? math.max(0.0, (viewport.height - contentHeight) / 2)
+          : 0.0;
+      if (_imageHeight == null ||
+          (_imageHeight! - available).abs() > 0.5 ||
+          (_imageTopPadding - topPadding).abs() > 0.5) {
+        setState(() {
+          _imageHeight = available;
+          _imageTopPadding = topPadding;
+        });
+        _scheduleImageLayout();
+      }
+    });
+  }
 
   List<dynamic> get _cellDelta =>
       flattenNoteTables(Delta.fromJson(widget.delta)).toJson();
@@ -777,8 +852,15 @@ class _TableCellState extends State<_TableCell> {
     _focus.addListener(_focused);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleImageLayout();
+  }
+
   void _listen() {
     _changes = _controller.changes.listen((_) {
+      _scheduleImageLayout();
       if (!_applying && !widget.readOnly) {
         widget.onChanged(_controller.document.toDelta().toJson());
       }
@@ -791,6 +873,14 @@ class _TableCellState extends State<_TableCell> {
     widget.onFocus(_controller);
   }
 
+  // An image-only cell has no text to tap, so interacting with the embed is the
+  // only way to select the cell and reveal the table's row/column controls.
+  void _selectFromEmbed() {
+    if (widget.readOnly) return;
+    widget.editing?.activate(_controller, _focus);
+    widget.onFocus(_controller);
+  }
+
   bool get _matchesSnapshot =>
       jsonEncode(_controller.document.toDelta().toJson()) ==
       jsonEncode(normalizeNoteBlocks(Delta.fromJson(_cellDelta)).toJson());
@@ -798,6 +888,7 @@ class _TableCellState extends State<_TableCell> {
   @override
   void didUpdateWidget(_TableCell oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _scheduleImageLayout();
     _controller.readOnly = widget.readOnly;
     if (widget.readOnly) widget.editing?.release(_controller);
     if (!_matchesSnapshot) {
@@ -826,6 +917,7 @@ class _TableCellState extends State<_TableCell> {
     previousDocument.close();
     _listen();
     _applying = false;
+    _scheduleImageLayout();
   }
 
   @override
@@ -854,7 +946,7 @@ class _TableCellState extends State<_TableCell> {
             scrollController: _scroll,
             config: QuillEditorConfig(
               editorKey: _editorKey,
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.fromLTRB(8, 8 + _imageTopPadding, 8, 8),
               scrollable: true,
               expands: true,
               autoFocus: false,
@@ -930,8 +1022,9 @@ class _TableCellState extends State<_TableCell> {
                 editing: widget.editing,
                 inlineWidth: widget.width,
                 includeTables: false,
-                // Leave room for the embed's padding and the text line descent.
-                mediaMaxHeight: math.max(1, widget.height - 16),
+                cellImageFrames: _imageFrames,
+                onEmbedSelect: _selectFromEmbed,
+                mediaMaxHeight: _imageHeight ?? math.max(1, widget.height - 16),
               ),
             ),
           ),

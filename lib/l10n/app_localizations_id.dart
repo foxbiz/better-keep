@@ -3763,7 +3763,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get resizeImage => 'Seret untuk mengubah ukuran gambar';
 
   @override
-  String get removeImageReference => 'Hapus dari teks';
+  String get previewImage => 'Pratinjau gambar';
+
+  @override
+  String get removeImageReference => 'Hapus';
 
   @override
   String get inlineAttachmentUnavailable => 'Lampiran tidak tersedia';

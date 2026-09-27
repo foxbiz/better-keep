@@ -3768,7 +3768,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get resizeImage => 'Görseli yeniden boyutlandırmak için sürükleyin';
 
   @override
-  String get removeImageReference => 'Metinden kaldır';
+  String get previewImage => 'Görseli önizle';
+
+  @override
+  String get removeImageReference => 'Kaldır';
 
   @override
   String get inlineAttachmentUnavailable => 'Ek kullanılamıyor';

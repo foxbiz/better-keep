@@ -1098,24 +1098,19 @@ class _SketchPageState extends State<SketchPage>
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         backgroundColor: _backgroundColor,
-        body: Stack(
-          children: [
+        body: _SketchLayers(
+          enabled: widget.heroTag != null,
+          background: [
             // Canvas - fills the entire screen including behind appbar
             Positioned.fill(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   if (!_hasFitted) {
                     _hasFitted = true;
-                    // Delay fit when hero animation is active to prevent jarring transition
-                    if (widget.heroTag != null) {
-                      // Set initial centered position immediately (without animation delay)
-                      _fitToScreen(constraints.maxWidth, constraints.maxHeight);
-                    } else {
-                      _fitToScreen(constraints.maxWidth, constraints.maxHeight);
-                    }
+                    _fitToScreen(constraints.maxWidth, constraints.maxHeight);
                   }
 
-                  final canvasWidget = Container(
+                  Widget canvasWidget = Container(
                     width: _canvasSize.width,
                     height: _canvasSize.height,
                     decoration: _isImageBasedSketch
@@ -1420,19 +1415,9 @@ class _SketchPageState extends State<SketchPage>
                     ),
                   );
 
-                  final interactiveViewer = InteractiveViewer(
-                    transformationController: _transformationController,
-                    boundaryMargin: const EdgeInsets.all(2000),
-                    minScale: 0.01,
-                    maxScale: 5.0,
-                    panEnabled: _isMoveMode,
-                    scaleEnabled: true,
-                    constrained: false,
-                    child: canvasWidget,
-                  );
-
                   if (widget.heroTag != null) {
-                    return Hero(
+                    // Fly to the transformed canvas bounds, not the viewport.
+                    canvasWidget = Hero(
                       tag: widget.heroTag!,
                       flightShuttleBuilder:
                           (
@@ -1468,10 +1453,19 @@ class _SketchPageState extends State<SketchPage>
                             }
                             return toHeroContext.widget;
                           },
-                      child: interactiveViewer,
+                      child: canvasWidget,
                     );
                   }
-                  return interactiveViewer;
+                  return InteractiveViewer(
+                    transformationController: _transformationController,
+                    boundaryMargin: const EdgeInsets.all(2000),
+                    minScale: 0.01,
+                    maxScale: 5.0,
+                    panEnabled: _isMoveMode,
+                    scaleEnabled: true,
+                    constrained: false,
+                    child: canvasWidget,
+                  );
                 },
               ),
             ),
@@ -1514,6 +1508,8 @@ class _SketchPageState extends State<SketchPage>
                   ),
                 ),
               ),
+          ],
+          controls: [
             // Floating toolbar at the bottom
             Positioned(
               left: 0,
@@ -2393,6 +2389,149 @@ class _SketchPageState extends State<SketchPage>
         );
       }
     }
+  }
+}
+
+/// Temporarily lifts the existing controls above the Navigator's Hero flights.
+class _SketchLayers extends StatefulWidget {
+  const _SketchLayers({
+    required this.enabled,
+    required this.background,
+    required this.controls,
+  });
+
+  final bool enabled;
+  final List<Widget> background;
+  final List<Widget> controls;
+
+  @override
+  State<_SketchLayers> createState() => _SketchLayersState();
+}
+
+class _SketchLayersState extends State<_SketchLayers> {
+  final _link = LayerLink();
+  final _controlsKey = GlobalKey();
+  OverlayEntry? _entry;
+  ModalRoute<dynamic>? _route;
+  Size _size = Size.zero;
+  bool _updatePending = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (_route != route) {
+      _route?.animation?.removeStatusListener(_onRouteAnimation);
+      _route = route;
+      _route?.animation?.addStatusListener(_onRouteAnimation);
+    }
+    _scheduleUpdate();
+  }
+
+  void _onRouteAnimation(AnimationStatus status) {
+    _updateOverlay();
+    _scheduleUpdate();
+  }
+
+  Widget _buildControls() => KeyedSubtree(
+    key: _controlsKey,
+    child: Stack(children: widget.controls),
+  );
+
+  void _updateOverlay() {
+    final animation = _route?.animation;
+    final flying =
+        widget.enabled &&
+        (animation?.status == AnimationStatus.forward ||
+            animation?.status == AnimationStatus.reverse);
+    if (!flying) {
+      if (_entry != null) {
+        _entry!.remove();
+        _entry!.dispose();
+        setState(() => _entry = null);
+      }
+      return;
+    }
+    if (_entry != null) {
+      _entry!.markNeedsBuild();
+      return;
+    }
+    setState(() {
+      _entry = OverlayEntry(
+        builder: (_) => Positioned(
+          width: _size.width,
+          height: _size.height,
+          child: CompositedTransformFollower(
+            link: _link,
+            showWhenUnlinked: false,
+            child: InheritedTheme.captureAll(
+              context,
+              MediaQuery(
+                data: MediaQuery.of(context),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: IgnorePointer(
+                    child: FadeTransition(
+                      opacity: animation!,
+                      child: _buildControls(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+    Overlay.of(context).insert(_entry!);
+  }
+
+  void _scheduleUpdate() {
+    if (_updatePending || !widget.enabled) return;
+    _updatePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Heroes start in post-frame callbacks. Raise controls after those
+      // callbacks, before the next frame paints the flight.
+      scheduleMicrotask(() {
+        _updatePending = false;
+        if (!mounted) return;
+        _updateOverlay();
+        if (_entry != null) {
+          Overlay.of(context).rearrange([_entry!], below: _entry);
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _route?.animation?.removeStatusListener(_onRouteAnimation);
+    _entry?.remove();
+    _entry?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ...widget.background,
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _size = constraints.biggest;
+              _scheduleUpdate();
+              return CompositedTransformTarget(
+                link: _link,
+                child: _entry == null
+                    ? _buildControls()
+                    : const SizedBox.expand(),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 }
 

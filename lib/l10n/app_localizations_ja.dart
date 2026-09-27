@@ -3627,7 +3627,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get resizeImage => 'ドラッグして画像のサイズを変更';
 
   @override
-  String get removeImageReference => '本文から削除';
+  String get previewImage => '画像をプレビュー';
+
+  @override
+  String get removeImageReference => '削除';
 
   @override
   String get inlineAttachmentUnavailable => '添付ファイルを利用できません';

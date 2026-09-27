@@ -3627,7 +3627,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get resizeImage => '드래그하여 이미지 크기 조절';
 
   @override
-  String get removeImageReference => '본문에서 제거';
+  String get previewImage => '이미지 미리보기';
+
+  @override
+  String get removeImageReference => '제거';
 
   @override
   String get inlineAttachmentUnavailable => '첨부 파일을 사용할 수 없습니다';

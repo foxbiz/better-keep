@@ -303,13 +303,19 @@ void insertNoteEmbed(
       : 0;
   final plain = controller.document.toPlainText();
   final leading = block && start > 0 && plain[start - 1] != '\n';
+  // Reuse an existing cell line ending instead of adding a blank paragraph.
+  final trailing =
+      block &&
+      !(controller is NoteEditorController &&
+          !controller.allowTables &&
+          plain[start + length] == '\n');
   final delta = Delta()..retain(start);
   if (leading) delta.insert('\n');
   delta.insert({type: data});
-  if (block) delta.insert('\n');
+  if (trailing) delta.insert('\n');
   delta.delete(length);
   final nextSelection = TextSelection.collapsed(
-    offset: start + (leading ? 1 : 0) + 1 + (block ? 1 : 0),
+    offset: start + (leading ? 1 : 0) + 1 + (trailing ? 1 : 0),
   );
   controller.compose(delta, nextSelection, ChangeSource.local);
   controller.updateSelection(nextSelection, ChangeSource.local);

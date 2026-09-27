@@ -3798,7 +3798,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get resizeImage => 'Arraste para redimensionar a imagem';
 
   @override
-  String get removeImageReference => 'Remover do texto';
+  String get previewImage => 'Pré-visualizar imagem';
+
+  @override
+  String get removeImageReference => 'Remover';
 
   @override
   String get inlineAttachmentUnavailable => 'Anexo indisponível';

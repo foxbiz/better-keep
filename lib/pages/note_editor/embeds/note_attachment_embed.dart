@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
+import 'package:better_keep/models/note_image.dart';
+import 'package:better_keep/pages/image_viewer.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/gestures.dart';
@@ -38,11 +40,17 @@ class NoteAttachmentEmbedBuilder extends EmbedBuilder {
     this.inlineWidth = 640,
     this.mediaMaxHeight,
     this.editing,
+    this.cellImageFrames,
+    this.onSelect,
   });
   final double inlineWidth;
   final double? mediaMaxHeight;
   final NoteEmbedEditing? editing;
   final Note note;
+  final Map<int, GlobalKey>? cellImageFrames;
+
+  /// Selects the owning table cell when this embed is interacted with.
+  final VoidCallback? onSelect;
   @override
   String get key => noteAttachmentEmbedType;
 
@@ -79,15 +87,39 @@ class NoteAttachmentEmbedBuilder extends EmbedBuilder {
             ),
     );
     return _AttachmentFrame(
-      key: ValueKey('${data['id']}:$offset'),
+      key:
+          cellImageFrames?.putIfAbsent(offset, GlobalKey.new) ??
+          ValueKey('${data['id']}:$offset'),
       data: data,
       ratio: ratio > 0 && ratio.isFinite ? ratio : 1,
       inlineWidth: inlineWidth,
       maxHeight: mediaMaxHeight ?? 400,
+      fitToCell: cellImageFrames != null,
+      onPreview: path == null || (note.locked && !note.unlocked)
+          ? null
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ImageViewer(
+                  note: note,
+                  image:
+                      image ??
+                      NoteImage(
+                        src: path,
+                        size: 0,
+                        index: 0,
+                        aspectRatio: '$ratio:1',
+                        lastModified: '',
+                      ),
+                  previewOnly: true,
+                  heroTag: 'attachment-preview-${data['id']}',
+                ),
+              ),
+            ),
       controller: embedContext.controller,
       readOnly: embedContext.readOnly,
       editing: editing,
       offset: offset,
+      onSelect: onSelect,
       child: content,
     );
   }
@@ -100,20 +132,26 @@ class _AttachmentFrame extends StatefulWidget {
     required this.ratio,
     required this.inlineWidth,
     required this.maxHeight,
+    required this.fitToCell,
+    required this.onPreview,
     required this.controller,
     required this.readOnly,
     required this.editing,
     required this.offset,
+    this.onSelect,
     required this.child,
   });
   final Map<String, dynamic> data;
   final double ratio;
   final double inlineWidth;
   final double maxHeight;
+  final bool fitToCell;
+  final VoidCallback? onPreview;
   final QuillController controller;
   final bool readOnly;
   final NoteEmbedEditing? editing;
   final int offset;
+  final VoidCallback? onSelect;
   final Widget child;
 
   @override
@@ -132,14 +170,14 @@ class _AttachmentFrameState extends State<_AttachmentFrame> {
   bool _menuOpen = false;
 
   void _showControls() {
-    if (widget.readOnly) return;
+    if (widget.readOnly && widget.onPreview == null) return;
     setState(() => _controlsVisible = true);
     _scheduleHide();
   }
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    if (!_resizing && !_menuOpen) {
+    if (!widget.fitToCell && !_resizing && !_menuOpen) {
       _hideTimer = Timer(const Duration(seconds: 4), _hideControls);
     }
   }
@@ -168,6 +206,57 @@ class _AttachmentFrameState extends State<_AttachmentFrame> {
     }
   }
 
+  Widget _imageMenu({Widget? child, bool requestFocus = true}) =>
+      PopupMenuButton<String>(
+        key: ValueKey('attachment_options_${_data['id']}'),
+        tooltip: context.l10n.inNoteImage,
+        // A cell image must not move focus: closing the menu would otherwise
+        // return focus to the note editor and release the selected cell.
+        requestFocus: requestFocus,
+        icon: child == null ? const Icon(Icons.more_horiz) : null,
+        style: IconButton.styleFrom(
+          backgroundColor: Theme.of(
+            context,
+          ).colorScheme.surface.withValues(alpha: 0.95),
+        ),
+        onOpened: () {
+          _menuOpen = true;
+          _hideTimer?.cancel();
+        },
+        onCanceled: () {
+          _menuOpen = false;
+          _scheduleHide();
+        },
+        onSelected: (action) {
+          _menuOpen = false;
+          _scheduleHide();
+          if (action == 'preview') {
+            widget.onPreview?.call();
+          } else if (action == 'remove') {
+            replaceNoteEmbed(
+              widget.controller,
+              noteAttachmentEmbedType,
+              _data['id'] as String,
+              null,
+              offsetHint: widget.offset,
+            );
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'preview',
+            enabled: widget.onPreview != null,
+            child: Text(context.l10n.previewImage),
+          ),
+          if (!widget.readOnly)
+            PopupMenuItem(
+              value: 'remove',
+              child: Text(context.l10n.removeImageReference),
+            ),
+        ],
+        child: child,
+      );
+
   double _startWidth = 0;
   Offset _drag = Offset.zero;
 
@@ -183,6 +272,7 @@ class _AttachmentFrameState extends State<_AttachmentFrame> {
       );
       final stored = _data['width'];
       final requested =
+          (widget.fitToCell ? maximum : null) ??
           _resizingWidth ??
           (stored is num && stored.isFinite && stored > 0
               ? stored.toDouble()
@@ -190,20 +280,45 @@ class _AttachmentFrameState extends State<_AttachmentFrame> {
       final width = requested
           .clamp(math.min(40.0, maximum), maximum)
           .toDouble();
-      final compactControls = width / widget.ratio < 76;
       final image = SizedBox(
         key: ValueKey('attachment_image_${_data['id']}'),
         width: width,
         height: width / widget.ratio,
         child: widget.child,
       );
-      if (widget.readOnly || widget.editing == null) {
+      if (widget.editing == null) {
         return Align(
+          alignment: Alignment.center,
+          heightFactor: 1,
+          child: GestureDetector(onTap: widget.onPreview, child: image),
+        );
+      }
+      if (widget.fitToCell) {
+        final content = Align(
           alignment: Alignment.center,
           heightFactor: 1,
           child: image,
         );
+        // The first tap selects the owning cell so its table controls appear;
+        // the image menu only opens from a second tap once the cell is active.
+        // Read-only cells cannot be selected, so their menu opens immediately.
+        final cellActive =
+            widget.readOnly ||
+            (widget.editing != null &&
+                identical(widget.editing!.controller, widget.controller));
+        return NoteEmbedGestureRegion(
+          editing: widget.editing!,
+          owner: widget.controller,
+          child: cellActive
+              ? _imageMenu(child: content, requestFocus: false)
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onSelect,
+                  child: content,
+                ),
+        );
       }
+      final compactControls = width / widget.ratio < 76;
       return Align(
         alignment: Alignment.center,
         heightFactor: 1,
@@ -248,45 +363,9 @@ class _AttachmentFrameState extends State<_AttachmentFrame> {
                       start: compactControls ? 0 : null,
                       end: compactControls ? null : 0,
                       top: 0,
-                      child: PopupMenuButton<String>(
-                        key: ValueKey('attachment_options_${_data['id']}'),
-                        tooltip: context.l10n.inNoteImage,
-                        icon: const Icon(Icons.more_horiz),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.surface.withValues(alpha: 0.95),
-                        ),
-                        onOpened: () {
-                          _menuOpen = true;
-                          _hideTimer?.cancel();
-                        },
-                        onCanceled: () {
-                          _menuOpen = false;
-                          _scheduleHide();
-                        },
-                        onSelected: (action) {
-                          _menuOpen = false;
-                          _scheduleHide();
-                          if (action == 'remove') {
-                            replaceNoteEmbed(
-                              widget.controller,
-                              noteAttachmentEmbedType,
-                              _data['id'] as String,
-                              null,
-                              offsetHint: widget.offset,
-                            );
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'remove',
-                            child: Text(context.l10n.removeImageReference),
-                          ),
-                        ],
-                      ),
+                      child: _imageMenu(),
                     ),
-                  if (_controlsVisible)
+                  if (_controlsVisible && !widget.readOnly)
                     PositionedDirectional(
                       end: 0,
                       bottom: 0,

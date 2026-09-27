@@ -6702,10 +6702,16 @@ abstract class AppLocalizations {
   /// **'Drag to resize image'**
   String get resizeImage;
 
+  /// No description provided for @previewImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview image'**
+  String get previewImage;
+
   /// No description provided for @removeImageReference.
   ///
   /// In en, this message translates to:
-  /// **'Remove from text'**
+  /// **'Remove'**
   String get removeImageReference;
 
   /// No description provided for @inlineAttachmentUnavailable.

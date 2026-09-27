@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/pages/content_preview_page.dart';
 import 'dart:ui' show PointerDeviceKind;
 
@@ -574,7 +576,10 @@ void main() {
         final before = tester.getRect(firstCell);
         // A diagonal drag beginning on the visible control belongs to resizing.
         final column = await tester.startGesture(
-          tester.getCenter(find.byKey(const ValueKey('table_resize_column_0'))),
+          tester.getCenter(
+                find.byKey(const ValueKey('table_resize_column_0')),
+              ) +
+              const Offset(16, 20),
           kind: kind,
         );
         await column.moveBy(const Offset(6, -50));
@@ -583,7 +588,9 @@ void main() {
         await tester.pump();
         expect(tester.getSize(firstCell).width, closeTo(before.width + 6, 0.1));
         final row = await tester.startGesture(
-          tester.getCenter(find.byKey(const ValueKey('table_resize_row_0'))),
+          // Start near the expanded hit area's edge, below the row border.
+          tester.getCenter(find.byKey(const ValueKey('table_resize_row_0'))) +
+              const Offset(20, 16),
           kind: kind,
         );
         await row.moveBy(const Offset(-60, 6));
@@ -1245,6 +1252,8 @@ Future<void> _pumpNoteEditor(
   bool readOnly = false,
   bool trashed = false,
 }) async {
+  // Browser storage initialization must run outside the fake timer clock.
+  if (kIsWeb) await tester.runAsync(fileSystem);
   final content = jsonEncode([
     {'insert': 'Interaction note'},
     {

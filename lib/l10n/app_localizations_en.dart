@@ -3756,7 +3756,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get resizeImage => 'Drag to resize image';
 
   @override
-  String get removeImageReference => 'Remove from text';
+  String get previewImage => 'Preview image';
+
+  @override
+  String get removeImageReference => 'Remove';
 
   @override
   String get inlineAttachmentUnavailable => 'Attachment unavailable';

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/pages/image_viewer.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:better_keep/components/universal_image.dart';
@@ -254,23 +255,53 @@ void main() {
         .first;
     final tableBounds = tester.getRect(find.byType(NoteTableView));
     final cellBounds = tester.getRect(firstCell);
-    expect(cellBounds.left, tableBounds.left);
-    expect(cellBounds.top, tableBounds.top);
-    expect(cellBounds.width, closeTo((tableBounds.width - 2) / 2, 0.1));
+    expect(cellBounds.left, tableBounds.left + 22);
+    expect(cellBounds.top, tableBounds.top + 22);
+    expect(cellBounds.width, closeTo((tableBounds.width - 2 - 44) / 2, 0.1));
     await tester.tap(firstCell);
     await tester.pump();
     expect(tester.getRect(firstCell), cellBounds);
-    expect(
-      tester.getRect(find.byKey(const ValueKey('table_column_0'))).top,
-      cellBounds.top,
-    );
-    expect(
-      tester.getRect(find.byKey(const ValueKey('table_row_0'))).left,
-      cellBounds.left,
-    );
+    void expectCenteredControls() {
+      final bounds = tester.getRect(firstCell);
+      for (final (axis, menuCenter, gripCenter) in [
+        ('row', bounds.centerLeft, bounds.bottomCenter),
+        ('column', bounds.topCenter, bounds.centerRight),
+      ]) {
+        final menu = find.byKey(ValueKey('table_${axis}_0'));
+        final grip = find.byKey(ValueKey('table_resize_${axis}_0'));
+        expect(tester.getCenter(menu), menuCenter);
+        expect(tester.getCenter(grip), gripCenter);
+        expect(tester.getSize(menu), const Size.square(44));
+        // The outer half of each menu must remain tappable, not clipped.
+        expect(
+          menu.hitTestable(at: const Alignment(-0.8, -0.8)),
+          findsOneWidget,
+        );
+      }
+    }
+
+    expectCenteredControls();
     expect(find.byIcon(Icons.more_horiz), findsOneWidget);
     expect(find.byIcon(Icons.more_vert), findsOneWidget);
     expect(find.byKey(const ValueKey('table_row_1')), findsNothing);
+    final rowGrip = find.byKey(const ValueKey('table_resize_row_0'));
+    final columnGrip = find.byKey(const ValueKey('table_resize_column_0'));
+    expect(tester.getSize(rowGrip), const Size(56, 44));
+    expect(tester.getSize(columnGrip), const Size(44, 56));
+    for (final (grip, turns) in [(rowGrip, 0), (columnGrip, 1)]) {
+      final rotated = tester.widget<RotatedBox>(
+        find.descendant(of: grip, matching: find.byType(RotatedBox)),
+      );
+      expect(rotated.quarterTurns, turns);
+      final face = rotated.child! as Container;
+      expect(face.constraints!.biggest, const Size(28, 5));
+    }
+    AppState.tableHeaders = true;
+    await tester.pumpAndSettle();
+    expectCenteredControls();
+    AppState.tableHeaders = false;
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const ValueKey('table_row_0')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Duplicate row'));
@@ -330,10 +361,215 @@ void main() {
   });
 
   testWidgets(
-    'one attachment reference renders in text and cells and follows image-to-sketch updates',
+    'a sole cell image is centered until a paragraph is added above or below',
+    (tester) async {
+      final attachment = NoteAttachment.sketch(SketchData(aspectRatio: 4));
+      final reference = {...attachmentReference(attachment), 'id': 'centered'};
+      final table = NoteTableData(rows: 1, columns: 1, rowHeights: {0: 260});
+      final note = Note(attachments: [attachment]);
+      final root = _controller(table);
+      final editing = NoteEmbedEditing()..rootController = root;
+      final focus = FocusNode();
+      addTearDown(() {
+        root.dispose();
+        editing.dispose();
+        focus.dispose();
+      });
+      await tester.pumpWidget(_editor(root, editing, focus, note: note));
+      await tester.pumpAndSettle();
+      final cellFinder = find.descendant(
+        of: find.byType(NoteTableView),
+        matching: find.byType(QuillEditor),
+      );
+      final cell = tester.widget<QuillEditor>(cellFinder);
+      insertNoteEmbed(
+        cell.controller,
+        noteAttachmentEmbedType,
+        reference,
+        block: true,
+      );
+      expect(cell.controller.document.toPlainText(), '\uFFFC\n');
+      await tester.pumpAndSettle();
+      final saved = jsonEncode(root.document.toDelta().toJson());
+      final image = find.byKey(const ValueKey('attachment_image_centered'));
+      void expectCentered() {
+        final center = tester.getCenter(cellFinder);
+        expect(tester.getCenter(image).dx, closeTo(center.dx, 0.5));
+        expect(tester.getCenter(image).dy, closeTo(center.dy, 0.5));
+        expect(
+          tester
+              .widget<QuillEditor>(cellFinder)
+              .scrollController
+              .position
+              .maxScrollExtent,
+          closeTo(0, 0.5),
+        );
+      }
+
+      expectCentered();
+      // The space around a centered image still focuses text editing.
+      await tester.tapAt(tester.getTopLeft(cellFinder) + const Offset(16, 30));
+      await tester.pumpAndSettle();
+      expect(cell.focusNode.hasPrimaryFocus, isTrue);
+      expect(find.text('Preview image'), findsNothing);
+      expect(jsonEncode(root.document.toDelta().toJson()), saved);
+      for (final before in [true, false]) {
+        for (final text in ['\n', 'Surrounding text\n']) {
+          root.document.history.clear();
+          cell.controller.replaceText(before ? 0 : 1, 0, text, null);
+          await tester.pumpAndSettle();
+          expect(
+            tester.getCenter(image).dy,
+            lessThan(tester.getCenter(cellFinder).dy - 20),
+          );
+          expect(cell.controller.document.toPlainText(), contains(text));
+          if (text == '\n') {
+            root.document.history.clear();
+            cell.controller.updateSelection(
+              TextSelection.collapsed(offset: before ? 1 : 2),
+              ChangeSource.local,
+            );
+            Actions.invoke(
+              cell.focusNode.context!,
+              const DeleteCharacterIntent(forward: false),
+            );
+            await tester.pumpAndSettle();
+            expect(cell.controller.document.toPlainText(), '\uFFFC\n');
+            expectCentered();
+            root.undo();
+            await tester.pumpAndSettle();
+            expect(
+              cell.controller.document.toPlainText(),
+              before ? '\n\uFFFC\n' : '\uFFFC\n\n',
+            );
+            root.redo();
+          } else {
+            root.undo();
+          }
+          await tester.pumpAndSettle();
+          expectCentered();
+          expect(jsonEncode(root.document.toDelta().toJson()), saved);
+        }
+      }
+      // The last column's matching grip remains usable beyond its border.
+      cell.focusNode.requestFocus();
+      await tester.pumpAndSettle();
+      root.document.history.clear();
+      final width = tester.getSize(cellFinder).width;
+      final viewport = find.byKey(ValueKey('table_horizontal_${table.id}'));
+      final horizontal = tester
+          .widget<SingleChildScrollView>(viewport)
+          .controller!;
+      expect(horizontal.position.maxScrollExtent, 0);
+      await tester.dragFrom(
+        tester.getCenter(find.byKey(const ValueKey('table_resize_column_0'))) +
+            const Offset(16, 20),
+        const Offset(24, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getSize(cellFinder).width, closeTo(width + 24, 0.1));
+      expectCentered();
+      expect(horizontal.offset, 0);
+      root.undo();
+      await tester.pumpAndSettle();
+      expectCentered();
+      expect(jsonEncode(root.document.toDelta().toJson()), saved);
+      root.readOnly = true;
+      await tester.pumpWidget(_editor(root, editing, focus, note: note));
+      await tester.pumpAndSettle();
+      expectCentered();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'tapping a sole cell image selects the cell and reveals table controls',
+    (tester) async {
+      final attachment = NoteAttachment.sketch(SketchData(aspectRatio: 4));
+      final reference = {...attachmentReference(attachment), 'id': 'control'};
+      final table = NoteTableData(rows: 2, columns: 2, rowHeights: {0: 200})
+          .withCell(0, 0, [
+            {
+              'insert': {noteAttachmentEmbedType: reference},
+            },
+            {'insert': '\n'},
+          ]);
+      final note = Note(attachments: [attachment]);
+      final root = _controller(table);
+      final editing = NoteEmbedEditing()..rootController = root;
+      final focus = FocusNode();
+      addTearDown(() {
+        root.dispose();
+        editing.dispose();
+        focus.dispose();
+      });
+      await tester.pumpWidget(_editor(root, editing, focus, note: note));
+      await tester.pumpAndSettle();
+      final image = find.byKey(const ValueKey('attachment_image_control'));
+      expect(image, findsOneWidget);
+      final cellFinder = find
+          .descendant(
+            of: find.byType(NoteTableView),
+            matching: find.byType(QuillEditor),
+          )
+          .first;
+      expect(find.byKey(const ValueKey('table_row_0')), findsNothing);
+      expect(find.byKey(const ValueKey('table_column_0')), findsNothing);
+
+      // The note editor owns focus while the user picks the cell by its image.
+      focus.requestFocus();
+      await tester.pump();
+
+      await tester.tap(image);
+      await tester.pumpAndSettle();
+      // The first tap only selects the cell; the image menu stays closed.
+      expect(find.text('Preview image'), findsNothing);
+      expect(
+        editing.controller,
+        same(tester.widget<QuillEditor>(cellFinder).controller),
+      );
+      expect(find.byKey(const ValueKey('table_row_0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('table_column_0')), findsOneWidget);
+
+      // A second tap on the now-active cell opens the image menu without moving
+      // focus, so the cell stays selected when the menu is dismissed.
+      await tester.tap(image);
+      await tester.pumpAndSettle();
+      expect(find.text('Preview image'), findsOneWidget);
+      expect(focus.hasPrimaryFocus, isTrue);
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+      expect(find.text('Preview image'), findsNothing);
+      expect(find.byKey(const ValueKey('table_row_0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('table_column_0')), findsOneWidget);
+      expect(
+        editing.controller,
+        same(tester.widget<QuillEditor>(cellFinder).controller),
+      );
+
+      // Read-only cells cannot be selected, so the image menu opens directly
+      // and no table controls appear.
+      root.readOnly = true;
+      await tester.pumpWidget(_editor(root, editing, focus, note: note));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('attachment_image_control')));
+      await tester.pumpAndSettle();
+      expect(find.text('Preview image'), findsOneWidget);
+      expect(find.byKey(const ValueKey('table_row_0')), findsNothing);
+      expect(find.byKey(const ValueKey('table_column_0')), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'cell images fit remaining text height, preview, and follow attachment updates',
     (tester) async {
       final bytes = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAECAYAAABP2FU6AAAAEElEQVR4nGPQW7DiPwMqAQBdZgnVHK1lFQAAAABJRU5ErkJggg==',
       );
       UniversalImageCache.instance.put('/old.png', '/old.png', bytes);
       UniversalImageCache.instance.put('/new.png', '/new.png', bytes);
@@ -347,13 +583,25 @@ void main() {
           lastModified: '1',
         ),
       );
-      final reference = attachmentReference(attachment);
-      final table = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
-        {
-          'insert': {noteAttachmentEmbedType: reference},
-        },
-        {'insert': '\n'},
-      ]);
+      final reference = {...attachmentReference(attachment), 'width': 120.0};
+      final table = NoteTableData(rows: 1, columns: 1, rowHeights: {0: 280})
+          .withCell(0, 0, [
+            {
+              'insert': 'A rich heading',
+              'attributes': {'bold': true, 'size': 'large'},
+            },
+            {'insert': '\nWrapped text before the images\n'},
+            {
+              'insert': {noteAttachmentEmbedType: reference},
+            },
+            {'insert': '\n'},
+            {
+              'insert': {
+                noteAttachmentEmbedType: {...reference, 'id': 'cell-second'},
+              },
+            },
+            {'insert': '\n'},
+          ]);
       final root = _controller(table);
       root.replaceText(1, 0, '\n', null);
       root.replaceText(
@@ -363,7 +611,7 @@ void main() {
         null,
       );
       final note = Note(attachments: [attachment]);
-      final editing = NoteEmbedEditing();
+      final editing = NoteEmbedEditing()..rootController = root;
       final focus = FocusNode();
       addTearDown(() {
         root.dispose();
@@ -371,7 +619,8 @@ void main() {
         focus.dispose();
       });
       await tester.pumpWidget(_editor(root, editing, focus, note: note));
-      expect(find.byType(UniversalImage), findsNWidgets(2));
+      await tester.pumpAndSettle();
+      expect(find.byType(UniversalImage), findsNWidgets(3));
       for (final element in find.byType(UniversalImage).evaluate()) {
         expect((element.widget as UniversalImage).path, '/old.png');
       }
@@ -385,19 +634,90 @@ void main() {
         of: cellFinder,
         matching: find.byType(UniversalImage),
       );
-      void expectImageFits() {
-        final bounds = tester.getRect(cellFinder).deflate(2);
-        final image = tester.getRect(imageFinder);
-        expect(bounds.contains(image.topLeft), isTrue);
-        expect(bounds.contains(image.bottomRight), isTrue);
+      final cell = tester.widget<QuillEditor>(cellFinder);
+      void expectImagesFit() {
+        final bounds = tester.getRect(cellFinder).deflate(7.9);
+        for (final element in imageFinder.evaluate()) {
+          final image = tester.getRect(find.byWidget(element.widget));
+          expect(
+            bounds.contains(image.topLeft),
+            isTrue,
+            reason: '$image in $bounds',
+          );
+          expect(
+            bounds.contains(image.bottomRight),
+            isTrue,
+            reason: '$image in $bounds',
+          );
+          expect(image.width, closeTo(image.height / 4, 0.1));
+        }
+        expect(cell.scrollController.position.maxScrollExtent, closeTo(0, 0.5));
       }
 
-      expectImageFits();
+      expectImagesFit();
+      final originalHeight = tester.getSize(imageFinder.first).height;
       final saved = jsonEncode(root.document.toDelta().toJson());
+      root.document.history.clear();
+      cell.controller.replaceText(0, 0, 'Extra line\n', null);
+      await tester.pumpAndSettle();
+      expectImagesFit();
+      expect(
+        tester.getSize(imageFinder.first).height,
+        lessThan(originalHeight),
+      );
+      root.undo();
+      await tester.pumpAndSettle();
+      expectImagesFit();
+      expect(
+        tester.getSize(imageFinder.first).height,
+        closeTo(originalHeight, 0.1),
+      );
+      expect(jsonEncode(root.document.toDelta().toJson()), saved);
+
+      // The final row's hit area remains usable below its bottom border.
+      await tester.tapAt(tester.getTopLeft(cellFinder) + const Offset(20, 20));
+      await tester.pumpAndSettle();
+      root.document.history.clear();
+      await tester.dragFrom(
+        tester.getCenter(find.byKey(const ValueKey('table_resize_row_0'))) +
+            const Offset(20, 16),
+        const Offset(0, 40),
+      );
+      await tester.pumpAndSettle();
+      expectImagesFit();
+      expect(
+        tester.getSize(imageFinder.first).height,
+        closeTo(originalHeight + 20, 0.1),
+      );
+      root.undo();
+      await tester.pumpAndSettle();
+      expectImagesFit();
+      expect(jsonEncode(root.document.toDelta().toJson()), saved);
+
+      await tester.tap(imageFinder.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Preview image'), findsOneWidget);
+      expect(find.text('Remove'), findsOneWidget);
+      expect(
+        find.byKey(ValueKey('attachment_resize_${reference['id']}')),
+        findsNothing,
+      );
+      await tester.tap(find.text('Preview image'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<ImageViewer>(find.byType(ImageViewer)).image.src,
+        '/old.png',
+      );
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(find.byIcon(Icons.delete), findsNothing);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(jsonEncode(root.document.toDelta().toJson()), saved);
       attachment.type = AttachmentType.sketch;
       attachment.sketch = SketchData(
         previewImage: '/new.png',
         strokesFilePath: '/strokes.json',
+        aspectRatio: 0.25,
       );
       attachment.image = null;
       await tester.pumpWidget(_editor(root, editing, focus, note: note));
@@ -405,10 +725,26 @@ void main() {
         expect((element.widget as UniversalImage).path, '/new.png');
       }
       expect(jsonEncode(root.document.toDelta().toJson()), saved);
-      expectImageFits();
+      await tester.pumpAndSettle();
+      expectImagesFit();
+      root.readOnly = true;
+      await tester.pumpWidget(_editor(root, editing, focus, note: note));
+      await tester.pumpAndSettle();
+      await tester.tap(imageFinder.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Remove'), findsNothing);
+      await tester.tap(find.text('Preview image'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<ImageViewer>(find.byType(ImageViewer)).image.src,
+        '/new.png',
+      );
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(jsonEncode(root.document.toDelta().toJson()), saved);
       note.attachments.clear();
       await tester.pumpWidget(_editor(root, editing, focus, note: note));
-      expect(find.byTooltip('Attachment unavailable'), findsNWidgets(2));
+      expect(find.byTooltip('Attachment unavailable'), findsNWidgets(3));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       // Quill defers web caret work for the keyboard animation.
@@ -417,10 +753,9 @@ void main() {
   );
 
   testWidgets(
-    'attachment resizing preserves block layout, aspect ratio, and undo in notes and cells',
+    'attachment resizing preserves block layout, aspect ratio, and undo outside tables',
     (tester) async {
-      for (final inCell in [false, true]) {
-        final ratio = inCell ? 4.0 : 1.0;
+      for (final ratio in [1.0, 4.0]) {
         final note = Note(
           attachments: [
             NoteAttachment.sketch(SketchData(aspectRatio: ratio))
@@ -440,47 +775,28 @@ void main() {
           },
           {'insert': ' after\n'},
         ];
-        final root = inCell
-            ? _controller(
-                NoteTableData(
-                  rows: 1,
-                  columns: 1,
-                  rowHeights: {0: 220},
-                ).withCell(0, 0, delta),
-              )
-            : QuillController(
-                document: documentFromJsonSafe(delta),
-                selection: const TextSelection.collapsed(offset: 0),
-              );
+        final root = QuillController(
+          document: documentFromJsonSafe(delta),
+          selection: const TextSelection.collapsed(offset: 0),
+        );
         final editing = NoteEmbedEditing()..rootController = root;
         final focus = FocusNode();
         await tester.pumpWidget(
           _editor(root, editing, focus, note: note, rebuildOnController: false),
         );
         await tester.pumpAndSettle();
-        final owner = inCell
-            ? tester
-                  .widget<QuillEditor>(
-                    find
-                        .descendant(
-                          of: find.byType(NoteTableView),
-                          matching: find.byType(QuillEditor),
-                        )
-                        .first,
-                  )
-                  .controller
-            : root;
+
         final image = find.byKey(const ValueKey('attachment_image_resizable'));
         final originalSize = tester.getSize(image);
         expect(originalSize, Size(120, 120 / ratio));
-        expect(owner.document.toPlainText(), 'Before \n\uFFFC\n after\n');
+        expect(root.document.toPlainText(), 'Before \n\uFFFC\n after\n');
         final handle = find.byKey(
           const ValueKey('attachment_resize_resizable'),
         );
         expect(handle, findsNothing);
         final ownerEditor = find.byWidgetPredicate(
           (widget) =>
-              widget is QuillEditor && identical(widget.controller, owner),
+              widget is QuillEditor && identical(widget.controller, root),
         );
         expect(
           tester.getCenter(image).dx,
@@ -489,7 +805,7 @@ void main() {
         await tester.tap(image);
         await tester.pumpAndSettle();
         expect(handle, findsOneWidget);
-        expect(find.text('Remove from text'), findsNothing);
+        expect(find.text('Remove'), findsNothing);
         await tester.pump(const Duration(seconds: 4));
         expect(handle, findsNothing);
         final imageFocus = Focus.of(tester.element(image));
@@ -509,8 +825,8 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.byType(CheckedPopupMenuItem<String>), findsNothing);
-        expect(find.text('Remove from text'), findsOneWidget);
-        await tester.tap(find.text('Remove from text'));
+        expect(find.text('Remove'), findsOneWidget);
+        await tester.tap(find.text('Remove'));
         await tester.pumpAndSettle();
         expect(image, findsNothing);
         root.undo();
@@ -548,13 +864,13 @@ void main() {
         final resized = tester.getSize(image);
         expect(resized.width, greaterThan(originalSize.width));
         expect(resized.height, resized.width / ratio);
-        final saved = owner.document.toDelta().toJson().firstWhere(
+        final saved = root.document.toDelta().toJson().firstWhere(
           (op) => op['insert'] is Map,
         )['insert'][noteAttachmentEmbedType];
         expect(saved['width'], resized.width);
         expect(saved['src'], reference['src']);
         expect(saved['placement'], 'inline');
-        expect(owner.document.toPlainText(), 'Before \n\uFFFC\n after\n');
+        expect(root.document.toPlainText(), 'Before \n\uFFFC\n after\n');
         root.undo();
         await tester.pumpAndSettle();
         expect(jsonEncode(root.document.toDelta().toJson()), before);

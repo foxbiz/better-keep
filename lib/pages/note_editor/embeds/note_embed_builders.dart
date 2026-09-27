@@ -4,6 +4,7 @@ import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_table_embed.dart';
 import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 
@@ -14,6 +15,8 @@ List<EmbedBuilder> noteEmbedBuilders({
   double? mediaMaxHeight,
   double? tablePreviewMaxHeight,
   bool includeTables = true,
+  Map<int, GlobalKey>? cellImageFrames,
+  VoidCallback? onEmbedSelect,
 }) => [
   if (includeTables)
     NoteTableEmbedBuilder(
@@ -26,6 +29,8 @@ List<EmbedBuilder> noteEmbedBuilders({
     inlineWidth: inlineWidth,
     mediaMaxHeight: mediaMaxHeight,
     editing: editing,
+    cellImageFrames: cellImageFrames,
+    onSelect: onEmbedSelect,
   ),
   ...kIsWeb
       ? FlutterQuillEmbeds.editorWebBuilders()

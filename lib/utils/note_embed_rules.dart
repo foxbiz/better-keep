@@ -50,17 +50,18 @@ class PreserveNoteBlockLineRule extends DeleteRule {
     if (len == null || len < 1) return null;
     final end = index + len;
     final keepFirst =
-        isNoteBlock(_at(document, index - 1)) && _at(document, index) == '\n';
+        isNoteBlock(_at(document, index - 1)) &&
+        _at(document, index) == '\n' &&
+        _at(document, end) != '\n';
     final keepLast =
         isNoteBlock(_at(document, end)) &&
         index > 0 &&
         _at(document, index - 1) != '\n' &&
         _at(document, end - 1) == '\n';
     if (!keepFirst && !keepLast) return null;
-    final keep = keepFirst && keepLast && len > 1 ? 2 : 1;
     return Delta()
       ..retain(index + (keepFirst ? 1 : 0))
-      ..delete(len - keep);
+      ..delete(len - 1);
   }
 }
 

@@ -49,6 +49,7 @@ class ImageViewer extends StatefulWidget {
   final NoteImage image;
   final NoteAttachment? attachment;
   final String? heroTag;
+  final bool previewOnly;
 
   const ImageViewer({
     super.key,
@@ -56,6 +57,7 @@ class ImageViewer extends StatefulWidget {
     required this.image,
     this.attachment,
     this.heroTag,
+    this.previewOnly = false,
   });
 
   @override
@@ -79,18 +81,20 @@ class _ImageViewerState extends State<ImageViewer> {
       appBar: AppBar(
         backgroundColor: backgroundColor,
         leading: BackButton(onPressed: () => Navigator.pop(context)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: _onScribble,
-            tooltip: context.l10n.scribble,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: _onDelete,
-            tooltip: context.l10n.delete,
-          ),
-        ],
+        actions: widget.previewOnly
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _onScribble,
+                  tooltip: context.l10n.scribble,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: _onDelete,
+                  tooltip: context.l10n.delete,
+                ),
+              ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

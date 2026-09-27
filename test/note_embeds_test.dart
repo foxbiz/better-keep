@@ -263,6 +263,58 @@ void main() {
     );
   }
 
+  test('deleting blank paragraphs keeps only required block separators', () {
+    for (final embed in [
+      {NoteTableData.type: NoteTableData(rows: 1, columns: 1).toJson()},
+      {
+        noteAttachmentEmbedType: {
+          'id': 'ref',
+          'src': 'attachment://image',
+          'placement': 'block',
+        },
+      },
+    ]) {
+      final controller = NoteEditorController(
+        document: Document.fromDelta(
+          Delta()
+            ..insert('Before\n\n')
+            ..insert(embed)
+            ..insert('\n\n')
+            ..insert(embed)
+            ..insert('\n\nAfter\n'),
+        )..setCustomRules(customQuillRules),
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+      addTearDown(controller.dispose);
+      controller.replaceText(6, 2, '', null);
+      expect(
+        controller.document.toPlainText(),
+        'Before\n\uFFFC\n\n\uFFFC\n\nAfter\n',
+      );
+      controller.replaceText(8, 2, '', null);
+      expect(
+        controller.document.toPlainText(),
+        'Before\n\uFFFC\n\uFFFC\n\nAfter\n',
+      );
+      controller.replaceText(10, 1, '', null);
+      const withoutGaps = 'Before\n\uFFFC\n\uFFFC\nAfter\n';
+      expect(controller.document.toPlainText(), withoutGaps);
+      // A single separator still prevents merging text or neighboring blocks.
+      for (final offset in [6, 8, 10]) {
+        controller.replaceText(offset, 1, '', null);
+        expect(controller.document.toPlainText(), withoutGaps);
+      }
+      expect(
+        controller.document
+            .toDelta()
+            .toList()
+            .where((op) => op.data is Map)
+            .map((op) => op.data),
+        [embed, embed],
+      );
+    }
+  });
+
   test('pasted embeds with the same payload edit their own occurrence', () {
     final table = NoteTableData(rows: 1, columns: 1);
     final controller = QuillController(
@@ -338,6 +390,22 @@ void main() {
       );
       expect(reference['placement'], 'block');
       expect(controller.document.toPlainText(), 'Before\n\uFFfc\nAfter\n');
+      for (final (text, start, end, expected) in [
+        ('Before\n', 6, 6, 'Before\n\uFFFC\n'),
+        ('Before\n\nAfter\n', 7, 7, 'Before\n\uFFFC\nAfter\n'),
+        ('Before\nAfter\n', 7, 12, 'Before\n\uFFFC\n'),
+      ]) {
+        final cell = NoteEditorController(
+          document: Document.fromDelta(Delta()..insert(text)),
+          selection: TextSelection(baseOffset: start, extentOffset: end),
+          allowTables: false,
+        );
+        addTearDown(cell.dispose);
+        insertNoteEmbed(cell, noteAttachmentEmbedType, reference, block: true);
+        expect(cell.document.toPlainText(), expected);
+        cell.undo();
+        expect(cell.document.toPlainText(), text);
+      }
       controller.readOnly = true;
       replaceNoteEmbed(
         controller,

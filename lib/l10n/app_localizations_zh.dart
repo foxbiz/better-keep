@@ -3568,7 +3568,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get resizeImage => '拖动以调整图片大小';
 
   @override
-  String get removeImageReference => '从正文移除';
+  String get previewImage => '预览图片';
+
+  @override
+  String get removeImageReference => '移除';
 
   @override
   String get inlineAttachmentUnavailable => '附件不可用';
