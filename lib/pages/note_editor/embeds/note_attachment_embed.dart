@@ -215,9 +215,8 @@ class _AttachmentFrameState extends State<_AttachmentFrame> {
         requestFocus: requestFocus,
         icon: child == null ? const Icon(Icons.more_horiz) : null,
         style: IconButton.styleFrom(
-          backgroundColor: Theme.of(
-            context,
-          ).colorScheme.surface.withValues(alpha: 0.95),
+          backgroundColor: Theme.of(context).colorScheme.surface
+              .withValues(alpha: 0.95),
         ),
         onOpened: () {
           _menuOpen = true;
@@ -426,14 +425,13 @@ class _AttachmentFrameState extends State<_AttachmentFrame> {
                                 width: 28,
                                 height: 28,
                                 decoration: BoxDecoration(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.surface.withValues(alpha: 0.95),
+                                  color: Theme.of(context).colorScheme.surface
+                                      .withValues(alpha: 0.95),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outlineVariant,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant,
                                   ),
                                 ),
                                 child: Icon(
@@ -513,9 +511,9 @@ Future<NoteAttachment?> showNoteAttachmentPicker(
                         ? context.l10n.sketch
                         : context.l10n.image,
                     child: Material(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(10),
                       clipBehavior: Clip.antiAlias,
                       child: InkWell(

@@ -272,80 +272,76 @@ void main() {
       expect(result, isNull);
     });
 
-    test(
-      'integration: inserting newline before heading resets original to plain text',
-      () {
-        // Create document with h1 heading
-        document = Document.fromJson([
-          {'insert': 'Title'},
-          {
-            'insert': '\n',
-            'attributes': {'header': 1},
-          },
-        ]);
-        document.setCustomRules(customQuillRules);
+    test('integration: inserting newline before heading resets original to plain text', () {
+      // Create document with h1 heading
+      document = Document.fromJson([
+        {'insert': 'Title'},
+        {
+          'insert': '\n',
+          'attributes': {'header': 1},
+        },
+      ]);
+      document.setCustomRules(customQuillRules);
 
-        // Simulate inserting at start of document
-        document.insert(0, '\n');
+      // Simulate inserting at start of document
+      document.insert(0, '\n');
 
-        // Get the resulting plain text - should now have newline before Title
-        final plainText = document.toPlainText();
-        expect(plainText, '\nTitle\n');
+      // Get the resulting plain text - should now have newline before Title
+      final plainText = document.toPlainText();
+      expect(plainText, '\nTitle\n');
 
-        // Get the resulting delta
-        final delta = document.toDelta();
-        final ops = delta.toList();
+      // Get the resulting delta
+      final delta = document.toDelta();
+      final ops = delta.toList();
 
-        // After the rule:
-        // - First line is empty with heading (but empty so visually ignored)
-        // - Second line is "Title" with NO heading (reset to plain text)
-        //
-        // Expected delta structure:
-        // [insert: '\n' with header:1], [insert: 'Title'], [insert: '\n' without header]
+      // After the rule:
+      // - First line is empty with heading (but empty so visually ignored)
+      // - Second line is "Title" with NO heading (reset to plain text)
+      //
+      // Expected delta structure:
+      // [insert: '\n' with header:1], [insert: 'Title'], [insert: '\n' without header]
 
-        // Find heading attributes
-        bool firstNewlineHasHeader = false;
-        bool secondNewlineHasHeader = false;
-        int newlineIndex = 0;
+      // Find heading attributes
+      bool firstNewlineHasHeader = false;
+      bool secondNewlineHasHeader = false;
+      int newlineIndex = 0;
 
-        for (final op in ops) {
-          if (op.data is String) {
-            final data = op.data as String;
-            for (int i = 0; i < data.length; i++) {
-              if (data[i] == '\n') {
-                newlineIndex++;
-                final hasHeader =
-                    op.attributes?.containsKey('header') == true &&
-                    op.attributes!['header'] != null;
-                if (newlineIndex == 1) {
-                  firstNewlineHasHeader = hasHeader;
-                } else if (newlineIndex == 2) {
-                  secondNewlineHasHeader = hasHeader;
-                }
+      for (final op in ops) {
+        if (op.data is String) {
+          final data = op.data as String;
+          for (int i = 0; i < data.length; i++) {
+            if (data[i] == '\n') {
+              newlineIndex++;
+              final hasHeader =
+                  op.attributes?.containsKey('header') == true &&
+                  op.attributes!['header'] != null;
+              if (newlineIndex == 1) {
+                firstNewlineHasHeader = hasHeader;
+              } else if (newlineIndex == 2) {
+                secondNewlineHasHeader = hasHeader;
               }
             }
           }
         }
+      }
 
-        // First newline (empty line) should have heading
-        expect(
-          firstNewlineHasHeader,
-          isTrue,
-          reason: 'First newline (empty line) should have heading attribute',
-        );
+      // First newline (empty line) should have heading
+      expect(
+        firstNewlineHasHeader,
+        isTrue,
+        reason: 'First newline (empty line) should have heading attribute',
+      );
 
-        // Second newline (after "Title") should NOT have heading - it was reset
-        expect(
-          secondNewlineHasHeader,
-          isFalse,
-          reason:
-              'Second newline (Title line) should NOT have heading attribute',
-        );
+      // Second newline (after "Title") should NOT have heading - it was reset
+      expect(
+        secondNewlineHasHeader,
+        isFalse,
+        reason: 'Second newline (Title line) should NOT have heading attribute',
+      );
 
-        // Check that Title is still present
-        expect(plainText.contains('Title'), isTrue);
-      },
-    );
+      // Check that Title is still present
+      expect(plainText.contains('Title'), isTrue);
+    });
 
     test('integration: inserting newline after heading preserves behavior', () {
       // Create document with h1 heading followed by plain text

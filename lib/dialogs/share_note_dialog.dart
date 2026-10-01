@@ -475,9 +475,8 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
           _shareUrls.remove(share.id);
         });
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(l10n.linkRevoked)));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(l10n.linkRevoked)));
         }
       } catch (error, stackTrace) {
         AppLogger.error('Failed to revoke share link', error, stackTrace);
@@ -798,9 +797,8 @@ class _SecureLinkDialogState extends State<_SecureLinkDialog> {
   void _copyLink() {
     if (_shareResult != null) {
       Clipboard.setData(ClipboardData(text: _shareResult!.shareUrl));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.l10n.linkCopied)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(context.l10n.linkCopied)));
     }
   }
 

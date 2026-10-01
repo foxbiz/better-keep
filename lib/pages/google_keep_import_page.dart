@@ -167,9 +167,8 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
           const SizedBox(height: 16),
           Text(
             context.l10n.googleKeepImportBeforeStart,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(context.l10n.googleKeepImportInstructions),
@@ -237,9 +236,8 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
           const SizedBox(height: 24),
           Text(
             context.l10n.googleKeepSafetyLimits,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
           Text(context.l10n.googleKeepSafetyDescription),
@@ -288,9 +286,8 @@ class _ImportSummary extends StatelessWidget {
           children: [
             Text(
               context.l10n.googleKeepImportComplete,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Wrap(

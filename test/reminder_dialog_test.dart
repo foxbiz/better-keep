@@ -77,9 +77,8 @@ void main() {
     );
 
     final context = tester.element(find.byType(DatetimePicker));
-    final today = MaterialLocalizations.of(
-      context,
-    ).formatMediumDate(DateTime.now());
+    final today = MaterialLocalizations.of(context)
+        .formatMediumDate(DateTime.now());
     expect(find.text('Notification'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
     expect(find.text(today), findsOneWidget);
@@ -213,9 +212,8 @@ void main() {
     );
 
     final context = tester.element(find.byType(DatetimePicker));
-    final formattedDate = MaterialLocalizations.of(
-      context,
-    ).formatMediumDate(customDate);
+    final formattedDate = MaterialLocalizations.of(context)
+        .formatMediumDate(customDate);
     expect(find.text('Custom'), findsWidgets);
     expect(find.text(formattedDate), findsOneWidget);
   });

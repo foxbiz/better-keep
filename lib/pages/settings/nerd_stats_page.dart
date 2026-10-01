@@ -852,9 +852,9 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(7),
                             ),
@@ -953,9 +953,8 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                                                     fontSize: 10,
                                                     fontFamily: 'monospace',
                                                     color: value == null
-                                                        ? Theme.of(
-                                                            context,
-                                                          ).hintColor
+                                                        ? Theme.of(context)
+                                                              .hintColor
                                                         : null,
                                                   ),
                                                   maxLines: 2,

@@ -923,9 +923,8 @@ class MarkdownImportService {
 
     while (remaining.isNotEmpty) {
       // Try to match bold (**text** or __text__)
-      final boldMatch = RegExp(
-        r'\*\*(.+?)\*\*|__(.+?)__',
-      ).firstMatch(remaining);
+      final boldMatch = RegExp(r'\*\*(.+?)\*\*|__(.+?)__')
+          .firstMatch(remaining);
 
       // Try to match italic (*text* or _text_)
       final italicMatch = RegExp(
@@ -936,9 +935,8 @@ class MarkdownImportService {
       final codeMatch = RegExp(r'`([^`]+)`').firstMatch(remaining);
 
       // Try to match links [text](url) - text can span multiple lines
-      final linkMatch = RegExp(
-        r'\[([^\]]+)\]\(([^)\s]+)\)',
-      ).firstMatch(remaining);
+      final linkMatch = RegExp(r'\[([^\]]+)\]\(([^)\s]+)\)')
+          .firstMatch(remaining);
 
       // Find earliest match
       Match? earliest;

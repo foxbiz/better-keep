@@ -225,9 +225,8 @@ void main() {
         ..raw['/docs/empty.wav'] = Uint8List.fromList([0x45, 0x4e, 0x43, 0x52])
         ..decrypted['/docs/empty.wav'] = Uint8List(0);
       await expectLater(
-        AudioPlaybackSourceService(
-          operations: empty.operations,
-        ).resolve('/docs/empty.wav', protectedSource: true),
+        AudioPlaybackSourceService(operations: empty.operations)
+            .resolve('/docs/empty.wav', protectedSource: true),
         throwsA(
           isA<AudioPlaybackSourceException>().having(
             (error) => error.code,

@@ -222,9 +222,9 @@ class RichChecklistDocument {
           .toList(growable: false);
       final updated = [...items]..removeRange(index, end);
       updated.insertAll(parentEnd - moving.length, moving);
-      return RichChecklistDocument(
-        updated,
-      )._reconcileParentCompletion()._activeRootsFirst();
+      return RichChecklistDocument(updated)
+          ._reconcileParentCompletion()
+          ._activeRootsFirst();
     }
     return _shiftSubtree(index, -1);
   }
@@ -249,9 +249,9 @@ class RichChecklistDocument {
         ),
       );
     }
-    return RichChecklistDocument(
-      updated,
-    )._reconcileParentCompletion()._activeRootsFirst();
+    return RichChecklistDocument(updated)
+        ._reconcileParentCompletion()
+        ._activeRootsFirst();
   }
 
   RichChecklistDocument clearCompleted({
@@ -324,9 +324,9 @@ class RichChecklistDocument {
     final updated = [...items]
       ..[previousIndex] = previous.copyWith(inlineDelta: merged.toJson())
       ..removeAt(index);
-    return RichChecklistDocument(
-      updated,
-    )._reconcileParentCompletion()._activeRootsFirst();
+    return RichChecklistDocument(updated)
+        ._reconcileParentCompletion()
+        ._activeRootsFirst();
   }
 
   RichChecklistDocument replaceItemWith({
@@ -412,9 +412,9 @@ class RichChecklistDocument {
         indent: updated[child].indent + delta,
       );
     }
-    return RichChecklistDocument(
-      updated,
-    )._reconcileParentCompletion()._activeRootsFirst();
+    return RichChecklistDocument(updated)
+        ._reconcileParentCompletion()
+        ._activeRootsFirst();
   }
 
   RichChecklistDocument _reconcileParentCompletion() {

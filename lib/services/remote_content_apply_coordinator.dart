@@ -23,12 +23,15 @@ class RemoteContentHandlingResult {
   bool get isApplied => disposition == RemoteContentHandlingDisposition.applied;
 }
 
-typedef RemoteContentAttempt =
-    Future<RemoteNoteApplyResult> Function(int resolvedLocalId);
-typedef RemoteContentLocalIdResolver =
-    Future<int> Function(RemoteContentRetryEntry? existing);
-typedef RemoteContentHandledCallback =
-    Future<void> Function(RemoteContentHandlingResult result);
+typedef RemoteContentAttempt = Future<RemoteNoteApplyResult> Function(
+  int resolvedLocalId,
+);
+typedef RemoteContentLocalIdResolver = Future<int> Function(
+  RemoteContentRetryEntry? existing,
+);
+typedef RemoteContentHandledCallback = Future<void> Function(
+  RemoteContentHandlingResult result,
+);
 
 /// Owns attempt coalescing, per-document ordering, and durable retry updates.
 class RemoteContentApplyCoordinator {

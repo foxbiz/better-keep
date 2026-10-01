@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
 import 'package:better_keep/models/app_progress.dart';

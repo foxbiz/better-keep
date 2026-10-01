@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:better_keep/utils/file_utils.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
@@ -7,8 +8,9 @@ import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:flutter/material.dart';
 
-typedef PasswordProtectedImageDecoder =
-    Future<Uint8List> Function(Uint8List protectedBytes);
+typedef PasswordProtectedImageDecoder = Future<Uint8List> Function(
+  Uint8List protectedBytes,
+);
 
 /// Global in-memory cache for image bytes to support smooth Hero animations.
 /// When an image is loaded, it's cached here so the destination Hero widget

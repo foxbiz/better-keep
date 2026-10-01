@@ -433,9 +433,9 @@ void main() {
             note.title = 'Edited new note';
             expect(await note.save(false), isPositive);
             expect(
-              (await Note.get(
-                NoteType.all,
-              )).firstWhere((saved) => saved.id == note.id).createdAt,
+              (await Note.get(NoteType.all))
+                  .firstWhere((saved) => saved.id == note.id)
+                  .createdAt,
               createdAt,
             );
           });

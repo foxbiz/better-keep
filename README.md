@@ -6,12 +6,12 @@
 
 [![Microsoft Store](https://img.shields.io/badge/Microsoft_Store-0078D4?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMyAyMyI+PHBhdGggZmlsbD0iI2YxZjFmMSIgZD0iTTAgMGgxMXYxMUgweiIvPjxwYXRoIGZpbGw9IiNmMWYxZjEiIGQ9Ik0xMiAwaDExdjExSDEyeiIvPjxwYXRoIGZpbGw9IiNmMWYxZjEiIGQ9Ik0wIDEyaDExdjExSDB6Ii8+PHBhdGggZmlsbD0iI2YxZjFmMSIgZD0iTTEyIDEyaDExdjExSDEyeiIvPjwvc3ZnPg==&logoColor=white)](https://apps.microsoft.com/detail/9PHT5C6WK6Q1)
 
-Better Keep is my take on the notes app I always wanted Google Keep to be. It keeps the familiar card-based experience, then layers on richer writing, better organization, and privacy controls while staying lightning fast and offline friendly.
+Better Keep is a private notes app for quick ideas, everyday lists, and writing that needs more room. Capture rich-text notes, photos, sketches, and voice recordings, then organize them with labels, folders, colors, and search. After signing in, local note-taking is free and works offline. Pro adds end-to-end encrypted sync across your devices and unlimited locked notes.
 
 ## Why build it?
 
-- Google Keep is great but misses power features I rely on for project planning and journaling.
-- I wanted rich-text notes, better bulk actions, and real locking with encryption without leaving the Keep workflow.
+- I wanted one place for quick capture, project planning, and personal journaling.
+- Notes should have room for rich writing and attachments, stay easy to organize, and keep working offline.
 - Flutter lets me reach mobile, desktop, and web with one codebase, so the app can live everywhere I take notes.
 
 ## Highlights for everyone
@@ -102,9 +102,12 @@ npm run dev ios
 npm run dev macos
 npm run dev web
 npm run dev windows
+npm run dev hosting
 ```
 
 - Run `npm run dev` to list the supported platforms.
+- `hosting` previews the marketing website at `http://localhost:4321`.
+  Forward Astro options with `npm run dev hosting -- --port 4322`.
 - Android and iOS automatically use the only matching device or prompt when
   several are connected. Override the choice with
   `npm run dev android -- -d <device-id>`.
@@ -183,8 +186,7 @@ already have been routed to emulators.
 
 Google login uses a deterministic `google.com` emulator identity by default, so
 it works without internet. Enable **Use real Google OAuth** in the chooser only
-when testing the external Google flow. Prepare and test the email/password
-review account using `docs/GOOGLE_PLAY_REVIEW_ACCOUNT.md`.
+when testing the external Google flow.
 
 Run the emulator configuration tests with:
 

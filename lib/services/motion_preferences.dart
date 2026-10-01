@@ -150,9 +150,8 @@ class MotionMediaQuery extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        final mediaQuery = MediaQuery.of(
-          context,
-        ).copyWith(disableAnimations: controller.reduceAnimations);
+        final mediaQuery = MediaQuery.of(context)
+            .copyWith(disableAnimations: controller.reduceAnimations);
         return MediaQuery(data: mediaQuery, child: child);
       },
     );

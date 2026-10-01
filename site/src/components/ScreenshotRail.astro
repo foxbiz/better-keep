@@ -3,23 +3,22 @@ import { galleryScreenshots } from '../data/home';
 import DeviceFrame from './DeviceFrame.astro';
 ---
 
-<section class="home-section screenshot-gallery" id="screenshots">
+<section class="home-section screenshot-gallery" id="screenshots" data-screenshot-carousel>
   <div class="container">
     <div class="section-heading section-heading--split">
       <div>
-        <p class="eyebrow">Personalize and connect</p>
-        <h2 id="screenshot-gallery-title">Set up Better Keep your way.</h2>
+        <p class="eyebrow">Inside Better Keep</p>
+        <h2 id="screenshot-gallery-title">Take a look inside the app.</h2>
       </div>
       <p>
-        Choose a theme and language, sign in the way you prefer, and manage
-        connected accounts and subscription details.
+        Write in tables, make nested checklists, record voice notes,
+        and choose a theme you like.
       </p>
     </div>
-    <p class="device-gallery__hint" id="screenshot-gallery-hint">
-      Swipe to explore the app screens
-    </p>
+    <p class="device-gallery__hint" id="screenshot-gallery-hint">Swipe to explore the app screens</p>
     <div
       class="device-gallery"
+      id="screenshot-carousel"
       role="region"
       aria-labelledby="screenshot-gallery-title"
       aria-describedby="screenshot-gallery-hint"
@@ -27,9 +26,21 @@ import DeviceFrame from './DeviceFrame.astro';
     >
       {
         galleryScreenshots.map((screenshot) => (
-          <DeviceFrame {...screenshot} class="device-gallery__item" />
+          <div class="device-gallery__item">
+            <DeviceFrame {...screenshot} />
+          </div>
         ))
       }
     </div>
+    <div class="device-gallery__controls" data-carousel-controls hidden>
+      <button type="button" data-carousel-previous aria-label="Previous screenshot" aria-controls="screenshot-carousel">←</button>
+      <button type="button" data-carousel-toggle aria-controls="screenshot-carousel">Pause</button>
+      <button type="button" data-carousel-next aria-label="Next screenshot" aria-controls="screenshot-carousel">→</button>
+    </div>
   </div>
 </section>
+
+<script>
+  import { initializeCarousel } from '../lib/screenshot-carousel.ts';
+  document.querySelectorAll<HTMLElement>('[data-screenshot-carousel]').forEach(initializeCarousel);
+</script>

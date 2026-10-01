@@ -20,7 +20,7 @@ export const GET: APIRoute = () => {
       return [
         '  <url>',
         `    <loc>${url}</loc>`,
-        `    <lastmod>${product.updatedAt}</lastmod>`,
+        `    <lastmod>${pages.find((page) => page.slug === path)?.updatedAt ?? product.updatedAt}</lastmod>`,
         '  </url>'
       ].join('\n');
     })

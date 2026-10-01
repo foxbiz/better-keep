@@ -311,9 +311,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         'v$_version',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.4),
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.4),
                         ),
                       ),
                     ),
@@ -345,9 +344,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               minHeight: 6,
-              backgroundColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.2),
+              backgroundColor: Theme.of(context).colorScheme.primary
+                  .withValues(alpha: 0.2),
             ),
           ),
         ),
@@ -361,9 +359,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             key: ValueKey(_statusProgress),
             style: TextStyle(
               fontSize: 16,
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.7),
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
           ),
@@ -380,9 +377,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           icon: const Icon(Icons.close),
           label: Text(context.l10n.cancelSignIn),
           style: TextButton.styleFrom(
-            foregroundColor: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.7),
+            foregroundColor: Theme.of(context).colorScheme.onSurface
+                .withValues(alpha: 0.7),
           ),
         ),
       ],
@@ -965,9 +961,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   void _navigateToEmailLogin() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (context) => const EmailLoginPage()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (context) => const EmailLoginPage()));
   }
 
   Widget _buildLogo({required double size}) {

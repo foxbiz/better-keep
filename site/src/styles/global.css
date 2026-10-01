@@ -15,6 +15,7 @@
   --brand-strong: #f4ff63;
   --brand-blue: #3d8ddc;
   --success: #66bb6a;
+  --danger: #ef5350;
   --canvas: #0b0b0d;
   --canvas-deep: #070708;
   --surface: #151519;
@@ -452,14 +453,13 @@ html[data-store-platform='microsoft'] .store-badge[data-store-platform='microsof
 .device-frame__hardware picture {
   display: block;
   width: 100%;
-  aspect-ratio: 1179 / 2556;
+
 }
 
 .device-frame__hardware img {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: auto;
   object-fit: contain;
 }
 
@@ -487,6 +487,13 @@ html[data-store-platform='microsoft'] .store-badge[data-store-platform='microsof
 .device-frame figcaption strong {
   color: var(--ink);
   font-size: 0.82rem;
+}
+
+.device-frame figcaption span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Homepage hero */
@@ -969,19 +976,56 @@ html[data-store-platform='microsoft'] .store-badge[data-store-platform='microsof
 
 .device-gallery {
   display: grid;
-  max-width: 920px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: start;
-  gap: clamp(1.25rem, 4vw, 2.5rem);
-  margin-inline: auto;
+  grid-auto-flow: column;
+  grid-auto-columns: 300px;
+  align-items: center;
+  gap: 2rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding-bottom: 1rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
 }
 
-.device-gallery__hint {
+.device-gallery::-webkit-scrollbar {
   display: none;
 }
 
-.device-gallery__item:nth-child(2) {
-  margin-top: 4rem;
+.device-gallery__item {
+  position: relative;
+  min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.device-gallery__hint {
+  margin: 0 0 1rem;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+
+.device-gallery__controls {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.device-gallery__controls[hidden] {
+  display: none;
+}
+
+.device-gallery__controls button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.5rem 0.9rem;
+  background: var(--canvas-deep);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
 }
 
 /* CTA and footer */
@@ -1364,6 +1408,8 @@ tr:last-child td {
 .document-body .contact-grid,
 .document-body .pricing-grid,
 .document-body .why-pay-grid,
+.document-body .why-cards,
+.document-body .free-features,
 .document-body .steps-grid,
 .document-body .data-grid,
 .document-body .features-grid {
@@ -1384,6 +1430,7 @@ tr:last-child td {
 
 .document-body .highlight-box,
 .document-body .warning-box,
+.document-body .success-box,
 .document-body .info-box,
 .document-body .notice,
 .document-body .step,
@@ -1391,6 +1438,7 @@ tr:last-child td {
 .document-body .contact-card,
 .document-body .pricing-card,
 .document-body .why-pay-card,
+.document-body .why-card,
 .document-body .policy-card,
 .document-body .free-forever {
   margin-block: 1rem;
@@ -1412,6 +1460,130 @@ tr:last-child td {
 .document-body .free-forever {
   border-color: rgba(102, 187, 106, 0.38);
   background: rgba(102, 187, 106, 0.06);
+}
+
+.document-body .success-box {
+  border-color: var(--success);
+}
+
+.document-body .steps-container .step {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.document-body .step-number {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--canvas);
+  font-weight: 800;
+}
+
+.document-body .step-content h4,
+.document-body .timeline-item h4 {
+  margin-bottom: 0.5rem;
+}
+
+.document-body .step-content p:last-child,
+.document-body .success-box p:last-child,
+.document-body .timeline-item p:last-child {
+  margin-bottom: 0;
+}
+
+.document-body .timeline {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 1.5rem;
+}
+
+.document-body .timeline-item {
+  position: relative;
+  padding-bottom: 1.5rem;
+}
+
+.document-body .timeline-item::before {
+  content: '';
+  position: absolute;
+  top: 0.5rem;
+  left: calc(-1.5rem - 7px);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.document-body .timeline-item.danger::before {
+  background: var(--danger);
+}
+
+.document-body .timeline-item.danger h4 {
+  color: var(--danger);
+}
+
+.document-body .badge-deleted {
+  background: var(--surface-raised);
+  color: var(--danger);
+  border: 1px solid currentColor;
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.document-body .why-card {
+  margin-block: 0;
+}
+
+.document-body .why-card > svg {
+  color: var(--brand);
+  margin-bottom: 0.75rem;
+}
+
+.document-body .why-card p:last-child {
+  margin-bottom: 0;
+  color: var(--ink-soft);
+}
+
+.document-body .free-feature,
+.document-body .faq-question {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.document-body .free-feature > svg {
+  flex: 0 0 20px;
+  color: var(--success);
+}
+
+.document-body .faq-question {
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 750;
+}
+
+.document-body .faq-question::-webkit-details-marker {
+  display: none;
+}
+
+.document-body .faq-question > svg {
+  flex: 0 0 20px;
+}
+
+.document-body .faq-item[open] .faq-question > svg {
+  transform: rotate(180deg);
+}
+
+.document-body .faq-answer {
+  margin-top: 1rem;
+  color: var(--ink-soft);
 }
 
 .document-body .contact-icon,
@@ -1862,6 +2034,8 @@ tr:last-child td {
   .document-body .contact-grid,
   .document-body .pricing-grid,
   .document-body .why-pay-grid,
+  .document-body .why-cards,
+  .document-body .free-features,
   .document-body .steps-grid,
   .document-body .data-grid,
   .document-body .features-grid {
@@ -1895,7 +2069,6 @@ tr:last-child td {
     padding: 0 1rem 0.75rem 0;
     scroll-padding-inline: 0 1rem;
     scroll-snap-type: x mandatory;
-    scrollbar-width: thin;
   }
 
   .device-gallery__item {
@@ -1903,10 +2076,6 @@ tr:last-child td {
     margin-inline: 0;
     scroll-snap-align: start;
     scroll-snap-stop: always;
-  }
-
-  .device-gallery__item:nth-child(2) {
-    margin-top: 0;
   }
 
   .screenshot-gallery .section-heading {
@@ -1917,7 +2086,6 @@ tr:last-child td {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    margin: 0 0 1rem;
     color: var(--ink-muted);
     font-size: 0.76rem;
     font-weight: 700;
@@ -2008,4 +2176,14 @@ tr:last-child td {
   .user-count-proof__spinner {
     animation: none !important;
   }
+}
+
+/* Platform screenshot frames */
+.device-frame--desktop .device-frame__hardware {
+  border-radius: 14px;
+  border-width: 5px;
+}
+
+.device-frame--android .device-frame__hardware {
+  border-radius: 24px;
 }

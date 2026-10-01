@@ -5,11 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 typedef NoteFindSnapshot = ({NoteSearchDocument document, int revision});
-typedef NoteFindSearchRunner =
-    Future<NoteSearchResult> Function(
-      NoteSearchDocument document,
-      NoteSearchQuery query,
-    );
+typedef NoteFindSearchRunner = Future<NoteSearchResult> Function(
+  NoteSearchDocument document,
+  NoteSearchQuery query,
+);
 
 @immutable
 class NoteFindReplacementRequest {

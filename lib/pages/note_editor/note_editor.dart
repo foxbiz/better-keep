@@ -909,9 +909,8 @@ class _NoteEditorState extends State<NoteEditor>
         context.l10n.focusedChecklistUnsupportedContent,
       _ => context.l10n.focusedChecklistInvalidContent,
     };
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _waitForChecklistRouteFrame() async {
@@ -3299,9 +3298,8 @@ class _NoteEditorMetadata extends StatelessWidget {
     final hasLabels = labelText?.isNotEmpty ?? false;
     if (!hasTimestamp && !hasLabels) return const SizedBox.shrink();
 
-    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: foregroundColor.withValues(alpha: 0.55),
-    );
+    final style = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: foregroundColor.withValues(alpha: 0.55));
     return Padding(
       key: const ValueKey('note_editor_metadata'),
       padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),

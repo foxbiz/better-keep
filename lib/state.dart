@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/config.dart';
@@ -277,9 +278,9 @@ class AppState {
     _state["rate_app_dismissed"] =
         prefsInstance.getBool("rate_app_dismissed") ?? false;
 
-    final toolbarModesJson =
-        jsonDecode(prefsInstance.getString("toolbar_grid_modes") ?? "{}")
-            as Map<String, dynamic>;
+    final toolbarModesJson = jsonDecode(
+      prefsInstance.getString("toolbar_grid_modes") ?? "{}",
+    ) as Map<String, dynamic>;
 
     _state["toolbar_grid_modes"] = toolbarModesJson.map(
       (key, value) => MapEntry(key, value as bool),

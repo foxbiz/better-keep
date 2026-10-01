@@ -1,4 +1,5 @@
 import 'package:better_keep/services/cloud_read.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -118,16 +119,14 @@ class PlanService {
           reviewAuthorization == null &&
           AuthService.canSyncCloud) {
         unawaited(
-          _startSubscriptionListener(user.uid).catchError((
-            Object error,
-            StackTrace stack,
-          ) {
-            AppLogger.error(
-              'Subscription listener initialization deferred',
-              error,
-              stack,
-            );
-          }),
+          _startSubscriptionListener(user.uid)
+              .catchError((Object error, StackTrace stack) {
+                AppLogger.error(
+                  'Subscription listener initialization deferred',
+                  error,
+                  stack,
+                );
+              }),
         );
 
         // Validate subscription with backend (async, don't block init)

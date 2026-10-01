@@ -214,9 +214,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
               _otpSent
                   ? context.l10n.enterCodeSentTo
                   : context.l10n.sendingVerificationCode,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -244,9 +243,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
               const SizedBox(height: 16),
               Text(
                 context.l10n.sendingVerificationCode,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: colorScheme.onSurfaceVariant),
               ),
             ],
 

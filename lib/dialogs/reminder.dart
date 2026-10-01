@@ -292,9 +292,8 @@ class _DatetimePickerState extends State<DatetimePicker> {
           Expanded(
             child: Text(
               text,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colors.onSecondaryContainer,
-              ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: colors.onSecondaryContainer),
             ),
           ),
         ],

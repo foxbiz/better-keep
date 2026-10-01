@@ -16,11 +16,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:uuid/uuid.dart';
 
-const _checklistActionMouseCursor =
-    WidgetStateMouseCursor.fromMap(<WidgetStatesConstraint, MouseCursor>{
-      WidgetState.disabled: SystemMouseCursors.basic,
-      WidgetState.any: SystemMouseCursors.click,
-    });
+const _checklistActionMouseCursor = WidgetStateMouseCursor.fromMap(
+  <WidgetStatesConstraint, MouseCursor>{
+    WidgetState.disabled: SystemMouseCursors.basic,
+    WidgetState.any: SystemMouseCursors.click,
+  },
+);
 const _checklistItemMaxWidth = 600.0;
 
 class RichChecklistEditor extends StatefulWidget {
@@ -1969,6 +1970,10 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
           ),
           TextButton(
             onPressed: _readOnly ? null : () => _clearCompleted(sectionId),
+            style: TextButton.styleFrom(
+              foregroundColor: foregroundColor,
+              disabledForegroundColor: foregroundColor.withValues(alpha: 0.38),
+            ),
             child: Text(context.l10n.clearCompletedTasks),
           ),
         ],
@@ -2088,6 +2093,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
               height: firstLineExtent,
               child: Center(
                 child: PopupMenuButton<String>(
+                  iconColor: foregroundColor,
                   tooltip: context.l10n.tasks,
                   onSelected: (action) {
                     switch (action) {

@@ -70,9 +70,10 @@ Future<Uint8List?> captureImageFromWebCamera() async {
     final captureBtn =
         web.document.createElement('button') as web.HTMLButtonElement;
     // Create SVG icon for camera
-    final cameraSvg =
-        web.document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-            as web.SVGElement;
+    final cameraSvg = web.document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'svg',
+    ) as web.SVGElement;
     cameraSvg.setAttribute('width', '24');
     cameraSvg.setAttribute('height', '24');
     cameraSvg.setAttribute('viewBox', '0 0 24 24');
@@ -105,9 +106,10 @@ Future<Uint8List?> captureImageFromWebCamera() async {
     final cancelBtn =
         web.document.createElement('button') as web.HTMLButtonElement;
     // Create SVG icon for close
-    final closeSvg =
-        web.document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-            as web.SVGElement;
+    final closeSvg = web.document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'svg',
+    ) as web.SVGElement;
     closeSvg.setAttribute('width', '20');
     closeSvg.setAttribute('height', '20');
     closeSvg.setAttribute('viewBox', '0 0 24 24');

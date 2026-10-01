@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
+
 import 'package:better_keep/components/bubble_menu.dart';
 import 'package:better_keep/components/logo.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
@@ -868,9 +869,9 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 18,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ),

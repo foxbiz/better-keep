@@ -36,12 +36,12 @@ export const publicDocuments: readonly PublicDocument[] = [
   },
   {
     slug: 'pricing',
-    title: 'Simple, honest pricing',
-    eyebrow: 'Start locally for free',
+    title: 'Free and Pro plans',
+    eyebrow: 'Free local notes',
     description:
-      'Compare free local Better Keep notes with optional paid synchronization and advanced account features.',
+      'Use Better Keep Free for unlimited local notes after sign-in. Pro adds end-to-end encrypted sync across devices and unlimited locked notes.',
     introduction:
-      'Core local note-taking stays free. Optional subscriptions support encrypted synchronization, account features, and continued product development.'
+      'An account is required. Core local note-taking is free; optional Pro subscriptions add encrypted cloud synchronization and unlimited locked notes.'
   },
   {
     slug: 'contact',

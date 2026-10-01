@@ -18,7 +18,7 @@ import {
   mapWithConcurrency,
   parseShareLocation,
   readResponseBytesWithLimit
-} from '../lib/share-viewer.mjs';
+} from '../lib/share-viewer.ts';
 
 type ShareScreen =
   | 'loading'
@@ -364,7 +364,7 @@ export async function startShareViewer() {
     view.show('request');
   };
 
-  const renderAttachments = async (attachments: AttachmentRecord[]) => {
+  const renderAttachments = async (attachments: AttachmentRecord[], key: string) => {
     view.resetAttachments();
     const slots = attachments.map(() => view.reserveAttachmentSlot());
     await mapWithConcurrency(
@@ -390,7 +390,7 @@ export async function startShareViewer() {
             maxBytes: MAX_ATTACHMENT_BYTES,
             budget: attachmentBudget
           });
-          const decrypted = await decryptShareBytes(encrypted, shareKey);
+          const decrypted = await decryptShareBytes(encrypted, key);
           const url = URL.createObjectURL(
             new Blob([decrypted], { type: attachment.mimeType })
           );
@@ -437,7 +437,7 @@ export async function startShareViewer() {
           share.encrypted_attachments_nonce,
           shareKey
         );
-        await renderAttachments(parseAttachments(attachmentJson));
+        await renderAttachments(parseAttachments(attachmentJson), shareKey);
       }
     } catch {
       view.showError(

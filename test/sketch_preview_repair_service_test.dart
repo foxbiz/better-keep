@@ -443,11 +443,9 @@ void main() {
 
     expect(result.status, SketchPreviewRepairStatus.retryableFailure);
     expect(result.completedSketchKeys, {'repaired'});
-    final attachments =
-        jsonDecode(
-              (await database.query('note')).single['attachments'] as String,
-            )
-            as List;
+    final attachments = jsonDecode(
+      (await database.query('note')).single['attachments'] as String,
+    ) as List;
     expect(
       attachments.single['data']['previewImage'],
       '/tmp/repaired-preview.jpg',
@@ -549,11 +547,9 @@ void main() {
 
     final prefs = await AppState.prefs;
     expect(prefs.getInt('sketch_preview_renderer_version'), isNull);
-    final attachments =
-        jsonDecode(
-              (await database.query('note')).single['attachments'] as String,
-            )
-            as List;
+    final attachments = jsonDecode(
+      (await database.query('note')).single['attachments'] as String,
+    ) as List;
     expect(attachments.single['data']['previewImage'], isNull);
   });
 

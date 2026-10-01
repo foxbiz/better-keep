@@ -1,5 +1,7 @@
 import 'package:better_keep/utils/manual_sync_refresh.dart';
+
 import 'dart:async';
+
 import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/components/note_display_options_button.dart';

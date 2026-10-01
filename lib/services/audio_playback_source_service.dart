@@ -85,14 +85,14 @@ class AudioPlaybackSourceLease {
       _releaseFuture ??= Future<void>.sync(() async => _release?.call());
 }
 
-typedef AudioPlaybackResolve =
-    Future<AudioPlaybackSourceLease> Function(
-      String source, {
-      required bool protectedSource,
-    });
+typedef AudioPlaybackResolve = Future<AudioPlaybackSourceLease> Function(
+  String source, {
+  required bool protectedSource,
+});
 
-typedef PasswordProtectedAudioDecoder =
-    Future<Uint8List> Function(Uint8List protectedBytes);
+typedef PasswordProtectedAudioDecoder = Future<Uint8List> Function(
+  Uint8List protectedBytes,
+);
 
 @immutable
 class AudioPlaybackFileOperations {

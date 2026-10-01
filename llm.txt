@@ -214,9 +214,8 @@ better-keep/
 │       └── exports/              # Individual function modules (41 files)
 │
 ├── test/                         # Tests (3 files, light coverage)
-├── docs/                         # Technical docs (4 files)
+├── docs/                         # Technical docs (3 files)
 │   ├── E2EE.md                   # E2EE architecture deep-dive
-│   ├── DATABASE_MIGRATIONS.md
 │   ├── CONNECTED_ACCOUNTS.md
 │   └── SERVER_SIDE_SUBSCRIPTION_ENFORCEMENT.md
 ├── assets/                       # App assets (icons, fonts, sounds)
@@ -225,7 +224,6 @@ better-keep/
 ├── macos/                        # macOS platform project
 ├── windows/                      # Windows platform project
 ├── web/                          # Web platform project + static pages
-├── linux/                        # Linux platform project (disabled)
 ├── scripts/                      # Utility scripts
 ├── pubspec.yaml                  # Flutter project definition (50+ dependencies)
 ├── package.json                  # Node build scripts (root-level)

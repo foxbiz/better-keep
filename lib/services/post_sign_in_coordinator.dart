@@ -74,13 +74,12 @@ class PostSignInOperation {
   final Future<void> Function() run;
 }
 
-typedef PostSignInFailureReporter =
-    FutureOr<void> Function(
-      PostSignInStage stage,
-      String operation,
-      Object error,
-      StackTrace stackTrace,
-    );
+typedef PostSignInFailureReporter = FutureOr<void> Function(
+  PostSignInStage stage,
+  String operation,
+  Object error,
+  StackTrace stackTrace,
+);
 
 /// Runs authenticated startup without treating transient service failures as
 /// authentication failures.

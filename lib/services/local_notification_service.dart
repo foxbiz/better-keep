@@ -14,8 +14,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-typedef ReminderNotificationResponseHandler =
-    FutureOr<void> Function(NotificationResponse response);
+typedef ReminderNotificationResponseHandler = FutureOr<void> Function(
+  NotificationResponse response,
+);
 
 /// Owns the single flutter_local_notifications instance used by the app.
 /// Feature services get their own ID namespaces, but initialization and action

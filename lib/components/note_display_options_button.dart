@@ -6,8 +6,9 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
-typedef NoteOrderContextForView =
-    NoteOrderContext? Function(NoteViewMode viewMode);
+typedef NoteOrderContextForView = NoteOrderContext? Function(
+  NoteViewMode viewMode,
+);
 
 class NoteDisplayOptionsButton extends StatelessWidget {
   const NoteDisplayOptionsButton({
@@ -318,9 +319,8 @@ class _NoteDisplayOptionsDialogState extends State<_NoteDisplayOptionsDialog> {
                   custom
                       ? context.l10n.reorderCustomHint
                       : context.l10n.reorderDateSortHint,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                 ),
               ),
             ],

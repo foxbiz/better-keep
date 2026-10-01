@@ -38,9 +38,8 @@ List<dynamic> ensureDeltaEndsWithNewline(List<dynamic> ops) {
 /// with the required '\n' character.
 Document documentFromJsonSafe(List<dynamic> ops) {
   return Document.fromJson(
-    normalizeNoteBlocks(
-      Delta.fromJson(ensureDeltaEndsWithNewline(ops)),
-    ).toJson(),
+    normalizeNoteBlocks(Delta.fromJson(ensureDeltaEndsWithNewline(ops)))
+        .toJson(),
   );
 }
 

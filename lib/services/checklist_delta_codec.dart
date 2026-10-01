@@ -304,9 +304,9 @@ class ChecklistDeltaCodec {
           );
     }
 
-    final normalizedBody = documentFromJsonSafe(
-      updated.toJson(),
-    ).toDelta().toJson();
+    final normalizedBody = documentFromJsonSafe(updated.toJson())
+        .toDelta()
+        .toJson();
     final rescanned = createCollectionEditSession(
       title: '',
       document: documentFromJsonSafe(normalizedBody),
@@ -821,9 +821,10 @@ class ChecklistDeltaCodec {
   String combinedPlainText({
     required String title,
     required RichChecklistDocument document,
-  }) => documentFromJsonSafe(
-    encodeCombined(title: title, document: document),
-  ).toPlainText().trim();
+  }) =>
+      documentFromJsonSafe(encodeCombined(title: title, document: document))
+          .toPlainText()
+          .trim();
 
   String combinedBodyPlainText({
     required String title,

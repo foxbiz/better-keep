@@ -108,7 +108,8 @@ test("selects owning components once, including tests and configuration", () => 
 			["functions"],
 		],
 		[["admin-site/tsconfig.json", "admin-site/src/a.astro"], ["admin-site"]],
-		[["site/src/content/help.md", "test/site_assets_test.mjs"], ["site"]],
+		[["site/src/content/help.md", "test/site_assets_test.mts"], ["site"]],
+		[["test/site_assets_test.mjs"], ["site"]],
 		[
 			[
 				"tool/check_tasks.mjs",

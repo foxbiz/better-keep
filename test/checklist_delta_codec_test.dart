@@ -882,9 +882,8 @@ void main() {
 
         expect(document.items.map((entry) => entry.id), ['c']);
 
-        document = RichChecklistDocument([
-          item('a', 'Done', checked: true),
-        ]).clearCompleted(newId: () => 'new-${nextId++}');
+        document = RichChecklistDocument([item('a', 'Done', checked: true)])
+            .clearCompleted(newId: () => 'new-${nextId++}');
         expect(document.items.single.id, 'new-0');
         expect(document.items.single.isEmpty, isTrue);
       },

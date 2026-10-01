@@ -197,12 +197,14 @@ class RazorpayService {
       AppLogger.log('RazorpayService: Payment successful, verifying...');
 
       // Step 3: Verify payment with backend
-      final verifyResult =
-          await callCloudFunction('verifyRazorpaySubscription', {
-            'paymentId': paymentResult.paymentId,
-            'subscriptionId': paymentResult.subscriptionId,
-            'signature': paymentResult.signature,
-          });
+      final verifyResult = await callCloudFunction(
+        'verifyRazorpaySubscription',
+        {
+          'paymentId': paymentResult.paymentId,
+          'subscriptionId': paymentResult.subscriptionId,
+          'signature': paymentResult.signature,
+        },
+      );
       final verifyData = Map<String, dynamic>.from(verifyResult.data as Map);
 
       if (verifyData['success'] != true) {

@@ -406,9 +406,8 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
       children: [
         Text(
           context.l10n.checkingAccountStatus,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(context).textTheme.headlineSmall
+              ?.copyWith(fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -418,9 +417,8 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               minHeight: 6,
-              backgroundColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.2),
+              backgroundColor: Theme.of(context).colorScheme.primary
+                  .withValues(alpha: 0.2),
             ),
           ),
         ),
@@ -434,9 +432,8 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
               ),
               style: TextStyle(
                 fontSize: 16,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.7),
+                color: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.7),
               ),
               textAlign: TextAlign.center,
             );
@@ -448,9 +445,8 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
             context.l10n.takingTooLongTryAgain,
             style: TextStyle(
               fontSize: 14,
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.5),
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 16),

@@ -12,10 +12,14 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 typedef ReminderNavigationNoteLoader = Future<Note?> Function(int noteId);
-typedef ReminderNavigationUnlocker =
-    Future<bool?> Function(BuildContext context, Note note);
-typedef ReminderNavigationRouteOpener =
-    Future<void> Function(BuildContext context, Note note);
+typedef ReminderNavigationUnlocker = Future<bool?> Function(
+  BuildContext context,
+  Note note,
+);
+typedef ReminderNavigationRouteOpener = Future<void> Function(
+  BuildContext context,
+  Note note,
+);
 typedef ReminderNavigationDiagnostics = Future<void> Function(String message);
 
 class _PendingReminderNavigation {

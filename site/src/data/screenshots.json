@@ -1,0 +1,122 @@
+[
+  {
+    "id": "2",
+    "label": "Organize",
+    "caption": "Notes, labels, and reminders",
+    "alt": "Better Keep notes home with rich-text cards, checklists, labels, colors, images, drawings, and reminders",
+    "width": 1179,
+    "height": 2556,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "3",
+    "label": "Account",
+    "caption": "Accounts and subscription",
+    "alt": "Better Keep account screen showing subscription details and connected sign-in providers",
+    "width": 1179,
+    "height": 2556,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "4",
+    "label": "Protect",
+    "caption": "Private encrypted sync",
+    "alt": "Better Keep security screen showing encrypted notes, recovery controls, and approved devices",
+    "width": 1179,
+    "height": 2556,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "5",
+    "label": "Write",
+    "caption": "Rich text, images, and sketches",
+    "alt": "Better Keep rich-text editor showing a formatted travel note with an image and a sketch",
+    "width": 1179,
+    "height": 2556,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "6",
+    "label": "Capture",
+    "caption": "Voice notes and recordings",
+    "alt": "Better Keep editor showing formatted meeting notes with an attached voice recording",
+    "width": 1179,
+    "height": 2556,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "7",
+    "label": "Personalize",
+    "caption": "Themes and languages",
+    "alt": "Better Keep settings with dark theme controls and supported language choices",
+    "width": 1179,
+    "height": 2556,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "table-ios",
+    "width": 1320,
+    "height": 2868,
+    "platform": "ios",
+    "feature": "table",
+    "label": "Tables",
+    "caption": "Rich text inside table cells",
+    "alt": "Better Keep on iOS showing a Kyoto itinerary table with bold headings, italic descriptions, and highlighted text"
+  },
+  {
+    "id": "checklist-ios",
+    "width": 1320,
+    "height": 2868,
+    "platform": "ios",
+    "feature": "checklist",
+    "label": "Checklists",
+    "caption": "Nested tasks, completed items",
+    "alt": "Better Keep on iOS showing the Pack for Kyoto checklist with nested packing items and two completed tasks"
+  },
+  {
+    "id": "table-android",
+    "width": 1080,
+    "height": 2280,
+    "platform": "android",
+    "feature": "table",
+    "label": "Tables",
+    "caption": "Rich text inside table cells",
+    "alt": "Better Keep on Android showing a Kyoto itinerary table with bold headings, italic descriptions, and highlighted text"
+  },
+  {
+    "id": "checklist-android",
+    "width": 1080,
+    "height": 2280,
+    "platform": "android",
+    "feature": "checklist",
+    "label": "Checklists",
+    "caption": "Nested tasks, completed items",
+    "alt": "Better Keep on Android showing the Pack for Kyoto checklist with nested packing items and two completed tasks"
+  },
+  {
+    "id": "table-desktop",
+    "width": 1440,
+    "height": 1000,
+    "platform": "desktop",
+    "feature": "table",
+    "label": "Tables",
+    "caption": "Rich text inside table cells",
+    "alt": "Better Keep on desktop Web showing a Kyoto itinerary table with bold headings, italic descriptions, and highlighted text"
+  },
+  {
+    "id": "checklist-desktop",
+    "width": 1440,
+    "height": 1000,
+    "platform": "desktop",
+    "feature": "checklist",
+    "label": "Checklists",
+    "caption": "Nested tasks, completed items",
+    "alt": "Better Keep on desktop Web showing the Pack for Kyoto checklist with nested packing items and two completed tasks"
+  }
+]

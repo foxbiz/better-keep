@@ -1,7 +1,9 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/pages/content_preview_page.dart';
+
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:better_keep/models/note_table.dart';

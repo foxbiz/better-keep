@@ -23,6 +23,7 @@ export type MarketingPage = {
   eyebrow: string;
   description: string;
   answer: string;
+  updatedAt?: string;
   sections: PageSection[];
   comparison?: {
     alternativeLabel: string;
@@ -35,21 +36,22 @@ export type MarketingPage = {
 export const pages: MarketingPage[] = [
   {
     slug: 'google-keep-alternative',
-    title: 'A private Google Keep alternative with richer notes',
-    eyebrow: 'Switch without losing simplicity',
+    title: 'Google Keep alternative for iPhone: private, rich-text notes',
+    updatedAt: '2026-09-30',
+    eyebrow: 'Bring your notes to iPhone',
     description:
-      'Compare Better Keep with Google Keep for private, offline rich-text notes, encrypted sync, labels, reminders, voice transcription, and cross-platform access.',
+      'Looking for a Google Keep alternative on iPhone? Import your notes into Better Keep, write with rich text, and use local notes free. Encrypted sync is optional Pro.',
     answer:
-      'Better Keep is a strong Google Keep alternative for people who like a fast card-based notes workflow but need rich text, deeper organization, offline access, and end-to-end encrypted sync. It runs on mobile, desktop, and web, and its local Takeout importer lets you move notes without uploading the archive to a conversion service.',
+      'Bring your Google Keep notes to Better Keep on iPhone. Keep your cards and checklists, add headings and text formatting, and write offline after signing in. An account is required; local notes are free, and optional end-to-end encrypted cloud sync requires Pro. Better Keep also runs on iPad, Android, Mac, Windows, and Web.',
     sections: [
       {
-        heading: 'The familiar parts stay familiar',
+        heading: 'Cards, lists, and reminders',
         paragraphs: [
-          'Capture a thought quickly, pin important cards, color-code notes, add reminders, search instantly, and organize with labels. Better Keep keeps those lightweight habits while adding a fuller editor, folders, audio, sketches, and multi-device privacy controls.'
+          'Pin important notes, add reminders, and organize with labels and colors. Better Keep also supports rich text, folders, recordings, sketches, and encrypted sync across approved devices with Pro.'
         ]
       },
       {
-        heading: 'A private migration path',
+        heading: 'Import on your device',
         paragraphs: [
           'Export your data with Google Takeout, then select the archive inside Better Keep. The import is processed locally. Text notes, checklists, labels, colors, timestamps, pinned state, archive state, trash state, and supported attachments are preserved where the Takeout record provides them.'
         ],
@@ -60,9 +62,15 @@ export const pages: MarketingPage[] = [
         ]
       },
       {
+        heading: 'Try a few notes first',
+        paragraphs: [
+          'Sign in, create a local note, import a small Takeout archive, and format an imported note with headings and checklists. Check the import report before moving your whole collection. Unlimited local notes are free; Pro adds cloud sync and removes the five-locked-note limit.'
+        ]
+      },
+      {
         heading: 'Choose based on your priorities',
         paragraphs: [
-          'Google Keep remains convenient for a minimal Google-account workflow. Better Keep is designed for people who want a similarly direct experience with richer writing, device-local operation, a transparent security design, and source code they can inspect.'
+          'If you want headings, folders, recordings, or encrypted sync, try a few notes in Better Keep before moving your collection. Local notes are free after sign-in, and the source code is available to inspect.'
         ]
       }
     ],
@@ -103,14 +111,14 @@ export const pages: MarketingPage[] = [
           'Yes. Export Keep with Google Takeout and select the ZIP inside Better Keep. Processing stays on your device, and a report identifies anything that could not be imported.'
       },
       {
-        question: 'Does Better Keep work without an account?',
+        question: 'Is an account required to use Better Keep?',
         answer:
-          'Local note-taking works without an account. An account is used for optional encrypted synchronization and account-based features.'
+          'Yes. An account is required to use Better Keep. After signing in, local note-taking is free and works offline. Optional encrypted cloud sync requires Pro.'
       },
       {
         question: 'Is Better Keep open source?',
         answer:
-          `The source is publicly inspectable under CC BY-NC 4.0. That is accurately described as source-available rather than OSI-approved open source.`
+          `The code is available under CC BY-NC 4.0, which restricts commercial reuse. It is source-available, but does not meet the OSI definition of open source.`
       }
     ],
     sources: [
@@ -126,28 +134,36 @@ export const pages: MarketingPage[] = [
   },
   {
     slug: 'import/google-keep',
-    title: 'Import Google Keep notes privately with Takeout',
-    eyebrow: 'A local migration guide',
+    title: 'How to import Google Keep notes on iPhone with Better Keep',
+    updatedAt: '2026-09-30',
+    eyebrow: 'Bring your notes to iPhone',
     description:
-      'Move Google Keep notes to Better Keep with a local Google Takeout import that preserves text, checklists, labels, colors, timestamps, state, and supported attachments.',
+      'Move Google Keep notes to Better Keep on iPhone using Google Takeout. Follow the export and import steps, check limitations, and start with free offline notes.',
     answer:
-      'To move from Google Keep, request a Google Takeout export containing Keep, download the ZIP, and choose “Import from Google Keep” in Better Keep. The archive is parsed on your device rather than uploaded to Better Keep or another converter. Review the import summary before continuing with optional encrypted sync.',
+      'Export your Google Keep notes with Google Takeout, save the ZIP in Files on your iPhone, sign in to Better Keep, and choose “Import from Google Keep.” An account is required; import runs locally and does not require Pro. Review the report, then edit your local notes offline for free. Cloud sync is optional and requires Pro.',
     sections: [
       {
         heading: '1. Export only the data you need',
         bullets: [
           'Open Google Takeout and deselect all products.',
           'Select Keep, create the export, and download the resulting ZIP.',
+          'On iPhone, save the downloaded ZIP in Files. If you exported on a computer, transfer the ZIP to your iPhone first.',
           'Keep the original ZIP intact until the Better Keep import completes.'
         ]
       },
       {
-        heading: '2. Import inside Better Keep',
+        heading: '2. Import inside Better Keep on iPhone',
         bullets: [
-          'Open Help and choose “Import from Google Keep.”',
-          'Select the Takeout ZIP and review the privacy and size notice.',
+          'Sign in to Better Keep, open the navigation menu, then go to Settings → Help → Import from Google Keep.',
+          'Choose Takeout ZIP, select the archive from Files, and review the privacy and size notice.',
           'Keep the app open while it validates and imports the archive.',
           'Review imported, skipped, warning, failed, and unsupported totals.'
+        ]
+      },
+      {
+        heading: '3. Edit your imported notes offline',
+        paragraphs: [
+          'Open an imported note and add a heading, a checklist, or text formatting. Turn on Airplane Mode to try creating and editing local notes without a connection. Keep the original archive and compare important notes and attachments before completing your move.'
         ]
       },
       {
@@ -157,13 +173,18 @@ export const pages: MarketingPage[] = [
         ]
       },
       {
-        heading: 'Safe repeat imports and limitations',
+        heading: 'Repeat imports and unsupported items',
         paragraphs: [
-          'A stable fingerprint prevents an identical Takeout record from being imported twice. Missing attachments, drawings, malformed records, and unknown future fields are included in the report instead of stopping every other note.'
+          'Importing the same export again skips identical notes. The report lists missing attachments, unsupported drawings, malformed records, and unknown fields. These items do not stop the rest of the import.'
         ]
       }
     ],
     faqs: [
+      {
+        question: 'Do I need an account or Pro to import on iPhone?',
+        answer:
+          'An account is required. Import and local note-taking are free and do not require Pro. Pro is required for optional cloud sync; signing in alone does not include sync.'
+      },
       {
         question: 'Does Better Keep upload my Takeout ZIP?',
         answer:
@@ -172,7 +193,7 @@ export const pages: MarketingPage[] = [
       {
         question: 'What happens if I import the same archive twice?',
         answer:
-          'Exact previously imported records are skipped by default using a stable fingerprint.'
+          'Notes that exactly match a previous import are skipped by default.'
       },
       {
         question: 'Can every Google Keep drawing be imported?',
@@ -190,11 +211,12 @@ export const pages: MarketingPage[] = [
   {
     slug: 'private-encrypted-notes',
     title: 'Private notes with end-to-end encrypted sync',
-    eyebrow: 'Privacy without giving up convenience',
+    updatedAt: '2026-09-30',
+    eyebrow: 'Local notes and encrypted sync',
     description:
       'Write private local notes and optionally synchronize encrypted note content and attachments across Better Keep devices.',
     answer:
-      `Better Keep stores notes locally first and encrypts note titles, content, images, audio, and supported sketch attachments before optional cloud synchronization. Its current design uses ${product.encryption.noteAndAttachmentCipher} for authenticated encryption and ${product.encryption.deviceKeyExchange} device keys. Some operational metadata remains visible so synchronization and filtering can work.`,
+      'Keep a personal journal, project ideas, or everyday records in Better Keep. An account is required; local note-taking is free and works offline after sign-in. Pro adds end-to-end encrypted sync across approved devices and unlimited PIN-locked notes. Note titles, content, and supported attachments are encrypted before syncing; some operational metadata remains visible.',
     sections: [
       {
         heading: 'What end-to-end encryption protects',
@@ -208,7 +230,7 @@ export const pages: MarketingPage[] = [
       {
         heading: 'What is not encrypted',
         paragraphs: [
-          `Better Keep currently leaves ${product.encryption.metadataNotEncrypted.join(', ')} outside the encrypted note payload. This metadata supports filtering, display, and synchronization. The security page documents the boundary so you can make an informed decision.`
+          `The following metadata is not encrypted and can be visible to the sync service: ${product.encryption.metadataNotEncrypted.join(', ')}. It is used for filtering, display, and sync.`
         ]
       },
       {
@@ -222,14 +244,15 @@ export const pages: MarketingPage[] = [
   {
     slug: 'offline-notes-app',
     title: 'An offline notes app that keeps working',
-    eyebrow: 'Local-first by design',
+    updatedAt: '2026-10-01',
+    eyebrow: 'Write without a connection',
     description:
-      'Create, edit, search, organize, and review notes without waiting for a network connection in Better Keep.',
+      'Write journal entries, study notes, lists, and project ideas offline with Better Keep. Local notes are free after sign-in; encrypted cloud sync requires Pro.',
     answer:
-      'Better Keep is built around a local note database, so core writing, editing, searching, pinning, labeling, archiving, and organizing continue without a network connection. When optional synchronization is configured, local changes are queued and sent after connectivity returns instead of blocking the writing experience.',
+      'Write on a train, keep a shopping list handy, or review study notes when the connection drops. Better Keep saves notes locally, so writing, editing, searching, and organizing continue offline after you have signed in. An account and an initial connection are required. Unlimited local notes are free; optional Pro sync sends changes to your other approved devices when connectivity returns.',
     sections: [
       {
-        heading: 'Useful when the connection is not',
+        heading: 'What you can do offline',
         bullets: [
           'Write and edit rich-text notes',
           'Search, label, pin, archive, and restore notes',
@@ -238,24 +261,57 @@ export const pages: MarketingPage[] = [
         ]
       },
       {
-        heading: 'Sync follows the local save',
+        heading: 'Prepare your notes before going offline',
         paragraphs: [
-          'A local save is the primary action. Optional cloud synchronization operates after the note exists locally, with retry tracking for notes and attachments. Features that inherently require a remote service, account verification, or a new model download still need connectivity.'
+          'Sign in while you have a connection, then open the notes and attachments you will need on that device. A note saved on another device is not available offline until it has reached this one. If you use Pro sync, give pending notes and attachments time to finish syncing before leaving.',
+          'Before a trip, turn on airplane mode, create a note, edit it, and reopen it to check offline access on your device. Download a transcription model beforehand if you plan to use supported on-device voice transcription.'
         ]
+      },
+      {
+        heading: 'Keep a list handy on a train or in a shop',
+        paragraphs: [
+          'Make a packing or shopping checklist before you leave, group items in the order you will need them, and pin the note. For example, a travel list can start with tickets, wallet, charger, and medication. Tick items off without waiting for a connection.',
+          'For longer writing, keep a journal entry or study note on the device. Add a heading for each topic and write while the idea is fresh. Search and labels help you return to it later, even when the network is unavailable.'
+        ]
+      },
+      {
+        heading: 'Save on your device, then sync',
+        paragraphs: [
+          'Notes are saved on your device first. Free notes stay there. With Pro, note and attachment changes sync to your other approved devices when the connection returns. Wait for sync to finish before opening the latest version on another device.',
+          'Offline access covers content already available locally. Signing in, downloading a new transcription model, and receiving content from another device need a connection. On-device transcription is not available in the web app.'
+        ]
+      }
+    ],
+    faqs: [
+      {
+        question: 'Can I start using Better Keep entirely offline?',
+        answer:
+          'No. An account and an initial internet connection are required to sign in. After signing in, you can create, edit, search, and organize local notes offline.'
+      },
+      {
+        question: 'Do I need Pro to write offline?',
+        answer:
+          'No. Unlimited local notes and offline use after sign-in are free. Pro adds encrypted cloud sync across approved devices and unlimited locked notes; Free includes up to five locked notes.'
+      },
+      {
+        question: 'Will a note from another device be available without a connection?',
+        answer:
+          'Only if the note has already reached the device you are using. Cross-device cloud sync requires Pro and a connection. Open the notes and attachments you need before going offline.'
       }
     ]
   },
   {
     slug: 'rich-text-notes',
-    title: 'Rich-text notes without a heavy workspace',
-    eyebrow: 'Write more, keep the capture flow',
+    title: 'Rich-text notes for everyday writing',
+    updatedAt: '2026-10-01',
+    eyebrow: 'Format your notes',
     description:
-      'Use headings, lists, checklists, emphasis, color, links, images, audio, and sketches in fast card-based Better Keep notes.',
+      'Turn quick ideas into useful journal entries, study notes, and project plans with headings, lists, photos, sketches, and voice recordings in Better Keep.',
     answer:
-      'Better Keep combines the speed of a card-based notes app with a fuller rich-text editor. Use headings, emphasis, lists, checklists, indentation, alignment, links, colors, images, audio, and sketches without first building a database or workspace. Notes remain searchable and can be organized with labels, folders, colors, and pinned views.',
+      'Add headings, lists, links, photos, sketches, and audio to a note in Better Keep. Use it for journal entries, study notes, and project plans. Organize your writing with labels, folders, colors, and pinned notes. Sign in for free local notes that work offline; Pro adds encrypted sync across approved devices.',
     sections: [
       {
-        heading: 'A writing tool when you need one',
+        heading: 'Text formatting and attachments',
         bullets: [
           'Headings, bold, italic, underline, strike, and code styles',
           'Bulleted, numbered, and checklist content',
@@ -264,24 +320,69 @@ export const pages: MarketingPage[] = [
         ]
       },
       {
-        heading: 'Still optimized for quick capture',
+        heading: 'Start a note quickly',
         paragraphs: [
-          'The editor adds structure without turning every thought into a project. Quick actions can start an image, audio, sketch, checklist, or blank note, while cards keep recent and pinned material easy to scan.'
+          'Use quick actions to start an image, audio, sketch, checklist, or blank note. Recent and pinned notes appear as cards so you can find them from the home screen.'
         ]
+      },
+      {
+        heading: 'Journals, study notes, and plans',
+        bullets: [
+          'Journal: write a dated entry, add a photo, and label entries by topic.',
+          'Study: use headings for subjects, highlight key points, and attach sketches or a recording.',
+          'Project planning: keep context in a rich-text note, make a checklist for next steps, and set a reminder.',
+          'Everyday lists: keep shopping, packing, or reading lists together and pin the one you need now.'
+        ],
+        paragraphs: [
+          'Rich-text editing and local note-taking are free after signing in. Local notes work offline. Pro adds encrypted cloud sync across your devices and unlimited locked notes.'
+        ]
+      },
+      {
+        heading: 'A study note you can revisit',
+        paragraphs: [
+          'Start with one topic rather than a whole course. Add headings for Summary, Example, and Questions. Explain the idea in your own words, attach a sketch or photo where it helps, and highlight the point you want to remember.',
+          'Keep unanswered questions as a checklist, then add a label for the subject. Pin the note while you are working on it. A recording can stay with the note, with supported on-device transcription available when you want searchable text.'
+        ]
+      },
+      {
+        heading: 'A journal entry with room for the details',
+        paragraphs: [
+          'Use a date and a short title, then try three prompts: What happened? What do I want to remember? What will I try tomorrow? Use whichever prompts help you write.',
+          'Add a photo or sketch, use a label for a recurring topic, and keep the entries in a folder. Local writing is free after sign-in. If you want the journal available on another approved device, Pro adds encrypted cloud sync.'
+        ]
+      },
+      {
+        heading: 'A project plan that fits in one note',
+        paragraphs: [
+          'For a small project, use headings for Goal, Next steps, and References. Write the outcome under Goal, make a checklist of actions, and keep useful links or photos under References. Set a reminder for when you want to revisit the plan.',
+          'Use labels and pinned notes to find active work quickly, then archive the note when the project is finished.'
+        ]
+      }
+    ],
+    faqs: [
+      {
+        question: 'Is rich-text editing free?',
+        answer:
+          'Yes. An account is required, but rich-text editing and unlimited local notes are free after sign-in. Pro adds encrypted cloud sync across devices and unlimited locked notes.'
+      },
+      {
+        question: 'Can I write longer notes offline?',
+        answer:
+          'Yes. After signing in, you can create and edit local rich-text notes offline. Notes or attachments from another device must first reach the device you are using; Pro sync needs a connection.'
       }
     ]
   },
   {
     slug: 'voice-notes-transcription',
     title: 'Private voice notes with on-device transcription',
-    eyebrow: 'Capture first, search later',
+    eyebrow: 'Record and transcribe',
     description:
       'Record voice notes in Better Keep and convert speech to searchable text with supported on-device Whisper transcription.',
     answer:
-      'Better Keep can attach audio recordings to notes and, on supported native devices, transcribe them with an on-device Whisper model. This keeps transcription audio out of a hosted speech-to-text API. Model availability, download size, performance, and language accuracy vary by device, so the original recording remains attached for reference.',
+      'Better Keep can attach audio recordings to notes and, on supported native devices, transcribe them with an on-device Whisper model. The transcription runs on your device without sending audio to a speech-to-text service. Model availability, download size, performance, and language accuracy vary by device, so the original recording remains attached for reference.',
     sections: [
       {
-        heading: 'Designed for private capture',
+        heading: 'Keep recordings with your notes',
         bullets: [
           'Attach recordings directly to the relevant note',
           'Append transcripts to searchable note text',
@@ -290,9 +391,9 @@ export const pages: MarketingPage[] = [
         ]
       },
       {
-        heading: 'Be precise about “on device”',
+        heading: 'Downloads and accuracy',
         paragraphs: [
-          'The transcription engine runs locally on supported native platforms, but downloading a model can require a connection. Web support and performance differ from native devices. Better Keep does not describe the transcript as perfectly accurate; names, accents, background noise, and specialist vocabulary can require correction.'
+          'Download a model before transcribing on supported native devices. Transcription is not available in the web app. Check transcripts for mistakes, especially names and specialist terms. Accents and background noise can also affect accuracy.'
         ]
       }
     ]
@@ -300,14 +401,14 @@ export const pages: MarketingPage[] = [
   {
     slug: 'cross-platform-notes',
     title: 'Notes across Android, iPhone, Mac, Windows, and Web',
-    eyebrow: 'One focused app across your devices',
+    eyebrow: 'Phone, computer, and browser',
     description:
       'Use Better Keep on Android, iOS, macOS, Windows, and the web with optional end-to-end encrypted synchronization.',
     answer:
-      `Better Keep is available on ${product.platforms.join(', ')}. Each client keeps a local note database, while an optional account synchronizes encrypted note content and attachments between approved devices. Platform capabilities such as alarms, background work, file access, and on-device transcription can differ because each operating system exposes different APIs.`,
+      `Better Keep is available on ${product.platforms.join(', ')}. An account is required. Notes are saved on each device. Pro adds encrypted sync of note content and supported attachments between approved devices. Reminders, background sync, file access, and transcription vary by platform.`,
     sections: [
       {
-        heading: 'The same core workflow everywhere',
+        heading: 'Notes and organization',
         bullets: [
           'Card, grid, list, and folder-based organization',
           'Rich-text editing and search',
@@ -316,9 +417,9 @@ export const pages: MarketingPage[] = [
         ]
       },
       {
-        heading: 'Platform differences are documented',
+        heading: 'Check features for your device',
         paragraphs: [
-          'Better Keep avoids claiming feature parity where the operating system cannot provide it. Store listings and release notes identify platform-specific limitations for alarms, background behavior, attachment access, and transcription.'
+          'Some features depend on your device and operating system. Check the store listing and release notes for limits on reminders, background sync, attachment access, and transcription.'
         ]
       }
     ]
@@ -326,11 +427,11 @@ export const pages: MarketingPage[] = [
   {
     slug: 'source-available-notes',
     title: 'A source-available private notes app',
-    eyebrow: 'Inspect the implementation',
+    eyebrow: 'Read the source code',
     description:
       'Review the Better Keep source code, security design, local storage approach, and CC BY-NC 4.0 license.',
     answer:
-      `Better Keep publishes its application source so users and developers can inspect how notes, local storage, synchronization, and encryption are implemented. The code is licensed under CC BY-NC 4.0, so the accurate label is “source-available,” not OSI-approved open source. Commercial reuse is restricted by the current license.`,
+      `Better Keep publishes its application source so users and developers can inspect how notes, local storage, synchronization, and encryption are implemented. The code is licensed under CC BY-NC 4.0, which restricts commercial reuse. It is source-available, but does not meet the OSI definition of open source.`,
     sections: [
       {
         heading: 'What you can inspect',
@@ -342,9 +443,9 @@ export const pages: MarketingPage[] = [
         ]
       },
       {
-        heading: 'License boundary',
+        heading: 'License and reuse',
         paragraphs: [
-          'The repository is available for inspection and non-commercial use under its license. The license does not meet the standard definition of open source because it includes a non-commercial restriction. Better Keep will use the same wording consistently in the app, website, repository, and store materials.'
+          'The repository is available for inspection and non-commercial use under its license. The license does not meet the standard definition of open source because it includes a non-commercial restriction.'
         ]
       }
     ],
@@ -362,11 +463,11 @@ export const pages: MarketingPage[] = [
   {
     slug: 'security',
     title: 'Better Keep security and encryption design',
-    eyebrow: 'A transparent boundary, not a vague promise',
+    eyebrow: 'Encryption and its limits',
     description:
       'Understand what Better Keep encrypts, what metadata remains visible, how approved devices receive keys, and how recovery works.',
     answer:
-      `Better Keep encrypts synchronized note titles, content, and supported attachments on the device with ${product.encryption.noteAndAttachmentCipher}. Approved devices use ${product.encryption.deviceKeyExchange} key exchange to receive a wrapped user master key. Recovery material is protected with a passphrase-derived ${product.encryption.recoveryKeyDerivation} key. The implementation is source-available but has not been described as independently audited.`,
+      `Better Keep encrypts synchronized note titles, content, and supported attachments on the device with ${product.encryption.noteAndAttachmentCipher}. Approved devices use ${product.encryption.deviceKeyExchange} key exchange to receive a wrapped user master key. Recovery material is protected with a passphrase-derived ${product.encryption.recoveryKeyDerivation} key. The source code is available to inspect. No independent security audit has been published.`,
     sections: [
       {
         heading: 'Threat model',
@@ -429,22 +530,22 @@ export const pages: MarketingPage[] = [
     description:
       'Follow Better Keep product, privacy, migration, reliability, and platform updates with clear release notes and dates.',
     answer:
-      'The Better Keep changelog documents meaningful product and security changes instead of hiding them inside store copy. The current work adds a local Google Keep Takeout importer, an ethical native review prompt, a static search-friendly website, clearer security and licensing claims, and automated visibility checks.',
+      'Read about changes to Better Keep, including note import, review prompts, the website, and security documentation. The full changelog is available in the repository.',
     sections: [
       {
-        heading: 'July 2026 — migration and discoverability foundation',
+        heading: 'July 2026: note import and website updates',
         bullets: [
           'Added a local-only Google Keep Takeout importer with safety limits, cancellation, duplicate detection, and an import report.',
-          'Added review eligibility based on time, note count, active days, cooldowns, app version, and a successful user milestone.',
+          'Added review eligibility based on time, note count, active days, cooldowns, app version, and completed actions in the app.',
           'Moved Flutter Web to /app/ and made the root website static, crawlable HTML.',
-          'Published switching, privacy, offline, rich-text, voice, platform, source-license, security, and fair comparison pages.',
+          'Published switching, privacy, offline, rich-text, voice, platform, source-license, security, and comparison pages.',
           'Added automated metadata, link, schema, routing, store-copy, and Lighthouse checks.'
         ]
       },
       {
         heading: 'Release-note policy',
         paragraphs: [
-          'A release is documented when it changes user workflows, supported platforms, privacy or security behavior, migration compatibility, pricing, or data handling. Minor internal maintenance may be grouped. Security-sensitive details are published after users have a reasonable chance to update.'
+          'A release is documented when it changes features, supported platforms, privacy or security behavior, migration compatibility, pricing, or data handling. Minor internal maintenance may be grouped. Security-sensitive details are published after users have a reasonable chance to update.'
         ]
       }
     ],
@@ -458,26 +559,26 @@ export const pages: MarketingPage[] = [
   {
     slug: 'compare/standard-notes',
     title: 'Better Keep vs Standard Notes',
-    eyebrow: 'Choose the workflow, not a universal winner',
+    eyebrow: 'Compare editing, sync, and licensing',
     description:
       'Compare Better Keep and Standard Notes for private writing, encrypted sync, card-based capture, rich editing, source licensing, and platform support.',
     answer:
-      'Better Keep and Standard Notes both appeal to privacy-conscious note takers, but their workflows differ. Better Keep emphasizes colorful card-based capture, reminders, sketches, voice notes, and a Keep-style interface. Standard Notes emphasizes a long-established encrypted writing system and an open-source ecosystem. Choose based on the workflow and license model you prefer.',
+      'Better Keep organizes rich-text notes as cards, with reminders, sketches, and voice recordings. Standard Notes offers encrypted notes and a choice of editors, with open-source clients and server components. Compare the editing tools and licenses before choosing.',
     sections: [
       {
         heading: 'Better Keep is a better fit when',
         bullets: [
-          'You want a familiar card wall and quick-capture shortcuts.',
-          'Reminders, sketches, audio, colors, and folders are central.',
+          'You like notes displayed as cards and shortcuts for starting a note.',
+          'You use reminders, sketches, audio, colors, and folders.',
           'A local Google Takeout migration is important.'
         ]
       },
       {
         heading: 'Standard Notes is a better fit when',
         bullets: [
-          'You prioritize its established encrypted notes ecosystem.',
-          'Its open-source licensing and self-hosting options are decisive.',
-          'You prefer its editor and subscription model.'
+          'You prefer its encrypted notes and editors.',
+          'You need open-source licensing or its self-hosting options.',
+          'You prefer its subscription plans.'
         ]
       }
     ],
@@ -485,12 +586,12 @@ export const pages: MarketingPage[] = [
       alternativeLabel: 'Standard Notes',
       rows: [
         {
-          subject: 'Primary workflow',
+          subject: 'Notes and editing',
           betterKeep: 'Card-based quick capture and organization',
-          alternative: 'Encrypted writing and editor ecosystem'
+          alternative: 'Encrypted notes and a choice of editors'
         },
         {
-          subject: 'Migration focus',
+          subject: 'Import options',
           betterKeep: 'Local Google Takeout importer',
           alternative: 'Multiple documented import and conversion paths'
         },
@@ -519,12 +620,12 @@ export const pages: MarketingPage[] = [
     description:
       'Compare Better Keep and Notesnook for privacy, migration, editing, quick capture, organization, licensing, and device support.',
     answer:
-      'Better Keep and Notesnook both target people who want private cross-device notes. Better Keep stands out through a Keep-style card workflow, reminders, sketches, voice transcription, and local Google Takeout migration. Notesnook offers its own encrypted editor, publishing, vault, and open-source ecosystem. Test both with your real writing and organization habits.',
+      'Better Keep has rich-text cards, reminders, sketches, voice transcription on supported native devices, and local Google Takeout import. Notesnook offers encrypted notes, publishing, a vault, and open-source code. Try each app with a few notes to see which editing and organization tools you prefer.',
     sections: [
       {
         heading: 'Better Keep is a better fit when',
         bullets: [
-          'You are moving from a card-based Keep workflow.',
+          'You prefer notes displayed as cards.',
           'Fast capture, reminders, colors, audio, and sketches matter.',
           'You want a local Takeout import inside the app.'
         ]
@@ -533,8 +634,8 @@ export const pages: MarketingPage[] = [
         heading: 'Notesnook is a better fit when',
         bullets: [
           'Its open-source licensing is a requirement.',
-          'Its vault, publishing, and editor workflow match your needs.',
-          'You prefer its account and subscription offering.'
+          'You want its vault, publishing, or editing features.',
+          'You prefer its subscription plans.'
         ]
       }
     ],
@@ -542,14 +643,14 @@ export const pages: MarketingPage[] = [
       alternativeLabel: 'Notesnook',
       rows: [
         {
-          subject: 'Primary workflow',
-          betterKeep: 'Keep-style cards and quick capture',
+          subject: 'Notes and editing',
+          betterKeep: 'Rich-text cards and quick capture',
           alternative: 'Private notebooks, editor, vault, and publishing'
         },
         {
           subject: 'Google Keep migration',
           betterKeep: 'Local Takeout importer in the app',
-          alternative: 'Use currently documented Notesnook import options'
+          alternative: 'See Notesnook’s import guide'
         },
         {
           subject: 'License',
@@ -572,26 +673,26 @@ export const pages: MarketingPage[] = [
   {
     slug: 'compare/joplin',
     title: 'Better Keep vs Joplin',
-    eyebrow: 'Simple cards or a notebook knowledge base',
+    eyebrow: 'Cards or Markdown notebooks',
     description:
       'Compare Better Keep and Joplin for privacy, offline notes, migration, organization, Markdown, self-hosting, licensing, and platform support.',
     answer:
-      'Better Keep is designed for fast card-based capture with rich text, reminders, colors, audio, sketches, and an integrated Keep migration. Joplin is a mature open-source notebook and Markdown system with plugins and multiple synchronization targets. Better Keep favors a lightweight Keep-style experience; Joplin favors extensibility and user-controlled infrastructure.',
+      'Better Keep has rich-text cards, reminders, colors, audio, sketches, and Google Keep import. Joplin organizes Markdown notes in notebooks, supports plugins, and offers several sync options. Compare how you write and organize notes, and whether you want to run your own sync server.',
     sections: [
       {
         heading: 'Better Keep is a better fit when',
         bullets: [
           'You want colorful cards instead of notebook-first navigation.',
-          'Reminders, audio transcription, and mobile quick capture are central.',
+          'You use reminders, voice transcription, and shortcuts for starting notes.',
           'You want an importer integrated into the app.'
         ]
       },
       {
         heading: 'Joplin is a better fit when',
         bullets: [
-          'Markdown, plugins, and self-hosting are requirements.',
+          'You need Markdown, plugins, or self-hosting.',
           'You prefer notebook hierarchies and multiple sync targets.',
-          'An OSI-approved open-source license is non-negotiable.'
+          'You need an OSI-approved open-source license.'
         ]
       }
     ],
@@ -599,13 +700,13 @@ export const pages: MarketingPage[] = [
       alternativeLabel: 'Joplin',
       rows: [
         {
-          subject: 'Primary workflow',
+          subject: 'Notes and editing',
           betterKeep: 'Rich-text cards and quick capture',
-          alternative: 'Markdown notebooks and extensibility'
+          alternative: 'Markdown notebooks and plugins'
         },
         {
           subject: 'Hosting',
-          betterKeep: 'Managed optional encrypted sync',
+          betterKeep: 'Optional Pro encrypted cloud sync',
           alternative: 'Multiple sync targets and Joplin Server'
         },
         {

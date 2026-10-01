@@ -222,18 +222,16 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
             isRevoked
                 ? context.l10n.deviceRevoked
                 : context.l10n.waitingForApprovalTitle,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           if (isRevoked)
             Text(
               context.l10n.deviceRevokedDescription,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
           if (!isRevoked) ...[
@@ -252,9 +250,8 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
             if (_masterDeviceName != null) ...[
               Text(
                 context.l10n.pleaseApproveFrom,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 8),
               Container(
@@ -288,9 +285,8 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
             ] else
               Text(
                 context.l10n.waitingForApprovalFromDevice,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: colorScheme.onSurfaceVariant),
               ),
             const SizedBox(height: 32),
             Row(
@@ -308,9 +304,8 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                       Text(context.l10n.rememberThisDevice),
                       Text(
                         context.l10n.deviceRemovedOnSignOut,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),

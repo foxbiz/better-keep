@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/file_sync_track.dart';
 import 'package:better_keep/models/label.dart';
@@ -62,59 +63,56 @@ void main() {
     AppState.db = database;
   }
 
-  test(
-    'offline note edits, attachments and pending work survive immediate reopen',
-    () async {
-      final image = File('${directory.path}/attachment.png');
-      final bytes = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=',
-      );
-      await image.writeAsBytes(bytes);
-      final note = Note(
-        id: 101,
-        title: 'Offline note',
-        content: '[{"insert":"before\\n"}]',
-        plainText: 'before',
-        attachments: [
-          NoteAttachment.image(
-            NoteImage(
-              src: image.path,
-              size: bytes.length,
-              index: 0,
-              aspectRatio: '1:1',
-              lastModified: '',
-            ),
+  test('offline note edits, attachments and pending work survive immediate reopen', () async {
+    final image = File('${directory.path}/attachment.png');
+    final bytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=',
+    );
+    await image.writeAsBytes(bytes);
+    final note = Note(
+      id: 101,
+      title: 'Offline note',
+      content: '[{"insert":"before\\n"}]',
+      plainText: 'before',
+      attachments: [
+        NoteAttachment.image(
+          NoteImage(
+            src: image.path,
+            size: bytes.length,
+            index: 0,
+            aspectRatio: '1:1',
+            lastModified: '',
           ),
-        ],
-      );
-      expect(await note.save(), 101);
-      await FileSyncTrack(
-        noteId: 101,
-        localPath: image.path,
-        remotePath: 'gs://test.invalid/attachment.png',
-        contentHash: FileSyncTrack.computeHash(bytes),
-      ).save();
-      final stableId = note.syncId;
-      note.content =
-          '[{"insert":"task"},{"insert":"\\n","attributes":{"list":"checked"}}]';
-      note.plainText = 'task';
-      note.labels = 'Offline';
-      expect(await note.save(), 101);
-      // No wait for timers or background events before the simulated restart.
-      await reopen();
-      final restored = await Note.findById(101);
-      expect(restored?.content, note.content);
-      expect(restored?.labels, 'Offline');
-      expect(restored?.syncId, stableId);
-      expect(await image.readAsBytes(), bytes);
-      final downloaded = await FileSyncTrack.getByLocalPath(image.path);
-      expect(downloaded?.contentHash, FileSyncTrack.computeHash(bytes));
-      expect(downloaded?.remotePath, isNotNull);
-      final pending = await NoteSyncTrack.getByLocalId(101);
-      expect(pending?.status, SyncStatus.pending);
-      expect(pending?.action, SyncAction.upload);
-    },
-  );
+        ),
+      ],
+    );
+    expect(await note.save(), 101);
+    await FileSyncTrack(
+      noteId: 101,
+      localPath: image.path,
+      remotePath: 'gs://test.invalid/attachment.png',
+      contentHash: FileSyncTrack.computeHash(bytes),
+    ).save();
+    final stableId = note.syncId;
+    note.content =
+        '[{"insert":"task"},{"insert":"\\n","attributes":{"list":"checked"}}]';
+    note.plainText = 'task';
+    note.labels = 'Offline';
+    expect(await note.save(), 101);
+    // No wait for timers or background events before the simulated restart.
+    await reopen();
+    final restored = await Note.findById(101);
+    expect(restored?.content, note.content);
+    expect(restored?.labels, 'Offline');
+    expect(restored?.syncId, stableId);
+    expect(await image.readAsBytes(), bytes);
+    final downloaded = await FileSyncTrack.getByLocalPath(image.path);
+    expect(downloaded?.contentHash, FileSyncTrack.computeHash(bytes));
+    expect(downloaded?.remotePath, isNotNull);
+    final pending = await NoteSyncTrack.getByLocalId(101);
+    expect(pending?.status, SyncStatus.pending);
+    expect(pending?.action, SyncAction.upload);
+  });
 
   test(
     'PIN protection and later edits remain pending across restart',

@@ -162,12 +162,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: FirebaseSelectionScreen(
-          onSelected:
-              (
-                environment, {
-                physicalDeviceHost,
-                googleAuthMode = GoogleEmulatorAuthMode.mock,
-              }) async {},
+          onSelected: (
+            environment, {
+            physicalDeviceHost,
+            googleAuthMode = GoogleEmulatorAuthMode.mock,
+          }) async {},
         ),
       ),
     );

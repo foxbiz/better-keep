@@ -11,8 +11,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 typedef AttachmentSessionRead = Future<Uint8List> Function(String filePath);
-typedef AttachmentSessionWrite =
-    Future<void> Function(String filePath, Uint8List plaintext);
+typedef AttachmentSessionWrite = Future<void> Function(
+  String filePath,
+  Uint8List plaintext,
+);
 typedef AttachmentSourceCleanup = Future<void> Function(String sourcePath);
 
 enum _AttachmentSourceOwner { caller, commit, finished }

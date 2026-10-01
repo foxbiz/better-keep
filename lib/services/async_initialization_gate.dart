@@ -10,15 +10,13 @@ class AsyncInitializationGate {
     if (running != null) return running;
 
     late final Future<void> candidate;
-    candidate = Future<void>.sync(initializer).onError((
-      Object error,
-      StackTrace stackTrace,
-    ) {
-      if (identical(_running, candidate)) {
-        _running = null;
-      }
-      Error.throwWithStackTrace(error, stackTrace);
-    });
+    candidate = Future<void>.sync(initializer)
+        .onError((Object error, StackTrace stackTrace) {
+          if (identical(_running, candidate)) {
+            _running = null;
+          }
+          Error.throwWithStackTrace(error, stackTrace);
+        });
     _running = candidate;
     return candidate;
   }

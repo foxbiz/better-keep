@@ -99,9 +99,8 @@ class _AppColorPickerDialogState extends State<AppColorPickerDialog> {
                           boxShadow: [
                             if (widget.currentColor == color)
                               BoxShadow(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.4),
+                                color: Theme.of(context).colorScheme.primary
+                                    .withValues(alpha: 0.4),
                                 spreadRadius: 2,
                                 blurRadius: 4,
                               ),
