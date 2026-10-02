@@ -23,7 +23,7 @@
 		"node": "22.x || 24.x"
 	},
 	"overrides": {
-		"js-yaml": "^4.3.1",
+		"js-yaml": "^4.3.2",
 		"gaxios": {
 			"uuid": "^11.1.1"
 		},
@@ -36,7 +36,7 @@
 		"cookie": "^2.0.1",
 		"cross-spawn": "7.0.6",
 		"firebase": "12.16.0",
-		"firebase-tools": "15.24.0",
+		"firebase-tools": "15.32.1",
 		"proxy-agent": "^8.0.2"
 	}
 }
