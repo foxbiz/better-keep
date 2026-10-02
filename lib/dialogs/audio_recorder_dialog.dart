@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:better_keep/dialogs/audio_recorder_options.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/whisper/whisper_service.dart';
@@ -620,9 +621,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
@@ -766,9 +767,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                               child: Text(
                                 l10n.whisperModelRequired,
                                 style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -805,9 +806,9 @@ class _AudioRecorderDialogState extends State<AudioRecorderDialog>
                                 '${(_downloadProgress * 100).toInt()}%',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.outline,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outline,
                                     ),
                               ),
                             ],

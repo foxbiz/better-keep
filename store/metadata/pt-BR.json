@@ -4,19 +4,19 @@
   "appStore": {
     "name": "Better Keep: Notas Privadas",
     "subtitle": "Notas ricas, offline e seguras",
-    "keywords": "lista,lembrete,voz,transcrição,pasta,bloqueio,diário,desenho,organizar,sincronizar,nota",
-    "promotionalText": "Notas privadas com texto rico, uso local, lembretes e sincronização criptografada de ponta a ponta."
+    "keywords": "lista,lembrete,voz,transcrição,pasta,bloqueio,diário,desenho,organizar,sincronizar",
+    "promotionalText": "Notas privadas com texto rico e lembretes. Notas locais gratuitas após entrar; sincronização criptografada na nuvem exige Pro."
   },
   "playStore": {
     "title": "Better Keep: Notas Privadas",
-    "shortDescription": "Notas privadas e offline com texto rico e sincronização criptografada.",
-    "fullDescription": "Escreva com rapidez sem abrir mão de formatação, acesso offline ou privacidade. O Better Keep combina cartões simples com armazenamento local.\n\nUse títulos, listas, checklists, links, imagens, desenhos, gravações de voz e lembretes. Organize tudo com etiquetas, pastas, cores, notas fixadas, arquivo e busca rápida.\n\nVocê pode começar com notas locais sem criar uma conta. Na sincronização opcional, títulos, conteúdo e anexos compatíveis são criptografados no dispositivo. A importação de arquivos compatíveis também é processada localmente.\n\nDisponível para Android, iOS, macOS, Windows e Web. Alguns recursos, como transcrição de voz no dispositivo, variam por plataforma. O código-fonte está disponível sob a licença CC BY-NC 4.0."
+    "shortDescription": "Notas privadas e offline com texto rico. Sincronização criptografada com Pro.",
+    "fullDescription": "Escreva com rapidez sem abrir mão de formatação, acesso offline ou privacidade. O Better Keep combina cartões simples com armazenamento local.\n\nUse títulos, listas, checklists, links, imagens, desenhos, gravações de voz e lembretes. Organize tudo com etiquetas, pastas, cores, notas fixadas, arquivo e busca rápida.\n\nÉ necessário ter uma conta. Após entrar, as notas locais são gratuitas e funcionam offline. A sincronização criptografada na nuvem e as notas bloqueadas ilimitadas exigem Pro; o plano gratuito inclui até cinco notas bloqueadas. Na sincronização, títulos, conteúdo e anexos compatíveis são criptografados no dispositivo. A importação de arquivos compatíveis também é processada localmente.\n\nDisponível para Android, iOS, macOS, Windows e Web. Alguns recursos, como transcrição de voz no dispositivo, variam por plataforma. O código-fonte está disponível sob a licença CC BY-NC 4.0."
   },
   "screenshotCopy": [
     "Suas notas privadas, melhores",
     "Texto rico sem complicação",
-    "Sincronização criptografada",
-    "Offline em vários dispositivos",
+    "Sincronização criptografada com Pro",
+    "Offline após entrar na conta",
     "Leve suas notas com você",
     "Voz transcrita no dispositivo",
     "Lembretes no ritmo certo",

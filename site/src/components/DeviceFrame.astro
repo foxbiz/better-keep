@@ -3,6 +3,10 @@ interface Props {
   id: string;
   src: string;
   optimizedSrc: string;
+  optimizedSrcset?: string;
+  width: number;
+  height: number;
+  platform: string;
   alt: string;
   caption?: string;
   class?: string;
@@ -14,6 +18,10 @@ const {
   id,
   src,
   optimizedSrc,
+  optimizedSrcset,
+  width,
+  height,
+  platform,
   alt,
   caption,
   class: className,
@@ -23,18 +31,18 @@ const {
 ---
 
 <figure
-  class:list={['device-frame', className]}
+  class:list={['device-frame', `device-frame--${platform}`, className]}
   data-device-frame
   data-screenshot-id={id}
 >
   <div class="device-frame__hardware">
-    <span class="device-frame__speaker" aria-hidden="true"></span>
+    {platform === 'ios' && <span class="device-frame__speaker" aria-hidden="true"></span>}
     <picture>
-      <source srcset={optimizedSrc} type="image/webp" />
+      <source srcset={optimizedSrcset || optimizedSrc} sizes={platform === 'desktop' ? '(max-width: 1000px) 90vw, 1000px' : '(max-width: 680px) 85vw, 360px'} type="image/webp" />
       <img
         src={src}
-        width="1179"
-        height="2556"
+        width={width}
+        height={height}
         loading={priority ? 'eager' : 'lazy'}
         decoding="async"
         fetchpriority={priority ? 'high' : 'auto'}

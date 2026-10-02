@@ -6,8 +6,12 @@ import 'package:flutter/material.dart';
 
 /// Custom image builder function type for rendering images in the grid.
 /// Used for custom rendering like blurred thumbnails for locked notes.
-typedef ImageTileBuilder =
-    Widget Function(NoteImage image, int index, int total, BoxFit fit);
+typedef ImageTileBuilder = Widget Function(
+  NoteImage image,
+  int index,
+  int total,
+  BoxFit fit,
+);
 
 class NoteImageGrid extends StatelessWidget {
   final List<NoteImage> images;

@@ -2,6 +2,7 @@ import 'package:better_keep/models/note_table.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/services/sync_track_store.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -39,8 +40,9 @@ import 'package:uuid/uuid.dart';
 
 typedef NoteEvent = ModelEvent<Note>;
 typedef NoteListener = ModelListener<Note>;
-typedef ReminderScheduleCallback =
-    Future<ReminderScheduleResult> Function(Note note);
+typedef ReminderScheduleCallback = Future<ReminderScheduleResult> Function(
+  Note note,
+);
 
 Reminder? _parseReminder(Object? raw) {
   if (raw == null) return null;
@@ -3516,8 +3518,7 @@ class _NoteSchema implements ModelSchema<Note> {
         NoteType.locked => "locked = 1",
         NoteType.pinned => "pinned = 1",
         NoteType.trashed => "trashed = 1",
-        NoteType.reminder =>
-          "reminder IS NOT NULL AND trashed = 0 AND (completed = 0 OR reminder LIKE '%Daily%' OR reminder LIKE '%Weekly%' OR reminder LIKE '%Monthly%' OR reminder LIKE '%Yearly%')",
+        NoteType.reminder => "reminder IS NOT NULL AND trashed = 0 AND (completed = 0 OR reminder LIKE '%Daily%' OR reminder LIKE '%Weekly%' OR reminder LIKE '%Monthly%' OR reminder LIKE '%Yearly%')",
         _ => "trashed = 0 AND archived = 0",
       },
     ];

@@ -58,6 +58,7 @@ test("lists development platforms and explains mobile device selection", () => {
 	assert.deepEqual(parseDevTaskArguments(["help"]), {help: true});
 	assert.deepEqual(DEV_PLATFORM_NAMES, [
 		"android",
+		"hosting",
 		"ios",
 		"macos",
 		"web",
@@ -66,6 +67,27 @@ test("lists development platforms and explains mobile device selection", () => {
 	assert.match(formatDevTaskHelp(), /npm run dev <platform>/);
 	assert.match(formatDevTaskHelp(), /selected automatically/);
 	assert.match(formatDevTaskHelp(), /-- -d <device-id>/);
+});
+
+test("hosting runs the website workspace and forwards Astro options without device discovery", async () => {
+	const calls = [];
+	const exitCode = await runDevTask(["hosting", "--port", "4322"], {
+		root: "/repository",
+		processEnv: {BASE: "present"},
+		runProcess: async (operation) => {
+			calls.push(operation);
+			return 7;
+		},
+		runProcessWithOutput: async () => assert.fail("Hosting must not discover Flutter devices"),
+	});
+	assert.equal(exitCode, 7);
+	assert.deepEqual(calls, [{
+		command: "npm",
+		args: ["run", "dev", "--workspace", "site", "--", "--port", "4322"],
+		cwd: "/repository",
+		env: {BASE: "present"},
+	}]);
+	assert.throws(() => resolveDevTask(["hosting", "-d", "chrome"]), /does not use Flutter devices/);
 });
 
 test("mobile targets defer their Flutter operation until device discovery", () => {

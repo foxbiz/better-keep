@@ -422,9 +422,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         // Description
         Text(
           context.l10n.resetPasswordDescription,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodyLarge
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
@@ -518,9 +517,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         // Description
         Text(
           context.l10n.enterCodeSentTo,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodyLarge
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
 
@@ -617,9 +615,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         // Expires in note
         Text(
           context.l10n.codeExpiresIn,
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -660,9 +657,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
         // Description
         Text(
           context.l10n.enterNewPasswordDescription,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodyLarge
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),

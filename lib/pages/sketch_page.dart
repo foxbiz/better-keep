@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
+
 import 'package:better_keep/components/adaptive_popup_menu.dart';
 import 'package:better_keep/components/page_pattern_painter.dart';
 import 'package:better_keep/components/sketch_painter.dart';
@@ -1636,9 +1637,9 @@ class _SketchPageState extends State<SketchPage>
                                                 Icon(
                                                   pattern.icon,
                                                   color: isSelected
-                                                      ? Theme.of(
-                                                          context,
-                                                        ).colorScheme.primary
+                                                      ? Theme.of(context)
+                                                            .colorScheme
+                                                            .primary
                                                       : Theme.of(context)
                                                             .colorScheme
                                                             .onSurfaceVariant,
@@ -1688,9 +1689,9 @@ class _SketchPageState extends State<SketchPage>
                                           children: [
                                             Icon(
                                               Icons.save_alt,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                             ),
                                             const SizedBox(width: 12),
                                             Text(context.l10n.saveToGallery),
@@ -1705,17 +1706,17 @@ class _SketchPageState extends State<SketchPage>
                                           children: [
                                             Icon(
                                               Icons.delete,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.error,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error,
                                             ),
                                             const SizedBox(width: 12),
                                             Text(
                                               context.l10n.delete,
                                               style: TextStyle(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.error,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .error,
                                               ),
                                             ),
                                           ],

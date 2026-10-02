@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3197,8 +3198,7 @@ class AppLocalizationsId extends AppLocalizations {
       locale: localeName,
       other:
           'Apakah Anda benar-benar ingin menghapus $count catatan selamanya? Ini tidak dapat dibatalkan.',
-      one:
-          'Apakah Anda benar-benar ingin menghapus catatan ini selamanya? Ini tidak dapat dibatalkan.',
+      one: 'Apakah Anda benar-benar ingin menghapus catatan ini selamanya? Ini tidak dapat dibatalkan.',
     );
     return '$_temp0';
   }

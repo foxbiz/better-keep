@@ -184,9 +184,8 @@ Widget _host(
   supportedLocales: betterKeepSupportedLocales,
   home: Builder(
     builder: (context) => MediaQuery(
-      data: MediaQuery.of(
-        context,
-      ).copyWith(alwaysUse24HourFormat: alwaysUse24HourFormat),
+      data: MediaQuery.of(context)
+          .copyWith(alwaysUse24HourFormat: alwaysUse24HourFormat),
       child: NoteEditor(key: ValueKey(editorKey), note: note),
     ),
   ),

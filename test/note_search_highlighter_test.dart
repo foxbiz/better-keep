@@ -23,19 +23,17 @@ void main() {
       decoration: TextDecoration.underline,
     );
 
-    final span =
-        NoteSearchHighlighter.build(
-              node: node,
-              nodeOffset: 0,
-              text: 'target',
-              style: style,
-              recognizer: recognizer,
-              matches: const [NoteSearchMatch(start: 7, end: 13)],
-              activeMatch: const NoteSearchMatch(start: 7, end: 13),
-              matchColor: Colors.yellow,
-              activeMatchColor: Colors.orange,
-            )
-            as TextSpan;
+    final span = NoteSearchHighlighter.build(
+      node: node,
+      nodeOffset: 0,
+      text: 'target',
+      style: style,
+      recognizer: recognizer,
+      matches: const [NoteSearchMatch(start: 7, end: 13)],
+      activeMatch: const NoteSearchMatch(start: 7, end: 13),
+      matchColor: Colors.yellow,
+      activeMatchColor: Colors.orange,
+    ) as TextSpan;
     final highlighted = span.children!.single as TextSpan;
 
     expect(highlighted.text, 'target');

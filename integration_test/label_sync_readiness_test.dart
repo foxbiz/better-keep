@@ -222,9 +222,8 @@ void main() {
       expect(conflict.outcome, NoteSortCloudCommitOutcome.conflict);
       expect(conflict.previousRevision, firstRevision);
       expect(
-        (await manifest.get(
-          const GetOptions(source: Source.server),
-        )).data()?['revision'],
+        (await manifest.get(const GetOptions(source: Source.server)))
+            .data()?['revision'],
         firstRevision,
       );
 
@@ -238,9 +237,8 @@ void main() {
       );
       expect(committed.outcome, NoteSortCloudCommitOutcome.committed);
       expect(
-        (await manifest.get(
-          const GetOptions(source: Source.server),
-        )).data()?['revision'],
+        (await manifest.get(const GetOptions(source: Source.server)))
+            .data()?['revision'],
         finalRevision,
       );
     } finally {

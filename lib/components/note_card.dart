@@ -987,9 +987,9 @@ class _NoteCardState extends State<NoteCard>
           child: LinearProgressIndicator(
             value: progress,
             minHeight: 4,
-            backgroundColor: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest,
+            backgroundColor: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest,
             valueColor: AlwaysStoppedAnimation<Color>(
               progress == 1.0
                   ? Colors.green
@@ -1398,9 +1398,8 @@ class _NoteCardState extends State<NoteCard>
                 padding: EdgeInsets.all(10.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8.0),
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.errorContainer.withValues(alpha: 0.7),
+                  color: Theme.of(context).colorScheme.errorContainer
+                      .withValues(alpha: 0.7),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

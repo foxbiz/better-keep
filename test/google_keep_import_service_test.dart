@@ -721,9 +721,8 @@ void _setFirstZipHeaderUint32(
       break;
     }
     if (!matches) continue;
-    ByteData.sublistView(
-      archive,
-    ).setUint32(index + fieldOffset, value, Endian.little);
+    ByteData.sublistView(archive)
+        .setUint32(index + fieldOffset, value, Endian.little);
     return;
   }
   throw StateError('ZIP header was not found');

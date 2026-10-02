@@ -16,6 +16,10 @@ const platforms = {
 		description: "Run the Android application in debug mode.",
 		mobileTarget: "android",
 	},
+	hosting: {
+		description: "Run the marketing website with Astro on port 4321.",
+		operation: {command: "npm", args: ["run", "dev", "--workspace", "site", "--"]},
+	},
 	ios: {
 		description: "Run the iOS application in debug mode.",
 		mobileTarget: "ios",
@@ -81,6 +85,9 @@ export function parseDevTaskArguments(argv) {
 	const {deviceId: explicitDeviceId, forwardedArgs: extraArgs} =
 		extractDeviceSelector(arguments_);
 	if (explicitDeviceId && !definition.mobileTarget) {
+		if (definition.operation) {
+			throw new Error(`The ${platform} development target does not use Flutter devices.`);
+		}
 		throw new Error(
 			`The ${platform} development target uses the fixed Flutter device ID ${definition.device}.`,
 		);
@@ -121,7 +128,9 @@ export function resolveDevTask(argv) {
 	};
 	return {
 		...task,
-		operation: deviceId ? createDevOperation(task, deviceId) : null,
+		operation: definition.operation
+			? {...definition.operation, args: [...definition.operation.args, ...task.extraArgs]}
+			: deviceId ? createDevOperation(task, deviceId) : null,
 	};
 }
 

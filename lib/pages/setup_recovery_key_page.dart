@@ -137,9 +137,8 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.errorContainer.withValues(alpha: 0.5),
+                      color: Theme.of(context).colorScheme.errorContainer
+                          .withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -213,9 +212,9 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
                               _strengthWarning!,
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.tertiary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .tertiary,
                                   ),
                             ),
                           ),

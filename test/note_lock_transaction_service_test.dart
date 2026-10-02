@@ -182,11 +182,9 @@ void main() {
       expect(files.containsKey('/docs/strokes.json'), isFalse);
       final protected = files[sketch.strokesFilePath]!;
       expect(isBytesPasswordEncrypted(protected), isTrue);
-      final decoded =
-          jsonDecode(
-                utf8.decode(await decryptBytesWithPassword(protected, '1234')),
-              )
-              as Map<String, dynamic>;
+      final decoded = jsonDecode(
+        utf8.decode(await decryptBytesWithPassword(protected, '1234')),
+      ) as Map<String, dynamic>;
       expect(decoded['strokes'], [stroke.toString()]);
       expect(decoded['bgColor'], Colors.blue.toARGB32());
       expect(decoded['pagePattern'], PagePattern.grid.name);
@@ -505,119 +503,103 @@ void main() {
     },
   );
 
-  test(
-    'newly locked sketch preview remains visible only through its session decoder',
-    () async {
-      final previewBytes = Uint8List.fromList([
-        0x89,
-        0x50,
-        0x4e,
-        0x47,
-        1,
-        2,
-        3,
-      ]);
-      final files = <String, Uint8List>{
-        '/docs/preview.jpg': Uint8List.fromList(previewBytes),
-        '/docs/strokes.json': Uint8List.fromList(
-          utf8.encode(jsonEncode({'strokes': <String>[]})),
-        ),
-      };
-      final fake = _FakeLockFiles(files: files);
-      Note.lockFileOperationsOverride = fake.operations;
-      final sketch = SketchData(
-        previewImage: '/docs/preview.jpg',
-        blurredThumbnail: 'existing-local-thumbnail',
-        strokesFilePath: '/docs/strokes.json',
-        strokes: [
-          SketchStroke(points: '1,2,0.5;', color: Colors.black, size: 2),
-        ],
-      );
-      final note = Note(
-        id: 25,
-        title: 'Sketch',
-        content: _content('body'),
-        plainText: 'body',
-        attachments: [NoteAttachment.sketch(sketch)],
-      );
-      await _insertNote(database, note);
+  test('newly locked sketch preview remains visible only through its session decoder', () async {
+    final previewBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    final files = <String, Uint8List>{
+      '/docs/preview.jpg': Uint8List.fromList(previewBytes),
+      '/docs/strokes.json': Uint8List.fromList(
+        utf8.encode(jsonEncode({'strokes': <String>[]})),
+      ),
+    };
+    final fake = _FakeLockFiles(files: files);
+    Note.lockFileOperationsOverride = fake.operations;
+    final sketch = SketchData(
+      previewImage: '/docs/preview.jpg',
+      blurredThumbnail: 'existing-local-thumbnail',
+      strokesFilePath: '/docs/strokes.json',
+      strokes: [SketchStroke(points: '1,2,0.5;', color: Colors.black, size: 2)],
+    );
+    final note = Note(
+      id: 25,
+      title: 'Sketch',
+      content: _content('body'),
+      plainText: 'body',
+      attachments: [NoteAttachment.sketch(sketch)],
+    );
+    await _insertNote(database, note);
 
-      await note.lock('2468');
+    await note.lock('2468');
 
-      expect(note.locked, isTrue);
-      expect(note.unlocked, isTrue);
-      expect(sketch.previewImage, isNot('/docs/preview.jpg'));
-      final canonicalPreview = files[sketch.previewImage]!;
-      expect(isBytesPasswordEncrypted(canonicalPreview), isTrue);
+    expect(note.locked, isTrue);
+    expect(note.unlocked, isTrue);
+    expect(sketch.previewImage, isNot('/docs/preview.jpg'));
+    final canonicalPreview = files[sketch.previewImage]!;
+    expect(isBytesPasswordEncrypted(canonicalPreview), isTrue);
 
-      final displayBytes = await UniversalImage.prepareImageBytes(
-        canonicalPreview,
-        passwordProtectedDecoder: note.decryptAttachmentForSession,
-      );
-      expect(displayBytes, previewBytes);
-      expect(isBytesPasswordEncrypted(files[sketch.previewImage]!), isTrue);
-      expect(files, isNot(contains('/docs/preview.jpg')));
-    },
-  );
+    final displayBytes = await UniversalImage.prepareImageBytes(
+      canonicalPreview,
+      passwordProtectedDecoder: note.decryptAttachmentForSession,
+    );
+    expect(displayBytes, previewBytes);
+    expect(isBytesPasswordEncrypted(files[sketch.previewImage]!), isTrue);
+    expect(files, isNot(contains('/docs/preview.jpg')));
+  });
 
-  test(
-    'save waits for detached lock commit and never publishes staged paths early',
-    () async {
-      final files = <String, Uint8List>{
-        '/docs/image.jpg': Uint8List.fromList([1, 2, 3]),
-      };
-      final fake = _FakeLockFiles(files: files);
-      Note.lockFileOperationsOverride = fake.operations;
-      final note = Note(
-        id: 20,
-        title: 'Concurrent save',
-        content: _content('body'),
-        plainText: 'body',
-        attachments: [NoteAttachment.image(_image('/docs/image.jpg'))],
-      );
-      await _insertNote(database, note);
+  test('save waits for detached lock commit and never publishes staged paths early', () async {
+    final files = <String, Uint8List>{
+      '/docs/image.jpg': Uint8List.fromList([1, 2, 3]),
+    };
+    final fake = _FakeLockFiles(files: files);
+    Note.lockFileOperationsOverride = fake.operations;
+    final note = Note(
+      id: 20,
+      title: 'Concurrent save',
+      content: _content('body'),
+      plainText: 'body',
+      attachments: [NoteAttachment.image(_image('/docs/image.jpg'))],
+    );
+    await _insertNote(database, note);
 
-      final reachedCommit = Completer<void>();
-      final releaseCommit = Completer<void>();
-      Note.lockBeforeCommitOverride = (_) async {
-        reachedCommit.complete();
-        await releaseCommit.future;
-      };
+    final reachedCommit = Completer<void>();
+    final releaseCommit = Completer<void>();
+    Note.lockBeforeCommitOverride = (_) async {
+      reachedCommit.complete();
+      await releaseCommit.future;
+    };
 
-      final lockFuture = note.lock('1234');
-      await reachedCommit.future;
-      final stagedPath = files.keys.singleWhere(
-        (path) => path != '/docs/image.jpg',
-      );
+    final lockFuture = note.lock('1234');
+    await reachedCommit.future;
+    final stagedPath = files.keys.singleWhere(
+      (path) => path != '/docs/image.jpg',
+    );
 
-      expect(note.locked, isFalse);
-      expect(note.attachments.single.image!.src, '/docs/image.jpg');
-      final beforeCommit = (await database.query(
-        'note',
-        where: 'id = 20',
-      )).single;
-      expect(beforeCommit['attachments'], contains('/docs/image.jpg'));
-      expect(beforeCommit['attachments'], isNot(contains(stagedPath)));
+    expect(note.locked, isFalse);
+    expect(note.attachments.single.image!.src, '/docs/image.jpg');
+    final beforeCommit = (await database.query(
+      'note',
+      where: 'id = 20',
+    )).single;
+    expect(beforeCommit['attachments'], contains('/docs/image.jpg'));
+    expect(beforeCommit['attachments'], isNot(contains(stagedPath)));
 
-      var saveCompleted = false;
-      final saveFuture = note.save(false).then((value) {
-        saveCompleted = true;
-        return value;
-      });
-      await Future<void>.delayed(Duration.zero);
-      expect(saveCompleted, isFalse);
+    var saveCompleted = false;
+    final saveFuture = note.save(false).then((value) {
+      saveCompleted = true;
+      return value;
+    });
+    await Future<void>.delayed(Duration.zero);
+    expect(saveCompleted, isFalse);
 
-      releaseCommit.complete();
-      await lockFuture;
-      expect(await saveFuture, 20);
+    releaseCommit.complete();
+    await lockFuture;
+    expect(await saveFuture, 20);
 
-      final committed = (await database.query('note', where: 'id = 20')).single;
-      expect(committed['locked'], 1);
-      expect(committed['attachments'], contains(stagedPath));
-      expect(files, contains(stagedPath));
-      expect(files, isNot(contains('/docs/image.jpg')));
-    },
-  );
+    final committed = (await database.query('note', where: 'id = 20')).single;
+    expect(committed['locked'], 1);
+    expect(committed['attachments'], contains(stagedPath));
+    expect(files, contains(stagedPath));
+    expect(files, isNot(contains('/docs/image.jpg')));
+  });
 
   test('failed lock releases queued save with original paths intact', () async {
     final files = <String, Uint8List>{

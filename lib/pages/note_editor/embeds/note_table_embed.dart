@@ -531,9 +531,9 @@ class _NoteTableViewState extends State<NoteTableView> {
                                     child: Center(
                                       child: Text(
                                         _columnLabel(c),
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelSmall,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall,
                                       ),
                                     ),
                                   ),
@@ -549,9 +549,9 @@ class _NoteTableViewState extends State<NoteTableView> {
                                     child: Center(
                                       child: Text(
                                         '${r + 1}',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelSmall,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall,
                                       ),
                                     ),
                                   ),
@@ -644,9 +644,8 @@ class _NoteTableViewState extends State<NoteTableView> {
           );
         }
         return ScrollConfiguration(
-          behavior: ScrollConfiguration.of(
-            context,
-          ).copyWith(scrollbars: false, dragDevices: _dragDevices),
+          behavior: ScrollConfiguration.of(context)
+              .copyWith(scrollbars: false, dragDevices: _dragDevices),
           child: preview ? IgnorePointer(child: grid) : grid,
         );
       },
@@ -665,9 +664,8 @@ class _NoteTableViewState extends State<NoteTableView> {
     padding: EdgeInsets.zero,
     thickness: 4,
     radius: const Radius.circular(2),
-    thumbColor: Theme.of(
-      context,
-    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+    thumbColor: Theme.of(context).colorScheme.onSurfaceVariant
+        .withValues(alpha: 0.45),
     crossAxisMargin: 6,
     mainAxisMargin: 4,
     scrollbarOrientation: ScrollbarOrientation.bottom,

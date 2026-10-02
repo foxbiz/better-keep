@@ -1,4 +1,5 @@
 import 'package:better_keep/services/cloud_session_recovery.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -964,16 +965,14 @@ Expected IDs: ${ProductIds.all}
         if (verificationToken.trim().isEmpty) {
           return VerifyPurchaseResult(
             valid: false,
-            error:
-                'Unable to validate App Store purchase right now. Please tap Restore Purchases and try again.',
+            error: 'Unable to validate App Store purchase right now. Please tap Restore Purchases and try again.',
           );
         }
 
         if (_isTransactionJsonPayload(verificationToken)) {
           return VerifyPurchaseResult(
             valid: false,
-            error:
-                'Unable to validate this purchase payload yet. Please tap Restore Purchases and try again.',
+            error: 'Unable to validate this purchase payload yet. Please tap Restore Purchases and try again.',
           );
         }
       }
@@ -1022,9 +1021,7 @@ Expected IDs: ${ProductIds.all}
       if (e.code == 'already-exists') {
         return VerifyPurchaseResult(
           valid: false,
-          error:
-              e.message ??
-              'This subscription is already linked to another account. Please contact support.',
+          error: e.message ?? 'This subscription is already linked to another account. Please contact support.',
           isLinkedToOtherAccount: true,
         );
       }
@@ -1048,9 +1045,7 @@ Expected IDs: ${ProductIds.all}
       if (e.code == 'internal') {
         return VerifyPurchaseResult(
           valid: false,
-          error:
-              e.message ??
-              'Server error while verifying purchase. Please try again shortly.',
+          error: e.message ?? 'Server error while verifying purchase. Please try again shortly.',
         );
       }
 
@@ -1058,9 +1053,7 @@ Expected IDs: ${ProductIds.all}
       // The user can try restoring purchases later once the issue is resolved
       return VerifyPurchaseResult(
         valid: false,
-        error:
-            e.message ??
-            'Unable to verify purchase. Please try restoring purchases later or contact support.',
+        error: e.message ?? 'Unable to verify purchase. Please try restoring purchases later or contact support.',
       );
     } catch (e) {
       AppLogger.error(

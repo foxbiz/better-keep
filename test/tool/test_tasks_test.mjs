@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
 	TEST_SUITE_NAMES,
@@ -54,8 +54,8 @@ test("root manifest exposes only grouped task entry points", () => {
 });
 
 test("lists every supported suite and treats an omitted suite as help", () => {
-	assert.deepEqual(parseTestTaskArguments([]), {help: true});
-	assert.deepEqual(parseTestTaskArguments(["--help"]), {help: true});
+	assert.deepEqual(parseTestTaskArguments([]), { help: true });
+	assert.deepEqual(parseTestTaskArguments(["--help"]), { help: true });
 	assert.deepEqual(TEST_SUITE_NAMES, [
 		"client-sync",
 		"database-migrations",
@@ -82,7 +82,6 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"reminders",
 		"review-prompts",
 		"search",
-		"store",
 		"subscription-management",
 		"visibility",
 		"web-release",
@@ -91,17 +90,34 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 	assert.match(formatTestTaskHelp(), /npm test <suite>/);
 });
 
-test("search suite validates site types, store metadata, and built visibility", () => {
+test("declared task commands reference existing repository files", () => {
+	const root = new URL("../../", import.meta.url);
+	const sourceFile = /^(?:\.\/)?(?:scripts|test|tool)\/[\w/.-]+\.(?:dart|mjs|mts|ts|py|sh)$/;
+	for (const suite of TEST_SUITE_NAMES) {
+		for (const operation of resolveTestTask([suite]).operations) {
+			for (const argument of [operation.command, ...(operation.args ?? [])]) {
+				if (!sourceFile.test(argument ?? "")) continue;
+				assert.ok(
+					existsSync(new URL(argument, root)),
+					`${suite} references missing ${argument}`,
+				);
+			}
+		}
+	}
+});
+
+test("search suite validates site types and built visibility", () => {
 	assert.deepEqual(resolveTestTask(["search"]).operations, [
 		{
 			args: [
+				"--experimental-strip-types",
 				"--test",
-				"test/site_account_manage_test.mjs",
-				"test/site_assets_test.mjs",
-				"test/site_public_documents_test.mjs",
-				"test/site_public_stats_test.mjs",
-				"test/site_share_viewer_test.mjs",
-				"test/site_store_platform_test.mjs",
+				"test/site_account_manage_test.mts",
+				"test/site_assets_test.mts",
+				"test/site_public_documents_test.mts",
+				"test/site_public_stats_test.mts",
+				"test/site_share_viewer_test.mts",
+				"test/site_store_platform_test.mts",
 			],
 			command: "node",
 			environment: {},
@@ -128,12 +144,6 @@ test("search suite validates site types, store metadata, and built visibility", 
 		{
 			args: ["--prefix", "admin-site", "run", "check"],
 			command: "npm",
-			environment: {},
-			type: "process",
-		},
-		{
-			args: ["scripts/validate_store_metadata.mjs"],
-			command: "node",
 			environment: {},
 			type: "process",
 		},
@@ -256,7 +266,7 @@ test("release expands suites in the established order and excludes devices", () 
 		"windows_build_policy_test.mjs",
 		"database_merge_migration_test.dart",
 		"build_web.sh",
-		"site_assets_test.mjs",
+		"site_assets_test.mts",
 		"test_hosting_routes.sh",
 		"google_keep_import_service_test.dart",
 		"google_keep_import_discoverability_test.dart",
@@ -313,7 +323,7 @@ test("injects emulator-only environment values into Firebase operations", () => 
 test("unknown suites fail with help and plain npm test succeeds", async () => {
 	let stdout = "";
 	assert.equal(
-		await runTestTask([], {stdout: {write: (value) => (stdout += value)}}),
+		await runTestTask([], { stdout: { write: (value) => (stdout += value) } }),
 		0,
 	);
 	assert.match(stdout, /firebase-emulator-functions/);
@@ -321,7 +331,7 @@ test("unknown suites fail with help and plain npm test succeeds", async () => {
 	let stderr = "";
 	assert.equal(
 		await runTestTask(["missing"], {
-			stderr: {write: (value) => (stderr += value)},
+			stderr: { write: (value) => (stderr += value) },
 		}),
 		2,
 	);
@@ -332,7 +342,7 @@ test("unknown suites fail with help and plain npm test succeeds", async () => {
 test("executes sequential operations and stops on the first failure", async () => {
 	const calls = [];
 	const exitCode = await runTestTask(["firebase-apple"], {
-		processEnv: {BASE: "present"},
+		processEnv: { BASE: "present" },
 		runProcess: async (operation) => {
 			calls.push(operation);
 			return 7;
@@ -348,9 +358,9 @@ test("passes merged environments to Firebase without changing the parent", async
 	const originalLegacyValue = process.env.OAUTH_LEGACY_V1_ENABLED;
 	const firebaseCalls = [];
 	const exitCode = await runTestTask(["firebase-emulator-functions"], {
-		processEnv: {BASE: "present"},
+		processEnv: { BASE: "present" },
 		runFirebase: async (args, options) => {
-			firebaseCalls.push({args, options});
+			firebaseCalls.push({ args, options });
 			return 0;
 		},
 		runFunctions: async () => 0,

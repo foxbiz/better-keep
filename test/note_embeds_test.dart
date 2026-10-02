@@ -1,7 +1,9 @@
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/dialogs/paste_dialog.dart';
 import 'package:better_keep/utils/note_embed_rules.dart';
+
 import 'dart:convert';
+
 import 'package:flutter_quill/quill_delta.dart';
 
 import 'package:better_keep/models/note.dart';
@@ -16,58 +18,50 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'sparse tables preserve legacy nested content through storage and axis edits',
-    () {
-      final nested = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
-        {'insert': 'Nested\n'},
-      ]);
-      final rich = [
+  test('sparse tables preserve legacy nested content through storage and axis edits', () {
+    final nested = NoteTableData(rows: 1, columns: 1).withCell(0, 0, [
+      {'insert': 'Nested\n'},
+    ]);
+    final rich = [
+      {
+        'insert': 'Bold',
+        'attributes': {'bold': true},
+      },
+      {'insert': '\n'},
+      {
+        'insert': {NoteTableData.type: nested.toJson()},
+      },
+      {'insert': '\n'},
+    ];
+    final table = NoteTableData(
+      rows: 256,
+      columns: 256,
+    ).withCell(100, 200, rich).resizeColumn(200, 220).resizeRow(100, 120);
+    final restored = NoteTableData.fromJson(
+      jsonDecode(jsonEncode(table.toJson())),
+    );
+    expect(restored.cells.length, 1);
+    expect(restored.cell(100, 200), rich);
+    expect(restored.changeAxis(row: true, index: 0), same(restored));
+    final smaller = restored.changeAxis(row: true, index: 0, delete: true);
+    expect(smaller.cell(99, 200), rich);
+    expect(smaller.rowHeights[99], 120);
+    final duplicate = smaller.changeAxis(row: true, index: 99, duplicate: true);
+    expect(duplicate.cell(99, 200), rich);
+    expect(
+      (duplicate.cell(100, 200)[2]['insert'][NoteTableData.type] as Map)['id'],
+      isNot(nested.id),
+    );
+    expect(
+      noteDeltaPlainText([
         {
-          'insert': 'Bold',
-          'attributes': {'bold': true},
+          'insert': {NoteTableData.type: duplicate.toJson()},
         },
-        {'insert': '\n'},
-        {
-          'insert': {NoteTableData.type: nested.toJson()},
-        },
-        {'insert': '\n'},
-      ];
-      final table = NoteTableData(
-        rows: 256,
-        columns: 256,
-      ).withCell(100, 200, rich).resizeColumn(200, 220).resizeRow(100, 120);
-      final restored = NoteTableData.fromJson(
-        jsonDecode(jsonEncode(table.toJson())),
-      );
-      expect(restored.cells.length, 1);
-      expect(restored.cell(100, 200), rich);
-      expect(restored.changeAxis(row: true, index: 0), same(restored));
-      final smaller = restored.changeAxis(row: true, index: 0, delete: true);
-      expect(smaller.cell(99, 200), rich);
-      expect(smaller.rowHeights[99], 120);
-      final duplicate = smaller.changeAxis(
-        row: true,
-        index: 99,
-        duplicate: true,
-      );
-      expect(duplicate.cell(99, 200), rich);
-      expect(
-        (duplicate.cell(100, 200)[2]['insert'][NoteTableData.type]
-            as Map)['id'],
-        isNot(nested.id),
-      );
-      expect(
-        noteDeltaPlainText([
-          {
-            'insert': {NoteTableData.type: duplicate.toJson()},
-          },
-        ]),
-        contains('Nested'),
-      );
-      expect(() => NoteTableData(rows: 257, columns: 1), throwsFormatException);
-    },
-  );
+      ]),
+      contains('Nested'),
+    );
+    expect(() => NoteTableData(rows: 257, columns: 1), throwsFormatException);
+  });
 
   test(
     'cell paste flattens tables in reading order and preserves rich media',
@@ -342,82 +336,78 @@ void main() {
     );
     final delta = controller.document.toDelta().toJson();
     expect(
-      NoteTableData.fromJson(
-        (delta.first['insert'] as Map)[NoteTableData.type],
-      ).cells,
+      NoteTableData.fromJson((delta.first['insert'] as Map)[NoteTableData.type])
+          .cells,
       isEmpty,
     );
     expect(
-      NoteTableData.fromJson(
-        (delta[2]['insert'] as Map)[NoteTableData.type],
-      ).cell(0, 0).first['insert'],
+      NoteTableData.fromJson((delta[2]['insert'] as Map)[NoteTableData.type])
+          .cell(0, 0)
+          .first['insert'],
       'Copy\n',
     );
   });
 
-  test(
-    'attachment IDs survive serialization and file replacement; block insertion preserves text',
-    () {
-      final attachment = NoteAttachment.image(
-        NoteImage(
-          src: '/first.png',
-          size: 1,
-          index: 0,
-          aspectRatio: '1:1',
-          lastModified: '1',
-        ),
+  test('attachment IDs survive serialization and file replacement; block insertion preserves text', () {
+    final attachment = NoteAttachment.image(
+      NoteImage(
+        src: '/first.png',
+        size: 1,
+        index: 0,
+        aspectRatio: '1:1',
+        lastModified: '1',
+      ),
+    );
+    final reference = attachmentReference(attachment);
+    final restored = NoteAttachment.fromJson(attachment.toJson());
+    restored.image!.src = '/updated.png';
+    final note = Note(attachments: [restored]);
+    expect(
+      resolveNoteAttachment(note, reference['src'] as String)?.image!.src,
+      '/updated.png',
+    );
+    final controller = QuillController(
+      document: Document.fromJson([
+        {'insert': 'BeforeAfter\n'},
+      ]),
+      selection: const TextSelection.collapsed(offset: 6),
+    );
+    addTearDown(controller.dispose);
+    insertNoteEmbed(
+      controller,
+      noteAttachmentEmbedType,
+      reference,
+      block: true,
+    );
+    expect(reference['placement'], 'block');
+    expect(controller.document.toPlainText(), 'Before\n\uFFfc\nAfter\n');
+    for (final (text, start, end, expected) in [
+      ('Before\n', 6, 6, 'Before\n\uFFFC\n'),
+      ('Before\n\nAfter\n', 7, 7, 'Before\n\uFFFC\nAfter\n'),
+      ('Before\nAfter\n', 7, 12, 'Before\n\uFFFC\n'),
+    ]) {
+      final cell = NoteEditorController(
+        document: Document.fromDelta(Delta()..insert(text)),
+        selection: TextSelection(baseOffset: start, extentOffset: end),
+        allowTables: false,
       );
-      final reference = attachmentReference(attachment);
-      final restored = NoteAttachment.fromJson(attachment.toJson());
-      restored.image!.src = '/updated.png';
-      final note = Note(attachments: [restored]);
-      expect(
-        resolveNoteAttachment(note, reference['src'] as String)?.image!.src,
-        '/updated.png',
-      );
-      final controller = QuillController(
-        document: Document.fromJson([
-          {'insert': 'BeforeAfter\n'},
-        ]),
-        selection: const TextSelection.collapsed(offset: 6),
-      );
-      addTearDown(controller.dispose);
-      insertNoteEmbed(
-        controller,
-        noteAttachmentEmbedType,
-        reference,
-        block: true,
-      );
-      expect(reference['placement'], 'block');
-      expect(controller.document.toPlainText(), 'Before\n\uFFfc\nAfter\n');
-      for (final (text, start, end, expected) in [
-        ('Before\n', 6, 6, 'Before\n\uFFFC\n'),
-        ('Before\n\nAfter\n', 7, 7, 'Before\n\uFFFC\nAfter\n'),
-        ('Before\nAfter\n', 7, 12, 'Before\n\uFFFC\n'),
-      ]) {
-        final cell = NoteEditorController(
-          document: Document.fromDelta(Delta()..insert(text)),
-          selection: TextSelection(baseOffset: start, extentOffset: end),
-          allowTables: false,
-        );
-        addTearDown(cell.dispose);
-        insertNoteEmbed(cell, noteAttachmentEmbedType, reference, block: true);
-        expect(cell.document.toPlainText(), expected);
-        cell.undo();
-        expect(cell.document.toPlainText(), text);
-      }
-      controller.readOnly = true;
-      replaceNoteEmbed(
-        controller,
-        noteAttachmentEmbedType,
-        reference['id'] as String,
-        null,
-      );
-      expect(controller.document.toPlainText(), 'Before\n\uFFfc\nAfter\n');
-      note.attachments.clear();
-      expect(resolveNoteAttachment(note, reference['src'] as String), isNull);
-    },
-  );
+      addTearDown(cell.dispose);
+      insertNoteEmbed(cell, noteAttachmentEmbedType, reference, block: true);
+      expect(cell.document.toPlainText(), expected);
+      cell.undo();
+      expect(cell.document.toPlainText(), text);
+    }
+    controller.readOnly = true;
+    replaceNoteEmbed(
+      controller,
+      noteAttachmentEmbedType,
+      reference['id'] as String,
+      null,
+    );
+    expect(controller.document.toPlainText(), 'Before\n\uFFfc\nAfter\n');
+    note.attachments.clear();
+    expect(resolveNoteAttachment(note, reference['src'] as String), isNull);
+  });
 
   test(
     'tables and all attachment images keep their own line while editing',

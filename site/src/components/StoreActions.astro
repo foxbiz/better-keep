@@ -6,20 +6,25 @@ interface Props {
   variant?: 'hero' | 'compact';
   compact?: boolean;
   includeWeb?: boolean;
+  appleCampaign?: string;
 }
 
 const {
   variant = 'compact',
   compact = false,
-  includeWeb = true
+  includeWeb = true,
+  appleCampaign
 } = Astro.props;
+
+const appleUrl = new URL(product.appStoreUrl);
+if (appleCampaign) appleUrl.searchParams.set('ct', appleCampaign);
 
 const storeActions = [
   {
     label: 'Download on the App Store',
     eyebrow: 'Download on the',
     title: 'App Store',
-    href: product.appStoreUrl,
+    href: appleUrl.toString(),
     icon: 'apple',
     platform: 'apple',
     analytics: product.analyticsGoals.appStore

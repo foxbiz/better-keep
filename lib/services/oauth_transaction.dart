@@ -57,9 +57,9 @@ class OAuthTransaction {
   final String mode;
   final DateTime createdAt;
 
-  String get challenge => base64UrlEncode(
-    sha256.convert(utf8.encode(verifier)).bytes,
-  ).replaceAll('=', '');
+  String get challenge =>
+      base64UrlEncode(sha256.convert(utf8.encode(verifier)).bytes)
+          .replaceAll('=', '');
 
   bool get isExpired =>
       DateTime.now().toUtc().difference(createdAt) >= _transactionLifetime;

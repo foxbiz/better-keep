@@ -79,9 +79,8 @@ void main() {
 
   test('store destinations never contain account identifiers', () {
     expect(Uri.parse(appleSubscriptionsUrl).queryParameters, isEmpty);
-    final playParameters = Uri.parse(
-      googlePlaySubscriptionsUrl,
-    ).queryParameters;
+    final playParameters = Uri.parse(googlePlaySubscriptionsUrl)
+        .queryParameters;
     expect(playParameters.keys, unorderedEquals(['sku', 'package']));
   });
 }

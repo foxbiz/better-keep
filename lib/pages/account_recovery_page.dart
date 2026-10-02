@@ -159,9 +159,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
             _hasRecoveryKey
                 ? context.l10n.recoverYourAccount
                 : context.l10n.accountRecoveryRequired,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
@@ -169,9 +168,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
             _hasRecoveryKey
                 ? context.l10n.noActiveDevicesRecoveryKey
                 : context.l10n.noActiveDevicesNoRecoveryKey,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: colorScheme.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
@@ -271,9 +269,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
           const SizedBox(height: 8),
           Text(
             context.l10n.anotherDeviceApprovalHint,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: colorScheme.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
@@ -500,9 +497,8 @@ class _StartFreshConfirmationPageState
           const SizedBox(height: 16),
           Text(
             context.l10n.thisActionWill,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w500),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
@@ -591,9 +587,8 @@ class _StartFreshConfirmationPageState
           Expanded(
             child: Text(
               text,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
             ),
           ),
         ],

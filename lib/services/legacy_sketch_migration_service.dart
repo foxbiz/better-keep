@@ -102,10 +102,12 @@ class LegacyEncryptedSketchDecoder {
   }
 }
 
-typedef LocalSketchMetadataDecryptor =
-    Future<String> Function(String ciphertext);
-typedef LocalSketchMetadataEncryptor =
-    Future<String> Function(String plaintext);
+typedef LocalSketchMetadataDecryptor = Future<String> Function(
+  String ciphertext,
+);
+typedef LocalSketchMetadataEncryptor = Future<String> Function(
+  String plaintext,
+);
 
 /// Decodes the deprecated app-key metadata only inside an already
 /// PIN-authenticated migration. Locked note loading must never call this.
@@ -1245,9 +1247,10 @@ class LegacySketchMigrationRecoveryService {
     final attachments = jsonDecode(decoded) as List<dynamic>;
     return attachments
         .map(
-          (value) => NoteAttachment.fromJson(
-            Map<String, dynamic>.from(value as Map),
-          ).sketch?.strokesFilePath,
+          (value) =>
+              NoteAttachment.fromJson(Map<String, dynamic>.from(value as Map))
+                  .sketch
+                  ?.strokesFilePath,
         )
         .whereType<String>()
         .toSet();

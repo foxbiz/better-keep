@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart' show Color, ThemeData;
 
 /// App installation information

@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/share_link.dart';
@@ -24,6 +25,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+
 import 'dart:io' show Platform;
 
 /// Result of creating a share link

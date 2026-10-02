@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
@@ -55,6 +56,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
 import 'support/offline_firebase.dart';
 
 void main() {
@@ -234,8 +236,7 @@ void main() {
         name: 'rich text without plain text',
         title: '',
         text: null,
-        content:
-            '[{"insert":"Preserved body","attributes":{"bold":true}},{"insert":"\\n"}]',
+        content: '[{"insert":"Preserved body","attributes":{"bold":true}},{"insert":"\\n"}]',
       ),
     ]) {
       test(
@@ -281,56 +282,53 @@ void main() {
       );
     }
 
-    test(
-      'saved empty notes support Trash, restore, and editing; drafts are discarded',
-      () async {
-        backend.firestore.response = (_, _) async => OfflineSnapshot(
-          value: {
-            ...payload(),
-            'title': '',
-            'plain_text': '',
-            'content': '[{"insert":"\\n"}]',
-          },
-        );
-        expect(
-          await NoteSyncService().retryFailedRemoteNote('remote-note'),
-          isTrue,
-        );
-        final note = (await Note.findById(101))!;
-        await note.moveToTrash();
-        expect((await Note.findById(101))!.trashed, isTrue);
-        await note.restoreFromTrash();
-        expect((await Note.findById(101))!.trashed, isFalse);
-        expect(
-          await note.saveEditorSnapshot(
-            title: 'Edited',
-            content: '[{"insert":"Body\\n"}]',
-            plainText: 'Body',
-          ),
-          101,
-        );
-        expect((await Note.findById(101))!.plainText, 'Body\n');
-        expect(
-          await note.saveEditorSnapshot(
-            title: '',
-            content: '[{"insert":"\\n"}]',
-            plainText: '',
-          ),
-          101,
-        );
-        expect((await Note.findById(101))!.isEmpty, isTrue);
-        expect(
-          (await NoteSyncTrack.getByLocalId(101))!.status,
-          SyncStatus.pending,
-        );
-        for (final id in [null, 102]) {
-          final draft = Note(id: id, title: ' ', plainText: '\n');
-          expect(await draft.save(), -1);
-        }
-        expect(await Note.count(NoteType.all), 1);
-        expect(await NoteSyncTrack.getByLocalId(102), isNull);
-      },
-    );
+    test('saved empty notes support Trash, restore, and editing; drafts are discarded', () async {
+      backend.firestore.response = (_, _) async => OfflineSnapshot(
+        value: {
+          ...payload(),
+          'title': '',
+          'plain_text': '',
+          'content': '[{"insert":"\\n"}]',
+        },
+      );
+      expect(
+        await NoteSyncService().retryFailedRemoteNote('remote-note'),
+        isTrue,
+      );
+      final note = (await Note.findById(101))!;
+      await note.moveToTrash();
+      expect((await Note.findById(101))!.trashed, isTrue);
+      await note.restoreFromTrash();
+      expect((await Note.findById(101))!.trashed, isFalse);
+      expect(
+        await note.saveEditorSnapshot(
+          title: 'Edited',
+          content: '[{"insert":"Body\\n"}]',
+          plainText: 'Body',
+        ),
+        101,
+      );
+      expect((await Note.findById(101))!.plainText, 'Body\n');
+      expect(
+        await note.saveEditorSnapshot(
+          title: '',
+          content: '[{"insert":"\\n"}]',
+          plainText: '',
+        ),
+        101,
+      );
+      expect((await Note.findById(101))!.isEmpty, isTrue);
+      expect(
+        (await NoteSyncTrack.getByLocalId(101))!.status,
+        SyncStatus.pending,
+      );
+      for (final id in [null, 102]) {
+        final draft = Note(id: id, title: ' ', plainText: '\n');
+        expect(await draft.save(), -1);
+      }
+      expect(await Note.count(NoteType.all), 1);
+      expect(await NoteSyncTrack.getByLocalId(102), isNull);
+    });
   });
 
   group('recovery callback lifetimes', () {
@@ -1540,38 +1538,32 @@ void main() {
     },
   );
 
-  test(
-    'restart refresh retries durable dependencies without an encryption transition',
-    () async {
-      await seedLocalDependency();
-      await NoteSyncService().dispose();
-      expect(
-        await NoteSyncService().refreshWithOutcome(),
-        SyncRefreshOutcome.complete,
-      );
-      expect((await Note.findById(101))!.title, 'Remote');
-      expect(e2ee.status.value, E2EEStatus.ready);
-      expect(backend.firestore.queryReads, isNotEmpty);
-    },
-  );
+  test('restart refresh retries durable dependencies without an encryption transition', () async {
+    await seedLocalDependency();
+    await NoteSyncService().dispose();
+    expect(
+      await NoteSyncService().refreshWithOutcome(),
+      SyncRefreshOutcome.complete,
+    );
+    expect((await Note.findById(101))!.title, 'Remote');
+    expect(e2ee.status.value, E2EEStatus.ready);
+    expect(backend.firestore.queryReads, isNotEmpty);
+  });
 
-  test(
-    'foreground resume rechecks local dependencies while encryption stays ready',
-    () async {
-      await seedLocalDependency();
-      final token = Completer<IdTokenResult>();
-      (backend.auth.currentUser as OfflineUser).tokenResponse = () =>
-          token.future;
-      AuthService.setAppForeground(true);
-      await NoteSyncService().recheckLocalAttachmentDependencies();
-      expect((await Note.findById(101))!.title, 'Remote');
-      expect(e2ee.status.value, E2EEStatus.ready);
-      AuthService.setAppForeground(false);
-      AuthService.cloudRecovery.stop();
-      token.complete(OfflineToken());
-      await Future<void>.delayed(Duration.zero);
-    },
-  );
+  test('foreground resume rechecks local dependencies while encryption stays ready', () async {
+    await seedLocalDependency();
+    final token = Completer<IdTokenResult>();
+    (backend.auth.currentUser as OfflineUser).tokenResponse = () =>
+        token.future;
+    AuthService.setAppForeground(true);
+    await NoteSyncService().recheckLocalAttachmentDependencies();
+    expect((await Note.findById(101))!.title, 'Remote');
+    expect(e2ee.status.value, E2EEStatus.ready);
+    AuthService.setAppForeground(false);
+    AuthService.cloudRecovery.stop();
+    token.complete(OfflineToken());
+    await Future<void>.delayed(Duration.zero);
+  });
 
   test(
     'pending deletion is never downloaded by a dependency recheck',
@@ -1769,51 +1761,45 @@ void main() {
     },
   );
 
-  test(
-    'PIN attachment repair persists across restart without changing pending work',
-    () async {
-      final old = '${dir.path}/protected.bin';
-      final protectedBytes = await encryptBytesWithPassword(original, '1234');
-      await File(old).writeAsBytes(protectedBytes);
-      final local = Note(
-        id: 101,
-        syncId: 'remote-note',
-        title: 'Protected',
-        locked: true,
-        content: await encryptAsync('secret', '1234'),
-        attachments: [imageAttachment(old)],
-      );
-      await local.save();
-      await track(old);
-      final before = (await db.query(Note.model)).single;
-      final pendingBefore = (await NoteSyncTrack.getByLocalId(101))!.toJson();
-      attachments.response = (_) async => protectedBytes;
-      final repaired = await NoteSyncService().redownloadFile(old);
-      expect(repaired, isNotNull);
-      expect(await File(old).exists(), isFalse);
-      await NewAttachmentTransactionRecoveryService.recoverPending(
-        database: db,
-        operations: await NoteLockFileOperations.platform(),
-        journal: NewAttachmentTransactionJournal(await AppState.prefs),
-      );
-      final after = (await db.query(Note.model)).single;
-      expect(after['content'], before['content']);
-      expect(after['updated_at'], before['updated_at']);
-      expect(after['locked'], 1);
-      expect((await NoteSyncTrack.getByLocalId(101))!.toJson(), pendingBefore);
-      expect(
-        (await Note.findById(101))!.attachments.single.image!.src,
-        repaired,
-      );
-      expect(await File(repaired!).readAsBytes(), protectedBytes);
-      local.pinned = true;
-      await local.save();
-      final afterSave = (await Note.findById(101))!;
-      expect(afterSave.attachments.single.image!.src, repaired);
-      expect(afterSave.locked, isTrue);
-      expect(afterSave.pinned, isTrue);
-    },
-  );
+  test('PIN attachment repair persists across restart without changing pending work', () async {
+    final old = '${dir.path}/protected.bin';
+    final protectedBytes = await encryptBytesWithPassword(original, '1234');
+    await File(old).writeAsBytes(protectedBytes);
+    final local = Note(
+      id: 101,
+      syncId: 'remote-note',
+      title: 'Protected',
+      locked: true,
+      content: await encryptAsync('secret', '1234'),
+      attachments: [imageAttachment(old)],
+    );
+    await local.save();
+    await track(old);
+    final before = (await db.query(Note.model)).single;
+    final pendingBefore = (await NoteSyncTrack.getByLocalId(101))!.toJson();
+    attachments.response = (_) async => protectedBytes;
+    final repaired = await NoteSyncService().redownloadFile(old);
+    expect(repaired, isNotNull);
+    expect(await File(old).exists(), isFalse);
+    await NewAttachmentTransactionRecoveryService.recoverPending(
+      database: db,
+      operations: await NoteLockFileOperations.platform(),
+      journal: NewAttachmentTransactionJournal(await AppState.prefs),
+    );
+    final after = (await db.query(Note.model)).single;
+    expect(after['content'], before['content']);
+    expect(after['updated_at'], before['updated_at']);
+    expect(after['locked'], 1);
+    expect((await NoteSyncTrack.getByLocalId(101))!.toJson(), pendingBefore);
+    expect((await Note.findById(101))!.attachments.single.image!.src, repaired);
+    expect(await File(repaired!).readAsBytes(), protectedBytes);
+    local.pinned = true;
+    await local.save();
+    final afterSave = (await Note.findById(101))!;
+    expect(afterSave.attachments.single.image!.src, repaired);
+    expect(afterSave.locked, isTrue);
+    expect(afterSave.pinned, isTrue);
+  });
 
   test(
     'database failure rolls back replacement mapping and staged files',

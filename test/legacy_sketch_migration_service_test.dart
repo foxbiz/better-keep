@@ -340,13 +340,9 @@ void main() {
       final newPath = result.migrated.single.newPath;
       final protected = fake.files[newPath]!;
       expect(isBytesPasswordEncrypted(protected), isTrue);
-      final recovered =
-          jsonDecode(
-                utf8.decode(
-                  await decryptBytesWithPassword(protected, password),
-                ),
-              )
-              as Map<String, dynamic>;
+      final recovered = jsonDecode(
+        utf8.decode(await decryptBytesWithPassword(protected, password)),
+      ) as Map<String, dynamic>;
       expect(recovered['strokes'], [stroke.toString()]);
       expect(recovered['bgColor'], Colors.purple.toARGB32());
       expect(recovered['pagePattern'], PagePattern.dotGrid.name);
@@ -522,13 +518,9 @@ void main() {
       final migratedPath = result.migrated.single.newPath;
       final protected = fake.files[migratedPath]!;
       expect(isBytesPasswordEncrypted(protected), isTrue);
-      final currentJson =
-          jsonDecode(
-                utf8.decode(
-                  await decryptBytesWithPassword(protected, password),
-                ),
-              )
-              as Map<String, dynamic>;
+      final currentJson = jsonDecode(
+        utf8.decode(await decryptBytesWithPassword(protected, password)),
+      ) as Map<String, dynamic>;
       expect(currentJson, isNot(contains('encryptedStrokes')));
       expect(currentJson['strokes'], [stroke.toString()]);
       expect(currentJson['bgColor'], Colors.blue.toARGB32());

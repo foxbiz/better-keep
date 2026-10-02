@@ -40,7 +40,7 @@ export function affectedComponents(files) {
 			components.add("functions");
 		} else if (/^admin-site\//.test(file)) {
 			components.add("admin-site");
-		} else if (/^site\/|^test\/site_.*\.mjs$/.test(file)) {
+		} else if (/^site\/|^test\/site_.*\.m(?:js|ts)$/.test(file)) {
 			components.add("site");
 		} else if (
 			file.endsWith(".dart") ||
@@ -97,8 +97,9 @@ export function componentCommands(component, root = repositoryRoot) {
 				step("npm", "--prefix", "site", "test"),
 				step(
 					"node",
+					"--experimental-strip-types",
 					"--test",
-					...testFiles(root, "test", /^site_.*_test\.mjs$/),
+					...testFiles(root, "test", /^site_.*_test\.mts$/),
 				),
 			];
 		case "tooling":

@@ -2,19 +2,22 @@ import 'dart:async';
 
 import 'package:better_keep/services/oauth_transaction.dart';
 
-typedef OAuthCompletionRedeemer =
-    Future<String> Function(
-      String completionCode,
-      OAuthTransaction transaction,
-    );
+typedef OAuthCompletionRedeemer = Future<String> Function(
+  String completionCode,
+  OAuthTransaction transaction,
+);
 typedef OAuthCustomTokenAuthenticator<TUser extends Object> =
     Future<TUser?> Function(String customToken);
-typedef OAuthSignInFinalizer<TUser extends Object> =
-    Future<void> Function(TUser user, String provider);
+typedef OAuthSignInFinalizer<TUser extends Object> = Future<void> Function(
+  TUser user,
+  String provider,
+);
 typedef OAuthTransactionRemover = Future<void> Function(String transactionId);
 typedef OAuthVerificationStateSetter = void Function(bool isVerifying);
-typedef OAuthSecondaryFailureReporter =
-    void Function(Object error, StackTrace stackTrace);
+typedef OAuthSecondaryFailureReporter = void Function(
+  Object error,
+  StackTrace stackTrace,
+);
 
 class RecoveredOAuthSignInException implements Exception {
   const RecoveredOAuthSignInException(this.code, this.message);

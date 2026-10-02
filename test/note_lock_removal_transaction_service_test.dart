@@ -136,9 +136,8 @@ void main() {
       expect(preparation.replacements.single.oldPath, stalePath);
       expect(files[attachments.single.recording!.src], plaintext);
       expect(
-        await NoteLockRemovalTransactionService(
-          fake.operations,
-        ).cleanupOriginals(preparation.journalRecord),
+        await NoteLockRemovalTransactionService(fake.operations)
+            .cleanupOriginals(preparation.journalRecord),
         isTrue,
       );
       expect(files, isNot(contains(currentPath)));

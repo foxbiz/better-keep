@@ -5,8 +5,11 @@ import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firestore_operation_retry.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-typedef FirestoreQueryRetryLogger =
-    void Function(Object error, int nextAttempt, Duration delay);
+typedef FirestoreQueryRetryLogger = void Function(
+  Object error,
+  int nextAttempt,
+  Duration delay,
+);
 
 /// Server-backed Firestore reads used by note synchronization.
 ///

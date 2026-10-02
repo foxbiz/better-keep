@@ -35,43 +35,40 @@ import DocumentIcon from './DocumentIcon.astro';
 
     <!-- Why We Charge Section -->
     <section class="why-pay-section">
-      <h2>Why Do We Charge?</h2>
+      <h2>Pro features</h2>
       <p>
-        Better Keep Notes is built with care by a small team. We believe in honest, sustainable software—no ads, no data
-        selling,
-        no dark patterns. Here's where your subscription goes:
+        Use Free for notes you keep on one device. Choose Pro when you want to
+        continue writing across devices or lock more than five notes.
       </p>
       <div class="why-cards">
         <div class="why-card">
           <DocumentIcon name="server" />
-          <h3>Server Infrastructure</h3>
-          <p>Cloud sync and real-time features require servers that cost real money to run and maintain securely.</p>
+          <h3>Sync across devices</h3>
+          <p>Capture a thought on your phone, then continue on your computer. Pro syncs notes and supported attachments across your approved devices.</p>
         </div>
         <div class="why-card">
           <DocumentIcon name="shield-check" />
-          <h3>End-to-End Encryption</h3>
-          <p>Strong encryption is computationally expensive. We invest in proper cryptography to keep your data truly
-            private.</p>
+          <h3>Sync personal writing privately</h3>
+          <p>Note titles, content, and supported attachments are encrypted on your device before syncing. <a href="/security">Read what encryption covers.</a></p>
         </div>
         <div class="why-card">
           <DocumentIcon name="code-2" />
-          <h3>Ongoing Development</h3>
-          <p>New features, bug fixes, and cross-platform support across 6 platforms takes continuous effort.</p>
+          <h3>Lock more than five notes</h3>
+          <p>Free includes up to five PIN-locked notes. Pro removes that limit for personal journals, records, and other notes you want to lock.</p>
         </div>
         <div class="why-card">
           <DocumentIcon name="ban" />
-          <h3>No Ads, No Tracking</h3>
-          <p>Your subscription means we never need to monetize your attention or data. You're the customer, not the
-            product.</p>
+          <h3>Support an independent app</h3>
+          <p>Your subscription helps fund continued development, maintenance, and the service that keeps your devices in sync.</p>
         </div>
       </div>
     </section>
 
     <!-- Free Forever Section -->
     <section class="free-forever">
-      <h2> Free Forever</h2>
+      <h2>Free Plan</h2>
       <p>
-        These features will always be free, no account required:
+        These features are included in the free plan. An account is required:
       </p>
       <div class="free-features">
         <div class="free-feature">
@@ -113,71 +110,73 @@ import DocumentIcon from './DocumentIcon.astro';
     <section class="faq-section">
       <h2>Frequently Asked Questions</h2>
 
-      <div class="faq-item">
-        <div class="faq-question" onclick="toggleFaq(this)">
-          <span>Can I use the app without creating an account?</span>
+      <details class="faq-item">
+        <summary class="faq-question">
+          <span>Is an account required to use the app?</span>
           <DocumentIcon name="chevron-down" />
-        </div>
+        </summary>
         <div class="faq-answer">
-          Yes! Better Keep Notes works completely offline without any account. All free features are available without
-          signing up. You only need an account if you want to sync your notes across devices.
+          Yes. An account is required to use Better Keep Notes. After signing in,
+          you can create, edit, and organize local notes offline on the free plan.
+          Optional encrypted cloud sync requires Pro.
         </div>
-      </div>
+      </details>
 
-      <div class="faq-item">
-        <div class="faq-question" onclick="toggleFaq(this)">
+      <details class="faq-item">
+        <summary class="faq-question">
           <span>What happens when my Pro subscription expires?</span>
           <DocumentIcon name="chevron-down" />
-        </div>
+        </summary>
         <div class="faq-answer">
-          Your notes are always yours. When your subscription expires, you'll still have access to all your local notes.
-          Cloud sync will pause, but your data remains safe and encrypted locally. You can export everything at any
-          time.
+          You can still access your local notes when your subscription expires. Cloud sync pauses,
+          and you can export your notes from the app.
         </div>
-      </div>
+      </details>
 
-      <div class="faq-item">
-        <div class="faq-question" onclick="toggleFaq(this)">
+      <details class="faq-item">
+        <summary class="faq-question">
           <span>Is there a free trial for Pro?</span>
           <DocumentIcon name="chevron-down" />
-        </div>
+        </summary>
         <div class="faq-answer">
-          Yes! New users get a 7-day free trial of Pro features. No credit card required to start. If you decide Pro
-          isn't for you, you'll automatically switch to the free plan.
+          If your account receives a Pro trial, the app shows the remaining trial
+          time. Trial availability and duration depend on the current offer.
+          A trial does not automatically become a paid subscription; choose a
+          paid plan to continue using Pro after it ends.
         </div>
-      </div>
+      </details>
 
-      <div class="faq-item">
-        <div class="faq-question" onclick="toggleFaq(this)">
+      <details class="faq-item">
+        <summary class="faq-question">
           <span>Can I switch between monthly and yearly billing?</span>
           <DocumentIcon name="chevron-down" />
-        </div>
+        </summary>
         <div class="faq-answer">
           Yes, you can change your billing cycle at any time. If you switch from monthly to yearly, you'll get a
           prorated credit for your remaining monthly subscription.
         </div>
-      </div>
+      </details>
 
-      <div class="faq-item">
-        <div class="faq-question" onclick="toggleFaq(this)">
+      <details class="faq-item">
+        <summary class="faq-question">
           <span>Can I self-host Better Keep Notes?</span>
           <DocumentIcon name="chevron-down" />
-        </div>
+        </summary>
         <div class="faq-answer">
-          Yes! If you're interested in running your own backend with Firebase or Supabase, please contact us at
+          Yes. To run your own backend with Firebase or Supabase, contact us at
           <a href="mailto:contact@betterkeep.app">contact@betterkeep.app</a> and we'll
           help you get set up.
         </div>
-      </div>
+      </details>
 
-      <div class="faq-item">
-        <div class="faq-question" onclick="toggleFaq(this)">
+      <details class="faq-item">
+        <summary class="faq-question">
           <span>Can I get a refund?</span>
           <DocumentIcon name="chevron-down" />
-        </div>
+        </summary>
         <div class="faq-answer">
           Yes. If you're not satisfied within the first 30 days, contact us for a full refund. For subscriptions
           purchased through app stores, refunds are processed according to their respective policies.
         </div>
-      </div>
+      </details>
     </section>

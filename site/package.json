@@ -3,15 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node scripts/prepare_assets.mjs",
+    "predev": "node --experimental-strip-types scripts/prepare_assets.ts",
     "dev": "astro dev",
-    "prebuild": "node scripts/prepare_assets.mjs",
+    "prebuild": "node --experimental-strip-types scripts/prepare_assets.ts",
     "build": "astro build",
-    "postbuild": "node scripts/validate_design.mjs",
-    "check": "astro check",
-    "test": "node --test test/*.test.mjs",
-    "test:mobile": "node scripts/run_mobile_acceptance.mjs",
-    "lighthouse": "node scripts/run_lighthouse.mjs"
+    "postbuild": "node --experimental-strip-types scripts/validate_design.ts",
+    "check": "astro check && tsc --noEmit -p tsconfig.tools.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test:mobile": "node --experimental-strip-types scripts/run_mobile_acceptance.ts",
+    "lighthouse": "node --experimental-strip-types scripts/run_lighthouse.ts"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",

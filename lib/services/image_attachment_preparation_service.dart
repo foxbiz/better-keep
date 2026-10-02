@@ -10,19 +10,21 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 
-typedef ImageAttachmentCompress =
-    Future<Uint8List> Function(
-      Uint8List bytes, {
-      required int quality,
-      required int minWidth,
-      required int minHeight,
-    });
-typedef ImageAttachmentDecode =
-    Future<ImageAttachmentDimensions> Function(Uint8List bytes);
+typedef ImageAttachmentCompress = Future<Uint8List> Function(
+  Uint8List bytes, {
+  required int quality,
+  required int minWidth,
+  required int minHeight,
+});
+typedef ImageAttachmentDecode = Future<ImageAttachmentDimensions> Function(
+  Uint8List bytes,
+);
 typedef ImageAttachmentThumbnail = Future<String?> Function(Uint8List bytes);
 typedef ImageAttachmentDirectory = Future<String> Function();
-typedef ImageAttachmentWrite =
-    Future<void> Function(String filePath, Uint8List bytes);
+typedef ImageAttachmentWrite = Future<void> Function(
+  String filePath,
+  Uint8List bytes,
+);
 
 @immutable
 class ImageAttachmentDimensions {

@@ -19,6 +19,8 @@ interface Props {
 
 const { page } = Astro.props;
 const canonicalPath = `/${page.slug}`;
+const updatedAt = page.updatedAt ?? product.updatedAt;
+const isKeepGuide = page.slug === 'import/google-keep';
 const screenshot = (() => {
   if (page.slug === 'rich-text-notes') {
     return screenshotById['5'];
@@ -64,7 +66,7 @@ const schemas: Record<string, unknown>[] = [
     headline: page.title,
     description: page.description,
     datePublished: product.updatedAt,
-    dateModified: product.updatedAt,
+    dateModified: updatedAt,
     mainEntityOfPage: `${product.siteUrl}${canonicalPath}`,
     author: {
       '@type': 'Organization',
@@ -114,8 +116,9 @@ if (page.faqs?.length) {
         <p class="eyebrow">{page.eyebrow}</p>
         <h1>{page.title}</h1>
         <p class="answer-box">{page.answer}</p>
+        <StoreActions compact={true} appleCampaign={isKeepGuide ? 'keep_import_guide' : undefined} />
         <p class="article-meta">
-          Published and reviewed by {product.publisher} · Updated {product.updatedAt}
+          Published and reviewed by {product.publisher} · Updated {updatedAt}
         </p>
       </div>
       <DeviceFrame
@@ -215,10 +218,16 @@ if (page.faqs?.length) {
         <p class="eyebrow">Try Better Keep</p>
         <h2>Start with local notes.</h2>
         <p>
-          Add an account only when you want encrypted sync and account-based
-          features.
+          An account is required. Local notes are free. Optional encrypted
+          cloud sync requires Pro.
         </p>
-        <StoreActions compact={true} />
+        <p><a href="/pricing">Compare Free and Pro</a></p>
+        <StoreActions compact={true} appleCampaign={isKeepGuide ? 'keep_import_guide' : undefined} />
+        {
+          page.slug === 'google-keep-alternative' && (
+            <p><a href="/import/google-keep" data-analytics={product.analyticsGoals.keepImport}>Follow the Google Keep import guide</a></p>
+          )
+        }
       </aside>
     </div>
   </article>
@@ -226,11 +235,11 @@ if (page.faqs?.length) {
   <section class="section container">
     <div class="cta-band">
       <div>
-        <p class="eyebrow">Private notes, richer writing</p>
-        <h2>Keep the capture flow. Upgrade everything around it.</h2>
+        <p class="eyebrow">Try Better Keep</p>
+        <h2>Write your first note for free.</h2>
         <p>Available on {product.platforms.join(', ')}.</p>
       </div>
-      <StoreActions compact={true} />
+      <StoreActions compact={true} appleCampaign={isKeepGuide ? 'keep_import_guide' : undefined} />
     </div>
   </section>
 </BaseLayout>

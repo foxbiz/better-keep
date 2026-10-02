@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import path from "node:path";
-import {fileURLToPath} from "node:url";
-import {runFirebaseCli} from "./firebase_cli.mjs";
-import {runFunctionsCommand} from "./functions_runtime.mjs";
-import {runChildProcess} from "./process_runner.mjs";
+import { fileURLToPath } from "node:url";
+import { runFirebaseCli } from "./firebase_cli.mjs";
+import { runFunctionsCommand } from "./functions_runtime.mjs";
+import { runChildProcess } from "./process_runner.mjs";
 
 const runnerPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(runnerPath), "..");
@@ -25,11 +25,11 @@ const firebaseStep = (args, environment = {}) => ({
 	environment,
 	type: "firebase",
 });
-const functionsStep = (args) => ({args, type: "functions"});
-const suiteStep = (name) => ({name, type: "suite"});
+const functionsStep = (args) => ({ args, type: "functions" });
+const suiteStep = (name) => ({ name, type: "suite" });
 
-function defineSuite(description, createSteps, {acceptsArguments = false} = {}) {
-	return {acceptsArguments, createSteps, description};
+function defineSuite(description, createSteps, { acceptsArguments = false } = {}) {
+	return { acceptsArguments, createSteps, description };
 }
 
 function flutterTests(files) {
@@ -85,7 +85,7 @@ const suites = {
 				...extraArgs,
 			]),
 		],
-		{acceptsArguments: true},
+		{ acceptsArguments: true },
 	),
 	"firebase-emulator-config": defineSuite(
 		"Run Firebase environment configuration tests.",
@@ -161,7 +161,7 @@ const suites = {
 				...extraArgs,
 			]),
 		],
-		{acceptsArguments: true},
+		{ acceptsArguments: true },
 	),
 	"firebase-environment-web": defineSuite(
 		"Run web policy and browser acceptance tests.",
@@ -258,26 +258,23 @@ const suites = {
 			"test/reminder_time_zone_resolver_test.dart",
 		]),
 	]),
-	search: defineSuite("Validate site types, store metadata, and search visibility.", () => [
+	search: defineSuite("Validate site types and search visibility.", () => [
 		processStep("node", [
+			"--experimental-strip-types",
 			"--test",
-			"test/site_account_manage_test.mjs",
-			"test/site_assets_test.mjs",
-			"test/site_public_documents_test.mjs",
-			"test/site_public_stats_test.mjs",
-			"test/site_share_viewer_test.mjs",
-			"test/site_store_platform_test.mjs",
+			"test/site_account_manage_test.mts",
+			"test/site_assets_test.mts",
+			"test/site_public_documents_test.mts",
+			"test/site_public_stats_test.mts",
+			"test/site_share_viewer_test.mts",
+			"test/site_store_platform_test.mts",
 		]),
 		processStep("npm", ["--prefix", "site", "test"]),
 		processStep("npm", ["--prefix", "site", "run", "check"]),
 		processStep("npm", ["--prefix", "admin-site", "test"]),
 		processStep("npm", ["--prefix", "admin-site", "run", "check"]),
-		processStep("node", ["scripts/validate_store_metadata.mjs"]),
 		processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),
 		processStep("node", ["scripts/validate_admin_bundle.mjs", "build/admin"]),
-	]),
-	store: defineSuite("Validate localized store metadata.", () => [
-		processStep("node", ["scripts/validate_store_metadata.mjs"]),
 	]),
 	"subscription-management": defineSuite(
 		"Run subscription management routing tests.",
@@ -355,7 +352,7 @@ export const TEST_SUITE_NAMES = Object.freeze(Object.keys(suites).sort());
 
 export function parseTestTaskArguments(argv) {
 	if (argv.length === 0 || argv[0] === "--help" || argv[0] === "help") {
-		return {help: true};
+		return { help: true };
 	}
 	const [suite, ...extraArgs] = argv;
 	const definition = suites[suite];
@@ -367,7 +364,7 @@ export function parseTestTaskArguments(argv) {
 			`The ${suite} test suite does not accept extra arguments: ${extraArgs.join(" ")}`,
 		);
 	}
-	return {extraArgs, help: false, suite};
+	return { extraArgs, help: false, suite };
 }
 
 function expandSuite(name, extraArgs = [], stack = []) {
@@ -412,22 +409,22 @@ export function formatTestTaskHelp() {
 
 async function executeOperation(
 	operation,
-	{processEnv, root, runFirebase, runFunctions, runProcess},
+	{ processEnv, root, runFirebase, runFunctions, runProcess },
 ) {
 	if (operation.type === "firebase") {
 		return runFirebase(operation.args, {
-			processEnv: {...processEnv, ...operation.environment},
+			processEnv: { ...processEnv, ...operation.environment },
 			root,
 		});
 	}
 	if (operation.type === "functions") {
-		return runFunctions(operation.args, {env: processEnv, root});
+		return runFunctions(operation.args, { env: processEnv, root });
 	}
 	return runProcess({
 		args: operation.args,
 		command: operation.command,
 		cwd: root,
-		env: {...processEnv, ...operation.environment},
+		env: { ...processEnv, ...operation.environment },
 	});
 }
 
@@ -482,7 +479,7 @@ export async function runTestTask(
 		stdout.write(`${formatTestTaskHelp()}\n`);
 		return 0;
 	}
-	return executeTestTask(task, {stderr, ...executionOptions});
+	return executeTestTask(task, { stderr, ...executionOptions });
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";

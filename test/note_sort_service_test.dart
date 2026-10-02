@@ -764,51 +764,48 @@ void main() {
     expect(service.snapshotFor(folder).orderedNoteIds, ['note-1']);
   });
 
-  test(
-    'new notes precede imports without changing saved order after rebase',
-    () async {
-      final existing = await _seedImportedOrder(database, grid);
-      final before = service
-          .sortNotes(grid, existing)
-          .map((note) => note.syncId)
-          .toList();
-      final base = service.snapshotFor(grid);
-      final first = Note(id: 5, syncId: 'new-first', title: 'First');
-      final second = Note(id: 6, syncId: 'new-second', title: 'Second');
-      await Future.wait([first.save(false), second.save(false)]);
-      await _waitUntil(
-        () => service.snapshotFor(grid).orderedNoteIds.contains(second.syncId),
-      );
-      Future<Iterable<String?>> visibleIds() async => service
-          .sortNotes(grid, await Note.get(NoteType.all))
-          .map((note) => note.syncId);
-      final expected = ['new-second', 'new-first', ...before];
-      expect(await visibleIds(), expected);
-      expect(service.snapshotFor(grid).orderedNoteIds, [
-        'new-second',
-        'new-first',
-        'note-3',
-        'note-4',
-        'note-1',
-        'hidden-note',
-        'note-2',
-      ]);
+  test('new notes precede imports without changing saved order after rebase', () async {
+    final existing = await _seedImportedOrder(database, grid);
+    final before = service
+        .sortNotes(grid, existing)
+        .map((note) => note.syncId)
+        .toList();
+    final base = service.snapshotFor(grid);
+    final first = Note(id: 5, syncId: 'new-first', title: 'First');
+    final second = Note(id: 6, syncId: 'new-second', title: 'Second');
+    await Future.wait([first.save(false), second.save(false)]);
+    await _waitUntil(
+      () => service.snapshotFor(grid).orderedNoteIds.contains(second.syncId),
+    );
+    Future<Iterable<String?>> visibleIds() async => service
+        .sortNotes(grid, await Note.get(NoteType.all))
+        .map((note) => note.syncId);
+    final expected = ['new-second', 'new-first', ...before];
+    expect(await visibleIds(), expected);
+    expect(service.snapshotFor(grid).orderedNoteIds, [
+      'new-second',
+      'new-first',
+      'note-3',
+      'note-4',
+      'note-1',
+      'hidden-note',
+      'note-2',
+    ]);
 
-      // A remote revision must replay the same prefix without losing hidden IDs.
-      await service.applyRemoteSnapshotForTesting(
-        base.copyWith(revision: 'remote-update'),
-      );
-      expect(await visibleIds(), expected);
-      expect(service.snapshotFor(grid).orderedNoteIds, contains('hidden-note'));
-      first.title = 'Edited existing note';
-      await first.save(false);
-      expect(await visibleIds(), expected);
+    // A remote revision must replay the same prefix without losing hidden IDs.
+    await service.applyRemoteSnapshotForTesting(
+      base.copyWith(revision: 'remote-update'),
+    );
+    expect(await visibleIds(), expected);
+    expect(service.snapshotFor(grid).orderedNoteIds, contains('hidden-note'));
+    first.title = 'Edited existing note';
+    await first.save(false);
+    expect(await visibleIds(), expected);
 
-      await service.dispose();
-      await service.init();
-      expect(await visibleIds(), expected);
-    },
-  );
+    await service.dispose();
+    await service.init();
+    expect(await visibleIds(), expected);
+  });
 
   test('rapid lifecycle events always mutate the latest snapshot', () async {
     await service.setMode(grid, NoteSortMode.custom);
@@ -1280,35 +1277,32 @@ void main() {
     },
   );
 
-  test(
-    'local changes during repair upload remain pending and supersede the candidate',
-    () async {
-      await _seedImportedOrder(database, grid);
-      final started = Completer<void>();
-      final release = Completer<void>();
-      final cloud = _FakeNoteSortCloudRepository()
-        ..enforceBaseRevision = true
-        ..writeStarted = started
-        ..writeBarrier = release;
-      cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
-      NoteSortService.cloudRepositoryOverride = cloud;
-      NoteSortService.canReceiveCloudOverride = true;
-      NoteSortService.canPushCloudOverride = true;
-      await service.receiveRemoteContextForTesting(grid.key);
-      final upload = service.flushCloudForTesting();
-      await started.future;
-      await service.setMode(grid, NoteSortMode.createdNewest);
-      final edited = service.snapshotFor(grid);
-      release.complete();
-      await upload;
-      expect(cloud.commitCalls, 0);
-      expect(service.snapshotFor(grid).revision, edited.revision);
-      expect(service.snapshotFor(grid).dirty, isTrue);
-      await service.flushCloudForTesting();
-      expect(service.snapshotFor(grid).mode, NoteSortMode.createdNewest);
-      expect(service.snapshotFor(grid).dirty, isFalse);
-    },
-  );
+  test('local changes during repair upload remain pending and supersede the candidate', () async {
+    await _seedImportedOrder(database, grid);
+    final started = Completer<void>();
+    final release = Completer<void>();
+    final cloud = _FakeNoteSortCloudRepository()
+      ..enforceBaseRevision = true
+      ..writeStarted = started
+      ..writeBarrier = release;
+    cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = true;
+    await service.receiveRemoteContextForTesting(grid.key);
+    final upload = service.flushCloudForTesting();
+    await started.future;
+    await service.setMode(grid, NoteSortMode.createdNewest);
+    final edited = service.snapshotFor(grid);
+    release.complete();
+    await upload;
+    expect(cloud.commitCalls, 0);
+    expect(service.snapshotFor(grid).revision, edited.revision);
+    expect(service.snapshotFor(grid).dirty, isTrue);
+    await service.flushCloudForTesting();
+    expect(service.snapshotFor(grid).mode, NoteSortMode.createdNewest);
+    expect(service.snapshotFor(grid).dirty, isFalse);
+  });
 
   test(
     'absent, invalid, and unsupported remote orders are never repaired',
@@ -2072,12 +2066,14 @@ void main() {
       await Label.upgradeTable(migrationDb, 7, 9);
       await migrationDb.transaction(SyncIdentityMigration.migrate);
 
-      final noteIds = (await migrationDb.query(
-        'note',
-      )).map((row) => row['sync_id']).whereType<String>().toList();
-      final labelIds = (await migrationDb.query(
-        'label',
-      )).map((row) => row['sync_id']).whereType<String>().toList();
+      final noteIds = (await migrationDb.query('note'))
+          .map((row) => row['sync_id'])
+          .whereType<String>()
+          .toList();
+      final labelIds = (await migrationDb.query('label'))
+          .map((row) => row['sync_id'])
+          .whereType<String>()
+          .toList();
       expect(noteIds.single, isNotEmpty);
       expect(labelIds.single, isNotEmpty);
     },

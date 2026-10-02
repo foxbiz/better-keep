@@ -30,7 +30,7 @@ import Icon from './Icon.astro';
   import {
     createUserCountPresentation,
     loadPublicUserMetric
-  } from '../lib/public-stats.mjs';
+  } from '../lib/public-stats.ts';
 
   const counters = document.querySelectorAll<HTMLElement>('[data-user-count]');
 

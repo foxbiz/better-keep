@@ -13,6 +13,7 @@ import 'package:better_keep/pages/note_editor/note_editor_toolbar.dart';
 import 'package:better_keep/pages/note_editor/toolbar/text_size_button.dart';
 import 'package:better_keep/services/checklist_delta_codec.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/themes/theme_registry.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
@@ -84,6 +85,91 @@ void main() {
       await tester.tap(find.text('Completed (1)'));
       await tester.pumpAndSettle();
       expect(find.text('Done task', findRichText: true), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'row menu icons contrast with the note in light and dark themes',
+    (tester) async {
+      for (final theme in [
+        ThemeRegistry.lightThemes.values.first,
+        ThemeRegistry.darkThemes.values.first,
+      ]) {
+        for (final color in [
+          const Color(0xfffff8e1),
+          const Color(0xff202124),
+          Colors.transparent,
+        ]) {
+          await _pumpEditor(
+            tester,
+            note: _RecordingNote(color: color),
+            document: RichChecklistDocument([_item('a', 'Task')]),
+            theme: theme,
+          );
+          await tester.pumpAndSettle();
+          final menuIcon = find
+              .descendant(
+                of: find.byType(PopupMenuButton<String>),
+                matching: find.byType(Icon),
+              )
+              .first;
+          final icon = tester.widget<Icon>(menuIcon);
+          final background = color == Colors.transparent
+              ? theme.colorScheme.surface
+              : color;
+          expect(
+            icon.color ?? IconTheme.of(tester.element(menuIcon)).color,
+            isDark(background) ? Colors.white : Colors.black,
+          );
+        }
+      }
+    },
+  );
+
+  testWidgets(
+    'clear completed text contrasts with the note in light and dark themes',
+    (tester) async {
+      for (final theme in [
+        ThemeRegistry.lightThemes.values.first,
+        ThemeRegistry.darkThemes.values.first,
+      ]) {
+        for (final color in [
+          const Color(0xfffff8e1),
+          const Color(0xff202124),
+          Colors.transparent,
+        ]) {
+          for (final readOnly in [false, true]) {
+            await _pumpEditor(
+              tester,
+              note: Note(color: color, readOnly: readOnly),
+              document: RichChecklistDocument([
+                _item('active', 'Task'),
+                _item('done', 'Done', checked: true),
+              ]),
+              theme: theme,
+            );
+            await tester.pumpAndSettle();
+            final label = find.text('Clear completed');
+            final button = tester.widget<TextButton>(
+              find.ancestor(of: label, matching: find.byType(TextButton)),
+            );
+            expect(button.onPressed == null, readOnly);
+            final background = color == Colors.transparent
+                ? theme.colorScheme.surface
+                : color;
+            final textColor = DefaultTextStyle.of(tester.element(label))
+                .style
+                .color!;
+            final rendered = Color.alphaBlend(textColor, background);
+            final a = rendered.computeLuminance();
+            final b = background.computeLuminance();
+            final contrast = a > b
+                ? (a + 0.05) / (b + 0.05)
+                : (b + 0.05) / (a + 0.05);
+            expect(contrast, greaterThanOrEqualTo(readOnly ? 1.5 : 4.5));
+          }
+        }
+      }
     },
   );
 
@@ -1976,9 +2062,8 @@ void main() {
 
     expect(note.saveCalls, 1);
     expect(
-      documentFromJsonSafe(
-        codec.tryParseCombinedJson(note.content)!.bodyDelta,
-      ).toPlainText(),
+      documentFromJsonSafe(codec.tryParseCombinedJson(note.content)!.bodyDelta)
+          .toPlainText(),
       'Remote before\nTask local\nAfter\n',
     );
   });
@@ -3213,9 +3298,8 @@ void main() {
           supportedLocales: betterKeepSupportedLocales,
           locale: const Locale('pt'),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(1.4)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.4)),
             child: child!,
           ),
           home: NoteEditor(note: note),
@@ -3247,6 +3331,7 @@ Future<void> _pumpEditor(
   required RichChecklistDocument document,
   String title = '',
   TargetPlatform? platform,
+  ThemeData? theme,
 }) async {
   final codec = ChecklistDeltaCodec();
   final body = codec.encodeBody(document);
@@ -3267,17 +3352,19 @@ Future<void> _pumpEditor(
         ),
       ),
       platform: platform,
+      theme: theme,
     ),
   );
   await tester.pump();
 }
 
-Widget _host(Widget home, {TargetPlatform? platform}) => MaterialApp(
-  localizationsDelegates: betterKeepLocalizationDelegates,
-  supportedLocales: betterKeepSupportedLocales,
-  theme: ThemeData(platform: platform),
-  home: home,
-);
+Widget _host(Widget home, {TargetPlatform? platform, ThemeData? theme}) =>
+    MaterialApp(
+      localizationsDelegates: betterKeepLocalizationDelegates,
+      supportedLocales: betterKeepSupportedLocales,
+      theme: theme ?? ThemeData(platform: platform),
+      home: home,
+    );
 
 Finder _checklistEntryContents() => find.byWidgetPredicate(
   (widget) =>
@@ -3382,7 +3469,13 @@ String _emptyTodoContent() => jsonEncode([
 ]);
 
 class _RecordingNote extends Note {
-  _RecordingNote({super.id, super.title, super.content, super.locked});
+  _RecordingNote({
+    super.id,
+    super.title,
+    super.content,
+    super.locked,
+    super.color,
+  });
 
   int saveCalls = 0;
   int deleteCalls = 0;

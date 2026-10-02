@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+
 import 'package:alarm/alarm.dart';
 import 'package:app_links/app_links.dart';
 import 'package:better_keep/app.dart';
@@ -47,6 +48,7 @@ import 'package:better_keep/services/firebase_bootstrap_coordinator.dart';
 import 'package:better_keep/services/firebase_default_app_initializer.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'firebase_options.dart';
 
 void main() async {
@@ -809,9 +811,8 @@ class _FirebaseSelectionScreenState extends State<FirebaseSelectionScreen> {
                       'remembered. Emulator mode never falls back to '
                       'production.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: Theme.of(context).colorScheme.onSurface
+                            .withValues(alpha: 0.6),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -857,17 +858,15 @@ class _EnvironmentCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.6),
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.6),
                 ),
                 textAlign: TextAlign.center,
               ),

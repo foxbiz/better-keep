@@ -80,48 +80,45 @@ void main() {
     expect(await journal.load(), isEmpty);
   });
 
-  test(
-    'download cleanup resumes after a committed replacement cannot delete its source',
-    () async {
-      const original = '/docs/old.bin';
-      const staged = '/docs/new.bin';
-      final undeletable = <String>{original};
-      files = _FakeAttachmentFiles(undeletablePaths: undeletable);
-      files.data[original] = Uint8List.fromList([1]);
-      final service = NewAttachmentTransactionService(
-        operations: files.operations,
-        journal: journal,
-      );
-      final prepared = await service.prepareDownloaded(
-        bytes: Uint8List.fromList([2]),
-        originalPath: original,
-        stagedPath: staged,
-        readForSession: files.readForSession,
-        writeForSession: files.writeForSession,
-      );
-      await _insertNote(
-        database,
-        Note(
-          id: 1,
-          title: 'Image',
-          content: _content('image'),
-          attachments: [NoteAttachment.image(_image(staged))],
-        ),
-      );
-      expect(await service.finishCommitted(prepared, database), isFalse);
-      expect(await journal.load(), hasLength(1));
-      expect(files.data.containsKey(original), isTrue);
-      undeletable.clear();
-      await NewAttachmentTransactionRecoveryService.recoverPending(
-        database: database,
-        operations: files.operations,
-        journal: journal,
-      );
-      expect(await journal.load(), isEmpty);
-      expect(files.data.containsKey(original), isFalse);
-      expect(await files.readForSession(staged), [2]);
-    },
-  );
+  test('download cleanup resumes after a committed replacement cannot delete its source', () async {
+    const original = '/docs/old.bin';
+    const staged = '/docs/new.bin';
+    final undeletable = <String>{original};
+    files = _FakeAttachmentFiles(undeletablePaths: undeletable);
+    files.data[original] = Uint8List.fromList([1]);
+    final service = NewAttachmentTransactionService(
+      operations: files.operations,
+      journal: journal,
+    );
+    final prepared = await service.prepareDownloaded(
+      bytes: Uint8List.fromList([2]),
+      originalPath: original,
+      stagedPath: staged,
+      readForSession: files.readForSession,
+      writeForSession: files.writeForSession,
+    );
+    await _insertNote(
+      database,
+      Note(
+        id: 1,
+        title: 'Image',
+        content: _content('image'),
+        attachments: [NoteAttachment.image(_image(staged))],
+      ),
+    );
+    expect(await service.finishCommitted(prepared, database), isFalse);
+    expect(await journal.load(), hasLength(1));
+    expect(files.data.containsKey(original), isTrue);
+    undeletable.clear();
+    await NewAttachmentTransactionRecoveryService.recoverPending(
+      database: database,
+      operations: files.operations,
+      journal: journal,
+    );
+    expect(await journal.load(), isEmpty);
+    expect(files.data.containsKey(original), isFalse);
+    expect(await files.readForSession(staged), [2]);
+  });
 
   test(
     'first download journal removes only an uncommitted staged file on restart',

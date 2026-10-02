@@ -810,9 +810,8 @@ class _UserPageState extends State<UserPage> {
     try {
       await NoteShareService().approveRequest(request.shareId, request.id);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(context.l10n.accessApproved)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(context.l10n.accessApproved)));
       }
     } catch (error, stackTrace) {
       AppLogger.error('Failed to approve share request', error, stackTrace);
@@ -831,9 +830,8 @@ class _UserPageState extends State<UserPage> {
     try {
       await NoteShareService().denyRequest(request.shareId, request.id);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(context.l10n.accessDenied)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(context.l10n.accessDenied)));
       }
     } catch (error, stackTrace) {
       AppLogger.error('Failed to deny share request', error, stackTrace);

@@ -1,6 +1,7 @@
 ---
 import { product } from '../data/product';
 import Icon from './Icon.astro';
+import PlatformIcon from './PlatformIcon.astro';
 ---
 
 <header class="site-header" data-site-header>
@@ -9,19 +10,21 @@ import Icon from './Icon.astro';
       <img src="/media/brand/logo.svg" width="38" height="38" alt="" />
       <span>Better Keep</span>
     </a>
+    <a
+      class="nav-github"
+      href={product.githubUrl}
+      rel="external"
+      aria-label="View Better Keep on GitHub"
+      title="View Better Keep on GitHub"
+      data-analytics={product.analyticsGoals.github}
+    >
+      <PlatformIcon name="github" size={22} />
+    </a>
     <div class="nav-links">
       <a href="/#features">Features</a>
-      <a href="/import/google-keep">Import</a>
+      <a href="/rich-text-notes">Rich text</a>
       <a href="/security">Security</a>
       <a href="/pricing">Pricing</a>
-      <a
-        class="button nav-launch"
-        href={product.webAppUrl}
-        data-analytics={product.analyticsGoals.webApp}
-      >
-        Open web app
-        <Icon name="ArrowRight" size={17} />
-      </a>
     </div>
     <button
       class="mobile-menu-toggle"
@@ -39,7 +42,7 @@ import Icon from './Icon.astro';
     <div class="container mobile-navigation__links">
       <a href="/#features">Features</a>
       <a href="/#platforms">Platforms</a>
-      <a href="/import/google-keep">Import from Google Keep</a>
+      <a href="/rich-text-notes">Rich-text notes</a>
       <a href="/security">Security</a>
       <a href="/pricing">Pricing</a>
       <a
@@ -53,6 +56,15 @@ import Icon from './Icon.astro';
     </div>
   </div>
 </header>
+
+<a
+      class="button floating-web-app"
+      href={product.webAppUrl}
+      data-analytics={product.analyticsGoals.webApp}
+    >
+      Open web app
+      <Icon name="ArrowRight" size={17} />
+    </a>
 
 <script>
   const toggle = document.querySelector<HTMLButtonElement>('[data-menu-toggle]');
@@ -99,7 +111,8 @@ import Icon from './Icon.astro';
     }
     if (event.key !== 'Tab') return;
 
-    const focusable = [toggle, ...navigation.querySelectorAll<HTMLElement>(focusableSelector)];
+    const floatingAction = document.querySelector<HTMLAnchorElement>('.floating-web-app');
+    const focusable = [toggle, ...navigation.querySelectorAll<HTMLElement>(focusableSelector), floatingAction].filter((element): element is HTMLElement => element !== null);
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (!first || !last) return;

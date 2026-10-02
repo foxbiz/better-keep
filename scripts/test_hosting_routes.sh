@@ -59,6 +59,8 @@ expect_home_redirect() {
 }
 
 request "/" "home"
+request "/import/google-keep" "keep_import"
+request "/google-keep-alternative" "keep_alternative"
 astro_asset_path="$(
   LC_ALL=C grep -Eio -- '/_astro/[^"[:space:]<>]+\.[[:alnum:]_-]{8,}\.(css|js)' \
     "$TEST_OUTPUT/home.body" |
@@ -103,8 +105,13 @@ request "/this-route-does-not-exist" "missing"
 
 expect_status "home" "200"
 expect_header "home" "^cache-control: no-cache, max-age=0, must-revalidate"
-expect_body "home" "Notes that stay"
-expect_body "home" "out of your way"
+expect_body "home" "Quick notes."
+expect_body "home" "Room to think."
+expect_status "keep_import" "200"
+expect_body "keep_import" 'rel="canonical" href="https://betterkeep.app/import/google-keep"'
+expect_body "keep_import" "ct=keep_import_guide"
+expect_status "keep_alternative" "200"
+expect_body "keep_alternative" 'href="/import/google-keep"'
 expect_body "home" "media/brand/logo.svg"
 expect_body "home" "data-platform-icon=.apple"
 if [[ -n "$astro_asset_path" ]]; then

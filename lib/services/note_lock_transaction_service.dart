@@ -20,15 +20,21 @@ import 'package:uuid/uuid.dart';
 
 typedef NoteLockPathExists = Future<bool> Function(String filePath);
 typedef NoteLockReadBytes = Future<Uint8List> Function(String filePath);
-typedef NoteLockWriteBytes =
-    Future<void> Function(String filePath, Uint8List bytes);
+typedef NoteLockWriteBytes = Future<void> Function(
+  String filePath,
+  Uint8List bytes,
+);
 typedef NoteLockDeletePath = Future<bool> Function(String filePath);
 typedef NoteLockDocumentDirectory = Future<String> Function();
 typedef NoteLockResolvePath = Future<String> Function(String filePath);
-typedef NoteLockPasswordEncrypt =
-    Future<Uint8List> Function(Uint8List bytes, String password);
-typedef NoteLockPasswordDecrypt =
-    Future<Uint8List> Function(Uint8List bytes, String password);
+typedef NoteLockPasswordEncrypt = Future<Uint8List> Function(
+  Uint8List bytes,
+  String password,
+);
+typedef NoteLockPasswordDecrypt = Future<Uint8List> Function(
+  Uint8List bytes,
+  String password,
+);
 
 enum NoteLockAssetKind {
   image,
@@ -871,9 +877,8 @@ class NoteLockTransactionService {
 
   static String _safeExtension(String? sourcePath, NoteLockAssetKind kind) {
     if (sourcePath != null && sourcePath.startsWith('data:')) {
-      final match = RegExp(
-        r'^data:[^/]+/([a-zA-Z0-9+.-]+)',
-      ).firstMatch(sourcePath);
+      final match = RegExp(r'^data:[^/]+/([a-zA-Z0-9+.-]+)')
+          .firstMatch(sourcePath);
       if (match != null) return '.${match.group(1)}';
     }
     if (sourcePath != null && !sourcePath.startsWith('data:')) {
