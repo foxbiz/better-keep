@@ -1,9 +1,6 @@
 ---
 import { heroScreenshots } from '../data/home';
-import { product } from '../data/product';
 import DeviceFrame from './DeviceFrame.astro';
-import Icon from './Icon.astro';
-import PlatformIcon from './PlatformIcon.astro';
 import StoreActions from './StoreActions.astro';
 import UserCount from './UserCount.astro';
 
@@ -16,35 +13,15 @@ const positions = ['left', 'primary', 'right'] as const;
       <p class="eyebrow">Private, offline-friendly notes</p>
       <h1>Quick notes. <span>Room to think.</span></h1>
       <p class="home-hero__lede">
-        Capture an idea, plan your day, or write something longer. Keep rich-text
-        notes, checklists, photos, sketches, and voice recordings together.
-        Sign in for free local notes that work offline. Add Pro for private,
-        encrypted sync across your devices.
+        Your free note-taking app for ideas, checklists, and everyday plans.
+        Write offline with rich-text notes, photos, sketches, and voice recordings.
       </p>
-      <StoreActions variant="hero" />
-      <div class="hero-proof" aria-label="Better Keep highlights">
-        <UserCount />
-        <a class="hero-proof__item" href="/offline-notes-app"><Icon name="CloudOff" size={17} />Offline-first</a>
-        <a class="hero-proof__item" href="/security"><Icon name="ShieldCheck" size={17} />Encrypted sync with Pro</a>
+      <div class="home-hero__actions">
+        <StoreActions variant="hero" />
       </div>
-      <p class="platforms-note">
-        Available on <a href="#platforms">{product.platforms.join(', ')}</a>
-      </p>
     </div>
 
     <div class="hero-stage">
-      <div class="hero-stage__actions">
-        <a
-          class="hero-github-badge"
-          href={product.githubUrl}
-          rel="external"
-          data-analytics={product.analyticsGoals.github}
-        >
-          <PlatformIcon name="github" size={19} />
-          View on GitHub
-          <Icon name="ArrowRight" size={15} />
-        </a>
-      </div>
       <div class="hero-stage__screens" aria-label="Better Keep rich-text, notes home, and voice-note screens">
         <div class="hero-stage__backdrop" aria-hidden="true"></div>
         {
@@ -58,5 +35,6 @@ const positions = ['left', 'primary', 'right'] as const;
         }
       </div>
     </div>
+    <div class="home-hero__community"><UserCount /></div>
   </div>
 </section>

@@ -71,7 +71,7 @@ test('mobile screenshot gallery is a native accessible scroll-snap rail', () => 
 test('homepage density and tap targets remain responsive at narrow widths', () => {
   const platformGrid = blockAfter(mobile, '.platform-grid');
   const narrowPlatformGrid = blockAfter(narrow, '.platform-grid');
-  const githubBadge = blockAfter(css, '.hero-github-badge');
+  const githubBadge = blockAfter(css, '.nav-github');
   const menuToggle = blockAfter(css, '.mobile-menu-toggle');
   const storeBadge = blockAfter(css, '.web-app-action,\n.store-badge');
 

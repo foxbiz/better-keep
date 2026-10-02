@@ -199,6 +199,7 @@ function measureHomepage(): Measurements {
     const bounds = element.getBoundingClientRect();
     const style = getComputedStyle(element);
     return {
+      top: bounds.top,
       bottom: bounds.bottom,
       display: style.display,
       height: bounds.height,
@@ -216,7 +217,7 @@ function measureHomepage(): Measurements {
   const galleryBounds = gallery.getBoundingClientRect();
   const targetHeights = [
     ...document.querySelectorAll(
-      '.mobile-menu-toggle, .web-app-action, .store-badge:not([style*="display: none"]), .hero-github-badge'
+      '.mobile-menu-toggle, .web-app-action, .store-badge:not([style*="display: none"]), .nav-github'
     )
   ].filter((element) => getComputedStyle(element).display !== 'none')
     .map((element) => element.getBoundingClientRect().height);
@@ -236,6 +237,8 @@ function measureHomepage(): Measurements {
       scrollSnapType: galleryStyle.scrollSnapType,
       scrollWidth: gallery.scrollWidth
     },
+    lede: rect('.home-hero__lede')!,
+    heroActions: rect('.home-hero__actions')!,
     halo: rect('.hero-stage__backdrop')!,
     hero: rect('.home-hero')!,
     horizontalExtent: Math.max(
@@ -268,11 +271,11 @@ function measureHomepage(): Measurements {
 const measurementScript = `return (${measureHomepage.toString()})();`;
 
 type Viewport = typeof viewports[number];
-type MeasuredRect = { bottom: number; display: string; height: number; left: number; right: number; width: number };
+type MeasuredRect = { top: number; bottom: number; display: string; height: number; left: number; right: number; width: number };
 type Measurements = {
   documentHeight: number;
   gallery: { clientWidth: number; height: number; itemCount: number; itemSnap: string[]; lastItemReachable: boolean; overflowX: string; scrollSnapType: string; scrollWidth: number };
-  halo: MeasuredRect; hero: MeasuredRect; leftPhone: MeasuredRect; primaryPhone: MeasuredRect; rightPhone: MeasuredRect;
+  lede: MeasuredRect; heroActions: MeasuredRect; halo: MeasuredRect; hero: MeasuredRect; leftPhone: MeasuredRect; primaryPhone: MeasuredRect; rightPhone: MeasuredRect;
   horizontalExtent: number; innerWidth: number; layoutWidth: number; platformColumns: number;
   storeActionGroups: { left: number; right: number }[];
   targetHeights: number[];
@@ -301,6 +304,9 @@ function verifyViewport(viewport: Viewport, metrics: Measurements) {
   );
 
   if (mobile) {
+    assert(metrics.primaryPhone.top >= metrics.lede.bottom, 'hero screenshot overlaps the introduction');
+    assert(metrics.primaryPhone.top <= viewport.height - 240, 'less than 240px of the app preview is visible in the first viewport');
+    assert(metrics.heroActions.top >= metrics.primaryPhone.bottom, 'download options appear before the app preview');
     const viewportCenter = metrics.layoutWidth / 2;
     const haloRatio = metrics.halo.width / metrics.halo.height;
     assert(

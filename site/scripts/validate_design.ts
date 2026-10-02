@@ -144,29 +144,14 @@ assert(
   'Homepage source-available wording is missing'
 );
 assert(
-  !homeHeroSource.includes('Source-available') &&
-    !homeHeroSource.includes('/source-available-notes') &&
-    homeHeroSource.includes('class="hero-github-badge"') &&
-    homeHeroSource.includes('name="github"') &&
-    homeHeroSource.includes('data-analytics={product.analyticsGoals.github}') &&
-    homeHeroSource.includes('rel="external"'),
-  'Hero must replace the source-available proof link with the tracked GitHub badge'
-);
-assert(
-  index.includes('class="hero-github-badge"') &&
-    index.includes('data-platform-icon="github"') &&
-    index.indexOf('class="hero-github-badge"') <
-      index.indexOf('data-screenshot-id="5"'),
-  'GitHub badge must render above the hero screenshots with the GitHub mark'
-);
-const heroGithubBadgeRule =
-  sourceCss.match(/\.hero-github-badge\s*\{([^}]*)\}/)?.[1] || '';
-assert(
-  /display:\s*inline-flex/.test(heroGithubBadgeRule) &&
-    /min-height:\s*44px/.test(heroGithubBadgeRule) &&
-    /border-radius:\s*999px/.test(heroGithubBadgeRule) &&
-    /background:\s*#f7f7f4/.test(heroGithubBadgeRule),
-  'Hero GitHub badge must use the compact high-contrast badge treatment'
+  headerSource.includes('class="nav-github"') &&
+    headerSource.includes('aria-label="View Better Keep on GitHub"') &&
+    headerSource.includes('data-analytics={product.analyticsGoals.github}') &&
+    !homeHeroSource.includes('hero-github-badge') &&
+    !homeHeroSource.includes('class="hero-proof"') &&
+    !homeHeroSource.includes('platforms-note') &&
+    homeHeroSource.includes('home-hero__community'),
+  'GitHub must be an accessible header icon, with only the anchored community count retained in the hero'
 );
 assert(
   index.includes('data-user-count') &&
@@ -180,8 +165,8 @@ assert(
   'Homepage is missing the accessible community-count loading state'
 );
 assert(
-  index.indexOf('data-user-count') < index.indexOf('Offline-first'),
-  'Registered-user metric must be the first item in the homepage proof row'
+  index.includes('class="home-hero__community"'),
+  'Registered-user metric must have a dedicated anchored position in the hero'
 );
 assert(
   !/\d+(?:\.\d)?[KM]\+\s+people have joined/i.test(indexVisibleText) &&
@@ -279,13 +264,13 @@ assert(
   'Mobile hero decoration must use a stable viewport position'
 );
 assert(
-  /min-height:\s*clamp\(590px,\s*170vw,\s*665px\)/.test(
+  /min-height:\s*calc\(clamp\(210px,\s*64vw,\s*250px\)\s*\*\s*2\.4\s*\+\s*12px\)/.test(
     narrowHeroStageRule
   ) &&
     /width:\s*clamp\(210px,\s*64vw,\s*250px\)/.test(
       narrowHeroPrimaryDeviceRule
     ),
-  'Phone hero must keep the GitHub badge separate from a bounded primary screenshot'
+  'Phone hero must reserve space for the bounded primary screenshot'
 );
 assert(
   /display:\s*block/.test(narrowDocumentTableRule) &&

@@ -268,9 +268,19 @@ h3 {
   color: var(--ink);
 }
 
-.nav-launch {
-  min-height: 42px;
-  padding-inline: 1.1rem;
+.floating-web-app {
+  position: fixed;
+  z-index: 1100;
+  right: calc(1rem + env(safe-area-inset-right, 0px));
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  min-height: 52px;
+  padding-inline: 1.25rem;
+  white-space: nowrap;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+body:has(.floating-web-app) {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .mobile-menu-toggle {
@@ -518,6 +528,7 @@ html[data-store-platform='microsoft'] .store-badge[data-store-platform='microsof
 }
 
 .home-hero__inner {
+  position: relative;
   display: grid;
   min-height: 850px;
   grid-template-columns: minmax(0, 0.82fr) minmax(540px, 1.18fr);
@@ -552,11 +563,14 @@ html[data-store-platform='microsoft'] .store-badge[data-store-platform='microsof
   margin-bottom: 1.5rem;
 }
 
-.hero-proof {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem 1.1rem;
-  margin-top: 1.15rem;
+.home-hero__community {
+  position: absolute;
+  bottom: 1.25rem;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  text-align: center;
+  transform: translateX(-50%);
 }
 
 .hero-proof__item {
@@ -567,14 +581,6 @@ html[data-store-platform='microsoft'] .store-badge[data-store-platform='microsof
   font-size: 0.78rem;
   font-weight: 650;
   line-height: 1.2;
-}
-
-.hero-proof a.hero-proof__item {
-  text-decoration: none;
-}
-
-.hero-proof a.hero-proof__item:hover {
-  color: var(--ink);
 }
 
 .user-count-proof {
@@ -624,53 +630,31 @@ html[data-store-platform='microsoft'] .store-badge[data-store-platform='microsof
   }
 }
 
-.platforms-note {
-  margin: 1rem 0 0;
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-}
-
-.platforms-note a {
-  color: var(--ink-soft);
-}
-
 .hero-stage {
   position: relative;
   min-height: 720px;
 }
 
-.hero-stage__actions {
-  display: flex;
-  min-height: 44px;
-  align-items: flex-start;
-  justify-content: flex-end;
-}
-
-.hero-github-badge {
+.nav-github {
+  margin-left: auto;
   display: inline-flex;
+  width: 44px;
   min-height: 44px;
+  flex: 0 0 44px;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0.55rem 0.85rem;
-  background: #f7f7f4;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
-  color: #0b0b0d;
-  font-size: 0.78rem;
-  font-weight: 800;
-  line-height: 1;
-  text-decoration: none;
-  transition: transform var(--transition), background var(--transition);
+  color: var(--ink);
+  background: var(--surface);
 }
 
-.hero-github-badge:hover {
-  background: #fff;
-  color: #0b0b0d;
-  transform: translateY(-2px);
+.nav-github .platform-icon path {
+  fill: currentColor;
 }
 
-.hero-github-badge .platform-icon {
-  flex: 0 0 19px;
+.nav-github:hover {
+  color: var(--brand);
 }
 
 .hero-stage__screens {
@@ -1813,9 +1797,7 @@ tr:last-child td {
     margin-inline: auto;
   }
 
-  .hero-proof {
-    justify-content: center;
-  }
+
 
   .hero-stage {
     width: min(100%, 650px);
@@ -1823,9 +1805,7 @@ tr:last-child td {
     margin-inline: auto;
   }
 
-  .hero-stage__actions {
-    justify-content: center;
-  }
+
 
   .section-heading--split,
   .security-story,
@@ -1945,25 +1925,49 @@ tr:last-child td {
     font-size: clamp(2rem, 10vw, 3rem);
   }
 
+  .nav {
+    gap: 0.75rem;
+  }
+
   .home-hero__inner {
-    gap: 2rem;
-    padding-block: 7.5rem 3.5rem;
+    gap: 1.25rem;
+    padding-block: 6rem 3.5rem;
+  }
+
+  .home-hero__copy {
+    display: contents;
+  }
+
+  .home-hero__copy > .eyebrow {
+    margin-bottom: 0;
+    text-align: center;
+  }
+
+  .home-hero__actions {
+    order: 2;
+    text-align: center;
   }
 
   .home-hero h1 {
-    max-width: 10ch;
+    max-width: 14ch;
+    margin-bottom: 0;
+    font-size: clamp(2.4rem, 10vw, 3.5rem);
+    text-align: center;
   }
 
   .home-hero__lede {
+    max-width: 38ch;
+    margin-bottom: 0;
     font-size: 1rem;
+    text-align: center;
   }
 
   .hero-stage {
-    min-height: clamp(590px, 170vw, 665px);
+    min-height: calc(clamp(210px, 64vw, 250px) * 2.4 + 12px);
   }
 
   .hero-stage__screens {
-    inset: 56px 0 0;
+    inset: 0;
   }
 
   .hero-stage__backdrop {
