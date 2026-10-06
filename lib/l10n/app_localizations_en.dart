@@ -1,6 +1,5 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
-
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3192,7 +3191,8 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other:
           'Do you really want to delete $count notes forever? This can\'t be undone.',
-      one: 'Do you really want to delete this note forever? This can\'t be undone.',
+      one:
+          'Do you really want to delete this note forever? This can\'t be undone.',
     );
     return '$_temp0';
   }

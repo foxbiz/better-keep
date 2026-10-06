@@ -61,12 +61,20 @@ import PlatformIcon from './PlatformIcon.astro';
       class="button floating-web-app"
       href={product.webAppUrl}
       data-analytics={product.analyticsGoals.webApp}
+      data-play-store-url={product.playStoreUrl}
     >
-      Open web app
+      <span data-app-action-label>Open web app</span>
       <Icon name="ArrowRight" size={17} />
     </a>
 
 <script>
+  import { configureNativeAppAction } from '../lib/native-app-action';
+
+  configureNativeAppAction(
+    document.querySelector<HTMLAnchorElement>('.floating-web-app'),
+    navigator
+  );
+
   const toggle = document.querySelector<HTMLButtonElement>('[data-menu-toggle]');
   const navigation = document.querySelector<HTMLElement>('[data-mobile-navigation]');
   const openIcon = toggle?.querySelector<HTMLElement>('[data-menu-open-icon]');
