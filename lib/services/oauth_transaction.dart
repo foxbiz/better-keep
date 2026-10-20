@@ -10,7 +10,7 @@ import 'oauth_transaction_store_native.dart'
 const _transactionLifetime = Duration(minutes: 5);
 final _transactionIdPattern = RegExp(r'^[A-Za-z0-9_-]{22}$');
 final _verifierPattern = RegExp(r'^[A-Za-z0-9_-]{43}$');
-const _providers = {'facebook', 'github', 'twitter'};
+const _providers = {'facebook', 'github', 'twitter', 'apple'};
 const _modes = {'signin', 'link'};
 
 String _randomBase64Url(int length) {

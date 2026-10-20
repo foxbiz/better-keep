@@ -11,7 +11,7 @@ import {
 	OAUTH_COMPLETION_TTL_MS,
 	OAUTH_REDEMPTION_LEASE_MS,
 	timingSafeStringEqual,
-	type CustomOAuthProvider,
+	type BrowserOAuthProvider,
 } from "./oauthSession";
 
 interface CompletionData {
@@ -32,7 +32,7 @@ export async function createOAuthCompletion({
 	clientTransactionId,
 }: {
 	uid: string;
-	provider: CustomOAuthProvider;
+	provider: BrowserOAuthProvider;
 	challenge: string;
 	clientTransactionId: string;
 }): Promise<string> {
