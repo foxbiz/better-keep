@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3735,4 +3736,26 @@ class AppLocalizationsJa extends AppLocalizations {
   String attachmentCount(int count) {
     return '添付ファイル $count 件';
   }
+
+  @override
+  String get storageLowTitle => 'ストレージの空き容量が不足しています';
+
+  @override
+  String get browserStorageLow =>
+      'ブラウザの保存領域がいっぱい、または残り少なくなっています。未同期のノートを保護するため、空き容量を増やしてください。';
+
+  @override
+  String get deviceStorageLow =>
+      'デバイスの空き容量が少なくなっています。未同期のノートを保護するため、空き容量を増やしてください。';
+
+  @override
+  String get storageLoginAgain => '再度ログイン';
+
+  @override
+  String get storageClearedAfterPressure =>
+      '空き容量の不足により、ローカルデータが削除された可能性があります。再度ログインして同期済みのノートを復元してください。同期前に削除されたノートはクラウドから復元できません。';
+
+  @override
+  String get storageCleared =>
+      'ローカルデータが削除されたため、ログアウトしました。再度ログインして同期済みのノートを復元してください。同期前に削除されたノートはクラウドから復元できません。';
 }

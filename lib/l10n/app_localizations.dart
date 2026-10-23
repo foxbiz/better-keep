@@ -6893,6 +6893,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 attachment} other{{count} attachments}}'**
   String attachmentCount(int count);
+
+  /// No description provided for @storageLowTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage almost full'**
+  String get storageLowTitle;
+
+  /// No description provided for @browserStorageLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser storage is full or running low. Free up space to help protect your unsynced notes.'**
+  String get browserStorageLow;
+
+  /// No description provided for @deviceStorageLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is running low on storage. Free up space to help protect your unsynced notes.'**
+  String get deviceStorageLow;
+
+  /// No description provided for @storageLoginAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in again'**
+  String get storageLoginAgain;
+
+  /// No description provided for @storageClearedAfterPressure.
+  ///
+  /// In en, this message translates to:
+  /// **'Local data may have been cleared because storage was running low. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.'**
+  String get storageClearedAfterPressure;
+
+  /// No description provided for @storageCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Local data was cleared and you have been logged out. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.'**
+  String get storageCleared;
 }
 
 class _AppLocalizationsDelegate

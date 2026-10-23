@@ -288,16 +288,13 @@ class WebFileSystem implements FileSystem {
 
   static Future<_FileSystemBackend> _selectBackend() async {
     if (_OpfsBackend.isSupported) {
-      try {
-        final backend = _OpfsBackend();
-        await backend.init().timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => throw TimeoutException('OPFS init timed out'),
-        );
-        return backend;
-      } catch (e) {
-        // OPFS failed, fall back to IndexedDB
-      }
+      // A supported store failing is not an empty alternative store.
+      final backend = _OpfsBackend();
+      await backend.init().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw TimeoutException('OPFS init timed out'),
+      );
+      return backend;
     }
 
     final backend = _IndexedDbBackend(dbName: 'better_keep_fs');
@@ -506,8 +503,11 @@ class _OpfsBackend implements _FileSystemBackend {
           options,
         ]),
       );
-    } catch (_) {
-      return null;
+    } catch (error) {
+      if (error is html.DomException && error.name == 'NotFoundError') {
+        return null;
+      }
+      rethrow;
     }
   }
 
@@ -522,8 +522,11 @@ class _OpfsBackend implements _FileSystemBackend {
         current = await _promise(
           js_util.callMethod(current, 'getDirectoryHandle', [segment, options]),
         );
-      } catch (_) {
-        return null;
+      } catch (error) {
+        if (error is html.DomException && error.name == 'NotFoundError') {
+          return null;
+        }
+        rethrow;
       }
     }
     return current;

@@ -7,6 +7,8 @@ import flutter_local_notifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var storageChannel: FlutterMethodChannel?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -34,6 +36,28 @@ import flutter_local_notifications
       GeneratedPluginRegistrant.register(with: registry)
     }
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "StorageHealth") {
+      let channel = FlutterMethodChannel(
+        name: "com.betterkeep/storage", binaryMessenger: registrar.messenger())
+      storageChannel = channel
+      channel.setMethodCallHandler { call, result in
+        guard call.method == "getAvailableBytes" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        guard let path = call.arguments as? String else {
+          result(FlutterError(code: "storage_unavailable", message: "Missing data path", details: nil))
+          return
+        }
+        do {
+          let values = try URL(fileURLWithPath: path).resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+          result(values.volumeAvailableCapacityForImportantUsage)
+        } catch {
+          result(FlutterError(code: "storage_unavailable", message: "Storage information is unavailable", details: nil))
+        }
+      }
+    }
   }
 
   @available(iOS 13.0, *)

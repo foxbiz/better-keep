@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3735,4 +3736,26 @@ class AppLocalizationsKo extends AppLocalizations {
   String attachmentCount(int count) {
     return '첨부 파일 $count개';
   }
+
+  @override
+  String get storageLowTitle => '저장 공간이 거의 가득 찼습니다';
+
+  @override
+  String get browserStorageLow =>
+      '브라우저 저장 공간이 가득 찼거나 부족합니다. 동기화되지 않은 노트를 보호하려면 공간을 확보하세요.';
+
+  @override
+  String get deviceStorageLow =>
+      '기기의 저장 공간이 부족합니다. 동기화되지 않은 노트를 보호하려면 공간을 확보하세요.';
+
+  @override
+  String get storageLoginAgain => '다시 로그인';
+
+  @override
+  String get storageClearedAfterPressure =>
+      '저장 공간 부족으로 로컬 데이터가 삭제되었을 수 있습니다. 다시 로그인하여 동기화된 노트를 복원하세요. 동기화 전에 삭제된 노트는 클라우드에서 복구할 수 없습니다.';
+
+  @override
+  String get storageCleared =>
+      '로컬 데이터가 삭제되어 로그아웃되었습니다. 다시 로그인하여 동기화된 노트를 복원하세요. 동기화 전에 삭제된 노트는 클라우드에서 복구할 수 없습니다.';
 }

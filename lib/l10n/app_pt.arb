@@ -1133,5 +1133,11 @@
   "imageCount": "{count, plural, =1{1 imagem} other{{count} imagens}}",
   "sketchCount": "{count, plural, =1{1 esboço} other{{count} esboços}}",
   "tableCount": "{count, plural, =1{1 tabela} other{{count} tabelas}}",
-  "attachmentCount": "{count, plural, =1{1 anexo} other{{count} anexos}}"
+  "attachmentCount": "{count, plural, =1{1 anexo} other{{count} anexos}}",
+  "storageLowTitle": "Armazenamento quase cheio",
+  "browserStorageLow": "O armazenamento do navegador está cheio ou quase cheio. Libere espaço para ajudar a proteger suas notas não sincronizadas.",
+  "deviceStorageLow": "O armazenamento do dispositivo está quase cheio. Libere espaço para ajudar a proteger suas notas não sincronizadas.",
+  "storageLoginAgain": "Entrar novamente",
+  "storageClearedAfterPressure": "Os dados locais podem ter sido apagados por falta de espaço. Entre novamente para restaurar as notas sincronizadas. Notas apagadas antes da sincronização não podem ser recuperadas da nuvem.",
+  "storageCleared": "Os dados locais foram apagados e você saiu da conta. Entre novamente para restaurar as notas sincronizadas. Notas apagadas antes da sincronização não podem ser recuperadas da nuvem."
 }

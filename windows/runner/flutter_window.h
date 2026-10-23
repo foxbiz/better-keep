@@ -28,6 +28,8 @@ class FlutterWindow : public Win32Window {
   bool QueryReduceMotionEnabled() const;
   void NotifyReduceMotionPreferenceIfChanged();
 
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> storage_channel_;
+
   // The project to run.
   flutter::DartProject project_;
 

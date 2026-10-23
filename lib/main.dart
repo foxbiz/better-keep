@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'dart:async';
 
+import 'package:better_keep/services/local_storage_recovery.dart';
+import 'package:better_keep/services/storage_health_service.dart';
+
 import 'package:alarm/alarm.dart';
 import 'package:app_links/app_links.dart';
 import 'package:better_keep/app.dart';
@@ -117,6 +120,8 @@ Future<void> _finishFirebaseStartup(SharedPreferences preferences) async {
   FirebaseBackend.lock();
   await AppState.initializeFirebaseScope(preferences: preferences);
   await AlarmIdService.init(prefs: preferences);
+  LocalStorageRecovery(preferences).loadNotice();
+  StorageHealthService.instance.start(preferences);
 
   // Firebase routing must be final before accessing the native Auth instance.
   // Explicitly propagate the configured domain because Android and Apple
@@ -130,7 +135,7 @@ Future<void> _finishFirebaseStartup(SharedPreferences preferences) async {
   );
 
   // This must be the first AuthService access.
-  await AuthService.init(prefs: preferences);
+  await AuthService.init(prefs: preferences, deferLocalRestore: true);
   AppLogger.log(
     '[Main] AuthService initialized, currentUser: ${AuthService.currentUser?.email}',
   );
@@ -421,9 +426,7 @@ class _BetterKeepState extends State<BetterKeep> {
 
     // Use the same recoverable post-sign-in pipeline for restored sessions and
     // fresh sign-ins. A transient cloud failure must not make startup fatal.
-    if (AuthService.currentUser != null) {
-      await AuthService.initializeCurrentUserServices();
-    }
+    await AuthService.initializeCurrentUserServices();
   }
 
   Future<void> _initializeOptionalReminderServices() async {
@@ -535,7 +538,12 @@ class _BetterKeepState extends State<BetterKeep> {
 
   Future<void> _initDb() async {
     try {
-      final db = await initDatabase();
+      var db = await initDatabase(detectDataLoss: true);
+      final recovery = LocalStorageRecovery(await AppState.prefs);
+      if (recovery.pending) {
+        await AuthService.signOut();
+        db = AppState.db;
+      }
       LocalDataEncryption.setDatabaseGetter(() => db);
       await NoteSortService().init();
       // Resolve interrupted local lock transactions before the note UI, sync,

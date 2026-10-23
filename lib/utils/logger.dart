@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:better_keep/services/storage_health_service.dart';
+
 import 'package:better_keep/services/file_system.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -32,6 +34,7 @@ class AppLogger {
     Object? error,
     StackTrace? stackTrace,
   ]) async {
+    StorageHealthService.instance.reportError(error ?? message);
     final errorMessage = error != null
         ? '$message: $error${stackTrace != null ? '\n$stackTrace' : ''}'
         : message;
@@ -58,6 +61,7 @@ class AppLogger {
       // Append to file
       await fs.writeString(logPath, '$logMessage\n', append: true);
     } catch (e) {
+      StorageHealthService.instance.reportError(e);
       debugPrint("Failed to write log to file: $e");
     }
   }

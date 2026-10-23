@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3197,8 +3198,7 @@ class AppLocalizationsTr extends AppLocalizations {
       locale: localeName,
       other:
           '$count notu gerçekten kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz.',
-      one:
-          'Bu notu gerçekten kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz.',
+      one: 'Bu notu gerçekten kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz.',
     );
     return '$_temp0';
   }
@@ -3878,4 +3878,26 @@ class AppLocalizationsTr extends AppLocalizations {
   String attachmentCount(int count) {
     return '$count ek';
   }
+
+  @override
+  String get storageLowTitle => 'Depolama alanı dolmak üzere';
+
+  @override
+  String get browserStorageLow =>
+      'Tarayıcı depolama alanı dolu veya azalıyor. Eşitlenmemiş notlarınızı korumaya yardımcı olmak için yer açın.';
+
+  @override
+  String get deviceStorageLow =>
+      'Cihazınızın depolama alanı azalıyor. Eşitlenmemiş notlarınızı korumaya yardımcı olmak için yer açın.';
+
+  @override
+  String get storageLoginAgain => 'Tekrar giriş yap';
+
+  @override
+  String get storageClearedAfterPressure =>
+      'Depolama alanı azaldığı için yerel veriler silinmiş olabilir. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz.';
+
+  @override
+  String get storageCleared =>
+      'Yerel veriler silindi ve hesabınızdan çıkış yapıldı. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz.';
 }

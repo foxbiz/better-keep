@@ -692,8 +692,22 @@ void main() {
     );
 
     test(
-      'actual free-account recovery downloads notes automatically',
+      'reset checkpoints restore older cloud notes after local loss',
       () async {
+        AppState.noteCloudSyncCheckpoint = CloudSyncCheckpoint(
+          bootstrapped: true,
+          cursor: CloudSyncCursor(
+            seconds: DateTime.utc(2026, 10, 21).millisecondsSinceEpoch ~/ 1000,
+            nanoseconds: 0,
+            documentId: 'newer-note',
+          ),
+        );
+        AppState.labelCloudSyncCheckpoint = const CloudSyncCheckpoint(
+          bootstrapped: true,
+        );
+        await AppState.clearSyncCheckpoints();
+        expect(AppState.noteCloudSyncCheckpoint, isNull);
+        expect(AppState.labelCloudSyncCheckpoint, isNull);
         backend.firestore.queryResponse = (path, _) async =>
             OfflineQuerySnapshot(
               path.endsWith('/notes')

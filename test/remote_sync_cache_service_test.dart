@@ -14,6 +14,30 @@ void main() {
 
   group('remote sync cache completion', () {
     test(
+      'strict recovery refuses an undeleted cache and permits retry',
+      () async {
+        final fs = _MemoryFileSystem();
+        final cache = RemoteSyncCacheService.forTesting(() async => fs);
+        await cache.startNewSync(_cursor);
+        await cache.addPage(_page(hasMore: true));
+        fs.failDeletes = true;
+        await expectLater(cache.clear(strict: true), throwsStateError);
+        expect(cache.hasPendingSyncs, true);
+        expect(fs.files, isNotEmpty);
+        fs.failDeletes = false;
+        await cache.clear(strict: true);
+        expect(fs.files, isEmpty);
+        expect(cache.hasPendingSyncs, false);
+      },
+    );
+
+    test('strict recovery propagates unavailable storage instead of treating it as empty', () async {
+      final fs = _MemoryFileSystem()..failDirectoryCheck = true;
+      final cache = RemoteSyncCacheService.forTesting(() async => fs);
+      await expectLater(cache.clear(strict: true), throwsStateError);
+    });
+
+    test(
       'failed cache initialization preserves pending pages and can retry',
       () async {
         final fs = _MemoryFileSystem();
@@ -266,6 +290,8 @@ PendingRemoteSyncPage _page({
 
 class _MemoryFileSystem implements FileSystem {
   bool failReads = false;
+  bool failDeletes = false;
+  bool failDirectoryCheck = false;
   final Map<String, Uint8List> files = {};
   final Set<String> directories = {'/', '/cache'};
 
@@ -308,13 +334,16 @@ class _MemoryFileSystem implements FileSystem {
       : Uint8List.fromList(files[filePath] ?? (throw StateError('missing')));
 
   @override
-  Future<bool> delete(String filePath) async => files.remove(filePath) != null;
+  Future<bool> delete(String filePath) async =>
+      !failDeletes && files.remove(filePath) != null;
 
   @override
   Future<bool> exists(String filePath) async => files.containsKey(filePath);
 
   @override
-  Future<bool> isDirectory(String value) async => directories.contains(value);
+  Future<bool> isDirectory(String value) async => failDirectoryCheck
+      ? throw StateError('storage unavailable')
+      : directories.contains(value);
 
   @override
   Future<bool> isFile(String value) async => files.containsKey(value);

@@ -1133,5 +1133,11 @@
   "imageCount": "{count} gambar",
   "sketchCount": "{count} sketsa",
   "tableCount": "{count} tabel",
-  "attachmentCount": "{count} lampiran"
+  "attachmentCount": "{count} lampiran",
+  "storageLowTitle": "Penyimpanan hampir penuh",
+  "browserStorageLow": "Penyimpanan browser penuh atau hampir habis. Kosongkan ruang untuk membantu melindungi catatan yang belum disinkronkan.",
+  "deviceStorageLow": "Penyimpanan perangkat Anda hampir habis. Kosongkan ruang untuk membantu melindungi catatan yang belum disinkronkan.",
+  "storageLoginAgain": "Masuk lagi",
+  "storageClearedAfterPressure": "Data lokal mungkin telah dihapus karena ruang penyimpanan hampir habis. Masuk lagi untuk memulihkan catatan yang telah disinkronkan. Catatan yang dihapus sebelum disinkronkan tidak dapat dipulihkan dari cloud.",
+  "storageCleared": "Data lokal telah dihapus dan Anda telah keluar. Masuk lagi untuk memulihkan catatan yang telah disinkronkan. Catatan yang dihapus sebelum disinkronkan tidak dapat dipulihkan dari cloud."
 }

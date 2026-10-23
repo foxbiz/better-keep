@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3197,8 +3198,7 @@ class AppLocalizationsId extends AppLocalizations {
       locale: localeName,
       other:
           'Apakah Anda benar-benar ingin menghapus $count catatan selamanya? Ini tidak dapat dibatalkan.',
-      one:
-          'Apakah Anda benar-benar ingin menghapus catatan ini selamanya? Ini tidak dapat dibatalkan.',
+      one: 'Apakah Anda benar-benar ingin menghapus catatan ini selamanya? Ini tidak dapat dibatalkan.',
     );
     return '$_temp0';
   }
@@ -3873,4 +3873,26 @@ class AppLocalizationsId extends AppLocalizations {
   String attachmentCount(int count) {
     return '$count lampiran';
   }
+
+  @override
+  String get storageLowTitle => 'Penyimpanan hampir penuh';
+
+  @override
+  String get browserStorageLow =>
+      'Penyimpanan browser penuh atau hampir habis. Kosongkan ruang untuk membantu melindungi catatan yang belum disinkronkan.';
+
+  @override
+  String get deviceStorageLow =>
+      'Penyimpanan perangkat Anda hampir habis. Kosongkan ruang untuk membantu melindungi catatan yang belum disinkronkan.';
+
+  @override
+  String get storageLoginAgain => 'Masuk lagi';
+
+  @override
+  String get storageClearedAfterPressure =>
+      'Data lokal mungkin telah dihapus karena ruang penyimpanan hampir habis. Masuk lagi untuk memulihkan catatan yang telah disinkronkan. Catatan yang dihapus sebelum disinkronkan tidak dapat dipulihkan dari cloud.';
+
+  @override
+  String get storageCleared =>
+      'Data lokal telah dihapus dan Anda telah keluar. Masuk lagi untuk memulihkan catatan yang telah disinkronkan. Catatan yang dihapus sebelum disinkronkan tidak dapat dipulihkan dari cloud.';
 }

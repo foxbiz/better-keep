@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
+import 'package:better_keep/components/storage_warning.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/pages/home/google_keep_import_visibility.dart';
@@ -215,6 +216,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                   ),
                 ),
               ),
+              const SliverToBoxAdapter(child: StorageWarning()),
               SliverToBoxAdapter(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -293,6 +295,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                     ),
                   ),
                 ),
+              const SliverToBoxAdapter(child: StorageWarning()),
               SliverToBoxAdapter(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),

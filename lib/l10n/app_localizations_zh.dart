@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3676,4 +3677,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String attachmentCount(int count) {
     return '$count 个附件';
   }
+
+  @override
+  String get storageLowTitle => '存储空间即将用尽';
+
+  @override
+  String get browserStorageLow => '浏览器存储空间已满或即将用尽。请释放空间，以帮助保护尚未同步的笔记。';
+
+  @override
+  String get deviceStorageLow => '设备存储空间不足。请释放空间，以帮助保护尚未同步的笔记。';
+
+  @override
+  String get storageLoginAgain => '重新登录';
+
+  @override
+  String get storageClearedAfterPressure =>
+      '存储空间不足可能导致本地数据被清除。请重新登录以恢复已同步的笔记。同步前被清除的笔记无法从云端恢复。';
+
+  @override
+  String get storageCleared =>
+      '本地数据已被清除，您已退出登录。请重新登录以恢复已同步的笔记。同步前被清除的笔记无法从云端恢复。';
 }

@@ -1,4 +1,5 @@
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/components/storage_warning.dart';
 import 'package:flutter/material.dart';
 
 /// A localized, implementation-agnostic loading screen used before the main
@@ -60,6 +61,7 @@ class AppStartupErrorView extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
+                    const StorageWarning(),
                     Text(
                       retry == null
                           ? context.l10n.startupRestartMessage
