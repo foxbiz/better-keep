@@ -517,7 +517,13 @@ class _ArchiveParserEntry extends _ParserEntry {
   @override
   Future<Uint8List> load() async {
     final output = _BoundedOutputMemoryStream(maxBytes: maxReadBytes);
-    file.writeContent(output, freeMemory: true);
+    try {
+      file.writeContent(output, freeMemory: true);
+    } on ArchiveException catch (error) {
+      throw KeepImportValidationException(
+        '${this.path} failed ZIP validation: $error',
+      );
+    }
     final bytes = output.getBytes();
     if (bytes.length != size) {
       throw KeepImportValidationException(

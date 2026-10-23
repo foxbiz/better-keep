@@ -180,6 +180,7 @@ test("production Hosting isolates public and administrator artifacts", () => {
 	assertHostingCachePolicy(publicHosting);
 	assert.deepEqual(publicHosting.rewrites, [
 		{source: "/oauth/start", function: "oauthStart"},
+		{source: "/oauth/apple", function: "desktopAppleAuth"},
 		{source: "/oauth/callback", function: "oauthCallback"},
 		{source: "/s/**", destination: "/s/index.html"},
 		{source: "/app/**", destination: "/app/index.html"},
