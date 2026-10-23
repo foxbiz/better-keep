@@ -18,7 +18,7 @@ void main() {
       }
     });
 
-    test('uses Firebase provider auth on Android and Windows', () {
+    test('routes Android and Windows through provider dispatch', () {
       for (final platform in [TargetPlatform.android, TargetPlatform.windows]) {
         expect(
           appleAuthFlowFor(isWeb: false, platform: platform),
@@ -55,6 +55,43 @@ void main() {
     expect(provider.providerId, 'apple.com');
     expect(provider.scopes, unorderedEquals(['email', 'name']));
   });
+
+  test(
+    'Windows sign-in never invokes the unsupported Firebase provider API',
+    () async {
+      final result = await runAppleProviderSignIn<String>(
+        platform: TargetPlatform.windows,
+        browserSignIn: () async => 'browser credential',
+        firebaseSignIn: () async => fail('Windows invoked signInWithProvider'),
+      );
+      expect(result, 'browser credential');
+    },
+  );
+
+  test('Android keeps its existing Firebase provider sign-in', () async {
+    final result = await runAppleProviderSignIn<String>(
+      platform: TargetPlatform.android,
+      browserSignIn: () async =>
+          fail('Android opened the Windows browser flow'),
+      firebaseSignIn: () async => 'firebase credential',
+    );
+    expect(result, 'firebase credential');
+  });
+
+  test(
+    'Windows browser cancellation propagates without a native fallback',
+    () async {
+      final error = FirebaseAuthException(code: 'cancelled');
+      await expectLater(
+        runAppleProviderSignIn<String>(
+          platform: TargetPlatform.windows,
+          browserSignIn: () async => throw error,
+          firebaseSignIn: () async => fail('Cancellation invoked native auth'),
+        ),
+        throwsA(same(error)),
+      );
+    },
+  );
 
   group('Apple auth dispatch', () {
     test('web flow invokes only the popup delegate', () async {

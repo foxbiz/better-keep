@@ -23,6 +23,7 @@ import getPublicStats from "./exports/getPublicStats";
 import grantTrialOnFirstSignIn from "./exports/grantTrialOnFirstSignIn";
 import oauthCallback from "./exports/oauthCallback";
 import oauthStart from "./exports/oauthStart";
+import desktopAppleAuth from "./exports/desktopAppleAuth";
 import processPlayStoreNotification from "./exports/playStoreWebhook";
 import processAdminRevenueEvent from "./exports/processAdminRevenueEvent";
 import processScheduledDeletions from "./exports/processScheduledDeletions";
@@ -82,6 +83,7 @@ export {
 	grantTrialOnFirstSignIn,
 	oauthCallback,
 	oauthStart,
+	desktopAppleAuth,
 	processAdminRevenueEvent,
 	processPlayStoreNotification,
 	processScheduledDeletions,

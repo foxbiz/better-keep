@@ -181,6 +181,10 @@ export default onRequest(
 			sendError("Update Better Keep to complete OAuth sign-in", state);
 			return;
 		}
+		if (state.provider === "apple") {
+			sendError("Use the Apple sign-in completion endpoint", state);
+			return;
+		}
 
 		const callbackUrl = `https://betterkeep.app/oauth/callback`;
 

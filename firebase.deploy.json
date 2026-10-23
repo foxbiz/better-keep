@@ -178,6 +178,10 @@
 					"function": "oauthStart"
 				},
 				{
+					"source": "/oauth/apple",
+					"function": "desktopAppleAuth"
+				},
+				{
 					"source": "/oauth/callback",
 					"function": "oauthCallback"
 				},

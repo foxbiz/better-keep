@@ -34,6 +34,14 @@ AppleAuthProvider buildAppleAuthProvider() => AppleAuthProvider()
   ..addScope('email')
   ..addScope('name');
 
+/// Windows cannot run the Firebase C++ SDK's interactive provider flow.
+/// Keep this sign-in fallback separate from native account linking.
+Future<T> runAppleProviderSignIn<T>({
+  required TargetPlatform platform,
+  required Future<T> Function() browserSignIn,
+  required Future<T> Function() firebaseSignIn,
+}) => platform == TargetPlatform.windows ? browserSignIn() : firebaseSignIn();
+
 Future<T> runAppleAuthFlow<T>({
   required AppleAuthFlow flow,
   required Future<T> Function() webPopup,

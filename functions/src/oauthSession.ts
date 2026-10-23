@@ -15,6 +15,7 @@ export const OAUTH_STATE_AUDIENCE = "betterkeep-oauth-callback";
 
 const CUSTOM_OAUTH_PROVIDERS = ["facebook", "github", "twitter"] as const;
 export type CustomOAuthProvider = (typeof CUSTOM_OAUTH_PROVIDERS)[number];
+export type BrowserOAuthProvider = CustomOAuthProvider | "apple";
 
 export type OAuthRedirect = "popup" | "betterkeep";
 export type OAuthMode = "signin" | "link";
@@ -23,7 +24,7 @@ export type OAuthFlowVersion = 1 | 2;
 export interface OAuthState {
 	version: OAuthFlowVersion;
 	audience: typeof OAUTH_STATE_AUDIENCE;
-	provider: CustomOAuthProvider;
+	provider: BrowserOAuthProvider;
 	redirect: OAuthRedirect;
 	mode: OAuthMode;
 	linkingUserId?: string;
@@ -179,7 +180,7 @@ export async function openOAuthState(
 	if (
 		(value.version !== 1 && value.version !== 2) ||
 		value.audience !== OAUTH_STATE_AUDIENCE ||
-		!isCustomOAuthProvider(value.provider) ||
+		(!isCustomOAuthProvider(value.provider) && value.provider !== "apple") ||
 		(value.redirect !== "popup" && value.redirect !== "betterkeep") ||
 		(value.mode !== "signin" && value.mode !== "link") ||
 		!isOpaqueToken(value.browserNonce) ||

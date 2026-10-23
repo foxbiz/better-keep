@@ -2,6 +2,21 @@ import 'package:better_keep/services/oauth_transaction.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'Windows Apple transactions survive validation on callback recovery',
+    () {
+      final transaction = OAuthTransaction.create(
+        provider: 'apple',
+        mode: 'signin',
+      );
+      final restored = OAuthTransaction.fromJson(transaction.toJson());
+      expect(restored.isWellFormed, isTrue);
+      expect(restored.isExpired, isFalse);
+      expect(restored.provider, 'apple');
+      expect(restored.challenge, transaction.challenge);
+    },
+  );
+
   test('OAuth transaction uses correctly sized random correlation values', () {
     final first = OAuthTransaction.create(provider: 'github', mode: 'signin');
     final second = OAuthTransaction.create(provider: 'github', mode: 'signin');

@@ -424,7 +424,14 @@ class AuthService {
         completionCode = result.completionCode!;
       } else {
         _oauthCompleter = Completer<_OAuthCallbackResult>();
-        if (!await launchUrl(authUrl, mode: LaunchMode.inAppBrowserView)) {
+        if (!await launchUrl(
+          authUrl,
+          mode:
+              provider == 'apple' &&
+                  defaultTargetPlatform == TargetPlatform.windows
+              ? LaunchMode.externalApplication
+              : LaunchMode.inAppBrowserView,
+        )) {
           throw FirebaseAuthException(
             code: 'launch-failed',
             message: 'Could not open authentication page',
@@ -471,16 +478,20 @@ class AuthService {
     String mode = 'signin',
     String? linkToken,
   }) {
-    return Uri.https('betterkeep.app', '/oauth/start', {
-      'provider': provider,
-      'redirect': kIsWeb ? 'popup' : 'betterkeep',
-      'mode': mode,
-      'linkToken': ?linkToken,
-      'flowVersion': '2',
-      'completionChallenge': transaction.challenge,
-      'clientTransactionId': transaction.id,
-      if (kIsWeb) 'clientOrigin': web_oauth.currentOAuthClientOrigin(),
-    });
+    return Uri.https(
+      'betterkeep.app',
+      provider == 'apple' ? '/oauth/apple' : '/oauth/start',
+      {
+        'provider': provider,
+        'redirect': kIsWeb ? 'popup' : 'betterkeep',
+        'mode': mode,
+        'linkToken': ?linkToken,
+        'flowVersion': '2',
+        'completionChallenge': transaction.challenge,
+        'clientTransactionId': transaction.id,
+        if (kIsWeb) 'clientOrigin': web_oauth.currentOAuthClientOrigin(),
+      },
+    );
   }
 
   /// Initialize AuthService with optional pre-loaded SharedPreferences for faster startup.
@@ -849,8 +860,17 @@ class AuthService {
           failureStage = 'firebase-provider';
           onStatusChange?.call(AuthProgress.signingIn);
           return (
-            userCredential: await _auth.signInWithProvider(
-              buildAppleAuthProvider(),
+            userCredential: await runAppleProviderSignIn(
+              platform: defaultTargetPlatform,
+              browserSignIn: () {
+                failureStage = 'browser-oauth';
+                return _signInWithWebOAuth(
+                  provider: 'apple',
+                  onStatusChange: onStatusChange,
+                );
+              },
+              firebaseSignIn: () =>
+                  _auth.signInWithProvider(buildAppleAuthProvider()),
             ),
             appleCredential: null,
           );
