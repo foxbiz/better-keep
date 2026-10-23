@@ -118,7 +118,7 @@ export const pages: MarketingPage[] = [
       {
         question: 'Is Better Keep open source?',
         answer:
-          `The code is available under CC BY-NC 4.0, which restricts commercial reuse. It is source-available, but does not meet the OSI definition of open source.`
+          `The code is available under PolyForm Noncommercial 1.0.0, which restricts commercial reuse. It is source-available, but does not meet the OSI definition of open source.`
       }
     ],
     sources: [
@@ -429,9 +429,9 @@ export const pages: MarketingPage[] = [
     title: 'A source-available private notes app',
     eyebrow: 'Read the source code',
     description:
-      'Review the Better Keep source code, security design, local storage approach, and CC BY-NC 4.0 license.',
+      'Review the Better Keep source code, security design, local storage approach, and PolyForm Noncommercial 1.0.0 license.',
     answer:
-      `Better Keep publishes its application source so users and developers can inspect how notes, local storage, synchronization, and encryption are implemented. The code is licensed under CC BY-NC 4.0, which restricts commercial reuse. It is source-available, but does not meet the OSI definition of open source.`,
+      `Better Keep publishes its application source so users and developers can inspect how notes, local storage, synchronization, and encryption are implemented. The code is licensed under PolyForm Noncommercial 1.0.0, which restricts commercial reuse. It is source-available, but does not meet the OSI definition of open source.`,
     sections: [
       {
         heading: 'What you can inspect',
@@ -445,7 +445,7 @@ export const pages: MarketingPage[] = [
       {
         heading: 'License and reuse',
         paragraphs: [
-          'The repository is available for inspection and non-commercial use under its license. The license does not meet the standard definition of open source because it includes a non-commercial restriction.'
+          'The PolyForm Noncommercial License 1.0.0 permits use, modification, and redistribution for its permitted purposes, including noncommercial purposes and listed organizational uses. Distributions must include the license terms or their URL and all required notices. Commercial use outside those purposes requires separate permission from Foxbiz Software Pvt. Ltd.'
         ]
       }
     ],

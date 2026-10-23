@@ -13,7 +13,7 @@
 		"test": "node tool/test_tasks.mjs"
 	},
 	"author": "Foxbiz Software Pvt. Ltd.",
-	"license": "UNLICENSED",
+	"license": "PolyForm-Noncommercial-1.0.0",
 	"private": true,
 	"workspaces": [
 		"admin-site",

@@ -1826,7 +1826,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get openSourceDescription =>
-      'O código pode ser consultado sob a licença CC BY-NC 4.0. Como o uso comercial é restrito, ele é source-available, não código aberto aprovado pela OSI.';
+      'O código pode ser consultado sob a licença PolyForm Noncommercial 1.0.0. Como o uso comercial é restrito, ele é source-available, não código aberto aprovado pela OSI.';
 
   @override
   String get frequentlyAskedQuestions => 'Perguntas frequentes';

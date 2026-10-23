@@ -1759,7 +1759,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get openSourceDescription =>
-      'ソースはCC BY-NC 4.0で閲覧できます。商用利用が制限されるため、OSI承認のオープンソースではなくソース公開ソフトウェアです。';
+      'ソースはPolyForm Noncommercial 1.0.0で閲覧できます。商用利用が制限されるため、OSI承認のオープンソースではなくソース公開ソフトウェアです。';
 
   @override
   String get frequentlyAskedQuestions => 'よくある質問';

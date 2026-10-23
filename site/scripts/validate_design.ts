@@ -140,8 +140,8 @@ assert(
   'Homepage contains an unverified user-count claim'
 );
 assert(
-  index.includes('Source-available'),
-  'Homepage source-available wording is missing'
+  index.includes('Source-available under PolyForm Noncommercial 1.0.0'),
+  'Homepage PolyForm Noncommercial license wording is missing'
 );
 assert(
   headerSource.includes('class="nav-github"') &&

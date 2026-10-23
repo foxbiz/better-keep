@@ -549,7 +549,7 @@
 	"passwordMixAdvice": "Considere adicionar letras e números para maior segurança.",
 	"version": "Versão {version} ({buildNumber})",
 	"openSource": "Código disponível",
-	"openSourceDescription": "O código pode ser consultado sob a licença CC BY-NC 4.0. Como o uso comercial é restrito, ele é source-available, não código aberto aprovado pela OSI.",
+	"openSourceDescription": "O código pode ser consultado sob a licença PolyForm Noncommercial 1.0.0. Como o uso comercial é restrito, ele é source-available, não código aberto aprovado pela OSI.",
 	"frequentlyAskedQuestions": "Perguntas frequentes",
 	"needMoreHelp": "Precisa de mais ajuda?",
 	"needMoreHelpDescription": "Se você tiver dúvidas ou precisar de assistência, sinta-se à vontade para entrar em contato conosco.",

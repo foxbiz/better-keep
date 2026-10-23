@@ -9,7 +9,7 @@
 Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app inspired by Google Keep. Built with **Flutter** (Dart), backed by **Firebase** (Auth, Firestore, Storage, Cloud Functions). Features rich-text editing, E2E encryption, AI audio transcription (Whisper), reminders, sketches, labels, folders, and subscription monetization.
 
 - **Version**: 1.0.66+66
-- **License**: CC BY-NC 4.0
+- **License**: PolyForm Noncommercial 1.0.0
 - **Publisher**: Foxbiz Software Pvt. Ltd.
 - **Firebase Project**: `better-keep-notes`
 - **Live App**: https://betterkeep.app

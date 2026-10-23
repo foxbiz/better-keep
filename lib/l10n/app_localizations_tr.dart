@@ -1812,7 +1812,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get openSourceDescription =>
-      'Kaynak kodu CC BY-NC 4.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.';
+      'Kaynak kodu PolyForm Noncommercial 1.0.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.';
 
   @override
   String get frequentlyAskedQuestions => 'Sıkça Sorulan Sorular';

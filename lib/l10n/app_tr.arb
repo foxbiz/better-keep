@@ -1651,7 +1651,7 @@
 	"openSource": "Kaynak Koduna Erişim",
 	"@openSource": { "description": "Source availability section title" },
 
-	"openSourceDescription": "Kaynak kodu CC BY-NC 4.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.",
+	"openSourceDescription": "Kaynak kodu PolyForm Noncommercial 1.0.0 kapsamında incelenebilir. Ticari yeniden kullanım kısıtlı olduğundan OSI onaylı açık kaynak değil, kaynak kodu erişilebilir yazılımdır.",
 	"@openSourceDescription": { "description": "Source availability and license description" },
 
 	"frequentlyAskedQuestions": "Sıkça Sorulan Sorular",

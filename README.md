@@ -364,7 +364,7 @@ For an exceptional commit that must bypass the local checks, use
 
 ## Source license
 
-The repository is **source-available under CC BY-NC 4.0**. The non-commercial
+The repository is **source-available under PolyForm Noncommercial 1.0.0**. The non-commercial
 restriction means it is not described as OSI-approved open source.
 
 ## Project layout
@@ -513,16 +513,12 @@ This project uses Firebase for sync and authentication. Since `firebase_options.
 
 ## License
 
-This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International Public License (CC BY-NC 4.0)**.
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
-You are free to:
-
-- **Share** — copy and redistribute the material in any medium or format.
-- **Adapt** — remix, transform, and build upon the material.
-
-Under the following terms:
-
-- **Attribution** — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
-- **NonCommercial** — You may not use the material for commercial purposes.
+You may use, modify, and redistribute the software for the purposes permitted by
+that license, including noncommercial purposes and its listed organizational
+uses. Distributions must include the license terms or their URL and all required
+notices. Commercial use outside the permitted purposes requires separate
+permission from Foxbiz Software Pvt. Ltd.
 
 See the [LICENSE](LICENSE) file for details.

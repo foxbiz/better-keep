@@ -549,7 +549,7 @@
 	"passwordMixAdvice": "Pertimbangkan untuk menambahkan huruf dan angka untuk keamanan yang lebih kuat.",
 	"version": "Versi {version} ({buildNumber})",
 	"openSource": "Sumber Tersedia",
-	"openSourceDescription": "Kode sumber dapat diperiksa dengan lisensi CC BY-NC 4.0. Karena penggunaan komersial dibatasi, ini adalah source-available, bukan open source yang disetujui OSI.",
+	"openSourceDescription": "Kode sumber dapat diperiksa dengan lisensi PolyForm Noncommercial 1.0.0. Karena penggunaan komersial dibatasi, ini adalah source-available, bukan open source yang disetujui OSI.",
 	"frequentlyAskedQuestions": "Pertanyaan yang Sering Diajukan",
 	"needMoreHelp": "Butuh Bantuan Lebih?",
 	"needMoreHelpDescription": "Jika Anda memiliki pertanyaan atau membutuhkan bantuan, jangan ragu untuk menghubungi kami.",

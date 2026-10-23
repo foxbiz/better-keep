@@ -23,7 +23,7 @@
   "publicStatsUrl": "https://us-central1-better-keep-notes.cloudfunctions.net/getPublicStats",
   "githubUrl": "https://github.com/foxbiz/better-keep",
   "license": {
-    "label": "Source-available under CC BY-NC 4.0",
+    "label": "Source-available under PolyForm Noncommercial 1.0.0",
     "url": "https://github.com/foxbiz/better-keep/blob/main/LICENSE"
   },
   "encryption": {

@@ -1806,7 +1806,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openSourceDescription =>
-      'Inspect the source under CC BY-NC 4.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.';
+      'Inspect the source under PolyForm Noncommercial 1.0.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.';
 
   @override
   String get frequentlyAskedQuestions => 'Frequently Asked Questions';

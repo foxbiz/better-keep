@@ -1762,7 +1762,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get openSourceDescription =>
-      '소스는 CC BY-NC 4.0에 따라 확인할 수 있습니다. 상업적 재사용이 제한되므로 OSI 승인 오픈 소스가 아닌 소스 공개 소프트웨어입니다.';
+      '소스는 PolyForm Noncommercial 1.0.0에 따라 확인할 수 있습니다. 상업적 재사용이 제한되므로 OSI 승인 오픈 소스가 아닌 소스 공개 소프트웨어입니다.';
 
   @override
   String get frequentlyAskedQuestions => '자주 묻는 질문';

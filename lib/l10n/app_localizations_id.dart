@@ -1821,7 +1821,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get openSourceDescription =>
-      'Kode sumber dapat diperiksa dengan lisensi CC BY-NC 4.0. Karena penggunaan komersial dibatasi, ini adalah source-available, bukan open source yang disetujui OSI.';
+      'Kode sumber dapat diperiksa dengan lisensi PolyForm Noncommercial 1.0.0. Karena penggunaan komersial dibatasi, ini adalah source-available, bukan open source yang disetujui OSI.';
 
   @override
   String get frequentlyAskedQuestions => 'Pertanyaan yang Sering Diajukan';

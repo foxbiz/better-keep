@@ -3399,7 +3399,7 @@ abstract class AppLocalizations {
   /// Source availability and license description
   ///
   /// In en, this message translates to:
-  /// **'Inspect the source under CC BY-NC 4.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.'**
+  /// **'Inspect the source under PolyForm Noncommercial 1.0.0. Commercial reuse is restricted, so this is source-available rather than OSI-approved open source.'**
   String get openSourceDescription;
 
   /// FAQ section title
