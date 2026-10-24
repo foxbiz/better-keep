@@ -1,7 +1,7 @@
 name: better_keep
 description: 'Notes app with enhanced features'
 publish_to: 'none'
-version: 1.4.5+96
+version: 1.4.5+97
 
 environment:
   sdk: ^3.13.0
@@ -25,6 +25,9 @@ dependencies:
   record: ^7.1.1
   audioplayers: ^6.5.1
   shared_preferences: ^2.5.3
+  # Older Android JNI implementations crash at startup after release shrinking.
+  # https://github.com/flutter/flutter/issues/194649
+  shared_preferences_android: ^2.5.3
   file_picker: ^12.2.0
   file_selector_windows: ^0.9.3+5
   share_plus: ^13.3.0
