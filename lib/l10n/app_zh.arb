@@ -1133,5 +1133,11 @@
   "imageCount": "{count} 张图片",
   "sketchCount": "{count} 幅草图",
   "tableCount": "{count} 个表格",
-  "attachmentCount": "{count} 个附件"
+  "attachmentCount": "{count} 个附件",
+  "storageLowTitle": "存储空间即将用尽",
+  "browserStorageLow": "浏览器存储空间已满或即将用尽。请释放空间，以帮助保护尚未同步的笔记。",
+  "deviceStorageLow": "设备存储空间不足。请释放空间，以帮助保护尚未同步的笔记。",
+  "storageLoginAgain": "重新登录",
+  "storageClearedAfterPressure": "存储空间不足可能导致本地数据被清除。请重新登录以恢复已同步的笔记。同步前被清除的笔记无法从云端恢复。",
+  "storageCleared": "本地数据已被清除，您已退出登录。请重新登录以恢复已同步的笔记。同步前被清除的笔记无法从云端恢复。"
 }

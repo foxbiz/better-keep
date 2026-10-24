@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3191,8 +3192,7 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other:
           'Do you really want to delete $count notes forever? This can\'t be undone.',
-      one:
-          'Do you really want to delete this note forever? This can\'t be undone.',
+      one: 'Do you really want to delete this note forever? This can\'t be undone.',
     );
     return '$_temp0';
   }
@@ -3890,4 +3890,26 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get storageLowTitle => 'Storage almost full';
+
+  @override
+  String get browserStorageLow =>
+      'Browser storage is full or running low. Free up space to help protect your unsynced notes.';
+
+  @override
+  String get deviceStorageLow =>
+      'Your device is running low on storage. Free up space to help protect your unsynced notes.';
+
+  @override
+  String get storageLoginAgain => 'Log in again';
+
+  @override
+  String get storageClearedAfterPressure =>
+      'Local data may have been cleared because storage was running low. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.';
+
+  @override
+  String get storageCleared =>
+      'Local data was cleared and you have been logged out. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.';
 }

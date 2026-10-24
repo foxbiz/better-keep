@@ -1,3 +1,4 @@
+import 'package:better_keep/services/storage_health_service.dart';
 import 'package:better_keep/models/note_table.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
@@ -931,6 +932,7 @@ class Note extends BaseModel<Note> {
     bool trackSync = true,
     ModelChangeOrigin origin = ModelChangeOrigin.local,
   ]) async {
+    StorageHealthService.instance.reportWriteSuccess();
     super.notifyWithOrigin(event, origin);
 
     if (!trackSync) return;
@@ -2859,6 +2861,7 @@ class Note extends BaseModel<Note> {
         } catch (e) {
           if (!cloudOperationIsCurrent()) rethrow;
           updatedAt = previousUpdatedAt;
+          StorageHealthService.instance.reportError(e);
           AppLogger.log("Error updating note: $e");
           snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
           return -1;
@@ -2888,6 +2891,7 @@ class Note extends BaseModel<Note> {
       if (!cloudOperationIsCurrent()) rethrow;
       updatedAt = previousUpdatedAt;
       snackbar(currentAppLocalizations().failedSaveNote, Colors.red);
+      StorageHealthService.instance.reportError(e);
       AppLogger.log("Error saving note: $e");
       id = null;
       return -1;

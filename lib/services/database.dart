@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'local_storage_recovery.dart';
+
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/file_sync_track.dart';
 import 'package:better_keep/models/label.dart';
@@ -20,7 +22,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
-Future<Database> initDatabase() async {
+Future<Database> initDatabase({bool detectDataLoss = false}) async {
   final dbPath = await activeDatabasePath();
 
   final db = await openDatabase(
@@ -36,6 +38,10 @@ Future<Database> initDatabase() async {
       await ImportFingerprintStore.createTable(db);
       await RemoteContentRetryLedger.createTable(db);
       await SyncIdentityMigration.migrate(db);
+      if (detectDataLoss) {
+        await LocalStorageRecovery(await SharedPreferences.getInstance())
+            .databaseCreated();
+      }
     },
     onUpgrade: (db, oldVersion, newVersion) async {
       await Note.upgradeTable(db, oldVersion, newVersion);

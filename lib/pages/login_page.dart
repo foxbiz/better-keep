@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:better_keep/components/storage_warning.dart';
+
 import 'package:better_keep/pages/email_login_page.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/apple_auth.dart';
@@ -303,6 +305,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               padding: const EdgeInsets.only(left: 32, right: 32, top: 32),
               child: Column(
                 children: [
+                  const StorageLossNotice(),
                   _isLoading ? _buildLoadingState() : _buildLoginContent(),
                   if (_version.isNotEmpty)
                     Padding(

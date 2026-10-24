@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -3226,8 +3227,7 @@ class AppLocalizationsPt extends AppLocalizations {
       locale: localeName,
       other:
           'Você realmente quer excluir $count notas para sempre? Isso não pode ser desfeito.',
-      one:
-          'Você realmente quer excluir esta nota para sempre? Isso não pode ser desfeito.',
+      one: 'Você realmente quer excluir esta nota para sempre? Isso não pode ser desfeito.',
     );
     return '$_temp0';
   }
@@ -3932,4 +3932,26 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get storageLowTitle => 'Armazenamento quase cheio';
+
+  @override
+  String get browserStorageLow =>
+      'O armazenamento do navegador está cheio ou quase cheio. Libere espaço para ajudar a proteger suas notas não sincronizadas.';
+
+  @override
+  String get deviceStorageLow =>
+      'O armazenamento do dispositivo está quase cheio. Libere espaço para ajudar a proteger suas notas não sincronizadas.';
+
+  @override
+  String get storageLoginAgain => 'Entrar novamente';
+
+  @override
+  String get storageClearedAfterPressure =>
+      'Os dados locais podem ter sido apagados por falta de espaço. Entre novamente para restaurar as notas sincronizadas. Notas apagadas antes da sincronização não podem ser recuperadas da nuvem.';
+
+  @override
+  String get storageCleared =>
+      'Os dados locais foram apagados e você saiu da conta. Entre novamente para restaurar as notas sincronizadas. Notas apagadas antes da sincronização não podem ser recuperadas da nuvem.';
 }

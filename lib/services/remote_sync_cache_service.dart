@@ -459,19 +459,24 @@ class RemoteSyncCacheService {
   }
 
   /// Clear the entire cache
-  Future<void> clear() async {
+  Future<void> clear({bool strict = false, bool enforceSession = true}) async {
     final fs = await _fileSystemProvider();
     final cacheDir = await _getCacheDir();
 
     try {
-      final files = await fs.list(cacheDir);
+      final files = await fs.isDirectory(cacheDir)
+          ? await fs.list(cacheDir)
+          : <String>[];
       for (final fileName in files) {
         final filePath = path.join(cacheDir, fileName);
-        requireCloudOperation();
-        await fs.delete(filePath);
+        if (enforceSession) requireCloudOperation();
+        final deleted = await fs.delete(filePath);
+        if (strict && !deleted && await fs.exists(filePath)) {
+          throw StateError('Could not clear remote sync cache');
+        }
       }
     } catch (e) {
-      if (e is CloudOperationCancelled) rethrow;
+      if (strict || e is CloudOperationCancelled) rethrow;
       // Directory might not exist yet
     }
 

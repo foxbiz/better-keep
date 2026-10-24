@@ -35,6 +35,37 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
 
+  storage_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "com.betterkeep/storage",
+      &flutter::StandardMethodCodec::GetInstance());
+  storage_channel_->SetMethodCallHandler([](const auto& call, auto result) {
+    if (call.method_name() != "getAvailableBytes") {
+      result->NotImplemented();
+      return;
+    }
+    const auto* path = call.arguments()
+        ? std::get_if<std::string>(call.arguments()) : nullptr;
+    if (!path) {
+      result->Error("storage_unavailable", "Missing data path");
+      return;
+    }
+    const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        path->c_str(), -1, nullptr, 0);
+    if (length == 0) {
+      result->Error("storage_unavailable", "Invalid data path");
+      return;
+    }
+    std::wstring wide_path(length, L'\0');
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path->c_str(), -1,
+        wide_path.data(), length);
+    ULARGE_INTEGER available;
+    if (!GetDiskFreeSpaceExW(wide_path.c_str(), &available, nullptr, nullptr)) {
+      result->Error("storage_unavailable", "Storage information is unavailable");
+      return;
+    }
+    result->Success(flutter::EncodableValue(static_cast<int64_t>(available.QuadPart)));
+  });
+
   reduce_motion_enabled_ = QueryReduceMotionEnabled();
   motion_preference_channel_ = std::make_unique<
       flutter::MethodChannel<flutter::EncodableValue>>(
@@ -66,6 +97,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (storage_channel_) storage_channel_->SetMethodCallHandler(nullptr);
+  storage_channel_.reset();
   if (motion_preference_channel_) {
     motion_preference_channel_->SetMethodCallHandler(nullptr);
   }

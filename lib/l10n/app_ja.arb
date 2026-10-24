@@ -1133,5 +1133,11 @@
   "imageCount": "画像 {count} 件",
   "sketchCount": "スケッチ {count} 件",
   "tableCount": "表 {count} 件",
-  "attachmentCount": "添付ファイル {count} 件"
+  "attachmentCount": "添付ファイル {count} 件",
+  "storageLowTitle": "ストレージの空き容量が不足しています",
+  "browserStorageLow": "ブラウザの保存領域がいっぱい、または残り少なくなっています。未同期のノートを保護するため、空き容量を増やしてください。",
+  "deviceStorageLow": "デバイスの空き容量が少なくなっています。未同期のノートを保護するため、空き容量を増やしてください。",
+  "storageLoginAgain": "再度ログイン",
+  "storageClearedAfterPressure": "空き容量の不足により、ローカルデータが削除された可能性があります。再度ログインして同期済みのノートを復元してください。同期前に削除されたノートはクラウドから復元できません。",
+  "storageCleared": "ローカルデータが削除されたため、ログアウトしました。再度ログインして同期済みのノートを復元してください。同期前に削除されたノートはクラウドから復元できません。"
 }

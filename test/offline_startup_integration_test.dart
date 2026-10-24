@@ -83,6 +83,20 @@ void main() {
     await AuthService.init(prefs: preferences);
   });
 
+  test('database-ready startup permits a later cached auth restore', () async {
+    await AuthService.init(
+      prefs: await SharedPreferences.getInstance(),
+      deferLocalRestore: true,
+    );
+    final user = backend.auth.currentUser;
+    backend.auth.currentUser = null;
+    await AuthService.initializeCurrentUserServices();
+    backend.auth.currentUser = user;
+    backend.auth.changes.add(user);
+    await pumpEventQueue(times: 100);
+    expect(e2ee.status.value, isNot(E2EEStatus.notInitialized));
+  });
+
   tearDown(() async {
     Note.syncTriggerOverride = null;
     AuthService.cloudRecovery.stop();

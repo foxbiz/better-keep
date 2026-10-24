@@ -3913,5 +3913,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "storageLowTitle": "Storage almost full",
+  "browserStorageLow": "Browser storage is full or running low. Free up space to help protect your unsynced notes.",
+  "deviceStorageLow": "Your device is running low on storage. Free up space to help protect your unsynced notes.",
+  "storageLoginAgain": "Log in again",
+  "storageClearedAfterPressure": "Local data may have been cleared because storage was running low. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.",
+  "storageCleared": "Local data was cleared and you have been logged out. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud."
 }

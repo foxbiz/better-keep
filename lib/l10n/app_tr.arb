@@ -3707,5 +3707,11 @@
   "imageCount": "{count} görsel",
   "sketchCount": "{count} çizim",
   "tableCount": "{count} tablo",
-  "attachmentCount": "{count} ek"
+  "attachmentCount": "{count} ek",
+  "storageLowTitle": "Depolama alanı dolmak üzere",
+  "browserStorageLow": "Tarayıcı depolama alanı dolu veya azalıyor. Eşitlenmemiş notlarınızı korumaya yardımcı olmak için yer açın.",
+  "deviceStorageLow": "Cihazınızın depolama alanı azalıyor. Eşitlenmemiş notlarınızı korumaya yardımcı olmak için yer açın.",
+  "storageLoginAgain": "Tekrar giriş yap",
+  "storageClearedAfterPressure": "Depolama alanı azaldığı için yerel veriler silinmiş olabilir. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz.",
+  "storageCleared": "Yerel veriler silindi ve hesabınızdan çıkış yapıldı. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz."
 }

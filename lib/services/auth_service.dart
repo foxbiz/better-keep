@@ -1,3 +1,6 @@
+import 'remote_sync_cache_service.dart';
+import 'local_storage_recovery.dart';
+
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/cloud_read.dart';
@@ -141,6 +144,7 @@ class AuthService {
       _cachedUserId != null && currentUser?.uid != _cachedUserId;
 
   static bool get canRestoreLocalSession =>
+      _freshSignInUid == null &&
       currentUser != null &&
       currentUser!.uid == _cachedUserId &&
       !ReviewAccess.isReviewIdentity(currentUser!);
@@ -148,6 +152,7 @@ class AuthService {
   static final CloudSessionRecovery cloudRecovery = CloudSessionRecovery(
     verify: (isCurrent) async {
       final user = currentUser;
+      if (_deferLocalRestore) return CloudSessionState.pending;
       if (user == null ||
           sessionInvalid.value ||
           ReviewAccess.isReviewIdentity(user)) {
@@ -496,7 +501,13 @@ class AuthService {
 
   /// Initialize AuthService with optional pre-loaded SharedPreferences for faster startup.
   /// Token validation is deferred to background to not block app startup.
-  static Future<void> init({SharedPreferences? prefs}) async {
+  static bool _deferLocalRestore = false;
+
+  static Future<void> init({
+    SharedPreferences? prefs,
+    bool deferLocalRestore = false,
+  }) async {
+    _deferLocalRestore = deferLocalRestore;
     try {
       await purgeExpiredOAuthTransactions();
     } catch (error, stackTrace) {
@@ -678,7 +689,8 @@ class AuthService {
         }
 
         cloudRecovery.start(user.uid);
-        if (canRestoreLocalSession &&
+        if (!_deferLocalRestore &&
+            canRestoreLocalSession &&
             _postSignInFuture == null &&
             E2EEService.instance.status.value == E2EEStatus.notInitialized) {
           unawaited(
@@ -1640,15 +1652,34 @@ class AuthService {
     User user,
     ValueChanged<AuthProgress>? onStatusChange,
     String provider,
-  ) => _startPostSignInInitialization(
-    user: user,
-    provider: provider,
-    onStatusChange: onStatusChange,
-  );
+  ) async {
+    await _signOutFuture;
+    if (currentUser?.uid != user.uid) return;
+    _deferLocalRestore = false;
+    _freshSignInUid = user.uid;
+    return _startPostSignInInitialization(
+      user: user,
+      provider: provider,
+      onStatusChange: onStatusChange,
+    );
+  }
+
+  static String? _freshSignInUid;
+
+  // Explicit sign-in must not inherit stale cursors, including after partial
+  // storage loss. Restored sessions do not enter this path.
+  static Future<void> _resetSyncForLogin() async {
+    cloudRecovery.stop();
+    await NoteSyncService().dispose();
+    await LabelSyncService().dispose();
+    await AppState.clearSyncCheckpoints();
+    await RemoteSyncCacheService().clear(strict: true);
+  }
 
   /// Initializes cloud and encryption services for a restored Firebase Auth
   /// session. This uses the same recoverable pipeline as a fresh sign-in.
   static Future<void> initializeCurrentUserServices() async {
+    _deferLocalRestore = false;
     final user = currentUser;
     final current = captureSession();
     if (user == null) {
@@ -1815,9 +1846,16 @@ class AuthService {
             throw StateError('Review authorization was not retained');
           }
           PlanService.instance.activateReviewSession(reviewAuthorization);
+          _freshSignInUid = null;
           return;
         }
         await _ensureUserExists(user, request.onStatusChange, request.provider);
+        requireCurrentSession(isCurrent);
+        if (_freshSignInUid == user.uid) {
+          await _resetSyncForLogin();
+          requireCurrentSession(isCurrent);
+          _freshSignInUid = null;
+        }
       }),
       initializeEncryption: PostSignInOperation(
         'initialize-encryption',
@@ -2173,7 +2211,15 @@ class AuthService {
     }
   }
 
-  static Future<void> signOut() async {
+  static Future<void>? _signOutFuture;
+
+  static Future<void> signOut() {
+    return _signOutFuture ??= _performSignOut().whenComplete(() {
+      _signOutFuture = null;
+    });
+  }
+
+  static Future<void> _performSignOut() async {
     _sessionEpoch++;
     AttachmentRepairCoordinator.instance.reset();
     E2EEService.instance.resetInitialization();
@@ -2181,11 +2227,16 @@ class AuthService {
     _postSignInGeneration++;
     cloudRecovery.stop();
     _cachedUserId = null;
+    _freshSignInUid = null;
     _postSignInRequest = null;
     _postSignInFuture = null;
     postSignInState.value = PostSignInState.idle;
     try {
-      await ReminderSessionService.setSignedIn(false);
+      try {
+        await ReminderSessionService.setSignedIn(false);
+      } catch (error) {
+        AppLogger.error('Could not persist signed-out reminder state', error);
+      }
 
       // Stop token revocation listener
       _stopTokenRevocationListener();
@@ -2292,8 +2343,12 @@ class AuthService {
 
       // Close database connection before deleting
       try {
-        await AppState.db.close();
-        // Clear Database
+        final database = AppState.get('db');
+        if (database != null) await AppState.db.close();
+      } catch (e) {
+        AppLogger.error('Error closing database during signout', e);
+      }
+      try {
         await deleteDatabase(await activeDatabasePath());
       } catch (e) {
         AppLogger.error('Error closing/deleting database: $e');
@@ -2312,9 +2367,13 @@ class AuthService {
       }
 
       // Clear File System
-      final fs = await fileSystem();
-      await _clearFileSystemRecursively(await fs.documentDir);
-      await _clearFileSystemRecursively(await fs.cacheDir);
+      try {
+        final fs = await fileSystem();
+        await _clearFileSystemRecursively(await fs.documentDir);
+        await _clearFileSystemRecursively(await fs.cacheDir);
+      } catch (error) {
+        AppLogger.error('Error accessing files during signout', error);
+      }
 
       // Invalidate avatar cache so new user gets fresh avatar
       UserAvatar.invalidateCache();
@@ -2332,7 +2391,7 @@ class AuthService {
       // Reset App State
       try {
         await Future.microtask(() {});
-        AppState.reset();
+        await AppState.reset();
       } catch (e) {
         AppLogger.error('Error resetting AppState: $e');
       }
@@ -2392,8 +2451,26 @@ class AuthService {
           'Error reinitializing database after fallback signout: $dbError',
         );
       }
-
-      return;
+    } finally {
+      sessionInvalid.value = false;
+      // Authentication is already cleared. Failed local cleanup must not hide
+      // the login screen; fresh sign-in strictly retries reset before syncing.
+      for (final cleanup in <Future<void> Function()>[
+        AppState.clearSyncCheckpoints,
+        () =>
+            RemoteSyncCacheService().clear(strict: true, enforceSession: false),
+        () async {
+          if (currentUser == null) {
+            await LocalStorageRecovery(await AppState.prefs).completeLogout();
+          }
+        },
+      ]) {
+        try {
+          await cleanup();
+        } catch (error, stack) {
+          AppLogger.error('Local sign-out cleanup deferred', error, stack);
+        }
+      }
     }
   }
 

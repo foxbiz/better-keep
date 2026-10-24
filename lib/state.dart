@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:better_keep/services/local_storage_recovery.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/config.dart';
@@ -80,13 +81,47 @@ class AppState {
   }
 
   /// Safely persist a value to SharedPreferences with error handling
+  static Future<void> _syncPreferenceWrites = Future<void>.value();
+
   static void _persistToPrefs(
     Future<void> Function(SharedPreferences p) action,
   ) {
-    prefs.then(action).catchError((e) {
-      // Log error but don't crash - preference persistence is best-effort
+    prefs.then(action).catchError((Object e) {
       AppLogger.error('AppState: Failed to persist preference', e);
     });
+  }
+
+  // Only checkpoint writes need ordering against recovery's checkpoint reset.
+  static void _persistSyncToPrefs(
+    Future<void> Function(SharedPreferences p) action,
+  ) {
+    _syncPreferenceWrites = _syncPreferenceWrites
+        .then((_) async {
+          await action(await prefs);
+        })
+        .catchError((Object e) {
+          // Log error but don't crash - preference persistence is best-effort
+          AppLogger.error('AppState: Failed to persist preference', e);
+        });
+  }
+
+  /// Await this before starting a new full cloud reconciliation.
+  static Future<void> clearSyncCheckpoints() async {
+    await _syncPreferenceWrites;
+    final preferences = await prefs;
+    for (final key in const [
+      'last_synced_at',
+      'last_label_synced_at',
+      'note_cloud_sync_checkpoint_v2',
+      'label_cloud_sync_checkpoint_v2',
+      'last_synced_user_id',
+    ]) {
+      set(key, null);
+      final scopedKey = FirebaseScopedPreferences.key(key);
+      if (!await preferences.remove(scopedKey)) {
+        throw StateError('Could not reset cloud sync checkpoint');
+      }
+    }
   }
 
   static Future<void> reset() async {
@@ -678,14 +713,14 @@ class AppState {
 
   static set lastSynced(DateTime? time) {
     set("last_synced_at", time);
-    _persistToPrefs((p) async {
+    _persistSyncToPrefs((p) async {
       if (time != null) {
-        p.setString(
+        await p.setString(
           FirebaseScopedPreferences.key("last_synced_at"),
           time.toIso8601String(),
         );
       } else {
-        p.remove(FirebaseScopedPreferences.key("last_synced_at"));
+        await p.remove(FirebaseScopedPreferences.key("last_synced_at"));
       }
     });
   }
@@ -696,14 +731,14 @@ class AppState {
 
   static set lastLabelSynced(DateTime? time) {
     set("last_label_synced_at", time);
-    _persistToPrefs((p) async {
+    _persistSyncToPrefs((p) async {
       if (time != null) {
-        p.setString(
+        await p.setString(
           FirebaseScopedPreferences.key("last_label_synced_at"),
           time.toIso8601String(),
         );
       } else {
-        p.remove(FirebaseScopedPreferences.key("last_label_synced_at"));
+        await p.remove(FirebaseScopedPreferences.key("last_label_synced_at"));
       }
     });
   }
@@ -757,7 +792,7 @@ class AppState {
     required CloudSyncCheckpoint? checkpoint,
   }) {
     set(stateKey, checkpoint);
-    _persistToPrefs((preferences) async {
+    _persistSyncToPrefs((preferences) async {
       final scopedPreferenceKey = FirebaseScopedPreferences.key(preferenceKey);
       if (checkpoint == null) {
         await preferences.remove(scopedPreferenceKey);
@@ -766,6 +801,12 @@ class AppState {
           scopedPreferenceKey,
           jsonEncode(checkpoint.toJson()),
         );
+      }
+      if (LocalStorageRecovery.notice.value != null &&
+          !LocalStorageRecovery(preferences).pending &&
+          noteCloudSyncCheckpoint?.bootstrapped == true &&
+          labelCloudSyncCheckpoint?.bootstrapped == true) {
+        await LocalStorageRecovery(preferences).dismissNotice();
       }
     });
   }
