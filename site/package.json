@@ -17,7 +17,7 @@
     "@fontsource-variable/manrope": "^5.3.0",
     "@lucide/astro": "^1.27.0",
     "astro": "^7.3.5",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.17",
     "firebase": "^12.16.0",
     "marked": "^13.0.3"
   },
