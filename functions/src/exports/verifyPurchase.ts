@@ -114,6 +114,16 @@ async function sendSubscriptionWelcomeEmail(
 		const subData = subscription as
 			| { plan?: string; billingPeriod?: string; expiresAt?: string }
 			| undefined;
+		const planName = subData?.plan === "lite" ? "Lite" : "Pro";
+		const benefits =
+			subData?.plan === "lite"
+				? ["Automatic encrypted sync with your connected cloud storage"]
+				: [
+						"Unlimited locked notes with biometric protection",
+						"Real-time end-to-end encrypted cloud sync",
+						"Automatic encrypted sync with your connected cloud storage",
+						"Priority support",
+					];
 		const billingPeriod = subData?.billingPeriod || "monthly";
 		const expiresAt = subData?.expiresAt
 			? new Date(subData.expiresAt).toLocaleDateString()
@@ -131,27 +141,25 @@ async function sendSubscriptionWelcomeEmail(
           <div style="text-align: center; margin-bottom: 24px;">
             <img src="https://betterkeep.app/icons/logo.png" alt="Better Keep Notes" style="width: 64px; height: 64px;">
           </div>
-          <h1 style="color: #333; font-size: 22px; margin-bottom: 20px;">Welcome to <strong>Better Keep Notes</strong> Pro</h1>
+          <h1 style="color: #333; font-size: 22px; margin-bottom: 20px;">Welcome to <strong>Better Keep Notes</strong> ${planName}</h1>
           <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">
             Hi there,
           </p>
           <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">
-            Thank you for subscribing to <strong>Better Keep Notes Pro</strong>. Your payment has been processed and your account has been upgraded.
+            Thank you for subscribing to <strong>Better Keep Notes ${planName}</strong>. Your payment has been processed and your account has been upgraded.
           </p>
           <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 3px solid #6366f1;">
             <p style="color: #333; font-size: 15px; margin: 0 0 8px 0; font-weight: 600;">Subscription Details</p>
-            <p style="color: #555; font-size: 15px; margin: 4px 0;">Plan: <strong>Pro ${
+            <p style="color: #555; font-size: 15px; margin: 4px 0;">Plan: <strong>${planName} ${
 							billingPeriod === "yearly" ? "(Yearly)" : "(Monthly)"
 						}</strong></p>
             <p style="color: #555; font-size: 15px; margin: 4px 0;">Next billing date: <strong>${expiresAt}</strong></p>
           </div>
           <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 12px;">
-            With your Pro subscription, you now have access to:
+            With your ${planName} subscription, you now have access to:
           </p>
           <ul style="color: #555; font-size: 15px; line-height: 1.8; padding-left: 20px; margin-bottom: 16px;">
-            <li>Unlimited locked notes with biometric protection</li>
-            <li>Real-time end-to-end encrypted cloud sync</li>
-            <li>Priority support</li>
+            ${benefits.map((benefit) => `<li>${benefit}</li>`).join("")}
           </ul>
           <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">
             If you have any questions about your subscription or need help getting started, contact us at <a href="mailto:support@betterkeep.app" style="color: #6366f1;">support@betterkeep.app</a>.
@@ -171,9 +179,9 @@ async function sendSubscriptionWelcomeEmail(
 		await sendEmail({
 			from: `"${senderName}" <${senderEmail}>`,
 			to: email,
-			subject: "Your Better Keep Notes Pro subscription is now active",
+			subject: `Your Better Keep Notes ${planName} subscription is now active`,
 			html: htmlContent,
-			text: `Hi there,\n\nThank you for subscribing to Better Keep Notes Pro. Your payment has been processed and your account has been upgraded.\n\nSubscription Details:\nPlan: Pro (${billingPeriod})\nNext billing date: ${expiresAt}\n\nWith your Pro subscription, you now have access to unlimited locked notes with biometric protection, real-time end-to-end encrypted cloud sync, and priority support.\n\nIf you have any questions, contact us at support@betterkeep.app.\n\nThanks again for your support.\n\nBetter Keep Notes by Foxbiz Software Pvt. Ltd.`,
+			text: `Hi there,\n\nThank you for subscribing to Better Keep Notes ${planName}. Your payment has been processed and your account has been upgraded.\n\nSubscription Details:\nPlan: ${planName} (${billingPeriod})\nNext billing date: ${expiresAt}\n\nWith your ${planName} subscription, you now have access to ${benefits.join(", ")}.\n\nIf you have any questions, contact us at support@betterkeep.app.\n\nThanks again for your support.\n\nBetter Keep Notes by Foxbiz Software Pvt. Ltd.`,
 		});
 
 		console.log(`Sent welcome email to ${email}`);

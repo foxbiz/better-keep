@@ -14,6 +14,7 @@ import 'package:better_keep/services/firebase_emulator_google_auth.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
+import 'package:better_keep/services/note_sort_cloud_manifest.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/db_init.dart';
@@ -208,6 +209,8 @@ void main() {
         baseRevision: null,
         chunkCount: 0,
         noteCount: 0,
+        updatedAt: DateTime.utc(2026, 7, 2),
+        contentHash: NoteSortCloudManifest.contentHash(const []),
       );
       expect(first.outcome, NoteSortCloudCommitOutcome.committed);
 
@@ -218,6 +221,8 @@ void main() {
         baseRevision: 'stale-base-$suffix',
         chunkCount: 0,
         noteCount: 0,
+        updatedAt: DateTime.utc(2026, 7, 1),
+        contentHash: NoteSortCloudManifest.contentHash(const []),
       );
       expect(conflict.outcome, NoteSortCloudCommitOutcome.conflict);
       expect(conflict.previousRevision, firstRevision);
@@ -234,6 +239,8 @@ void main() {
         baseRevision: firstRevision,
         chunkCount: 0,
         noteCount: 0,
+        updatedAt: DateTime.utc(2026, 7, 3),
+        contentHash: NoteSortCloudManifest.contentHash(const []),
       );
       expect(committed.outcome, NoteSortCloudCommitOutcome.committed);
       expect(

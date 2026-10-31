@@ -11,6 +11,7 @@
 .svn/
 .swiftpm/
 .secrets
+outputs/
 migrate_working_dir/
 
 # IntelliJ related

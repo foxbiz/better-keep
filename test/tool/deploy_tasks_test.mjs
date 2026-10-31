@@ -179,6 +179,8 @@ test("production Hosting isolates public and administrator artifacts", () => {
 	assert.equal(adminHosting.public, "build/admin");
 	assertHostingCachePolicy(publicHosting);
 	assert.deepEqual(publicHosting.rewrites, [
+		{source: "/oauth/storage/start", function: "storageOAuthStart"},
+		{source: "/oauth/storage/callback", destination: "/app/storage-auth.html"},
 		{source: "/oauth/start", function: "oauthStart"},
 		{source: "/oauth/apple", function: "desktopAppleAuth"},
 		{source: "/oauth/callback", function: "oauthCallback"},
@@ -215,6 +217,8 @@ test("the full emulator serves the same combined web artifact", () => {
 	assertHostingCachePolicy(config.hosting);
 	assertWelcomeRedirects(config.hosting);
 	assert.deepEqual(config.hosting.rewrites, [
+		{source: "/oauth/storage/start", function: "storageOAuthStart"},
+		{source: "/oauth/storage/callback", destination: "/app/storage-auth.html"},
 		{source: "/oauth/start", function: "oauthStart"},
 		{source: "/oauth/callback", function: "oauthCallback"},
 		{source: "/s/**", destination: "/s/index.html"},

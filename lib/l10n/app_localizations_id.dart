@@ -10,6 +10,24 @@ class AppLocalizationsId extends AppLocalizations {
   AppLocalizationsId([String locale = 'id']) : super(locale);
 
   @override
+  String get externalSyncContinue => 'Lanjutkan';
+
+  @override
+  String get externalSyncConnectionInfo => 'Info koneksi';
+
+  @override
+  String get externalSyncConnectPrompt =>
+      'Masuk untuk mulai menyinkronkan catatan Anda.';
+
+  @override
+  String get externalSyncNativeSetupPrompt =>
+      'Masuk ke Google Drive di perangkat ini.';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'Masukkan URL lengkap folder WebDAV dan kata sandi aplikasi. Sinkronisasi browser memerlukan izin permintaan lintas asal dari server Anda.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -1993,7 +2011,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get paymentConfirmedActivationPending =>
-      'Pembayaran telah dikonfirmasi, tetapi aktivasi Pro memerlukan waktu lebih lama. Jangan membeli lagi. Periksa ulang status atau kelola langganan di Google Play.';
+      'Pembayaran telah dikonfirmasi, tetapi aktivasi membutuhkan waktu lebih lama. Jangan membeli lagi. Periksa kembali status atau kelola langganan Anda.';
 
   @override
   String get recheckStatus => 'Periksa Ulang Status';
@@ -3895,4 +3913,351 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get storageCleared =>
       'Data lokal telah dihapus dan Anda telah keluar. Masuk lagi untuk memulihkan catatan yang telah disinkronkan. Catatan yang dihapus sebelum disinkronkan tidak dapat dipulihkan dari cloud.';
+
+  @override
+  String get externalSyncTitle => 'Penyedia sinkronisasi';
+
+  @override
+  String get externalSyncDescription =>
+      'Pilih satu penyedia untuk menyinkronkan catatan antarperangkat.';
+
+  @override
+  String get externalSyncUnavailable =>
+      'Masuk, lalu setujui atau pulihkan perangkat ini untuk menghubungkan penyimpanan.';
+
+  @override
+  String get externalSyncAccount => 'Akun dan enkripsi';
+
+  @override
+  String get externalSyncCloud => 'Cloud Better Keep';
+
+  @override
+  String get externalSyncCloudDescription =>
+      'Sinkronisasi bawaan · Memerlukan Pro';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': 'Hubungkan',
+      'browser': 'Masuk melalui browser',
+      'manual': 'Gunakan kata sandi aplikasi',
+      'reconnect': 'Hubungkan kembali',
+      'continue': 'Lanjutkan di browser',
+      'pause': 'Jeda',
+      'resume': 'Lanjutkan',
+      'disconnect': 'Putuskan koneksi',
+      'sync': 'Sinkronkan sekarang',
+      'other': 'Coba lagi',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': 'Menyiapkan otorisasi…',
+      'awaitingConsent': 'Siap diotorisasi melalui browser Anda',
+      'authorizing': 'Menghubungkan…',
+      'cancelling': 'Membatalkan otorisasi…',
+      'cancelPending':
+          'Pembatalan tidak dapat dikonfirmasi. Coba batalkan lagi.',
+      'connecting': 'Menghubungkan…',
+      'pausing': 'Menjeda…',
+      'enabling': 'Melanjutkan…',
+      'disconnecting': 'Memutuskan koneksi…',
+      'paused': 'Dijeda',
+      'notConnected': 'Tidak terhubung',
+      'keyRecovery':
+          'Pulihkan kunci enkripsi Anda untuk menggunakan koneksi ini.',
+      'pending': 'Beberapa perubahan menunggu untuk disinkronkan.',
+      'other': 'Terhubung',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired': 'Masuk ke akun Google Drive yang terhubung di perangkat ini. Catatan Anda tetap terenkripsi.',
+      'reconnectRequired':
+          'Hubungkan kembali akun ini untuk melanjutkan sinkronisasi.',
+      'quotaExceeded': 'Penyimpanan Anda penuh. Kosongkan ruang di penyedia ini, lalu coba lagi.',
+      'rateLimited': 'Penyedia meminta untuk menunggu. Sinkronisasi akan dicoba lagi secara otomatis.',
+      'corruptData': 'Sebagian data sinkronisasi tidak dapat diverifikasi. Catatan lokal Anda tetap disimpan.',
+      'unsupported':
+          'Penyedia atau browser ini tidak dapat menyelesaikan koneksi.',
+      'other': 'Tidak dapat menjangkau penyedia ini. Periksa koneksi Anda, lalu coba lagi.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return 'Sinkronisasi terakhir yang berhasil: $time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => 'Belum ada sinkronisasi yang berhasil';
+
+  @override
+  String get externalSyncBlocked =>
+      'Beberapa catatan atau lampiran belum siap diunggah. Sinkronisasi akan dicoba lagi.';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return 'Putuskan koneksi $provider?';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      'Ini menghentikan sinkronisasi dengan akun ini. Catatan di perangkat ini dan file yang sudah disimpan di penyedia tetap disimpan.';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Koneksi ke Better Keep telah diputus. Pencabutan akses tidak dapat dikonfirmasi. Hapus akses Better Keep di pengaturan akun penyedia Anda.';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Gunakan kata sandi aplikasi dari pengaturan keamanan Nextcloud Anda. Sinkronisasi melalui browser memerlukan server yang mengizinkan permintaan lintas asal.';
+
+  @override
+  String get externalSyncServer => 'URL server';
+
+  @override
+  String get externalSyncUsername => 'Nama pengguna';
+
+  @override
+  String get externalSyncAppPassword => 'Kata sandi aplikasi';
+
+  @override
+  String get externalSyncInvalidServer =>
+      'Masukkan URL server HTTPS tanpa nama pengguna, kata sandi, kueri, atau fragmen.';
+
+  @override
+  String get externalSyncRequired => 'Kolom ini wajib diisi.';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      'Otorisasi selesai sebelum pembatalan. Penyedia sudah terhubung. Gunakan Putuskan koneksi untuk menghapusnya.';
+
+  @override
+  String get externalSyncNextcloudBrowserHelp =>
+      'Masuk ke server Nextcloud Anda untuk memberikan akses. Anda dapat mencabut akses di pengaturan Nextcloud. Sinkronisasi melalui browser memerlukan server yang mengizinkan permintaan lintas asal.';
+
+  @override
+  String get externalSyncLogoutPending =>
+      'Beberapa perubahan masih menunggu sinkronisasi. Keluar dari akun akan menghapus catatan dan media lokal perangkat ini. Perubahan yang belum disimpan ke penyedia mana pun dapat hilang.\n\nSelesaikan sinkronisasi atau ekspor data Anda sebelum keluar.';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      'Kami tidak dapat memverifikasi apakah semua perubahan Anda sudah disinkronkan. Keluar dari akun akan menghapus catatan dan media lokal perangkat ini. Perubahan yang belum disimpan ke penyedia mana pun dapat hilang.\n\nPeriksa penyedia sinkronisasi Anda atau ekspor data Anda sebelum keluar.';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      'Beberapa catatan terkunci berisi sketsa lama yang perlu diperbarui. Di perangkat tempat Anda membuatnya, buka catatan tersebut dan buka kuncinya dengan PIN Anda, lalu coba sinkronkan lagi.';
+
+  @override
+  String get externalSyncOff => 'Sinkronisasi nonaktif';
+
+  @override
+  String get externalSyncOffDescription => 'Simpan catatan di perangkat ini';
+
+  @override
+  String get externalSyncDetails => 'Detail sinkronisasi';
+
+  @override
+  String get externalSyncNeedsAttention => 'Perlu perhatian · Lihat detail';
+
+  @override
+  String externalSyncConnectTitle(String provider) {
+    return 'Hubungkan $provider';
+  }
+
+  @override
+  String get externalSyncConnectHelp =>
+      'Masuk untuk memberikan akses penyimpanan. Setelah terhubung, penyedia ini akan dipilih untuk sinkronisasi.';
+
+  @override
+  String get verifyNewDevice => 'Verifikasi perangkat baru';
+
+  @override
+  String get deviceVerificationInstructions =>
+      'Di perangkat tepercaya, pindai QR pada perangkat baru atau bandingkan seluruh kode keamanan di kedua layar.';
+
+  @override
+  String get deviceVerificationExpired =>
+      'Kode verifikasi kedaluwarsa. Buat kode baru di perangkat baru.';
+
+  @override
+  String get newVerificationCode => 'Buat kode baru';
+
+  @override
+  String get deviceVerificationMismatch =>
+      'Perangkat tidak cocok. Jangan setujui permintaan ini.';
+
+  @override
+  String get deviceVerificationMatched =>
+      'Perangkat terverifikasi. Anda dapat melanjutkan.';
+
+  @override
+  String get scanNewDevice => 'Pindai perangkat baru';
+
+  @override
+  String get compareSecurityCode => 'Bandingkan kode keamanan';
+
+  @override
+  String get completeSecurityCodeMatches =>
+      'Saya telah membandingkan seluruh kode di kedua perangkat. Keduanya cocok.';
+
+  @override
+  String get approveVerifiedDevice => 'Setujui perangkat';
+
+  @override
+  String get deviceCameraUnavailable =>
+      'Kamera tidak tersedia. Bandingkan kode keamanan sebagai gantinya.';
+
+  @override
+  String get deviceVerificationRetry =>
+      'Verifikasi gagal. Perbarui kedua perangkat, buat kode baru di perangkat baru, lalu coba lagi.';
+
+  @override
+  String get browserEncryptionSessionOnly =>
+      'Kunci enkripsi hanya disimpan selama sesi browser ini. Setelah memuat ulang, setujui browser lagi atau gunakan frasa sandi pemulihan.';
+
+  @override
+  String get verifyTrustedDevice => 'Verifikasi perangkat tepercaya';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      'Biarkan layar konfirmasi terbuka di perangkat tepercaya. Pindai QR-nya atau bandingkan seluruh 32 karakter kode keamanan sebelum menerima kunci enkripsi.';
+
+  @override
+  String get scanTrustedDevice => 'Pindai perangkat tepercaya';
+
+  @override
+  String get acceptVerifiedKey => 'Terima kunci terverifikasi';
+
+  @override
+  String get confirmOnNewDevice => 'Konfirmasi di perangkat baru';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      'Di perangkat baru, pilih “Verifikasi perangkat tepercaya”. Pindai QR ini atau pastikan seluruh kode keamanannya cocok dengan kode di bawah. Biarkan layar terbuka hingga perangkat baru terbuka. Batas waktu awal sepuluh menit tetap berlaku.';
+
+  @override
+  String get storageSecurityUpgrade => 'Hubungkan ulang dengan aman';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      'Koneksi ini menggunakan penyimpanan kredensial lama yang dikelola server. Cabut akses Better Keep di pengaturan aplikasi terhubung penyedia (atau hapus kata sandi aplikasi Nextcloud), lalu hubungkan ulang di sini. Catatan dan file jarak jauh tetap disimpan. Kredensial baru dienkripsi di perangkat dengan kunci enkripsi catatan.';
+
+  @override
+  String get devicePairingScanInstruction =>
+      'Di perangkat tepercaya, buka permintaan persetujuan dan pindai kode ini.';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'Bandingkan seluruh kode ini dengan kode di perangkat tepercaya Anda.';
+
+  @override
+  String get showQrCode => 'Tampilkan kode QR';
+
+  @override
+  String get externalSyncSharedSetup =>
+      'Masuk ke Google Drive di perangkat ini.';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      'Masuk ke akun Google Drive yang terhubung di perangkat ini. Catatan Anda tetap terenkripsi.';
+
+  @override
+  String get externalSyncStorageFull =>
+      'Penyimpanan penuh. Sinkronisasi dijeda; catatan lokal Anda aman. Kosongkan ruang, lalu ketuk Sinkronkan sekarang.';
+
+  @override
+  String get externalSyncClear => 'Hapus data tersinkron';
+
+  @override
+  String get externalSyncClearMessage =>
+      'Hapus salinan tersinkron dan nonaktifkan sinkronisasi. Catatan lokal tetap tersimpan; data yang hanya ada di penyedia akan hilang.';
+
+  @override
+  String get externalSyncClearing => 'Menghapus data tersinkron…';
+
+  @override
+  String get externalSyncClearPending =>
+      'Penghapusan belum selesai · Ketuk untuk mencoba lagi';
+
+  @override
+  String get externalSyncClearDone =>
+      'Data tersinkron dihapus. Sinkronisasi nonaktif. Catatan lokal tetap tersimpan. Penyedia Anda mungkin menyimpan file yang dihapus di sampah.';
+
+  @override
+  String get externalSyncClearCodeSent =>
+      'Masukkan kode yang dikirim ke email Anda.';
+
+  @override
+  String get externalSyncClearCodeError =>
+      'Tidak dapat menghapus data tersinkron. Periksa kode dan koneksi Anda, atau minta kode baru. Jika penghapusan sudah dimulai, sinkronisasi tetap nonaktif hingga selesai.';
+
+  @override
+  String get externalSyncClearSendError =>
+      'Tidak dapat mengirim kode. Pastikan email akun Anda sudah diverifikasi, tunggu satu menit, lalu coba lagi.';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$used terpakai dari $total';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => 'Memeriksa penyimpanan…';
+
+  @override
+  String get externalSyncCapacityUnavailable =>
+      'Informasi penyimpanan tidak tersedia';
+
+  @override
+  String get externalSyncClearVerifyTitle => 'Verifikasi untuk menghapus';
+
+  @override
+  String get externalSyncClearSendCode => 'Kirim kode';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => 'Pilih paket Anda';
+
+  @override
+  String get upgradeToLite => 'Upgrade ke Lite';
+
+  @override
+  String get automaticExternalSync => 'Sinkronisasi eksternal otomatis';
+
+  @override
+  String get manualExternalSync => 'Sinkronisasi eksternal manual';
+
+  @override
+  String get liteDescription =>
+      'Pembaruan otomatis dengan penyimpanan cloud Anda sendiri.';
+
+  @override
+  String get manualSyncDescription =>
+      'Sinkronisasi manual gratis. Lite dan Pro menyediakan pembaruan otomatis.';
+
+  @override
+  String get automaticSyncEnabled => 'Pembaruan otomatis diaktifkan';
+
+  @override
+  String get subscriptionActiveTitle => 'Langganan aktif';
+
+  @override
+  String get subscriptionChangePlan =>
+      'Kelola langganan Anda saat ini untuk mengganti paket.';
+
+  @override
+  String get subscribe => 'Langganan';
+
+  @override
+  String get builtInCloudSync => 'Sinkronisasi cloud bawaan';
 }

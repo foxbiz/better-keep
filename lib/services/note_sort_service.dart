@@ -1,3 +1,5 @@
+import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 
 import 'dart:async';
@@ -11,17 +13,22 @@ import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/services/async_keyed_serializer.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/external_sync/firebase_sync_version.dart';
+import 'package:better_keep/services/external_sync/firebase_order_tombstones.dart';
+import 'package:better_keep/services/external_sync/sync_version.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/initial_hydration_gate.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
+import 'package:better_keep/services/note_sort_cloud_manifest.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/review_access.dart';
 import 'package:better_keep/services/retry_controller.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
@@ -65,6 +72,9 @@ class NoteSortService {
   static Future<void> Function()? cloudStartOverride;
 
   @visibleForTesting
+  static Future<SyncRefreshOutcome> Function()? refreshOperationOverride;
+
+  @visibleForTesting
   static NoteSortCloudRepository? cloudRepositoryOverride;
 
   @visibleForTesting
@@ -83,6 +93,8 @@ class NoteSortService {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteListener;
   Timer? _cloudWriteTimer;
   Future<void>? _activeUpload;
+  Future<SyncRefreshOutcome>? _manualRefresh;
+  final syncStatus = ValueNotifier(SyncProgress.idle);
   Timer? _cleanupTimer;
   bool _initialized = false;
   bool _lastKnownCryptoReady = false;
@@ -93,7 +105,8 @@ class NoteSortService {
   _NoteSortCloudRun? _cloudRun;
   final Set<String> _activeDragContexts = {};
   final Map<String, NoteOrderSnapshot> _deferredRemote = {};
-  final Map<String, int> _remoteChunkCounts = {};
+  final Map<String, (_NoteSortCloudRun, SyncVersion)> _deferredTombstones = {};
+  final Map<String, Future<void> Function()> _deferredReplicaRefresh = {};
   final Set<String> _remoteContextKeys = {};
 
   FirebaseFirestore get _firestore => FirebaseBackend.firestore;
@@ -134,6 +147,7 @@ class NoteSortService {
       final user = AuthService.currentUser;
       return user != null &&
           AuthService.canSyncCloud &&
+          FirebaseSyncPreference.instance.allowsSync(user.uid) &&
           !ReviewAccess.isAuthorizedSessionFor(user);
     } catch (_) {
       return false;
@@ -144,7 +158,8 @@ class NoteSortService {
       e2eeReadyOverride ?? E2EEService.instance.isCryptoReady;
 
   bool get _canPushCloud =>
-      canPushCloudOverride ?? (_canReceiveCloud && PlanService.instance.isPaid);
+      canPushCloudOverride ??
+      (_canReceiveCloud && PlanService.instance.entitlements.realtimeCloudSync);
 
   bool _isCurrentCloudRun(_NoteSortCloudRun run) =>
       identical(_cloudRun, run) && (run.session.isCurrent?.call() ?? true);
@@ -336,22 +351,20 @@ class NoteSortService {
         NoteOrderContext.mainGrid(),
         NoteOrderContext.mainList(),
       ]) {
-        await txn.insert(tableName, {
-          'context_key': context.key,
-          'sort_mode': (mode ?? defaultHomeSortMode).name,
-          'revision': revision,
-          'base_revision': null,
-          'updated_at': updatedAt,
-          'dirty': dirty ? 1 : 0,
-          'hydrated': 0,
-        });
-        for (final entry in ordered.indexed) {
-          await txn.insert(positionTableName, {
-            'context_key': context.key,
-            'note_sync_id': entry.$2,
-            'position': entry.$1,
-          });
-        }
+        await _persistSnapshot(
+          NoteOrderSnapshot(
+            context: context,
+            mode: mode ?? defaultHomeSortMode,
+            orderedNoteIds: ordered,
+            revision: revision,
+            updatedAt:
+                DateTime.tryParse(updatedAt) ??
+                DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true),
+            dirty: dirty,
+          ),
+          txn: txn,
+          recordVersion: legacy != null,
+        );
       }
     });
   }
@@ -366,13 +379,37 @@ class NoteSortService {
     _lastKnownCryptoReady = _isCryptoReady;
     E2EEService.instance.status.addListener(_handleE2EEStatusChange);
     AuthService.cloudRecovery.state.addListener(_handleCloudSessionChange);
+    _lastFirebaseSyncAllowed =
+        FirebaseSyncPreference.instance.allowsCurrentAccount;
+    FirebaseSyncPreference.instance.addListener(_handleSyncSelectionChange);
     E2EEService.instance.deviceManager.hasUMK.addListener(
       _handleE2EEStatusChange,
     );
   }
 
+  bool _lastFirebaseSyncAllowed = false;
+  void _handleSyncSelectionChange() {
+    final allowed = FirebaseSyncPreference.instance.allowsCurrentAccount;
+    if (allowed == _lastFirebaseSyncAllowed) return;
+    _lastFirebaseSyncAllowed = allowed;
+    if (!_canReceiveCloud) {
+      _handleCloudSessionChange();
+      return;
+    }
+    unawaited(
+      startCloudSync().catchError((Object error, StackTrace stack) {
+        AppLogger.error(
+          '[NOTE_SORT] Firebase sync resume deferred',
+          error,
+          stack,
+        );
+      }),
+    );
+  }
+
   void _handleCloudSessionChange() {
-    if (AuthService.cloudRecovery.state.value == CloudSessionState.ready) {
+    if (AuthService.cloudRecovery.state.value == CloudSessionState.ready &&
+        FirebaseSyncPreference.instance.allowsCurrentAccount) {
       return;
     }
     // Invalidate synchronously before awaiting listener cancellation.
@@ -445,6 +482,61 @@ class NoteSortService {
     return snapshots.value[context.key] ?? _defaultSnapshot(context);
   }
 
+  /// Refresh a snapshot already committed by an external replica. This reads
+  /// durable state rather than inventing a new ordering edit or timestamp.
+  Future<void> refreshFromReplica(
+    String contextKey, {
+    required Database database,
+    required bool Function() isCurrent,
+  }) => _mutations.run(contextKey, () async {
+    bool current() =>
+        _initialized && isCurrent() && identical(AppState.get('db'), database);
+    if (!current()) return;
+    if (_activeDragContexts.contains(contextKey)) {
+      _deferredReplicaRefresh[contextKey] = () => refreshFromReplica(
+        contextKey,
+        database: database,
+        isCurrent: isCurrent,
+      );
+      return;
+    }
+    final snapshot = await database.transaction((txn) async {
+      final rows = await txn.query(
+        tableName,
+        where: 'context_key = ?',
+        whereArgs: [contextKey],
+      );
+      if (rows.isEmpty) return null;
+      final positions = await txn.query(
+        positionTableName,
+        columns: ['note_sync_id'],
+        where: 'context_key = ?',
+        whereArgs: [contextKey],
+        orderBy: 'position ASC',
+      );
+      return NoteOrderSnapshot.tryFromDatabaseJson(
+        rows.single,
+        orderedNoteIds: positions
+            .map((row) => row['note_sync_id'])
+            .whereType<String>(),
+      );
+    });
+    if (!current()) return;
+    if (snapshot == null) {
+      snapshots.value = Map.unmodifiable(
+        {...snapshots.value}..remove(contextKey),
+      );
+      final run = _cloudRun;
+      if (run != null) {
+        await _refreshPendingTombstones(run);
+        _scheduleCloudWrite(run);
+      }
+    } else {
+      _publishSnapshot(snapshot);
+      if (snapshot.dirty) _scheduleCloudWrite();
+    }
+  });
+
   static NoteSortMode defaultSortModeFor(NoteOrderContext context) =>
       context.kind == NoteOrderContextKind.main
       ? defaultHomeSortMode
@@ -495,9 +587,11 @@ class NoteSortService {
       mode: context.reorderable ? legacyMode : _dateMode(legacyMode),
       orderedNoteIds: List.unmodifiable(ids),
       revision: const Uuid().v4(),
-      updatedAt: DateTime.now().toUtc(),
+      // Merely opening a context is not an edit. A fresh device's fallback
+      // ordering must not outrank the user's existing remote arrangement.
+      updatedAt: DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true),
     );
-    await _persistSnapshot(seeded);
+    await _persistSnapshot(seeded, recordVersion: false);
     _publishSnapshot(seeded);
     return seeded;
   }
@@ -725,8 +819,17 @@ class NoteSortService {
     _activeDragContexts.remove(context.key);
     final deferred = _deferredRemote.remove(context.key);
     if (deferred != null) {
-      await _mutations.run(context.key, () => _applyOrRebaseRemote(deferred));
+      await _mutations.run(context.key, () => _applyRemoteSnapshot(deferred));
     }
+    final deletion = _deferredTombstones.remove(context.key);
+    if (deletion != null) {
+      await _mutations.run(
+        context.key,
+        () => _applyRemoteDeletion(deletion.$1, deletion.$2),
+      );
+    }
+    await _deferredReplicaRefresh.remove(context.key)?.call();
+    _scheduleCloudWrite();
   }
 
   int _compareNotes(
@@ -902,12 +1005,28 @@ class NoteSortService {
     NoteOrderOperation operation, {
     Iterable<NoteOrderOperation> precedingOperations = const [],
   }) async {
-    final next = draft.copyWith(
-      revision: const Uuid().v4(),
-      updatedAt: DateTime.now().toUtc(),
-      dirty: true,
-    );
+    late NoteOrderSnapshot next;
     await AppState.db.transaction((txn) async {
+      final previous = await SyncMutationJournal.current(
+        txn,
+        SyncEntityKind.order,
+        draft.context.key,
+      );
+      next = draft.copyWith(
+        revision: const Uuid().v4(),
+        updatedAt: DateTime.fromMicrosecondsSinceEpoch(
+          max(
+            DateTime.now().toUtc().microsecondsSinceEpoch,
+            max(
+                  previous?.modifiedAtMicros ?? 0,
+                  draft.updatedAt.microsecondsSinceEpoch,
+                ) +
+                1,
+          ),
+          isUtc: true,
+        ),
+        dirty: true,
+      );
       await _persistSnapshot(next, txn: txn);
       for (final pending in [...precedingOperations, operation]) {
         await txn.insert(
@@ -921,15 +1040,26 @@ class NoteSortService {
     _scheduleCloudWrite();
   }
 
-  Future<void> _persistSnapshot(
+  static Future<void> _persistSnapshot(
     NoteOrderSnapshot value, {
-    DatabaseExecutor? txn,
-    DatabaseExecutor? database,
+    Transaction? txn,
+    Database? database,
+    bool recordVersion = true,
   }) async {
-    final executor = txn ?? database ?? AppState.db;
-    final row = value.toDatabaseJson();
-    await executor.rawInsert(
-      '''
+    if (txn == null) {
+      return (database ?? AppState.db).transaction(
+        (transaction) => _persistSnapshot(
+          value,
+          txn: transaction,
+          recordVersion: recordVersion,
+        ),
+      );
+    }
+    await SyncMutationJournal.withoutCapture(txn, () async {
+      final executor = txn;
+      final row = value.toDatabaseJson();
+      await executor.rawInsert(
+        '''
       INSERT INTO $tableName (
         context_key, sort_mode, revision, base_revision,
         updated_at, dirty, hydrated
@@ -942,29 +1072,45 @@ class NoteSortService {
         dirty = excluded.dirty,
         hydrated = excluded.hydrated
       ''',
-      [
-        row['context_key'],
-        row['sort_mode'],
-        row['revision'],
-        row['base_revision'],
-        row['updated_at'],
-        row['dirty'],
-        row['hydrated'],
-      ],
-    );
-    await executor.delete(
-      positionTableName,
-      where: 'context_key = ?',
-      whereArgs: [value.context.key],
-    );
-    for (final entry in value.orderedNoteIds.indexed) {
-      await executor.insert(positionTableName, {
-        'context_key': value.context.key,
-        'note_sync_id': entry.$2,
-        'position': entry.$1,
-      });
-    }
+        [
+          row['context_key'],
+          row['sort_mode'],
+          row['revision'],
+          row['base_revision'],
+          row['updated_at'],
+          row['dirty'],
+          row['hydrated'],
+        ],
+      );
+      await executor.delete(
+        positionTableName,
+        where: 'context_key = ?',
+        whereArgs: [value.context.key],
+      );
+      for (final entry in value.orderedNoteIds.indexed) {
+        await executor.insert(positionTableName, {
+          'context_key': value.context.key,
+          'note_sync_id': entry.$2,
+          'position': entry.$1,
+        });
+      }
+      if (recordVersion) {
+        await SyncMutationJournal.received(
+          txn,
+          _snapshotVersion(value),
+          value.context.key,
+        );
+      }
+    });
   }
+
+  static SyncVersion _snapshotVersion(NoteOrderSnapshot value) => SyncVersion(
+    kind: SyncEntityKind.order,
+    entityId: value.context.key,
+    revisionId: value.revision,
+    modifiedAtMicros: value.updatedAt.microsecondsSinceEpoch,
+    deleted: false,
+  );
 
   void _publishSnapshot(NoteOrderSnapshot snapshot) {
     snapshots.value = Map.unmodifiable({
@@ -988,6 +1134,137 @@ class NoteSortService {
         .map(NoteOrderOperation.tryFromDatabaseJson)
         .whereType<NoteOrderOperation>()
         .toList();
+  }
+
+  Future<SyncRefreshOutcome> refreshWithOutcome({bool dataHydrated = false}) {
+    final override = refreshOperationOverride;
+    if (override != null) return override();
+    final running = _manualRefresh;
+    if (running != null) return running;
+    late final Future<SyncRefreshOutcome> task;
+    task = _refreshCloud(dataHydrated: dataHydrated).whenComplete(() {
+      if (identical(_manualRefresh, task)) _manualRefresh = null;
+    });
+    _manualRefresh = task;
+    return _trackCloudTask(task);
+  }
+
+  Future<SyncRefreshOutcome> _refreshCloud({required bool dataHydrated}) async {
+    if (!_canReceiveCloud) return SyncRefreshOutcome.deferred;
+    final accountCurrent = AuthService.captureSession();
+    await startCloudSync();
+    if (!accountCurrent()) return SyncRefreshOutcome.deferred;
+    final run = _cloudRun;
+    if (run == null || !_isCurrentCloudRun(run)) {
+      return SyncRefreshOutcome.deferred;
+    }
+    run.manualRefreshing = true;
+    syncStatus.value = const SyncProgress(SyncPhase.checkingForUpdates);
+    SyncRefreshOutcome? outcome;
+    SyncRefreshOutcome finish(SyncRefreshOutcome value) => outcome = value;
+    try {
+      final query = await _contextCollectionRef(run.session)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 10));
+      if (!_isCurrentCloudRun(run) || !_canReceiveCloud) {
+        return finish(SyncRefreshOutcome.deferred);
+      }
+      if (query.metadata.isFromCache || query.metadata.hasPendingWrites) {
+        throw const CloudVerificationUnavailable();
+      }
+      final generation = _remoteHydration.currentGeneration;
+      _remoteHydration.beginWork(generation, isFromCache: false);
+      final applied = await _remoteEvents.run(
+        generation,
+        () => _processContextSnapshot(run, generation, query),
+      );
+      if (!_isCurrentCloudRun(run)) return finish(SyncRefreshOutcome.deferred);
+      if (!applied) return finish(SyncRefreshOutcome.failed);
+      run.remoteInitialResolved = true;
+      if (!dataHydrated) {
+        try {
+          await Future.wait([
+            NoteSyncService().initialHydration,
+            LabelSyncService().initialHydration,
+          ]).timeout(const Duration(seconds: 10));
+        } on TimeoutException {
+          return finish(SyncRefreshOutcome.deferred);
+        }
+      }
+      if (!_isCurrentCloudRun(run) || !_canReceiveCloud) {
+        return finish(SyncRefreshOutcome.deferred);
+      }
+      run.dataHydrated = true;
+      await _tryFinishBootstrap(run);
+      if (!_isCurrentCloudRun(run)) return finish(SyncRefreshOutcome.deferred);
+      _cloudWriteTimer?.cancel();
+      run.uploadRetry.cancel();
+      final pending = _activeUpload;
+      if (pending != null) await pending;
+      if (!_isCurrentCloudRun(run) || !_canReceiveCloud) {
+        return finish(SyncRefreshOutcome.deferred);
+      }
+      await _uploadDirtyContexts(run);
+      if (!_isCurrentCloudRun(run)) return finish(SyncRefreshOutcome.deferred);
+      if (run.blockedContexts.isNotEmpty ||
+          run.missingContexts.isNotEmpty ||
+          run.lastUploadFailed) {
+        return finish(SyncRefreshOutcome.failed);
+      }
+      await _refreshPendingTombstones(run);
+      if (_deferredRemote.isNotEmpty ||
+          _deferredTombstones.isNotEmpty ||
+          run.hasPendingTombstones ||
+          snapshots.value.values.any((s) => s.dirty)) {
+        return finish(
+          _canPushCloud
+              ? SyncRefreshOutcome.deferred
+              : SyncRefreshOutcome.uploadRestricted,
+        );
+      }
+      return finish(SyncRefreshOutcome.complete);
+    } on CloudOperationCancelled {
+      return finish(SyncRefreshOutcome.deferred);
+    } catch (error) {
+      if (!_isCurrentCloudRun(run)) return finish(SyncRefreshOutcome.deferred);
+      run.lastUploadFailed = true;
+      if (isCloudConnectionFailure(error)) {
+        AuthService.cloudRecovery.connectionLost();
+        return finish(SyncRefreshOutcome.unavailable);
+      }
+      return finish(SyncRefreshOutcome.failed);
+    } finally {
+      run.manualRefreshing = false;
+      if (_isCurrentCloudRun(run) && outcome != null) {
+        syncStatus.value = SyncProgress(switch (outcome!) {
+          SyncRefreshOutcome.complete => SyncPhase.complete,
+          SyncRefreshOutcome.uploadRestricted => SyncPhase.uploadRestricted,
+          SyncRefreshOutcome.unavailable => SyncPhase.unavailable,
+          SyncRefreshOutcome.failed => SyncPhase.failed,
+          SyncRefreshOutcome.deferred => SyncPhase.deferred,
+        });
+      }
+    }
+  }
+
+  void _publishCloudProgress(_NoteSortCloudRun run) {
+    if (!_isCurrentCloudRun(run)) return;
+    final dirty =
+        snapshots.value.values.any((s) => s.dirty) ||
+        _deferredRemote.isNotEmpty ||
+        _deferredTombstones.isNotEmpty ||
+        run.hasPendingTombstones;
+    syncStatus.value = SyncProgress(
+      run.uploading || run.manualRefreshing
+          ? SyncPhase.syncing
+          : run.lastUploadFailed ||
+                run.blockedContexts.isNotEmpty ||
+                run.missingContexts.isNotEmpty
+          ? SyncPhase.failed
+          : dirty
+          ? (_canPushCloud ? SyncPhase.deferred : SyncPhase.uploadRestricted)
+          : SyncPhase.complete,
+    );
   }
 
   Future<void> startCloudSync() async {
@@ -1119,7 +1396,7 @@ class NoteSortService {
         );
   }
 
-  Future<void> _processContextSnapshot(
+  Future<bool> _processContextSnapshot(
     _NoteSortCloudRun run,
     int hydrationGeneration,
     QuerySnapshot<Map<String, dynamic>> query,
@@ -1128,12 +1405,12 @@ class NoteSortService {
     try {
       if (!_isCurrentCloudRun(run) ||
           !_remoteHydration.isCurrent(hydrationGeneration)) {
-        return;
+        return false;
       }
       for (final document in query.docs) {
         if (!_isCurrentCloudRun(run) ||
             !_remoteHydration.isCurrent(hydrationGeneration)) {
-          return;
+          return false;
         }
         if (document.metadata.hasPendingWrites) continue;
         // Even an unreadable existing manifest must suppress legacy seeding.
@@ -1141,7 +1418,7 @@ class NoteSortService {
         final result = await _decodeRemoteDocument(run, document);
         if (!_isCurrentCloudRun(run) ||
             !_remoteHydration.isCurrent(hydrationGeneration)) {
-          return;
+          return false;
         }
         await _receiveRemoteRead(run, document.id, result);
       }
@@ -1163,6 +1440,10 @@ class NoteSortService {
         _remoteListenerRetry.succeeded();
       }
     }
+    if (run.bootstrapReady) _publishCloudProgress(run);
+    return !hydrationFailed &&
+        _isCurrentCloudRun(run) &&
+        _remoteHydration.isCurrent(hydrationGeneration);
   }
 
   void _failContextListenerAttempt(_NoteSortCloudRun run, int generation) {
@@ -1189,12 +1470,25 @@ class NoteSortService {
         run.bootstrapReady) {
       return;
     }
-    run.bootstrapReady = true;
-    await _migrateLegacyCloudIfNeeded(run);
-    if (!_isCurrentCloudRun(run)) return;
-    await _drainCloudCleanup(run);
-    if (!_isCurrentCloudRun(run)) return;
-    _scheduleCloudWrite(run);
+    final pending = run.bootstrapTask;
+    if (pending != null) return pending;
+    final task = (() async {
+      await _migrateLegacyCloudIfNeeded(run);
+      if (!_isCurrentCloudRun(run)) return;
+      await _drainCloudCleanup(run);
+      if (!_isCurrentCloudRun(run)) return;
+      await _refreshPendingTombstones(run);
+      if (!_isCurrentCloudRun(run)) return;
+      run.bootstrapReady = true;
+      _publishCloudProgress(run);
+      _scheduleCloudWrite(run);
+    })();
+    run.bootstrapTask = task;
+    try {
+      await task;
+    } finally {
+      if (identical(run.bootstrapTask, task)) run.bootstrapTask = null;
+    }
   }
 
   Future<_RemoteOrderRead> _decodeRemoteDocument(
@@ -1226,6 +1520,8 @@ class NoteSortService {
         documentId != contextKey ||
         revision is! String ||
         revision.isEmpty ||
+        (data['content_hash'] != null && data['content_hash'] is! String) ||
+        (data.containsKey('deleted') && data['deleted'] != true) ||
         modeName is! String ||
         chunkCount is! int ||
         chunkCount < 0 ||
@@ -1243,17 +1539,33 @@ class NoteSortService {
     if (context == null || mode == null) {
       return const _RemoteOrderRead(_RemoteOrderKind.invalid);
     }
-    final timestamp = data['updated_at'];
+    SyncVersion version;
+    try {
+      version = NoteSortCloudManifest.version(data);
+    } on FormatException {
+      return const _RemoteOrderRead(_RemoteOrderKind.invalid);
+    } on ArgumentError {
+      return const _RemoteOrderRead(_RemoteOrderKind.invalid);
+    }
     final manifest = _NoteSortManifest(
       context: context,
       mode: context.reorderable ? mode : _dateMode(mode),
       revision: revision,
       chunkCount: chunkCount,
       noteCount: noteCount,
-      updatedAt: timestamp is Timestamp
-          ? timestamp.toDate().toUtc()
-          : DateTime.now().toUtc(),
+      version: version,
+      contentHash: data['content_hash'] as String?,
     );
+    if (version.deleted) {
+      if (data['deleted'] != true ||
+          mode != NoteSortMode.custom ||
+          chunkCount != 0 ||
+          noteCount != 0 ||
+          manifest.contentHash != NoteSortCloudManifest.contentHash(const [])) {
+        return _RemoteOrderRead(_RemoteOrderKind.invalid, manifest: manifest);
+      }
+      return _RemoteOrderRead(_RemoteOrderKind.deleted, manifest: manifest);
+    }
 
     final chunks = await run.session.repository.readChunks(
       revision,
@@ -1274,7 +1586,9 @@ class NoteSortService {
       chunkCount: chunkCount,
       chunks: chunks,
     );
-    if (ids == null) {
+    if (ids == null ||
+        (manifest.contentHash != null &&
+            manifest.contentHash != NoteSortCloudManifest.contentHash(ids))) {
       return _RemoteOrderRead(_RemoteOrderKind.invalid, manifest: manifest);
     }
     return _RemoteOrderRead(
@@ -1284,9 +1598,12 @@ class NoteSortService {
         context: manifest.context,
         mode: manifest.mode,
         orderedNoteIds: ids,
-        revision: revision,
+        revision: version.revisionId,
         baseRevision: revision,
-        updatedAt: manifest.updatedAt,
+        updatedAt: DateTime.fromMicrosecondsSinceEpoch(
+          version.modifiedAtMicros,
+          isUtc: true,
+        ),
         hydrated: true,
       ),
     );
@@ -1299,11 +1616,24 @@ class NoteSortService {
   ) async {
     if (!_isCurrentCloudRun(run)) return;
     switch (result.kind) {
+      case _RemoteOrderKind.deleted:
+        run.missingContexts.remove(contextKey);
+        run.blockedContexts.remove(contextKey);
+        final version = result.manifest!.version;
+        await _mutations.run(contextKey, () async {
+          if (_activeDragContexts.contains(contextKey)) {
+            final previous = _deferredTombstones[contextKey];
+            if (previous == null || version.compareTo(previous.$2) > 0) {
+              _deferredTombstones[contextKey] = (run, version);
+            }
+          } else {
+            await _applyRemoteDeletion(run, version);
+          }
+        });
       case _RemoteOrderKind.valid:
         run.missingContexts.remove(contextKey);
         run.blockedContexts.remove(contextKey);
         final remote = result.snapshot!;
-        _remoteChunkCounts[remote.revision] = result.manifest!.chunkCount;
         await _mutations.run(contextKey, () => _receiveRemote(run, remote));
       case _RemoteOrderKind.missingChunks:
         run.blockedContexts.remove(contextKey);
@@ -1333,6 +1663,72 @@ class NoteSortService {
     }
   }
 
+  Future<void> _applyRemoteDeletion(
+    _NoteSortCloudRun run,
+    SyncVersion incoming,
+  ) async {
+    if (!_isCurrentCloudRun(run)) return;
+    final db = run.session.database;
+    await db.transaction((txn) async {
+      if (!_isCurrentCloudRun(run)) throw const CloudOperationCancelled();
+      final current = await SyncMutationJournal.current(
+        txn,
+        SyncEntityKind.order,
+        incoming.entityId,
+      );
+      if (current == null || incoming.compareTo(current) >= 0) {
+        await SyncMutationJournal.withoutCapture(txn, () async {
+          for (final table in [
+            positionTableName,
+            operationTableName,
+            tableName,
+          ]) {
+            await txn.delete(
+              table,
+              where: 'context_key = ?',
+              whereArgs: [incoming.entityId],
+            );
+          }
+          await SyncMutationJournal.received(txn, incoming, incoming.entityId);
+        });
+      }
+      await FirebaseOrderTombstones.acknowledge(
+        db,
+        txn,
+        run.session.userId,
+        incoming,
+      );
+      if (!_isCurrentCloudRun(run)) throw const CloudOperationCancelled();
+    });
+    if (!_isCurrentCloudRun(run)) return;
+    final current = await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.order,
+      incoming.entityId,
+    );
+    if (!_isCurrentCloudRun(run)) return;
+    if (current?.revisionId == incoming.revisionId &&
+        current?.deleted == true) {
+      snapshots.value = Map.unmodifiable(
+        {...snapshots.value}..remove(incoming.entityId),
+      );
+    }
+    await _refreshPendingTombstones(run);
+  }
+
+  Future<void> _refreshPendingTombstones(_NoteSortCloudRun run) async {
+    if (!_isCurrentCloudRun(run)) return;
+    final pending = await FirebaseOrderTombstones.pending(
+      run.session.database,
+      run.session.userId,
+      limit: 1,
+    );
+    if (_isCurrentCloudRun(run)) {
+      run.hasPendingTombstones = pending.isNotEmpty;
+      if (run.bootstrapReady) _publishCloudProgress(run);
+    }
+  }
+
   void _logOrderRecovery(
     _NoteSortCloudRun run,
     String contextKey,
@@ -1346,23 +1742,31 @@ class NoteSortService {
     }
   }
 
+  void _deferRemote(NoteOrderSnapshot remote) {
+    final previous = _deferredRemote[remote.context.key];
+    if (previous == null ||
+        _snapshotVersion(remote).compareTo(_snapshotVersion(previous)) > 0) {
+      _deferredRemote[remote.context.key] = remote;
+    }
+  }
+
   Future<void> _receiveRemote(
     _NoteSortCloudRun run,
     NoteOrderSnapshot remote,
   ) async {
     if (!_isCurrentCloudRun(run)) return;
     if (_activeDragContexts.contains(remote.context.key)) {
-      _deferredRemote[remote.context.key] = remote;
+      _deferRemote(remote);
       return;
     }
-    await _applyOrRebaseRemote(remote, run: run);
+    await _applyRemoteSnapshot(remote, run: run);
   }
 
   @visibleForTesting
   Future<void> applyRemoteSnapshotForTesting(NoteOrderSnapshot remote) {
     return _mutations.run(
       remote.context.key,
-      () => _applyOrRebaseRemote(remote),
+      () => _applyRemoteSnapshot(remote),
     );
   }
 
@@ -1370,10 +1774,10 @@ class NoteSortService {
   Future<void> receiveRemoteSnapshotForTesting(NoteOrderSnapshot remote) {
     return _mutations.run(remote.context.key, () async {
       if (_activeDragContexts.contains(remote.context.key)) {
-        _deferredRemote[remote.context.key] = remote;
+        _deferRemote(remote);
         return;
       }
-      await _applyOrRebaseRemote(remote);
+      await _applyRemoteSnapshot(remote);
     });
   }
 
@@ -1387,91 +1791,73 @@ class NoteSortService {
       if (remote == null) return;
       await _mutations.run(
         remote.context.key,
-        () => _applyOrRebaseRemote(remote),
+        () => _applyRemoteSnapshot(remote),
       );
     });
   }
 
-  Future<void> _applyOrRebaseRemote(
+  Future<void> _applyRemoteSnapshot(
     NoteOrderSnapshot remote, {
     _NoteSortCloudRun? run,
+    bool publishToFirebase = false,
   }) async {
     if (run != null && !_isCurrentCloudRun(run)) return;
-    final database = run?.session.database;
-    final local = snapshots.value[remote.context.key];
-    if (local?.revision == remote.revision && local?.dirty == false) return;
-    final operations = await _loadOperations(
-      remote.context.key,
-      database: database,
-    );
-    if (run != null && !_isCurrentCloudRun(run)) return;
-    if (operations.isEmpty) {
-      await _persistSnapshot(remote, database: database);
-      if (run != null && !_isCurrentCloudRun(run)) return;
-      _publishSnapshot(remote);
-      return;
-    }
-
-    final (ids, mode) = _replayOrderOperations(
-      remote.orderedNoteIds,
-      remote.mode,
-      operations,
-    );
-    final rebased = NoteOrderSnapshot(
-      context: remote.context,
-      mode: mode,
-      orderedNoteIds: List.unmodifiable(ids),
-      revision: const Uuid().v4(),
-      baseRevision: remote.revision,
-      updatedAt: DateTime.now().toUtc(),
-      dirty: true,
-      hydrated: true,
-    );
-    await _persistSnapshot(rebased, database: database);
-    if (run != null && !_isCurrentCloudRun(run)) return;
-    _publishSnapshot(rebased);
-    _scheduleCloudWrite(run);
-  }
-
-  (List<String>, NoteSortMode) _replayOrderOperations(
-    Iterable<String> base,
-    NoteSortMode mode,
-    List<NoteOrderOperation> operations, {
-    bool applyMoves = true,
-  }) {
-    final ids = base.toList();
-    for (final operation in operations) {
-      switch (operation.type) {
-        case NoteOrderOperationType.setMode:
-          mode = operation.mode ?? mode;
-        case NoteOrderOperationType.insertNote:
-          final noteId = operation.noteId;
-          if (noteId != null && !ids.contains(noteId)) ids.insert(0, noteId);
-        case NoteOrderOperationType.deleteNote:
-          ids.remove(operation.noteId);
-        case NoteOrderOperationType.moveNote:
-          final noteId = operation.noteId;
-          if (noteId == null) continue;
-          if (applyMoves) {
-            ids.remove(noteId);
-            final beforeIndex = operation.beforeId == null
-                ? -1
-                : ids.indexOf(operation.beforeId!);
-            final afterIndex = operation.afterId == null
-                ? -1
-                : ids.indexOf(operation.afterId!);
-            if (beforeIndex >= 0) {
-              ids.insert(beforeIndex, noteId);
-            } else if (afterIndex >= 0) {
-              ids.insert(afterIndex + 1, noteId);
-            } else {
-              ids.add(noteId);
-            }
-          }
-          mode = operation.mode ?? mode;
+    final database = run?.session.database ?? AppState.db;
+    final incoming = _snapshotVersion(remote);
+    final adopted = await database.transaction((txn) async {
+      if (run != null && !_isCurrentCloudRun(run)) {
+        throw const CloudOperationCancelled();
       }
+      final rows = await txn.query(
+        tableName,
+        where: 'context_key = ?',
+        whereArgs: [remote.context.key],
+      );
+      final stored = rows.isEmpty
+          ? null
+          : NoteOrderSnapshot.tryFromDatabaseJson(rows.single);
+      final current =
+          await SyncMutationJournal.current(
+            txn,
+            SyncEntityKind.order,
+            remote.context.key,
+          ) ??
+          (stored == null ? null : _snapshotVersion(stored));
+      if (current != null && incoming.compareTo(current) < 0) return false;
+      if (current != null &&
+          incoming.compareTo(current) == 0 &&
+          stored != null) {
+        final positions = await txn.query(
+          positionTableName,
+          where: 'context_key = ?',
+          whereArgs: [remote.context.key],
+          orderBy: 'position ASC',
+        );
+        if (stored.mode != remote.mode ||
+            !listEquals(
+              positions.map((row) => row['note_sync_id']).toList(),
+              remote.orderedNoteIds,
+            )) {
+          throw const FormatException('Order revision content changed');
+        }
+      }
+      await _persistSnapshot(
+        remote.copyWith(dirty: publishToFirebase),
+        txn: txn,
+      );
+      await txn.delete(
+        operationTableName,
+        where: 'context_key = ?',
+        whereArgs: [remote.context.key],
+      );
+      if (run != null && !_isCurrentCloudRun(run)) {
+        throw const CloudOperationCancelled();
+      }
+      return true;
+    });
+    if (adopted && (run == null || _isCurrentCloudRun(run))) {
+      _publishSnapshot(remote.copyWith(dirty: publishToFirebase));
     }
-    return (ids, mode);
   }
 
   void _handlePlanChange() {
@@ -1526,13 +1912,33 @@ class NoteSortService {
       return;
     }
     run.uploading = true;
+    _publishCloudProgress(run);
     var retryableFailure = false;
     var authorizationStop = false;
     try {
+      final deletions = await FirebaseOrderTombstones.pending(
+        run.session.database,
+        run.session.userId,
+        exclude: {...run.blockedContexts, ..._activeDragContexts},
+      );
+      for (final deletion in deletions) {
+        if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
+        try {
+          await _uploadTombstone(run, deletion);
+        } catch (error) {
+          if (!_isCurrentCloudRun(run)) return;
+          final outcome = _uploadFailureOutcome(error);
+          authorizationStop |=
+              outcome == _NoteSortUploadOutcome.authorizationStop;
+          retryableFailure |=
+              outcome == _NoteSortUploadOutcome.retryableFailure;
+        }
+      }
       for (final contextKey in run.missingContexts.toList()) {
         if (!_isCurrentCloudRun(run)) return;
         try {
           await _prepareMissingOrderRepair(run, contextKey);
+          retryableFailure |= run.missingContexts.contains(contextKey);
         } catch (error, stack) {
           if (!_isCurrentCloudRun(run)) return;
           final outcome = _uploadFailureOutcome(error);
@@ -1563,7 +1969,7 @@ class NoteSortService {
           case _NoteSortUploadOutcome.authorizationStop:
             authorizationStop = true;
           case _NoteSortUploadOutcome.success:
-          case _NoteSortUploadOutcome.conflictRebased:
+          case _NoteSortUploadOutcome.conflictResolved:
           case _NoteSortUploadOutcome.supersededSnapshot:
           case _NoteSortUploadOutcome.staleSession:
           case _NoteSortUploadOutcome.remoteDataBlocked:
@@ -1583,7 +1989,22 @@ class NoteSortService {
       run.uploading = false;
     }
     if (!_isCurrentCloudRun(run)) return;
-
+    var pendingDeletes = false;
+    try {
+      await _refreshPendingTombstones(run);
+      if (!_isCurrentCloudRun(run)) return;
+      pendingDeletes = (await FirebaseOrderTombstones.pending(
+        run.session.database,
+        run.session.userId,
+        limit: 1,
+        exclude: {...run.blockedContexts, ..._activeDragContexts},
+      )).isNotEmpty;
+    } catch (_) {
+      retryableFailure = true;
+    }
+    if (!_isCurrentCloudRun(run)) return;
+    run.lastUploadFailed = retryableFailure || authorizationStop;
+    _publishCloudProgress(run);
     final uploadAgain = run.uploadAgain;
     run.uploadAgain = false;
     final hasDirty =
@@ -1592,7 +2013,8 @@ class NoteSortService {
               snapshot.dirty &&
               !run.blockedContexts.contains(snapshot.context.key),
         ) ||
-        run.missingContexts.isNotEmpty;
+        run.missingContexts.isNotEmpty ||
+        pendingDeletes;
     if (authorizationStop) {
       run.uploadRetry.cancel();
     } else if (retryableFailure) {
@@ -1603,6 +2025,58 @@ class NoteSortService {
     } else {
       run.uploadRetry.succeeded();
     }
+  }
+
+  Future<void> _uploadTombstone(
+    _NoteSortCloudRun run,
+    SyncVersion deletion,
+  ) async {
+    final db = run.session.database;
+    final current = await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.order,
+      deletion.entityId,
+    );
+    if (!_isCurrentCloudRun(run) ||
+        !_canPushCloud ||
+        current?.revisionId != deletion.revisionId) {
+      return;
+    }
+    final commit = await run.session.repository.commitManifest(
+      contextKey: deletion.entityId,
+      sortMode: 'custom',
+      revision: deletion.revisionId,
+      baseRevision: null,
+      chunkCount: 0,
+      noteCount: 0,
+      updatedAt: DateTime.fromMicrosecondsSinceEpoch(
+        deletion.modifiedAtMicros,
+        isUtc: true,
+      ),
+      contentHash: NoteSortCloudManifest.contentHash(const []),
+      deleted: true,
+    );
+    if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
+    if (commit.outcome == NoteSortCloudCommitOutcome.conflict) {
+      final remote = await _readRemoteOrder(run, deletion.entityId);
+      await _receiveRemoteRead(run, deletion.entityId, remote);
+      return;
+    }
+    await db.transaction((txn) async {
+      if (!_isCurrentCloudRun(run) || !_canPushCloud) {
+        throw const CloudOperationCancelled();
+      }
+      await FirebaseOrderTombstones.acknowledge(
+        db,
+        txn,
+        run.session.userId,
+        deletion,
+      );
+      if (!_isCurrentCloudRun(run) || !_canPushCloud) {
+        throw const CloudOperationCancelled();
+      }
+    });
+    if (_isCurrentCloudRun(run)) _remoteContextKeys.add(deletion.entityId);
   }
 
   void _scheduleUploadRetry(_NoteSortCloudRun run) {
@@ -1663,6 +2137,8 @@ class NoteSortService {
         baseRevision: local.baseRevision,
         chunkCount: chunks.length,
         noteCount: local.orderedNoteIds.length,
+        updatedAt: local.updatedAt,
+        contentHash: NoteSortCloudManifest.contentHash(local.orderedNoteIds),
       );
       if (commit.outcome == NoteSortCloudCommitOutcome.conflict) {
         if (!_isCurrentCloudRun(run)) {
@@ -1720,28 +2196,9 @@ class NoteSortService {
         }
       }
       _remoteContextKeys.add(local.context.key);
-      if (run.repairBases.containsKey(local.context.key) &&
-          run.repairBases[local.context.key] == local.baseRevision) {
-        _logOrderRecovery(
-          run,
-          local.context.key,
-          local.baseRevision,
-          'repaired',
-        );
-        run.repairBases.remove(local.context.key);
-      }
-      _remoteChunkCounts[local.revision] = chunks.length;
-      final previousRevision = commit.previousRevision;
-      if (previousRevision != null && previousRevision != local.revision) {
-        await _journalCloudRevision(
-          run,
-          contextKey: local.context.key,
-          revision: previousRevision,
-          chunkCount: commit.previousChunkCount,
-        );
-        if (_isCurrentCloudRun(run)) {
-          _trackCloudTask(_drainCloudCleanup(run));
-        }
+      final repairedBase = run.repairBases.remove(local.context.key);
+      if (repairedBase != null) {
+        _logOrderRecovery(run, local.context.key, repairedBase, 'repaired');
       }
       return _NoteSortUploadOutcome.success;
     } catch (error, stackTrace) {
@@ -1812,7 +2269,7 @@ class NoteSortService {
         'conflict recovered',
       );
       return _isCurrentCloudRun(run)
-          ? _NoteSortUploadOutcome.conflictRebased
+          ? _NoteSortUploadOutcome.conflictResolved
           : _NoteSortUploadOutcome.staleSession;
     } catch (error, stackTrace) {
       if (!_isCurrentCloudRun(run)) {
@@ -1888,45 +2345,43 @@ class NoteSortService {
         return;
       }
       final local = snapshots.value[contextKey];
-      if (local?.dirty == true &&
-          local?.baseRevision == manifest.revision &&
-          run.repairBases[contextKey] == manifest.revision) {
-        run.missingContexts.remove(contextKey);
+      if (local == null) return;
+      final comparison = _snapshotVersion(local).compareTo(manifest.version);
+      if (comparison < 0) return;
+      if (comparison == 0 &&
+          (manifest.contentHash !=
+                  NoteSortCloudManifest.contentHash(local.orderedNoteIds) ||
+              manifest.mode != local.mode ||
+              manifest.noteCount != local.orderedNoteIds.length)) {
         return;
       }
-      final notes = await _loadNotesForContext(manifest.context);
-      if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
-      notes.sort(_compareSeedOrder);
-      final ids = <String>{...local?.orderedNoteIds ?? const <String>[]};
-      ids.addAll(notes.map(_stableId).whereType<String>());
-      final operations = await _loadOperations(
-        contextKey,
-        database: run.session.database,
-      );
-      if (!_isCurrentCloudRun(run) || !_canPushCloud) return;
-      final (orderedIds, mode) = _replayOrderOperations(
-        ids,
-        manifest.mode,
-        operations,
-        // Local snapshots already contain their journaled moves.
-        applyMoves: local == null,
-      );
-      final repaired = NoteOrderSnapshot(
-        context: manifest.context,
-        mode: mode,
-        orderedNoteIds: List.unmodifiable(orderedIds),
-        revision: const Uuid().v4(),
-        baseRevision: manifest.revision,
-        updatedAt: DateTime.now().toUtc(),
-        dirty: true,
-        hydrated: true,
-      );
-      await _persistSnapshot(repaired, database: run.session.database);
-      if (!_isCurrentCloudRun(run)) return;
+      // Only republish an authentic local snapshot. Missing remote dependencies
+      // do not authorize inventing a newer order from a partial local library.
+      final repaired = local.copyWith(dirty: true);
+      final retained = await run.session.database.transaction((txn) async {
+        if (!_isCurrentCloudRun(run)) throw const CloudOperationCancelled();
+        final rows = await txn.query(
+          tableName,
+          where: 'context_key = ?',
+          whereArgs: [contextKey],
+        );
+        if (rows.isEmpty || rows.single['revision'] != local.revision) {
+          return false;
+        }
+        await _persistSnapshot(repaired, txn: txn);
+        if (!_isCurrentCloudRun(run)) throw const CloudOperationCancelled();
+        return true;
+      });
+      if (!retained || !_isCurrentCloudRun(run)) return;
       _publishSnapshot(repaired);
       run.repairBases[contextKey] = manifest.revision;
       run.missingContexts.remove(contextKey);
-      _logOrderRecovery(run, contextKey, manifest.revision, 'repair prepared');
+      _logOrderRecovery(
+        run,
+        contextKey,
+        manifest.revision,
+        'source snapshot retained',
+      );
     });
   }
 
@@ -1982,12 +2437,9 @@ class NoteSortService {
   }) async {
     if (!_isCurrentCloudRun(run)) return;
     try {
-      final manifest = await run.session.repository.readManifest(contextKey);
-      if (!_isCurrentCloudRun(run)) return;
-      if (manifest?['revision'] != revision) {
-        await run.session.repository.deleteRevision(revision, chunkCount);
-      }
-      if (!_isCurrentCloudRun(run)) return;
+      // Retain source chunks for v1. An absent current manifest is not proof
+      // that another device cannot still publish this same source revision.
+      // Discard old local cleanup requests without deleting remote history.
       await _clearCloudCleanup(run, revision);
     } catch (error, stackTrace) {
       if (_isCurrentCloudRun(run) && isCloudConnectionFailure(error)) {
@@ -1997,7 +2449,7 @@ class NoteSortService {
         await _recordCloudCleanupFailure(run, revision);
       }
       AppLogger.error(
-        '[NOTE_SORT] Failed to remove unreferenced order chunks',
+        '[NOTE_SORT] Failed to retire order cleanup request',
         error,
         stackTrace,
       );
@@ -2290,18 +2742,32 @@ class NoteSortService {
         for (final id in matchingIds) {
           if (!filtered.contains(id)) filtered.add(id);
         }
+        final source = FirebaseSyncVersion.read(
+          SyncEntityKind.order,
+          context.key,
+          {
+            ...data,
+            'context_key': context.key,
+            'sort_mode': (context.reorderable ? mode : _dateMode(mode)).name,
+            'ordered_ids': filtered,
+          },
+        );
         final migrated = NoteOrderSnapshot(
           context: context,
           mode: context.reorderable ? mode : _dateMode(mode),
           orderedNoteIds: filtered,
-          revision: const Uuid().v4(),
-          updatedAt: DateTime.now().toUtc(),
-          dirty: true,
+          revision: source.revisionId,
+          updatedAt: DateTime.fromMicrosecondsSinceEpoch(
+            source.modifiedAtMicros,
+            isUtc: true,
+          ),
           hydrated: true,
         );
-        await _persistSnapshot(migrated, database: run.session.database);
-        if (!_isCurrentCloudRun(run)) return;
-        _publishSnapshot(migrated);
+        await _mutations.run(
+          context.key,
+          () =>
+              _applyRemoteSnapshot(migrated, run: run, publishToFirebase: true),
+        );
       }
     } catch (error, stackTrace) {
       if (_isCurrentCloudRun(run)) {
@@ -2391,6 +2857,8 @@ class NoteSortService {
   Future<void> _stopCloudSync() async {
     final run = _cloudRun;
     _cloudRun = null;
+    _manualRefresh = null;
+    syncStatus.value = SyncProgress.idle;
     _nextCloudGeneration++;
     run?.uploadRetry.cancel();
     PlanService.instance.statusNotifier.removeListener(_handlePlanChange);
@@ -2404,7 +2872,7 @@ class NoteSortService {
     _remoteHydration.reset();
     _activeUpload = null;
     _deferredRemote.clear();
-    _remoteChunkCounts.clear();
+    _deferredTombstones.clear();
     _remoteContextKeys.clear();
 
     if (remoteListener != null) {
@@ -2415,6 +2883,7 @@ class NoteSortService {
   Future<void> dispose() async {
     E2EEService.instance.status.removeListener(_handleE2EEStatusChange);
     AuthService.cloudRecovery.state.removeListener(_handleCloudSessionChange);
+    FirebaseSyncPreference.instance.removeListener(_handleSyncSelectionChange);
     E2EEService.instance.deviceManager.hasUMK.removeListener(
       _handleE2EEStatusChange,
     );
@@ -2440,6 +2909,7 @@ class NoteSortService {
     }
     _cloudTasks.clear();
     _activeDragContexts.clear();
+    _deferredReplicaRefresh.clear();
     snapshots.value = const {};
   }
 }
@@ -2472,6 +2942,10 @@ class _NoteSortCloudRun {
   final blockedContexts = <String>{};
   final repairBases = <String, String>{};
   final recoveryLogs = <String>{};
+  bool manualRefreshing = false;
+  bool lastUploadFailed = false;
+  bool hasPendingTombstones = false;
+  Future<void>? bootstrapTask;
   bool remoteInitialResolved = false;
   bool dataHydrated = false;
   bool bootstrapReady = false;
@@ -2484,7 +2958,7 @@ class _NoteSortCloudRun {
 
 enum _NoteSortUploadOutcome {
   success,
-  conflictRebased,
+  conflictResolved,
   supersededSnapshot,
   retryableFailure,
   authorizationStop,
@@ -2494,6 +2968,7 @@ enum _NoteSortUploadOutcome {
 
 enum _RemoteOrderKind {
   valid,
+  deleted,
   absent,
   missingChunks,
   invalid,
@@ -2515,12 +2990,14 @@ class _NoteSortManifest {
     required this.revision,
     required this.chunkCount,
     required this.noteCount,
-    required this.updatedAt,
+    required this.version,
+    this.contentHash,
   });
   final NoteOrderContext context;
   final NoteSortMode mode;
   final String revision;
   final int chunkCount;
   final int noteCount;
-  final DateTime updatedAt;
+  final SyncVersion version;
+  final String? contentHash;
 }

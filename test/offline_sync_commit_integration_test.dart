@@ -1,3 +1,13 @@
+import 'package:better_keep/services/e2ee/device_verification.dart';
+import 'package:better_keep/services/external_sync/firebase_sync_migration.dart';
+import 'package:better_keep/services/external_sync/portable_sync_codec.dart';
+import 'package:better_keep/services/external_sync/sync_cipher.dart';
+import 'package:better_keep/services/external_sync/sync_object_cache.dart';
+import 'package:better_keep/services/file_system_io.dart';
+import 'package:better_keep/services/external_sync/firebase_sync_version.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/external_sync/sync_version.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -38,6 +48,7 @@ import 'package:better_keep/services/note_lock_transaction_service.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
+import 'package:better_keep/services/external_sync/sync_replica_store.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/review_access.dart';
@@ -98,6 +109,7 @@ void main() {
     await FileSyncTrack.createTable(db);
     await RemoteContentRetryLedger.createTable(db);
     await NoteSortService.createTable(db);
+    await SyncReplicaStore.createTables(db);
     Note.syncTriggerOverride = () {};
     e2ee.resetInitialization();
     e2ee.deviceManager.setCachedUMKForTesting(Uint8List(32));
@@ -125,6 +137,7 @@ void main() {
     });
   });
   tearDown(() async {
+    FirebaseSyncMigration.stampOverride = null;
     backend.firestore.emitAcknowledgements = false;
     AuthService.cloudRecovery.stop();
     await e2ee.deviceManager.dispose();
@@ -204,6 +217,31 @@ void main() {
     ),
   );
 
+  test('unstamped legacy note no longer blocks a newer local upload', () async {
+    allowPaid();
+    final note = await saved();
+    const path = 'users/account-a/notes/remote-note';
+    backend.firestore.documents[path] = {
+      ...payload(),
+      'updated_at': '2026-09-11T12:00:00',
+    };
+    var migrations = 0;
+    FirebaseSyncMigration.stampOverride = (kind, id) async {
+      expect(kind, SyncEntityKind.note);
+      expect(id, 'remote-note');
+      migrations++;
+      backend.firestore.documents[path]!['sync_committed_at'] =
+          Timestamp.fromDate(DateTime.utc(2026, 9, 11));
+    };
+    note.title = 'Newer local edit';
+    await note.save();
+    await NoteSyncService().sync(true);
+    expect(migrations, 1);
+    expect((await NoteSyncTrack.getByLocalId(101))?.status, SyncStatus.synced);
+    expect(backend.firestore.documents[path]!['updated_at'], endsWith('Z'));
+    expect(backend.firestore.documents[path]!['sync_meta'], isA<Map>());
+  });
+
   Future<void> seedLocalDependency() async {
     await saved();
     final data = payload();
@@ -222,6 +260,38 @@ void main() {
       errorCode: 'local-attachment-unavailable',
     );
   }
+
+  test('pausing Firebase stops library transfers but keeps identity ready and local edits', () async {
+    allowPaid();
+    await backend.firebaseSync.setEnabled(false);
+    await NoteSyncService().init();
+    await LabelSyncService().init();
+    await NoteSortService().init();
+    final note = await saved();
+    note.title = 'Local while Firebase is paused';
+    await note.save();
+    backend.firestore.reads.clear();
+    backend.firestore.queryReads.clear();
+    backend.firestore.writes.clear();
+    expect(
+      await NoteSyncService().refreshWithOutcome(),
+      SyncRefreshOutcome.deferred,
+    );
+    expect(
+      await LabelSyncService().refreshWithOutcome(),
+      SyncRefreshOutcome.deferred,
+    );
+    await NoteSortService().startCloudSync();
+    expect(AuthService.canSyncCloud, true);
+    expect(backend.firestore.reads, isEmpty);
+    expect(backend.firestore.queryReads, isEmpty);
+    expect(backend.firestore.writes, isEmpty);
+    expect(
+      (await Note.findById(note.id!))!.title,
+      'Local while Firebase is paused',
+    );
+    expect(await NoteSyncTrack.count(pending: true), greaterThan(0));
+  });
 
   group('empty cloud notes', () {
     for (final sample in [
@@ -796,32 +866,25 @@ void main() {
       );
     }
 
-    test(
-      'pending edits and deletions keep encryption deferrals truthful',
-      () async {
-        await seedEncryptionDependency();
-        final local = await saved();
-        local.title = 'Newer local work';
-        await local.save();
-        for (final action in [SyncAction.upload, SyncAction.delete]) {
-          final track = (await NoteSyncTrack.getByLocalId(101))!;
-          track.action = action;
-          await track.save();
-          final before = (await db.query(NoteSyncTrack.model)).single;
-          expect(
-            await NoteSyncService().refreshWithOutcome(),
-            SyncRefreshOutcome.deferred,
-          );
-          expect((await db.query(NoteSyncTrack.model)).single, before);
-          expect((await ledger.get('account-a', 'remote-note'))!.attempts, 1);
-          expect((await Note.findById(101))!.title, 'Newer local work');
-        }
-        expect(
-          backend.firestore.reads.where((r) => r.$1.contains('/notes/')),
-          isEmpty,
-        );
-      },
-    );
+    test('a newer local edit supersedes an older encryption deferral without consuming retries', () async {
+      await seedEncryptionDependency();
+      final local = await saved();
+      await SyncMutationJournal.install(db);
+      local.title = 'Newer local work';
+      await local.save();
+      final before = (await db.query(NoteSyncTrack.model)).single;
+      expect(
+        await NoteSyncService().refreshWithOutcome(),
+        SyncRefreshOutcome.uploadRestricted,
+      );
+      expect((await db.query(NoteSyncTrack.model)).single, before);
+      expect(await ledger.get('account-a', 'remote-note'), isNull);
+      expect((await Note.findById(101))!.title, 'Newer local work');
+      expect(
+        backend.firestore.reads.where((r) => r.$1.contains('/notes/')),
+        hasLength(1),
+      );
+    });
 
     test(
       'dependency reads coalesce and ignore late account completions',
@@ -949,11 +1012,21 @@ void main() {
           'status': 'pending',
           'public_key': base64Encode(Uint8List(32)),
           'created_at': '2026-01-01T00:00:00Z',
+          'approval_request': DeviceVerificationRequest.create(
+            account: 'account-a',
+            environment: jsonEncode([
+              'demo-offline-test',
+              'offline-test',
+              'live',
+            ]),
+            deviceId: 'pending-device',
+            publicKey: Uint8List(32),
+          ).toJson(),
         },
       });
       await tester.runAsync(() async {
         events.add(pending);
-        await cancelledRead.future;
+        await cancelledRead.future.timeout(const Duration(seconds: 5));
         await pumpEventQueue();
       });
       await tester.pump();
@@ -1533,14 +1606,15 @@ void main() {
   );
 
   test(
-    'recovery skips pending local work and retries after acknowledgement',
+    'recovery compares pending local work and clears superseded remote retries',
     () async {
       await seedLocalDependency();
+      await SyncMutationJournal.install(db);
       final local = (await Note.findById(101))!;
       local.title = 'Pending local edit';
       await local.save();
       await NoteSyncService().recheckLocalAttachmentDependencies();
-      expect(backend.firestore.reads, isEmpty);
+      expect(backend.firestore.reads, hasLength(1));
       expect((await Note.findById(101))!.title, 'Pending local edit');
       final pending = (await NoteSyncTrack.getByLocalId(101))!;
       expect(await pending.markSyncedIfUnchanged(DateTime.now()), isTrue);
@@ -1579,24 +1653,19 @@ void main() {
     await Future<void>.delayed(Duration.zero);
   });
 
-  test(
-    'pending deletion is never downloaded by a dependency recheck',
-    () async {
-      await seedLocalDependency();
-      final pending = (await NoteSyncTrack.getByLocalId(101))!;
-      await pending.setAction(SyncAction.delete);
-      await NoteSyncService().recheckLocalAttachmentDependencies();
-      expect(backend.firestore.reads, isEmpty);
-      expect(
-        (await NoteSyncTrack.getByLocalId(101))!.action,
-        SyncAction.delete,
-      );
-      expect(
-        await RemoteContentRetryLedger().get('account-a', 'remote-note'),
-        isNotNull,
-      );
-    },
-  );
+  test('dependency rechecks retain a newer local tombstone and clear the stale remote retry', () async {
+    await seedLocalDependency();
+    await SyncMutationJournal.install(db);
+    await (await Note.findById(101))!.delete();
+    await NoteSyncService().recheckLocalAttachmentDependencies();
+    expect(backend.firestore.reads, hasLength(1));
+    expect(await Note.findById(101), isNull);
+    expect((await NoteSyncTrack.getByLocalId(101))!.action, SyncAction.delete);
+    expect(
+      await RemoteContentRetryLedger().get('account-a', 'remote-note'),
+      isNull,
+    );
+  });
 
   test('late dependency read cannot apply after account switching', () async {
     await seedLocalDependency();
@@ -1989,11 +2058,420 @@ void main() {
       isNull,
     );
   });
+  Future<void> pullLabels(Map<String, Map<String, dynamic>> values) async {
+    AppState.labelCloudSyncCheckpoint = null;
+    var reads = 0;
+    backend.firestore.queryResponse = (_, _) async =>
+        OfflineQuerySnapshot(reads++ == 1 ? values : {});
+    await LabelSyncService().refresh();
+  }
+
+  test('Firebase label pulls replace older pending work and preserve source timestamps', () async {
+    final label = Label(name: 'Local');
+    await label.save();
+    await SyncMutationJournal.install(db);
+    final current = (await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.label,
+      label.syncId!,
+    ))!;
+    final incoming = SyncVersion(
+      kind: SyncEntityKind.label,
+      entityId: label.syncId!,
+      revisionId: 'remote-label',
+      modifiedAtMicros: current.modifiedAtMicros + 10000,
+      deleted: false,
+    );
+    await pullLabels({
+      label.syncId!: FirebaseSyncVersion.bind({
+        'name': 'Remote label',
+        'is_system': 1,
+        'created_at': '2026-01-02T03:04:05Z',
+      }, incoming),
+    });
+    final restored = (await Label.findBySyncId(label.syncId!))!;
+    expect(restored.name, 'Remote label');
+    expect(restored.isSystem, true);
+    expect(restored.createdAt, DateTime.utc(2026, 1, 2, 3, 4, 5));
+    expect(
+      restored.updatedAt!.microsecondsSinceEpoch,
+      incoming.modifiedAtMicros,
+    );
+    expect(
+      (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.label,
+        label.syncId!,
+      ))!.revisionId,
+      incoming.revisionId,
+    );
+    expect(
+      (await LabelSyncTrack.getByLocalId(label.id!))!.status,
+      LabelSyncStatus.synced,
+    );
+  });
+
+  test('label tombstones use LWW and name repair cannot recreate the deleted entity', () async {
+    final label = Label(name: 'Work');
+    await label.save();
+    await saved();
+    await db.update(Note.model, {'labels': 'Work'}, where: 'id = 101');
+    await SyncMutationJournal.install(db);
+    final current = (await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.label,
+      label.syncId!,
+    ))!;
+    Map<String, dynamic> tombstone(int time) => FirebaseSyncVersion.bind(
+      {},
+      SyncVersion(
+        kind: SyncEntityKind.label,
+        entityId: label.syncId!,
+        revisionId: 'delete-$time',
+        modifiedAtMicros: time,
+        deleted: true,
+      ),
+    );
+    await pullLabels({label.syncId!: tombstone(current.modifiedAtMicros - 1)});
+    expect(await Label.findBySyncId(label.syncId!), isNotNull);
+    await pullLabels({
+      label.syncId!: tombstone(current.modifiedAtMicros + 10000),
+    });
+    expect(await Label.findBySyncId(label.syncId!), isNull);
+    await Label.fixLabels();
+    expect(await Label.findByName('Work'), isNull);
+    expect(
+      (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.label,
+        label.syncId!,
+      ))!.deleted,
+      true,
+    );
+  });
+
+  test('local label deletion queues membership edits as independent note revisions', () async {
+    final label = Label(name: 'Work');
+    await label.save();
+    await saved();
+    await db.update(Note.model, {'labels': 'Work,Other'}, where: 'id = 101');
+    await SyncMutationJournal.install(db);
+    final before = (await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.note,
+      'remote-note',
+    ))!;
+    await label.delete();
+    expect((await Note.findById(101))!.labels, 'Other');
+    expect((await NoteSyncTrack.getByLocalId(101))!.status, SyncStatus.pending);
+    expect(
+      (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.note,
+        'remote-note',
+      ))!.compareTo(before),
+      greaterThan(0),
+    );
+  });
+
+  test('same-name labels keep their stable identities behind one folder and edit together', () async {
+    final a = Label(name: 'Work', syncId: 'label-a');
+    final b = Label(name: 'Work', syncId: 'label-b');
+    await a.save();
+    await b.save();
+    await saved();
+    await db.update(Note.model, {'labels': 'Work'}, where: 'id = 101');
+    await SyncMutationJournal.install(db);
+    expect(await db.query(Label.model), hasLength(2));
+    expect((await Label.get()).single.syncId, 'label-a');
+    a.name = 'Renamed';
+    await a.save();
+    expect((await Label.findBySyncId('label-b'))!.name, 'Renamed');
+    expect((await Label.get()).single.name, 'Renamed');
+    expect((await Note.findById(101))!.labels, 'Renamed');
+    await a.delete();
+    expect(await db.query(Label.model), isEmpty);
+    expect(
+      (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.label,
+        'label-a',
+      ))!.deleted,
+      true,
+    );
+    expect(
+      (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.label,
+        'label-b',
+      ))!.deleted,
+      true,
+    );
+  });
+
   test(
-    'deletion retries Storage cleanup after the tombstone committed',
+    'label deletion rolls back if a membership update cannot commit',
+    () async {
+      final label = Label(name: 'Work');
+      await label.save();
+      await saved();
+      await db.update(Note.model, {'labels': 'Work'}, where: 'id = 101');
+      await SyncMutationJournal.install(db);
+      await db.execute(
+        "CREATE TRIGGER fail_label_membership BEFORE UPDATE OF labels ON note BEGIN SELECT RAISE(ABORT, 'synthetic membership failure'); END",
+      );
+      await expectLater(label.delete(), throwsA(anything));
+      expect(await Label.findById(label.id!), isNotNull);
+      expect((await Note.findById(101))!.labels, 'Work');
+      expect(
+        (await SyncMutationJournal.current(
+          db,
+          SyncEntityKind.label,
+          label.syncId!,
+        ))!.deleted,
+        false,
+      );
+      expect(
+        (await LabelSyncTrack.getByLocalId(label.id!))!.action,
+        LabelSyncAction.upload,
+      );
+    },
+  );
+
+  test(
+    'label publication cannot overwrite a newer concurrent remote edit',
+    () async {
+      allowPaid();
+      final label = Label(name: 'Local');
+      await label.save();
+      await SyncMutationJournal.install(db);
+      final current = (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.label,
+        label.syncId!,
+      ))!;
+      final incoming = SyncVersion(
+        kind: SyncEntityKind.label,
+        entityId: label.syncId!,
+        revisionId: 'remote-race',
+        modifiedAtMicros: current.modifiedAtMicros + 10000,
+        deleted: false,
+      );
+      final winner = FirebaseSyncVersion.bind({
+        'name': 'Remote winner',
+        'created_at': '2026-01-01T00:00:00Z',
+      }, incoming);
+      backend.firestore.commit = () async {
+        backend.firestore.commit = null;
+        backend.firestore.documents['users/account-a/labels/${label.syncId}'] =
+            winner;
+      };
+      await LabelSyncService().sync(true);
+      expect((await Label.findById(label.id!))!.name, 'Remote winner');
+      expect(
+        backend
+            .firestore
+            .documents['users/account-a/labels/${label.syncId}']!['name'],
+        'Remote winner',
+      );
+      expect(
+        (await SyncMutationJournal.current(
+          db,
+          SyncEntityKind.label,
+          label.syncId!,
+        ))!.revisionId,
+        incoming.revisionId,
+      );
+    },
+  );
+
+  test('unmigrated protected sketch metadata cannot be silently dropped by Firebase publication', () async {
+    allowPaid();
+    final local = await saved();
+    await db.update(
+      Note.model,
+      {
+        'locked': 1,
+        'attachments': jsonEncode([
+          {
+            'type': 'sketch',
+            'data': {'encrypted_metadata': 'local-protected-source'},
+          },
+        ]),
+      },
+      where: 'id = ?',
+      whereArgs: [local.id],
+    );
+    await NoteSyncTrack(
+      localId: 101,
+      remoteId: 'remote-note',
+      action: SyncAction.upload,
+    ).save();
+    await NoteSyncService().sync(true);
+    expect(
+      backend.firestore.documents['users/account-a/notes/remote-note'],
+      isNull,
+    );
+    expect((await NoteSyncTrack.getByLocalId(101))!.status, SyncStatus.pending);
+    expect(NoteSyncService().syncFailed.value, contains(101));
+  });
+
+  test('Firebase round-trip preserves the external semantic revision across independent encryption', () async {
+    allowPaid();
+    final local = await saved();
+    await SyncMutationJournal.install(db);
+    await SyncObjectCache.createTable(db);
+    local.title = 'Portable note';
+    await local.save();
+    final source = (await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.note,
+      'remote-note',
+    ))!;
+    final cipher = await SyncCipher.create('account-a', Uint8List(32));
+    PortableSyncCodec codec(String scope) => PortableSyncCodec(
+      cache: SyncObjectCache(
+        database: db,
+        files: const IoFileSystem(),
+        root: '${dir.path}/$scope',
+        scope: scope,
+        cipher: cipher,
+      ),
+      readAttachment: (_) => throw StateError('No media in this fixture'),
+      writeAttachment: (_, _, _, _) =>
+          throw StateError('No media in this fixture'),
+    );
+    try {
+      final before = await codec('first-cache')
+          .encode(source, (await db.query(Note.model)).single);
+      await NoteSyncService().sync(true);
+      final wire =
+          backend.firestore.documents['users/account-a/notes/remote-note']!;
+      expect(
+        FirebaseSyncVersion.read(
+          SyncEntityKind.note,
+          'remote-note',
+          wire,
+        ).revisionId,
+        source.revisionId,
+      );
+      // Rehydrate the Firebase representation into an empty note row while
+      // retaining the edit identity, as another approved device would.
+      await db.transaction(
+        (txn) => SyncMutationJournal.withoutCapture(
+          txn,
+          () => txn.delete(Note.model),
+        ),
+      );
+      expect(
+        await NoteSyncService().retryFailedRemoteNote('remote-note'),
+        true,
+      );
+      final after = await codec('independent-cache')
+          .encode(source, (await db.query(Note.model)).single);
+      expect(after.payloadObjectId, isNot(before.payloadObjectId));
+      expect(after.contentFingerprint, before.contentFingerprint);
+      expect(after.sameContent(before), true);
+    } finally {
+      cipher.dispose();
+    }
+  });
+
+  test(
+    'order Firebase round trip preserves an external source fingerprint',
+    () async {
+      allowPaid();
+      await SyncMutationJournal.install(db);
+      await SyncObjectCache.createTable(db);
+      final sort = NoteSortService();
+      await sort.init();
+      const context = NoteOrderContext.mainGrid();
+      final sourceSnapshot = NoteOrderSnapshot(
+        context: context,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: ['visible', 'not-yet-downloaded'],
+        revision: 'external-order',
+        updatedAt: DateTime.utc(2026, 1, 2, 3, 4, 5, 123, 456),
+        hydrated: true,
+      );
+      await sort.applyRemoteSnapshotForTesting(sourceSnapshot);
+      final source = (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.order,
+        context.key,
+      ))!;
+      final cipher = await SyncCipher.create('account-a', Uint8List(32));
+      PortableSyncCodec codec(String scope) => PortableSyncCodec(
+        cache: SyncObjectCache(
+          database: db,
+          files: const IoFileSystem(),
+          root: '${dir.path}/$scope',
+          scope: scope,
+          cipher: cipher,
+        ),
+        readAttachment: (_) => throw StateError('Order has no media'),
+        writeAttachment: (_, _, _, _) => throw StateError('Order has no media'),
+      );
+      Future<Map<String, Object?>> row() async => (await db.query(
+        NoteSortService.tableName,
+        where: 'context_key = ?',
+        whereArgs: [context.key],
+      )).single;
+      try {
+        final before = await codec('order-before').encode(
+          source,
+          await row(),
+          orderedIds: sourceSnapshot.orderedNoteIds,
+        );
+        NoteSortService.cloudRepositoryOverride =
+            FirestoreNoteSortCloudRepository(
+              firestore: backend.firestore,
+              userId: 'account-a',
+              schemaVersion: 2,
+            );
+        NoteSortService.canReceiveCloudOverride = true;
+        NoteSortService.canPushCloudOverride = true;
+        await sort.uploadSnapshotWithRetryForTesting(
+          sourceSnapshot.copyWith(dirty: true),
+        );
+        expect(sort.snapshotFor(context).dirty, isFalse);
+        await sort.dispose();
+        await db.transaction(
+          (txn) => SyncMutationJournal.withoutCapture(txn, () async {
+            await txn.delete(
+              NoteSortService.positionTableName,
+              where: 'context_key = ?',
+              whereArgs: [context.key],
+            );
+            await txn.delete(
+              NoteSortService.tableName,
+              where: 'context_key = ?',
+              whereArgs: [context.key],
+            );
+          }),
+        );
+        await sort.init();
+        expect(await sort.receiveRemoteContextForTesting(context.key), 'valid');
+        final restored = sort.snapshotFor(context);
+        expect(restored.revision, source.revisionId);
+        expect(restored.updatedAt, sourceSnapshot.updatedAt);
+        expect(restored.orderedNoteIds, sourceSnapshot.orderedNoteIds);
+        final after = await codec('order-after')
+            .encode(source, await row(), orderedIds: restored.orderedNoteIds);
+        expect(after.payloadObjectId, isNot(before.payloadObjectId));
+        expect(after.contentFingerprint, before.contentFingerprint);
+      } finally {
+        cipher.dispose();
+      }
+    },
+  );
+
+  test(
+    'tombstone publication retains files needed by concurrent revivals',
     () async {
       allowPaid();
       backend.storage.failList = true;
+      backend.storage.objects.add('history-source');
       backend.firestore.documents['users/account-a/notes/remote-note'] = {
         'local_id': 101,
         'updated_at': '2026-09-01T00:00:00Z',
@@ -2005,88 +2483,168 @@ void main() {
         action: SyncAction.delete,
       ).save();
       await NoteSyncService().sync(true);
-      expect(backend.storage.lists, 1);
-      expect(await NoteSyncTrack.getByLocalId(101), isNotNull);
+      expect(backend.storage.lists, 0);
+      expect(backend.storage.objects, {'history-source'});
+      expect(await NoteSyncTrack.getByLocalId(101), isNull);
+      final wire =
+          backend.firestore.documents['users/account-a/notes/remote-note']!;
+      expect(wire['deleted'], true);
       expect(
-        backend
-            .firestore
-            .documents['users/account-a/notes/remote-note']!['deleted'],
-        isTrue,
+        FirebaseSyncVersion.read(
+          SyncEntityKind.note,
+          'remote-note',
+          wire,
+        ).deleted,
+        true,
       );
-      backend.storage.failList = false;
-      AuthService.cloudRecovery.state.value = CloudSessionState.ready;
-      await NoteSyncService().sync(true);
-      expect(backend.storage.lists, 2);
-      expect(await NoteSyncTrack.getByLocalId(101), isNull);
     },
   );
+
   test(
-    'partial Storage deletion retries remaining files after service restart',
+    'a new local deletion survives an older tombstone acknowledgement',
     () async {
       allowPaid();
-      backend.firestore.documents['users/account-a/notes/remote-note'] = {
-        'deleted': true,
-      };
-      backend.storage.objects.addAll(['first', 'second']);
-      backend.storage.delete = (value) async {
-        if (value == 'second') throw TimeoutException('offline');
-      };
       await NoteSyncTrack(
         localId: 101,
         remoteId: 'remote-note',
         action: SyncAction.delete,
       ).save();
-      await NoteSyncService().sync(true);
-      expect(backend.storage.objects, {'second'});
-      expect(await NoteSyncTrack.getByLocalId(101), isNotNull);
-      await NoteSyncService().dispose();
-      backend.storage.delete = null;
-      AuthService.cloudRecovery.state.value = CloudSessionState.ready;
-      await NoteSyncService().sync(true);
-      expect(backend.storage.objects, isEmpty);
-      expect(await NoteSyncTrack.getByLocalId(101), isNull);
-    },
-  );
-
-  test(
-    'authoritative document absence still requires Storage cleanup',
-    () async {
-      allowPaid();
-      backend.firestore.response = (_, _) async => OfflineSnapshot(value: null);
-      backend.storage.objects.add('orphan');
-      await NoteSyncTrack(
-        localId: 101,
-        remoteId: 'remote-note',
-        action: SyncAction.delete,
-      ).save();
-      await NoteSyncService().sync(true);
-      expect(backend.storage.lists, 1);
-      expect(backend.storage.objects, isEmpty);
-      expect(await NoteSyncTrack.getByLocalId(101), isNull);
-    },
-  );
-
-  test(
-    'newly queued deletion survives an older cleanup acknowledgement',
-    () async {
-      allowPaid();
-      backend.firestore.documents['users/account-a/notes/remote-note'] = {
-        'deleted': true,
-      };
-      backend.storage.objects.add('file');
-      backend.storage.delete = (_) async {
+      backend.firestore.commit = () async {
+        backend.firestore.commit = null;
         final pending = await NoteSyncTrack.getByLocalId(101);
         await pending!.setAction(SyncAction.delete);
       };
-      await NoteSyncTrack(
-        localId: 101,
-        remoteId: 'remote-note',
-        action: SyncAction.delete,
-      ).save();
       await NoteSyncService().sync(true);
       expect(await NoteSyncTrack.getByLocalId(101), isNotNull);
     },
   );
+
+  test(
+    'Firebase applies newer edits over pending local work without restamping',
+    () async {
+      final local = await saved();
+      await SyncMutationJournal.install(db);
+      local.title = 'Pending local';
+      await local.save();
+      final current = (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.note,
+        'remote-note',
+      ))!;
+      final remoteVersion = SyncVersion(
+        kind: SyncEntityKind.note,
+        entityId: 'remote-note',
+        revisionId: 'external-source',
+        modifiedAtMicros: current.modifiedAtMicros + 10000,
+        deleted: false,
+      );
+      final wire = FirebaseSyncVersion.bind(payload(), remoteVersion);
+      backend.firestore.response = (_, _) async => OfflineSnapshot(value: wire);
+      expect(
+        await NoteSyncService().retryFailedRemoteNote('remote-note'),
+        true,
+      );
+      expect((await Note.findById(101))!.title, 'Remote');
+      expect(
+        (await SyncMutationJournal.current(
+          db,
+          SyncEntityKind.note,
+          'remote-note',
+        ))!.revisionId,
+        'external-source',
+      );
+      expect(
+        (await NoteSyncTrack.getByLocalId(101))!.status,
+        SyncStatus.synced,
+      );
+      expect((await Note.findById(101))!.createdAt, DateTime.utc(2026, 9, 1));
+    },
+  );
+
+  test('older Firebase deletions lose to local edits and newer tombstones prevent resurrection', () async {
+    final local = await saved();
+    await SyncMutationJournal.install(db);
+    local.title = 'Local edit';
+    await local.save();
+    final current = (await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.note,
+      'remote-note',
+    ))!;
+    Map<String, dynamic> deletion(int time) => FirebaseSyncVersion.bind(
+      {'local_id': 101},
+      SyncVersion(
+        kind: SyncEntityKind.note,
+        entityId: 'remote-note',
+        revisionId: 'delete-$time',
+        modifiedAtMicros: time,
+        deleted: true,
+      ),
+    );
+    backend.firestore.response = (_, _) async =>
+        OfflineSnapshot(value: deletion(current.modifiedAtMicros - 1));
+    await NoteSyncService().retryFailedRemoteNote('remote-note');
+    expect(await Note.findById(101), isNotNull);
+    backend.firestore.response = (_, _) async =>
+        OfflineSnapshot(value: deletion(current.modifiedAtMicros + 10000));
+    await NoteSyncService().retryFailedRemoteNote('remote-note');
+    expect(await Note.findById(101), isNull);
+    expect(
+      (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.note,
+        'remote-note',
+      ))!.deleted,
+      true,
+    );
+    backend.firestore.response = (_, _) async =>
+        OfflineSnapshot(value: payload());
+    await NoteSyncService().retryFailedRemoteNote('remote-note');
+    expect(await Note.findById(101), isNull);
+  });
+
+  test('Firestore transaction retries preserve a newer edit arriving before publication', () async {
+    allowPaid();
+    final local = await saved();
+    await SyncMutationJournal.install(db);
+    local.title = 'Pending';
+    await local.save();
+    final captured = (await SyncMutationJournal.current(
+      db,
+      SyncEntityKind.note,
+      'remote-note',
+    ))!;
+    final winner = FirebaseSyncVersion.bind(
+      payload(),
+      SyncVersion(
+        kind: SyncEntityKind.note,
+        entityId: 'remote-note',
+        revisionId: 'concurrent-remote',
+        modifiedAtMicros: captured.modifiedAtMicros + 10000,
+        deleted: false,
+      ),
+    );
+    backend.firestore.commit = () async {
+      backend.firestore.commit = null;
+      backend.firestore.documents['users/account-a/notes/remote-note'] = winner;
+    };
+    await NoteSyncService().sync(true);
+    expect(
+      backend
+          .firestore
+          .documents['users/account-a/notes/remote-note']!['title'],
+      'Remote',
+    );
+    expect((await Note.findById(101))!.title, 'Remote');
+    expect(
+      (await SyncMutationJournal.current(
+        db,
+        SyncEntityKind.note,
+        'remote-note',
+      ))!.revisionId,
+      'concurrent-remote',
+    );
+  });
 
   test(
     'ordering manifest completion after pause leaves local work pending',
@@ -2161,6 +2719,89 @@ void main() {
         )).single['dirty'],
         1,
       );
+    },
+  );
+
+  test('Firebase selection cancels an in-flight order publication without acknowledging it', () async {
+    allowPaid();
+    final sort = NoteSortService();
+    final cloud = _PausedSortRepository();
+    NoteSortService.cloudRepositoryOverride = cloud;
+    await sort.init();
+    final snapshot = NoteOrderSnapshot(
+      context: const NoteOrderContext.mainGrid(),
+      mode: NoteSortMode.custom,
+      orderedNoteIds: ['note-a'],
+      revision: 'selection-pause',
+      updatedAt: DateTime.now(),
+      dirty: true,
+    );
+    final operation = sort.uploadSnapshotWithRetryForTesting(snapshot);
+    await cloud.started.future;
+    await backend.firebaseSync.setEnabled(false);
+    expect(AuthService.canSyncCloud, true);
+    expect(sort.canReceiveCloudForTesting, false);
+    cloud.release.complete();
+    await operation;
+    expect(cloud.commits, 0);
+    expect(sort.snapshots.value[snapshot.context.key]!.dirty, true);
+  });
+
+  test('manual ordering refresh waits for its upload and coalesces duplicate requests', () async {
+    allowPaid();
+    backend.firestore.queryResponse = (_, options) async {
+      expect(options?.source, Source.server);
+      return OfflineQuerySnapshot({});
+    };
+    backend.firestore.response = (_, _) async => OfflineSnapshot();
+    final sort = NoteSortService();
+    final cloud = _PausedSortRepository();
+    NoteSortService.cloudRepositoryOverride = cloud;
+    const context = NoteOrderContext.mainGrid();
+    await sort.init();
+    await sort.setMode(context, NoteSortMode.updatedNewest);
+    final refresh = sort.refreshWithOutcome(dataHydrated: true);
+    expect(sort.refreshWithOutcome(dataHydrated: true), same(refresh));
+    await cloud.started.future;
+    expect(sort.syncStatus.value.isActive, true);
+    expect(sort.snapshots.value[context.key]!.dirty, true);
+    cloud.release.complete();
+    expect(await refresh, SyncRefreshOutcome.complete);
+    expect(sort.snapshots.value[context.key]!.dirty, false);
+    expect(sort.syncStatus.value.phase, SyncPhase.complete);
+    expect(cloud.commits, 1);
+  });
+
+  test('invalid Firebase ordering data fails manual refresh instead of reporting success', () async {
+    backend.firestore.queryResponse = (_, _) async => OfflineQuerySnapshot({
+      const NoteOrderContext.mainGrid().key: {'schema_version': 999},
+    });
+    backend.firestore.response = (_, _) async => OfflineSnapshot();
+    final sort = NoteSortService();
+    expect(
+      await sort.refreshWithOutcome(dataHydrated: true),
+      SyncRefreshOutcome.failed,
+    );
+    expect(sort.syncStatus.value.phase, SyncPhase.failed);
+  });
+
+  test(
+    'manual ordering refresh retains dirty work for free accounts',
+    () async {
+      backend.firestore.queryResponse = (_, _) async =>
+          OfflineQuerySnapshot({});
+      backend.firestore.response = (_, _) async => OfflineSnapshot();
+      final sort = NoteSortService();
+      await sort.init();
+      const context = NoteOrderContext.mainGrid();
+      await sort.setMode(context, NoteSortMode.updatedNewest);
+      expect(
+        await sort.refreshWithOutcome(dataHydrated: true),
+        SyncRefreshOutcome.uploadRestricted,
+      );
+      expect(sort.syncStatus.value.phase, SyncPhase.uploadRestricted);
+      expect(sort.snapshots.value[context.key]!.dirty, true);
+      expect(backend.firestore.writes, isEmpty);
     },
   );
 
@@ -2324,6 +2965,9 @@ class _PausedSortRepository implements NoteSortCloudRepository {
     required String? baseRevision,
     required int chunkCount,
     required int noteCount,
+    required DateTime updatedAt,
+    required String contentHash,
+    bool deleted = false,
   }) async {
     await beforeCommit?.call();
     commits++;

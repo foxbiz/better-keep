@@ -22,6 +22,50 @@ void main() {
   }
 
   group('selectFirebaseEmulatorHost', () {
+    test('physical device field takes precedence over the build-time host', () {
+      for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+        expect(
+          selectFirebaseEmulatorHost(
+            isWeb: false,
+            platform: platform,
+            isAndroidEmulator: false,
+            isAppleSimulator: false,
+            physicalDeviceHost: ' 192.168.1.25 ',
+            configuredHost: '192.168.1.26',
+          ),
+          '192.168.1.25',
+        );
+      }
+    });
+    test(
+      'explicit environment host overrides browser and simulator defaults',
+      () {
+        for (final platform in TargetPlatform.values) {
+          expect(
+            selectFirebaseEmulatorHost(
+              isWeb: true,
+              platform: platform,
+              isAndroidEmulator: true,
+              isAppleSimulator: true,
+              physicalDeviceHost: '',
+              configuredHost: ' dev.example.test ',
+            ),
+            'dev.example.test',
+          );
+        }
+        expect(
+          () => selectFirebaseEmulatorHost(
+            isWeb: true,
+            platform: TargetPlatform.linux,
+            isAndroidEmulator: false,
+            isAppleSimulator: false,
+            physicalDeviceHost: '',
+            configuredHost: 'https://dev.example.test/path',
+          ),
+          throwsFormatException,
+        );
+      },
+    );
     test('uses explicit IPv4 loopback for browsers', () {
       expect(
         selectHost(isWeb: true, platform: TargetPlatform.linux),
@@ -92,6 +136,36 @@ void main() {
   });
 
   group('FirebaseEmulatorEndpoints', () {
+    test(
+      'HTTPS browser origin is validated and included in backend identity',
+      () {
+        expect(normalizeEmulatorWebOrigin(''), isNull);
+        expect(
+          normalizeEmulatorWebOrigin(' https://dev.example.test/ '),
+          'https://dev.example.test',
+        );
+        for (final value in [
+          'http://dev.example.test',
+          'https://user@dev.example.test',
+          'https://dev.example.test/path',
+          'https://dev.example.test?key=value',
+        ]) {
+          expect(
+            () => normalizeEmulatorWebOrigin(value),
+            throwsFormatException,
+          );
+        }
+        const proxied = FirebaseEmulatorEndpoints(
+          '127.0.0.1',
+          webProxyOrigin: 'https://dev.example.test',
+        );
+        expect(proxied.routingIdentity, '127.0.0.1|https://dev.example.test');
+        expect(
+          proxied.functionsBaseUrl(projectId: 'test', region: 'us-central1'),
+          'https://dev.example.test/__emulator/functions/test/us-central1',
+        );
+      },
+    );
     const endpoints = FirebaseEmulatorEndpoints('192.168.1.25');
 
     test('builds Functions and Hosting URLs from the resolved host', () {

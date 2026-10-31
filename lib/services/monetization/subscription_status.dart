@@ -23,7 +23,7 @@ SubscriptionStatus? parseVerifiedProviderEntitlement(
     return null;
   }
   final status = SubscriptionStatus.fromFirestore(data);
-  if (status.plan != UserPlan.pro ||
+  if (!status.plan.isPaid ||
       !status.isActive ||
       status.billingPeriod == null ||
       !_verifiedProviderSources.contains(status.purchasePlatform)) {
@@ -184,7 +184,7 @@ class SubscriptionStatus {
 
   /// Whether an active paid provider, rather than a trial, grants access.
   bool get isActiveProviderEntitlement =>
-      plan == UserPlan.pro &&
+      plan.isPaid &&
       isActive &&
       _verifiedProviderSources.contains(purchasePlatform);
 

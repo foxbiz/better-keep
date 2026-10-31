@@ -101,6 +101,21 @@ export const RAZORPAY_PLANS: Record<
 };
 
 // Default currency for Razorpay
+export function razorpayPlanConfig(
+	tier: "lite" | "pro",
+	currency: SupportedCurrency,
+	period: "monthly" | "yearly",
+) {
+	const pro = RAZORPAY_PLANS[currency][period];
+	return tier === "lite"
+		? {
+				...pro,
+				amount: Math.floor(pro.amount / 2),
+				name: pro.name.replace("Pro", "Lite"),
+			}
+		: pro;
+}
+
 // NOTE: Razorpay Subscriptions API only supports INR for most Indian merchants.
 // USD subscriptions require special approval from Razorpay.
 // Set to INR as default until multi-currency subscriptions are approved.
@@ -128,6 +143,8 @@ export const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {
 export const IOS_PRODUCT_IDS = {
 	monthly: "pro_monthly",
 	yearly: "pro_yearly",
+	liteMonthly: "lite_monthly",
+	liteYearly: "lite_yearly",
 } as const;
 
 // Trial configuration (can be controlled via environment variables)
@@ -138,3 +155,8 @@ export const DEBUG_TRIAL_MINUTES =
 	isEmulator && process.env.DEBUG_TRIAL_MINUTES
 		? Number.parseInt(process.env.DEBUG_TRIAL_MINUTES, 10)
 		: null;
+
+// OAuth application secret, never a user credential encryption key.
+export const googleDriveClientSecret = defineSecret(
+	"GOOGLE_DRIVE_CLIENT_SECRET",
+);

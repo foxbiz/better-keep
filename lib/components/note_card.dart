@@ -21,6 +21,7 @@ import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/services/reminder_schedule_result_presenter.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/state.dart';
@@ -561,6 +562,7 @@ class _NoteCardState extends State<NoteCard>
     WidgetsBinding.instance.addPostFrameCallback((_) => _anim.forward());
 
     super.initState();
+    _repairMissingSketchPreviews();
   }
 
   @override
@@ -576,6 +578,7 @@ class _NoteCardState extends State<NoteCard>
   @override
   void didUpdateWidget(NoteCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _repairMissingSketchPreviews();
 
     final contentChanged = widget.note.content != _lastContent;
     final lockedChanged = widget.note.locked != _lastLocked;
@@ -592,6 +595,44 @@ class _NoteCardState extends State<NoteCard>
       _lastReminder = widget.note.reminder;
       _scheduleReminderExpiration();
     }
+  }
+
+  Note? _previewRepairNote;
+  String? _previewRepairSignature;
+
+  void _repairMissingSketchPreviews() {
+    final note = widget.note;
+    if (note.id == null ||
+        note.locked ||
+        !note.sketches.any(
+          (sketch) =>
+              sketch.hasStrokesFile &&
+              (sketch.previewImage == null || sketch.previewImage!.isEmpty),
+        )) {
+      return;
+    }
+    final signature = SketchPreviewRepairService.sourceSignatureFor(note);
+    if (identical(_previewRepairNote, note) &&
+        _previewRepairSignature == signature) {
+      return;
+    }
+    _previewRepairNote = note;
+    _previewRepairSignature = signature;
+    final database = AppState.db;
+    bool current() =>
+        mounted &&
+        identical(AppState.db, database) &&
+        identical(widget.note, note) &&
+        !note.locked &&
+        SketchPreviewRepairService.sourceSignatureFor(note) == signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!current()) return;
+      await SketchPreviewRepairService.repairMissingPreviews(
+        note,
+        isCurrent: current,
+      );
+      if (current()) setState(() {});
+    });
   }
 
   void _scheduleReminderExpiration() {

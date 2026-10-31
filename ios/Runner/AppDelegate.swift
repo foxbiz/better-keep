@@ -1,4 +1,5 @@
 import Flutter
+import GoogleSignIn
 import UIKit
 import BackgroundTasks
 import UserNotifications
@@ -58,6 +59,33 @@ import flutter_local_notifications
         }
       }
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BetterKeepStorageGoogle") {
+      let channel = FlutterMethodChannel(name: "com.betterkeep/storage_google", binaryMessenger: registrar.messenger())
+    channel.setMethodCallHandler { call, result in
+      let signIn = GIDSignIn.sharedInstance
+      if call.method == "clientId" {
+        result(signIn.configuration?.clientID)
+        return
+      }
+      guard call.method == "grant" else { result(FlutterMethodNotImplemented); return }
+      guard let user = signIn.currentUser else {
+        result(FlutterError(code: "consent_required", message: "Authorize Google Drive again", details: nil)); return
+      }
+      user.refreshTokensIfNeeded { refreshed, error in
+        guard error == nil, let refreshed = refreshed,
+          let expiry = refreshed.accessToken.expirationDate else {
+          result(FlutterError(code: "consent_required", message: "Authorize Google Drive again", details: nil)); return
+        }
+        result([
+          "clientId": refreshed.configuration.clientID,
+          "accessToken": refreshed.accessToken.tokenString,
+          "refreshToken": refreshed.refreshToken.tokenString,
+          "expiresAt": Int64(expiry.timeIntervalSince1970 * 1000)
+        ])
+      }
+    }
+    }
+
   }
 
   @available(iOS 13.0, *)

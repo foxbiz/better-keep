@@ -36,7 +36,7 @@ class Labels extends StatefulWidget {
 class _LabelsState extends State<Labels> {
   List<Label>? labels;
   late List<String> selectedLabels;
-  late final Function(LabelEvent) _labelsUpdate;
+  int _loadGeneration = 0;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _newLabelController = TextEditingController();
   final FocusNode _newLabelFocusNode = FocusNode();
@@ -49,41 +49,21 @@ class _LabelsState extends State<Labels> {
     super.initState();
     selectedLabels = widget.selectedLabels?.toSet().toList() ?? [];
 
-    Label.get()
-        .then((fetchedLabels) {
-          if (!mounted) return;
-          setState(() {
-            labels = fetchedLabels;
-          });
-        })
-        .catchError((e) {
-          if (!mounted) return;
-          setState(() {
-            labels = [];
-          });
-        });
-
-    _labelsUpdate = (event) {
-      if (!mounted) return;
-      setState(() {
-        if (event.event == "created") {
-          labels = [event.label, ...(labels ?? [])];
-        } else if (event.event == "deleted") {
-          labels = (labels ?? [])
-              .where((label) => label.id != event.label.id)
-              .toList();
-        } else if (event.event == "updated") {
-          final index = (labels ?? []).indexWhere(
-            (label) => label.id == event.label.id,
-          );
-          if (index != -1) {
-            labels![index] = event.label;
-          }
-        }
-      });
-    };
-
+    _labelsUpdate();
     Label.on("changed", _labelsUpdate);
+  }
+
+  Future<void> _labelsUpdate([LabelEvent? event]) async {
+    final generation = ++_loadGeneration;
+    try {
+      // Resolve same-name replicas through the same display list as the tabs.
+      final fetchedLabels = await Label.get();
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => labels = fetchedLabels);
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => labels ??= []);
+    }
   }
 
   @override

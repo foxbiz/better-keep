@@ -12,6 +12,10 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   crypto: ^3.0.6
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.4.2
+  flutter_web_auth_2: ^5.1.0
+  flutter_web_auth_2_platform_interface: ^5.0.0
   alarm: ^5.1.5
   sqflite_common_ffi: ^2.4.0
   flutter_quill: ^11.5.0
@@ -40,6 +44,7 @@ dependencies:
   firebase_core: 4.13.0
   firebase_auth: 6.5.7
   google_sign_in: ^7.2.0
+  google_sign_in_platform_interface: ^3.1.0
   sign_in_with_apple: ^8.1.0
   # 6.8.0 is required for the Firebase iOS 12.17.0 SPM pin, but its published
   # Android plugin reports MissingPluginException after every transaction.
@@ -58,6 +63,7 @@ dependencies:
   url_launcher: ^6.3.2
   metadata_fetch: ^0.4.2
   http: ^1.6.0
+  xml: ^7.0.1
   sqflite_common_ffi_web: ^1.1.0
   # 0.4.5+2 fails under the current Kotlin/AGP toolchain because its Android
   # registrar is not resolved during compilation. Android activation remains
@@ -96,6 +102,7 @@ dependency_overrides:
     path: third_party/quill_native_bridge_android
 
 dev_dependencies:
+  flutter_secure_storage_platform_interface: ^2.1.1
   msix: ^3.16.7
   flutter_test:
     sdk: flutter

@@ -7,6 +7,7 @@ export interface RazorpaySubscriptionEntity {
 	current_end?: number | null;
 	ended_at?: number | null;
 	id: string;
+	notes?: { tier?: string; plan?: string } | null;
 	plan_id?: string | null;
 	status?: string | null;
 }
@@ -97,11 +98,13 @@ function state(value: string | null | undefined): string {
 
 export function normalizeRazorpaySubscription({
 	billingPeriod,
+	verifiedTier,
 	entity,
 	userId,
 	now = Date.now(),
 }: {
 	billingPeriod?: string | null;
+	verifiedTier?: string | null;
 	entity: RazorpaySubscriptionEntity;
 	userId: string;
 	now?: number;
@@ -114,14 +117,17 @@ export function normalizeRazorpaySubscription({
 	const subscriptionState = cancelAtCycleEnd
 		? "CANCELED"
 		: state(entity.status);
+	// Tier comes from our server-created payment record or provider notes.
+	// Only legacy records without either tier retain the old Pro interpretation.
+	const tier = verifiedTier ?? entity.notes?.tier ?? "pro";
 	const base: Record<string, unknown> = {
-		plan: "pro",
+		plan: tier === "lite" || tier === "pro" ? tier : "free",
 		source: "razorpay",
 		environment: "production",
 		userId,
 		providerSubscriptionId: entity.id,
 		planId: entity.plan_id ?? null,
-		billingPeriod: billingPeriod ?? null,
+		billingPeriod: billingPeriod ?? entity.notes?.plan ?? null,
 		subscriptionState,
 		willAutoRenew: subscriptionState === "ACTIVE" && !cancelAtCycleEnd,
 		cancelAtCycleEnd,

@@ -54,7 +54,7 @@ Each device has its own X25519 keypair:
   - iOS/macOS: Keychain
   - Android: EncryptedSharedPreferences / Keystore
   - Windows: Windows Credential Store
-  - Web: IndexedDB with encryption
+  - Web: memory only for new keypairs and master keys; reload requires approval or recovery. The original `WEB_STORAGE_KEY` is retained only for read-only legacy recovery, not new key persistence.
 
 - **Public Key**: Stored on Firestore for other devices to use
 
@@ -117,7 +117,12 @@ Path: `users/{uid}/devices/{deviceId}`
   status: "approved",               // "pending" | "approved" | "revoked"
   created_at: "2024-01-01T...",
   approved_at: "2024-01-01T...",
-  approved_by_public_key: "base64..." // Public key of approving device (for ECDH)
+  approved_by_public_key: "base64...", // Used only with local verification proof
+  approval_protocol: 2,
+  approval_request: { /* account, environment, device, locally held key, ID, expiry */ },
+  wrapped_umk_version: 2,
+  pairing_proof: "base64...",      // QR handoff authentication; no pairing secret
+  accepted_receipt: "fingerprint..." // Completion hint, not standalone authorization
 }
 ```
 
@@ -178,30 +183,13 @@ Path: `users/{uid}/e2ee/recovery_key`
 
 ### 2. Adding a New Device
 
-```
-New Device:
-1. Generate device keypair
-2. Store private key locally
-3. Upload public key to Firestore (status: pending)
-4. Listen for approval
+The pending device generates a ten-minute request from its locally held public key, account/environment, device ID and random request ID. Its QR also contains a fresh one-time pairing secret. That secret never goes to Firebase and is not a master key or provider credential.
 
-Existing Device:
-1. Sees pending device in UI
-2. User approves new device
-3. Existing device:
-   a. Gets new device's public key
-   b. Derives shared secret (ECDH: own private + their public)
-   c. Encrypts UMK with shared secret
-   d. Uploads wrapped UMK to new device's doc (status: approved)
+The trusted device scans the QR, checks the pending request and wraps the master key for the exact verified public key. The recipient verifies the request-bound handoff using its local pairing secret before accepting it. A successful scan completes pairing without an extra approval button.
 
-New Device:
-1. Receives approval notification
-2. Gets approving device's public key
-3. Derives same shared secret (ECDH: own private + their public)
-4. Decrypts UMK
-5. Caches UMK locally
-6. E2EE is now ready
-```
+Camera-free pairing compares all 32 hexadecimal characters on both devices and requires explicit confirmation in each direction. Cancellation, expiry, regeneration and identity changes invalidate pending verification. An accepted receipt fingerprint is retained so an already accepted handoff can be reloaded after the original request expires.
+
+Existing devices with a cached master key remain usable. If that cache is missing, an unverified legacy envelope supplied by another device is rejected; use verified approval or recovery. First-device and recovery self-wrapping remain supported. Older approving clients retain their original trust weakness, so update all approving devices before relying on substitution protection.
 
 ### 3. Opening/Syncing Notes
 
@@ -209,7 +197,7 @@ New Device:
 1. App checks E2EE status on startup
 2. If device is approved:
    a. Load cached UMK from secure storage, OR
-   b. Fetch wrapped UMK from Firestore and unwrap
+   b. Unwrap an accepted, verified handoff (or first-device/recovery self-wrap)
 3. When downloading notes:
    a. Check if note has e2ee_ciphertext
    b. If yes, decrypt with UMK
@@ -304,19 +292,15 @@ if (await E2EEService.instance.deviceManager.isFirstDevice()) {
 
 ### Approving a New Device
 
-```dart
-// On existing device
-E2EEService.instance.deviceManager.pendingApprovals.addListener(() {
-  final pending = E2EEService.instance.deviceManager.pendingApprovals.value;
-  for (final request in pending) {
-    // Show approval UI
-    showApprovalDialog(request);
-  }
-});
+Use the device-verification UI to scan the new device or compare security codes. `DeviceManager.approveDevice` requires a `VerifiedDeviceApproval`; a device ID alone is insufficient. Notifications open verification and do not grant access themselves.
 
-// User approves
-await E2EEService.instance.deviceManager.approveDevice(deviceId);
-```
+### External-provider credentials
+
+`SyncCipher` derives a separate credential purpose from the existing user master key. Authenticated envelopes bind user, provider, library, connection generation and OAuth client identity. Firebase stores these envelopes, not plaintext credentials. Approved devices decrypt compatible grants locally.
+
+For providers requiring a confidential OAuth client, the reusable exchange function sees authorization codes and tokens transiently during exchange/refresh. It does not persist or log them and never receives the user master key. This is a credential trust boundary; it does not change note/media end-to-end encryption. The exchange validates the approved session, connection capability, generation/revision, refresh lease and configured client before and after exchange. It does not cryptographically attest that a caller-supplied token belongs to the encrypted connection.
+
+Built-in note/media remote formats remain unchanged. External sync stores its encrypted manifests, revisions and media in a separate account/library namespace, with independent per-provider cursors and acknowledgements.
 
 ### Manual Encryption/Decryption
 

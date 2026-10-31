@@ -4,6 +4,45 @@ import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 
 void main() {
+  group('Play subscription replacement', () {
+    GooglePlayPurchaseDetails? select(
+      List<GooglePlayPurchaseDetails> purchases, {
+      String from = 'better_keep_lite',
+      String to = 'better_keep_pro',
+    }) => selectGooglePlayReplacementPurchase(
+      purchases,
+      currentProductId: from,
+      targetProductId: to,
+      uid: 'owner',
+    );
+
+    test('uses the existing acknowledged token in either tier direction', () {
+      final lite = _purchase('better_keep_lite');
+      final pro = _purchase('better_keep_pro');
+      expect(select([lite]), same(lite));
+      expect(
+        select([pro], from: 'better_keep_pro', to: 'better_keep_lite'),
+        same(pro),
+      );
+    });
+
+    test('rejects missing, ambiguous, pending, foreign and unacknowledged purchases', () {
+      final lite = _purchase('better_keep_lite');
+      for (final purchases in <List<GooglePlayPurchaseDetails>>[
+        [],
+        [lite, lite],
+        [lite, _purchase('better_keep_pro')],
+        [_purchase('better_keep_pro')],
+        [_purchase('better_keep_lite', owner: 'other')],
+        [_purchase('better_keep_lite', acknowledged: false)],
+        [_purchase('better_keep_lite', pending: true)],
+        [_purchase('better_keep_lite', token: '')],
+      ]) {
+        expect(select(purchases), isNull);
+      }
+      expect(select([lite], to: 'better_keep_lite'), isNull);
+    });
+  });
   group('selectGooglePlayProductForBasePlan', () {
     test('selects products at the first and last offer indexes', () {
       final products = _subscriptionProducts();
@@ -56,6 +95,30 @@ void main() {
     });
   });
 }
+
+GooglePlayPurchaseDetails _purchase(
+  String product, {
+  String owner = 'owner',
+  bool acknowledged = true,
+  bool pending = false,
+  String token = 'verified-by-backend-later',
+}) => GooglePlayPurchaseDetails.fromPurchase(
+  PurchaseWrapper(
+    orderId: 'test-order',
+    packageName: 'io.foxbiz.better_keep',
+    purchaseTime: 1,
+    purchaseToken: token,
+    signature: '',
+    products: [product],
+    isAutoRenewing: true,
+    originalJson: '{}',
+    isAcknowledged: acknowledged,
+    purchaseState: pending
+        ? PurchaseStateWrapper.pending
+        : PurchaseStateWrapper.purchased,
+    obfuscatedAccountId: owner,
+  ),
+).single;
 
 List<GooglePlayProductDetails> _subscriptionProducts() {
   const pricingPhase = PricingPhaseWrapper(

@@ -1,3 +1,5 @@
+import 'package:better_keep/services/e2ee/secure_storage.dart';
+
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
@@ -69,6 +71,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   bool _searchMode = false;
   bool _shrinkDrawer = false;
   bool _hasPendingApprovals = false;
+  bool _recoveryPromptShown = false;
   int _approvalCheckGeneration = 0;
   bool _isBubbleMenuOpen = false;
 
@@ -307,13 +310,18 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   Future<void> _checkRecoveryKeySetup() async {
     // Use post-frame callback to show dialog after widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _recoveryPromptShown) return;
       if (E2EEService.instance.needsRecoveryKeySetup.value) {
+        _recoveryPromptShown = true;
         // Reset the flag
         E2EEService.instance.needsRecoveryKeySetup.value = false;
 
         // Show recovery key setup page
         if (mounted) {
-          final result = await showSetupRecoveryKeyPage(context);
+          final result = await showSetupRecoveryKeyPage(
+            context,
+            legacyRecovery: E2EESecureStorage.instance.needsLegacyRecoverySetup,
+          );
           if (result == true && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(

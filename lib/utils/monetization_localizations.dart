@@ -5,6 +5,7 @@ extension PurchaseOutcomeLocalizations on PurchaseOutcome {
   String localized(AppLocalizations l10n) => switch (this) {
     PurchaseOutcome.activated => l10n.subscriptionActivated,
     PurchaseOutcome.restored => l10n.subscriptionRestored,
+    PurchaseOutcome.changePlanRequired => l10n.subscriptionChangePlan,
     PurchaseOutcome.alreadyActive => l10n.subscriptionAlreadyActive,
     PurchaseOutcome.activationPending => l10n.paymentConfirmedActivationPending,
     PurchaseOutcome.ownershipConflict =>

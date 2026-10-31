@@ -4,13 +4,13 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { google } from "googleapis";
 import * as jose from "jose";
 import * as nodemailer from "nodemailer";
+import { activeAppStoreReceipt } from "./appStoreSubscription";
 import {
 	appStoreSharedSecret,
 	auth,
 	db,
 	emailPassword,
 	IOS_BUNDLE_ID,
-	IOS_PRODUCT_IDS,
 	isEmulator,
 } from "./config";
 import { mergeSubscriptionClaims } from "./customClaims";
@@ -21,6 +21,7 @@ import {
 	normalizedSubscriptionFields,
 	requireVerifiedEntitlementPayload,
 } from "./subscriptionEntitlement";
+import { appleSubscriptionProduct } from "./subscriptionProducts";
 import { reconcileUserEntitlement } from "./subscriptionReconciler";
 import type { AppStoreJWSTransactionPayload } from "./types";
 
@@ -34,7 +35,7 @@ import type { AppStoreJWSTransactionPayload } from "./types";
  */
 export async function setSubscriptionClaims(
 	userId: string,
-	plan: "pro" | "free",
+	plan: "pro" | "lite" | "free",
 	expiresAt: Date | null,
 ): Promise<void> {
 	try {
@@ -279,39 +280,39 @@ export async function sendRazorpaySubscriptionEmail(
 
 	switch (type) {
 		case "welcome":
-			subject = "Welcome to Better Keep Notes Pro! 🎉";
-			heading = "Welcome to Better Keep Notes Pro";
-			message = `Thank you for subscribing! Your account has been upgraded and you now have access to all Pro features including unlimited locked notes, real-time encrypted sync, and priority support.\n\nYour subscription will renew on ${expiryStr}.`;
+			subject = "Welcome to Better Keep Notes! 🎉";
+			heading = "Welcome to Better Keep Notes";
+			message = `Thank you for subscribing! Your subscription is active. Open the app to use the features included in your plan.\n\nYour subscription will renew on ${expiryStr}.`;
 			ctaText = "Open Better Keep Notes";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "cancelled":
 			subject = "Your Better Keep Notes subscription has been cancelled";
 			heading = "Subscription Cancelled";
-			message = `Your subscription has been cancelled. You'll continue to have Pro access until ${expiryStr}, after which you'll be switched to the free plan.\n\nYou can resume your subscription anytime before it expires to keep your Pro benefits.`;
+			message = `Your subscription has been cancelled. You'll continue to have access to your plan until ${expiryStr}, after which you'll be switched to the free plan.\n\nYou can resume your subscription anytime before it expires to keep your subscription benefits.`;
 			ctaText = "Resume Subscription";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "resumed":
 			subject = "Your Better Keep Notes subscription has been resumed";
 			heading = "Subscription Resumed";
-			message = `Great news! Your subscription has been resumed and will renew automatically on ${expiryStr}. You'll continue to enjoy all Pro features.`;
+			message = `Great news! Your subscription has been resumed and will renew automatically on ${expiryStr}. You'll continue to enjoy your subscription benefits.`;
 			ctaText = "Open Better Keep Notes";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "renewed":
 			subject = "Your Better Keep Notes subscription has been renewed";
 			heading = "Subscription Renewed";
-			message = `Your Pro subscription has been renewed successfully. Your next billing date is ${expiryStr}. Thank you for your continued support!`;
+			message = `Your subscription has been renewed successfully. Your next billing date is ${expiryStr}. Thank you for your continued support!`;
 			ctaText = "Open Better Keep Notes";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "expired":
-			subject = "Your Better Keep Notes Pro subscription has expired";
+			subject = "Your Better Keep Notes subscription has expired";
 			heading = "Subscription Expired";
 			message =
-				"Your Pro subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain access to Pro features.";
-			ctaText = "Resubscribe to Pro";
+				"Your subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain your subscription benefits.";
+			ctaText = "Resubscribe";
 			ctaUrl = "https://betterkeep.app";
 			break;
 	}
@@ -547,8 +548,8 @@ async function handleVerifiedJWSTransaction(
 	}
 
 	// Validate product ID
-	const knownProductIds = Object.values(IOS_PRODUCT_IDS) as string[];
-	if (!knownProductIds.includes(transaction.productId)) {
+	const product = appleSubscriptionProduct(transaction.productId);
+	if (!product) {
 		return {
 			valid: false,
 			message: `Unknown product ID: ${transaction.productId}`,
@@ -567,8 +568,7 @@ async function handleVerifiedJWSTransaction(
 	const originalTransactionId = transaction.originalTransactionId;
 	const resolvedProductId = transaction.productId;
 	const expiresMs = transaction.expiresDate;
-	const billingPeriod =
-		resolvedProductId === IOS_PRODUCT_IDS.yearly ? "yearly" : "monthly";
+	const billingPeriod = product.period;
 	const expiresAt = Timestamp.fromMillis(expiresMs);
 
 	// Atomically read the subscription doc and write the new owner inside a
@@ -644,7 +644,7 @@ async function handleVerifiedJWSTransaction(
 									? "production"
 									: "test",
 							expiresAt,
-							plan: "pro",
+							plan: product.plan,
 							source: "app_store",
 							subscriptionState: subState,
 							willAutoRenew: autoRenew,
@@ -695,7 +695,7 @@ async function handleVerifiedJWSTransaction(
 		sendWelcomeEmail: !welcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
 		subscription: requireVerifiedEntitlementPayload({
-			plan: "pro",
+			plan: product.plan,
 			source: "app_store",
 			billingPeriod,
 			expiresAt: Timestamp.fromMillis(expiresMs),
@@ -830,7 +830,6 @@ export async function verifyAppStorePurchase(
 		};
 	}
 
-	const knownProductIds = Object.values(IOS_PRODUCT_IDS) as string[];
 	const latestReceiptInfo =
 		(appleResponse.latest_receipt_info as Array<Record<string, string>>) || [];
 	const receiptRoot =
@@ -843,35 +842,23 @@ export async function verifyAppStorePurchase(
 		(appleResponse.pending_renewal_info as Array<Record<string, string>>) || [];
 	const now = Date.now();
 
-	const activeReceipts = receiptEntries.filter((r) => {
-		const expiresMs = Number.parseInt(r.expires_date_ms || "0", 10);
-		return (
-			knownProductIds.includes(r.product_id) &&
-			!r.cancellation_date_ms &&
-			expiresMs > now
-		);
-	});
+	const latest = activeAppStoreReceipt(receiptEntries, now);
 
-	if (activeReceipts.length === 0) {
+	if (!latest) {
 		console.warn(
 			`App Store verify: no active receipts. latest_receipt_info=${latestReceiptInfo.length}, in_app=${inAppReceipts.length}`,
 		);
 		return { valid: false, message: "No active subscription found in receipt" };
 	}
 
-	activeReceipts.sort(
-		(a, b) =>
-			Number.parseInt(b.expires_date_ms, 10) -
-			Number.parseInt(a.expires_date_ms, 10),
-	);
-	const latest = activeReceipts[0];
-
 	const originalTransactionId = latest.original_transaction_id;
 	const expiresMs = Number.parseInt(latest.expires_date_ms, 10);
 	const resolvedProductId = latest.product_id;
+	const product = appleSubscriptionProduct(resolvedProductId);
 	if (
 		!originalTransactionId ||
 		!resolvedProductId ||
+		!product ||
 		!Number.isFinite(expiresMs)
 	) {
 		return {
@@ -879,8 +866,7 @@ export async function verifyAppStorePurchase(
 			message: "Receipt payload missing required subscription fields",
 		};
 	}
-	const billingPeriod =
-		resolvedProductId === IOS_PRODUCT_IDS.yearly ? "yearly" : "monthly";
+	const billingPeriod = product.period;
 
 	const expiresAt = Timestamp.fromMillis(expiresMs);
 
@@ -927,7 +913,7 @@ export async function verifyAppStorePurchase(
 							billingPeriod,
 							environment: receiptEnvironment,
 							expiresAt,
-							plan: "pro",
+							plan: product.plan,
 							source: "app_store",
 							subscriptionState,
 							willAutoRenew,
@@ -976,7 +962,7 @@ export async function verifyAppStorePurchase(
 		sendWelcomeEmail: !appStoreWelcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
 		subscription: requireVerifiedEntitlementPayload({
-			plan: "pro",
+			plan: product.plan,
 			source: "app_store",
 			billingPeriod,
 			expiresAt: Timestamp.fromMillis(expiresMs),

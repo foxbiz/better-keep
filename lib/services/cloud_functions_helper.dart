@@ -89,6 +89,8 @@ Future<CloudFunctionResult> callCloudFunction(
 /// Maps HTTP/gRPC status strings to FirebaseFunctionsException error codes.
 String _mapStatusToCode(String status) {
   switch (status) {
+    case 'ABORTED':
+      return 'aborted';
     case 'ALREADY_EXISTS':
       return 'already-exists';
     case 'INVALID_ARGUMENT':

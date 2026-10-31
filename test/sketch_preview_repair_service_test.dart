@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:better_keep/components/note_card.dart';
+import 'package:better_keep/components/note_image_grid.dart';
+import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/models/file_sync_track.dart';
@@ -14,6 +17,7 @@ import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -64,6 +68,130 @@ void main() {
   tearDown(() async {
     SketchPreviewRepairService.resetTestOverrides();
     await database.close();
+  });
+
+  for (final locked in [false, true]) {
+    testWidgets(
+      'synced sketch card repairs missing preview only when unlocked: $locked',
+      (tester) async {
+        late Directory directory;
+        late Note note;
+        late String previewPath;
+        var generated = 0;
+        await tester.runAsync(() async {
+          directory = await Directory.systemTemp.createTemp(
+            'card-preview-test-',
+          );
+          final strokesPath = '${directory.path}/strokes.json';
+          previewPath = '${directory.path}/preview.png';
+          final stroke = SketchStroke(
+            points: '10,20,0.5;30,40,0.5;',
+            color: Colors.indigo,
+            size: 6,
+            tool: SketchTool.brush,
+          );
+          await File(strokesPath).writeAsString(
+            jsonEncode({
+              'strokes': [stroke.toString()],
+              'bgColor': Colors.white.toARGB32(),
+              'pagePattern': 'blank',
+              'aspectRatio': 1.0,
+            }),
+          );
+          await _insertNote(
+            database,
+            title: 'Synced sketch',
+            content: '[{"insert":"Body\\n"}]',
+            updatedAt: '2026-10-24T10:00:00.000',
+            locked: locked,
+            attachments: jsonEncode([
+              NoteAttachment.sketch(SketchData(strokesFilePath: strokesPath))
+                  .toJson(),
+            ]),
+          );
+          note = await Note.fromJsonAsync(
+            (await database.query('note')).single,
+          );
+        });
+        addTearDown(() => directory.delete(recursive: true));
+        SketchPreviewRepairService.previewGeneratorOverride = (sketch) async {
+          generated++;
+          expect(sketch.strokes, hasLength(1));
+          await File(previewPath).writeAsBytes(
+            base64Decode(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO2kAAAAASUVORK5CYII=',
+            ),
+          );
+          sketch.previewImage = previewPath;
+          return true;
+        };
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: [
+              ...AppLocalizations.localizationsDelegates,
+              FlutterQuillLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: SizedBox(
+                  width: 280,
+                  child: NoteCard(note: note, index: 0),
+                ),
+              ),
+            ),
+          ),
+        );
+        for (var attempt = 0; attempt < 100; attempt++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+          if (!locked && note.sketches.single.previewImage != null) break;
+          if (locked && attempt == 5) break;
+        }
+        expect(generated, locked ? 0 : 1);
+        if (locked) {
+          expect(find.byType(NoteImageGrid), findsNothing);
+        } else {
+          final grid = tester.widget<NoteImageGrid>(find.byType(NoteImageGrid));
+          expect(grid.images.single.src, previewPath);
+        }
+        final row = await tester.runAsync(
+          () async => (await database.query('note')).single,
+        );
+        expect(row!['updated_at'], '2026-10-24T10:00:00.000');
+        expect(
+          (jsonDecode(
+            row['attachments'] as String,
+          ) as List).single['data']['previewImage'],
+          locked ? null : previewPath,
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(generated, locked ? 0 : 1);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
+  test('cancelled preview repair discards generated files without changing the note', () async {
+    await _insertSketchNote(database);
+    var current = true;
+    final deleted = <String>[];
+    final original = (await database.query('note')).single['attachments'];
+    await SketchPreviewRepairService.repairNoteById(
+      1,
+      isCurrent: () => current,
+      repair: (note, _) async {
+        note.sketches.single.previewImage = '/tmp/cancelled-preview.jpg';
+        current = false;
+        return const SketchPreviewRepairBatchResult(changed: true);
+      },
+      deleteGeneratedPreviews: (paths) async => deleted.addAll(paths),
+      onPersisted: (_) async => fail('Cancelled repair must not publish'),
+    );
+    expect(deleted, ['/tmp/cancelled-preview.jpg']);
+    expect((await database.query('note')).single['attachments'], original);
   });
 
   test('attachment CAS changes no other note columns or timestamp', () async {

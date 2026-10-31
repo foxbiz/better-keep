@@ -3,6 +3,7 @@ import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/pages/about_page.dart';
 import 'package:better_keep/pages/help_page.dart';
 import 'package:better_keep/pages/settings/nerd_stats_page.dart';
+import 'package:better_keep/pages/settings/storage_sync_page.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/whisper/whisper.dart';
@@ -14,6 +15,9 @@ import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart'
     show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+
+import '../../components/sync_provider_tile.dart';
+
 import 'package:path/path.dart' as path;
 
 class Settings extends StatefulWidget {
@@ -390,6 +394,13 @@ class _SettingsState extends State<Settings> {
           _SettingsSection(
             title: context.l10n.settingsSync,
             children: [
+              SyncProviderTile(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const StorageSyncPage(),
+                  ),
+                ),
+              ),
               SwitchListTile(
                 secondary: const Icon(Icons.sync),
                 title: Text(context.l10n.showSyncProgress),

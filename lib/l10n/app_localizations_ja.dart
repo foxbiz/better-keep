@@ -10,6 +10,22 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get externalSyncContinue => '続行';
+
+  @override
+  String get externalSyncConnectionInfo => '接続情報';
+
+  @override
+  String get externalSyncConnectPrompt => 'ログインしてノートの同期を開始します。';
+
+  @override
+  String get externalSyncNativeSetupPrompt => 'このデバイスでGoogle Driveにログインしてください。';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'WebDAVフォルダーの完全なURLとアプリパスワードを入力してください。ブラウザーで同期するには、サーバーでクロスオリジンリクエストを許可する必要があります。';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -1924,7 +1940,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get paymentConfirmedActivationPending =>
-      'お支払いは確認されましたが、Pro の有効化に時間がかかっています。再度購入しないでください。ステータスを再確認するか、Google Play でサブスクリプションを管理してください。';
+      'お支払いは確認されましたが、有効化に時間がかかっています。再度購入しないでください。ステータスを再確認するか、サブスクリプションを管理してください。';
 
   @override
   String get recheckStatus => 'ステータスを再確認';
@@ -3758,4 +3774,333 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get storageCleared =>
       'ローカルデータが削除されたため、ログアウトしました。再度ログインして同期済みのノートを復元してください。同期前に削除されたノートはクラウドから復元できません。';
+
+  @override
+  String get externalSyncTitle => '同期プロバイダー';
+
+  @override
+  String get externalSyncDescription => 'ノートをデバイス間で同期するプロバイダーを1つ選択してください。';
+
+  @override
+  String get externalSyncUnavailable =>
+      'ストレージに接続するには、ログインしてこのデバイスを承認するか、復旧してください。';
+
+  @override
+  String get externalSyncAccount => 'アカウントと暗号化';
+
+  @override
+  String get externalSyncCloud => 'Better Keepクラウド';
+
+  @override
+  String get externalSyncCloudDescription => '標準の同期 · Proが必要';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': '接続',
+      'browser': 'ブラウザーでログイン',
+      'manual': 'アプリパスワードを使用',
+      'reconnect': '再接続',
+      'continue': 'ブラウザーで続行',
+      'pause': '一時停止',
+      'resume': '再開',
+      'disconnect': '接続を解除',
+      'sync': '今すぐ同期',
+      'other': '再試行',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': '認証の準備中…',
+      'awaitingConsent': 'ブラウザーで認証できます',
+      'authorizing': '接続中…',
+      'cancelling': '認証をキャンセル中…',
+      'cancelPending': 'キャンセルを確認できませんでした。もう一度キャンセルしてください。',
+      'connecting': '接続中…',
+      'pausing': '一時停止中…',
+      'enabling': '再開中…',
+      'disconnecting': '接続を解除中…',
+      'paused': '一時停止中',
+      'notConnected': '未接続',
+      'keyRecovery': 'この接続を使用するには暗号化キーを復旧してください。',
+      'pending': '一部の変更が同期待ちです。',
+      'other': '接続済み',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired':
+          'このデバイスで接続済みのGoogle Driveアカウントにログインしてください。ノートは暗号化されたままです。',
+      'reconnectRequired': '同期を続けるには、このアカウントに再接続してください。',
+      'quotaExceeded': 'ストレージがいっぱいです。このプロバイダーの空き容量を増やしてから再試行してください。',
+      'rateLimited': 'プロバイダーから待機を求められました。同期は自動的に再試行されます。',
+      'corruptData': '一部の同期データを検証できませんでした。ローカルのノートは保持されます。',
+      'unsupported': 'このプロバイダーまたはブラウザーでは接続を完了できません。',
+      'other': 'このプロバイダーに接続できませんでした。通信状況を確認して再試行してください。',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return '前回の同期成功日時：$time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => 'まだ同期が成功していません';
+
+  @override
+  String get externalSyncBlocked => '一部のノートまたは添付ファイルをまだアップロードできません。同期は再試行されます。';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return '$providerの接続を解除しますか？';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      'このアカウントとの同期を停止します。このデバイスのノートと、プロバイダーに保存済みのファイルは保持されます。';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Better Keepとの接続を解除しました。アクセス権の取り消しを確認できませんでした。プロバイダーのアカウント設定でBetter Keepのアクセス権を削除してください。';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Nextcloudのセキュリティ設定で発行したアプリパスワードを使用してください。ブラウザーで同期するには、サーバーでクロスオリジンリクエストを許可する必要があります。';
+
+  @override
+  String get externalSyncServer => 'サーバーURL';
+
+  @override
+  String get externalSyncUsername => 'ユーザー名';
+
+  @override
+  String get externalSyncAppPassword => 'アプリパスワード';
+
+  @override
+  String get externalSyncInvalidServer =>
+      'ユーザー名、パスワード、クエリ、フラグメントを含まないHTTPSのサーバーURLを入力してください。';
+
+  @override
+  String get externalSyncRequired => 'この項目は必須です。';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      'キャンセル前に認証が完了しました。プロバイダーは接続済みです。削除するには「接続を解除」を選択してください。';
+
+  @override
+  String get externalSyncNextcloudBrowserHelp =>
+      'Nextcloudサーバーにログインしてアクセスを許可してください。アクセス権はNextcloudの設定で取り消せます。ブラウザーで同期するには、サーバーでクロスオリジンリクエストを許可する必要があります。';
+
+  @override
+  String get externalSyncLogoutPending =>
+      '一部の変更がまだ同期待ちです。ログアウトすると、このデバイスのローカルのノートとメディアが削除されます。どのプロバイダーにも保存されていない変更は失われる可能性があります。\n\nログアウトする前に同期を完了するか、データをエクスポートしてください。';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      'すべての変更が同期済みかどうか確認できませんでした。ログアウトすると、このデバイスのローカルのノートとメディアが削除されます。どのプロバイダーにも保存されていない変更は失われる可能性があります。\n\nログアウトする前に同期先のプロバイダーを確認するか、データをエクスポートしてください。';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      '一部のロックされたノートに、更新が必要な古いスケッチが含まれています。スケッチを作成したデバイスでそのノートを開き、PINでロックを解除してから同期を再試行してください。';
+
+  @override
+  String get externalSyncOff => '同期オフ';
+
+  @override
+  String get externalSyncOffDescription => 'このデバイスにノートを保存';
+
+  @override
+  String get externalSyncDetails => '同期の詳細';
+
+  @override
+  String get externalSyncNeedsAttention => '確認が必要 · 同期の詳細を表示';
+
+  @override
+  String externalSyncConnectTitle(String provider) {
+    return '$providerに接続';
+  }
+
+  @override
+  String get externalSyncConnectHelp =>
+      'ログインしてストレージへのアクセスを許可してください。接続後、このプロバイダーが同期先に選択されます。';
+
+  @override
+  String get verifyNewDevice => '新しい端末を確認';
+
+  @override
+  String get deviceVerificationInstructions =>
+      '信頼済み端末で新しい端末のQRコードを読み取るか、両画面のセキュリティコード全体を比較してください。';
+
+  @override
+  String get deviceVerificationExpired =>
+      '確認コードの有効期限が切れました。新しい端末でコードを再生成してください。';
+
+  @override
+  String get newVerificationCode => 'コードを再生成';
+
+  @override
+  String get deviceVerificationMismatch => '端末が一致しません。このリクエストを承認しないでください。';
+
+  @override
+  String get deviceVerificationMatched => '端末を確認しました。続行できます。';
+
+  @override
+  String get scanNewDevice => '新しい端末をスキャン';
+
+  @override
+  String get compareSecurityCode => 'セキュリティコードを比較';
+
+  @override
+  String get completeSecurityCodeMatches => '両端末のコード全体を比較し、一致することを確認しました。';
+
+  @override
+  String get approveVerifiedDevice => '端末を承認';
+
+  @override
+  String get deviceCameraUnavailable => 'カメラを利用できません。代わりにセキュリティコードを比較してください。';
+
+  @override
+  String get deviceVerificationRetry =>
+      '確認できませんでした。両端末を更新し、新しい端末でコードを再生成してから再試行してください。';
+
+  @override
+  String get browserEncryptionSessionOnly =>
+      '暗号化キーはこのブラウザセッション中のみ保持されます。再読み込み後はブラウザを再承認するか、復元用パスフレーズを使用してください。';
+
+  @override
+  String get verifyTrustedDevice => '信頼済み端末を確認';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      '信頼済み端末の確認画面を開いたままにしてください。暗号化キーを受け入れる前に、QRコードを読み取るか、セキュリティコードの32文字すべてを比較してください。';
+
+  @override
+  String get scanTrustedDevice => '信頼済み端末をスキャン';
+
+  @override
+  String get acceptVerifiedKey => '確認済みキーを受け入れる';
+
+  @override
+  String get confirmOnNewDevice => '新しい端末で確認';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      '新しい端末で「信頼済み端末を確認」を選択してください。このQRコードを読み取るか、コード全体が下のコードと一致することを確認してください。新しい端末のロックが解除されるまで画面を開いたままにしてください。有効期限は最初の生成から10分です。';
+
+  @override
+  String get storageSecurityUpgrade => '安全に再接続';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      'この接続では以前のサーバー管理の認証情報ストレージを使用していました。プロバイダーの連携アプリ設定でBetter Keepのアクセスを取り消すか、Nextcloudのアプリパスワードを削除してから、ここで再接続してください。ノートとリモートファイルは保持されます。新しい認証情報はノートの暗号化キーを使って端末上で暗号化されます。';
+
+  @override
+  String get devicePairingScanInstruction =>
+      '信頼できるデバイスで承認リクエストを開き、このコードをスキャンしてください。';
+
+  @override
+  String get devicePairingCodeInstruction => 'このコード全体を、信頼できるデバイスのコードと比較してください。';
+
+  @override
+  String get showQrCode => 'QRコードを表示';
+
+  @override
+  String get externalSyncSharedSetup => 'このデバイスでGoogle Driveにログインしてください。';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      'このデバイスで接続済みのGoogle Driveアカウントにログインしてください。ノートは暗号化されたままです。';
+
+  @override
+  String get externalSyncStorageFull =>
+      'ストレージがいっぱいです。同期は一時停止していますが、端末内のノートは安全です。空き容量を増やしてから「今すぐ同期」をタップしてください。';
+
+  @override
+  String get externalSyncClear => '同期済みデータを削除';
+
+  @override
+  String get externalSyncClearMessage =>
+      '同期済みのコピーを削除して同期をオフにします。端末内のノートは保持されますが、プロバイダーにしかないデータは失われます。';
+
+  @override
+  String get externalSyncClearing => '同期済みデータを削除中…';
+
+  @override
+  String get externalSyncClearPending => '削除が未完了です · タップして再試行';
+
+  @override
+  String get externalSyncClearDone =>
+      '同期済みデータを削除しました。同期はオフです。端末内のノートは保持されています。削除したファイルがプロバイダーのゴミ箱に残る場合があります。';
+
+  @override
+  String get externalSyncClearCodeSent => 'メールで届いたコードを入力してください。';
+
+  @override
+  String get externalSyncClearCodeError =>
+      '同期済みデータを削除できませんでした。コードと接続を確認するか、新しいコードをリクエストしてください。削除が開始されている場合、完了するまで同期はオフのままです。';
+
+  @override
+  String get externalSyncClearSendError =>
+      'コードを送信できませんでした。アカウントのメールアドレスが確認済みであることを確認し、1分待ってから再試行してください。';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$total 中 $used 使用済み';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => 'ストレージを確認中…';
+
+  @override
+  String get externalSyncCapacityUnavailable => 'ストレージ情報を取得できません';
+
+  @override
+  String get externalSyncClearVerifyTitle => '削除の確認';
+
+  @override
+  String get externalSyncClearSendCode => 'コードを送信';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => 'プランを選択';
+
+  @override
+  String get upgradeToLite => 'Lite にアップグレード';
+
+  @override
+  String get automaticExternalSync => '外部ストレージの自動同期';
+
+  @override
+  String get manualExternalSync => '外部ストレージの手動同期';
+
+  @override
+  String get liteDescription => 'お使いのクラウドストレージで自動更新。';
+
+  @override
+  String get manualSyncDescription => '手動同期は無料です。Lite と Pro では自動更新も利用できます。';
+
+  @override
+  String get automaticSyncEnabled => '自動更新が有効です';
+
+  @override
+  String get subscriptionActiveTitle => 'サブスクリプションは有効です';
+
+  @override
+  String get subscriptionChangePlan => 'プランを変更するには、現在のサブスクリプションを管理してください。';
+
+  @override
+  String get subscribe => '登録する';
+
+  @override
+  String get builtInCloudSync => '標準のクラウド同期';
 }

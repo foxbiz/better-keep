@@ -11,6 +11,14 @@ service cloud.firestore {
         && request.auth.token.planExpiresAt > request.time.toMillis();
     }
 
+    function hasAutomaticExternalSync() {
+      return request.auth != null
+        && request.auth.token.keys().hasAll(['plan', 'planExpiresAt'])
+        && request.auth.token.plan in ['lite', 'pro']
+        && request.auth.token.planExpiresAt != null
+        && request.auth.token.planExpiresAt > request.time.toMillis();
+    }
+
     function isReviewAccount() {
       return request.auth != null
         && (
@@ -124,7 +132,10 @@ service cloud.firestore {
           'revision',
           'chunk_count',
           'note_count',
-          'updated_at'
+          'updated_at',
+          'content_hash',
+          'sync_meta',
+          'deleted'
         ])
         && data.schema_version == 2
         && data.context_key == contextId
@@ -134,7 +145,7 @@ service cloud.firestore {
         && data.sort_mode in ['custom', 'createdNewest', 'updatedNewest']
         && data.revision is string
         && data.revision.size() > 0
-        && data.revision.size() <= 64
+        && data.revision.size() <= 256
         && data.chunk_count is int
         && data.chunk_count >= 0
         && data.chunk_count <= 500
@@ -149,7 +160,15 @@ service cloud.firestore {
             && data.note_count <= data.chunk_count * 2000
           )
         )
-        && data.updated_at is timestamp;
+        && data.updated_at is timestamp
+        && (!('content_hash' in data) ||
+            (data.content_hash is string && data.content_hash.matches('^[a-f0-9]{64}$')))
+        && (!('sync_meta' in data) || data.sync_meta is map)
+        && (!('deleted' in data) || (
+          data.deleted == true && data.sort_mode == 'custom'
+          && data.chunk_count == 0 && data.note_count == 0
+          && data.content_hash == '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945'
+        ));
     }
 
     function hasValidContextOrderChunk(revision) {
@@ -261,6 +280,51 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      match /storage_credentials/{document=**} {
+        allow read, write: if false;
+      }
+
+      match /sync_settings/{settingId} {
+        allow read: if isMutableOwner(userId) && settingId == 'firebase';
+        allow create, update: if isMutableOwner(userId)
+          && settingId == 'firebase'
+          && request.resource.data.keys().hasOnly(['enabled', 'provider', 'updatedAt'])
+          && request.resource.data.enabled is bool
+          && (!('provider' in request.resource.data) ||
+            (request.resource.data.provider in ['firebase', 'google_drive', 'dropbox', 'nextcloud', 'webdav', 'none']
+              && request.resource.data.enabled == (request.resource.data.provider == 'firebase')))
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if false;
+      }
+
+      match /storage_connections/{document=**} {
+        allow read: if isMutableOwner(userId);
+        allow write: if false;
+      }
+
+      match /storage_sync_signals/{provider} {
+        function validSignal() {
+          let data = request.resource.data;
+          let connection = get(/databases/$(database)/documents/users/$(userId)/storage_connections/$(provider)).data;
+          return provider in ['google_drive', 'dropbox', 'nextcloud', 'webdav']
+            && data.keys().hasOnly(['libraryId', 'generation', 'storageEpoch', 'deviceId', 'token', 'updatedAt'])
+            && connection.enabled == true && connection.state == 'ready'
+            && data.libraryId == connection.libraryId
+            && data.generation == connection.generation
+            && data.storageEpoch == connection.get('storageEpoch', '')
+            && data.deviceId is string && data.deviceId.matches('[A-Za-z0-9_-]{1,128}')
+            && data.token is string && data.token.size() > 0 && data.token.size() <= 128
+            && data.updatedAt == request.time;
+        }
+        allow read: if isMutableOwner(userId) && hasAutomaticExternalSync();
+        allow create: if isMutableOwner(userId) && hasAutomaticExternalSync() && validSignal();
+        allow update: if isMutableOwner(userId) && hasAutomaticExternalSync() && validSignal()
+          && (request.resource.data.generation != resource.data.generation
+            || request.resource.data.storageEpoch != resource.data.storageEpoch
+            || request.time >= resource.data.updatedAt + duration.value(10, 's'));
+        allow delete: if false;
+      }
+
       // Other subcollections (settings, preferences, etc.) - allow for owner
       match /{subcollection}/{document=**} {
         // Exclude notes, labels, and subscription which have specific rules above
@@ -272,6 +336,10 @@ service cloud.firestore {
             'otpVerification',
             'pendingProviderLinks',
             'auditLog',
+            'storage_credentials',
+            'storage_connections',
+            'storage_sync_signals',
+            'sync_settings',
             'preferences',
             'note_order_snapshots',
             'note_order_contexts',
@@ -329,6 +397,10 @@ service cloud.firestore {
     }
 
     // Payments collection - only Cloud Functions should access
+    match /storageOAuthSessions/{document=**} {
+      allow read, write: if false;
+    }
+
     match /payments/{paymentId} {
       allow read: if false;
       allow write: if false;

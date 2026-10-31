@@ -1,3 +1,6 @@
+import 'package:better_keep/services/note_sort_service.dart';
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
@@ -16,6 +19,9 @@ bool Function()? _manualRefreshCurrent;
 Future<SyncRefreshOutcome> runManualSyncRefresh({
   required Future<SyncRefreshOutcome> Function() notes,
   required Future<SyncRefreshOutcome> Function() labels,
+  Future<SyncRefreshOutcome?> Function()? external,
+  Future<SyncRefreshOutcome> Function()? ordering,
+  bool firebaseEnabled = true,
 }) async {
   Future<SyncRefreshOutcome> attempt(
     Future<SyncRefreshOutcome> Function() action,
@@ -31,12 +37,42 @@ Future<SyncRefreshOutcome> runManualSyncRefresh({
     }
   }
 
-  final noteOutcome = await attempt(notes);
-  if (noteOutcome == SyncRefreshOutcome.unavailable) {
-    return noteOutcome;
+  Future<SyncRefreshOutcome> firebase() async {
+    final noteOutcome = await attempt(notes);
+    if (noteOutcome == SyncRefreshOutcome.unavailable) return noteOutcome;
+    final labelOutcome = await attempt(labels);
+    final outcomes = [noteOutcome, labelOutcome];
+    if (ordering != null &&
+        outcomes.every(
+          (outcome) =>
+              outcome == SyncRefreshOutcome.complete ||
+              outcome == SyncRefreshOutcome.uploadRestricted,
+        )) {
+      outcomes.add(await attempt(ordering));
+    }
+    return combineSyncRefreshOutcomes(outcomes);
   }
-  final labelOutcome = await attempt(labels);
-  return combineSyncRefreshOutcomes([noteOutcome, labelOutcome]);
+
+  Future<SyncRefreshOutcome?> providers() async {
+    try {
+      return await external!();
+    } on CloudOperationCancelled {
+      return SyncRefreshOutcome.deferred;
+    } catch (error) {
+      return isCloudConnectionFailure(error)
+          ? SyncRefreshOutcome.unavailable
+          : SyncRefreshOutcome.failed;
+    }
+  }
+
+  final results = await Future.wait<SyncRefreshOutcome?>([
+    if (firebaseEnabled) firebase(),
+    if (external != null) providers(),
+  ]);
+  final outcomes = results.whereType<SyncRefreshOutcome>().toList();
+  return outcomes.isEmpty
+      ? SyncRefreshOutcome.deferred
+      : combineSyncRefreshOutcomes(outcomes);
 }
 
 /// Feedback belongs only to user actions, never to automatic sync retries.
@@ -54,7 +90,16 @@ Future<void> refreshSyncFromUser(BuildContext context) {
   late final Future<void> operation;
   operation =
       (() async {
+        final preference = FirebaseSyncPreference.instance;
         final outcome = await runManualSyncRefresh(
+          firebaseEnabled:
+              preference.enabled != false && !preference.stoppedLocally,
+          ordering: () => current()
+              ? NoteSortService().refreshWithOutcome(dataHydrated: true)
+              : Future.value(SyncRefreshOutcome.deferred),
+          external: () => current()
+              ? ExternalSyncService.instance.refreshWithOutcome()
+              : Future.value(SyncRefreshOutcome.deferred),
           notes: () => NoteSyncService().refreshWithOutcome(manual: true),
           labels: () => current()
               ? LabelSyncService().refreshWithOutcome()

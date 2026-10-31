@@ -110,6 +110,21 @@ test("paid owners can create valid manifests and chunks", async () => {
   await assertSucceeds(setDoc(doc(db, chunkPath), validChunk()));
 });
 
+test("paid owners can forward source metadata and legacy normalized revision IDs", async () => {
+  const db = firestoreFor(ownerId, { paid: true });
+  await assertSucceeds(setDoc(doc(db, manifestPath), validManifest({
+    revision: `firebase-${"a".repeat(64)}`,
+    updated_at: new Date("2026-01-02T03:04:05Z"),
+    content_hash: "b".repeat(64),
+    sync_meta: {
+      version: 1, kind: "order", entityId: contextId,
+      revisionId: `firebase-${"a".repeat(64)}`,
+      modifiedAtMicros: 1767323045000000, deleted: false,
+      payloadHash: "c".repeat(64),
+    },
+  })));
+});
+
 test("free owners cannot create or update ordering data", async () => {
   const db = firestoreFor(ownerId);
   await assertFails(setDoc(doc(db, manifestPath), validManifest()));
@@ -126,6 +141,22 @@ test("free owners cannot create or update ordering data", async () => {
   await assertFails(
     setDoc(doc(db, chunkPath), validChunk({ note_ids: ["changed"] })),
   );
+});
+
+test("ordering tombstones are empty manifests restricted to paid owners", async () => {
+  const tombstone = validManifest({
+    deleted: true, chunk_count: 0, note_count: 0,
+    content_hash: '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
+  });
+  const paid = doc(firestoreFor(ownerId, {paid: true}), manifestPath);
+  await assertSucceeds(setDoc(paid, tombstone));
+  await assertSucceeds(getDoc(doc(firestoreFor(ownerId), manifestPath)));
+  await assertFails(setDoc(doc(firestoreFor(ownerId), manifestPath), tombstone));
+  await assertFails(setDoc(doc(firestoreFor(otherId, {paid: true}), manifestPath), tombstone));
+  for (const fields of [
+    {deleted: 'true'}, {deleted: false}, {chunk_count: 1, note_count: 1},
+    {sort_mode: 'updatedNewest'}, {content_hash: 'a'.repeat(64)},
+  ]) await assertFails(setDoc(paid, {...tombstone, ...fields}));
 });
 
 test("owners can delete existing ordering data after downgrade", async () => {
@@ -154,12 +185,14 @@ test("manifest validation rejects malformed and excessive payloads", async () =>
     validManifest({ schema_version: 1 }),
     validManifest({ context_key: "main:list" }),
     validManifest({ sort_mode: "unsupported" }),
-    validManifest({ revision: "x".repeat(65) }),
+    validManifest({ revision: "x".repeat(257) }),
     validManifest({ chunk_count: 501 }),
     validManifest({ note_count: 1000001 }),
     validManifest({ chunk_count: 0, note_count: 1 }),
     validManifest({ chunk_count: 2, note_count: 2000 }),
     validManifest({ updated_at: "not-a-timestamp" }),
+    validManifest({ content_hash: "not-a-hash" }),
+    validManifest({ sync_meta: "not-a-map" }),
     validManifest({ unexpected: true }),
   ];
 

@@ -1,4 +1,4 @@
-export type SubscriptionPlanClaim = "pro" | "free";
+export type SubscriptionPlanClaim = "pro" | "lite" | "free";
 
 /** Preserves unrelated security claims while updating subscription claims. */
 export function mergeSubscriptionClaims(
@@ -10,6 +10,6 @@ export function mergeSubscriptionClaims(
 		...(existingClaims ?? {}),
 		plan,
 		planExpiresAt:
-			plan === "pro" && expiresAt !== null ? expiresAt.getTime() : null,
+			plan !== "free" && expiresAt !== null ? expiresAt.getTime() : null,
 	};
 }

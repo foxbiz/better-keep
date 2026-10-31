@@ -87,6 +87,7 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
 
   void _scheduleHide() {
     _hideTimer?.cancel();
+    if (_progress.phase == SyncPhase.storageFull) return;
     _hideTimer = Timer(const Duration(seconds: 3), () async {
       await _animationController.reverse();
       if (mounted && !_progress.isActive) {
@@ -126,7 +127,8 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
                   final counts = NoteSyncService().syncProgress.value;
                   final showCounts =
                       _progress.phase == SyncPhase.syncing &&
-                      NoteSyncService().isSyncing.value;
+                      NoteSyncService().isSyncing.value &&
+                      SyncPresentation.instance.showNoteCounts;
                   return _SyncProgressCard(
                     syncedCount: showCounts ? counts.$1 : 0,
                     totalCount: showCounts ? counts.$2 : 0,

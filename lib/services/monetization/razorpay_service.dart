@@ -128,6 +128,7 @@ class RazorpayService {
   /// [currency] defaults to the currently selected currency from SubscriptionService.
   Future<RazorpayPaymentResult> purchaseSubscription({
     required bool yearly,
+    UserPlan plan = UserPlan.pro,
     String? currency,
   }) async {
     // Defense in depth: reject unsupported platforms before authentication or
@@ -163,7 +164,11 @@ class RazorpayService {
 
       final createResult = await callCloudFunction(
         'createRazorpaySubscription',
-        {'yearly': yearly, 'currency': selectedCurrency},
+        {
+          'yearly': yearly,
+          'currency': selectedCurrency,
+          'tier': plan.toStorageString(),
+        },
       );
       final createData = Map<String, dynamic>.from(createResult.data as Map);
 
@@ -172,7 +177,8 @@ class RazorpayService {
         return RazorpayPaymentResult.failed('Failed to create subscription');
       }
 
-      final planName = createData['name'] as String? ?? 'Pro Subscription';
+      final planName =
+          createData['name'] as String? ?? '${plan.displayName} Subscription';
       // Use test key in debug mode, live key in release
       final serverKeyId = createData['keyId'] as String? ?? _keyId;
       final keyId = _getCheckoutKey(serverKeyId);
@@ -225,7 +231,7 @@ class RazorpayService {
 
       if (!PlanService.instance.status.isActiveProviderEntitlement) {
         return RazorpayPaymentResult.failed(
-          'Payment confirmed, but Pro activation is still pending',
+          'Payment confirmed, but subscription activation is still pending',
         );
       }
 

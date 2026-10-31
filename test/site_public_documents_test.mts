@@ -30,12 +30,13 @@ async function collectHtml(directory: string, prefix = ""): Promise<string[]> {
 	return files;
 }
 
-test("web keeps only the four operational HTML entry points", async () => {
+test("web keeps only the operational HTML entry points", async () => {
 	assert.deepEqual((await collectHtml(webRoot)).sort(), [
 		"auth.html",
 		"desktop-checkout.html",
 		"index.html",
 		"reset-password.html",
+		"storage-auth.html",
 	]);
 
 	const shareRoute = await readFile(

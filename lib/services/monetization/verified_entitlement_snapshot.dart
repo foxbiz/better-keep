@@ -1,5 +1,4 @@
 import 'subscription_status.dart';
-import 'user_plan.dart';
 
 /// UID-bound copy of an entitlement returned by authenticated backend
 /// verification. It is a local availability floor, not server authorization.
@@ -17,7 +16,7 @@ class VerifiedEntitlementSnapshot {
   bool isUsableFor(String expectedUid, {DateTime? now}) {
     final effectiveNow = now ?? DateTime.now();
     return uid == expectedUid &&
-        status.plan == UserPlan.pro &&
+        status.plan.isPaid &&
         (status.isPlayStoreSubscription ||
             status.isAppStoreSubscription ||
             status.isRazorpaySubscription) &&
