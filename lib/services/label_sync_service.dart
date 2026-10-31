@@ -1,5 +1,10 @@
+import 'external_sync/firebase_sync_migration.dart';
+
+import 'package:better_keep/services/firebase_sync_preference.dart';
+import 'package:better_keep/services/external_sync/firebase_sync_version.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/external_sync/sync_version.dart';
 import 'package:better_keep/services/cloud_operation.dart';
-import 'package:better_keep/services/cloud_read.dart';
 import 'package:better_keep/services/async_initialization_gate.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 
@@ -26,7 +31,6 @@ import 'package:flutter/material.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:uuid/uuid.dart';
 
 class LabelSyncService {
   @visibleForTesting
@@ -121,11 +125,13 @@ class LabelSyncService {
   String get _incomingSyncState =>
       'backendConfigured=${FirebaseBackend.isConfigured}, '
       'cloud=${AuthService.cloudRecovery.state.value.name}, '
+      'provider=${FirebaseSyncPreference.instance.selectedProvider ?? 'unconfirmed'}, '
+      'firebaseAllowed=${FirebaseBackend.isConfigured && FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)}, '
       'cryptoReady=${E2EEService.instance.isCryptoReady}, '
       'sessionInvalid=${AuthService.sessionInvalid.value}, review=$_isReviewSession';
 
   String get _pushSyncState =>
-      '$_incomingSyncState, paid=${PlanService.instance.isPaid}';
+      '$_incomingSyncState, paid=${PlanService.instance.entitlements.realtimeCloudSync}';
 
   /// Check if we can receive/download sync (incoming):
   /// - Not an authorized review session
@@ -133,7 +139,8 @@ class LabelSyncService {
   /// Note: Pro subscription NOT required for receiving sync
   bool get _canReceiveSync {
     // If session is invalid (user deleted/disabled), disable all sync
-    if (!AuthService.canSyncCloud) {
+    if (!AuthService.canSyncCloud ||
+        !FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
       return false;
     }
 
@@ -151,7 +158,7 @@ class LabelSyncService {
       return false;
     }
     // Cloud sync upload requires Pro subscription
-    if (!PlanService.instance.isPaid) {
+    if (!PlanService.instance.entitlements.realtimeCloudSync) {
       return false;
     }
     return true;
@@ -165,9 +172,9 @@ class LabelSyncService {
     final generation = _sessionGeneration;
     final cloudGeneration = _cloudGeneration;
     return () =>
-        current() &&
         generation == _sessionGeneration &&
-        (!cloud || cloudGeneration == _cloudGeneration);
+        (!cloud || cloudGeneration == _cloudGeneration) &&
+        current();
   }
 
   Future<void> Function() _background(
@@ -190,8 +197,31 @@ class LabelSyncService {
     },
   );
 
+  bool _lastFirebaseSyncAllowed = false;
+  void _onSyncSelectionChange() {
+    final allowed = FirebaseSyncPreference.instance.allowsSync(
+      currentUser?.uid,
+    );
+    if (allowed == _lastFirebaseSyncAllowed) return;
+    _lastFirebaseSyncAllowed = allowed;
+    if (!_canReceiveSync) {
+      _onCloudStateChange();
+      return;
+    }
+    unawaited(
+      _background(() async {
+        await init();
+        requireCloudOperation();
+        await resumeCloudSync();
+      })(),
+    );
+  }
+
   void _onCloudStateChange() {
-    if (AuthService.canSyncCloud) return;
+    if (AuthService.canSyncCloud &&
+        FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
+      return;
+    }
     _cloudGeneration++;
     _syncTimer?.cancel();
     _pullRetry.cancel();
@@ -218,6 +248,10 @@ class LabelSyncService {
     if (_initialized) return;
     _initialized = true;
     AuthService.cloudRecovery.state.addListener(_onCloudStateChange);
+    _lastFirebaseSyncAllowed = FirebaseSyncPreference.instance.allowsSync(
+      currentUser?.uid,
+    );
+    FirebaseSyncPreference.instance.addListener(_onSyncSelectionChange);
 
     AppLogger.log("[LABEL_SYNC] LabelSyncService initialized");
 
@@ -225,7 +259,7 @@ class LabelSyncService {
     _lastKnownCryptoReady = e2ee.isCryptoReady;
 
     // Initialize with current subscription state
-    _wasPreviouslyPaid = PlanService.instance.isPaid;
+    _wasPreviouslyPaid = PlanService.instance.entitlements.realtimeCloudSync;
 
     // Listen for subscription changes
     PlanService.instance.statusNotifier.addListener(_onSubscriptionChange);
@@ -330,7 +364,7 @@ class LabelSyncService {
 
   /// Called when subscription status changes
   void _onSubscriptionChange() {
-    final isPaidNow = PlanService.instance.isPaid;
+    final isPaidNow = PlanService.instance.entitlements.realtimeCloudSync;
     AppLogger.log(
       "[LABEL_SYNC]Subscription changed - isPaid: $isPaidNow (was: $_wasPreviouslyPaid)",
     );
@@ -486,68 +520,6 @@ class LabelSyncService {
                     final localId =
                         existingSyncTrack?.localId ?? stableLabel?.id;
 
-                    if (isDeleted) {
-                      AppLogger.log(
-                        "[LABEL_SYNC] Label doc $remoteDocId is deleted, handling deletion",
-                      );
-                      if (localId != null) {
-                        _addSyncingIncoming(localId);
-                        try {
-                          await _handleRemoteDeletedLabelByRemoteId(
-                            remoteDocId,
-                          );
-                        } finally {
-                          _removeSyncingIncoming(localId);
-                        }
-                      } else {
-                        await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
-                      }
-                      continue;
-                    }
-
-                    if (existingSyncTrack != null &&
-                        (existingSyncTrack.status == LabelSyncStatus.pending ||
-                            existingSyncTrack.status ==
-                                LabelSyncStatus.failed)) {
-                      AppLogger.log(
-                        "[LABEL_SYNC] Skipping real-time update for doc $remoteDocId - has pending local changes",
-                      );
-                      continue;
-                    }
-
-                    Label? localLabel;
-                    if (localId != null) {
-                      localLabel = await Label.findById(localId);
-                    }
-
-                    if (localLabel != null &&
-                        remoteData['updated_at'] != null) {
-                      final localUpdatedAt = localLabel.updatedAt;
-                      final updatedAtValue = remoteData['updated_at'];
-                      final remoteUpdatedAt = updatedAtValue is String
-                          ? DateTime.tryParse(updatedAtValue)
-                          : null;
-                      if (remoteUpdatedAt == null) {
-                        allChangesSucceeded = false;
-                        AppLogger.error(
-                          '[LABEL_SYNC] Quarantined malformed label $remoteDocId',
-                          StateError('updated_at must be an ISO-8601 string'),
-                        );
-                        continue;
-                      }
-
-                      if (localUpdatedAt != null &&
-                          (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                              remoteUpdatedAt.isAtSameMomentAs(
-                                localUpdatedAt,
-                              ))) {
-                        AppLogger.log(
-                          "[LABEL_SYNC] Skipping doc $remoteDocId - local is same or newer (local: $localUpdatedAt, remote: $remoteUpdatedAt)",
-                        );
-                        continue;
-                      }
-                    }
-
                     AppLogger.log(
                       "[LABEL_SYNC] Patching label from remote doc $remoteDocId",
                     );
@@ -681,6 +653,7 @@ class LabelSyncService {
   Future<void> dispose() async {
     _sessionGeneration++;
     AuthService.cloudRecovery.state.removeListener(_onCloudStateChange);
+    FirebaseSyncPreference.instance.removeListener(_onSyncSelectionChange);
     await _stopRemoteListener();
     _syncTimer?.cancel();
     _syncTimer = null;
@@ -788,7 +761,7 @@ class LabelSyncService {
       requireCloudOperation();
       final uploadRestricted =
           syncFailed.value.isEmpty &&
-          !PlanService.instance.isPaid &&
+          !PlanService.instance.entitlements.realtimeCloudSync &&
           await LabelSyncTrack.count(pending: true) > 0;
       requireCloudOperation();
       if (uploadRestricted) {
@@ -892,209 +865,113 @@ class LabelSyncService {
     if (pendingSyncs.isEmpty) return;
     syncStatus.value = const SyncProgress(SyncPhase.savingChanges);
 
-    WriteBatch batch = _firestore.batch();
-    int batchCount = 0;
     Object? pushFailure;
-    final List<Future<void> Function()> postCommitActions = [];
-
     for (final sync in pendingSyncs) {
-      final syncStartTime = DateTime.now();
+      final started = DateTime.now();
       _addSyncingOutgoing(sync.localId);
       try {
-        if (sync.action == LabelSyncAction.delete && sync.remoteId == null) {
+        final captured = await AppState.db.transaction((txn) async {
           requireCloudOperation();
-          await sync.delete();
-          AppLogger.log(
-            "[LABEL_SYNC] Deleted local sync track for label without remote ID: ${sync.localId}",
+          final rows = await txn.query(
+            Label.model,
+            where: 'id = ?',
+            whereArgs: [sync.localId],
           );
-          _removeSyncingOutgoing(sync.localId);
+          final row = rows.isEmpty ? null : rows.single;
+          final remoteId = sync.remoteId ?? row?['sync_id'] as String?;
+          if (remoteId == null) return null;
+          final version =
+              await SyncMutationJournal.current(
+                txn,
+                SyncEntityKind.label,
+                remoteId,
+              ) ??
+              FirebaseSyncVersion.read(SyncEntityKind.label, remoteId, {
+                ...?row,
+                'updated_at':
+                    // This is the originating device's local database, not
+                    // an ambiguous remote wall clock. Normalize before binding.
+                    DateTime.tryParse(row?['updated_at']?.toString() ?? '')
+                        ?.toUtc()
+                        .toIso8601String() ??
+                    sync.updatedAt?.toUtc().toIso8601String(),
+                if (row == null) 'deleted': true,
+              });
+          if (version.deleted != (row == null)) {
+            throw StateError('Label version does not match content');
+          }
+          return (row: row, version: version);
+        });
+        if (captured == null) {
+          await sync.deleteIfUnchanged();
           continue;
         }
-
-        late final Map<String, dynamic>? remoteData;
-
-        if (sync.remoteId != null) {
-          final docSnapshot = await readCloudDocument(
-            _labelsCollection.doc(sync.remoteId),
-            isCurrent: cloudOperationIsCurrent,
-          );
-          if (docSnapshot.exists) {
-            remoteData = docSnapshot.data()!;
-          } else {
-            remoteData = null;
-          }
-        } else {
-          remoteData = null;
+        final version = captured.version;
+        final row = captured.row;
+        final payload = FirebaseSyncVersion.bind({
+          'local_id': sync.localId,
+          if (row != null) ...{
+            'name': row['name'],
+            'is_system': row['is_system'] ?? 0,
+            'created_at': DateTime.tryParse(row['created_at']?.toString() ?? '')
+                ?.toUtc()
+                .toIso8601String(),
+          },
+        }, version);
+        payload[cloudSyncCommittedAtField] = FieldValue.serverTimestamp();
+        if (version.deleted) {
+          payload['deleted_at'] = FieldValue.serverTimestamp();
         }
-
-        if (remoteData != null) {
-          final remoteUpdatedAt = DateTime.parse(remoteData['updated_at']);
-
-          final hasPendingSync =
-              sync.status == LabelSyncStatus.pending ||
-              sync.status == LabelSyncStatus.failed;
-
-          if (hasPendingSync) {
-            AppLogger.log(
-              "[LABEL_SYNC] Skipping remote patch for label ${sync.localId} - has pending local changes",
-            );
-          } else if (sync.updatedAt == null ||
-              remoteUpdatedAt.isAfter(sync.updatedAt!)) {
-            await _patchRemoteLabel(remoteData, sync.remoteId!);
-            AppLogger.log(
-              "[LABEL_SYNC] Patched local label from remote changes: ${sync.remoteId}",
-            );
-            _removeSyncingOutgoing(sync.localId);
-            continue;
-          }
-        }
-
-        final isRemoteDeleted =
-            remoteData?['deleted'] == true || remoteData?['deleted'] == 1;
-        if (sync.action == LabelSyncAction.delete && !isRemoteDeleted) {
-          if (remoteData == null) {
+        if (sync.remoteId == null) await sync.claimRemoteId(version.entityId);
+        final winner = await FirebaseSyncMigration.retry(
+          _labelsCollection.doc(version.entityId),
+          SyncEntityKind.label,
+          requireCloudOperation,
+          () => _firestore.runTransaction<Map<String, dynamic>?>((txn) async {
             requireCloudOperation();
-            await sync.delete();
-            AppLogger.log(
-              "[LABEL_SYNC] Remote document doesn't exist, cleaning up sync track for: ${sync.localId}",
-            );
-            _removeSyncingOutgoing(sync.localId);
-            continue;
-          }
-          if (sync.remoteId != null) {
-            final localId = sync.localId;
-            batch.set(_labelsCollection.doc(sync.remoteId), {
-              'local_id': sync.localId,
-              'deleted_at': FieldValue.serverTimestamp(),
-              'deleted': true,
-              'updated_at': DateTime.now().toIso8601String(),
-              cloudSyncCommittedAtField: FieldValue.serverTimestamp(),
-            });
-            postCommitActions.add(() async {
-              requireCloudOperation();
-              requireCloudOperation();
-              await sync.delete();
-              AppLogger.log(
-                "[LABEL_SYNC] Deleted remote label: ${sync.remoteId}",
-              );
-              _removeSyncingOutgoing(localId);
-            });
-            batchCount++;
-          } else {
-            requireCloudOperation();
-            await sync.delete();
-            _removeSyncingOutgoing(sync.localId);
-          }
-          continue;
-        }
-
-        final label = await Label.findById(sync.localId);
-
-        if (label == null) {
-          requireCloudOperation();
-          await sync.delete();
-          _removeSyncingOutgoing(sync.localId);
-          continue;
-        }
-
-        final labelData = <String, dynamic>{
-          'local_id': label.id,
-          'name': label.name,
-          'created_at': label.createdAt?.toIso8601String(),
-          'updated_at': label.updatedAt?.toIso8601String(),
-          cloudSyncCommittedAtField: FieldValue.serverTimestamp(),
-        };
-
-        final localId = sync.localId;
-        final capturedSyncStartTime = syncStartTime;
-        if (sync.remoteId != null) {
-          batch.set(
-            _labelsCollection.doc(sync.remoteId),
-            labelData,
-            SetOptions(merge: true),
-          );
-          postCommitActions.add(() async {
-            requireCloudOperation();
-            final wasUnchanged = await sync.markSyncedIfUnchanged(
-              capturedSyncStartTime,
-            );
-            if (wasUnchanged) {
-              AppLogger.log(
-                "[LABEL_SYNC] Updated remote label: ${sync.remoteId}",
-              );
-            } else {
-              AppLogger.log(
-                "[LABEL_SYNC] Label ${sync.localId} was modified during sync, triggering re-sync",
-              );
-              LabelSyncService().sync();
+            final ref = _labelsCollection.doc(version.entityId);
+            final snapshot = await txn.get(ref);
+            if (snapshot.metadata.isFromCache ||
+                snapshot.metadata.hasPendingWrites) {
+              throw const CloudVerificationUnavailable();
             }
-            _removeSyncingOutgoing(localId);
-          });
-        } else {
-          final stableId = label.syncId ?? const Uuid().v4();
-          if (label.syncId != stableId) {
-            label.syncId = stableId;
             requireCloudOperation();
-            await AppState.db.update(
-              Label.model,
-              {'sync_id': stableId},
-              where: 'id = ?',
-              whereArgs: [label.id],
-            );
-          }
-          final newDocRef = _labelsCollection.doc(stableId);
-          batch.set(newDocRef, labelData);
-          requireCloudOperation();
-          await sync.claimRemoteId(newDocRef.id);
-          postCommitActions.add(() async {
-            requireCloudOperation();
-            final wasUnchanged = await sync.markSyncedIfUnchanged(
-              capturedSyncStartTime,
-            );
-            if (wasUnchanged) {
-              AppLogger.log(
-                "[LABEL_SYNC] Created remote label: ${newDocRef.id}",
+            final data = snapshot.data();
+            if (data != null) {
+              final current = FirebaseSyncVersion.read(
+                SyncEntityKind.label,
+                version.entityId,
+                data,
               );
-            } else {
-              AppLogger.log(
-                "[LABEL_SYNC] Label ${sync.localId} was modified during sync, triggering re-sync",
-              );
-              LabelSyncService().sync();
+              final comparison = current.compareTo(version);
+              if (comparison > 0) return data;
+              if (comparison == 0) return null;
             }
-            _removeSyncingOutgoing(localId);
-          });
+            txn.set(ref, payload);
+            return null;
+          }, timeout: const Duration(seconds: 10)),
+        );
+        requireCloudOperation();
+        if (winner != null) {
+          await _patchRemoteLabel(winner, version.entityId);
+        } else if (version.deleted) {
+          await sync.deleteIfUnchanged();
+        } else if (!await sync.markSyncedIfUnchanged(started)) {
+          LabelSyncService().sync();
         }
-
-        batchCount++;
-
-        if (batchCount >= 400) {
-          requireCloudOperation();
-          await batch.commit().timeout(const Duration(seconds: 10));
-          requireCloudOperation();
-          for (final action in postCommitActions) {
-            await action();
-          }
-          postCommitActions.clear();
-          batch = _firestore.batch();
-          batchCount = 0;
-        }
-      } catch (e) {
-        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+      } catch (error) {
+        if (error is CloudOperationCancelled ||
+            isCloudConnectionFailure(error)) {
           rethrow;
         }
-        pushFailure = e;
-        AppLogger.error("[LABEL_SYNC] Error syncing label ${sync.localId}: $e");
+        pushFailure = error;
+        AppLogger.error(
+          '[LABEL_SYNC] Could not publish label ${sync.localId}',
+          error,
+        );
         _markSyncFailed(sync.localId);
+      } finally {
         _removeSyncingOutgoing(sync.localId);
-      }
-    }
-
-    if (batchCount > 0) {
-      requireCloudOperation();
-      await batch.commit().timeout(const Duration(seconds: 10));
-      requireCloudOperation();
-      for (final action in postCommitActions) {
-        await action();
       }
     }
     if (pushFailure != null) throw pushFailure;
@@ -1219,45 +1096,6 @@ class LabelSyncService {
         final stableLabel = await Label.findBySyncId(remoteDocId);
         final localId = existingSyncTrack?.localId ?? stableLabel?.id;
 
-        if (isDeleted) {
-          if (localId != null) {
-            _addSyncingIncoming(localId);
-            try {
-              await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
-            } finally {
-              _removeSyncingIncoming(localId);
-            }
-          } else {
-            await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
-          }
-          continue;
-        }
-
-        if (existingSyncTrack != null &&
-            (existingSyncTrack.status == LabelSyncStatus.pending ||
-                existingSyncTrack.status == LabelSyncStatus.failed)) {
-          AppLogger.log(
-            "[LABEL_SYNC] Skipping pull for doc $remoteDocId - has pending local changes",
-          );
-          continue;
-        }
-
-        final localLabel = localId == null
-            ? null
-            : await Label.findById(localId);
-        if (localLabel != null && remoteData['updated_at'] != null) {
-          final localUpdatedAt = localLabel.updatedAt;
-          final remoteUpdatedAt = DateTime.parse(
-            remoteData['updated_at'] as String,
-          );
-
-          if (localUpdatedAt != null &&
-              (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                  remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt))) {
-            continue;
-          }
-        }
-
         if (localId != null) {
           _addSyncingIncoming(localId);
         }
@@ -1275,8 +1113,6 @@ class LabelSyncService {
 
       lastDocument = querySnapshot.docs.last;
     }
-
-    await Label.fixLabels();
 
     checkpointCommit.stage(
       CloudSyncCheckpoint(bootstrapped: true, cursor: committedCursor),
@@ -1343,121 +1179,153 @@ class LabelSyncService {
     }
   }
 
-  Future<void> _handleRemoteDeletedLabelByRemoteId(String remoteDocId) async {
-    final syncTrack = await LabelSyncTrack.getByRemoteId(remoteDocId);
-    final label =
-        await Label.findBySyncId(remoteDocId) ??
-        (syncTrack == null ? null : await Label.findById(syncTrack.localId));
-    if (label != null) {
-      await label.delete(sync: false, origin: ModelChangeOrigin.remoteSync);
-    }
-    await syncTrack?.delete();
-    AppLogger.log(
-      "[LABEL_SYNC] Deleted local label from remote deletion by remoteId: $remoteDocId",
-    );
-  }
+  Future<void> _patchRemoteLabel(Map<String, dynamic> data, String remoteId) =>
+      _labelApplySerializer.run(
+        remoteId,
+        () => _applyRemoteLabel(data, remoteId),
+      );
 
-  Future<void> _patchRemoteLabel(
-    Map<String, dynamic> remoteData,
-    String remoteDocId,
-  ) => _labelApplySerializer.run(
-    remoteDocId,
-    () => _patchRemoteLabelInner(remoteData, remoteDocId),
-  );
-
-  Future<void> _patchRemoteLabelInner(
-    Map<String, dynamic> remoteData,
-    String remoteDocId,
+  Future<void> _applyRemoteLabel(
+    Map<String, dynamic> data,
+    String remoteId,
   ) async {
-    final isDeleted =
-        remoteData['deleted'] == true || remoteData['deleted'] == 1;
-    if (isDeleted) {
-      await _handleRemoteDeletedLabelByRemoteId(remoteDocId);
-      return;
-    }
-
-    // First, try to find existing label by remoteId (sync track)
-    LabelSyncTrack? existingSyncTrack = await LabelSyncTrack.getByRemoteId(
-      remoteDocId,
+    data = await FirebaseSyncMigration.resolve(
+      _labelsCollection.doc(remoteId),
+      SyncEntityKind.label,
+      data,
+      requireCloudOperation,
     );
-    Label? label;
-
-    if (existingSyncTrack != null) {
-      label = await Label.findById(existingSyncTrack.localId);
-    }
-
-    label ??= await Label.findBySyncId(remoteDocId);
-
-    // Fallback: find by name. If found, also link the sync track so
-    // future syncs won't create a duplicate for this remote doc.
-    if (label == null) {
-      label = await Label.findByName(remoteData['name'] as String);
-      if (label != null && existingSyncTrack == null) {
-        // Link this existing local label to the remote doc
-        existingSyncTrack = await LabelSyncTrack.getByLocalId(label.id!);
-      }
-    }
-
-    if (label == null) {
-      // Create new label - let SQLite auto-generate the ID
-      label = Label(
-        name: remoteData['name'] as String,
-        syncId: remoteDocId,
-        createdAt: remoteData['created_at'] != null
-            ? DateTime.parse(remoteData['created_at'])
-            : null,
-        updatedAt: remoteData['updated_at'] != null
-            ? DateTime.parse(remoteData['updated_at'])
-            : null,
-      );
-
-      // Save without triggering sync (we're pulling from remote)
-      final newId = await label.save(
-        sync: false,
-        origin: ModelChangeOrigin.remoteSync,
-      );
-      label.id = newId;
-    } else {
-      // Update existing label
-      label.name = remoteData['name'] as String;
-      label.syncId = remoteDocId;
-      label.updatedAt = remoteData['updated_at'] != null
-          ? DateTime.parse(remoteData['updated_at'])
-          : DateTime.now();
-
+    final version = FirebaseSyncVersion.read(
+      SyncEntityKind.label,
+      remoteId,
+      data,
+    );
+    Label? changed;
+    String? event;
+    await AppState.db.transaction((txn) async {
       requireCloudOperation();
-      await AppState.db.update(
+      final current = await SyncMutationJournal.current(
+        txn,
+        SyncEntityKind.label,
+        remoteId,
+      );
+      if (current != null && version.compareTo(current) <= 0) return;
+      final rows = await txn.query(
         Label.model,
-        label.toJson(),
-        where: "id = ?",
-        whereArgs: [label.id],
+        where: 'sync_id = ?',
+        whereArgs: [remoteId],
       );
-      label.notifyWithOrigin("updated", ModelChangeOrigin.remoteSync);
-    }
-
-    // Update or create sync track using the label's actual local ID
-    LabelSyncTrack? syncTrack =
-        existingSyncTrack ?? await LabelSyncTrack.getByLocalId(label.id!);
-    if (syncTrack == null) {
-      syncTrack = LabelSyncTrack(
-        localId: label.id!,
-        remoteId: remoteDocId,
-        action: LabelSyncAction.upload,
-        status: LabelSyncStatus.synced,
+      var tracks = await txn.query(
+        LabelSyncTrack.model,
+        where: 'remote_id = ?',
+        whereArgs: [remoteId],
       );
-    } else {
-      if (syncTrack.remoteId != remoteDocId) {
-        requireCloudOperation();
-        await syncTrack.claimRemoteId(remoteDocId);
+      if (tracks.isEmpty && rows.isNotEmpty) {
+        tracks = await txn.query(
+          LabelSyncTrack.model,
+          where: 'local_id = ? AND (remote_id IS NULL OR remote_id = ?)',
+          whereArgs: [rows.single['id'], remoteId],
+        );
       }
-      syncTrack.status = LabelSyncStatus.synced;
+      // Stable identities are never reassigned merely because names match.
+      var id = rows.isNotEmpty
+          ? rows.single['id'] as int
+          : tracks.isNotEmpty
+          ? tracks.single['local_id'] as int
+          : null;
+      if (rows.isNotEmpty && current == null) {
+        final time = DateTime.tryParse(
+          rows.single['updated_at']?.toString() ?? '',
+        );
+        if (time != null &&
+            time.toUtc().microsecondsSinceEpoch > version.modifiedAtMicros) {
+          return;
+        }
+      }
+      await SyncMutationJournal.withoutCapture(txn, () async {
+        if (version.deleted) {
+          if (rows.isNotEmpty) {
+            changed = Label.fromJson(rows.single);
+            event = 'deleted';
+            await txn.delete(
+              Label.model,
+              where: 'sync_id = ?',
+              whereArgs: [remoteId],
+            );
+          }
+          await txn.delete(
+            LabelSyncTrack.model,
+            where: 'remote_id = ? OR (local_id = ? AND remote_id IS NULL)',
+            whereArgs: [remoteId, id],
+          );
+        } else {
+          final row = <String, Object?>{
+            'sync_id': remoteId,
+            'name': data['name'],
+            'is_system': data['is_system'] == 1 ? 1 : 0,
+            'created_at': FirebaseSyncVersion.timestamp(data['created_at'])
+                ?.toIso8601String(),
+            'updated_at': DateTime.fromMicrosecondsSinceEpoch(
+              version.modifiedAtMicros,
+              isUtc: true,
+            ).toIso8601String(),
+          };
+          if (data['name'] is! String || row['created_at'] == null) {
+            throw const FormatException('Invalid label payload');
+          }
+          if (rows.isEmpty) {
+            // Let SQLite allocate an ID if the historical track's ID is occupied.
+            if (id != null &&
+                (await txn.query(
+                  Label.model,
+                  where: 'id = ?',
+                  whereArgs: [id],
+                )).isNotEmpty) {
+              id = null;
+            }
+            id = await txn.insert(Label.model, {'id': ?id, ...row});
+            event = 'created';
+          } else {
+            await txn.update(
+              Label.model,
+              row,
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+            event = 'updated';
+          }
+          changed = Label.fromJson({'id': id, ...row});
+          final track = tracks.isEmpty ? null : tracks.single;
+          final ack = <String, Object?>{
+            'local_id': id,
+            'remote_id': remoteId,
+            'action': LabelSyncAction.upload.name,
+            'status': LabelSyncStatus.synced.name,
+            'created_at': track?['created_at'] ?? row['updated_at'],
+            'updated_at': row['updated_at'],
+          };
+          if (track == null) {
+            await txn.insert(LabelSyncTrack.model, ack);
+          } else {
+            await txn.update(
+              LabelSyncTrack.model,
+              ack,
+              where: 'id = ?',
+              whereArgs: [track['id']],
+            );
+          }
+        }
+        await SyncMutationJournal.received(
+          txn,
+          version,
+          id?.toString() ?? current?.localId ?? '',
+        );
+      });
+      requireCloudOperation();
+    });
+    if (changed != null && cloudOperationIsCurrent()) {
+      changed!.notifyWithOrigin(event!, ModelChangeOrigin.remoteSync);
     }
-    requireCloudOperation();
-    await syncTrack.save();
-
-    AppLogger.log(
-      "[LABEL_SYNC] Patched label ${label.id} from remote doc $remoteDocId",
-    );
   }
 
   /// Queue a label for sync when created or updated

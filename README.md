@@ -73,15 +73,34 @@ The app requires environment variables defined in a `.env` file. Create one at t
 # WEB_AUTH_DOMAIN=betterkeep.app
 # WINDOWS_AUTH_DOMAIN=betterkeep.app
 #
-# Web storage encryption key (64-char hex string, 256 bits)
-# Generate with: openssl rand -hex 32
-# WEB_STORAGE_KEY=<your-64-char-hex-key>
-#
 # Required for physical Android/iOS devices in emulator mode.
 # Optional remote/LAN override for desktop clients; same-machine desktop
 # clients default to 127.0.0.1.
 # EMULATOR_HOST=192.168.1.25
 ```
+
+Storage provider public client IDs are documented in [.env.example](.env.example).
+For HTTPS development, run `npm run dev web` and `npm run dev hosting`, then
+open `/app` on your configured development origin. The site proxies `/app` to Flutter
+and serves its browser callback at `/oauth/storage/callback`, preserving the
+registered provider URL. For an isolated Flutter port, start hosting with
+`BETTER_KEEP_FLUTTER_DEV_ORIGIN=http://127.0.0.1:PORT`. This is only the local
+upstream; browser authorization still uses the public HTTPS hostname.
+`EMULATOR_HOST` configures the emulator hostname/IP, including web and simulators.
+On physical devices, the debug screen's LAN host field takes precedence.
+For a browser served over HTTPS, also set
+`EMULATOR_WEB_ORIGIN` to your HTTPS development origin in `.env` and rebuild.
+Astro reads the same value for its allowed hostname and public debug URLs;
+the actual hostname belongs only in your ignored local configuration.
+The browser then uses HTTPS paths `/__emulator/auth`, `/__emulator/firestore`,
+`/__emulator/functions`, and `/__emulator/storage`. Astro can forward these to
+local ports 9099, 8080, 5001, and 9199 whenever `EMULATOR_WEB_ORIGIN` is set.
+Leave it empty to disable the development emulator proxy. Native SDKs still use
+the configured host and
+the emulator ports over HTTP. The override never changes Live routing.
+Browser encryption keys are memory-only; no build-time storage encryption key is
+used. See [external sync setup and transition](docs/EXTERNAL_SYNC_IMPLEMENTATION.md#provider-configuration)
+for provider setup and the device-verification flow.
 
 **Using VS Code:**
 

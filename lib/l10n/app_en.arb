@@ -1,4 +1,10 @@
 {
+  "externalSyncContinue": "Continue",
+  "externalSyncConnectionInfo": "Connection info",
+  "externalSyncConnectPrompt": "Sign in to start syncing your notes.",
+  "externalSyncNativeSetupPrompt": "Sign in to Google Drive on this device.",
+  "externalSyncWebDavHelp": "Enter your full WebDAV folder URL and an app password. Browser sync requires your server to allow cross-origin requests.",
+
 	"@@locale": "en",
 	"@@last_modified": "2026-01-31",
 
@@ -1905,7 +1911,7 @@
 		"description": "Snackbar message shown when user successfully subscribes via subscription listener"
 	},
 	"paymentConfirmedTitle": "Payment confirmed",
-	"paymentConfirmedActivationPending": "Payment was confirmed, but Pro activation is taking longer. Do not purchase again. Recheck your status or manage the subscription in Google Play.",
+	"paymentConfirmedActivationPending": "Payment was confirmed, but activation is taking longer. Do not purchase again. Recheck your status or manage your subscription.",
 	"recheckStatus": "Recheck Status",
 	"subscriptionAccountMismatchTitle": "Subscription linked to another account",
 	"subscriptionAccountMismatchMessage": "This Google Play subscription is linked to another Better Keep account. Sign in to that account or contact support; access has not been granted here.",
@@ -3919,5 +3925,185 @@
   "deviceStorageLow": "Your device is running low on storage. Free up space to help protect your unsynced notes.",
   "storageLoginAgain": "Log in again",
   "storageClearedAfterPressure": "Local data may have been cleared because storage was running low. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.",
-  "storageCleared": "Local data was cleared and you have been logged out. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud."
+  "storageCleared": "Local data was cleared and you have been logged out. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.",
+  "externalSyncTitle": "Sync provider",
+  "externalSyncDescription": "Choose one provider to sync your notes across devices.",
+  "externalSyncUnavailable": "Sign in and approve or recover this device to connect storage.",
+  "externalSyncAccount": "Account and encryption",
+  "externalSyncCloud": "Better Keep cloud",
+  "externalSyncCloudDescription": "Built-in sync · Requires Pro",
+  "externalSyncAction": "{action, select, connect{Connect} browser{Sign in with browser} manual{Use an app password} reconnect{Reconnect} continue{Continue in browser} pause{Pause} resume{Resume} disconnect{Disconnect} sync{Sync now} other{Retry}}",
+  "externalSyncState": "{state, select, preparing{Preparing authorization…} awaitingConsent{Ready to authorize in your browser} authorizing{Connecting…} cancelling{Cancelling authorization…} cancelPending{Cancellation could not be confirmed. Retry Cancel.} connecting{Connecting…} pausing{Pausing…} enabling{Resuming…} disconnecting{Disconnecting…} paused{Paused} notConnected{Not connected} keyRecovery{Recover your encryption key to use this connection.} pending{Some changes are waiting to sync.} other{Connected}}",
+  "externalSyncFailure": "{reason, select, sharedSetupRequired{Sign in to the connected Google Drive account on this device. Your notes stay encrypted.} reconnectRequired{Reconnect this account to continue syncing.} quotaExceeded{Your storage is full. Free up space in this provider and retry.} rateLimited{The provider asked us to wait. Sync will retry automatically.} corruptData{Some sync data could not be verified. Your local notes are kept.} unsupported{This provider or browser cannot complete the connection.} other{Could not reach this provider. Check your connection and retry.}}",
+  "externalSyncLastSuccess": "Last successful sync: {time}",
+  "externalSyncNeverSynced": "No successful sync yet",
+  "externalSyncBlocked": "Some notes or attachments are not ready to upload. Sync will retry.",
+  "externalSyncDisconnectTitle": "Disconnect {provider}?",
+  "externalSyncDisconnectMessage": "This stops syncing with this account. Notes on this device and files already stored with the provider are kept.",
+  "externalSyncRevocationIncomplete": "Disconnected from Better Keep. Access revocation could not be confirmed. Remove Better Keep’s access in your provider’s account settings.",
+  "externalSyncNextcloudHelp": "Use an app password from your Nextcloud security settings. Browser sync requires your server to allow cross-origin requests.",
+  "externalSyncServer": "Server URL",
+  "externalSyncUsername": "Username",
+  "externalSyncAppPassword": "App password",
+  "externalSyncInvalidServer": "Enter an HTTPS server URL without a username, password, query or fragment.",
+  "externalSyncRequired": "This field is required.",
+  "@externalSyncTitle": {
+    "description": "External storage sync settings: externalSyncTitle"
+  },
+  "@externalSyncDescription": {
+    "description": "External storage sync settings: externalSyncDescription"
+  },
+  "@externalSyncUnavailable": {
+    "description": "External storage sync settings: externalSyncUnavailable"
+  },
+  "@externalSyncAccount": {
+    "description": "External storage sync settings: externalSyncAccount"
+  },
+  "@externalSyncCloud": {
+    "description": "External storage sync settings: externalSyncCloud"
+  },
+  "@externalSyncCloudDescription": {
+    "description": "External storage sync settings: externalSyncCloudDescription"
+  },
+  "@externalSyncAction": {
+    "description": "External storage sync settings: externalSyncAction",
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "@externalSyncState": {
+    "description": "External storage sync settings: externalSyncState",
+    "placeholders": {
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "@externalSyncFailure": {
+    "description": "External storage sync settings: externalSyncFailure",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "@externalSyncLastSuccess": {
+    "description": "External storage sync settings: externalSyncLastSuccess",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@externalSyncNeverSynced": {
+    "description": "External storage sync settings: externalSyncNeverSynced"
+  },
+  "@externalSyncBlocked": {
+    "description": "External storage sync settings: externalSyncBlocked"
+  },
+  "@externalSyncDisconnectTitle": {
+    "description": "External storage sync settings: externalSyncDisconnectTitle",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "@externalSyncDisconnectMessage": {
+    "description": "External storage sync settings: externalSyncDisconnectMessage"
+  },
+  "@externalSyncRevocationIncomplete": {
+    "description": "External storage sync settings: externalSyncRevocationIncomplete"
+  },
+  "@externalSyncNextcloudHelp": {
+    "description": "External storage sync settings: externalSyncNextcloudHelp"
+  },
+  "@externalSyncServer": {
+    "description": "External storage sync settings: externalSyncServer"
+  },
+  "@externalSyncUsername": {
+    "description": "External storage sync settings: externalSyncUsername"
+  },
+  "@externalSyncAppPassword": {
+    "description": "External storage sync settings: externalSyncAppPassword"
+  },
+  "@externalSyncInvalidServer": {
+    "description": "External storage sync settings: externalSyncInvalidServer"
+  },
+  "@externalSyncRequired": {
+    "description": "External storage sync settings: externalSyncRequired"
+  },
+  "externalSyncAlreadyConnected": "Authorization finished before cancellation. The provider is connected. Use Disconnect to remove it.",
+  "@externalSyncAlreadyConnected": {"description": "OAuth registration won the cancellation race"},
+  "externalSyncNextcloudBrowserHelp": "Sign in on your Nextcloud server to grant access. You can revoke access in Nextcloud settings. Browser sync requires your server to allow cross-origin requests.",
+  "@externalSyncNextcloudBrowserHelp": {"description": "Nextcloud browser authorization and server requirements"},
+  "externalSyncLogoutPending": "Some changes are still pending sync. Signing out removes this device’s local notes and media. Changes that haven’t been saved to any provider may be lost.\n\nFinish syncing or export your data before signing out.",
+  "@externalSyncLogoutPending": {"description": "Conditional sign-out warning covering notes, labels, ordering and all sync providers"},
+  "externalSyncLogoutUnknown": "We couldn’t verify whether all your changes are synced. Signing out removes this device’s local notes and media. Changes that haven’t been saved to any provider may be lost.\n\nCheck your sync providers or export your data before signing out.",
+  "@externalSyncLogoutUnknown": {"description": "Sign-out warning when provider metadata or local sync state cannot be verified"},
+  "externalSyncUnlockSketches": "Some locked notes contain older sketches that need updating. On the device where you created them, open those notes and unlock them with your PIN, then retry sync.",
+  "@externalSyncUnlockSketches": {"description": "Recovery instructions when a protected legacy sketch cannot be uploaded to an external provider"},
+	"externalSyncOff": "Sync off",
+	"externalSyncOffDescription": "Keep notes on this device",
+	"externalSyncDetails": "Sync details",
+	"externalSyncNeedsAttention": "Needs attention · See sync details",
+	"externalSyncConnectTitle": "Connect {provider}",
+	"externalSyncConnectHelp": "Sign in to grant access to your storage. Once connected, this provider will be selected for sync.",
+	"@externalSyncConnectTitle": {"placeholders": {"provider": {"type": "String"}}},
+	"verifyNewDevice": "Verify new device",
+	"deviceVerificationInstructions": "On your trusted device, scan the QR shown on the new device, or compare the entire security code on both screens.",
+	"deviceVerificationExpired": "This verification code has expired. Generate a new code on the new device.",
+	"newVerificationCode": "Generate new code",
+	"deviceVerificationMismatch": "The devices do not match. Do not approve this request.",
+	"deviceVerificationMatched": "Device verified. You can now approve it.",
+	"scanNewDevice": "Scan new device",
+	"compareSecurityCode": "Compare security code",
+	"completeSecurityCodeMatches": "I compared the entire code on both devices. They match.",
+	"approveVerifiedDevice": "Approve device",
+	"deviceCameraUnavailable": "Camera unavailable. You can compare the security code instead.",
+	"deviceVerificationRetry": "Verification could not be completed. Update both devices and generate a new code on the new device, then try again.",
+	"browserEncryptionSessionOnly": "Encryption keys stay in this browser session only. After a reload, approve this browser again or use your recovery passphrase.",
+	"verifyTrustedDevice": "Verify trusted device",
+	"verifyTrustedDeviceInstructions": "On your trusted device, keep the confirmation screen open. Scan its QR code or compare all 32 characters of the security code before accepting your encryption key.",
+	"scanTrustedDevice": "Scan trusted device",
+	"acceptVerifiedKey": "Accept verified key",
+	"confirmOnNewDevice": "Confirm on your new device",
+	"confirmOnNewDeviceInstructions": "On the new device, choose “Verify trusted device”. Scan this QR code or confirm that its complete security code matches the one below. Keep this screen open until the new device unlocks. The original ten-minute expiry still applies.",
+	"storageSecurityUpgrade": "Reconnect securely",
+	"storageSecurityUpgradeInstructions": "This connection used the old server-managed credential storage. First revoke Better Keep access in your provider’s connected-app settings (or remove its Nextcloud app password), then reconnect here. Your notes and remote files are kept. New credentials are encrypted on your device with your note-encryption key.",
+  "devicePairingScanInstruction": "On your trusted device, open the approval request and scan this code.",
+  "devicePairingCodeInstruction": "Compare this entire code with the one on your trusted device.",
+  "showQrCode": "Show QR code",
+  "externalSyncSharedSetup": "Sign in to Google Drive on this device.",
+  "externalSyncSharedSetupHelp": "Sign in to the connected Google Drive account on this device. Your notes stay encrypted.",
+  "externalSyncStorageFull": "Storage full. Sync is paused; your local notes are safe. Free up space, then tap Sync now.",
+  "externalSyncClear": "Clear synced data",
+  "externalSyncClearMessage": "Delete synced copies and turn sync off. Local notes stay; provider-only data will be lost.",
+  "externalSyncClearing": "Clearing synced data…",
+  "externalSyncClearPending": "Clearing unfinished · Tap to retry",
+  "externalSyncClearDone": "Synced data cleared. Sync is off. Local notes were kept. Your provider may retain deleted files in its trash.",
+  "externalSyncClearCodeSent": "Enter the code sent to your email.",
+  "externalSyncClearCodeError": "Could not clear synced data. Check the code and your connection, or request a new code. If clearing started, sync stays off until it finishes.",
+  "externalSyncClearSendError": "Could not send a code. Check that your account email is verified, wait a minute, and try again.",
+  "externalSyncCapacity": "{used} used of {total}",
+  "@externalSyncCapacity": {"placeholders": {"used": {"type": "String"}, "total": {"type": "String"}}},
+  "externalSyncCapacityLoading": "Checking storage…",
+  "externalSyncCapacityUnavailable": "Storage information unavailable"
+,
+  "externalSyncClearVerifyTitle": "Verify to clear",
+  "externalSyncClearSendCode": "Send code",
+  "lite": "Lite",
+  "choosePlan": "Choose your plan",
+  "upgradeToLite": "Upgrade to Lite",
+  "automaticExternalSync": "Automatic external sync",
+  "manualExternalSync": "Manual external sync",
+  "liteDescription": "Automatic updates with your own cloud storage.",
+  "manualSyncDescription": "Sync manually for free. Lite and Pro add automatic updates.",
+  "automaticSyncEnabled": "Automatic updates enabled",
+  "subscriptionActiveTitle": "Subscription active",
+  "subscriptionChangePlan": "Manage your current subscription to change plans.",
+  "subscribe": "Subscribe",
+  "builtInCloudSync": "Built-in cloud sync"
 }

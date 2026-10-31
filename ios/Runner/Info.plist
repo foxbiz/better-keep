@@ -95,7 +95,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>We need access to your camera to add photos to notes.</string>
+	<string>Use your camera to add photos to notes or verify a new device.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>This app needs to access your Documents folder to store AI models for transcription.</string>
 	<key>NSDownloadsFolderUsageDescription</key>

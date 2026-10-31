@@ -108,6 +108,36 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @externalSyncContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get externalSyncContinue;
+
+  /// No description provided for @externalSyncConnectionInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection info'**
+  String get externalSyncConnectionInfo;
+
+  /// No description provided for @externalSyncConnectPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to start syncing your notes.'**
+  String get externalSyncConnectPrompt;
+
+  /// No description provided for @externalSyncNativeSetupPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to Google Drive on this device.'**
+  String get externalSyncNativeSetupPrompt;
+
+  /// No description provided for @externalSyncWebDavHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your full WebDAV folder URL and an app password. Browser sync requires your server to allow cross-origin requests.'**
+  String get externalSyncWebDavHelp;
+
   /// The name of the application
   ///
   /// In en, this message translates to:
@@ -3687,7 +3717,7 @@ abstract class AppLocalizations {
   /// No description provided for @paymentConfirmedActivationPending.
   ///
   /// In en, this message translates to:
-  /// **'Payment was confirmed, but Pro activation is taking longer. Do not purchase again. Recheck your status or manage the subscription in Google Play.'**
+  /// **'Payment was confirmed, but activation is taking longer. Do not purchase again. Recheck your status or manage your subscription.'**
   String get paymentConfirmedActivationPending;
 
   /// No description provided for @recheckStatus.
@@ -6929,6 +6959,510 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Local data was cleared and you have been logged out. Log in again to restore synced notes. Notes cleared before syncing cannot be recovered from the cloud.'**
   String get storageCleared;
+
+  /// External storage sync settings: externalSyncTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Sync provider'**
+  String get externalSyncTitle;
+
+  /// External storage sync settings: externalSyncDescription
+  ///
+  /// In en, this message translates to:
+  /// **'Choose one provider to sync your notes across devices.'**
+  String get externalSyncDescription;
+
+  /// External storage sync settings: externalSyncUnavailable
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in and approve or recover this device to connect storage.'**
+  String get externalSyncUnavailable;
+
+  /// External storage sync settings: externalSyncAccount
+  ///
+  /// In en, this message translates to:
+  /// **'Account and encryption'**
+  String get externalSyncAccount;
+
+  /// External storage sync settings: externalSyncCloud
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep cloud'**
+  String get externalSyncCloud;
+
+  /// External storage sync settings: externalSyncCloudDescription
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in sync · Requires Pro'**
+  String get externalSyncCloudDescription;
+
+  /// External storage sync settings: externalSyncAction
+  ///
+  /// In en, this message translates to:
+  /// **'{action, select, connect{Connect} browser{Sign in with browser} manual{Use an app password} reconnect{Reconnect} continue{Continue in browser} pause{Pause} resume{Resume} disconnect{Disconnect} sync{Sync now} other{Retry}}'**
+  String externalSyncAction(String action);
+
+  /// External storage sync settings: externalSyncState
+  ///
+  /// In en, this message translates to:
+  /// **'{state, select, preparing{Preparing authorization…} awaitingConsent{Ready to authorize in your browser} authorizing{Connecting…} cancelling{Cancelling authorization…} cancelPending{Cancellation could not be confirmed. Retry Cancel.} connecting{Connecting…} pausing{Pausing…} enabling{Resuming…} disconnecting{Disconnecting…} paused{Paused} notConnected{Not connected} keyRecovery{Recover your encryption key to use this connection.} pending{Some changes are waiting to sync.} other{Connected}}'**
+  String externalSyncState(String state);
+
+  /// External storage sync settings: externalSyncFailure
+  ///
+  /// In en, this message translates to:
+  /// **'{reason, select, sharedSetupRequired{Sign in to the connected Google Drive account on this device. Your notes stay encrypted.} reconnectRequired{Reconnect this account to continue syncing.} quotaExceeded{Your storage is full. Free up space in this provider and retry.} rateLimited{The provider asked us to wait. Sync will retry automatically.} corruptData{Some sync data could not be verified. Your local notes are kept.} unsupported{This provider or browser cannot complete the connection.} other{Could not reach this provider. Check your connection and retry.}}'**
+  String externalSyncFailure(String reason);
+
+  /// External storage sync settings: externalSyncLastSuccess
+  ///
+  /// In en, this message translates to:
+  /// **'Last successful sync: {time}'**
+  String externalSyncLastSuccess(String time);
+
+  /// External storage sync settings: externalSyncNeverSynced
+  ///
+  /// In en, this message translates to:
+  /// **'No successful sync yet'**
+  String get externalSyncNeverSynced;
+
+  /// External storage sync settings: externalSyncBlocked
+  ///
+  /// In en, this message translates to:
+  /// **'Some notes or attachments are not ready to upload. Sync will retry.'**
+  String get externalSyncBlocked;
+
+  /// External storage sync settings: externalSyncDisconnectTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect {provider}?'**
+  String externalSyncDisconnectTitle(String provider);
+
+  /// External storage sync settings: externalSyncDisconnectMessage
+  ///
+  /// In en, this message translates to:
+  /// **'This stops syncing with this account. Notes on this device and files already stored with the provider are kept.'**
+  String get externalSyncDisconnectMessage;
+
+  /// External storage sync settings: externalSyncRevocationIncomplete
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected from Better Keep. Access revocation could not be confirmed. Remove Better Keep’s access in your provider’s account settings.'**
+  String get externalSyncRevocationIncomplete;
+
+  /// External storage sync settings: externalSyncNextcloudHelp
+  ///
+  /// In en, this message translates to:
+  /// **'Use an app password from your Nextcloud security settings. Browser sync requires your server to allow cross-origin requests.'**
+  String get externalSyncNextcloudHelp;
+
+  /// External storage sync settings: externalSyncServer
+  ///
+  /// In en, this message translates to:
+  /// **'Server URL'**
+  String get externalSyncServer;
+
+  /// External storage sync settings: externalSyncUsername
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get externalSyncUsername;
+
+  /// External storage sync settings: externalSyncAppPassword
+  ///
+  /// In en, this message translates to:
+  /// **'App password'**
+  String get externalSyncAppPassword;
+
+  /// External storage sync settings: externalSyncInvalidServer
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an HTTPS server URL without a username, password, query or fragment.'**
+  String get externalSyncInvalidServer;
+
+  /// External storage sync settings: externalSyncRequired
+  ///
+  /// In en, this message translates to:
+  /// **'This field is required.'**
+  String get externalSyncRequired;
+
+  /// OAuth registration won the cancellation race
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization finished before cancellation. The provider is connected. Use Disconnect to remove it.'**
+  String get externalSyncAlreadyConnected;
+
+  /// Nextcloud browser authorization and server requirements
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in on your Nextcloud server to grant access. You can revoke access in Nextcloud settings. Browser sync requires your server to allow cross-origin requests.'**
+  String get externalSyncNextcloudBrowserHelp;
+
+  /// Conditional sign-out warning covering notes, labels, ordering and all sync providers
+  ///
+  /// In en, this message translates to:
+  /// **'Some changes are still pending sync. Signing out removes this device’s local notes and media. Changes that haven’t been saved to any provider may be lost.\n\nFinish syncing or export your data before signing out.'**
+  String get externalSyncLogoutPending;
+
+  /// Sign-out warning when provider metadata or local sync state cannot be verified
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t verify whether all your changes are synced. Signing out removes this device’s local notes and media. Changes that haven’t been saved to any provider may be lost.\n\nCheck your sync providers or export your data before signing out.'**
+  String get externalSyncLogoutUnknown;
+
+  /// Recovery instructions when a protected legacy sketch cannot be uploaded to an external provider
+  ///
+  /// In en, this message translates to:
+  /// **'Some locked notes contain older sketches that need updating. On the device where you created them, open those notes and unlock them with your PIN, then retry sync.'**
+  String get externalSyncUnlockSketches;
+
+  /// No description provided for @externalSyncOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync off'**
+  String get externalSyncOff;
+
+  /// No description provided for @externalSyncOffDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep notes on this device'**
+  String get externalSyncOffDescription;
+
+  /// No description provided for @externalSyncDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync details'**
+  String get externalSyncDetails;
+
+  /// No description provided for @externalSyncNeedsAttention.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention · See sync details'**
+  String get externalSyncNeedsAttention;
+
+  /// No description provided for @externalSyncConnectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect {provider}'**
+  String externalSyncConnectTitle(String provider);
+
+  /// No description provided for @externalSyncConnectHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to grant access to your storage. Once connected, this provider will be selected for sync.'**
+  String get externalSyncConnectHelp;
+
+  /// No description provided for @verifyNewDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify new device'**
+  String get verifyNewDevice;
+
+  /// No description provided for @deviceVerificationInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'On your trusted device, scan the QR shown on the new device, or compare the entire security code on both screens.'**
+  String get deviceVerificationInstructions;
+
+  /// No description provided for @deviceVerificationExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'This verification code has expired. Generate a new code on the new device.'**
+  String get deviceVerificationExpired;
+
+  /// No description provided for @newVerificationCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate new code'**
+  String get newVerificationCode;
+
+  /// No description provided for @deviceVerificationMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The devices do not match. Do not approve this request.'**
+  String get deviceVerificationMismatch;
+
+  /// No description provided for @deviceVerificationMatched.
+  ///
+  /// In en, this message translates to:
+  /// **'Device verified. You can now approve it.'**
+  String get deviceVerificationMatched;
+
+  /// No description provided for @scanNewDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan new device'**
+  String get scanNewDevice;
+
+  /// No description provided for @compareSecurityCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare security code'**
+  String get compareSecurityCode;
+
+  /// No description provided for @completeSecurityCodeMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'I compared the entire code on both devices. They match.'**
+  String get completeSecurityCodeMatches;
+
+  /// No description provided for @approveVerifiedDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve device'**
+  String get approveVerifiedDevice;
+
+  /// No description provided for @deviceCameraUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera unavailable. You can compare the security code instead.'**
+  String get deviceCameraUnavailable;
+
+  /// No description provided for @deviceVerificationRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification could not be completed. Update both devices and generate a new code on the new device, then try again.'**
+  String get deviceVerificationRetry;
+
+  /// No description provided for @browserEncryptionSessionOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption keys stay in this browser session only. After a reload, approve this browser again or use your recovery passphrase.'**
+  String get browserEncryptionSessionOnly;
+
+  /// No description provided for @verifyTrustedDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify trusted device'**
+  String get verifyTrustedDevice;
+
+  /// No description provided for @verifyTrustedDeviceInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'On your trusted device, keep the confirmation screen open. Scan its QR code or compare all 32 characters of the security code before accepting your encryption key.'**
+  String get verifyTrustedDeviceInstructions;
+
+  /// No description provided for @scanTrustedDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan trusted device'**
+  String get scanTrustedDevice;
+
+  /// No description provided for @acceptVerifiedKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept verified key'**
+  String get acceptVerifiedKey;
+
+  /// No description provided for @confirmOnNewDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm on your new device'**
+  String get confirmOnNewDevice;
+
+  /// No description provided for @confirmOnNewDeviceInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'On the new device, choose “Verify trusted device”. Scan this QR code or confirm that its complete security code matches the one below. Keep this screen open until the new device unlocks. The original ten-minute expiry still applies.'**
+  String get confirmOnNewDeviceInstructions;
+
+  /// No description provided for @storageSecurityUpgrade.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect securely'**
+  String get storageSecurityUpgrade;
+
+  /// No description provided for @storageSecurityUpgradeInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'This connection used the old server-managed credential storage. First revoke Better Keep access in your provider’s connected-app settings (or remove its Nextcloud app password), then reconnect here. Your notes and remote files are kept. New credentials are encrypted on your device with your note-encryption key.'**
+  String get storageSecurityUpgradeInstructions;
+
+  /// No description provided for @devicePairingScanInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'On your trusted device, open the approval request and scan this code.'**
+  String get devicePairingScanInstruction;
+
+  /// No description provided for @devicePairingCodeInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare this entire code with the one on your trusted device.'**
+  String get devicePairingCodeInstruction;
+
+  /// No description provided for @showQrCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Show QR code'**
+  String get showQrCode;
+
+  /// No description provided for @externalSyncSharedSetup.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to Google Drive on this device.'**
+  String get externalSyncSharedSetup;
+
+  /// No description provided for @externalSyncSharedSetupHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to the connected Google Drive account on this device. Your notes stay encrypted.'**
+  String get externalSyncSharedSetupHelp;
+
+  /// No description provided for @externalSyncStorageFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage full. Sync is paused; your local notes are safe. Free up space, then tap Sync now.'**
+  String get externalSyncStorageFull;
+
+  /// No description provided for @externalSyncClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear synced data'**
+  String get externalSyncClear;
+
+  /// No description provided for @externalSyncClearMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete synced copies and turn sync off. Local notes stay; provider-only data will be lost.'**
+  String get externalSyncClearMessage;
+
+  /// No description provided for @externalSyncClearing.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing synced data…'**
+  String get externalSyncClearing;
+
+  /// No description provided for @externalSyncClearPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing unfinished · Tap to retry'**
+  String get externalSyncClearPending;
+
+  /// No description provided for @externalSyncClearDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced data cleared. Sync is off. Local notes were kept. Your provider may retain deleted files in its trash.'**
+  String get externalSyncClearDone;
+
+  /// No description provided for @externalSyncClearCodeSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the code sent to your email.'**
+  String get externalSyncClearCodeSent;
+
+  /// No description provided for @externalSyncClearCodeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clear synced data. Check the code and your connection, or request a new code. If clearing started, sync stays off until it finishes.'**
+  String get externalSyncClearCodeError;
+
+  /// No description provided for @externalSyncClearSendError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send a code. Check that your account email is verified, wait a minute, and try again.'**
+  String get externalSyncClearSendError;
+
+  /// No description provided for @externalSyncCapacity.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} used of {total}'**
+  String externalSyncCapacity(String used, String total);
+
+  /// No description provided for @externalSyncCapacityLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking storage…'**
+  String get externalSyncCapacityLoading;
+
+  /// No description provided for @externalSyncCapacityUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage information unavailable'**
+  String get externalSyncCapacityUnavailable;
+
+  /// No description provided for @externalSyncClearVerifyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify to clear'**
+  String get externalSyncClearVerifyTitle;
+
+  /// No description provided for @externalSyncClearSendCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Send code'**
+  String get externalSyncClearSendCode;
+
+  /// No description provided for @lite.
+  ///
+  /// In en, this message translates to:
+  /// **'Lite'**
+  String get lite;
+
+  /// No description provided for @choosePlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your plan'**
+  String get choosePlan;
+
+  /// No description provided for @upgradeToLite.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Lite'**
+  String get upgradeToLite;
+
+  /// No description provided for @automaticExternalSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic external sync'**
+  String get automaticExternalSync;
+
+  /// No description provided for @manualExternalSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual external sync'**
+  String get manualExternalSync;
+
+  /// No description provided for @liteDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic updates with your own cloud storage.'**
+  String get liteDescription;
+
+  /// No description provided for @manualSyncDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync manually for free. Lite and Pro add automatic updates.'**
+  String get manualSyncDescription;
+
+  /// No description provided for @automaticSyncEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic updates enabled'**
+  String get automaticSyncEnabled;
+
+  /// No description provided for @subscriptionActiveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription active'**
+  String get subscriptionActiveTitle;
+
+  /// No description provided for @subscriptionChangePlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage your current subscription to change plans.'**
+  String get subscriptionChangePlan;
+
+  /// No description provided for @subscribe.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe'**
+  String get subscribe;
+
+  /// No description provided for @builtInCloudSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in cloud sync'**
+  String get builtInCloudSync;
 }
 
 class _AppLocalizationsDelegate

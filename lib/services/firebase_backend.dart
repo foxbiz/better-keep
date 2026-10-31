@@ -9,6 +9,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import 'firebase_emulator_host.dart';
+import 'firebase_emulator_web_proxy.dart';
 
 /// Identifies the local persistence namespace paired with a Firebase backend.
 enum FirebaseLocalDataScope {
@@ -153,7 +154,11 @@ class FirebaseBackend {
   }) async {
     _ensureMutable();
 
-    final baseAppName = emulatorAppNameFor(endpoints.host);
+    if (!kDebugMode) {
+      throw StateError('Firebase emulators are only available in debug mode.');
+    }
+    configureFirebaseEmulatorWebProxy(endpoints);
+    final baseAppName = emulatorAppNameFor(endpoints.routingIdentity);
     final canUsePreferred =
         preferredAppName != null &&
         preferredAppName.startsWith(baseAppName) &&
@@ -162,6 +167,9 @@ class FirebaseBackend {
         ? preferredAppName
         : _nextEmulatorAppName(baseAppName);
     final existingApp = _findApp(appName);
+    if (existingApp == null) {
+      prepareFirebaseAuthEmulator(appName);
+    }
     final emulatorApp =
         existingApp ??
         await Firebase.initializeApp(

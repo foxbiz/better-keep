@@ -1,6 +1,6 @@
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
-import { databaseId } from "../config";
 import { syncAdminUserIndex } from "../adminUserIndex";
+import { databaseId } from "../config";
 
 export default onDocumentWritten(
 	{ document: "users/{userId}", database: databaseId },

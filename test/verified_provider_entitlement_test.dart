@@ -1,5 +1,7 @@
 import 'package:better_keep/services/monetization/subscription_status.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:better_keep/services/monetization/entitlements.dart';
+import 'package:better_keep/services/monetization/user_plan.dart';
 
 void main() {
   final future = DateTime.now().add(const Duration(days: 30)).toIso8601String();
@@ -25,6 +27,34 @@ void main() {
       expect(status.willAutoRenew, isFalse, reason: source);
       expect(status.isCancelledButActive, isTrue, reason: source);
     }
+  });
+
+  test('Lite grants automatic external sync without Pro features and expires to free', () {
+    final status = parseVerifiedProviderEntitlement({
+      'entitlementContractVersion': verifiedEntitlementContractVersion,
+      'plan': 'lite',
+      'source': 'app_store',
+      'billingPeriod': 'monthly',
+      'expiresAt': future,
+      'renewalState': 'renewing',
+      'subscriptionState': 'ACTIVE',
+    });
+    expect(status!.effectivePlan, UserPlan.lite);
+    final access = Entitlements.forPlan(status.effectivePlan);
+    expect(access.automaticExternalSync, isTrue);
+    expect(access.realtimeCloudSync, isFalse);
+    expect(access.maxLockedNotes, 5);
+    final expired = SubscriptionStatus.fromFirestore({
+      'plan': 'lite',
+      'source': 'app_store',
+      'expiresAt': past,
+    });
+    expect(expired.effectivePlan, UserPlan.free);
+    expect(
+      Entitlements.forPlan(expired.effectivePlan).automaticExternalSync,
+      isFalse,
+    );
+    expect(Entitlements.pro.automaticExternalSync, isTrue);
   });
 
   test('rejects trial, free, expired, and unknown entitlement payloads', () {

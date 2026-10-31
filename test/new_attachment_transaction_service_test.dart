@@ -9,10 +9,12 @@ import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/new_attachment_transaction_service.dart';
+import 'package:better_keep/services/attachment_startup_cleanup.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -54,6 +56,168 @@ void main() {
     Note.unlockPostAuthenticationOverride = null;
     Note.syncTriggerOverride = null;
     await database.close();
+  });
+
+  group('native startup attachment cleanup', () {
+    setUp(() async {
+      await database.execute(
+        'CREATE TABLE replica_attachment_cache (path TEXT)',
+      );
+    });
+
+    Future<void> collect(Iterable<String> retired) =>
+        AttachmentStartupCleanup.run(
+          database: database,
+          operations: files.operations,
+          retiredPaths: retired,
+        );
+
+    test(
+      'preserves referenced sources and confines deletion to app files',
+      () async {
+        const shared = '/docs/shared.jpg';
+        const retired = '/docs/old.json';
+        const materialized = '/docs/external_sync_media/old.jpg';
+        const outside = '/outside/private.jpg';
+        for (final path in [shared, retired, materialized, outside]) {
+          files.data[path] = Uint8List.fromList([1]);
+        }
+        await _insertNote(
+          database,
+          Note(
+            id: 5,
+            locked: true,
+            attachments: [NoteAttachment.image(_image(shared))],
+          ),
+        );
+        for (final path in [shared, retired, outside]) {
+          await database.insert('file_sync_track', {
+            'note_id': 5,
+            'local_path': path,
+          });
+        }
+        await database.insert('replica_attachment_cache', {
+          'path': materialized,
+        });
+        await collect([shared, retired, outside]);
+        expect(files.data.keys.toSet(), {shared, outside});
+        expect(
+          (await database.query('file_sync_track')).map((r) => r['local_path']),
+          [shared, outside],
+        );
+        expect(await database.query('replica_attachment_cache'), isEmpty);
+        await collect([retired]); // Idempotent after a successful deletion.
+      },
+    );
+
+    test('malformed references abort before deleting any candidate', () async {
+      files.data['/docs/old.json'] = Uint8List.fromList([1]);
+      await database.insert('note', {'id': 10, 'attachments': 'malformed'});
+      await expectLater(collect(['/docs/old.json']), throwsA(anything));
+      expect(files.data.containsKey('/docs/old.json'), isTrue);
+    });
+
+    for (final encoded in [
+      'ENC:invalid',
+      'ENC:AA==',
+      'ENC:${base64Encode(Uint8List(32))}',
+    ]) {
+      test(
+        'undecryptable metadata preserves files and all tracking rows: $encoded',
+        () async {
+          const path = '/docs/keep.jpg';
+          files.data[path] = Uint8List.fromList([1]);
+          await database.insert('note', {'id': 10, 'attachments': encoded});
+          await database.insert('file_sync_track', {
+            'note_id': 10,
+            'local_path': path,
+          });
+          await database.insert('replica_attachment_cache', {'path': path});
+          await expectLater(collect([path]), throwsFormatException);
+          expect(files.data.containsKey(path), isTrue);
+          expect(await database.query('file_sync_track'), hasLength(1));
+          expect(
+            await database.query('replica_attachment_cache'),
+            hasLength(1),
+          );
+        },
+      );
+    }
+
+    test('wrong-key ciphertext never becomes an unreferenced attachment', () async {
+      const path = '/docs/keep.jpg';
+      final box = await AesGcm.with256bits().encrypt(
+        utf8.encode('[{"type":"image","data":{"src":"$path"}}]'),
+        secretKey: SecretKey(List.filled(32, 0x22)),
+      );
+      final encoded =
+          'ENC:${base64Encode([...box.nonce, ...box.cipherText, ...box.mac.bytes])}';
+      files.data[path] = Uint8List.fromList([1]);
+      await database.insert('note', {'id': 10, 'attachments': encoded});
+      await expectLater(collect([path]), throwsFormatException);
+      expect(files.data.containsKey(path), isTrue);
+    });
+
+    // Exercised by the keyed test run with a synthetic LOCAL_DATA_KEY.
+    if (const String.fromEnvironment('LOCAL_DATA_KEY').isNotEmpty) {
+      test('valid encrypted empty metadata permits orphan cleanup', () async {
+        const path = '/docs/old.jpg';
+        const hex = String.fromEnvironment('LOCAL_DATA_KEY');
+        final key = List.generate(
+          32,
+          (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16),
+        );
+        final box = await AesGcm.with256bits().encrypt(
+          utf8.encode('[]'),
+          secretKey: SecretKey(key),
+        );
+        final encoded =
+            'ENC:${base64Encode([...box.nonce, ...box.cipherText, ...box.mac.bytes])}';
+        expect(encoded, startsWith('ENC:'));
+        files.data[path] = Uint8List.fromList([1]);
+        await database.insert('note', {'id': 10, 'attachments': encoded});
+        await collect([path]);
+        expect(files.data.containsKey(path), isFalse);
+      });
+    }
+
+    test(
+      'no cleanup candidates avoids reading or decrypting note rows',
+      () async {
+        await database.execute('DROP TABLE note');
+        await collect([]);
+        expect(files.data, isEmpty);
+      },
+    );
+
+    test('failed deletion keeps tracking metadata for retry', () async {
+      const path = '/docs/old.json';
+      files = _FakeAttachmentFiles(undeletablePaths: {path});
+      files.data[path] = Uint8List.fromList([1]);
+      await database.insert('file_sync_track', {
+        'note_id': 5,
+        'local_path': path,
+      });
+      await database.insert('replica_attachment_cache', {'path': path});
+      await collect([path]);
+      expect(files.data.containsKey(path), isTrue);
+      expect(await database.query('file_sync_track'), hasLength(1));
+      expect(await database.query('replica_attachment_cache'), hasLength(1));
+    });
+
+    test(
+      'bounds startup work and leaves remaining files for a later run',
+      () async {
+        final paths = List.generate(257, (i) => '/docs/retired-$i.json');
+        for (final path in paths) {
+          files.data[path] = Uint8List.fromList([1]);
+        }
+        await collect(paths);
+        expect(files.data, hasLength(1));
+        await collect(files.data.keys.toList());
+        expect(files.data, isEmpty);
+      },
+    );
   });
 
   test('download verification failure preserves the existing file', () async {

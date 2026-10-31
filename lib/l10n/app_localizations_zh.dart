@@ -10,6 +10,22 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get externalSyncContinue => '继续';
+
+  @override
+  String get externalSyncConnectionInfo => '连接信息';
+
+  @override
+  String get externalSyncConnectPrompt => '登录以开始同步笔记。';
+
+  @override
+  String get externalSyncNativeSetupPrompt => '请在此设备上登录 Google Drive。';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      '请输入 WebDAV 文件夹的完整网址和应用专用密码。浏览器同步需要服务器允许跨源请求。';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -1899,7 +1915,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get paymentConfirmedActivationPending =>
-      '付款已确认，但 Pro 激活需要更长时间。请勿再次购买。请重新检查状态或在 Google Play 中管理订阅。';
+      '付款已确认，但激活需要更长时间。请勿重复购买。请重新检查状态或管理订阅。';
 
   @override
   String get recheckStatus => '重新检查状态';
@@ -3697,4 +3713,324 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get storageCleared =>
       '本地数据已被清除，您已退出登录。请重新登录以恢复已同步的笔记。同步前被清除的笔记无法从云端恢复。';
+
+  @override
+  String get externalSyncTitle => '同步服务商';
+
+  @override
+  String get externalSyncDescription => '选择一个提供商，在设备之间同步笔记。';
+
+  @override
+  String get externalSyncUnavailable => '请登录并批准或恢复此设备，然后连接存储服务。';
+
+  @override
+  String get externalSyncAccount => '账户与加密';
+
+  @override
+  String get externalSyncCloud => 'Better Keep 云端';
+
+  @override
+  String get externalSyncCloudDescription => '内置同步 · 需要 Pro';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': '连接',
+      'browser': '通过浏览器登录',
+      'manual': '使用应用密码',
+      'reconnect': '重新连接',
+      'continue': '在浏览器中继续',
+      'pause': '暂停',
+      'resume': '恢复',
+      'disconnect': '断开连接',
+      'sync': '立即同步',
+      'other': '重试',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': '正在准备授权…',
+      'awaitingConsent': '已准备好，请在浏览器中授权',
+      'authorizing': '正在连接…',
+      'cancelling': '正在取消授权…',
+      'cancelPending': '无法确认是否已取消。请再次取消。',
+      'connecting': '正在连接…',
+      'pausing': '正在暂停…',
+      'enabling': '正在恢复…',
+      'disconnecting': '正在断开连接…',
+      'paused': '已暂停',
+      'notConnected': '未连接',
+      'keyRecovery': '请恢复您的加密密钥以使用此连接。',
+      'pending': '部分更改正在等待同步。',
+      'other': '已连接',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired': '请在此设备上登录已连接的 Google Drive 账号。您的笔记仍保持加密。',
+      'reconnectRequired': '请重新连接此账户以继续同步。',
+      'quotaExceeded': '您的存储空间已满。请在此服务商处释放空间后重试。',
+      'rateLimited': '服务商要求稍候。同步将自动重试。',
+      'corruptData': '无法验证部分同步数据。您的本地笔记会保留。',
+      'unsupported': '此服务商或浏览器无法完成连接。',
+      'other': '无法连接此服务商。请检查网络连接后重试。',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return '上次同步成功：$time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => '尚未成功同步';
+
+  @override
+  String get externalSyncBlocked => '部分笔记或附件尚未准备好上传。同步将重试。';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return '断开与$provider的连接？';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      '这会停止与此账户同步。此设备上的笔记和已存储在服务商处的文件都会保留。';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      '已断开与 Better Keep 的连接。无法确认访问权限是否已撤销。请在服务商的账户设置中移除 Better Keep 的访问权限。';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      '请使用 Nextcloud 安全设置中的应用密码。通过浏览器同步需要您的服务器允许跨源请求。';
+
+  @override
+  String get externalSyncServer => '服务器 URL';
+
+  @override
+  String get externalSyncUsername => '用户名';
+
+  @override
+  String get externalSyncAppPassword => '应用密码';
+
+  @override
+  String get externalSyncInvalidServer => '请输入不含用户名、密码、查询参数或片段的 HTTPS 服务器 URL。';
+
+  @override
+  String get externalSyncRequired => '此字段为必填项。';
+
+  @override
+  String get externalSyncAlreadyConnected => '授权在取消之前已完成。服务商已连接。请使用“断开连接”将其移除。';
+
+  @override
+  String get externalSyncNextcloudBrowserHelp =>
+      '请登录您的 Nextcloud 服务器以授予访问权限。您可以在 Nextcloud 设置中撤销访问权限。通过浏览器同步需要您的服务器允许跨源请求。';
+
+  @override
+  String get externalSyncLogoutPending =>
+      '部分更改仍在等待同步。退出登录会移除此设备上的本地笔记和媒体文件。尚未保存到任何服务商的更改可能会丢失。\n\n请在退出登录前完成同步或导出数据。';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      '我们无法确认您的所有更改是否已同步。退出登录会移除此设备上的本地笔记和媒体文件。尚未保存到任何服务商的更改可能会丢失。\n\n请在退出登录前检查同步服务商或导出数据。';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      '部分已锁定的笔记包含需要更新的旧版草图。请在创建草图的设备上打开这些笔记，用 PIN 解锁后再重试同步。';
+
+  @override
+  String get externalSyncOff => '关闭同步';
+
+  @override
+  String get externalSyncOffDescription => '将笔记保留在此设备上';
+
+  @override
+  String get externalSyncDetails => '同步详情';
+
+  @override
+  String get externalSyncNeedsAttention => '需要处理 · 查看同步详情';
+
+  @override
+  String externalSyncConnectTitle(String provider) {
+    return '连接 $provider';
+  }
+
+  @override
+  String get externalSyncConnectHelp => '登录以授权访问存储空间。连接后，此提供商将被选为同步目标。';
+
+  @override
+  String get verifyNewDevice => '验证新设备';
+
+  @override
+  String get deviceVerificationInstructions =>
+      '在可信设备上扫描新设备显示的二维码，或比较两个屏幕上的完整安全码。';
+
+  @override
+  String get deviceVerificationExpired => '此验证码已过期。请在新设备上生成新码。';
+
+  @override
+  String get newVerificationCode => '生成新码';
+
+  @override
+  String get deviceVerificationMismatch => '设备不匹配。请勿批准此请求。';
+
+  @override
+  String get deviceVerificationMatched => '设备已验证，可以继续。';
+
+  @override
+  String get scanNewDevice => '扫描新设备';
+
+  @override
+  String get compareSecurityCode => '比较安全码';
+
+  @override
+  String get completeSecurityCodeMatches => '我已比较两台设备上的完整安全码，确认完全一致。';
+
+  @override
+  String get approveVerifiedDevice => '批准设备';
+
+  @override
+  String get deviceCameraUnavailable => '无法使用相机。您可以改为比较安全码。';
+
+  @override
+  String get deviceVerificationRetry => '无法完成验证。请更新两台设备，在新设备上生成新码，然后重试。';
+
+  @override
+  String get browserEncryptionSessionOnly =>
+      '加密密钥仅保留在当前浏览器会话中。刷新后，请重新批准此浏览器或使用恢复口令。';
+
+  @override
+  String get verifyTrustedDevice => '验证可信设备';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      '请保持可信设备的确认页面打开。在接受加密密钥前，扫描其二维码或比较安全码的全部32个字符。';
+
+  @override
+  String get scanTrustedDevice => '扫描可信设备';
+
+  @override
+  String get acceptVerifiedKey => '接受已验证的密钥';
+
+  @override
+  String get confirmOnNewDevice => '在新设备上确认';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      '在新设备上选择“验证可信设备”。扫描此二维码，或确认完整安全码与下方一致。请保持此页面打开，直到新设备解锁。最初的十分钟有效期仍然适用。';
+
+  @override
+  String get storageSecurityUpgrade => '安全地重新连接';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      '此连接使用了旧的服务器托管凭据存储。请先在提供商的已连接应用设置中撤销Better Keep的访问权限（或删除Nextcloud应用密码），再在此处重新连接。您的笔记和远程文件会保留。新凭据将在设备上使用笔记加密密钥加密。';
+
+  @override
+  String get devicePairingScanInstruction => '在受信任的设备上打开批准请求，然后扫描此码。';
+
+  @override
+  String get devicePairingCodeInstruction => '请将此完整代码与受信任设备上的代码进行比较。';
+
+  @override
+  String get showQrCode => '显示二维码';
+
+  @override
+  String get externalSyncSharedSetup => '请在此设备上登录 Google Drive。';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      '请在此设备上登录已连接的 Google Drive 账号。您的笔记仍保持加密。';
+
+  @override
+  String get externalSyncStorageFull =>
+      '存储空间已满。同步已暂停，本地笔记安全无虞。请释放空间，然后点击“立即同步”。';
+
+  @override
+  String get externalSyncClear => '清除已同步数据';
+
+  @override
+  String get externalSyncClearMessage =>
+      '删除已同步的副本并关闭同步。本地笔记会保留；仅存于存储服务商中的数据将丢失。';
+
+  @override
+  String get externalSyncClearing => '正在清除已同步数据…';
+
+  @override
+  String get externalSyncClearPending => '清除未完成 · 点击重试';
+
+  @override
+  String get externalSyncClearDone =>
+      '已清除同步数据，同步已关闭。本地笔记已保留。存储服务商可能会在回收站中保留已删除的文件。';
+
+  @override
+  String get externalSyncClearCodeSent => '请输入发送到您邮箱的验证码。';
+
+  @override
+  String get externalSyncClearCodeError =>
+      '无法清除已同步数据。请检查验证码和网络连接，或重新获取验证码。如果清除已开始，同步将保持关闭，直到清除完成。';
+
+  @override
+  String get externalSyncClearSendError => '无法发送验证码。请确认您的账户邮箱已验证，等待一分钟后重试。';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '已用 $used，共 $total';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => '正在检查存储空间…';
+
+  @override
+  String get externalSyncCapacityUnavailable => '无法获取存储空间信息';
+
+  @override
+  String get externalSyncClearVerifyTitle => '验证后清除';
+
+  @override
+  String get externalSyncClearSendCode => '发送验证码';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => '选择方案';
+
+  @override
+  String get upgradeToLite => '升级到 Lite';
+
+  @override
+  String get automaticExternalSync => '外部存储自动同步';
+
+  @override
+  String get manualExternalSync => '外部存储手动同步';
+
+  @override
+  String get liteDescription => '使用自己的云存储自动更新。';
+
+  @override
+  String get manualSyncDescription => '手动同步免费。Lite 和 Pro 支持自动更新。';
+
+  @override
+  String get automaticSyncEnabled => '已启用自动更新';
+
+  @override
+  String get subscriptionActiveTitle => '订阅已生效';
+
+  @override
+  String get subscriptionChangePlan => '管理当前订阅以更改方案。';
+
+  @override
+  String get subscribe => '订阅';
+
+  @override
+  String get builtInCloudSync => '内置云同步';
 }

@@ -9,7 +9,7 @@ enum GoogleEmulatorAuthMode { mock, real }
 
 @immutable
 class FirebaseEmulatorEndpoints {
-  const FirebaseEmulatorEndpoints(this.host);
+  const FirebaseEmulatorEndpoints(this.host, {this.webProxyOrigin});
 
   static const int authPort = 9099;
   static const int firestorePort = 8080;
@@ -19,6 +19,10 @@ class FirebaseEmulatorEndpoints {
   static const int uiPort = 4000;
 
   final String host;
+  final String? webProxyOrigin;
+
+  String get routingIdentity =>
+      webProxyOrigin == null ? host : '$host|$webProxyOrigin';
 
   Map<String, int> get requiredServices => const {
     'Authentication': authPort,
@@ -31,9 +35,10 @@ class FirebaseEmulatorEndpoints {
   String functionsBaseUrl({
     required String projectId,
     required String region,
-  }) => 'http://$host:$functionsPort/$projectId/$region';
+  }) =>
+      '${webProxyOrigin == null ? 'http://$host:$functionsPort' : '$webProxyOrigin/__emulator/functions'}/$projectId/$region';
 
-  String get hostingBaseUrl => 'http://$host:$hostingPort';
+  String get hostingBaseUrl => webProxyOrigin ?? 'http://$host:$hostingPort';
 }
 
 @immutable
@@ -126,7 +131,34 @@ String selectFirebaseEmulatorHost({
   required bool isAndroidEmulator,
   required bool isAppleSimulator,
   required String physicalDeviceHost,
+  String configuredHost = '',
 }) {
+  final isPhysicalDevice =
+      !isWeb &&
+      ((platform == TargetPlatform.iOS && !isAppleSimulator) ||
+          (platform == TargetPlatform.android && !isAndroidEmulator));
+  // The debug screen uses EMULATOR_HOST only as an initial suggestion. Honor
+  // the entered (or saved) LAN address when connecting a physical device.
+  if (isPhysicalDevice && physicalDeviceHost.trim().isNotEmpty) {
+    return normalizePhysicalFirebaseEmulatorHost(physicalDeviceHost);
+  }
+  if (configuredHost.trim().isNotEmpty) {
+    final host = configuredHost.trim();
+    final uri = Uri.tryParse('http://$host');
+    if (uri == null ||
+        uri.host.isEmpty ||
+        uri.hasPort ||
+        uri.userInfo.isNotEmpty ||
+        uri.path.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        host.contains('://')) {
+      throw const FormatException(
+        'EMULATOR_HOST must be a hostname or IP, without a scheme, path, or port.',
+      );
+    }
+    return host;
+  }
   if (isWeb) {
     return firebaseEmulatorLoopbackHost;
   }
@@ -147,6 +179,23 @@ String selectFirebaseEmulatorHost({
   }
 
   return physicalDeviceHost;
+}
+
+String? normalizeEmulatorWebOrigin(String value) {
+  if (value.trim().isEmpty) return null;
+  final uri = Uri.tryParse(value.trim());
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty ||
+      (uri.path.isNotEmpty && uri.path != '/') ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    throw const FormatException(
+      'EMULATOR_WEB_ORIGIN must be an HTTPS origin, without a path or credentials.',
+    );
+  }
+  return uri.origin;
 }
 
 /// Validates and normalizes the LAN host entered for a physical device.

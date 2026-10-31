@@ -10,6 +10,7 @@ import { ANDROID_PACKAGE_NAME, db, googlePlayCredentials } from "../config";
 import { syncGooglePlayOrderById } from "../googlePlayRevenue";
 import {
 	endUnqueryableGooglePlaySubscription,
+	GooglePlayPermanentError,
 	isGooglePlayGoneError,
 	refreshGooglePlaySubscription,
 } from "../googlePlayService";
@@ -45,7 +46,8 @@ export function playEventClaimOutcome(
 	data: Record<string, unknown>,
 	nowMillis: number,
 ): PlayEventClaimOutcome {
-	if (data.status === "succeeded") return "succeeded";
+	if (data.status === "succeeded" || data.status === "rejected")
+		return "succeeded";
 	if (
 		data.status === "processing" &&
 		data.leaseUntil instanceof Timestamp &&
@@ -66,7 +68,7 @@ export async function executeClaimedPlayEvent({
 	complete: () => Promise<void>;
 	fail: (error: unknown) => Promise<void>;
 	process: () => Promise<void>;
-}): Promise<"duplicate" | "processed"> {
+}): Promise<"duplicate" | "processed" | "rejected"> {
 	const outcome = await claim();
 	if (outcome === "succeeded") return "duplicate";
 	if (outcome === "busy") throw new PlayEventBusyError();
@@ -76,6 +78,7 @@ export async function executeClaimedPlayEvent({
 		return "processed";
 	} catch (error) {
 		await fail(error);
+		if (error instanceof GooglePlayPermanentError) return "rejected";
 		throw error;
 	}
 }
@@ -135,16 +138,20 @@ async function failEvent(messageId: string, error: unknown): Promise<void> {
 			: error instanceof Error
 				? error.name.slice(0, 120)
 				: "unknown";
-	await db.collection(PLAY_STORE_EVENT_COLLECTION).doc(messageId).set(
-		{
-			status: "failed",
-			lastErrorCode: code,
-			lastFailedAt: FieldValue.serverTimestamp(),
-			leaseUntil: null,
-			updatedAt: FieldValue.serverTimestamp(),
-		},
-		{ merge: true },
-	);
+	await db
+		.collection(PLAY_STORE_EVENT_COLLECTION)
+		.doc(messageId)
+		.set(
+			{
+				status:
+					error instanceof GooglePlayPermanentError ? "rejected" : "failed",
+				lastErrorCode: code,
+				lastFailedAt: FieldValue.serverTimestamp(),
+				leaseUntil: null,
+				updatedAt: FieldValue.serverTimestamp(),
+			},
+			{ merge: true },
+		);
 }
 
 export async function processPlayNotification(

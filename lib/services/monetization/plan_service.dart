@@ -40,6 +40,9 @@ class PlanService {
   );
 
   /// Current entitlements based on subscription
+  // Only a fresh server observation may change an account-wide sync selection.
+  final ValueNotifier<String?> _confirmedLiteAccount = ValueNotifier(null);
+
   final ValueNotifier<Entitlements> _entitlements = ValueNotifier(
     Entitlements.free,
   );
@@ -93,6 +96,7 @@ class PlanService {
 
   /// Listenable for entitlement changes
   ValueListenable<Entitlements> get entitlementsNotifier => _entitlements;
+  ValueListenable<String?> get confirmedLiteAccount => _confirmedLiteAccount;
 
   /// Whether the user is on the free plan
   bool get isFree => currentPlan == UserPlan.free;
@@ -428,6 +432,11 @@ class PlanService {
     );
 
     _setSubscription(resolution.status);
+    if (origin == 'Firestore' &&
+        !resolution.shouldReconcile &&
+        resolution.status.effectivePlan == UserPlan.lite) {
+      _confirmedLiteAccount.value = uid;
+    }
     await _cacheSubscription(resolution.status, isCurrent: isCurrent);
     if (!(isCurrent?.call() ?? true)) return;
 
@@ -568,6 +577,7 @@ class PlanService {
 
   /// Stop listening for subscription changes
   void _stopSubscriptionListener() {
+    _confirmedLiteAccount.value = null;
     _subscriptionGeneration++;
     _listenerStart = null;
     _subscriptionListener?.cancel();
@@ -581,6 +591,7 @@ class PlanService {
     SubscriptionStatus status, {
     bool refreshAuthToken = true,
   }) {
+    _confirmedLiteAccount.value = null;
     final oldPlan = _subscriptionStatus.value.effectivePlan;
     final newPlan = status.effectivePlan;
 
@@ -714,6 +725,9 @@ class PlanService {
     await _persistVerifiedEntitlement(snapshot);
     if (!current()) return false;
     _setSubscription(snapshot.status);
+    if (snapshot.status.effectivePlan == UserPlan.lite) {
+      _confirmedLiteAccount.value = user.uid;
+    }
     await _cacheSubscription(snapshot.status, isCurrent: current);
     AppLogger.log(
       'PlanService: Applied verified ${snapshot.status.purchasePlatform} entitlement',

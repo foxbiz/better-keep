@@ -10,6 +10,22 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
+  String get externalSyncContinue => '계속';
+
+  @override
+  String get externalSyncConnectionInfo => '연결 정보';
+
+  @override
+  String get externalSyncConnectPrompt => '로그인하여 노트 동기화를 시작하세요.';
+
+  @override
+  String get externalSyncNativeSetupPrompt => '이 기기에서 Google Drive에 로그인하세요.';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'WebDAV 폴더의 전체 URL과 앱 비밀번호를 입력하세요. 브라우저에서 동기화하려면 서버에서 교차 출처 요청을 허용해야 합니다.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -1925,7 +1941,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get paymentConfirmedActivationPending =>
-      '결제가 확인되었지만 Pro 활성화가 지연되고 있습니다. 다시 구매하지 마세요. 상태를 다시 확인하거나 Google Play에서 구독을 관리하세요.';
+      '결제가 확인되었지만 활성화가 지연되고 있습니다. 다시 구매하지 마세요. 상태를 다시 확인하거나 구독을 관리하세요.';
 
   @override
   String get recheckStatus => '상태 다시 확인';
@@ -3758,4 +3774,333 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get storageCleared =>
       '로컬 데이터가 삭제되어 로그아웃되었습니다. 다시 로그인하여 동기화된 노트를 복원하세요. 동기화 전에 삭제된 노트는 클라우드에서 복구할 수 없습니다.';
+
+  @override
+  String get externalSyncTitle => '동기화 제공업체';
+
+  @override
+  String get externalSyncDescription => '기기 간에 노트를 동기화할 제공업체 하나를 선택하세요.';
+
+  @override
+  String get externalSyncUnavailable => '저장소를 연결하려면 로그인한 후 이 기기를 승인하거나 복구하세요.';
+
+  @override
+  String get externalSyncAccount => '계정 및 암호화';
+
+  @override
+  String get externalSyncCloud => 'Better Keep 클라우드';
+
+  @override
+  String get externalSyncCloudDescription => '기본 동기화 · Pro 필요';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': '연결',
+      'browser': '브라우저로 로그인',
+      'manual': '앱 비밀번호 사용',
+      'reconnect': '다시 연결',
+      'continue': '브라우저에서 계속',
+      'pause': '일시 중지',
+      'resume': '재개',
+      'disconnect': '연결 해제',
+      'sync': '지금 동기화',
+      'other': '다시 시도',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': '인증 준비 중…',
+      'awaitingConsent': '브라우저에서 인증할 준비가 되었습니다',
+      'authorizing': '연결 중…',
+      'cancelling': '인증 취소 중…',
+      'cancelPending': '취소 여부를 확인할 수 없습니다. 다시 취소해 주세요.',
+      'connecting': '연결 중…',
+      'pausing': '일시 중지 중…',
+      'enabling': '재개 중…',
+      'disconnecting': '연결 해제 중…',
+      'paused': '일시 중지됨',
+      'notConnected': '연결되지 않음',
+      'keyRecovery': '이 연결을 사용하려면 암호화 키를 복구하세요.',
+      'pending': '일부 변경 사항이 동기화를 기다리고 있습니다.',
+      'other': '연결됨',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired':
+          '이 기기에서 연결된 Google Drive 계정에 로그인하세요. 노트는 계속 암호화됩니다.',
+      'reconnectRequired': '동기화를 계속하려면 이 계정을 다시 연결하세요.',
+      'quotaExceeded': '저장소가 가득 찼습니다. 이 제공업체의 저장 공간을 확보한 후 다시 시도하세요.',
+      'rateLimited': '제공업체에서 잠시 기다려 달라고 요청했습니다. 동기화가 자동으로 다시 시도됩니다.',
+      'corruptData': '일부 동기화 데이터를 검증할 수 없습니다. 로컬 노트는 유지됩니다.',
+      'unsupported': '이 제공업체 또는 브라우저에서는 연결을 완료할 수 없습니다.',
+      'other': '이 제공업체에 연결할 수 없습니다. 인터넷 연결을 확인한 후 다시 시도하세요.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return '마지막 동기화 성공: $time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => '아직 동기화에 성공하지 못했습니다';
+
+  @override
+  String get externalSyncBlocked =>
+      '일부 노트 또는 첨부 파일을 아직 업로드할 수 없습니다. 동기화가 다시 시도됩니다.';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return '$provider 연결을 해제할까요?';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      '이 계정과의 동기화가 중지됩니다. 이 기기의 노트와 제공업체에 이미 저장된 파일은 유지됩니다.';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Better Keep 연결이 해제되었습니다. 접근 권한 철회 여부를 확인할 수 없습니다. 제공업체의 계정 설정에서 Better Keep의 접근 권한을 삭제하세요.';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Nextcloud 보안 설정에서 만든 앱 비밀번호를 사용하세요. 브라우저에서 동기화하려면 서버에서 교차 출처 요청을 허용해야 합니다.';
+
+  @override
+  String get externalSyncServer => '서버 URL';
+
+  @override
+  String get externalSyncUsername => '사용자 이름';
+
+  @override
+  String get externalSyncAppPassword => '앱 비밀번호';
+
+  @override
+  String get externalSyncInvalidServer =>
+      '사용자 이름, 비밀번호, 쿼리 또는 프래그먼트가 없는 HTTPS 서버 URL을 입력하세요.';
+
+  @override
+  String get externalSyncRequired => '필수 입력 항목입니다.';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      '취소하기 전에 인증이 완료되었습니다. 제공업체가 연결되어 있습니다. 제거하려면 연결 해제를 선택하세요.';
+
+  @override
+  String get externalSyncNextcloudBrowserHelp =>
+      'Nextcloud 서버에 로그인하여 접근을 허용하세요. Nextcloud 설정에서 접근 권한을 철회할 수 있습니다. 브라우저에서 동기화하려면 서버에서 교차 출처 요청을 허용해야 합니다.';
+
+  @override
+  String get externalSyncLogoutPending =>
+      '일부 변경 사항이 아직 동기화를 기다리고 있습니다. 로그아웃하면 이 기기의 로컬 노트와 미디어가 삭제됩니다. 어떤 제공업체에도 저장되지 않은 변경 사항은 손실될 수 있습니다.\n\n로그아웃하기 전에 동기화를 완료하거나 데이터를 내보내세요.';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      '모든 변경 사항이 동기화되었는지 확인할 수 없습니다. 로그아웃하면 이 기기의 로컬 노트와 미디어가 삭제됩니다. 어떤 제공업체에도 저장되지 않은 변경 사항은 손실될 수 있습니다.\n\n로그아웃하기 전에 동기화 제공업체를 확인하거나 데이터를 내보내세요.';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      '일부 잠긴 노트에 업데이트가 필요한 오래된 스케치가 있습니다. 스케치를 만든 기기에서 해당 노트를 열고 PIN으로 잠금을 해제한 후 동기화를 다시 시도하세요.';
+
+  @override
+  String get externalSyncOff => '동기화 끄기';
+
+  @override
+  String get externalSyncOffDescription => '이 기기에 노트 보관';
+
+  @override
+  String get externalSyncDetails => '동기화 세부 정보';
+
+  @override
+  String get externalSyncNeedsAttention => '확인 필요 · 세부 정보 보기';
+
+  @override
+  String externalSyncConnectTitle(String provider) {
+    return '$provider 연결';
+  }
+
+  @override
+  String get externalSyncConnectHelp =>
+      '로그인하여 저장소 접근을 허용하세요. 연결되면 이 제공업체가 동기화 대상으로 선택됩니다.';
+
+  @override
+  String get verifyNewDevice => '새 기기 확인';
+
+  @override
+  String get deviceVerificationInstructions =>
+      '신뢰하는 기기에서 새 기기의 QR 코드를 스캔하거나 두 화면의 보안 코드 전체를 비교하세요.';
+
+  @override
+  String get deviceVerificationExpired =>
+      '확인 코드가 만료되었습니다. 새 기기에서 코드를 다시 생성하세요.';
+
+  @override
+  String get newVerificationCode => '새 코드 생성';
+
+  @override
+  String get deviceVerificationMismatch => '기기가 일치하지 않습니다. 이 요청을 승인하지 마세요.';
+
+  @override
+  String get deviceVerificationMatched => '기기를 확인했습니다. 계속할 수 있습니다.';
+
+  @override
+  String get scanNewDevice => '새 기기 스캔';
+
+  @override
+  String get compareSecurityCode => '보안 코드 비교';
+
+  @override
+  String get completeSecurityCodeMatches => '두 기기에서 코드 전체를 비교했으며 서로 일치합니다.';
+
+  @override
+  String get approveVerifiedDevice => '기기 승인';
+
+  @override
+  String get deviceCameraUnavailable => '카메라를 사용할 수 없습니다. 대신 보안 코드를 비교하세요.';
+
+  @override
+  String get deviceVerificationRetry =>
+      '확인하지 못했습니다. 두 기기를 업데이트하고 새 기기에서 코드를 다시 생성한 뒤 재시도하세요.';
+
+  @override
+  String get browserEncryptionSessionOnly =>
+      '암호화 키는 이 브라우저 세션에만 유지됩니다. 새로고침 후 브라우저를 다시 승인하거나 복구 암호문을 사용하세요.';
+
+  @override
+  String get verifyTrustedDevice => '신뢰하는 기기 확인';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      '신뢰하는 기기에서 확인 화면을 열어 두세요. 암호화 키를 받기 전에 QR 코드를 스캔하거나 보안 코드 32자 전체를 비교하세요.';
+
+  @override
+  String get scanTrustedDevice => '신뢰하는 기기 스캔';
+
+  @override
+  String get acceptVerifiedKey => '확인된 키 수락';
+
+  @override
+  String get confirmOnNewDevice => '새 기기에서 확인';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      '새 기기에서 “신뢰하는 기기 확인”을 선택하세요. 이 QR 코드를 스캔하거나 전체 보안 코드가 아래 코드와 일치하는지 확인하세요. 새 기기가 잠금 해제될 때까지 화면을 열어 두세요. 최초 생성 후 10분의 유효 기간이 그대로 적용됩니다.';
+
+  @override
+  String get storageSecurityUpgrade => '안전하게 다시 연결';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      '이 연결은 이전의 서버 관리 자격 증명 저장소를 사용했습니다. 먼저 제공업체의 연결된 앱 설정에서 Better Keep의 접근 권한을 취소하거나 Nextcloud 앱 비밀번호를 삭제한 후 여기서 다시 연결하세요. 노트와 원격 파일은 유지됩니다. 새 자격 증명은 노트 암호화 키로 기기에서 암호화됩니다.';
+
+  @override
+  String get devicePairingScanInstruction => '신뢰하는 기기에서 승인 요청을 열고 이 코드를 스캔하세요.';
+
+  @override
+  String get devicePairingCodeInstruction => '이 코드 전체를 신뢰하는 기기의 코드와 비교하세요.';
+
+  @override
+  String get showQrCode => 'QR 코드 표시';
+
+  @override
+  String get externalSyncSharedSetup => '이 기기에서 Google Drive에 로그인하세요.';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      '이 기기에서 연결된 Google Drive 계정에 로그인하세요. 노트는 계속 암호화됩니다.';
+
+  @override
+  String get externalSyncStorageFull =>
+      '저장 공간이 가득 찼습니다. 동기화가 일시 중지되었으며 기기의 노트는 안전합니다. 공간을 확보한 후 지금 동기화를 탭하세요.';
+
+  @override
+  String get externalSyncClear => '동기화된 데이터 삭제';
+
+  @override
+  String get externalSyncClearMessage =>
+      '동기화된 사본을 삭제하고 동기화를 끕니다. 기기의 노트는 유지되지만 제공업체에만 있는 데이터는 삭제됩니다.';
+
+  @override
+  String get externalSyncClearing => '동기화된 데이터 삭제 중…';
+
+  @override
+  String get externalSyncClearPending => '삭제 미완료 · 탭하여 다시 시도';
+
+  @override
+  String get externalSyncClearDone =>
+      '동기화된 데이터가 삭제되었습니다. 동기화가 꺼졌습니다. 기기의 노트는 유지됩니다. 삭제된 파일이 제공업체의 휴지통에 남아 있을 수 있습니다.';
+
+  @override
+  String get externalSyncClearCodeSent => '이메일로 전송된 코드를 입력하세요.';
+
+  @override
+  String get externalSyncClearCodeError =>
+      '동기화된 데이터를 삭제할 수 없습니다. 코드와 연결을 확인하거나 새 코드를 요청하세요. 삭제가 시작된 경우 완료될 때까지 동기화가 꺼진 상태로 유지됩니다.';
+
+  @override
+  String get externalSyncClearSendError =>
+      '코드를 보낼 수 없습니다. 계정 이메일이 인증되었는지 확인하고 1분 후 다시 시도하세요.';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$total 중 $used 사용';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => '저장 공간 확인 중…';
+
+  @override
+  String get externalSyncCapacityUnavailable => '저장 공간 정보를 사용할 수 없습니다';
+
+  @override
+  String get externalSyncClearVerifyTitle => '삭제를 위한 인증';
+
+  @override
+  String get externalSyncClearSendCode => '코드 보내기';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => '요금제 선택';
+
+  @override
+  String get upgradeToLite => 'Lite로 업그레이드';
+
+  @override
+  String get automaticExternalSync => '외부 저장소 자동 동기화';
+
+  @override
+  String get manualExternalSync => '외부 저장소 수동 동기화';
+
+  @override
+  String get liteDescription => '사용 중인 클라우드 저장소로 자동 업데이트합니다.';
+
+  @override
+  String get manualSyncDescription =>
+      '수동 동기화는 무료입니다. Lite와 Pro는 자동 업데이트를 제공합니다.';
+
+  @override
+  String get automaticSyncEnabled => '자동 업데이트 사용 중';
+
+  @override
+  String get subscriptionActiveTitle => '구독 활성화됨';
+
+  @override
+  String get subscriptionChangePlan => '요금제를 변경하려면 현재 구독을 관리하세요.';
+
+  @override
+  String get subscribe => '구독하기';
+
+  @override
+  String get builtInCloudSync => '기본 클라우드 동기화';
 }

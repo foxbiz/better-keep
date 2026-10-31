@@ -45,6 +45,13 @@
         ]
       },
       {
+        "source": "/oauth/storage/callback",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
+        ]
+      },
+      {
         "source": "/app/**",
         "headers": [
           {
@@ -168,6 +175,14 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/oauth/storage/start",
+        "function": "storageOAuthStart"
+      },
+      {
+        "source": "/oauth/storage/callback",
+        "destination": "/app/storage-auth.html"
+      },
       {
         "source": "/oauth/start",
         "function": "oauthStart"

@@ -2,6 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { ADMIN_USER_COLLECTION } from "../adminConfig";
 import { auth, db, storage } from "../config";
+import { deleteStorageOAuthSessions } from "../storageAccountLifecycle";
 
 /**
  * Scheduled function that runs daily at 2:00 AM UTC
@@ -72,6 +73,7 @@ export default onSchedule(
 async function deleteUserCompletely(userId: string): Promise<void> {
 	console.log(`Starting complete deletion for user: ${userId}`);
 	await executeUserDeletion(userId, {
+		deleteStorageOAuthSessions: () => deleteStorageOAuthSessions(db, userId),
 		deleteSubcollections: async () => {
 			const userRef = db.collection("users").doc(userId);
 			const subcollections = await userRef.listCollections();
@@ -114,6 +116,7 @@ async function deleteUserCompletely(userId: string): Promise<void> {
 }
 
 export interface UserDeletionOperations {
+	deleteStorageOAuthSessions: () => Promise<void>;
 	deleteSubcollections: () => Promise<void>;
 	deleteStorage: () => Promise<void>;
 	deleteAuthUser: () => Promise<void>;
@@ -133,6 +136,7 @@ export async function executeUserDeletion(
 	_userId: string,
 	operations: UserDeletionOperations,
 ): Promise<void> {
+	await operations.deleteStorageOAuthSessions();
 	await operations.deleteSubcollections();
 	await operations.deleteStorage();
 	await operations.deleteAuthUser();

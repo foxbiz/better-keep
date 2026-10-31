@@ -12,6 +12,8 @@ import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import 'device_verification.dart';
+
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
@@ -54,6 +56,7 @@ class DeviceDocument {
   final Map<String, String?>? deviceDetails;
   final Set<String> capabilities;
   final String? appVersion;
+  final DeviceVerificationRequest? approvalRequest;
 
   DeviceDocument({
     required this.id,
@@ -69,10 +72,27 @@ class DeviceDocument {
     this.deviceDetails,
     this.capabilities = const <String>{},
     this.appVersion,
+    this.approvalRequest,
   });
 
   bool get isApproved => status == DeviceStatus.approved;
   bool get isPending => status == DeviceStatus.pending;
+  bool canApproveAt(DateTime now) =>
+      isPending &&
+      approvalRequest?.deviceId == id &&
+      approvalRequest?.publicKey == publicKey &&
+      approvalRequest?.isValidAt(now) == true;
+
+  static DeviceVerificationRequest? _readApprovalRequest(Object? data) {
+    try {
+      return data is Map
+          ? DeviceVerificationRequest.fromJson(Map<String, dynamic>.from(data))
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool get isRevoked => status == DeviceStatus.revoked;
   bool get hasWrappedUMK => wrappedUMK != null && wrappedUMKNonce != null;
   bool get supportsReminderV2 => capabilities.contains(reminderV2Capability);
@@ -138,6 +158,7 @@ class DeviceDocument {
               .toSet() ??
           const <String>{},
       appVersion: data['app_version'] as String?,
+      approvalRequest: _readApprovalRequest(data['approval_request']),
     );
   }
 
@@ -154,6 +175,7 @@ class DeviceDocument {
     if (deviceDetails != null) 'device_details': deviceDetails,
     if (capabilities.isNotEmpty) 'capabilities': capabilities.toList(),
     if (appVersion != null) 'app_version': appVersion,
+    if (approvalRequest != null) 'approval_request': approvalRequest!.toJson(),
   };
 }
 
@@ -199,6 +221,7 @@ class DeviceManager {
   final E2EESecureStorage _secureStorage = E2EESecureStorage.instance;
   final Uuid _uuid = const Uuid();
   int _sessionGeneration = 0;
+  int _verificationGeneration = 0;
   String? _publishedCapabilities;
   String? _lastAuthorizationDiagnostic;
   final Map<String, Future<void>> _capabilityPublications = {};
@@ -210,6 +233,8 @@ class DeviceManager {
   _approvalSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
   _pendingApprovalsSubscription;
+
+  Timer? _pendingApprovalsExpiry;
 
   /// In-memory cache of unwrapped UMK.
   Uint8List? _cachedUMK;
@@ -243,6 +268,12 @@ class DeviceManager {
         (isCurrent?.call() ?? true);
   }
 
+  bool Function() _captureVerificationSession([bool Function()? isCurrent]) {
+    final current = _captureSession(isCurrent);
+    final generation = _verificationGeneration;
+    return () => current() && generation == _verificationGeneration;
+  }
+
   void invalidateSession() {
     _sessionGeneration++;
     _publishedCapabilities = null;
@@ -256,6 +287,7 @@ class DeviceManager {
     _currentDeviceStatusSubscription = null;
     _approvalSubscription = null;
     _pendingApprovalsSubscription = null;
+    _pendingApprovalsExpiry?.cancel();
     pendingApprovals.value = [];
   }
 
@@ -263,6 +295,10 @@ class DeviceManager {
   Future<bool> loadLocalKey({bool Function()? isCurrent}) async {
     final uid = _currentUser?.uid;
     if (uid == null) return false;
+    if (await _secureStorage.getApprovalRequest() != null &&
+        await _secureStorage.getAcceptedApproval() == null) {
+      return false;
+    }
     final key = await _secureStorage.getCachedUMK();
     if (_currentUser?.uid != uid || !(isCurrent?.call() ?? true)) return false;
     if (key == null) return false;
@@ -274,6 +310,7 @@ class DeviceManager {
 
   Future<DeviceAuthorization> readServerAuthorization() async {
     final current = _captureSession();
+    final pairingCurrent = _captureVerificationSession(current);
     final uid = _currentUser?.uid;
     final deviceId = await _secureStorage.getDeviceId();
     if (uid == null || deviceId == null || _currentUser?.uid != uid) {
@@ -320,6 +357,50 @@ class DeviceManager {
     }
     final device = DeviceDocument.fromFirestore(snapshot);
     if (device.isRevoked) return result(DeviceAuthorization.revoked);
+    if (device.isPending &&
+        (_cachedUMK != null ||
+            await _secureStorage.getAcceptedApproval() != null)) {
+      // Once this device observes a reset, the previous receipt cannot be
+      // replayed to silently undo it. Reapproval needs a fresh local request.
+      await runCloudOperation(current, () async {
+        final publicKey = await _secureStorage.getDevicePublicKey();
+        requireCurrentSession(current);
+        if (publicKey == null) throw StateError('Local keys unavailable');
+        // Persist a new binding before any network operation. Keeping a local
+        // request also prevents a replay from falling back to legacy unwrap.
+        await _secureStorage.storeApprovalRequest(
+          DeviceVerificationRequest.create(
+            account: uid,
+            environment: _verificationEnvironment,
+            deviceId: deviceId,
+            publicKey: publicKey,
+          ).qrData,
+        );
+        await clearUMK();
+        await _ensureVerificationRequest(regenerate: true);
+      });
+    }
+    final localRequest = await localVerificationRequest();
+    if (device.isApproved && localRequest != null) {
+      try {
+        await _requireAcceptedReceipt(
+          localRequest,
+          snapshot.data()!,
+          isCurrent: pairingCurrent,
+        );
+      } on FormatException {
+        return result(DeviceAuthorization.pending);
+      } on StateError {
+        return result(
+          pairingCurrent()
+              ? DeviceAuthorization.pending
+              : DeviceAuthorization.unavailable,
+        );
+      } catch (_) {
+        return result(DeviceAuthorization.unavailable);
+      }
+    }
+    if (!current()) return DeviceAuthorization.unavailable;
     return result(
       device.isApproved
           ? DeviceAuthorization.approved
@@ -807,7 +888,10 @@ class DeviceManager {
       );
       if (existing.exists) {
         final device = DeviceDocument.fromFirestore(existing);
-        if (device.isPending) _listenForApproval(deviceId);
+        if (device.isPending) {
+          await _ensureVerificationRequest();
+          _listenForApproval(deviceId);
+        }
         return;
       }
       if (await _secureStorage.getCachedDeviceStatus() != null) {
@@ -821,28 +905,23 @@ class DeviceManager {
           )
         : await KeyExchange.generateKeyPair();
     final data = await _registrationData(keys);
-    if (deviceId == null) {
-      final existing = await _devicesCollection
-          .where('name', isEqualTo: data['name'])
-          .get(const GetOptions(source: Source.server))
-          .timeout(const Duration(seconds: 10));
-      requireCloudOperation();
-      if (existing.metadata.isFromCache || existing.metadata.hasPendingWrites) {
-        throw const CloudVerificationUnavailable();
-      }
-      final pending = existing.docs.where(
-        (doc) =>
-            doc.data()['status'] == DeviceStatus.pending.name &&
-            doc.data()['platform'] == data['platform'],
-      );
-      deviceId = pending.isEmpty ? _uuid.v4() : pending.first.id;
-    }
+    deviceId ??= _uuid.v4();
     if (!hasKeys) {
       await _secureStorage.setSignInProgress(true);
       await _secureStorage.storeDevicePrivateKey(keys.privateKey);
       await _secureStorage.storeDevicePublicKey(keys.publicKey);
       await _secureStorage.storeDeviceId(deviceId);
     }
+    final request = DeviceVerificationRequest.create(
+      account: _currentUser!.uid,
+      environment: _verificationEnvironment,
+      deviceId: deviceId,
+      publicKey: keys.publicKey,
+    );
+    await _secureStorage.storeApprovalRequest(request.qrData);
+    await _secureStorage.rememberInitializedAccount(_currentUser!.uid);
+    data['approval_request'] = request.toJson();
+    data['approval_protocol'] = DeviceVerificationRequest.version;
     data['status'] = DeviceStatus.pending.name;
     requireCloudOperation();
     await _devicesCollection
@@ -854,64 +933,366 @@ class DeviceManager {
     _listenForApproval(deviceId);
   }
 
-  /// Approves a pending device from an existing approved device.
-  ///
-  /// This wraps the UMK for the new device using ECDH key exchange.
-  Future<void> approveDevice(String pendingDeviceId) async {
-    if (_cachedUMK == null) {
-      throw StateError('Cannot approve device: UMK not available');
+  String get _verificationEnvironment => jsonEncode([
+    FirebaseBackend.projectId,
+    FirebaseBackend.databaseId,
+    FirebaseBackend.environment.name,
+  ]);
+
+  Future<DeviceVerificationRequest?> localVerificationRequest() async {
+    final current = _captureSession();
+    final value = await _secureStorage.getApprovalRequest();
+    requireCurrentSession(current);
+    if (value == null) return null;
+    final request = DeviceVerificationRequest.fromLocalData(value);
+    final publicKey = await _secureStorage.getDevicePublicKey();
+    final deviceId = await _secureStorage.getDeviceId();
+    requireCurrentSession(current);
+    if (request.account != _currentUser!.uid ||
+        request.environment != _verificationEnvironment ||
+        request.deviceId != deviceId ||
+        publicKey == null ||
+        request.publicKey != base64Encode(publicKey)) {
+      throw StateError('Local device verification does not match this session');
     }
+    return request;
+  }
 
-    AppLogger.log('E2EE: Approving device $pendingDeviceId');
+  Future<DeviceVerificationRequest> ensureVerificationRequest({
+    bool regenerate = false,
+  }) => runCloudOperation(
+    _captureSession(captureCloudOperation()),
+    () => _ensureVerificationRequest(regenerate: regenerate),
+  );
 
-    // Get pending device's public key
-    final pendingDeviceDoc = await _devicesCollection
-        .doc(pendingDeviceId)
-        .get();
-    if (!pendingDeviceDoc.exists) {
-      throw StateError('Device not found');
+  Future<DeviceVerificationRequest> _ensureVerificationRequest({
+    bool regenerate = false,
+  }) {
+    if (regenerate) _verificationGeneration++;
+    final current = _captureVerificationSession(captureCloudOperation());
+    return runCloudOperation(current, () async {
+      final deviceId = await _secureStorage.getDeviceId();
+      final publicKey = await _secureStorage.getDevicePublicKey();
+      requireCurrentSession(current);
+      if (deviceId == null || publicKey == null) {
+        throw StateError('Device keys unavailable');
+      }
+      final ref = _devicesCollection.doc(deviceId);
+      final snapshot = await readCloudDocument(ref, isCurrent: current);
+      final data = snapshot.data();
+      if (!['pending', 'approved'].contains(data?['status']) ||
+          data?['public_key'] != base64Encode(publicKey)) {
+        throw StateError('Device is not awaiting verification');
+      }
+      final previous = await localVerificationRequest();
+      requireCurrentSession(current);
+      if (data?['status'] == 'approved' && _cachedUMK != null) {
+        throw StateError('Device verification is already complete');
+      }
+      if (!regenerate && previous != null) {
+        // An expired request must be explicitly regenerated by the user. Do not
+        // change a code while someone is comparing it on another device.
+        if (jsonEncode(data?['approval_request']) !=
+            jsonEncode(previous.toJson())) {
+          final remote = data?['approval_request'];
+          if (remote is! Map ||
+              DeviceVerificationRequest.fromJson(
+                    Map<String, dynamic>.from(remote),
+                  ).canonical !=
+                  previous.canonical) {
+            throw StateError('Device verification request changed');
+          }
+        }
+        return previous;
+      }
+      final request = DeviceVerificationRequest.create(
+        account: _currentUser!.uid,
+        environment: _verificationEnvironment,
+        deviceId: deviceId,
+        publicKey: publicKey,
+      );
+      // Persist locally before publishing: a server approval must never be
+      // accepted without the locally created request binding.
+      if (regenerate) await clearUMK();
+      await _secureStorage.storeApprovalRequest(request.qrData);
+      requireCurrentSession(current);
+      await _firestore.runTransaction((transaction) async {
+        final fresh = (await transaction.get(ref)).data();
+        requireCurrentSession(current);
+        if (!['pending', 'approved'].contains(fresh?['status']) ||
+            fresh?['public_key'] != request.publicKey ||
+            fresh?['status'] != data?['status'] ||
+            jsonEncode(fresh?['approval_request']) !=
+                jsonEncode(data?['approval_request'])) {
+          throw StateError('Device verification request changed');
+        }
+        transaction.update(ref, {
+          'status': 'pending',
+          'approval_protocol': DeviceVerificationRequest.version,
+          'approval_request': request.toJson(),
+          'wrapped_umk': FieldValue.delete(),
+          'wrapped_umk_nonce': FieldValue.delete(),
+          'approved_by_public_key': FieldValue.delete(),
+          'pairing_proof': FieldValue.delete(),
+        });
+      });
+      requireCurrentSession(current);
+      return request;
+    });
+  }
+
+  Future<DeviceVerificationRequest> pendingVerificationRequest(
+    String deviceId,
+  ) => runCloudOperation(_captureSession(captureCloudOperation()), () async {
+    final current = _captureSession(captureCloudOperation());
+    final snapshot = await readCloudDocument(
+      _devicesCollection.doc(deviceId),
+      isCurrent: current,
+    );
+    final data = snapshot.data();
+    if (data?['status'] != 'pending' ||
+        data?['approval_request'] is! Map ||
+        data?['approval_protocol'] != DeviceVerificationRequest.version) {
+      throw StateError(
+        'Update the new device and generate a verification code',
+      );
     }
-
-    final pendingDevice = DeviceDocument.fromFirestore(pendingDeviceDoc);
-    if (!pendingDevice.isPending) {
-      throw StateError('Device is not pending approval');
+    final request = DeviceVerificationRequest.fromJson(
+      Map<String, dynamic>.from(data!['approval_request'] as Map),
+    );
+    if (request.deviceId != deviceId ||
+        request.publicKey != data['public_key'] ||
+        request.account != _currentUser!.uid ||
+        request.environment != _verificationEnvironment) {
+      throw StateError('Device verification request does not match');
     }
+    request.requireValid(DateTime.now());
+    return request;
+  });
 
-    // Get our private key for ECDH
+  /// No unverified overload: all UI entry points must obtain local proof first.
+  Future<DeviceApprovalReceipt> approveDevice(
+    VerifiedDeviceApproval verified,
+  ) => runCloudOperation(_captureSession(captureCloudOperation()), () async {
+    final current = _captureSession(captureCloudOperation());
+    final request = verified.request;
+    request.requireValid(DateTime.now());
+    if (_cachedUMK == null ||
+        request.account != _currentUser?.uid ||
+        request.environment != _verificationEnvironment) {
+      throw StateError('Cannot approve device in this session');
+    }
+    final fresh = await pendingVerificationRequest(request.deviceId);
+    if (fresh.canonical != request.canonical) {
+      throw StateError('Device key changed');
+    }
+    final ourDeviceId = await _secureStorage.getDeviceId();
     final ourPrivateKey = await _secureStorage.getDevicePrivateKey();
-    if (ourPrivateKey == null) {
-      throw StateError('Local private key not found');
+    final ourPublicKey = await _secureStorage.getDevicePublicKey();
+    requireCurrentSession(current);
+    if (ourDeviceId == null || ourPrivateKey == null || ourPublicKey == null) {
+      throw StateError('Local keys unavailable');
     }
-
-    // Derive shared secret using ECDH
-    final theirPublicKey = base64Decode(pendingDevice.publicKey);
     final sharedSecret = await KeyExchange.deriveSharedSecret(
       ourPrivateKey,
-      theirPublicKey,
+      base64Decode(request.publicKey),
     );
-
-    // Wrap UMK with shared secret
-    final wrappedResult = await AuthenticatedCipher.encryptString(
-      base64Encode(_cachedUMK!),
-      sharedSecret,
-    );
-
-    // Update the pending device with wrapped UMK
-    await _devicesCollection.doc(pendingDeviceId).update({
-      'wrapped_umk': wrappedResult.ciphertext,
-      'wrapped_umk_nonce': wrappedResult.nonce,
-      'status': DeviceStatus.approved.name,
-      'approved_at': DateTime.now().toIso8601String(),
-      // Store our public key so the new device can derive the same shared secret
-      'approved_by_public_key': base64Encode(
-        await _secureStorage.getDevicePublicKey() ?? Uint8List(0),
+    requireCurrentSession(current);
+    late CipherResultString wrapped;
+    try {
+      wrapped = await AuthenticatedCipher.encryptString(
+        request.encodeMasterKey(_cachedUMK!),
+        sharedSecret,
+      );
+    } finally {
+      sharedSecret.fillRange(0, sharedSecret.length, 0);
+    }
+    requireCurrentSession(current);
+    final receipt = verified.authenticateReceipt(
+      DeviceApprovalReceipt(
+        request: request,
+        approverPublicKey: base64Encode(ourPublicKey),
+        ciphertext: wrapped.ciphertext,
+        nonce: wrapped.nonce,
       ),
+    );
+    final ref = _devicesCollection.doc(request.deviceId);
+    await _firestore.runTransaction((transaction) async {
+      final approver = (await transaction.get(
+        _devicesCollection.doc(ourDeviceId),
+      )).data();
+      final data = (await transaction.get(ref)).data();
+      requireCurrentSession(current);
+      request.requireValid(DateTime.now());
+      if (approver?['status'] != 'approved' ||
+          approver?['public_key'] != base64Encode(ourPublicKey)) {
+        throw StateError('Approving device authorization changed');
+      }
+      if (data?['status'] != 'pending' ||
+          data?['public_key'] != request.publicKey ||
+          data?['approval_protocol'] != DeviceVerificationRequest.version ||
+          data?['approval_request'] is! Map ||
+          DeviceVerificationRequest.fromJson(
+                Map<String, dynamic>.from(data!['approval_request'] as Map),
+              ).canonical !=
+              request.canonical) {
+        throw StateError('Device verification request changed');
+      }
+      transaction.update(ref, {
+        'wrapped_umk': wrapped.ciphertext,
+        'wrapped_umk_nonce': wrapped.nonce,
+        'wrapped_umk_version': DeviceVerificationRequest.version,
+        'status': DeviceStatus.approved.name,
+        'approved_at': DateTime.now().toIso8601String(),
+        'approved_by_public_key': base64Encode(ourPublicKey),
+        'pairing_proof': receipt.pairingProof ?? FieldValue.delete(),
+      });
     });
+    requireCurrentSession(current);
+    // The existing snapshot listener refreshes the pending list. Return
+    // the locally created receipt even if a later metadata read is offline.
+    return receipt;
+  });
 
-    AppLogger.log('E2EE: Device $pendingDeviceId approved');
+  /// UI completion only; this hint never authorizes or unwraps a key.
+  Stream<bool> approvalReceiptFinished(DeviceApprovalReceipt receipt) {
+    final current = _captureSession();
+    return _devicesCollection
+        .doc(receipt.request.deviceId)
+        .snapshots(includeMetadataChanges: true)
+        .where((snapshot) => !snapshot.metadata.isFromCache)
+        .map((snapshot) {
+          final data = snapshot.data();
+          return !current() ||
+              data == null ||
+              data['status'] != 'approved' ||
+              data['accepted_receipt'] == receipt.fingerprint ||
+              data['wrapped_umk'] != receipt.ciphertext;
+        });
+  }
 
-    // Refresh pending approvals list
-    await _refreshPendingApprovals();
+  Future<void> _publishReceiptAccepted(
+    DeviceApprovalReceipt receipt,
+    bool Function() current,
+  ) async {
+    try {
+      final ref = _devicesCollection.doc(receipt.request.deviceId);
+      await _firestore
+          .runTransaction((transaction) async {
+            final data = (await transaction.get(ref)).data();
+            requireCurrentSession(current);
+            if (data == null ||
+                data['status'] != 'approved' ||
+                DeviceApprovalReceipt.fromDocument(
+                      receipt.request,
+                      data,
+                    ).fingerprint !=
+                    receipt.fingerprint) {
+              return;
+            }
+            transaction.update(ref, {'accepted_receipt': receipt.fingerprint});
+          })
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // A best-effort UI acknowledgement cannot prevent local key recovery.
+    }
+  }
+
+  Future<void> _requireAcceptedReceipt(
+    DeviceVerificationRequest localRequest,
+    Map<String, dynamic> data, {
+    required bool Function() isCurrent,
+  }) => runCloudOperation(isCurrent, () async {
+    final receipt = DeviceApprovalReceipt.fromDocument(localRequest, data);
+    final accepted = await _secureStorage.getAcceptedApproval();
+    requireCurrentSession(isCurrent);
+    if (accepted == null) {
+      final verified = localRequest.verifyPairingReceipt(receipt);
+      if (verified == null) receipt.requireAccepted(null);
+      await _secureStorage.storeAcceptedApproval(receipt.fingerprint);
+      requireCurrentSession(isCurrent);
+    } else {
+      receipt.requireAccepted(accepted);
+    }
+    // Persist acceptance before removing the secret: a crash between writes
+    // can safely resume only this exact handoff, never a replacement.
+    if (localRequest.hasPairingSecret) {
+      await _secureStorage.completeApprovalRequest(
+        jsonEncode(localRequest.toJson()),
+      );
+      requireCurrentSession(isCurrent);
+    }
+  });
+
+  /// Reads a candidate only. Server approval never proves who sent the key.
+  Future<DeviceApprovalReceipt?> pendingApprovalReceipt() =>
+      runCloudOperation(_captureSession(captureCloudOperation()), () async {
+        final current = _captureSession(captureCloudOperation());
+        final request = await localVerificationRequest();
+        if (request == null) return null;
+        final snapshot = await readCloudDocument(
+          _devicesCollection.doc(request.deviceId),
+          isCurrent: current,
+        );
+        if (snapshot.data()?['status'] != 'approved') return null;
+        return DeviceApprovalReceipt.fromDocument(request, snapshot.data()!);
+      });
+
+  /// Only a local scan/full-code confirmation can persist this exact receipt.
+  Future<void> acceptVerifiedApproval(VerifiedDeviceReceipt verified) =>
+      runCloudOperation(
+        _captureVerificationSession(captureCloudOperation()),
+        () async {
+          final current = _captureVerificationSession(captureCloudOperation());
+          final receipt = verified.receipt;
+          receipt.request.requireValid(DateTime.now());
+          final candidate = await pendingApprovalReceipt();
+          requireCurrentSession(current);
+          if (candidate?.fingerprint != receipt.fingerprint) {
+            throw StateError(
+              'Device handoff changed. Verify both devices again.',
+            );
+          }
+          receipt.request.requireValid(DateTime.now());
+          await _secureStorage.storeAcceptedApproval(receipt.fingerprint);
+          requireCurrentSession(current);
+          // init rereads and validates the fingerprint before decrypting. A
+          // replacement arriving between these operations cannot be accepted.
+          await init(isCurrent: current);
+        },
+      );
+
+  Future<void> cancelApprovalRequest() {
+    _verificationGeneration++;
+    return runCloudOperation(
+      _captureVerificationSession(captureCloudOperation()),
+      () async {
+        final current = _captureVerificationSession(captureCloudOperation());
+        final request = await localVerificationRequest();
+        requireCurrentSession(current);
+        if (request == null || _cachedUMK != null) return;
+        final ref = _devicesCollection.doc(request.deviceId);
+        await _firestore.runTransaction((transaction) async {
+          final data = (await transaction.get(ref)).data();
+          requireCurrentSession(current);
+          if (data == null) return;
+          if (data['public_key'] != request.publicKey ||
+              data['approval_request'] is! Map ||
+              DeviceVerificationRequest.fromJson(
+                    Map<String, dynamic>.from(data['approval_request'] as Map),
+                  ).canonical !=
+                  request.canonical) {
+            throw StateError('Device request changed');
+          }
+          transaction.delete(ref);
+        });
+        requireCurrentSession(current);
+        // Cancellation abandons the pending identity. Keeping its private key
+        // after removing the binding could permit a legacy downgrade replay.
+        await clearUMK();
+        await _secureStorage.clearAll();
+      },
+    );
   }
 
   /// Revokes a device by deleting it from Firebase.
@@ -947,6 +1328,7 @@ class DeviceManager {
       'wrapped_umk_nonce': FieldValue.delete(),
       'approved_at': FieldValue.delete(),
       'approved_by_public_key': FieldValue.delete(),
+      'pairing_proof': FieldValue.delete(),
       'revoked_at': FieldValue.delete(),
     });
 
@@ -961,54 +1343,61 @@ class DeviceManager {
   /// This resets the current device to pending status so it can be
   /// approved again by the master device. If no device ID exists locally,
   /// a new device registration is created.
-  Future<void> requestReapproval() async {
-    final deviceId = await _secureStorage.getDeviceId();
+  Future<void> requestReapproval() {
+    _verificationGeneration++;
+    return runCloudOperation(_captureSession(captureCloudOperation()), () async {
+      final deviceId = await _secureStorage.getDeviceId();
 
-    // Clear local UMK cache since we need a new one
-    await _secureStorage.clearCachedUMK();
-    _cachedUMK = null;
-    hasUMK.value = false;
+      // Clear local UMK cache since we need a new one
+      await _secureStorage.clearCachedUMK();
+      requireCloudOperation();
+      _cachedUMK = null;
+      hasUMK.value = false;
 
-    if (deviceId == null) {
-      // No device ID found - register as a new device instead
-      AppLogger.log(
-        'E2EE: No device ID found, registering as new device for re-approval',
-      );
-      await registerNewDevice();
-      return;
-    }
+      if (deviceId == null) {
+        // No device ID found - register as a new device instead
+        AppLogger.log(
+          'E2EE: No device ID found, registering as new device for re-approval',
+        );
+        await registerNewDevice();
+        return;
+      }
 
-    // Check if the device still exists on the server
-    final deviceDoc = await _devicesCollection
-        .doc(deviceId)
-        .get(const GetOptions(source: Source.server))
-        .timeout(const Duration(seconds: 10));
-    if (!deviceDoc.exists) {
-      // Device was deleted from server - register as a new device
-      AppLogger.log(
-        'E2EE: Device not found on server, registering as new device for re-approval',
-      );
-      await _secureStorage.clearAll();
-      await registerNewDevice();
-      return;
-    }
+      // Check if the device still exists on the server
+      final deviceDoc = await _devicesCollection
+          .doc(deviceId)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 10));
+      if (!deviceDoc.exists) {
+        // Device was deleted from server - register as a new device
+        AppLogger.log(
+          'E2EE: Device not found on server, registering as new device for re-approval',
+        );
+        await _secureStorage.clearAll();
+        await registerNewDevice();
+        return;
+      }
 
-    AppLogger.log('E2EE: Requesting re-approval for current device');
+      AppLogger.log('E2EE: Requesting re-approval for current device');
 
-    // Reset device to pending status in Firestore
-    await _devicesCollection.doc(deviceId).update({
-      'status': DeviceStatus.pending.name,
-      'wrapped_umk': FieldValue.delete(),
-      'wrapped_umk_nonce': FieldValue.delete(),
-      'approved_at': FieldValue.delete(),
-      'approved_by_public_key': FieldValue.delete(),
-      'revoked_at': FieldValue.delete(),
+      // Reset device to pending status in Firestore
+      await _devicesCollection.doc(deviceId).update({
+        'status': DeviceStatus.pending.name,
+        'wrapped_umk': FieldValue.delete(),
+        'wrapped_umk_nonce': FieldValue.delete(),
+        'approved_at': FieldValue.delete(),
+        'approved_by_public_key': FieldValue.delete(),
+        'pairing_proof': FieldValue.delete(),
+        'revoked_at': FieldValue.delete(),
+      });
+
+      await _ensureVerificationRequest(regenerate: true);
+
+      AppLogger.log('E2EE: Re-approval request sent');
+
+      // Start listening for approval again
+      _listenForApproval(deviceId);
     });
-
-    AppLogger.log('E2EE: Re-approval request sent');
-
-    // Start listening for approval again
-    _listenForApproval(deviceId);
   }
 
   /// Gets all registered devices for the current user.
@@ -1127,6 +1516,7 @@ class DeviceManager {
   /// Call this when the service is no longer needed.
   Future<void> dispose() async {
     _sessionGeneration++;
+    _pendingApprovalsExpiry?.cancel();
     _publishedCapabilities = null;
     _lastAuthorizationDiagnostic = null;
     _capabilityPublications.clear();
@@ -1155,78 +1545,144 @@ class DeviceManager {
       devicePublicKey,
     );
 
-    return await AuthenticatedCipher.encryptString(
-      base64Encode(umk),
-      sharedSecret,
-    );
+    try {
+      return await AuthenticatedCipher.encryptString(
+        base64Encode(umk),
+        sharedSecret,
+      );
+    } finally {
+      sharedSecret.fillRange(0, sharedSecret.length, 0);
+    }
   }
 
   /// Unwraps and caches the UMK from a device document.
   Future<void> _unwrapAndCacheUMK(
     DeviceDocument device, {
     bool Function()? isCurrent,
-  }) async {
-    final current = _captureSession(isCurrent);
-    final uid = _currentUser?.uid;
-    final generation = _sessionGeneration;
-    if (!device.hasWrappedUMK) {
-      throw StateError('Device does not have wrapped UMK');
-    }
-
-    final privateKey = await _secureStorage.getDevicePrivateKey();
-    if (privateKey == null) {
-      throw StateError('Local private key not found');
-    }
-
-    Uint8List sharedSecret;
-
-    // Check if this was approved by another device or is self-encrypted
-    requireCurrentSession(current);
-    final deviceDoc = await readCloudDocument(
-      _devicesCollection.doc(device.id),
-      isCurrent: current,
+  }) {
+    final current = _captureVerificationSession(
+      isCurrent ?? captureCloudOperation(),
     );
-    final approvedByPublicKey =
-        deviceDoc.data()?['approved_by_public_key'] as String?;
-
-    if (approvedByPublicKey != null && approvedByPublicKey.isNotEmpty) {
-      // Approved by another device - use ECDH with approver's public key
-      sharedSecret = await KeyExchange.deriveSharedSecret(
-        privateKey,
-        base64Decode(approvedByPublicKey),
-      );
-    } else {
-      // Self-encrypted (first device) - use own public key
-      final publicKey = await _secureStorage.getDevicePublicKey();
-      if (publicKey == null) {
-        throw StateError('Local public key not found');
+    return runCloudOperation(current, () async {
+      final uid = _currentUser?.uid;
+      final generation = _sessionGeneration;
+      if (!device.hasWrappedUMK) {
+        throw StateError('Device does not have wrapped UMK');
       }
-      sharedSecret = await KeyExchange.deriveSharedSecret(
-        privateKey,
-        publicKey,
+
+      final privateKey = await _secureStorage.getDevicePrivateKey();
+      if (privateKey == null) {
+        throw StateError('Local private key not found');
+      }
+
+      Uint8List sharedSecret;
+
+      // Check if this was approved by another device or is self-encrypted
+      requireCurrentSession(current);
+      final deviceDoc = await readCloudDocument(
+        _devicesCollection.doc(device.id),
+        isCurrent: current,
       );
-    }
+      device = DeviceDocument.fromFirestore(deviceDoc);
+      if (!device.isApproved || !device.hasWrappedUMK) {
+        throw StateError('Device approval changed');
+      }
+      final localRequest = await localVerificationRequest();
+      if (localRequest != null) {
+        await _requireAcceptedReceipt(
+          localRequest,
+          deviceDoc.data()!,
+          isCurrent: current,
+        );
+      }
+      requireCurrentSession(current);
+      final approvedByPublicKey =
+          deviceDoc.data()?['approved_by_public_key'] as String?;
 
-    // Decrypt wrapped UMK
-    final umkBase64 = await AuthenticatedCipher.decryptString(
-      device.wrappedUMK!,
-      device.wrappedUMKNonce!,
-      sharedSecret,
-    );
+      if (localRequest == null &&
+          approvedByPublicKey != null &&
+          approvedByPublicKey.isNotEmpty) {
+        // A legacy sender key fetched from the server is not independent proof.
+        // Existing native devices keep their cached UMK. If that cache is lost,
+        // use verified pairing or recovery instead of trusting a new sender key.
+        throw StateError('Verified device approval or recovery required');
+      }
+      if (approvedByPublicKey != null && approvedByPublicKey.isNotEmpty) {
+        // Approved by another device - use ECDH with approver's public key
+        sharedSecret = await KeyExchange.deriveSharedSecret(
+          privateKey,
+          base64Decode(approvedByPublicKey),
+        );
+      } else {
+        // Self-encrypted (first device) - use own public key
+        final publicKey = await _secureStorage.getDevicePublicKey();
+        if (publicKey == null) {
+          throw StateError('Local public key not found');
+        }
+        sharedSecret = await KeyExchange.deriveSharedSecret(
+          privateKey,
+          publicKey,
+        );
+      }
 
-    final umk = base64Decode(umkBase64);
+      late String plaintext;
+      try {
+        plaintext = await AuthenticatedCipher.decryptString(
+          device.wrappedUMK!,
+          device.wrappedUMKNonce!,
+          sharedSecret,
+        );
+      } finally {
+        sharedSecret.fillRange(0, sharedSecret.length, 0);
+      }
+      requireCurrentSession(current);
+      late Uint8List umk;
+      if (localRequest != null ||
+          deviceDoc.data()?['wrapped_umk_version'] ==
+              DeviceVerificationRequest.version) {
+        if (localRequest == null ||
+            deviceDoc.data()?['wrapped_umk_version'] !=
+                DeviceVerificationRequest.version) {
+          throw StateError(
+            'Verified device approval required. Update the approving device.',
+          );
+        }
+        final accepted = await _secureStorage.getAcceptedApproval();
+        requireCurrentSession(current);
+        DeviceApprovalReceipt.fromDocument(
+          localRequest,
+          deviceDoc.data()!,
+        ).requireAccepted(accepted);
+        umk = localRequest.decodeMasterKey(
+          plaintext,
+          envelopeVersion: deviceDoc.data()?['wrapped_umk_version'] as int?,
+          previouslyAcceptedRequestId: localRequest.requestId,
+        );
+      } else {
+        // Existing approved devices and first-device/recovery self-wrapping.
+        umk = base64Decode(plaintext);
+      }
 
-    if (_currentUser?.uid != uid || generation != _sessionGeneration) return;
-    requireCurrentSession(current);
-    if (umk.length != 32) throw const FormatException('Invalid master key');
-    // Cache the unwrapped UMK
-    await _secureStorage.cacheUnwrappedUMK(umk);
-    requireCurrentSession(current);
-    requireCloudOperation();
-    _cachedUMK = umk;
-    hasUMK.value = true;
+      if (_currentUser?.uid != uid || generation != _sessionGeneration) return;
+      requireCurrentSession(current);
+      if (umk.length != 32) throw const FormatException('Invalid master key');
+      // Cache the unwrapped UMK
+      await _secureStorage.cacheUnwrappedUMK(umk);
+      requireCurrentSession(current);
+      requireCloudOperation();
+      _cachedUMK = umk;
+      hasUMK.value = true;
 
-    AppLogger.log('E2EE: UMK unwrapped and cached');
+      if (localRequest != null) {
+        unawaited(
+          _publishReceiptAccepted(
+            DeviceApprovalReceipt.fromDocument(localRequest, deviceDoc.data()!),
+            current,
+          ),
+        );
+      }
+      AppLogger.log('E2EE: UMK unwrapped and cached');
+    });
   }
 
   /// Listens for approval of the current device.
@@ -1286,12 +1742,11 @@ class DeviceManager {
           .listen(
             (snapshot) {
               if (!current()) return;
-              final requests = snapshot.docs
-                  .map((doc) => DeviceDocument.fromFirestore(doc))
-                  .map((doc) => DeviceApprovalRequest.fromDocument(doc))
-                  .toList();
-
-              pendingApprovals.value = requests;
+              _publishPendingApprovals(
+                snapshot.docs
+                    .map((doc) => DeviceDocument.fromFirestore(doc))
+                    .toList(),
+              );
             },
             onError: (Object error, StackTrace stack) {
               if (!current()) return;
@@ -1305,16 +1760,41 @@ class DeviceManager {
 
   /// Refreshes the pending approvals list.
   Future<void> _refreshPendingApprovals() async {
+    final current = _captureSession();
     final snapshot = await _devicesCollection
         .where('status', isEqualTo: DeviceStatus.pending.name)
         .get();
 
-    final requests = snapshot.docs
-        .map((doc) => DeviceDocument.fromFirestore(doc))
-        .map((doc) => DeviceApprovalRequest.fromDocument(doc))
-        .toList();
+    if (!current()) return;
+    _publishPendingApprovals(
+      snapshot.docs.map((doc) => DeviceDocument.fromFirestore(doc)).toList(),
+    );
+  }
 
-    pendingApprovals.value = requests;
+  void _publishPendingApprovals(List<DeviceDocument> devices) {
+    _pendingApprovalsExpiry?.cancel();
+    final current = _captureSession();
+    final now = DateTime.now();
+    final eligible = devices
+        .where((device) => device.canApproveAt(now))
+        .toList();
+    pendingApprovals.value = eligible
+        .map(DeviceApprovalRequest.fromDocument)
+        .toList();
+    if (eligible.isEmpty) return;
+    final expiry = eligible
+        .map(
+          (device) =>
+              device.approvalRequest!.createdAt +
+              DeviceVerificationRequest.lifetime.inMilliseconds,
+        )
+        .reduce((a, b) => a < b ? a : b);
+    _pendingApprovalsExpiry = Timer(
+      Duration(milliseconds: expiry - now.millisecondsSinceEpoch),
+      () {
+        if (current()) _publishPendingApprovals(eligible);
+      },
+    );
   }
 
   /// Sets the current device as the primary (master) device.

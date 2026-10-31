@@ -148,7 +148,7 @@ async function main() {
 		const flutterArguments = [
 			"drive",
 			"--driver=test_driver/integration_test.dart",
-			"--target=integration_test/firebase_environment_web_test.dart",
+			`--target=${process.argv[2] ?? "integration_test/firebase_environment_web_test.dart"}`,
 			"-d",
 			"web-server",
 			"--web-hostname=127.0.0.1",
@@ -156,6 +156,7 @@ async function main() {
 			"--headless",
 			"--browser-name=chrome",
 			"--timeout=180",
+			...process.argv.slice(3),
 		];
 		if (process.env.CHROME_BINARY) {
 			flutterArguments.push(`--chrome-binary=${process.env.CHROME_BINARY}`);

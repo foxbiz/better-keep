@@ -13,8 +13,9 @@ void main() {
   late SyncPresentation presentation;
   late Completer<CloudSessionState> verification;
   late Completer<void> initialization;
-  late ValueNotifier<bool> notes, labels;
-  late ValueNotifier<SyncProgress> noteStatus, labelStatus;
+  late ValueNotifier<bool> notes, labels, firebaseEnabled;
+  late ValueNotifier<SyncProgress> external;
+  late ValueNotifier<SyncProgress> noteStatus, labelStatus, orderStatus;
   late ValueNotifier<E2EEStatus> encryption;
   late ValueNotifier<PostSignInState> postSignIn;
 
@@ -26,17 +27,25 @@ void main() {
       onReady: (_) => initialization.future,
       onFailure: (_, _) {},
     )..setForeground(false);
+    firebaseEnabled = ValueNotifier(true);
+    external = ValueNotifier(SyncProgress.idle);
     notes = ValueNotifier(false);
     labels = ValueNotifier(false);
     noteStatus = ValueNotifier(SyncProgress.idle);
+    orderStatus = ValueNotifier(SyncProgress.idle);
     labelStatus = ValueNotifier(SyncProgress.idle);
     encryption = ValueNotifier(E2EEStatus.ready);
     postSignIn = ValueNotifier(PostSignInState.idle);
     presentation = SyncPresentation(
       recovery: recovery,
+      externalChanges: external,
+      externalProgress: () => external.value,
+      firebaseChanges: firebaseEnabled,
+      firebaseSelected: () => firebaseEnabled.value,
       noteBusy: notes,
       labelBusy: labels,
       noteStatus: noteStatus,
+      orderStatus: orderStatus,
       labelStatus: labelStatus,
       noteFailures: ValueNotifier({}),
       labelFailures: ValueNotifier({}),
@@ -50,6 +59,60 @@ void main() {
     recovery.stop();
     presentation.dispose();
   });
+
+  test(
+    'external transfers remain visible while Firebase is unavailable or paused',
+    () {
+      recovery.connectionLost();
+      external.value = const SyncProgress(SyncPhase.syncing);
+      expect(presentation.value.phase, SyncPhase.syncing);
+      external.value = const SyncProgress(SyncPhase.complete);
+      expect(presentation.value.phase, SyncPhase.unavailable);
+      firebaseEnabled.value = false;
+      expect(presentation.value.phase, SyncPhase.complete);
+      noteStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+      expect(presentation.value.phase, SyncPhase.complete);
+    },
+  );
+
+  test('external failure or pending work prevents a global success', () {
+    recovery.state.value = CloudSessionState.ready;
+    noteStatus.value = const SyncProgress(SyncPhase.complete);
+    external.value = const SyncProgress(SyncPhase.failed, failedCount: 2);
+    expect(presentation.value.phase, SyncPhase.failed);
+    expect(presentation.value.failedCount, 2);
+    external.value = const SyncProgress(SyncPhase.storageFull);
+    expect(presentation.value.phase, SyncPhase.storageFull);
+    expect(presentation.value.isFailure, true);
+    external.value = const SyncProgress(SyncPhase.deferred);
+    expect(presentation.value.phase, SyncPhase.deferred);
+    external.value = const SyncProgress(SyncPhase.providerSetupRequired);
+    expect(presentation.value.phase, SyncPhase.providerSetupRequired);
+    expect(presentation.value.isFailure, false);
+    external.value = const SyncProgress(SyncPhase.syncing);
+    expect(presentation.value.phase, SyncPhase.syncing);
+    external.value = const SyncProgress(SyncPhase.complete);
+    expect(presentation.value.phase, SyncPhase.complete);
+  });
+
+  test(
+    'order-only work and failures contribute to combined Firebase progress',
+    () {
+      recovery.state.value = CloudSessionState.ready;
+      noteStatus.value = const SyncProgress(SyncPhase.complete);
+      orderStatus.value = const SyncProgress(SyncPhase.syncing);
+      expect(presentation.value.phase, SyncPhase.syncing);
+      orderStatus.value = const SyncProgress(SyncPhase.failed);
+      expect(presentation.value.phase, SyncPhase.failed);
+      orderStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+      expect(presentation.value.phase, SyncPhase.uploadRestricted);
+      orderStatus.value = SyncProgress.idle;
+      labelStatus.value = const SyncProgress(SyncPhase.complete);
+      expect(presentation.value.phase, SyncPhase.uploadRestricted);
+      orderStatus.value = const SyncProgress(SyncPhase.complete);
+      expect(presentation.value.phase, SyncPhase.complete);
+    },
+  );
 
   test('new session immediately prepares before any verification event', () {
     expect(recovery.state.value, CloudSessionState.pending);

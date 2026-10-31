@@ -10,6 +10,24 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String get externalSyncContinue => 'Devam et';
+
+  @override
+  String get externalSyncConnectionInfo => 'Bağlantı bilgileri';
+
+  @override
+  String get externalSyncConnectPrompt =>
+      'Notlarınızı eşitlemeye başlamak için oturum açın.';
+
+  @override
+  String get externalSyncNativeSetupPrompt =>
+      'Bu cihazda Google Drive’a giriş yapın.';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'WebDAV klasörünüzün tam URL adresini ve bir uygulama parolasını girin. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -1983,7 +2001,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get paymentConfirmedActivationPending =>
-      'Ödeme onaylandı ancak Pro etkinleştirmesi daha uzun sürüyor. Tekrar satın almayın. Durumu yeniden kontrol edin veya aboneliği Google Play\'de yönetin.';
+      'Ödemeniz onaylandı ancak etkinleştirme biraz daha uzun sürüyor. Tekrar satın almayın. Durumunuzu yeniden kontrol edin veya aboneliğinizi yönetin.';
 
   @override
   String get recheckStatus => 'Durumu Yeniden Kontrol Et';
@@ -3900,4 +3918,353 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get storageCleared =>
       'Yerel veriler silindi ve hesabınızdan çıkış yapıldı. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz.';
+
+  @override
+  String get externalSyncTitle => 'Eşitleme sağlayıcısı';
+
+  @override
+  String get externalSyncDescription =>
+      'Notlarınızı cihazlar arasında eşitlemek için bir sağlayıcı seçin.';
+
+  @override
+  String get externalSyncUnavailable =>
+      'Depolamayı bağlamak için oturum açın ve bu cihazı onaylayın veya kurtarın.';
+
+  @override
+  String get externalSyncAccount => 'Hesap ve şifreleme';
+
+  @override
+  String get externalSyncCloud => 'Better Keep bulutu';
+
+  @override
+  String get externalSyncCloudDescription =>
+      'Yerleşik eşitleme · Pro gerektirir';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': 'Bağlan',
+      'browser': 'Tarayıcıyla oturum aç',
+      'manual': 'Uygulama parolası kullan',
+      'reconnect': 'Yeniden bağlan',
+      'continue': 'Tarayıcıda devam et',
+      'pause': 'Duraklat',
+      'resume': 'Sürdür',
+      'disconnect': 'Bağlantıyı kes',
+      'sync': 'Şimdi eşitle',
+      'other': 'Yeniden dene',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': 'Yetkilendirme hazırlanıyor…',
+      'awaitingConsent': 'Tarayıcınızda yetkilendirmeye hazır',
+      'authorizing': 'Bağlanıyor…',
+      'cancelling': 'Yetkilendirme iptal ediliyor…',
+      'cancelPending':
+          'İptal işlemi doğrulanamadı. İptal etmeyi yeniden deneyin.',
+      'connecting': 'Bağlanıyor…',
+      'pausing': 'Duraklatılıyor…',
+      'enabling': 'Sürdürülüyor…',
+      'disconnecting': 'Bağlantı kesiliyor…',
+      'paused': 'Duraklatıldı',
+      'notConnected': 'Bağlı değil',
+      'keyRecovery':
+          'Bu bağlantıyı kullanmak için şifreleme anahtarınızı kurtarın.',
+      'pending': 'Bazı değişiklikler eşitlenmeyi bekliyor.',
+      'other': 'Bağlı',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired': 'Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.',
+      'reconnectRequired':
+          'Eşitlemeye devam etmek için bu hesabı yeniden bağlayın.',
+      'quotaExceeded':
+          'Depolama alanınız dolu. Bu sağlayıcıda yer açıp yeniden deneyin.',
+      'rateLimited': 'Sağlayıcı beklememizi istedi. Eşitleme otomatik olarak yeniden denenecek.',
+      'corruptData':
+          'Bazı eşitleme verileri doğrulanamadı. Yerel notlarınız korunur.',
+      'unsupported': 'Bu sağlayıcı veya tarayıcı bağlantıyı tamamlayamıyor.',
+      'other': 'Bu sağlayıcıya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return 'Son başarılı eşitleme: $time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => 'Henüz başarılı bir eşitleme yok';
+
+  @override
+  String get externalSyncBlocked =>
+      'Bazı notlar veya ekler henüz yüklenmeye hazır değil. Eşitleme yeniden denenecek.';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return '$provider bağlantısı kesilsin mi?';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      'Bu işlem, bu hesapla eşitlemeyi durdurur. Bu cihazdaki notlar ve sağlayıcıda zaten saklanan dosyalar korunur.';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Better Keep bağlantısı kesildi. Erişim izninin kaldırıldığı doğrulanamadı. Sağlayıcınızın hesap ayarlarından Better Keep\'in erişimini kaldırın.';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Nextcloud güvenlik ayarlarınızdaki bir uygulama parolasını kullanın. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.';
+
+  @override
+  String get externalSyncServer => 'Sunucu URL\'si';
+
+  @override
+  String get externalSyncUsername => 'Kullanıcı adı';
+
+  @override
+  String get externalSyncAppPassword => 'Uygulama parolası';
+
+  @override
+  String get externalSyncInvalidServer =>
+      'Kullanıcı adı, parola, sorgu veya parça içermeyen bir HTTPS sunucu URL\'si girin.';
+
+  @override
+  String get externalSyncRequired => 'Bu alan zorunludur.';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      'Yetkilendirme, iptal işleminden önce tamamlandı. Sağlayıcı bağlı. Kaldırmak için Bağlantıyı kes seçeneğini kullanın.';
+
+  @override
+  String get externalSyncNextcloudBrowserHelp =>
+      'Erişim izni vermek için Nextcloud sunucunuzda oturum açın. Erişimi Nextcloud ayarlarından kaldırabilirsiniz. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.';
+
+  @override
+  String get externalSyncLogoutPending =>
+      'Bazı değişiklikler hâlâ eşitlenmeyi bekliyor. Oturumu kapatmak, bu cihazdaki yerel notları ve medyayı kaldırır. Hiçbir sağlayıcıya kaydedilmemiş değişiklikler kaybolabilir.\n\nOturumu kapatmadan önce eşitlemeyi tamamlayın veya verilerinizi dışa aktarın.';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      'Tüm değişikliklerinizin eşitlenip eşitlenmediğini doğrulayamadık. Oturumu kapatmak, bu cihazdaki yerel notları ve medyayı kaldırır. Hiçbir sağlayıcıya kaydedilmemiş değişiklikler kaybolabilir.\n\nOturumu kapatmadan önce eşitleme sağlayıcılarınızı kontrol edin veya verilerinizi dışa aktarın.';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      'Bazı kilitli notlar, güncellenmesi gereken eski çizimler içeriyor. Çizimleri oluşturduğunuz cihazda bu notları açın ve PIN\'inizle kilitlerini kaldırın, ardından eşitlemeyi yeniden deneyin.';
+
+  @override
+  String get externalSyncOff => 'Eşitleme kapalı';
+
+  @override
+  String get externalSyncOffDescription => 'Notları bu cihazda tut';
+
+  @override
+  String get externalSyncDetails => 'Eşitleme ayrıntıları';
+
+  @override
+  String get externalSyncNeedsAttention =>
+      'İlgilenmeniz gerekiyor · Ayrıntılara bakın';
+
+  @override
+  String externalSyncConnectTitle(String provider) {
+    return '$provider bağla';
+  }
+
+  @override
+  String get externalSyncConnectHelp =>
+      'Depolama erişimine izin vermek için giriş yapın. Bağlandıktan sonra bu sağlayıcı eşitleme için seçilecektir.';
+
+  @override
+  String get verifyNewDevice => 'Yeni cihazı doğrula';
+
+  @override
+  String get deviceVerificationInstructions =>
+      'Güvenilir cihazınızda yeni cihazdaki QR kodunu tarayın veya iki ekrandaki güvenlik kodunun tamamını karşılaştırın.';
+
+  @override
+  String get deviceVerificationExpired =>
+      'Doğrulama kodunun süresi doldu. Yeni cihazda yeni bir kod oluşturun.';
+
+  @override
+  String get newVerificationCode => 'Yeni kod oluştur';
+
+  @override
+  String get deviceVerificationMismatch =>
+      'Cihazlar eşleşmiyor. Bu isteği onaylamayın.';
+
+  @override
+  String get deviceVerificationMatched =>
+      'Cihaz doğrulandı. Devam edebilirsiniz.';
+
+  @override
+  String get scanNewDevice => 'Yeni cihazı tara';
+
+  @override
+  String get compareSecurityCode => 'Güvenlik kodunu karşılaştır';
+
+  @override
+  String get completeSecurityCodeMatches =>
+      'Her iki cihazdaki kodun tamamını karşılaştırdım. Kodlar eşleşiyor.';
+
+  @override
+  String get approveVerifiedDevice => 'Cihazı onayla';
+
+  @override
+  String get deviceCameraUnavailable =>
+      'Kamera kullanılamıyor. Bunun yerine güvenlik kodunu karşılaştırabilirsiniz.';
+
+  @override
+  String get deviceVerificationRetry =>
+      'Doğrulama tamamlanamadı. Her iki cihazı güncelleyin, yeni cihazda yeni bir kod oluşturun ve tekrar deneyin.';
+
+  @override
+  String get browserEncryptionSessionOnly =>
+      'Şifreleme anahtarları yalnızca bu tarayıcı oturumunda tutulur. Yeniden yükledikten sonra tarayıcıyı tekrar onaylayın veya kurtarma parolanızı kullanın.';
+
+  @override
+  String get verifyTrustedDevice => 'Güvenilir cihazı doğrula';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      'Güvenilir cihazınızda onay ekranını açık tutun. Şifreleme anahtarınızı kabul etmeden önce QR kodunu tarayın veya güvenlik kodunun 32 karakterinin tamamını karşılaştırın.';
+
+  @override
+  String get scanTrustedDevice => 'Güvenilir cihazı tara';
+
+  @override
+  String get acceptVerifiedKey => 'Doğrulanmış anahtarı kabul et';
+
+  @override
+  String get confirmOnNewDevice => 'Yeni cihazınızda onaylayın';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      'Yeni cihazda “Güvenilir cihazı doğrula” seçeneğini seçin. Bu QR kodunu tarayın veya güvenlik kodunun tamamının aşağıdakiyle eşleştiğini onaylayın. Yeni cihazın kilidi açılana kadar ekranı açık tutun. İlk on dakikalık süre geçerli olmaya devam eder.';
+
+  @override
+  String get storageSecurityUpgrade => 'Güvenle yeniden bağlan';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      'Bu bağlantı, sunucunun yönettiği eski kimlik bilgisi deposunu kullanıyordu. Önce sağlayıcınızın bağlı uygulama ayarlarından Better Keep erişimini iptal edin (veya Nextcloud uygulama parolasını kaldırın), sonra buradan yeniden bağlanın. Notlarınız ve uzak dosyalarınız korunur. Yeni kimlik bilgileri, not şifreleme anahtarınızla cihazınızda şifrelenir.';
+
+  @override
+  String get devicePairingScanInstruction =>
+      'Güvendiğiniz cihazda onay isteğini açın ve bu kodu tarayın.';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'Bu kodun tamamını güvendiğiniz cihazdaki kodla karşılaştırın.';
+
+  @override
+  String get showQrCode => 'QR kodunu göster';
+
+  @override
+  String get externalSyncSharedSetup =>
+      'Bu cihazda Google Drive’a giriş yapın.';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      'Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.';
+
+  @override
+  String get externalSyncStorageFull =>
+      'Depolama dolu. Eşitleme duraklatıldı; yerel notlarınız güvende. Yer açın, ardından Şimdi eşitle seçeneğine dokunun.';
+
+  @override
+  String get externalSyncClear => 'Eşitlenen verileri sil';
+
+  @override
+  String get externalSyncClearMessage =>
+      'Eşitlenen kopyaları silin ve eşitlemeyi kapatın. Yerel notlar kalır; yalnızca sağlayıcıda bulunan veriler kaybolur.';
+
+  @override
+  String get externalSyncClearing => 'Eşitlenen veriler siliniyor…';
+
+  @override
+  String get externalSyncClearPending =>
+      'Silme tamamlanmadı · Yeniden denemek için dokunun';
+
+  @override
+  String get externalSyncClearDone =>
+      'Eşitlenen veriler silindi. Eşitleme kapalı. Yerel notlar korundu. Sağlayıcınız silinen dosyaları çöp kutusunda tutabilir.';
+
+  @override
+  String get externalSyncClearCodeSent =>
+      'E-posta adresinize gönderilen kodu girin.';
+
+  @override
+  String get externalSyncClearCodeError =>
+      'Eşitlenen veriler silinemedi. Kodu ve bağlantınızı kontrol edin veya yeni bir kod isteyin. Silme işlemi başladıysa tamamlanana kadar eşitleme kapalı kalır.';
+
+  @override
+  String get externalSyncClearSendError =>
+      'Kod gönderilemedi. Hesabınızın e-posta adresinin doğrulandığından emin olun, bir dakika bekleyip tekrar deneyin.';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$total alanın $used kadarı kullanılıyor';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => 'Depolama kontrol ediliyor…';
+
+  @override
+  String get externalSyncCapacityUnavailable =>
+      'Depolama bilgisi kullanılamıyor';
+
+  @override
+  String get externalSyncClearVerifyTitle => 'Silmek için doğrulayın';
+
+  @override
+  String get externalSyncClearSendCode => 'Kod gönder';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => 'Planınızı seçin';
+
+  @override
+  String get upgradeToLite => 'Lite’a yükselt';
+
+  @override
+  String get automaticExternalSync => 'Otomatik harici senkronizasyon';
+
+  @override
+  String get manualExternalSync => 'Manuel harici senkronizasyon';
+
+  @override
+  String get liteDescription =>
+      'Kendi bulut depolamanızla otomatik güncellemeler.';
+
+  @override
+  String get manualSyncDescription =>
+      'Manuel senkronizasyon ücretsizdir. Lite ve Pro otomatik güncellemeler sunar.';
+
+  @override
+  String get automaticSyncEnabled => 'Otomatik güncellemeler etkin';
+
+  @override
+  String get subscriptionActiveTitle => 'Abonelik etkin';
+
+  @override
+  String get subscriptionChangePlan =>
+      'Plan değiştirmek için mevcut aboneliğinizi yönetin.';
+
+  @override
+  String get subscribe => 'Abone ol';
+
+  @override
+  String get builtInCloudSync => 'Yerleşik bulut senkronizasyonu';
 }

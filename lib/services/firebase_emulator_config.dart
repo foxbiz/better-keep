@@ -119,6 +119,7 @@ class FirebaseEmulatorConfig {
       isAndroidEmulator: _isAndroidEmulator,
       isAppleSimulator: _isIOSSimulator,
       physicalDeviceHost: lanHost,
+      configuredHost: _definedPhysicalDeviceHost,
     );
   }
 
@@ -159,7 +160,14 @@ class FirebaseEmulatorConfig {
     }
 
     final host = _resolveHost(physicalDeviceHost);
-    final emulatorEndpoints = FirebaseEmulatorEndpoints(host);
+    final emulatorEndpoints = FirebaseEmulatorEndpoints(
+      host,
+      webProxyOrigin: kIsWeb
+          ? normalizeEmulatorWebOrigin(
+              const String.fromEnvironment('EMULATOR_WEB_ORIGIN'),
+            )
+          : null,
+    );
     debugPrint('Firebase Emulators: Connecting');
     for (final service in emulatorEndpoints.requiredServices.entries) {
       debugPrint('  ${service.key}: $host:${service.value}');

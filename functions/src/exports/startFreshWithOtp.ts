@@ -3,6 +3,7 @@ import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError } from "firebase-functions/v2/https";
 import { db, storage } from "../config";
 import { onNonReviewCall } from "../nonReviewCallable";
+import { resetStorageConnections } from "../resetStorageConnections";
 
 /**
  * Deletes all notes from the user's collection.
@@ -198,6 +199,8 @@ export default onNonReviewCall(
 				.catch(() => {
 					// Recovery key might not exist, ignore error
 				});
+
+			await resetStorageConnections(db, userRef);
 
 			console.log(`Start fresh completed for user ${userId}`);
 

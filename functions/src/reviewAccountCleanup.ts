@@ -9,6 +9,7 @@ export interface ReviewAccountCleanupResult {
 	deletedAccountLinkSessions: number;
 	deletedOAuthStates: number;
 	deletedOAuthCompletions: number;
+	deletedStorageOAuthSessions: number;
 	deletedUserStorageFiles: number;
 	deletedShareStorageFiles: number;
 }
@@ -29,6 +30,7 @@ interface ReviewAccountCleanupPlan {
 	accountLinkSessionRefs: DocumentReference[];
 	oauthStateRefs: DocumentReference[];
 	oauthCompletionRefs: DocumentReference[];
+	storageOAuthSessionRefs: DocumentReference[];
 	passwordResetRef: DocumentReference;
 	trialUsageRef: DocumentReference;
 	userFiles: File[];
@@ -60,6 +62,7 @@ async function buildCleanupPlan({
 		accountLinkSessions,
 		oauthStates,
 		oauthCompletions,
+		storageOAuthSessions,
 		[userFiles],
 		[shareFiles],
 	] = await Promise.all([
@@ -69,6 +72,7 @@ async function buildCleanupPlan({
 		db.collection("accountLinkSessions").where("uid", "==", uid).get(),
 		db.collection("oauthStates").where("linkingUserId", "==", uid).get(),
 		db.collection("oauthCompletions").where("uid", "==", uid).get(),
+		db.collection("storageOAuthSessions").where("context.uid", "==", uid).get(),
 		bucket.getFiles({ prefix: `users/${uid}/` }),
 		bucket.getFiles({ prefix: `shares/${uid}/` }),
 	]);
@@ -81,6 +85,7 @@ async function buildCleanupPlan({
 			deletedAccountLinkSessions: accountLinkSessions.size,
 			deletedOAuthStates: oauthStates.size,
 			deletedOAuthCompletions: oauthCompletions.size,
+			deletedStorageOAuthSessions: storageOAuthSessions.size,
 			deletedUserStorageFiles: userFiles.length,
 			deletedShareStorageFiles: shareFiles.length,
 		},
@@ -93,6 +98,9 @@ async function buildCleanupPlan({
 		),
 		oauthStateRefs: oauthStates.docs.map((document) => document.ref),
 		oauthCompletionRefs: oauthCompletions.docs.map((document) => document.ref),
+		storageOAuthSessionRefs: storageOAuthSessions.docs.map(
+			(document) => document.ref,
+		),
 		passwordResetRef: db.collection("passwordResetOtps").doc(passwordResetId),
 		trialUsageRef: db.collection("trialUsage").doc(normalizedEmail),
 		userFiles,
@@ -118,6 +126,7 @@ export async function cleanupReviewAccountData(
 		recursivelyDeleteDocuments(options.db, plan.accountLinkSessionRefs),
 		recursivelyDeleteDocuments(options.db, plan.oauthStateRefs),
 		recursivelyDeleteDocuments(options.db, plan.oauthCompletionRefs),
+		recursivelyDeleteDocuments(options.db, plan.storageOAuthSessionRefs),
 		plan.passwordResetRef.delete(),
 		plan.trialUsageRef.delete(),
 		Promise.all(plan.userFiles.map((file) => file.delete())),

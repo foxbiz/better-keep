@@ -11,8 +11,8 @@ import {
 } from "../razorpaySubscription";
 import { minorUnitsToMicros } from "../revenueLedger";
 import { enqueueRevenueEventInTransaction } from "../revenueOutbox";
-import { reconcileUserEntitlement } from "../subscriptionReconciler";
 import { requireVerifiedEntitlementPayload } from "../subscriptionEntitlement";
+import { reconcileUserEntitlement } from "../subscriptionReconciler";
 import { razorpayRequest, sendRazorpaySubscriptionEmail } from "../utils";
 
 /**
@@ -118,6 +118,8 @@ export default onNonReviewCall(
 				);
 			}
 			const normalized = normalizeRazorpaySubscription({
+				verifiedTier:
+					typeof paymentData.tier === "string" ? paymentData.tier : null,
 				billingPeriod:
 					typeof paymentData.plan === "string" ? paymentData.plan : null,
 				entity: providerSubscription,

@@ -1,3 +1,28 @@
+import { appleSubscriptionProduct } from "./subscriptionProducts";
+
+/** Selects current access, excluding the old receipt left by a tier upgrade. */
+export function activeAppStoreReceipt(
+	receipts: Array<Record<string, string>>,
+	now: number,
+): Record<string, string> | null {
+	return (
+		receipts
+			.filter((receipt) => {
+				const expiry = Number(receipt.expires_date_ms);
+				return (
+					appleSubscriptionProduct(receipt.product_id) !== null &&
+					receipt.is_upgraded !== "true" &&
+					!receipt.cancellation_date_ms &&
+					Number.isFinite(expiry) &&
+					expiry > now
+				);
+			})
+			.sort(
+				(a, b) => Number(b.expires_date_ms) - Number(a.expires_date_ms),
+			)[0] ?? null
+	);
+}
+
 export type AppStoreNotificationDecision =
 	| {
 			defaultWillAutoRenew: boolean;

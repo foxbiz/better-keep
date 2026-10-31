@@ -1,3 +1,11 @@
+import 'package:better_keep/services/bounded_async.dart';
+
+import 'external_sync/firebase_sync_migration.dart';
+
+import 'package:better_keep/services/firebase_sync_preference.dart';
+import 'package:better_keep/services/external_sync/firebase_sync_version.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/external_sync/sync_version.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/services/downloaded_attachment_batch.dart';
@@ -390,9 +398,9 @@ class NoteSyncService {
     final generation = _sessionGeneration;
     final cloudGeneration = _cloudGeneration;
     return () =>
-        current() &&
         generation == _sessionGeneration &&
-        (!cloud || cloudGeneration == _cloudGeneration);
+        (!cloud || cloudGeneration == _cloudGeneration) &&
+        current();
   }
 
   Future<void> Function() _background(
@@ -411,8 +419,31 @@ class NoteSyncService {
     },
   );
 
+  bool _lastFirebaseSyncAllowed = false;
+  void _onSyncSelectionChange() {
+    final allowed = FirebaseSyncPreference.instance.allowsSync(
+      currentUser?.uid,
+    );
+    if (allowed == _lastFirebaseSyncAllowed) return;
+    _lastFirebaseSyncAllowed = allowed;
+    if (!_canReceiveSync) {
+      _onCloudStateChange();
+      return;
+    }
+    unawaited(
+      _background(() async {
+        await init();
+        requireCloudOperation();
+        await refresh();
+      })(),
+    );
+  }
+
   void _onCloudStateChange() {
-    if (AuthService.canSyncCloud) return;
+    if (AuthService.canSyncCloud &&
+        FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
+      return;
+    }
     _cloudGeneration++;
     _syncTimer?.cancel();
     _pullRetry.cancel();
@@ -445,6 +476,10 @@ class NoteSyncService {
     if (_initialized) return;
     _initialized = true;
     AuthService.cloudRecovery.state.addListener(_onCloudStateChange);
+    _lastFirebaseSyncAllowed = FirebaseSyncPreference.instance.allowsSync(
+      currentUser?.uid,
+    );
+    FirebaseSyncPreference.instance.addListener(_onSyncSelectionChange);
 
     AppLogger.log("[SYNC] SyncService initialized");
 
@@ -510,7 +545,7 @@ class NoteSyncService {
 
     // Listen for subscription changes to start/stop sync when user upgrades/downgrades
     // Initialize with current subscription state
-    _wasPreviouslyPaid = PlanService.instance.isPaid;
+    _wasPreviouslyPaid = PlanService.instance.entitlements.realtimeCloudSync;
     PlanService.instance.statusNotifier.addListener(_onSubscriptionChange);
 
     _userStreamSubscription = AuthService.userStream.listen((user) {
@@ -742,7 +777,6 @@ class NoteSyncService {
     syncStatus.value = const SyncProgress(SyncPhase.checkingForUpdates);
 
     int updatedCount = 0;
-    int deletedCount = 0;
 
     // Batch fetch remote docs to check for updates
     // Firestore allows up to 10 documents per whereIn query
@@ -790,43 +824,15 @@ class NoteSyncService {
           }
         }
 
-        // Check for deleted notes (docs that no longer exist)
-        final fetchedIds = querySnapshot.docs.map((doc) => doc.id).toSet();
-
-        for (final docId in batch) {
-          final cachedSync = pendingSyncs.cast<PendingRemoteSync?>().firstWhere(
-            (s) => s?.remoteDocId == docId,
-            orElse: () => null,
-          );
-
-          // Skip if no matching sync found in cache
-          if (cachedSync == null) continue;
-
-          if (!fetchedIds.contains(cachedSync.remoteDocId)) {
-            // Note was deleted on remote, mark cache entry as deleted
-            final updatedData = Map<String, dynamic>.from(
-              cachedSync.remoteData,
-            );
-            updatedData['deleted'] = true;
-            await _syncCache.updateRemoteData(
-              cachedSync.remoteDocId,
-              updatedData,
-            );
-            deletedCount++;
-            AppLogger.log(
-              "[SYNC] REFRESH: Note ${cachedSync.localId} deleted on remote",
-            );
-          }
-        }
+        // Absence is not a deletion event. Only a versioned tombstone may
+        // remove local content; retain cached work if a document disappears.
       } catch (e) {
         AppLogger.log("[SYNC] REFRESH ERROR: Batch $batchNum failed: $e");
         rethrow;
       }
     }
 
-    AppLogger.log(
-      "[SYNC] REFRESH COMPLETE: $updatedCount updated, $deletedCount deleted",
-    );
+    AppLogger.log("[SYNC] REFRESH COMPLETE: $updatedCount updated");
   }
 
   void _onE2EEReadinessChange() {
@@ -912,7 +918,7 @@ class NoteSyncService {
 
   /// Called when subscription status changes
   void _onSubscriptionChange() {
-    final isPaidNow = PlanService.instance.isPaid;
+    final isPaidNow = PlanService.instance.entitlements.realtimeCloudSync;
     AppLogger.log(
       "[SYNC] Subscription changed - isPaid: $isPaidNow (was: $_wasPreviouslyPaid)",
     );
@@ -946,11 +952,13 @@ class NoteSyncService {
   String get _incomingSyncState =>
       'backendConfigured=${FirebaseBackend.isConfigured}, '
       'cloud=${AuthService.cloudRecovery.state.value.name}, '
+      'provider=${FirebaseSyncPreference.instance.selectedProvider ?? 'unconfirmed'}, '
+      'firebaseAllowed=${FirebaseBackend.isConfigured && FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)}, '
       'cryptoReady=${E2EEService.instance.isCryptoReady}, '
       'sessionInvalid=${AuthService.sessionInvalid.value}, review=$_isReviewSession';
 
   String get _pushSyncState =>
-      '$_incomingSyncState, paid=${PlanService.instance.isPaid}';
+      '$_incomingSyncState, paid=${PlanService.instance.entitlements.realtimeCloudSync}';
 
   /// Check if we can receive/download sync (incoming):
   /// - E2EE must be ready
@@ -959,7 +967,8 @@ class NoteSyncService {
   /// Note: Pro subscription NOT required for receiving sync
   bool get _canReceiveSync {
     // If session is invalid (user deleted/disabled), disable all sync
-    if (!AuthService.canSyncCloud) {
+    if (!AuthService.canSyncCloud ||
+        !FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
       return false;
     }
 
@@ -982,7 +991,7 @@ class NoteSyncService {
     }
 
     // Cloud sync upload requires Pro subscription
-    if (!PlanService.instance.isPaid) {
+    if (!PlanService.instance.entitlements.realtimeCloudSync) {
       return false;
     }
 
@@ -1312,13 +1321,6 @@ class NoteSyncService {
           for (final entry in candidates) {
             requireCloudOperation();
             if (!_canReceiveSync) return;
-            final pending = await NoteSyncTrack.getByLocalId(entry.localId);
-            requireCloudOperation();
-            if (pending != null &&
-                (pending.status != SyncStatus.synced ||
-                    pending.action == SyncAction.delete)) {
-              continue;
-            }
             final snapshot = await readCloudDocument(
               _notesCollection.doc(entry.remoteDocumentId),
               isCurrent: cloudOperationIsCurrent,
@@ -1608,6 +1610,7 @@ class NoteSyncService {
                         await _handleRemoteDeletedNote(
                           localId,
                           remoteDocId: remoteDocId,
+                          remoteData: remoteData,
                         );
                         syncedCount++;
                       } finally {
@@ -1616,66 +1619,12 @@ class NoteSyncService {
                       continue;
                     }
 
-                    // Check if there's a pending sync for this note - don't overwrite local changes
-                    final pendingSync = await NoteSyncTrack.getByLocalId(
-                      localId,
-                    );
-                    if (pendingSync != null &&
-                        (pendingSync.status == SyncStatus.pending ||
-                            pendingSync.status == SyncStatus.failed)) {
-                      AppLogger.log(
-                        "[SYNC] REALTIME: Note $localId has pending local changes, skipping",
-                      );
+                    if (!await _shouldApplyRemoteNote(
+                      remoteData,
+                      remoteDocId,
+                    )) {
                       skippedCount++;
                       continue;
-                    }
-
-                    final localNote =
-                        await Note.findBySyncId(remoteDocId) ??
-                        await Note.findById(localId);
-
-                    if (localNote != null && remoteData['updated_at'] != null) {
-                      final localUpdatedAt = localNote.updatedAt;
-                      final updatedAtValue = remoteData['updated_at'];
-                      final remoteUpdatedAt = updatedAtValue is String
-                          ? DateTime.tryParse(updatedAtValue)
-                          : null;
-                      if (remoteUpdatedAt == null) {
-                        allSyncsSucceeded = false;
-                        AppLogger.error(
-                          '[SYNC] Quarantined malformed remote note $remoteDocId',
-                          StateError('updated_at must be an ISO-8601 string'),
-                        );
-                        skippedCount++;
-                        continue;
-                      }
-
-                      // Always re-process notes stuck with decryption_failed content
-                      final hasDecryptionError =
-                          localNote.content == Note.decryptionFailedContent;
-
-                      final equalTimestampBackgroundRepair =
-                          !hasDecryptionError &&
-                          localUpdatedAt != null &&
-                          remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
-                          await _needsEqualTimestampBackgroundRepair(
-                            localNote,
-                            remoteData,
-                          );
-
-                      if (!hasDecryptionError &&
-                          localUpdatedAt != null &&
-                          (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                              (remoteUpdatedAt.isAtSameMomentAs(
-                                    localUpdatedAt,
-                                  ) &&
-                                  !equalTimestampBackgroundRepair))) {
-                        AppLogger.log(
-                          "[SYNC] REALTIME: Note $localId local is newer, skipping",
-                        );
-                        skippedCount++;
-                        continue;
-                      }
                     }
 
                     AppLogger.log(
@@ -1819,6 +1768,7 @@ class NoteSyncService {
   Future<void> dispose() async {
     _sessionGeneration++;
     AuthService.cloudRecovery.state.removeListener(_onCloudStateChange);
+    FirebaseSyncPreference.instance.removeListener(_onSyncSelectionChange);
     await _stopRemoteListener();
     _syncTimer?.cancel();
     _syncTimer = null;
@@ -2007,7 +1957,7 @@ class NoteSyncService {
           return SyncRefreshOutcome.deferred;
         }
         final uploadRestricted =
-            !PlanService.instance.isPaid &&
+            !PlanService.instance.entitlements.realtimeCloudSync &&
             await NoteSyncTrack.count(pending: true) > 0;
         requireCloudOperation();
         if (uploadRestricted) {
@@ -2166,367 +2116,169 @@ class NoteSyncService {
       "[SYNC] PUSH: Starting push of ${pendingSyncs.length} local changes",
     );
 
-    WriteBatch batch = _firestore.batch();
-    int batchCount = 0;
-    int pushedCount = 0;
-    int failedCount = 0;
-    bool deferredForEncryption = false;
-    Uint8List? batchUMK;
-    final List<Future<void> Function()> postCommitActions = [];
-
-    for (final sync in pendingSyncs) {
-      // Capture sync start time to detect modifications during sync
+    var failedCount = 0;
+    var deferredForEncryption = false;
+    await forEachBounded(pendingSyncs, (sync) async {
       final syncStartTime = DateTime.now();
       _addSyncingOutgoing(sync.localId);
       try {
         final umk = _captureRequiredUMK();
-        if (sync.action == SyncAction.delete && sync.remoteId == null) {
+        final captured = await AppState.db.transaction((txn) async {
+          requireCloudOperation();
+          final rows = await txn.query(
+            Note.model,
+            where: 'id = ?',
+            whereArgs: [sync.localId],
+          );
+          final row = rows.isEmpty ? null : rows.single;
+          final remoteId = sync.remoteId ?? row?['sync_id'] as String?;
+          if (remoteId == null) return null;
+          final version = await SyncMutationJournal.current(
+            txn,
+            SyncEntityKind.note,
+            remoteId,
+          );
+          final deleted = row == null;
+          // Upgrade-time pending deletions have a queue entry but no live row to
+          // bootstrap. Normalize that durable event without using upload time.
+          final logical =
+              version ??
+              FirebaseSyncVersion.read(SyncEntityKind.note, remoteId, {
+                ...?row,
+                'updated_at':
+                    // This is the originating device's local database, not
+                    // an ambiguous remote wall clock. Normalize before binding.
+                    DateTime.tryParse(row?['updated_at']?.toString() ?? '')
+                        ?.toUtc()
+                        .toIso8601String() ??
+                    sync.updatedAt?.toUtc().toIso8601String(),
+                if (deleted) 'deleted': true,
+              });
+          if (logical.deleted != deleted) {
+            throw StateError('Note version does not match local content');
+          }
+          return (row: row, version: logical);
+        });
+        if (captured == null) {
           requireCloudOperation();
           await sync.deleteIfUnchanged();
-          AppLogger.log(
-            "[SYNC] PUSH: Note ${sync.localId} - deleted local track (no remote ID)",
-          );
-          _removeSyncingOutgoing(sync.localId);
-          continue;
+          return;
         }
-
-        late final Map<String, dynamic>? remoteData;
-
-        if (sync.remoteId != null) {
-          final docSnapshot = await readCloudDocument(
-            _notesCollection.doc(sync.remoteId),
-            isCurrent: cloudOperationIsCurrent,
-          );
-          if (docSnapshot.exists) {
-            remoteData = docSnapshot.data()!;
-          } else {
-            remoteData = null;
-          }
+        final version = captured.version;
+        Map<String, dynamic> payload;
+        if (version.deleted) {
+          payload = {'local_id': sync.localId, 'deleted': true};
         } else {
-          remoteData = null;
-        }
-
-        if (remoteData != null && sync.action != SyncAction.delete) {
-          final remoteUpdatedAtStr = remoteData['updated_at'] as String?;
-          if (remoteUpdatedAtStr == null) {
-            AppLogger.log(
-              "[SYNC] PUSH: Note ${sync.localId} - remote has null updated_at, skipping",
-            );
-            _removeSyncingOutgoing(sync.localId);
-            continue;
+          final note = await Note.fromJsonAsync(captured.row!);
+          payload = note.toJson();
+          payload['created_at'] = note.createdAt?.toUtc().toIso8601String();
+          ReminderSyncCodec.encode(note.reminder, payload);
+          final content = payload['content'] as String?;
+          if (content != null && LocalDataEncryption.isEncrypted(content)) {
+            payload['content'] = await LocalDataEncryption.instance
+                .decryptString(content);
           }
-          final remoteUpdatedAt = DateTime.parse(remoteUpdatedAtStr);
-
-          // Check if there's a pending sync for this note - if so, don't overwrite local changes
-          final hasPendingSync =
-              sync.status == SyncStatus.pending ||
-              sync.status == SyncStatus.failed;
-
-          if (hasPendingSync) {
-            // Local has pending changes, push them instead of pulling remote
-            AppLogger.log(
-              "[SYNC] PUSH: Note ${sync.localId} - pushing local (has pending changes)",
-            );
-          } else if (sync.updatedAt == null ||
-              remoteUpdatedAt.isAfter(sync.updatedAt!)) {
-            _addSyncingIncoming(sync.localId);
-            try {
-              await _applyRemoteContentAutomatically(
-                remoteData,
-                sync.remoteId!,
-              );
-              AppLogger.log(
-                "[SYNC] PUSH: Note ${sync.localId} - patched from remote (remote newer)",
-              );
-            } finally {
-              _removeSyncingIncoming(sync.localId);
-            }
-            _removeSyncingOutgoing(sync.localId);
-            continue;
-          }
-        }
-
-        final isRemoteDeleted =
-            remoteData?['deleted'] == true || remoteData?['deleted'] == 1;
-
-        // Handle case where remote note was deleted by another device
-        // If we have a pending upload but remote is deleted, delete locally instead
-        if (isRemoteDeleted && sync.action != SyncAction.delete) {
-          AppLogger.log(
-            "[SYNC] PUSH: Note ${sync.localId} - remote was deleted, deleting locally",
+          final attachments = await _uploadAttachments(
+            note.attachments,
+            note,
+            umk,
           );
-          await _handleRemoteDeletedNote(sync.localId);
-
-          // Confirm if note is deleted locally then delete the sync
-          final localNote = await Note.findById(sync.localId);
-          if (localNote == null) {
-            requireCloudOperation();
-            await sync.deleteIfUnchanged();
+          if (attachments == null) {
+            throw StateError('Required note media could not be uploaded');
           }
-
-          _removeSyncingOutgoing(sync.localId);
-          continue;
-        }
-
-        if (sync.action == SyncAction.delete) {
-          if (sync.remoteId != null && remoteData != null && !isRemoteDeleted) {
-            _ensureUMKAvailable(umk);
-            batchUMK ??= umk;
-            batch.set(_notesCollection.doc(sync.remoteId), {
-              'local_id': sync.localId,
-              'deleted_at': FieldValue.serverTimestamp(),
-              'deleted': true,
-              'updated_at': DateTime.now().toIso8601String(),
-              cloudSyncCommittedAtField: FieldValue.serverTimestamp(),
-            });
-            postCommitActions.add(() async {
-              await _deleteNoteStorage(sync.localId);
-              requireCloudOperation();
-              await sync.deleteIfUnchanged();
-              _removeSyncingOutgoing(sync.localId);
-            });
-            batchCount++;
-            pushedCount++;
-          } else {
-            // A tombstone or authoritative absence can follow a successful
-            // document commit whose Storage cleanup was interrupted.
-            if (sync.remoteId != null) await _deleteNoteStorage(sync.localId);
-            requireCloudOperation();
-            await sync.deleteIfUnchanged();
-            _removeSyncingOutgoing(sync.localId);
+          payload['attachments'] = attachments;
+          payload['local_id'] = sync.localId;
+          payload.remove('id');
+          payload.remove('remote_id');
+          payload = await _encryptNoteData(payload, umk);
+          if (payload.containsKey('e2ee_ciphertext')) {
+            payload.remove('title');
+            payload.remove('content');
+            payload.remove('plain_text');
           }
-          continue;
         }
-
-        final note = await Note.findById(sync.localId);
-
-        if (note == null) {
-          // Note was deleted locally but sync track still has upload action.
-          // This can happen due to race conditions when notes are trashed and
-          // deleted quickly - the delete action may be overwritten by the
-          // trash update action due to concurrent notify() calls.
-          // If we have a remoteId, we should sync the deletion to remote.
-          if (sync.remoteId != null && !isRemoteDeleted) {
-            final localId = sync.localId;
-            _ensureUMKAvailable(umk);
-            batchUMK ??= umk;
-            batch.set(_notesCollection.doc(sync.remoteId), {
-              'local_id': sync.localId,
-              'deleted_at': FieldValue.serverTimestamp(),
-              'deleted': true,
-              'updated_at': DateTime.now().toIso8601String(),
-              cloudSyncCommittedAtField: FieldValue.serverTimestamp(),
-            });
-            postCommitActions.add(() async {
-              requireCloudOperation();
-              await _deleteNoteStorage(sync.localId);
-              requireCloudOperation();
-              await sync.deleteIfUnchanged();
-              AppLogger.log(
-                "[SYNC] PUSH: Note ${sync.remoteId} deleted from remote (local note missing)",
-              );
-              _removeSyncingOutgoing(localId);
-            });
-            batchCount++;
-            pushedCount++;
-          } else {
-            if (sync.remoteId != null) await _deleteNoteStorage(sync.localId);
-            requireCloudOperation();
-            await sync.deleteIfUnchanged();
-            _removeSyncingOutgoing(sync.localId);
-          }
-          continue;
+        payload = FirebaseSyncVersion.bind(payload, version);
+        payload[cloudSyncCommittedAtField] = FieldValue.serverTimestamp();
+        if (version.deleted) {
+          payload['deleted_at'] = FieldValue.serverTimestamp();
         }
-
-        var noteData = note.toJson();
-        ReminderSyncCodec.encode(note.reminder, noteData);
-
-        // Ensure locally encrypted content is properly decrypted before sync
-        // This handles edge cases where content might still be encrypted
-        final content = noteData['content'] as String?;
-        if (content != null && LocalDataEncryption.isEncrypted(content)) {
-          AppLogger.log(
-            "[SYNC] PUSH: Note ${sync.localId} - decrypting locally encrypted content",
-          );
-          final localEncryption = LocalDataEncryption.instance;
-          noteData['content'] = await localEncryption.decryptString(content);
-        }
-
-        noteData['local_id'] = note.id;
-        AppLogger.log(
-          "Uploading attachments for note ${sync.localId} (has ${note.attachments.length} attachments)",
-        );
-        final attachmentsData = await _uploadAttachments(
-          note.attachments,
-          note,
-          umk,
-        );
-
-        // If attachment upload failed, skip this note and mark as failed
-        if (attachmentsData == null) {
-          AppLogger.log(
-            "[SYNC] PUSH: Note ${sync.localId} failed - attachment upload failed",
-          );
-          _markSyncFailed(sync.localId);
-          _removeSyncingOutgoing(sync.localId);
-          failedCount++;
-          continue;
-        }
-
-        noteData['attachments'] = attachmentsData;
-        noteData.remove('id');
-        noteData.remove('remote_id');
-
-        // Apply E2EE encryption if enabled
-        noteData = await _encryptNoteData(noteData, umk);
-        noteData[cloudSyncCommittedAtField] = FieldValue.serverTimestamp();
         _ensureUMKAvailable(umk);
-        batchUMK ??= umk;
-
-        final localId = sync.localId;
-        final capturedSyncStartTime = syncStartTime;
-        if (sync.remoteId != null) {
-          // When note is encrypted, explicitly delete plaintext fields from
-          // Firestore. SetOptions(merge: true) only adds/updates fields — it
-          // won't remove fields absent from the payload. Without this, a note
-          // that was previously stored unencrypted retains its old plaintext
-          // alongside the new ciphertext.
-          // Only applies to updates — new documents never have old plaintext.
-          if (noteData.containsKey('e2ee_ciphertext')) {
-            noteData['title'] = FieldValue.delete();
-            noteData['content'] = FieldValue.delete();
-            noteData['plain_text'] = FieldValue.delete();
-          }
-          batch.set(
-            _notesCollection.doc(sync.remoteId),
-            noteData,
-            SetOptions(merge: true),
-          );
-          postCommitActions.add(() async {
-            requireCloudOperation();
-            final wasUnchanged = await sync.markSyncedIfUnchanged(
-              capturedSyncStartTime,
-            );
-            if (wasUnchanged) {
-              AppLogger.log("[SYNC] PUSH: Note $localId updated on remote");
-            } else {
-              AppLogger.log(
-                "[SYNC] PUSH: Note $localId modified during sync, will re-sync",
-              );
-              // Trigger a new sync to push the changes made during this sync
-              NoteSyncService().sync();
+        if (sync.remoteId == null) await sync.claimRemoteId(version.entityId);
+        // The read and final replacement share a Firestore transaction. A newer
+        // remote edit arriving during media upload cannot be overwritten.
+        final remoteWinner = await FirebaseSyncMigration.retry(
+          _notesCollection.doc(version.entityId),
+          SyncEntityKind.note,
+          () => _ensureUMKAvailable(umk),
+          () => _firestore.runTransaction<Map<String, dynamic>?>((
+            transaction,
+          ) async {
+            _ensureUMKAvailable(umk);
+            final ref = _notesCollection.doc(version.entityId);
+            final snapshot = await transaction.get(ref);
+            _ensureUMKAvailable(umk);
+            if (snapshot.metadata.isFromCache ||
+                snapshot.metadata.hasPendingWrites) {
+              throw const CloudVerificationUnavailable();
             }
-            _removeSyncingOutgoing(localId);
-          });
-        } else {
-          // For new documents, remove plaintext fields instead of using
-          // FieldValue.delete() which is invalid without SetOptions(merge: true).
-          if (noteData.containsKey('e2ee_ciphertext')) {
-            noteData.remove('title');
-            noteData.remove('content');
-            noteData.remove('plain_text');
-          }
-          final stableId = note.syncId ?? const Uuid().v4();
-          if (note.syncId != stableId) {
-            note.syncId = stableId;
-            requireCloudOperation();
-            await AppState.db.update(
-              Note.model,
-              {'sync_id': stableId},
-              where: 'id = ?',
-              whereArgs: [note.id],
-            );
-          }
-          final newDocRef = _notesCollection.doc(stableId);
-          batch.set(newDocRef, noteData);
-          // Save remoteId immediately to prevent duplicates if another sync runs
-          // before the batch commits and markSynced is called
-          requireCloudOperation();
-          await sync.claimRemoteId(newDocRef.id);
-          postCommitActions.add(() async {
-            requireCloudOperation();
-            final wasUnchanged = await sync.markSyncedIfUnchanged(
-              capturedSyncStartTime,
-            );
-            if (wasUnchanged) {
-              AppLogger.log(
-                "[SYNC] PUSH: Note $localId created on remote (${newDocRef.id})",
+            final remote = snapshot.data();
+            if (remote != null) {
+              final current = FirebaseSyncVersion.read(
+                SyncEntityKind.note,
+                version.entityId,
+                remote,
               );
-            } else {
-              AppLogger.log(
-                "[SYNC] PUSH: Note $localId modified during sync, will re-sync",
-              );
-              // Trigger a new sync to push the changes made during this sync
-              NoteSyncService().sync();
+              final comparison = current.compareTo(version);
+              if (comparison > 0) return remote;
+              if (comparison == 0) return null;
             }
-            _removeSyncingOutgoing(localId);
-          });
+            transaction.set(ref, payload);
+            return null;
+          }, timeout: const Duration(seconds: 10)),
+        );
+        _ensureUMKAvailable(umk);
+        if (remoteWinner != null) {
+          if (remoteWinner['deleted'] == true || remoteWinner['deleted'] == 1) {
+            await _handleRemoteDeletedNote(
+              sync.localId,
+              remoteDocId: version.entityId,
+              remoteData: remoteWinner,
+            );
+          } else {
+            await _applyRemoteContentAutomatically(
+              remoteWinner,
+              version.entityId,
+              fallbackLocalId: sync.localId,
+            );
+          }
+          return;
         }
-
-        batchCount++;
-        pushedCount++;
-
-        if (batchCount >= 400) {
-          AppLogger.log("[SYNC] PUSH: Committing batch of 400 notes");
-          _ensureUMKAvailable(batchUMK);
-          requireCloudOperation();
-          await batch.commit().timeout(const Duration(seconds: 10));
-          requireCloudOperation();
-          for (final action in postCommitActions) {
-            try {
-              await action();
-            } catch (e) {
-              AppLogger.error('[SYNC] PUSH: Post-commit action failed', e);
-              rethrow;
-            }
-          }
-          postCommitActions.clear();
-          batch = _firestore.batch();
-          batchCount = 0;
-          batchUMK = null;
+        requireCloudOperation();
+        if (version.deleted) {
+          // Source files may still be referenced by another device's winning
+          // revival. Keep them until reference-aware history collection exists.
+          await sync.deleteIfUnchanged();
+        } else if (!await sync.markSyncedIfUnchanged(syncStartTime)) {
+          NoteSyncService().sync();
         }
       } on SyncEncryptionUnavailable {
         deferredForEncryption = true;
-        AppLogger.log(
-          '[SYNC] PUSH: Note ${sync.localId} deferred until encryption key is available',
-        );
-        _removeSyncingOutgoing(sync.localId);
-      } catch (e) {
-        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+      } catch (error) {
+        if (error is CloudOperationCancelled ||
+            isCloudConnectionFailure(error)) {
           rethrow;
         }
-        AppLogger.error('[SYNC] PUSH: Note ${sync.localId} error', e);
+        AppLogger.error('[SYNC] PUSH: Note ${sync.localId} error', error);
         _markSyncFailed(sync.localId);
-        _removeSyncingOutgoing(sync.localId);
         failedCount++;
+      } finally {
+        _removeSyncingOutgoing(sync.localId);
       }
-    }
-
-    if (batchCount > 0) {
-      _ensureUMKAvailable(batchUMK!);
-      requireCloudOperation();
-      await batch.commit().timeout(const Duration(seconds: 10));
-      requireCloudOperation();
-      for (final action in postCommitActions) {
-        try {
-          await action();
-        } catch (e) {
-          AppLogger.error('[SYNC] PUSH: Post-commit action failed', e);
-          rethrow;
-        }
-      }
-    }
-
+    });
     if (failedCount > 0) {
       throw StateError('Some outgoing notes could not be synced');
     }
-    if (deferredForEncryption) {
-      throw const SyncEncryptionUnavailable();
-    }
-
-    AppLogger.log(
-      "[SYNC] PUSH COMPLETE: $pushedCount pushed, $failedCount failed",
-    );
+    if (deferredForEncryption) throw const SyncEncryptionUnavailable();
   }
 
   Uint8List _captureRequiredUMK() {
@@ -2546,33 +2298,6 @@ class NoteSyncService {
       captured: captured,
       current: current,
     );
-  }
-
-  Future<void> _deleteNoteStorage(int noteId) async {
-    try {
-      final ref = getNoteDocsRef(noteId);
-      final listResult = await ref.listAll().timeout(
-        const Duration(seconds: 10),
-      );
-      requireCloudOperation();
-      await Future.wait(
-        listResult.items.map((item) async {
-          requireCloudOperation();
-          try {
-            await item.delete().timeout(const Duration(seconds: 10));
-          } on FirebaseException catch (error) {
-            if (error.code != 'object-not-found') rethrow;
-          }
-        }),
-      );
-    } on FirebaseException catch (e) {
-      if (e.code == 'object-not-found') return;
-      AppLogger.error('[SYNC] Error deleting storage for note $noteId', e);
-      rethrow;
-    } catch (e) {
-      AppLogger.error('[SYNC] Error deleting storage for note $noteId', e);
-      rethrow;
-    }
   }
 
   Future<void> _pushLocalChanges() async {
@@ -2902,8 +2627,6 @@ class NoteSyncService {
         remoteDocId,
         remoteSuggestedId,
       );
-      final remoteTrack = await NoteSyncTrack.getByRemoteId(remoteDocId);
-
       // Skip if already processed in this sync cycle
       if (processedIds.contains(remoteDocId)) {
         continue;
@@ -2967,7 +2690,11 @@ class NoteSyncService {
         // Handle deletion
         _addSyncingIncoming(localId);
         try {
-          await _handleRemoteDeletedNote(localId, remoteDocId: remoteDocId);
+          await _handleRemoteDeletedNote(
+            localId,
+            remoteDocId: remoteDocId,
+            remoteData: remoteData,
+          );
           if (!await _completeCachedRevision(
             remoteDocId,
             processedRevision,
@@ -2984,16 +2711,7 @@ class NoteSyncService {
         continue;
       }
 
-      // Check if there's a pending sync for this note - don't overwrite local changes
-      final localPendingSync =
-          remoteTrack ?? await NoteSyncTrack.getByLocalId(localId);
-
-      if (localPendingSync != null &&
-          (localPendingSync.status == SyncStatus.pending ||
-              localPendingSync.status == SyncStatus.failed)) {
-        AppLogger.log(
-          "[SYNC] PROCESS: Note $localId skipped - has pending local changes",
-        );
+      if (!await _shouldApplyRemoteNote(remoteData, remoteDocId)) {
         if (!await _completeCachedRevision(
           remoteDocId,
           processedRevision,
@@ -3005,45 +2723,6 @@ class NoteSyncService {
         skippedCount++;
         syncProgress.value = (syncedCount, totalCount);
         continue;
-      }
-
-      final localNote =
-          await Note.findById(localId) ?? await Note.findBySyncId(remoteDocId);
-
-      if (localNote != null && remoteData['updated_at'] != null) {
-        final localUpdatedAt = localNote.updatedAt;
-        final remoteUpdatedAt = DateTime.parse(remoteData['updated_at']);
-
-        // Always re-process notes stuck with decryption_failed content —
-        // these were saved by a previous bug where failed decryption
-        // permanently overwrote the local content with an error marker.
-        final hasDecryptionError =
-            localNote.content == Note.decryptionFailedContent;
-
-        final equalTimestampBackgroundRepair =
-            !hasDecryptionError &&
-            localUpdatedAt != null &&
-            remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
-            await _needsEqualTimestampBackgroundRepair(localNote, remoteData);
-
-        if (!hasDecryptionError &&
-            localUpdatedAt != null &&
-            (remoteUpdatedAt.isBefore(localUpdatedAt) ||
-                (remoteUpdatedAt.isAtSameMomentAs(localUpdatedAt) &&
-                    !equalTimestampBackgroundRepair))) {
-          // Local is newer, skip
-          if (!await _completeCachedRevision(
-            remoteDocId,
-            processedRevision,
-            localId,
-          )) {
-            return;
-          }
-          syncedCount++;
-          skippedCount++;
-          syncProgress.value = (syncedCount, totalCount);
-          continue;
-        }
       }
 
       _addSyncingIncoming(localId);
@@ -3134,53 +2813,119 @@ class NoteSyncService {
     return false;
   }
 
-  /// Handle a note that was deleted on remote
+  Future<bool> _shouldApplyRemoteNote(
+    Map<String, dynamic> data,
+    String remoteId,
+  ) async {
+    data = await FirebaseSyncMigration.resolve(
+      _notesCollection.doc(remoteId),
+      SyncEntityKind.note,
+      data,
+      requireCloudOperation,
+    );
+    final incoming = FirebaseSyncVersion.read(
+      SyncEntityKind.note,
+      remoteId,
+      data,
+    );
+    final local = await SyncMutationJournal.current(
+      AppState.db,
+      SyncEntityKind.note,
+      remoteId,
+    );
+    final note = await Note.findBySyncId(remoteId);
+    if (local != null) {
+      final comparison = incoming.compareTo(local);
+      if (comparison != 0) return comparison > 0;
+    } else if (note?.updatedAt == null ||
+        incoming.modifiedAtMicros >
+            note!.updatedAt!.toUtc().microsecondsSinceEpoch) {
+      return true;
+    } else if (incoming.modifiedAtMicros <
+        note.updatedAt!.toUtc().microsecondsSinceEpoch) {
+      return false;
+    }
+    // Equal-version recovery can replace corrupt/missing derived local content,
+    // but never advances its edit identity.
+    return note != null &&
+        (note.content == Note.decryptionFailedContent ||
+            await _needsEqualTimestampBackgroundRepair(note, data));
+  }
+
   Future<void> _handleRemoteDeletedNote(
     int localId, {
-    String? remoteDocId,
+    required String remoteDocId,
+    required Map<String, dynamic> remoteData,
   }) async {
-    final remoteTrack = remoteDocId == null
-        ? null
-        : await NoteSyncTrack.getByRemoteId(remoteDocId);
-    final stableNote = remoteDocId == null
-        ? null
-        : await Note.findBySyncId(remoteDocId);
-    final resolvedLocalId = remoteTrack?.localId ?? stableNote?.id ?? localId;
-    final note = remoteDocId == null
-        ? await Note.findById(resolvedLocalId)
-        : stableNote ??
-              (remoteTrack == null
-                  ? null
-                  : await Note.findById(remoteTrack.localId));
-    if (note == null) {
-      // Note doesn't exist locally, nothing to do
-      return;
-    }
-
-    // Delete local files tracked for this note
-    final trackedFiles = await FileSyncTrack.get(noteId: note.id!);
-    final fs = await fileSystem();
-    for (final trackedFile in trackedFiles) {
-      try {
-        if (await fs.exists(trackedFile.localPath)) {
-          await fs.delete(trackedFile.localPath);
+    remoteData = await FirebaseSyncMigration.resolve(
+      _notesCollection.doc(remoteDocId),
+      SyncEntityKind.note,
+      remoteData,
+      requireCloudOperation,
+    );
+    final incoming = FirebaseSyncVersion.read(
+      SyncEntityKind.note,
+      remoteDocId,
+      remoteData,
+    );
+    final db = AppState.db;
+    Note? removed;
+    await db.transaction((txn) async {
+      requireCloudOperation();
+      final current = await SyncMutationJournal.current(
+        txn,
+        SyncEntityKind.note,
+        remoteDocId,
+      );
+      if (current != null && incoming.compareTo(current) <= 0) return;
+      final notes = await txn.query(
+        Note.model,
+        where: 'sync_id = ?',
+        whereArgs: [remoteDocId],
+      );
+      final tracks = await txn.query(
+        NoteSyncTrack.model,
+        where: 'remote_id = ?',
+        whereArgs: [remoteDocId],
+      );
+      final id = notes.isNotEmpty
+          ? notes.single['id'] as int
+          : tracks.isNotEmpty
+          ? tracks.single['local_id'] as int
+          : localId;
+      if (notes.isNotEmpty && current == null) {
+        final time = DateTime.tryParse(
+          notes.single['updated_at']?.toString() ?? '',
+        );
+        if (time != null &&
+            time.toUtc().microsecondsSinceEpoch > incoming.modifiedAtMicros) {
+          return;
         }
-        await trackedFile.delete();
-      } catch (e) {
-        AppLogger.error('Error deleting tracked file', e);
       }
+      await SyncMutationJournal.withoutCapture(txn, () async {
+        if (notes.isNotEmpty) {
+          removed = Note.fromJson(notes.single);
+          await txn.delete(
+            Note.model,
+            where: 'sync_id = ?',
+            whereArgs: [remoteDocId],
+          );
+        }
+        await txn.delete(
+          NoteSyncTrack.model,
+          where: 'remote_id = ?',
+          whereArgs: [remoteDocId],
+        );
+        await SyncMutationJournal.received(txn, incoming, id.toString());
+      });
+      requireCloudOperation();
+    });
+    // Keep source files for concurrent revivals and retained history. Destructive
+    // file cleanup must be handled by a reference-aware collector, not a listener.
+    if (removed != null && cloudOperationIsCurrent()) {
+      removed!.notifyWithOrigin('deleted', ModelChangeOrigin.remoteSync);
+      ReminderCoordinator.instance.requestReconciliation();
     }
-
-    // Delete the note sync track
-    final syncTrack =
-        remoteTrack ?? await NoteSyncTrack.getByLocalId(resolvedLocalId);
-    if (syncTrack != null) {
-      await syncTrack.delete();
-    }
-
-    requireCloudOperation();
-    await note.delete(trackSync: false, origin: ModelChangeOrigin.remoteSync);
-    AppLogger.log("Deleted local note from remote deletion: $resolvedLocalId");
   }
 
   Future<int> _resolveIncomingLocalId(
@@ -3240,6 +2985,12 @@ class NoteSyncService {
     int resolvedLocalId,
     DownloadedAttachmentBatch downloads,
   ) async {
+    remoteData = await FirebaseSyncMigration.resolve(
+      _notesCollection.doc(remoteDocId),
+      SyncEntityKind.note,
+      remoteData,
+      requireCloudOperation,
+    );
     final localId = resolvedLocalId;
 
     // Note: deleted notes should be handled by _handleRemoteDeletedNote
@@ -3247,7 +2998,25 @@ class NoteSyncService {
     final isDeleted =
         remoteData['deleted'] == true || remoteData['deleted'] == 1;
     if (isDeleted) {
-      await _handleRemoteDeletedNote(localId, remoteDocId: remoteDocId);
+      await _handleRemoteDeletedNote(
+        localId,
+        remoteDocId: remoteDocId,
+        remoteData: remoteData,
+      );
+      return const RemoteNoteApplyResult.success();
+    }
+
+    final incomingVersion = FirebaseSyncVersion.read(
+      SyncEntityKind.note,
+      remoteDocId,
+      remoteData,
+    );
+    final localVersion = await SyncMutationJournal.current(
+      downloads.database,
+      SyncEntityKind.note,
+      remoteDocId,
+    );
+    if (localVersion != null && incomingVersion.compareTo(localVersion) < 0) {
       return const RemoteNoteApplyResult.success();
     }
 
@@ -3292,6 +3061,13 @@ class NoteSyncService {
         ? Note(id: noteId, syncId: remoteDocId)
         : await Note.fromJsonAsync(expectedRow);
     updatedNoteData['sync_id'] = remoteDocId;
+    updatedNoteData['updated_at'] = DateTime.fromMicrosecondsSinceEpoch(
+      incomingVersion.modifiedAtMicros,
+      isUtc: true,
+    ).toIso8601String();
+    updatedNoteData['created_at'] = FirebaseSyncVersion.timestamp(
+      updatedNoteData['created_at'],
+    )?.toIso8601String();
 
     if (isEncrypted && updatedNoteData.containsKey('e2ee_ciphertext')) {
       // Decryption failed — E2EE reported ready but the actual decrypt returned
@@ -3340,6 +3116,7 @@ class NoteSyncService {
       expectedSyncRow: expectedSyncRow,
       incoming: updatedNoteData,
       commitAttachments: downloads.commitMappings,
+      incomingVersion: incomingVersion,
     );
     downloads.committed = committed == RemoteNoteCommitResult.applied;
     if (committed == RemoteNoteCommitResult.staleSession) {
@@ -3435,50 +3212,6 @@ class NoteSyncService {
       if (backgroundTrack?.remotePath == remoteBackground) return true;
     }
     return false;
-  }
-
-  /// Deletes orphaned attachment files (local only).
-  /// Remote files are NOT deleted here to prevent race conditions between devices.
-  /// Remote file cleanup happens only when the entire note is deleted.
-  Future<void> _deleteOrphanedAttachments(Note note) async {
-    final fs = await fileSystem();
-    final trackedFiles = await FileSyncTrack.get(noteId: note.id!);
-    for (final trackedFile in trackedFiles) {
-      final isOrphaned = !note.attachments.any((att) {
-        final files = switch (att.type) {
-          AttachmentType.image => [att.image!.src],
-          AttachmentType.sketch => [
-            att.sketch!.strokesFilePath ?? '',
-            att.sketch!.previewImage ?? '',
-            att.sketch!.backgroundImage ?? '',
-          ],
-          AttachmentType.audio => [att.recording!.src],
-        }.where((path) => path.isNotEmpty).toList();
-        // Check both local and remote paths since attachments may have either
-        return files.contains(trackedFile.localPath) ||
-            files.contains(trackedFile.remotePath);
-      });
-
-      if (isOrphaned) {
-        try {
-          // Only delete local files - keep remote files intact to prevent
-          // breaking sync for other devices. Remote cleanup happens on note deletion.
-          if (await fs.exists(trackedFile.localPath)) {
-            await fs.delete(trackedFile.localPath);
-            AppLogger.log(
-              "Deleted orphaned local file: ${trackedFile.localPath}",
-            );
-          }
-          // Remove the sync track since the local file no longer exists
-          // but preserve the remote file for other devices
-          await trackedFile.delete();
-        } catch (e) {
-          AppLogger.log(
-            "Error deleting orphaned attachment ${trackedFile.localPath}: $e",
-          );
-        }
-      }
-    }
   }
 
   /// Downloads attachments and returns the list of successfully downloaded attachments.
@@ -3586,7 +3319,7 @@ class NoteSyncService {
     bool hasFailure = false;
 
     for (final attachment in attachments) {
-      // Skip sketch attachments without strokes (nothing to sync)
+      // Never publish a note with silently omitted source media.
       if (attachment.type == AttachmentType.sketch) {
         final sketch = attachment.sketch!;
         // Need either strokesFilePath or inline strokes
@@ -3598,9 +3331,9 @@ class NoteSyncService {
 
         if (!hasStrokesFile && !hasStrokes && !hasEncryptedStrokes) {
           AppLogger.log(
-            "Skipping sketch attachment without strokes for note ${note.id}",
+            "Sketch source unavailable for note ${note.id}; publication deferred",
           );
-          continue;
+          return null;
         }
       }
 
@@ -3623,11 +3356,6 @@ class NoteSyncService {
       return null; // Signal that upload failed
     }
 
-    unawaited(
-      _deleteOrphanedAttachments(note).catchError((e) {
-        AppLogger.error('Error deleting orphaned attachments', e);
-      }),
-    );
     return attachmentData;
   }
 

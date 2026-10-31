@@ -4,11 +4,12 @@ import { HttpsError } from "firebase-functions/v2/https";
 import {
 	DEFAULT_CURRENCY,
 	db,
-	RAZORPAY_PLANS,
 	razorpayKeyId,
 	razorpayKeySecret,
+	razorpayPlanConfig,
 } from "../config";
 import { onNonReviewCall } from "../nonReviewCallable";
+import { evaluateSubscription } from "../subscriptionEntitlement";
 import type { SupportedCurrency } from "../types";
 import { razorpayRequest } from "../utils";
 
@@ -24,6 +25,7 @@ export default onNonReviewCall(
 	async (
 		request: CallableRequest<{
 			yearly: boolean;
+			tier?: "lite" | "pro";
 			currency?: SupportedCurrency;
 		}>,
 	) => {
@@ -33,11 +35,14 @@ export default onNonReviewCall(
 		}
 		const userId = request.auth.uid;
 		const { yearly } = request.data;
+		const tier = request.data.tier ?? "pro";
+		if (tier !== "lite" && tier !== "pro")
+			throw new HttpsError("invalid-argument", "Unknown plan");
 		// Use provided currency or default to USD
 		const currency: SupportedCurrency =
 			request.data.currency === "INR" ? "INR" : DEFAULT_CURRENCY;
 		const planType = yearly ? "yearly" : "monthly";
-		const plan = RAZORPAY_PLANS[currency][planType];
+		const plan = razorpayPlanConfig(tier, currency, planType);
 
 		console.log(
 			`Creating Razorpay subscription for user ${userId}, yearly: ${yearly}, currency: ${currency}`,
@@ -52,29 +57,12 @@ export default onNonReviewCall(
 				.doc("status")
 				.get();
 
-			if (existingSubDoc.exists) {
-				const existingSub = existingSubDoc.data();
-				if (
-					existingSub &&
-					existingSub.plan !== "free" &&
-					existingSub.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE" &&
-					existingSub.source !== "trial" && // Allow upgrade from trial
-					existingSub.purchasePlatform !== "trial" // Allow upgrade from trial
-				) {
-					// Check if not expired (support both field names)
-					const expiryDate =
-						existingSub.expiresAt?.toDate?.() ||
-						existingSub.expiryDate?.toDate?.();
-					if (expiryDate && expiryDate > new Date()) {
-						console.log(
-							`User ${userId} already has an active subscription: ${existingSub.plan}`,
-						);
-						throw new HttpsError(
-							"already-exists",
-							"You already have an active subscription. Please cancel your current subscription first if you want to change plans.",
-						);
-					}
-				}
+			const existing = evaluateSubscription(existingSubDoc.data());
+			if (existing.entitled && existing.source !== "trial") {
+				throw new HttpsError(
+					"already-exists",
+					"Manage your current subscription before changing plans.",
+				);
 			}
 
 			const keyId = razorpayKeyId.value().trim();
@@ -86,6 +74,7 @@ export default onNonReviewCall(
 				keySecret,
 				planType,
 				currency,
+				tier,
 			);
 
 			// Create a subscription
@@ -107,6 +96,7 @@ export default onNonReviewCall(
 					notes: {
 						userId: userId,
 						plan: planType,
+						tier,
 						currency: currency,
 					},
 				},
@@ -123,6 +113,7 @@ export default onNonReviewCall(
 				userId,
 				type: "subscription",
 				plan: planType,
+				tier,
 				amount: plan.amount,
 				currency: plan.currency,
 				razorpaySubscriptionId: subData.id,
@@ -157,37 +148,65 @@ export default onNonReviewCall(
  * Get or create a Razorpay plan
  * Creates plan if it doesn't exist, returns existing plan ID otherwise
  */
-async function getOrCreateRazorpayPlan(
+export async function getOrCreateRazorpayPlan(
 	keyId: string,
 	keySecret: string,
 	planType: "monthly" | "yearly",
 	currency: SupportedCurrency = DEFAULT_CURRENCY,
+	tier: "lite" | "pro" = "pro",
+	requestPlan: typeof razorpayRequest = razorpayRequest,
 ): Promise<string> {
-	const planConfig = RAZORPAY_PLANS[currency][planType];
+	const planConfig = razorpayPlanConfig(tier, currency, planType);
 	// v3: Multi-currency support - USD and INR (Dec 2025)
-	const planName = `better_keep_pro_${planType}_${currency.toLowerCase()}_v3`;
+	const planName = `better_keep_${tier}_${planType}_${currency.toLowerCase()}_${tier === "pro" ? "v3" : "v1"}`;
 
 	try {
-		// First, try to find existing plan by listing plans
-		const plansResponse = (await razorpayRequest(
-			keyId,
-			keySecret,
-			"GET",
-			"/plans?count=100",
-		)) as { items: Array<{ id: string; item: { name: string } }> };
-
-		const existingPlan = plansResponse.items?.find(
-			(p) => p.item?.name === planName,
-		);
-
-		if (existingPlan) {
-			console.log(`Found existing Razorpay plan: ${existingPlan.id}`);
-			return existingPlan.id;
+		// Catalog plans are immutable. Check every page and fail closed if a
+		// matching name has different billing terms rather than charging it.
+		for (let skip = 0; ; skip += 100) {
+			const page = (await requestPlan(
+				keyId,
+				keySecret,
+				"GET",
+				`/plans?count=100&skip=${skip}`,
+			)) as {
+				items: Array<{
+					id: string;
+					period: string;
+					interval: number;
+					item: { name: string; amount: number; currency: string };
+				}>;
+			};
+			if (!Array.isArray(page.items)) {
+				throw new HttpsError("unavailable", "Unable to read billing plans");
+			}
+			const existingPlan = page.items.find((p) => p.item?.name === planName);
+			if (existingPlan) {
+				if (
+					existingPlan.period !== planType ||
+					existingPlan.interval !== 1 ||
+					existingPlan.item.amount !== planConfig.amount ||
+					existingPlan.item.currency !== planConfig.currency
+				) {
+					throw new HttpsError(
+						"failed-precondition",
+						"Billing plan configuration does not match",
+					);
+				}
+				return existingPlan.id;
+			}
+			if (page.items.length < 100) break;
+			if (skip >= 9900) {
+				throw new HttpsError(
+					"unavailable",
+					"Billing plan lookup limit reached",
+				);
+			}
 		}
 
 		// Create new plan
 		console.log(`Creating new Razorpay plan: ${planName}`);
-		const newPlan = (await razorpayRequest(keyId, keySecret, "POST", "/plans", {
+		const newPlan = (await requestPlan(keyId, keySecret, "POST", "/plans", {
 			period: planType === "yearly" ? "yearly" : "monthly",
 			interval: 1,
 			item: {

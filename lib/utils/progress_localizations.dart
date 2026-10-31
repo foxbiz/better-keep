@@ -96,6 +96,8 @@ extension SyncProgressLocalizations on SyncProgress {
     SyncPhase.unavailable => l10n.noConnectionAvailable,
     SyncPhase.waitingForApproval => l10n.waitingForDeviceApproval,
     SyncPhase.signInRequired => l10n.pleaseSignInAgain,
+    SyncPhase.storageFull => l10n.externalSyncStorageFull,
+    SyncPhase.providerSetupRequired => l10n.externalSyncSharedSetup,
     SyncPhase.deferred => l10n.syncPaused,
     SyncPhase.uploadRestricted => l10n.syncUploadRestricted,
     SyncPhase.complete => l10n.syncComplete,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:better_keep/components/quill_input_semantics.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_embed_builders.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
 import 'package:better_keep/models/note_table.dart';
@@ -2033,7 +2034,7 @@ class _NoteEditorState extends State<NoteEditor>
                                         return;
                                       },
                                     ),
-                                  ),
+                                  ).withWebInputSemantics(),
                                 ),
                               ),
                             ),

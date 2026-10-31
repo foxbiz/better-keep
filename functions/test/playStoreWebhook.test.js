@@ -148,3 +148,15 @@ test("a crash after a ledger mutation retries without duplicate revenue", async 
 	assert.equal(state.status, "succeeded");
 	assert.equal(ledger.size, 1);
 });
+
+const { GooglePlayPermanentError } = require('../lib/googlePlayService');
+test('permanent purchase conflict is recorded and acknowledged, not retried', async () => {
+ const conflict = new GooglePlayPermanentError('Conflicting purchase provider.');
+ let failures = 0;
+ assert.equal(await executeClaimedPlayEvent({claim: async () => 'claimed',
+  complete: unused, process: async () => { throw conflict; },
+  fail: async error => { assert.equal(error, conflict); failures++; }
+ }), 'rejected');
+ assert.equal(failures, 1);
+ assert.equal(playEventClaimOutcome({status: 'rejected'}, Date.now()), 'succeeded');
+});

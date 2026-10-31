@@ -44,7 +44,8 @@ class _AuthScaffoldState extends State<AuthScaffold>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    final disableAnimations =
+        !widget.showLogo || MediaQuery.disableAnimationsOf(context);
     if (_disableAnimations == disableAnimations) return;
 
     _disableAnimations = disableAnimations;

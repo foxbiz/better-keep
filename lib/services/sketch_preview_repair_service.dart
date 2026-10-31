@@ -430,7 +430,15 @@ class SketchPreviewRepairService {
     Future<void> Function(Note repairedNote)? onPersisted,
     Future<void> Function(List<String> paths)? cachePreviews,
     Future<void> Function(List<String> paths)? deleteGeneratedPreviews,
+    bool Function()? isCurrent,
   }) async {
+    final database = AppState.db;
+    bool current() =>
+        identical(database, AppState.db) && (isCurrent?.call() ?? true);
+    const cancelled = SketchPreviewRepairResult(
+      status: SketchPreviewRepairStatus.notNeeded,
+      sourceSignature: '',
+    );
     final repairPreviews =
         repair ??
         (note, completed) => repairNote(
@@ -446,7 +454,8 @@ class SketchPreviewRepairService {
     var lastCompletedSketchKeys = completedSketchKeys;
 
     for (var attempt = 0; attempt < 2; attempt++) {
-      final rows = await AppState.db.query(
+      if (!current()) return cancelled;
+      final rows = await database.query(
         'note',
         where: 'id = ?',
         whereArgs: [id],
@@ -461,6 +470,7 @@ class SketchPreviewRepairService {
 
       final row = rows.single;
       final note = await Note.fromJsonAsync(row);
+      if (!current()) return cancelled;
       final sourceSignature = sourceSignatureFor(note);
       lastSourceSignature = sourceSignature;
       final sameSource = expectedSourceSignature == sourceSignature;
@@ -503,6 +513,10 @@ class SketchPreviewRepairService {
       try {
         batch = await repairPreviews(note, effectiveCompleted);
         collectGeneratedPaths();
+        if (!current()) {
+          await cleanup(generatedPaths);
+          return cancelled;
+        }
         lastCompletedSketchKeys = batch.completedSketchKeys;
         if (!batch.changed) {
           await cleanup(generatedPaths);
@@ -517,15 +531,23 @@ class SketchPreviewRepairService {
         }
 
         final attachments = await note.serializeAttachmentsForLocalStorage();
+        if (!current()) {
+          await cleanup(generatedPaths);
+          return cancelled;
+        }
         persisted = await Note.updateAttachmentsIfUnchanged(
           id: id,
           expectedUpdatedAt: row['updated_at'],
           expectedAttachments: row['attachments'],
           attachments: attachments,
+          database: database,
         );
         if (persisted) {
+          if (!current()) return cancelled;
           await cache(generatedPaths);
+          if (!current()) return cancelled;
           await cleanup(batch.discardedPreviewPaths.toList());
+          if (!current()) return cancelled;
           await onPersisted?.call(note);
           return SketchPreviewRepairResult(
             status: batch.hasRetryableFailure
@@ -696,7 +718,10 @@ class SketchPreviewRepairService {
 
   /// Repairs missing previews opened from the editor without treating the
   /// repair as a user edit or triggering sync.
-  static Future<bool> repairMissingPreviews(Note note) async {
+  static Future<bool> repairMissingPreviews(
+    Note note, {
+    bool Function()? isCurrent,
+  }) async {
     final noteId = note.id;
     if (noteId == null) return false;
 
@@ -704,11 +729,12 @@ class SketchPreviewRepairService {
       final result = await repairNoteById(
         noteId,
         allowLocked: note.locked && note.unlocked,
+        isCurrent: isCurrent,
         onPersisted: (repairedNote) async {
           _copyPreviewFields(repairedNote, note);
         },
       );
-      if (result.isComplete) {
+      if ((isCurrent?.call() ?? true) && result.isComplete) {
         await _recordForcedRepairOutcome(noteId, result);
       }
       return result.isComplete;
@@ -843,7 +869,7 @@ class SketchPreviewRepairService {
     }
   }
 
-  @visibleForTesting
+  /// Identifies canonical sketch sources, excluding generated presentation.
   static String sourceSignatureFor(Note note) {
     final sources = <Map<String, Object?>>[
       for (final (index, sketch) in note.sketches.indexed)

@@ -136,7 +136,7 @@ class E2EEService {
         generation == _sessionGeneration;
     try {
       // Initialize secure storage first
-      await _secureStorage.init();
+      await _secureStorage.init(uid: uid, isCurrent: isCurrent);
 
       final restored = await readLocalEncryption(
         hasDeviceKeys: _secureStorage.hasDeviceKeys,
@@ -150,6 +150,7 @@ class E2EEService {
       backgroundVerificationProgress.value = null;
       switch (restored) {
         case LocalEncryptionState.ready:
+          needsRecoveryKeySetup.value = _secureStorage.needsLegacyRecoverySetup;
           status.value = E2EEStatus.ready;
           listenForStatusChanges();
           return true;
@@ -258,7 +259,10 @@ class E2EEService {
       final isFirst = await checked(_deviceManager.isFirstDevice);
       if (isFirst) {
         final hasRecovery = await checked(_recoveryKeyService.hasRecoveryKey);
-        if (!hasRecovery) {
+        final initializedBefore = await checked(
+          () => _secureStorage.wasAccountInitialized(uid!),
+        );
+        if (!hasRecovery && !initializedBefore) {
           await checked(_setupE2EE);
           return;
         }
@@ -349,6 +353,9 @@ class E2EEService {
     await _deviceManager.registerFirstDevice();
 
     status.value = E2EEStatus.ready;
+    await _secureStorage.rememberInitializedAccount(
+      AuthService.currentUser!.uid,
+    );
     await _secureStorage.cacheDeviceStatus('approved');
 
     // Flag that recovery key setup is needed
@@ -395,9 +402,13 @@ class E2EEService {
                   'Approved device has no usable master key',
                 );
               }
+              await _secureStorage.rememberInitializedAccount(uid!);
               await _secureStorage.cacheDeviceStatus('approved');
               if (!current()) return DeviceAuthorization.unavailable;
               localState = LocalEncryptionState.ready;
+              if (_secureStorage.needsLegacyRecoverySetup) {
+                needsRecoveryKeySetup.value = true;
+              }
               status.value = E2EEStatus.ready;
               listenForStatusChanges();
               await _deviceManager.startListeningForCurrentDevice(

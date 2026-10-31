@@ -10,6 +10,24 @@ class AppLocalizationsPt extends AppLocalizations {
   AppLocalizationsPt([String locale = 'pt']) : super(locale);
 
   @override
+  String get externalSyncContinue => 'Continuar';
+
+  @override
+  String get externalSyncConnectionInfo => 'Informações da conexão';
+
+  @override
+  String get externalSyncConnectPrompt =>
+      'Entre para começar a sincronizar suas notas.';
+
+  @override
+  String get externalSyncNativeSetupPrompt =>
+      'Entre no Google Drive neste dispositivo.';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'Insira a URL completa da pasta WebDAV e uma senha de aplicativo. A sincronização no navegador exige que seu servidor permita solicitações de outras origens.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -1997,7 +2015,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get paymentConfirmedActivationPending =>
-      'O pagamento foi confirmado, mas a ativação do Pro está demorando mais. Não compre novamente. Verifique o status ou gerencie a assinatura no Google Play.';
+      'O pagamento foi confirmado, mas a ativação está demorando mais. Não compre novamente. Verifique seu status ou gerencie sua assinatura.';
 
   @override
   String get recheckStatus => 'Verificar Status';
@@ -3954,4 +3972,350 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get storageCleared =>
       'Os dados locais foram apagados e você saiu da conta. Entre novamente para restaurar as notas sincronizadas. Notas apagadas antes da sincronização não podem ser recuperadas da nuvem.';
+
+  @override
+  String get externalSyncTitle => 'Provedor de sincronização';
+
+  @override
+  String get externalSyncDescription =>
+      'Escolha um provedor para sincronizar suas notas entre dispositivos.';
+
+  @override
+  String get externalSyncUnavailable =>
+      'Entre na sua conta e aprove ou recupere este dispositivo para conectar um serviço de armazenamento.';
+
+  @override
+  String get externalSyncAccount => 'Conta e criptografia';
+
+  @override
+  String get externalSyncCloud => 'Nuvem do Better Keep';
+
+  @override
+  String get externalSyncCloudDescription =>
+      'Sincronização integrada · Requer Pro';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': 'Conectar',
+      'browser': 'Entrar pelo navegador',
+      'manual': 'Usar uma senha de app',
+      'reconnect': 'Reconectar',
+      'continue': 'Continuar no navegador',
+      'pause': 'Pausar',
+      'resume': 'Retomar',
+      'disconnect': 'Desconectar',
+      'sync': 'Sincronizar agora',
+      'other': 'Tentar novamente',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': 'Preparando autorização…',
+      'awaitingConsent': 'Pronto para autorizar no navegador',
+      'authorizing': 'Conectando…',
+      'cancelling': 'Cancelando autorização…',
+      'cancelPending': 'Não foi possível confirmar o cancelamento. Tente cancelar novamente.',
+      'connecting': 'Conectando…',
+      'pausing': 'Pausando…',
+      'enabling': 'Retomando…',
+      'disconnecting': 'Desconectando…',
+      'paused': 'Pausado',
+      'notConnected': 'Não conectado',
+      'keyRecovery':
+          'Recupere sua chave de criptografia para usar esta conexão.',
+      'pending': 'Algumas alterações estão aguardando sincronização.',
+      'other': 'Conectado',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired': 'Entre na conta do Google Drive conectada neste dispositivo. Suas notas continuam criptografadas.',
+      'reconnectRequired': 'Reconecte esta conta para continuar sincronizando.',
+      'quotaExceeded': 'Seu armazenamento está cheio. Libere espaço neste provedor e tente novamente.',
+      'rateLimited': 'O provedor pediu para aguardar. A sincronização tentará novamente automaticamente.',
+      'corruptData': 'Não foi possível verificar alguns dados de sincronização. Suas notas locais foram mantidas.',
+      'unsupported':
+          'Este provedor ou navegador não consegue concluir a conexão.',
+      'other': 'Não foi possível acessar este provedor. Verifique sua conexão e tente novamente.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return 'Última sincronização bem-sucedida: $time';
+  }
+
+  @override
+  String get externalSyncNeverSynced =>
+      'Nenhuma sincronização bem-sucedida ainda';
+
+  @override
+  String get externalSyncBlocked =>
+      'Algumas notas ou anexos ainda não podem ser enviados. A sincronização tentará novamente.';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return 'Desconectar $provider?';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      'Isso interrompe a sincronização com esta conta. As notas neste dispositivo e os arquivos já armazenados no provedor serão mantidos.';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Desconectado do Better Keep. Não foi possível confirmar a revogação do acesso. Remova o acesso do Better Keep nas configurações da sua conta no provedor.';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Use uma senha de app das configurações de segurança do Nextcloud. Para sincronizar pelo navegador, seu servidor precisa permitir solicitações de outras origens.';
+
+  @override
+  String get externalSyncServer => 'URL do servidor';
+
+  @override
+  String get externalSyncUsername => 'Nome de usuário';
+
+  @override
+  String get externalSyncAppPassword => 'Senha de app';
+
+  @override
+  String get externalSyncInvalidServer =>
+      'Insira uma URL de servidor HTTPS sem nome de usuário, senha, parâmetros de consulta ou fragmento.';
+
+  @override
+  String get externalSyncRequired => 'Este campo é obrigatório.';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      'A autorização foi concluída antes do cancelamento. O provedor está conectado. Use Desconectar para removê-lo.';
+
+  @override
+  String get externalSyncNextcloudBrowserHelp =>
+      'Entre no seu servidor Nextcloud para conceder acesso. Você pode revogar o acesso nas configurações do Nextcloud. Para sincronizar pelo navegador, seu servidor precisa permitir solicitações de outras origens.';
+
+  @override
+  String get externalSyncLogoutPending =>
+      'Algumas alterações ainda aguardam sincronização. Sair da conta remove as notas e mídias locais deste dispositivo. Alterações que não foram salvas em nenhum provedor podem ser perdidas.\n\nConclua a sincronização ou exporte seus dados antes de sair.';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      'Não foi possível verificar se todas as suas alterações foram sincronizadas. Sair da conta remove as notas e mídias locais deste dispositivo. Alterações que não foram salvas em nenhum provedor podem ser perdidas.\n\nVerifique seus provedores de sincronização ou exporte seus dados antes de sair.';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      'Algumas notas bloqueadas contêm desenhos antigos que precisam ser atualizados. No dispositivo em que você os criou, abra essas notas e desbloqueie-as com seu PIN. Depois, tente sincronizar novamente.';
+
+  @override
+  String get externalSyncOff => 'Sincronização desativada';
+
+  @override
+  String get externalSyncOffDescription => 'Manter notas neste dispositivo';
+
+  @override
+  String get externalSyncDetails => 'Detalhes da sincronização';
+
+  @override
+  String get externalSyncNeedsAttention => 'Requer atenção · Veja os detalhes';
+
+  @override
+  String externalSyncConnectTitle(String provider) {
+    return 'Conectar $provider';
+  }
+
+  @override
+  String get externalSyncConnectHelp =>
+      'Entre para permitir acesso ao armazenamento. Após conectar, este provedor será selecionado para sincronização.';
+
+  @override
+  String get verifyNewDevice => 'Verificar novo dispositivo';
+
+  @override
+  String get deviceVerificationInstructions =>
+      'No dispositivo confiável, leia o QR exibido no novo dispositivo ou compare o código de segurança completo nas duas telas.';
+
+  @override
+  String get deviceVerificationExpired =>
+      'Este código expirou. Gere um novo código no novo dispositivo.';
+
+  @override
+  String get newVerificationCode => 'Gerar novo código';
+
+  @override
+  String get deviceVerificationMismatch =>
+      'Os dispositivos não correspondem. Não aprove esta solicitação.';
+
+  @override
+  String get deviceVerificationMatched =>
+      'Dispositivo verificado. Você pode continuar.';
+
+  @override
+  String get scanNewDevice => 'Ler QR do novo dispositivo';
+
+  @override
+  String get compareSecurityCode => 'Comparar código de segurança';
+
+  @override
+  String get completeSecurityCodeMatches =>
+      'Comparei o código completo nos dois dispositivos. Eles correspondem.';
+
+  @override
+  String get approveVerifiedDevice => 'Aprovar dispositivo';
+
+  @override
+  String get deviceCameraUnavailable =>
+      'Câmera indisponível. Você pode comparar o código de segurança.';
+
+  @override
+  String get deviceVerificationRetry =>
+      'Não foi possível verificar. Atualize os dois dispositivos, gere um novo código no novo dispositivo e tente novamente.';
+
+  @override
+  String get browserEncryptionSessionOnly =>
+      'As chaves de criptografia ficam apenas nesta sessão do navegador. Após recarregar, aprove o navegador novamente ou use sua frase de recuperação.';
+
+  @override
+  String get verifyTrustedDevice => 'Verificar dispositivo confiável';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      'Mantenha a tela de confirmação aberta no dispositivo confiável. Leia o QR ou compare todos os 32 caracteres do código de segurança antes de aceitar sua chave de criptografia.';
+
+  @override
+  String get scanTrustedDevice => 'Ler QR do dispositivo confiável';
+
+  @override
+  String get acceptVerifiedKey => 'Aceitar chave verificada';
+
+  @override
+  String get confirmOnNewDevice => 'Confirme no novo dispositivo';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      'No novo dispositivo, escolha “Verificar dispositivo confiável”. Leia este QR ou confirme que o código completo corresponde ao exibido abaixo. Mantenha esta tela aberta até o novo dispositivo ser desbloqueado. O prazo original de dez minutos continua valendo.';
+
+  @override
+  String get storageSecurityUpgrade => 'Reconectar com segurança';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      'Esta conexão usava o armazenamento antigo de credenciais gerenciado pelo servidor. Primeiro revogue o acesso do Better Keep nas configurações de aplicativos conectados do provedor (ou remova a senha de aplicativo do Nextcloud) e reconecte aqui. Suas notas e arquivos remotos serão mantidos. As novas credenciais são criptografadas no dispositivo com a chave de criptografia das notas.';
+
+  @override
+  String get devicePairingScanInstruction =>
+      'No dispositivo de confiança, abra o pedido de aprovação e leia este código.';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'Compare este código completo com o do dispositivo de confiança.';
+
+  @override
+  String get showQrCode => 'Mostrar código QR';
+
+  @override
+  String get externalSyncSharedSetup =>
+      'Entre no Google Drive neste dispositivo.';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      'Entre na conta do Google Drive conectada neste dispositivo. Suas notas continuam criptografadas.';
+
+  @override
+  String get externalSyncStorageFull =>
+      'Armazenamento cheio. A sincronização está pausada; suas notas locais estão seguras. Libere espaço e toque em Sincronizar agora.';
+
+  @override
+  String get externalSyncClear => 'Apagar dados sincronizados';
+
+  @override
+  String get externalSyncClearMessage =>
+      'Apagar as cópias sincronizadas e desativar a sincronização. As notas locais serão mantidas; os dados que existem apenas no provedor serão perdidos.';
+
+  @override
+  String get externalSyncClearing => 'Apagando dados sincronizados…';
+
+  @override
+  String get externalSyncClearPending =>
+      'Exclusão incompleta · Toque para tentar novamente';
+
+  @override
+  String get externalSyncClearDone =>
+      'Dados sincronizados apagados. A sincronização está desativada. As notas locais foram mantidas. Seu provedor pode manter os arquivos excluídos na lixeira.';
+
+  @override
+  String get externalSyncClearCodeSent =>
+      'Digite o código enviado ao seu e-mail.';
+
+  @override
+  String get externalSyncClearCodeError =>
+      'Não foi possível apagar os dados sincronizados. Verifique o código e sua conexão ou solicite um novo código. Se a exclusão já começou, a sincronização permanecerá desativada até a conclusão.';
+
+  @override
+  String get externalSyncClearSendError =>
+      'Não foi possível enviar um código. Verifique se o e-mail da sua conta foi confirmado, aguarde um minuto e tente novamente.';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$used usados de $total';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => 'Verificando armazenamento…';
+
+  @override
+  String get externalSyncCapacityUnavailable =>
+      'Informações de armazenamento indisponíveis';
+
+  @override
+  String get externalSyncClearVerifyTitle => 'Verificar para apagar';
+
+  @override
+  String get externalSyncClearSendCode => 'Enviar código';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => 'Escolha seu plano';
+
+  @override
+  String get upgradeToLite => 'Assinar o Lite';
+
+  @override
+  String get automaticExternalSync => 'Sincronização externa automática';
+
+  @override
+  String get manualExternalSync => 'Sincronização externa manual';
+
+  @override
+  String get liteDescription =>
+      'Atualizações automáticas com seu próprio armazenamento em nuvem.';
+
+  @override
+  String get manualSyncDescription =>
+      'Sincronize manualmente de graça. Lite e Pro incluem atualizações automáticas.';
+
+  @override
+  String get automaticSyncEnabled => 'Atualizações automáticas ativadas';
+
+  @override
+  String get subscriptionActiveTitle => 'Assinatura ativa';
+
+  @override
+  String get subscriptionChangePlan =>
+      'Gerencie sua assinatura atual para mudar de plano.';
+
+  @override
+  String get subscribe => 'Assinar';
+
+  @override
+  String get builtInCloudSync => 'Sincronização na nuvem integrada';
 }

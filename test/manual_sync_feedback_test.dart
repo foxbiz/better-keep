@@ -7,6 +7,7 @@ import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
@@ -17,6 +18,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   setUp(() {
+    NoteSortService.refreshOperationOverride = () async =>
+        SyncRefreshOutcome.complete;
+    NoteSortService().syncStatus.value = SyncProgress.idle;
     AuthService.cloudRecovery.stop();
     AuthService.cloudRecovery.setForeground(false);
     AppState.set('show_sync_progress', true);
@@ -26,6 +30,7 @@ void main() {
     LabelSyncService().syncStatus.value = SyncProgress.idle;
   });
   tearDown(() {
+    NoteSortService.refreshOperationOverride = null;
     NoteSyncService.refreshOperationOverride = null;
     LabelSyncService.refreshOperationOverride = null;
     AuthService.cloudRecovery.stop();
@@ -284,6 +289,88 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(SyncPresentation.instance.value.isActive, isFalse);
+  });
+
+  test(
+    'external refresh starts independently of an unavailable Firebase attempt',
+    () async {
+      final firebase = Completer<SyncRefreshOutcome>();
+      var started = false, labelsCalled = false;
+      final refresh = runManualSyncRefresh(
+        notes: () => firebase.future,
+        labels: () async {
+          labelsCalled = true;
+          return SyncRefreshOutcome.complete;
+        },
+        external: () async {
+          started = true;
+          return SyncRefreshOutcome.complete;
+        },
+      );
+      await pumpEventQueue();
+      expect(started, true);
+      firebase.complete(SyncRefreshOutcome.unavailable);
+      expect(await refresh, SyncRefreshOutcome.unavailable);
+      expect(labelsCalled, false);
+    },
+  );
+
+  test('external-only refresh never attempts Firebase and preserves provider failures', () async {
+    for (final outcome in SyncRefreshOutcome.values) {
+      expect(
+        await runManualSyncRefresh(
+          firebaseEnabled: false,
+          notes: () async => throw StateError('Firebase must stay paused'),
+          labels: () async => throw StateError('Firebase must stay paused'),
+          external: () async => outcome,
+        ),
+        outcome,
+      );
+    }
+    expect(
+      await runManualSyncRefresh(
+        firebaseEnabled: false,
+        notes: () async => throw StateError('Unexpected'),
+        labels: () async => throw StateError('Unexpected'),
+        external: () async => null,
+      ),
+      SyncRefreshOutcome.deferred,
+    );
+  });
+
+  test('ordering runs after successful data reconciliation and its failure is preserved', () async {
+    final calls = <String>[];
+    expect(
+      await runManualSyncRefresh(
+        notes: () async {
+          calls.add('notes');
+          return SyncRefreshOutcome.complete;
+        },
+        labels: () async {
+          calls.add('labels');
+          return SyncRefreshOutcome.complete;
+        },
+        ordering: () async {
+          calls.add('ordering');
+          return SyncRefreshOutcome.failed;
+        },
+      ),
+      SyncRefreshOutcome.failed,
+    );
+    expect(calls, ['notes', 'labels', 'ordering']);
+    calls.clear();
+    expect(
+      await runManualSyncRefresh(
+        notes: () async => SyncRefreshOutcome.deferred,
+        labels: () async => SyncRefreshOutcome.complete,
+        ordering: () async {
+          calls.add('ordering');
+          return SyncRefreshOutcome.complete;
+        },
+      ),
+      SyncRefreshOutcome.deferred,
+    );
+    expect(calls, isEmpty);
   });
 
   test('label failures reach the shared refresh result', () async {

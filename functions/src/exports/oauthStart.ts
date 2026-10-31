@@ -20,15 +20,15 @@ import {
 	isClientTransactionId,
 	isCustomOAuthProvider,
 	isOpaqueToken,
-	OAUTH_STATE_TTL_MS,
 	OAUTH_STATE_AUDIENCE,
+	OAUTH_STATE_TTL_MS,
+	type OAuthFlowVersion,
+	type OAuthState,
 	oauthCookieHeader,
 	originFromReferrer,
 	parseOAuthMode,
 	parseOAuthRedirect,
 	sealOAuthState,
-	type OAuthFlowVersion,
-	type OAuthState,
 } from "../oauthSession";
 import { isProtectedReviewUserRecord } from "../reviewAccess";
 

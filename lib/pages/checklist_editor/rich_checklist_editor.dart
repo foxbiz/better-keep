@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:better_keep/components/quill_input_semantics.dart';
+
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/rich_checklist.dart';
@@ -2193,7 +2195,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         ),
         customLinkPrefixes: const ['audio://'],
       ),
-    );
+    ).withWebInputSemantics();
     if (!_rowHasBackspaceSentinel) return editor;
     return Stack(
       children: [

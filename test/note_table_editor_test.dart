@@ -95,7 +95,7 @@ void main() {
       final cellFinder = find
           .descendant(
             of: find.byType(NoteTableView),
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           )
           .first;
       final cell = tester.widget<QuillEditor>(cellFinder);
@@ -199,7 +199,7 @@ void main() {
       final cell = tester.widget<QuillEditor>(
         find.descendant(
           of: find.byType(NoteTableView),
-          matching: find.byType(QuillEditor),
+          matching: find.bySubtype<QuillEditor>(),
         ),
       );
       expect(cell.controller.document.toPlainText(), 'Legacy text\n');
@@ -251,7 +251,7 @@ void main() {
     final firstCell = find
         .descendant(
           of: find.byType(NoteTableView),
-          matching: find.byType(QuillEditor),
+          matching: find.bySubtype<QuillEditor>(),
         )
         .first;
     final tableBounds = tester.getRect(find.byType(NoteTableView));
@@ -315,7 +315,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(NoteTableView),
-        matching: find.byType(QuillEditor),
+        matching: find.bySubtype<QuillEditor>(),
       ),
       findsNWidgets(6),
     );
@@ -380,7 +380,7 @@ void main() {
       await tester.pumpAndSettle();
       final cellFinder = find.descendant(
         of: find.byType(NoteTableView),
-        matching: find.byType(QuillEditor),
+        matching: find.bySubtype<QuillEditor>(),
       );
       final cell = tester.widget<QuillEditor>(cellFinder);
       insertNoteEmbed(
@@ -513,7 +513,7 @@ void main() {
       final cellFinder = find
           .descendant(
             of: find.byType(NoteTableView),
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           )
           .first;
       expect(find.byKey(const ValueKey('table_row_0')), findsNothing);
@@ -628,7 +628,7 @@ void main() {
       final cellFinder = find
           .descendant(
             of: find.byType(NoteTableView),
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           )
           .first;
       final imageFinder = find.descendant(
@@ -908,7 +908,7 @@ void main() {
       await tester.pumpWidget(_editor(root, editing, focus));
       final cells = find.descendant(
         of: find.byType(NoteTableView),
-        matching: find.byType(QuillEditor),
+        matching: find.bySubtype<QuillEditor>(),
       );
       expect(cells.evaluate().length, lessThan(80));
       expect(

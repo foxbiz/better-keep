@@ -12,6 +12,7 @@ class FirebaseEnvironmentStatus {
     required this.databaseId,
     required this.localDataScope,
     this.host,
+    this.webProxyOrigin,
   });
 
   factory FirebaseEnvironmentStatus.fromConfiguration(
@@ -22,7 +23,10 @@ class FirebaseEnvironmentStatus {
     projectId: configuration.projectId,
     databaseId: configuration.databaseId,
     localDataScope: configuration.localDataScope,
-    host: configuration.endpoints?.host,
+    host: configuration.endpoints?.webProxyOrigin == null
+        ? configuration.endpoints?.host
+        : Uri.parse(configuration.endpoints!.webProxyOrigin!).host,
+    webProxyOrigin: configuration.endpoints?.webProxyOrigin,
   );
 
   final FirebaseEnvironment environment;
@@ -31,6 +35,7 @@ class FirebaseEnvironmentStatus {
   final String databaseId;
   final FirebaseLocalDataScope localDataScope;
   final String? host;
+  final String? webProxyOrigin;
 
   bool get usesEmulators => environment == FirebaseEnvironment.emulator;
 }
@@ -217,17 +222,26 @@ Future<void> showFirebaseEnvironmentDetails(
   FirebaseEnvironmentStatus status,
 ) {
   final host = status.host;
-  final functionsRoute = host == null
+  final proxy = status.webProxyOrigin;
+  final functionsRoute = proxy != null
+      ? '$proxy/__emulator/functions'
+      : host == null
       ? 'Live · ${FirebaseBackend.defaultFunctionsRegion}'
       : '$host:${FirebaseEmulatorEndpoints.functionsPort}';
-  final authRoute = host == null
+  final authRoute = proxy != null
+      ? '$proxy/__emulator/auth'
+      : host == null
       ? 'Live'
       : '$host:${FirebaseEmulatorEndpoints.authPort}';
-  final firestoreRoute = host == null
+  final firestoreRoute = proxy != null
+      ? '$proxy/__emulator/firestore · ${status.databaseId}'
+      : host == null
       ? 'Live · ${status.databaseId}'
       : '$host:${FirebaseEmulatorEndpoints.firestorePort} · '
             '${status.databaseId}';
-  final storageRoute = host == null
+  final storageRoute = proxy != null
+      ? '$proxy/__emulator/storage'
+      : host == null
       ? 'Live'
       : '$host:${FirebaseEmulatorEndpoints.storagePort}';
 
