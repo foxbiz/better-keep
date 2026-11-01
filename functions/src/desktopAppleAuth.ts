@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { DecodedIdToken } from "firebase-admin/auth";
-import { timingSafeStringEqual, type OAuthState } from "./oauthSession";
 import type { RenderedOAuthHtml } from "./oauthResponse";
+import { type OAuthState, timingSafeStringEqual } from "./oauthSession";
 
 export function validateDesktopAppleCompletion(
 	state: OAuthState,

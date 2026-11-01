@@ -109,3 +109,12 @@ test("uses provider current_end instead of receipt time for entitlement", () => 
 	assert.equal(normalized.willAutoRenew, true);
 	assert.equal(normalized.expiresAt.toMillis(), 1788825600 * 1000);
 });
+
+
+test("Lite stays Lite when a later provider payload omits tier notes", () => {
+  const input = {entity: {id: "sub_lite", status: "active", current_end: 1788825600}, userId: "uid", now: Date.parse("2026-08-08T00:00:00Z")};
+  assert.equal(normalizeRazorpaySubscription({...input, verifiedTier: "lite"}).plan, "lite");
+  assert.equal(normalizeRazorpaySubscription({...input, entity: {...input.entity, notes: {tier: "lite"}}}).plan, "lite");
+  assert.equal(normalizeRazorpaySubscription({...input, verifiedTier: "unknown"}).plan, "free");
+  assert.equal(normalizeRazorpaySubscription(input).plan, "pro"); // Legacy Pro records remain compatible.
+});

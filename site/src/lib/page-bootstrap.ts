@@ -29,19 +29,28 @@ function initializeAnalytics(browser: Window & { plausible?: Analytics }, doc: D
   });
 }
 
-function redirectLegacyStandalone(browser: Window & {
+function redirectHome(browser: Window & {
   navigator: Navigator & { standalone?: boolean };
-}) {
+}, doc: Document, storeUrls: Record<string, string | undefined>) {
+  if (browser.location.pathname !== '/') return;
+  if (new URLSearchParams(browser.location.search).get('redirect') === 'store') {
+    const destination = storeUrls[doc.documentElement.dataset.storePlatform || 'none'];
+    if (destination) browser.location.replace(destination);
+    return;
+  }
   const legacyStandalone = browser.matchMedia('(display-mode: standalone)').matches ||
     browser.navigator.standalone === true;
-  if (legacyStandalone && browser.location.pathname === '/') {
+  if (legacyStandalone) {
     browser.location.replace('/app/');
   }
+}
+
+export function createHomeRedirectBootstrap(storeUrls: Record<string, string | undefined>) {
+  return `(${redirectHome.toString()})(window, document, ${JSON.stringify(storeUrls)});`;
 }
 
 // These must run synchronously in the head; serialize their compiled functions.
 export const pageBootstrap = {
   query: `(${stripQuery.toString()})(window);`,
-  analytics: `(${initializeAnalytics.toString()})(window, document);`,
-  legacy: `(${redirectLegacyStandalone.toString()})(window);`
+  analytics: `(${initializeAnalytics.toString()})(window, document);`
 };

@@ -137,6 +137,10 @@ void main() {
         await tester.enterText(find.byType(TextField), '  Work  ');
         await tester.tap(find.byIcon(Icons.add));
         await _waitFor(tester, () => _input(tester).isEmpty);
+        await _waitFor(
+          tester,
+          () => find.widgetWithText(ListTile, 'Work').evaluate().isNotEmpty,
+        );
         expect(result.closed, isFalse);
         expect(find.text(confirmation), findsNothing);
         if (selecting) expect(find.byIcon(Icons.check), findsOneWidget);
@@ -144,6 +148,10 @@ void main() {
         await tester.enterText(find.byType(TextField), ' Работа ');
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await _waitFor(tester, () => _input(tester).isEmpty);
+        await _waitFor(
+          tester,
+          () => find.widgetWithText(ListTile, 'Работа').evaluate().isNotEmpty,
+        );
         expect(result.closed, isFalse);
         if (selecting) expect(find.byIcon(Icons.check), findsNWidgets(2));
         expect(saves.attempts, 2);

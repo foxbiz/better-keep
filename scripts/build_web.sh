@@ -14,6 +14,8 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
   DART_DEFINE_ARGS+=(--dart-define-from-file="$PROJECT_DIR/.env")
 fi
 
+node "$PROJECT_DIR/scripts/validate_web_compatibility.mjs" "${DART_DEFINE_ARGS[@]}" "$@"
+
 rm -rf "$APP_OUTPUT"
 
 "$FLUTTER_BIN" build web \
@@ -49,6 +51,9 @@ do
 done
 
 cp -R "$PROJECT_DIR/web/js" "$HOSTING_OUTPUT/js"
+
+# The emulator bridge is used only by debug builds.
+node "$PROJECT_DIR/scripts/strip_emulator_proxy.mjs" "$HOSTING_OUTPUT"
 
 node "$PROJECT_DIR/scripts/validate_visibility.mjs" "$HOSTING_OUTPUT"
 

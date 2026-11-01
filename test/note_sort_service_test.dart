@@ -10,6 +10,12 @@ import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/note_sort_cloud_repository.dart';
+import 'package:better_keep/services/note_sort_cloud_manifest.dart';
+import 'package:better_keep/services/external_sync/firebase_sync_version.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/external_sync/firebase_order_tombstones.dart';
+import 'package:better_keep/services/external_sync/sync_replica_store.dart';
+import 'package:better_keep/services/external_sync/sync_version.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
@@ -48,6 +54,8 @@ void main() {
     await NoteSyncTrack.createTable(database);
     await LabelSyncTrack.createTable(database);
     await NoteSortService.createTable(database);
+    await SyncReplicaStore.createTables(database);
+    await SyncMutationJournal.install(database);
     await service.init();
   });
 
@@ -64,6 +72,505 @@ void main() {
     E2EEService.instance.deviceManager.setCachedUMKForTesting(originalUMK);
     await database.close();
   });
+
+  Map<String, dynamic> tombstone(String revision, DateTime time) =>
+      NoteSortCloudManifest.encode(
+        schemaVersion: NoteSortService.cloudSchemaVersion,
+        contextKey: grid.key,
+        sortMode: 'custom',
+        revision: revision,
+        updatedAt: time,
+        chunkCount: 0,
+        noteCount: 0,
+        contentHash: NoteSortCloudManifest.contentHash([]),
+        deleted: true,
+      );
+
+  Future<SyncVersion> externalDeletion(String revision, DateTime time) async {
+    final version = NoteSortCloudManifest.version(tombstone(revision, time));
+    await database.transaction(
+      (txn) => SyncMutationJournal.withoutCapture(txn, () async {
+        for (final table in [
+          NoteSortService.positionTableName,
+          NoteSortService.operationTableName,
+          NoteSortService.tableName,
+        ]) {
+          await txn.delete(
+            table,
+            where: 'context_key = ?',
+            whereArgs: [grid.key],
+          );
+        }
+        await SyncMutationJournal.received(txn, version, grid.key);
+      }),
+    );
+    await service.refreshFromReplica(
+      grid.key,
+      database: database,
+      isCurrent: () => true,
+    );
+    return version;
+  }
+
+  _FakeNoteSortCloudRepository deletionCloud() {
+    final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
+    NoteSortService.cloudRepositoryOverride = cloud;
+    NoteSortService.canReceiveCloudOverride = true;
+    NoteSortService.canPushCloudOverride = true;
+    return cloud;
+  }
+
+  test('Firebase deletion removes the context and retains its acknowledged source revision', () async {
+    await service.ensureContext(grid, visibleNotes: []);
+    final cloud = deletionCloud();
+    cloud.manifests[grid.key] = tombstone('remote-delete', DateTime.utc(2030));
+    cloud.readChunksError = StateError('Tombstones must not read chunks');
+    expect(await service.receiveRemoteContextForTesting(grid.key), 'deleted');
+    expect(
+      await database.query(
+        NoteSortService.tableName,
+        where: 'context_key = ?',
+        whereArgs: [grid.key],
+      ),
+      isEmpty,
+    );
+    expect(service.snapshots.value.containsKey(grid.key), isFalse);
+    final version = await SyncMutationJournal.current(
+      database,
+      SyncEntityKind.order,
+      grid.key,
+    );
+    expect(version!.deleted, isTrue);
+    expect(version.revisionId, 'remote-delete');
+    expect(
+      await FirebaseOrderTombstones.pending(database, 'test-user'),
+      isEmpty,
+    );
+    await service.flushCloudForTesting();
+    expect(cloud.commitCalls, 0);
+  });
+
+  test('a stale Firebase deletion cannot erase a newer live order', () async {
+    await service.applyRemoteSnapshotForTesting(
+      NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: ['newer'],
+        revision: 'live',
+        updatedAt: DateTime.utc(2031),
+        hydrated: true,
+      ),
+    );
+    final cloud = deletionCloud();
+    cloud.manifests[grid.key] = tombstone('old-delete', DateTime.utc(2030));
+    await service.receiveRemoteContextForTesting(grid.key);
+    expect(service.snapshotFor(grid).revision, 'live');
+    expect(service.snapshotFor(grid).orderedNoteIds, ['newer']);
+  });
+
+  for (final liveIsNewer in [true, false]) {
+    test(
+      'drag deferral compares live and deleted revisions (newer live: $liveIsNewer)',
+      () async {
+        await service.ensureContext(grid, visibleNotes: []);
+        final cloud = deletionCloud();
+        service.beginDrag(grid);
+        cloud.manifests[grid.key] = tombstone('delete', DateTime.utc(2030));
+        await service.receiveRemoteContextForTesting(grid.key);
+        expect(service.snapshots.value.containsKey(grid.key), isTrue);
+        await service.receiveRemoteSnapshotForTesting(
+          NoteOrderSnapshot(
+            context: grid,
+            mode: NoteSortMode.custom,
+            orderedNoteIds: ['live'],
+            revision: 'live',
+            updatedAt: DateTime.utc(liveIsNewer ? 2031 : 2029),
+            hydrated: true,
+          ),
+        );
+        await service.endDrag(grid, committed: false);
+        final current = await SyncMutationJournal.current(
+          database,
+          SyncEntityKind.order,
+          grid.key,
+        );
+        expect(current!.deleted, !liveIsNewer);
+        expect(current.revisionId, liveIsNewer ? 'live' : 'delete');
+      },
+    );
+  }
+
+  test('external deletion publishes to Firebase without restamping or source chunks', () async {
+    final cloud = deletionCloud();
+    final deleted = await externalDeletion(
+      'external-delete',
+      DateTime.utc(2030),
+    );
+    await service.flushCloudForTesting();
+    final published = NoteSortCloudManifest.version(cloud.manifests[grid.key]!);
+    expect(published.toJson(), deleted.toJson());
+    expect(cloud.chunks, isEmpty);
+    expect(
+      await FirebaseOrderTombstones.pending(database, 'test-user'),
+      isEmpty,
+    );
+    expect(service.syncStatus.value.phase.name, 'complete');
+  });
+
+  test('external deletion remains visibly pending when Firebase uploads are restricted', () async {
+    final cloud = deletionCloud();
+    service.activateCloudRunForTesting();
+    NoteSortService.canPushCloudOverride = false;
+    await externalDeletion('delete', DateTime.utc(2030));
+    expect(service.syncStatus.value.phase.name, 'uploadRestricted');
+    await service.flushCloudForTesting();
+    expect(cloud.commitCalls, 0);
+    expect(
+      await FirebaseOrderTombstones.pending(database, 'test-user'),
+      hasLength(1),
+    );
+  });
+
+  test(
+    'late deletion completion cannot acknowledge a newer external deletion',
+    () async {
+      final cloud = deletionCloud();
+      await externalDeletion('first-delete', DateTime.utc(2030));
+      cloud.beforeCommit = () async {
+        cloud.beforeCommit = null;
+        await externalDeletion('next-delete', DateTime.utc(2031));
+      };
+      await service.flushCloudForTesting();
+      expect(
+        (await FirebaseOrderTombstones.pending(
+          database,
+          'test-user',
+        )).single.revisionId,
+        'next-delete',
+      );
+      expect(service.syncStatus.value.phase.name, 'deferred');
+      await service.flushCloudForTesting();
+      expect(cloud.manifests[grid.key]!['revision'], 'next-delete');
+      expect(
+        await FirebaseOrderTombstones.pending(database, 'test-user'),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'pause during deletion publication keeps work pending for retry',
+    () async {
+      final cloud = deletionCloud();
+      await externalDeletion('delete', DateTime.utc(2030));
+      cloud.beforeCommit = () async {
+        NoteSortService.canPushCloudOverride = false;
+      };
+      await service.flushCloudForTesting();
+      expect(
+        await FirebaseOrderTombstones.pending(database, 'test-user'),
+        hasLength(1),
+      );
+      cloud.beforeCommit = null;
+      NoteSortService.canPushCloudOverride = true;
+      await service.flushCloudForTesting();
+      expect(
+        await FirebaseOrderTombstones.pending(database, 'test-user'),
+        isEmpty,
+      );
+    },
+  );
+
+  test('a newer Firebase revival wins an outgoing deletion conflict', () async {
+    final cloud = deletionCloud();
+    await externalDeletion('delete', DateTime.utc(2030));
+    cloud.manifests[grid.key] = NoteSortCloudManifest.encode(
+      schemaVersion: NoteSortService.cloudSchemaVersion,
+      contextKey: grid.key,
+      sortMode: 'updatedNewest',
+      revision: 'revived',
+      updatedAt: DateTime.utc(2031),
+      chunkCount: 0,
+      noteCount: 0,
+      contentHash: NoteSortCloudManifest.contentHash([]),
+    );
+    await service.flushCloudForTesting();
+    expect(service.snapshotFor(grid).revision, 'revived');
+    expect(
+      await FirebaseOrderTombstones.pending(database, 'test-user'),
+      isEmpty,
+    );
+  });
+
+  test('external snapshot refresh preserves journal identity and defers visual changes during drag', () async {
+    await service.ensureContext(grid, visibleNotes: []);
+    final initial = service.snapshotFor(grid);
+    final incoming = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: ['b', 'a'],
+      revision: 'external-order',
+      updatedAt: DateTime.utc(2026),
+      dirty: true,
+      hydrated: true,
+    );
+    await database.transaction((txn) async {
+      await SyncMutationJournal.withoutCapture(txn, () async {
+        await txn.update(
+          NoteSortService.tableName,
+          incoming.toDatabaseJson(),
+          where: 'context_key = ?',
+          whereArgs: [grid.key],
+        );
+        for (final entry in incoming.orderedNoteIds.indexed) {
+          await txn.insert(NoteSortService.positionTableName, {
+            'context_key': grid.key,
+            'note_sync_id': entry.$2,
+            'position': entry.$1,
+          });
+        }
+        await SyncMutationJournal.received(
+          txn,
+          SyncVersion(
+            kind: SyncEntityKind.order,
+            entityId: grid.key,
+            revisionId: incoming.revision,
+            modifiedAtMicros: incoming.updatedAt.microsecondsSinceEpoch,
+            deleted: false,
+          ),
+          grid.key,
+        );
+      });
+    });
+    service.beginDrag(grid);
+    await service.refreshFromReplica(
+      grid.key,
+      database: database,
+      isCurrent: () => true,
+    );
+    expect(service.snapshotFor(grid).revision, initial.revision);
+    await service.endDrag(grid, committed: false);
+    expect(service.snapshotFor(grid).revision, incoming.revision);
+    expect(service.snapshotFor(grid).orderedNoteIds, ['b', 'a']);
+    expect(service.snapshotFor(grid).dirty, isTrue);
+    expect(
+      (await SyncMutationJournal.current(
+        database,
+        SyncEntityKind.order,
+        grid.key,
+      ))!.revisionId,
+      incoming.revision,
+    );
+  });
+
+  test('external deletion removes the cached order but stale sessions cannot refresh it', () async {
+    await service.ensureContext(grid, visibleNotes: []);
+    await database.delete(
+      NoteSortService.tableName,
+      where: 'context_key = ?',
+      whereArgs: [grid.key],
+    );
+    await service.refreshFromReplica(
+      grid.key,
+      database: database,
+      isCurrent: () => false,
+    );
+    expect(service.snapshots.value.containsKey(grid.key), isTrue);
+    await service.refreshFromReplica(
+      grid.key,
+      database: database,
+      isCurrent: () => true,
+    );
+    expect(service.snapshots.value.containsKey(grid.key), isFalse);
+  });
+
+  test('order adoption and edits share one durable source identity', () async {
+    final remote = NoteOrderSnapshot(
+      context: grid,
+      mode: NoteSortMode.custom,
+      orderedNoteIds: ['remote'],
+      revision: 'future-source',
+      baseRevision: 'firebase-directory',
+      updatedAt: DateTime.now().toUtc().add(const Duration(days: 1)),
+      hydrated: true,
+    );
+    await service.applyRemoteSnapshotForTesting(remote);
+    final received = (await SyncMutationJournal.current(
+      database,
+      SyncEntityKind.order,
+      grid.key,
+    ))!;
+    expect(received.revisionId, remote.revision);
+    expect(received.modifiedAtMicros, remote.updatedAt.microsecondsSinceEpoch);
+    await service.setMode(grid, NoteSortMode.updatedNewest);
+    final local = service.snapshotFor(grid);
+    final edited = (await SyncMutationJournal.current(
+      database,
+      SyncEntityKind.order,
+      grid.key,
+    ))!;
+    expect(edited.revisionId, local.revision);
+    expect(edited.modifiedAtMicros, received.modifiedAtMicros + 1);
+    expect(local.updatedAt.microsecondsSinceEpoch, edited.modifiedAtMicros);
+    await service.applyRemoteSnapshotForTesting(remote);
+    expect(service.snapshotFor(grid).revision, local.revision);
+  });
+
+  test('failed position adoption rolls back snapshot, source version and queue', () async {
+    await service.setMode(grid, NoteSortMode.updatedNewest);
+    final before = service.snapshotFor(grid);
+    final versions = await database.query(SyncMutationJournal.table);
+    final operations = await database.query(NoteSortService.operationTableName);
+    await database.execute(
+      '''CREATE TRIGGER fail_order_position BEFORE INSERT ON note_sort_position
+      WHEN NEW.note_sync_id = 'fail' BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END''',
+    );
+    await expectLater(
+      service.applyRemoteSnapshotForTesting(
+        before.copyWith(
+          revision: 'new-source',
+          orderedNoteIds: ['ok', 'fail'],
+          updatedAt: before.updatedAt.add(const Duration(seconds: 1)),
+        ),
+      ),
+      throwsA(isA<DatabaseException>()),
+    );
+    expect(service.snapshotFor(grid), same(before));
+    expect(await database.query(SyncMutationJournal.table), versions);
+    expect(
+      await database.query(NoteSortService.operationTableName),
+      operations,
+    );
+    expect(
+      await database.query(
+        NoteSortService.tableName,
+        where: 'context_key = ?',
+        whereArgs: [grid.key],
+      ),
+      [before.toDatabaseJson()],
+    );
+  });
+
+  test(
+    'drag deferral retains the newest source despite reversed deliveries',
+    () async {
+      final newest = NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: ['newest'],
+        revision: 'newest',
+        updatedAt: DateTime.utc(2026, 1, 2),
+        hydrated: true,
+      );
+      service.beginDrag(grid);
+      await service.receiveRemoteSnapshotForTesting(newest);
+      await service.receiveRemoteSnapshotForTesting(
+        newest.copyWith(
+          revision: 'older',
+          orderedNoteIds: ['older'],
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      await service.endDrag(grid, committed: false);
+      expect(service.snapshotFor(grid).revision, newest.revision);
+    },
+  );
+
+  test(
+    'manifest hash mismatch and missing source time never replace local state',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository();
+      cloud.manifests[grid.key] = NoteSortCloudManifest.encode(
+        schemaVersion: 2,
+        contextKey: grid.key,
+        sortMode: 'custom',
+        revision: 'source',
+        updatedAt: DateTime.utc(2026, 1, 2),
+        chunkCount: 1,
+        noteCount: 1,
+        contentHash: NoteSortCloudManifest.contentHash(['original']),
+      );
+      cloud.chunks['source'] = [
+        _orderChunk('source', ['changed']),
+      ];
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      final before = service.snapshotFor(grid);
+      expect(await service.receiveRemoteContextForTesting(grid.key), 'invalid');
+      expect(service.snapshotFor(grid), same(before));
+      cloud.chunks['source'] = [
+        _orderChunk('source', ['original']),
+      ];
+      cloud.manifests[grid.key]!.remove('updated_at');
+      expect(await service.receiveRemoteContextForTesting(grid.key), 'invalid');
+      expect(service.snapshotFor(grid), same(before));
+    },
+  );
+
+  test(
+    'recreating a default context preserves its tombstone until a user edit',
+    () async {
+      final deleted = SyncVersion(
+        kind: SyncEntityKind.order,
+        entityId: grid.key,
+        revisionId: 'deleted-source',
+        deleted: true,
+        modifiedAtMicros: DateTime.now()
+            .add(const Duration(days: 1))
+            .microsecondsSinceEpoch,
+      );
+      await database.transaction(
+        (txn) => SyncMutationJournal.withoutCapture(txn, () async {
+          await txn.delete(
+            NoteSortService.tableName,
+            where: 'context_key = ?',
+            whereArgs: [grid.key],
+          );
+          await SyncMutationJournal.received(txn, deleted, grid.key);
+        }),
+      );
+      await service.dispose();
+      await service.init();
+      await service.ensureContext(grid);
+      expect(
+        (await SyncMutationJournal.current(
+          database,
+          SyncEntityKind.order,
+          grid.key,
+        ))!.deleted,
+        isTrue,
+      );
+      await service.setMode(grid, NoteSortMode.updatedNewest);
+      final edited = (await SyncMutationJournal.current(
+        database,
+        SyncEntityKind.order,
+        grid.key,
+      ))!;
+      expect(edited.deleted, isFalse);
+      expect(edited.modifiedAtMicros, deleted.modifiedAtMicros + 1);
+    },
+  );
+
+  test(
+    'legacy chunk directory names remain separate from normalized edit IDs',
+    () async {
+      final cloud = _FakeNoteSortCloudRepository();
+      cloud.manifests[grid.key] = _orderManifest(grid, 'legacy-directory', 1)
+        ..remove('sync_meta');
+      cloud.chunks['legacy-directory'] = [
+        _orderChunk('legacy-directory', ['legacy-note']),
+      ];
+      NoteSortService.cloudRepositoryOverride = cloud;
+      NoteSortService.canReceiveCloudOverride = true;
+      expect(await service.receiveRemoteContextForTesting(grid.key), 'valid');
+      final snapshot = service.snapshotFor(grid);
+      expect(snapshot.revision, startsWith('firebase-'));
+      expect(snapshot.baseRevision, 'legacy-directory');
+      expect(snapshot.orderedNoteIds, ['legacy-note']);
+      expect(await service.receiveRemoteContextForTesting(grid.key), 'valid');
+      expect(service.snapshotFor(grid).revision, snapshot.revision);
+    },
+  );
 
   test('cloud startup requires a ready E2EE state and UMK', () async {
     NoteSortService.canReceiveCloudOverride = true;
@@ -630,11 +1137,10 @@ void main() {
         'note-4',
         'note-3',
         'note-1',
-        'remote-note',
         'hidden-note',
         'note-2',
       ]);
-      expect(rebased.baseRevision, 'import-remote');
+      expect(rebased.baseRevision, 'import-base');
       expect(rebased.dirty, isTrue);
     },
   );
@@ -764,7 +1270,7 @@ void main() {
     expect(service.snapshotFor(folder).orderedNoteIds, ['note-1']);
   });
 
-  test('new notes precede imports without changing saved order after rebase', () async {
+  test('new notes retain saved order when an older snapshot arrives', () async {
     final existing = await _seedImportedOrder(database, grid);
     final before = service
         .sortNotes(grid, existing)
@@ -792,7 +1298,7 @@ void main() {
       'note-2',
     ]);
 
-    // A remote revision must replay the same prefix without losing hidden IDs.
+    // A delayed older snapshot cannot replace the saved prefix or hidden IDs.
     await service.applyRemoteSnapshotForTesting(
       base.copyWith(revision: 'remote-update'),
     );
@@ -858,54 +1364,63 @@ void main() {
     );
   });
 
-  test('pending local move rebases onto a newer remote context', () async {
-    for (var id = 1; id <= 3; id++) {
-      await _insertNote(
-        database,
-        id: id,
-        updatedAt: DateTime.utc(2026, 7, 25 - id),
+  test(
+    'newer remote order replaces a pending local move without restamping',
+    () async {
+      for (var id = 1; id <= 3; id++) {
+        await _insertNote(
+          database,
+          id: id,
+          updatedAt: DateTime.utc(2026, 7, 25 - id),
+        );
+      }
+      final firstRemote = NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: const ['note-1', 'note-2', 'note-3'],
+        revision: 'remote-1',
+        baseRevision: 'remote-1',
+        updatedAt: DateTime.utc(2026, 7, 23),
+        hydrated: true,
       );
-    }
-    final firstRemote = NoteOrderSnapshot(
-      context: grid,
-      mode: NoteSortMode.custom,
-      orderedNoteIds: const ['note-1', 'note-2', 'note-3'],
-      revision: 'remote-1',
-      baseRevision: 'remote-1',
-      updatedAt: DateTime.utc(2026, 7, 23),
-      hydrated: true,
-    );
-    await service.applyRemoteSnapshotForTesting(firstRemote);
-    final notes = await Note.get(NoteType.all);
-    await service.reorderVisibleNotes(
-      context: grid,
-      draggedId: 3,
-      targetId: 1,
-      placeAfter: false,
-      visibleNotes: notes,
-    );
+      await service.applyRemoteSnapshotForTesting(firstRemote);
+      final notes = await Note.get(NoteType.all);
+      await service.reorderVisibleNotes(
+        context: grid,
+        draggedId: 3,
+        targetId: 1,
+        placeAfter: false,
+        visibleNotes: notes,
+      );
 
-    final concurrentRemote = NoteOrderSnapshot(
-      context: grid,
-      mode: NoteSortMode.custom,
-      orderedNoteIds: const ['note-1', 'remote-unknown', 'note-2', 'note-3'],
-      revision: 'remote-2',
-      baseRevision: 'remote-2',
-      updatedAt: DateTime.utc(2026, 7, 24),
-      hydrated: true,
-    );
-    await service.applyRemoteSnapshotForTesting(concurrentRemote);
+      final concurrentRemote = NoteOrderSnapshot(
+        context: grid,
+        mode: NoteSortMode.custom,
+        orderedNoteIds: const ['note-1', 'remote-unknown', 'note-2', 'note-3'],
+        revision: 'remote-2',
+        baseRevision: 'remote-2',
+        updatedAt: service
+            .snapshotFor(grid)
+            .updatedAt
+            .add(const Duration(seconds: 1)),
+        hydrated: true,
+      );
+      await service.applyRemoteSnapshotForTesting(concurrentRemote);
 
-    final rebased = service.snapshotFor(grid);
-    expect(rebased.orderedNoteIds, [
-      'note-3',
-      'note-1',
-      'remote-unknown',
-      'note-2',
-    ]);
-    expect(rebased.baseRevision, 'remote-2');
-    expect(rebased.dirty, isTrue);
-  });
+      final rebased = service.snapshotFor(grid);
+      expect(rebased.orderedNoteIds, [
+        'note-1',
+        'remote-unknown',
+        'note-2',
+        'note-3',
+      ]);
+      expect(rebased.baseRevision, 'remote-2');
+      expect(rebased.dirty, isFalse);
+      expect(rebased.revision, concurrentRemote.revision);
+      expect(rebased.updatedAt, concurrentRemote.updatedAt);
+      expect(await database.query(NoteSortService.operationTableName), isEmpty);
+    },
+  );
 
   test('remote events are applied in listener delivery order', () async {
     final firstStarted = Completer<void>();
@@ -944,64 +1459,62 @@ void main() {
     expect(service.snapshotFor(grid).orderedNoteIds, ['newer']);
   });
 
-  test('committed drag rebases its move over deferred remote state', () async {
-    NoteSortService.canReceiveCloudOverride = true;
-    NoteSortService.canPushCloudOverride = false;
-    for (var id = 1; id <= 3; id++) {
-      await _insertNote(
-        database,
-        id: id,
-        updatedAt: DateTime.utc(2026, 7, 25 - id),
+  test(
+    'committed drag retains its newer version over delayed remote state',
+    () async {
+      NoteSortService.canReceiveCloudOverride = true;
+      NoteSortService.canPushCloudOverride = false;
+      for (var id = 1; id <= 3; id++) {
+        await _insertNote(
+          database,
+          id: id,
+          updatedAt: DateTime.utc(2026, 7, 25 - id),
+        );
+      }
+      await service.applyRemoteSnapshotForTesting(
+        NoteOrderSnapshot(
+          context: grid,
+          mode: NoteSortMode.custom,
+          orderedNoteIds: const ['note-1', 'note-2', 'note-3'],
+          revision: 'drag-base',
+          baseRevision: 'drag-base',
+          updatedAt: DateTime.utc(2026, 7, 23),
+          hydrated: true,
+        ),
       );
-    }
-    await service.applyRemoteSnapshotForTesting(
-      NoteOrderSnapshot(
-        context: grid,
-        mode: NoteSortMode.custom,
-        orderedNoteIds: const ['note-1', 'note-2', 'note-3'],
-        revision: 'drag-base',
-        baseRevision: 'drag-base',
-        updatedAt: DateTime.utc(2026, 7, 23),
-        hydrated: true,
-      ),
-    );
 
-    service.beginDrag(grid);
-    await service.receiveRemoteSnapshotForTesting(
-      NoteOrderSnapshot(
+      service.beginDrag(grid);
+      await service.receiveRemoteSnapshotForTesting(
+        NoteOrderSnapshot(
+          context: grid,
+          mode: NoteSortMode.custom,
+          orderedNoteIds: const [
+            'note-1',
+            'remote-during-drag',
+            'note-2',
+            'note-3',
+          ],
+          revision: 'drag-remote',
+          baseRevision: 'drag-remote',
+          updatedAt: DateTime.utc(2026, 7, 24),
+          hydrated: true,
+        ),
+      );
+      await service.reorderVisibleNotes(
         context: grid,
-        mode: NoteSortMode.custom,
-        orderedNoteIds: const [
-          'note-1',
-          'remote-during-drag',
-          'note-2',
-          'note-3',
-        ],
-        revision: 'drag-remote',
-        baseRevision: 'drag-remote',
-        updatedAt: DateTime.utc(2026, 7, 24),
-        hydrated: true,
-      ),
-    );
-    await service.reorderVisibleNotes(
-      context: grid,
-      draggedId: 3,
-      targetId: 1,
-      placeAfter: false,
-      visibleNotes: await Note.get(NoteType.all),
-    );
-    await service.endDrag(grid, committed: true);
+        draggedId: 3,
+        targetId: 1,
+        placeAfter: false,
+        visibleNotes: await Note.get(NoteType.all),
+      );
+      await service.endDrag(grid, committed: true);
 
-    final rebased = service.snapshotFor(grid);
-    expect(rebased.orderedNoteIds, [
-      'note-3',
-      'note-1',
-      'remote-during-drag',
-      'note-2',
-    ]);
-    expect(rebased.baseRevision, 'drag-remote');
-    expect(rebased.dirty, isTrue);
-  });
+      final rebased = service.snapshotFor(grid);
+      expect(rebased.orderedNoteIds, ['note-3', 'note-1', 'note-2']);
+      expect(rebased.baseRevision, 'drag-base');
+      expect(rebased.dirty, isTrue);
+    },
+  );
 
   test('cancelled drag applies deferred remote state directly', () async {
     await service.applyRemoteSnapshotForTesting(
@@ -1048,7 +1561,7 @@ void main() {
         visibleNotes: notes.where((note) => note.id! <= 2),
       );
       final before = await database.query('note');
-      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
       cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
       NoteSortService.cloudRepositoryOverride = cloud;
       NoteSortService.canReceiveCloudOverride = true;
@@ -1061,13 +1574,7 @@ void main() {
       await service.flushCloudForTesting();
 
       final repaired = service.snapshotFor(grid);
-      expect(repaired.orderedNoteIds, [
-        'hidden-note',
-        'note-2',
-        'note-1',
-        'note-3',
-        'note-4',
-      ]);
+      expect(repaired.orderedNoteIds, ['hidden-note', 'note-2', 'note-1']);
       expect(repaired.dirty, isFalse);
       expect(repaired.baseRevision, repaired.revision);
       expect(cloud.manifests[grid.key]?['revision'], repaired.revision);
@@ -1081,12 +1588,12 @@ void main() {
   );
 
   test(
-    'repair waits for hydration and upload permission and seeds a new folder',
+    'missing chunks never seed a replacement from a partial new folder',
     () async {
       final context = NoteOrderContext.label('__unlabeled__');
       await _insertNote(database, id: 1, updatedAt: DateTime.utc(2026, 7, 21));
       await _insertNote(database, id: 2, updatedAt: DateTime.utc(2026, 7, 22));
-      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
       cloud.manifests[context.key] = _orderManifest(context, 'broken', 2);
       NoteSortService.cloudRepositoryOverride = cloud;
       NoteSortService.canReceiveCloudOverride = true;
@@ -1102,9 +1609,17 @@ void main() {
       expect(cloud.writeCalls, 0);
       NoteSortService.canPushCloudOverride = true;
       await service.flushCloudForTesting();
-      expect(service.snapshotFor(context).orderedNoteIds, ['note-2', 'note-1']);
+      expect(service.snapshotFor(context).orderedNoteIds, isEmpty);
+      expect(cloud.manifests[context.key]?['revision'], 'broken');
+      expect(cloud.commitCalls, 0);
+      cloud.chunks['broken'] = [
+        _orderChunk('broken', ['note-1', 'note-2']),
+      ];
+      await service.flushCloudForTesting();
+      expect(service.snapshotFor(context).orderedNoteIds, ['note-1', 'note-2']);
+      expect(service.snapshotFor(context).revision, 'broken');
       expect(service.snapshotFor(context).dirty, isFalse);
-      expect(cloud.commitCalls, 1);
+      expect(cloud.commitCalls, 0);
     },
   );
 
@@ -1116,8 +1631,7 @@ void main() {
         if (laterMode != null) await service.setMode(grid, laterMode);
         final expectedIds = ['note-3', 'note-2', 'note-1', 'note-4'];
         expect(service.snapshotFor(grid).orderedNoteIds, expectedIds);
-        final cloud = _FakeNoteSortCloudRepository()
-          ..enforceBaseRevision = true;
+        final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
         cloud.manifests[grid.key] = {
           ..._orderManifest(grid, 'broken', 4),
           'sort_mode': NoteSortMode.createdNewest.name,
@@ -1153,7 +1667,7 @@ void main() {
 
   for (final pendingMembership in [false, true]) {
     test(
-      'repair preserves server mode with membership edits: $pendingMembership',
+      'missing order requires a newer local edit: $pendingMembership',
       () async {
         await _insertNote(
           database,
@@ -1176,8 +1690,7 @@ void main() {
             await service.applyNoteEventForTesting(event);
           }
         }
-        final cloud = _FakeNoteSortCloudRepository()
-          ..enforceBaseRevision = true;
+        final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
         cloud.manifests[grid.key] = {
           ..._orderManifest(grid, 'broken', 1),
           'sort_mode': NoteSortMode.createdNewest.name,
@@ -1193,11 +1706,24 @@ void main() {
         await service.flushCloudForTesting();
 
         final repaired = service.snapshotFor(grid);
-        expect(repaired.mode, NoteSortMode.createdNewest);
-        expect(repaired.orderedNoteIds, ['note-2']);
+        expect(repaired.mode, NoteSortMode.custom);
+        expect(
+          repaired.orderedNoteIds,
+          pendingMembership ? ['note-2'] : isEmpty,
+        );
         expect(repaired.dirty, isFalse);
-        expect(cloud.manifests[grid.key]?['sort_mode'], 'createdNewest');
-        expect(cloud.chunks[repaired.revision]!.single['note_ids'], ['note-2']);
+        expect(
+          cloud.manifests[grid.key]?['sort_mode'],
+          pendingMembership ? 'custom' : 'createdNewest',
+        );
+        expect(cloud.commitCalls, pendingMembership ? 2 : 0);
+        if (pendingMembership) {
+          expect(cloud.chunks[repaired.revision]!.single['note_ids'], [
+            'note-2',
+          ]);
+        } else {
+          expect(cloud.manifests[grid.key]?['revision'], 'broken');
+        }
         expect(
           await database.query(NoteSortService.operationTableName),
           isEmpty,
@@ -1216,7 +1742,7 @@ void main() {
         NoteSortService.operationTableName,
       );
       final cloud = _FakeNoteSortCloudRepository()
-        ..enforceBaseRevision = true
+        ..enforceVersion = true
         ..failWrites = true;
       cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
       NoteSortService.cloudRepositoryOverride = cloud;
@@ -1226,7 +1752,7 @@ void main() {
       await service.flushCloudForTesting();
       final candidate = service.snapshotFor(grid);
       expect(candidate.dirty, isTrue);
-      expect(candidate.baseRevision, 'broken');
+      expect(candidate.baseRevision, 'before-offline-edits');
       expect(candidate.orderedNoteIds, expectedIds);
       expect(
         await database.query(NoteSortService.operationTableName),
@@ -1246,15 +1772,20 @@ void main() {
   );
 
   test(
-    'another device winning repair is rebased without overwriting its order',
+    'a newer edit from another device wins during repair publication',
     () async {
       await _seedImportedOrder(database, grid);
       await service.setMode(grid, NoteSortMode.updatedNewest);
-      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
       cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
       cloud.beforeCommit = () async {
         if (cloud.commitCalls != 1) return;
-        cloud.manifests[grid.key] = _orderManifest(grid, 'other-device', 2);
+        cloud.manifests[grid.key] = _orderManifest(
+          grid,
+          'other-device',
+          2,
+          updatedAt: DateTime.now().toUtc().add(const Duration(days: 1)),
+        );
         cloud.chunks['other-device'] = [
           _orderChunk('other-device', ['remote-new', 'note-1']),
         ];
@@ -1269,20 +1800,21 @@ void main() {
         'remote-new',
         'note-1',
       ]);
-      expect(service.snapshotFor(grid).mode, NoteSortMode.updatedNewest);
-      expect(service.snapshotFor(grid).dirty, isTrue);
+      expect(service.snapshotFor(grid).mode, NoteSortMode.custom);
+      expect(service.snapshotFor(grid).dirty, isFalse);
       await service.flushCloudForTesting();
       expect(service.snapshotFor(grid).dirty, isFalse);
-      expect(cloud.commitCalls, 2);
+      expect(cloud.commitCalls, 1);
     },
   );
 
   test('local changes during repair upload remain pending and supersede the candidate', () async {
     await _seedImportedOrder(database, grid);
+    await service.setMode(grid, NoteSortMode.updatedNewest);
     final started = Completer<void>();
     final release = Completer<void>();
     final cloud = _FakeNoteSortCloudRepository()
-      ..enforceBaseRevision = true
+      ..enforceVersion = true
       ..writeStarted = started
       ..writeBarrier = release;
     cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 4);
@@ -1379,49 +1911,26 @@ void main() {
     },
   );
 
-  test('upload waits until earlier cleanup of its revision finishes', () async {
-    final started = Completer<void>();
-    final release = Completer<void>();
-    final cloud = _FakeNoteSortCloudRepository()
-      ..deleteStarted = started
-      ..deleteBarrier = release;
-    NoteSortService.cloudRepositoryOverride = cloud;
-    NoteSortService.canReceiveCloudOverride = true;
-    NoteSortService.canPushCloudOverride = true;
-    final snapshot = service.snapshotFor(grid).copyWith(dirty: true);
-    await _insertCleanup(
-      database,
-      contextKey: grid.key,
-      revision: snapshot.revision,
-      chunkCount: 1,
-    );
-    final cleanup = service.drainCloudCleanupForTesting();
-    await started.future;
-    final upload = service.uploadSnapshotWithRetryForTesting(snapshot);
-    await pumpEventQueue();
-    expect(cloud.writeCalls, 0);
-    release.complete();
-    await Future.wait([cleanup, upload]);
-    expect(cloud.manifests[grid.key]?['revision'], snapshot.revision);
-    expect(cloud.chunks.containsKey(snapshot.revision), isTrue);
-  });
-
   test(
-    'no-base conflict with missing chunks recovers without another edit',
+    'a newer local edit publishes even without a common Firebase base',
     () async {
-      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
       cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 1);
       NoteSortService.cloudRepositoryOverride = cloud;
       NoteSortService.canReceiveCloudOverride = true;
       NoteSortService.canPushCloudOverride = true;
       final snapshot = service
           .snapshotFor(grid)
-          .copyWith(orderedNoteIds: ['local-note'], dirty: true);
+          .copyWith(
+            orderedNoteIds: ['local-note'],
+            updatedAt: DateTime.now().toUtc(),
+            dirty: true,
+          );
       await service.uploadSnapshotWithRetryForTesting(snapshot);
       await _waitUntil(() => !service.snapshotFor(grid).dirty);
       expect(service.snapshotFor(grid).dirty, isFalse);
       expect(service.snapshotFor(grid).orderedNoteIds, ['local-note']);
-      expect(cloud.commitCalls, 2);
+      expect(cloud.commitCalls, 1);
       expect(
         cloud.manifests[grid.key]?['revision'],
         service.snapshotFor(grid).revision,
@@ -1453,7 +1962,7 @@ void main() {
   test(
     'repair rechecks a changed manifest before staging a replacement',
     () async {
-      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
       cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 1);
       NoteSortService.cloudRepositoryOverride = cloud;
       NoteSortService.canReceiveCloudOverride = true;
@@ -1480,7 +1989,8 @@ void main() {
   test(
     'repair cannot overwrite an unsupported schema introduced during upload',
     () async {
-      final cloud = _FakeNoteSortCloudRepository()..enforceBaseRevision = true;
+      await service.setMode(grid, NoteSortMode.updatedNewest);
+      final cloud = _FakeNoteSortCloudRepository()..enforceVersion = true;
       cloud.manifests[grid.key] = _orderManifest(grid, 'broken', 1);
       cloud.beforeCommit = () async {
         cloud.manifests[grid.key]!['schema_version'] = 99;
@@ -1498,7 +2008,7 @@ void main() {
     },
   );
 
-  test('failed chunk upload is journaled and cleaned safely', () async {
+  test('failed chunk upload retains source data for retry', () async {
     final cloud = _FakeNoteSortCloudRepository()..failWrites = true;
     NoteSortService.cloudRepositoryOverride = cloud;
     NoteSortService.canReceiveCloudOverride = true;
@@ -1513,11 +2023,12 @@ void main() {
 
     await service.uploadSnapshotForTesting(snapshot);
 
-    expect(cloud.deletedRevisions, ['candidate-revision']);
+    expect(cloud.deletedRevisions, isEmpty);
+    expect(cloud.chunks['candidate-revision'], isNotNull);
     expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
   });
 
-  test('manifest conflict removes candidate chunks before rebase', () async {
+  test('manifest conflict retains chunks for concurrent publication', () async {
     final cloud = _FakeNoteSortCloudRepository()..conflictOnCommit = true;
     NoteSortService.cloudRepositoryOverride = cloud;
     NoteSortService.canReceiveCloudOverride = true;
@@ -1533,12 +2044,12 @@ void main() {
 
     await service.uploadSnapshotForTesting(snapshot);
 
-    expect(cloud.deletedRevisions, ['conflicting-revision']);
+    expect(cloud.deletedRevisions, isEmpty);
     expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
   });
 
   test(
-    'manifest conflict rebases once and commits the local operation',
+    'retry after a conflict preserves the newer local source revision',
     () async {
       final cloud = _FakeNoteSortCloudRepository()..conflictCount = 1;
       cloud.manifests[grid.key] = {
@@ -1546,6 +2057,7 @@ void main() {
         'context_key': grid.key,
         'sort_mode': NoteSortMode.updatedNewest.name,
         'revision': 'remote-2',
+        'updated_at': Timestamp.fromDate(DateTime.utc(2026, 7, 24)),
         'chunk_count': 1,
         'note_count': 1,
       };
@@ -1582,7 +2094,9 @@ void main() {
 
       final committed = service.snapshotFor(grid);
       expect(cloud.commitCalls, 2);
-      expect(cloud.deletedRevisions, contains(conflicting.revision));
+      expect(cloud.deletedRevisions, isEmpty);
+      expect(committed.revision, conflicting.revision);
+      expect(committed.updatedAt, conflicting.updatedAt);
       expect(committed.mode, NoteSortMode.custom);
       expect(committed.orderedNoteIds, ['remote-note']);
       expect(committed.baseRevision, committed.revision);
@@ -1628,7 +2142,7 @@ void main() {
     await upload;
 
     expect(cloud.commitCalls, 0);
-    expect(cloud.deletedRevisions, ['superseded-candidate']);
+    expect(cloud.deletedRevisions, isEmpty);
     expect(service.snapshotFor(grid).revision, 'remote-2');
     expect(service.snapshotFor(grid).dirty, isFalse);
     expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
@@ -1652,61 +2166,22 @@ void main() {
     expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
   });
 
-  test('failed cleanup remains durable with retry metadata', () async {
-    final cloud = _FakeNoteSortCloudRepository()..failDeletes = true;
+  test('legacy cleanup requests retain old source chunks', () async {
+    final cloud = _FakeNoteSortCloudRepository();
+    cloud.chunks['old-source'] = [
+      _orderChunk('old-source', ['one']),
+    ];
     NoteSortService.cloudRepositoryOverride = cloud;
     NoteSortService.canReceiveCloudOverride = true;
     await _insertCleanup(
       database,
       contextKey: grid.key,
-      revision: 'orphan-revision',
-      chunkCount: 2,
-    );
-
-    await service.drainCloudCleanupForTesting();
-
-    final rows = await database.query(NoteSortService.cleanupTableName);
-    expect(rows, hasLength(1));
-    expect(rows.single['revision'], 'orphan-revision');
-    expect(rows.single['retry_count'], 1);
-    expect(rows.single['next_retry_at'], isNotNull);
-  });
-
-  test('cleanup requested during a drain runs another pass', () async {
-    final deleteStarted = Completer<void>();
-    final releaseDelete = Completer<void>();
-    final cloud = _FakeNoteSortCloudRepository()
-      ..deleteStarted = deleteStarted
-      ..deleteBarrier = releaseDelete;
-    NoteSortService.cloudRepositoryOverride = cloud;
-    NoteSortService.canReceiveCloudOverride = true;
-    await _insertCleanup(
-      database,
-      contextKey: grid.key,
-      revision: 'cleanup-first',
-      chunkCount: 1,
-    );
-
-    final firstDrain = service.drainCloudCleanupForTesting();
-    await deleteStarted.future;
-    await _insertCleanup(
-      database,
-      contextKey: grid.key,
-      revision: 'cleanup-second',
+      revision: 'old-source',
       chunkCount: 1,
     );
     await service.drainCloudCleanupForTesting();
-
-    releaseDelete.complete();
-    await firstDrain;
-    await _waitUntil(
-      () => cloud.deletedRevisions.toSet().containsAll({
-        'cleanup-first',
-        'cleanup-second',
-      }),
-    );
-
-    expect(cloud.deletedRevisions, ['cleanup-first', 'cleanup-second']);
+    expect(cloud.deletedRevisions, isEmpty);
+    expect(cloud.chunks['old-source'], isNotNull);
     expect(await database.query(NoteSortService.cleanupTableName), isEmpty);
   });
 
@@ -1742,7 +2217,7 @@ void main() {
   test('conflict recovery failure retries without another mutation', () async {
     final cloud = _FakeNoteSortCloudRepository()
       ..conflictCount = 1
-      ..failReadManifestCalls.add(2);
+      ..failReadManifestCalls.add(1);
     NoteSortService.cloudRepositoryOverride = cloud;
     NoteSortService.canReceiveCloudOverride = true;
     NoteSortService.canPushCloudOverride = true;
@@ -2213,15 +2688,27 @@ Future<void> _insertCleanup(
 Map<String, dynamic> _orderManifest(
   NoteOrderContext context,
   String revision,
-  int noteCount,
-) => {
-  'schema_version': NoteSortService.cloudSchemaVersion,
-  'context_key': context.key,
-  'sort_mode': NoteSortMode.custom.name,
-  'revision': revision,
-  'chunk_count': 1,
-  'note_count': noteCount,
-};
+  int noteCount, {
+  DateTime? updatedAt,
+}) => FirebaseSyncVersion.bind(
+  {
+    'schema_version': NoteSortService.cloudSchemaVersion,
+    'context_key': context.key,
+    'sort_mode': NoteSortMode.custom.name,
+    'revision': revision,
+    'chunk_count': 1,
+    'note_count': noteCount,
+    'updated_at': Timestamp.fromDate(DateTime.utc(2026, 7, 24)),
+  },
+  SyncVersion(
+    kind: SyncEntityKind.order,
+    entityId: context.key,
+    revisionId: revision,
+    modifiedAtMicros:
+        (updatedAt ?? DateTime.utc(2026, 7, 24)).microsecondsSinceEpoch,
+    deleted: false,
+  ),
+);
 
 Map<String, dynamic> _orderChunk(String revision, List<String> ids) => {
   'schema_version': NoteSortService.cloudSchemaVersion,
@@ -2246,7 +2733,7 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
   int readManifestCalls = 0;
   Object? writeError;
   Object? readChunksError;
-  bool enforceBaseRevision = false;
+  bool enforceVersion = false;
   Future<void> Function()? beforeCommit;
   void Function()? onReadManifest;
   Completer<void>? writeStarted;
@@ -2263,31 +2750,45 @@ class _FakeNoteSortCloudRepository implements NoteSortCloudRepository {
     required String? baseRevision,
     required int chunkCount,
     required int noteCount,
+    required DateTime updatedAt,
+    required String contentHash,
+    bool deleted = false,
   }) async {
     commitCalls++;
     await beforeCommit?.call();
     final previous = manifests[contextKey];
     if (conflictOnCommit ||
         conflictCount > 0 ||
-        (enforceBaseRevision &&
+        (enforceVersion &&
             previous != null &&
             (previous['schema_version'] != schemaVersion ||
-                (previous['revision'] != baseRevision &&
-                    previous['revision'] != revision)))) {
+                NoteSortCloudManifest.version(previous).compareTo(
+                      SyncVersion(
+                        kind: SyncEntityKind.order,
+                        entityId: contextKey,
+                        revisionId: revision,
+                        modifiedAtMicros: updatedAt.microsecondsSinceEpoch,
+                        deleted: deleted,
+                      ),
+                    ) >
+                    0))) {
       if (conflictCount > 0) conflictCount--;
       return NoteSortCloudCommitResult.conflict(
         previousRevision: previous?['revision'] as String?,
         previousChunkCount: previous?['chunk_count'] as int? ?? 0,
       );
     }
-    manifests[contextKey] = {
-      'schema_version': schemaVersion,
-      'context_key': contextKey,
-      'sort_mode': sortMode,
-      'revision': revision,
-      'chunk_count': chunkCount,
-      'note_count': noteCount,
-    };
+    manifests[contextKey] = NoteSortCloudManifest.encode(
+      schemaVersion: schemaVersion,
+      contextKey: contextKey,
+      sortMode: sortMode,
+      revision: revision,
+      updatedAt: updatedAt,
+      chunkCount: chunkCount,
+      noteCount: noteCount,
+      contentHash: contentHash,
+      deleted: deleted,
+    );
     return NoteSortCloudCommitResult.committed(
       previousRevision: previous?['revision'] as String?,
       previousChunkCount: previous?['chunk_count'] as int? ?? 0,

@@ -32,7 +32,9 @@ function isLocalDevelopmentOrigin(origin: string): boolean {
 	}
 }
 
-export function isPublicStatsOriginAllowed(origin: string | undefined): boolean {
+export function isPublicStatsOriginAllowed(
+	origin: string | undefined,
+): boolean {
 	if (!origin) return true;
 	return (
 		exactAllowedOrigins.has(origin) ||
@@ -67,13 +69,14 @@ export function createPublicStatsPayload(
 	value: unknown,
 	color: "blue" | "red" = "blue",
 ): PublicStatsPayload {
-	const message = typeof value === "string" && value.trim() ? value.trim() : "0";
+	const message =
+		typeof value === "string" && value.trim() ? value.trim() : "0";
 	const metric = compactPublicUserCount(message);
 	return {
 		schemaVersion: 1,
 		label: "users",
 		message,
 		color,
-		...(metric ? {metric} : {}),
+		...(metric ? { metric } : {}),
 	};
 }

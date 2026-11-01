@@ -25,51 +25,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// On mobile platforms, uses flutter_secure_storage which leverages
 /// platform secure storage (Keychain, Keystore).
 ///
-/// On web, data is encrypted with an in-app key before storing in
-/// localStorage. This provides a layer of protection against casual
-/// cross-site access, though it is not equivalent to native platform
-/// secure storage.
+/// Browser encryption material lives only in this Dart session. It is never
+/// recoverable using an application-wide build secret.
 class E2EESecureStorage {
-  // In-app encryption key for web storage (256-bit AES key as hex string)
-  // Set via --dart-define=WEB_STORAGE_KEY=<64-char-hex-string>
-  // This adds a layer of obfuscation - cross-site scripts cannot read
-  // the raw keys directly from localStorage without knowing this key.
-  static const String _webStorageKeyHex = String.fromEnvironment(
-    'WEB_STORAGE_KEY',
-    defaultValue: '',
-  );
+  // Kept for auth callers: a memory-only browser session needs no build key.
+  static bool get isWebStorageConfigured => true;
 
-  /// Check if web storage is properly configured (WEB_STORAGE_KEY is set)
-  static bool get isWebStorageConfigured {
-    return _webStorageKeyHex.isNotEmpty && _webStorageKeyHex.length == 64;
-  }
-
-  static Uint8List? _webStorageKeyCache;
-  static Uint8List get _webStorageKey {
-    if (_webStorageKeyCache != null) return _webStorageKeyCache!;
-    if (_webStorageKeyHex.isEmpty || _webStorageKeyHex.length != 64) {
-      throw StateError(
-        'WEB_STORAGE_KEY must be a 64-character hex string (256 bits). '
-        'Set it via --dart-define=WEB_STORAGE_KEY=<your-key>',
-      );
-    }
-    // Parse hex string to bytes
-    final bytes = <int>[];
-    for (var i = 0; i < 64; i += 2) {
-      bytes.add(int.parse(_webStorageKeyHex.substring(i, i + 2), radix: 16));
-    }
-    _webStorageKeyCache = Uint8List.fromList(bytes);
-    return _webStorageKeyCache!;
-  }
-
-  static final _webCipher = AesGcm.with256bits();
   static E2EESecureStorage? _instance;
   static E2EESecureStorage get instance {
     _instance ??= E2EESecureStorage._();
     return _instance!;
   }
 
-  E2EESecureStorage._();
+  E2EESecureStorage._()
+    : legacyKeyHex = const String.fromEnvironment('WEB_STORAGE_KEY');
+
+  @visibleForTesting
+  E2EESecureStorage.forTesting({this.legacyKeyHex = ''});
+
+  // Read-only compatibility with the previously released browser format.
+  // Never use this public build constant to persist new secrets.
+  final String legacyKeyHex;
+  String? _legacyUid;
+  bool get needsLegacyRecoverySetup => _legacyUid != null;
 
   // Storage keys
   static const String _devicePrivateKeyKey = 'e2ee_device_private_key';
@@ -79,6 +57,41 @@ class E2EESecureStorage {
   static const String _rememberDeviceKey = 'e2ee_remember_device';
   static const String _deviceStatusKey = 'e2ee_device_status';
   static const String _signInProgressKey = 'e2ee_sign_in_progress';
+  static const String _approvalRequestKey = 'e2ee_approval_request';
+  static const String _acceptedApprovalKey = 'e2ee_accepted_approval';
+  static const _keys = [
+    _devicePrivateKeyKey,
+    _devicePublicKeyKey,
+    _deviceIdKey,
+    _umkCacheKey,
+    _rememberDeviceKey,
+    _deviceStatusKey,
+    _signInProgressKey,
+    _approvalRequestKey,
+    _acceptedApprovalKey,
+  ];
+
+  Future<void> clearApprovalRequest() => _mutations.run('keys', () async {
+    requireCloudOperation();
+    await _deleteDirect(_approvalRequestKey);
+    await _deleteDirect(_acceptedApprovalKey);
+  });
+
+  Future<String?> getApprovalRequest() => _read(_approvalRequestKey);
+  Future<void> storeApprovalRequest(String value) =>
+      _mutations.run('keys', () async {
+        requireCloudOperation();
+        await _deleteDirect(_acceptedApprovalKey);
+        await _writeDirect(_approvalRequestKey, value);
+      });
+
+  /// Remove the one-time QR secret without invalidating the accepted fingerprint.
+  Future<void> completeApprovalRequest(String publicRequest) =>
+      _write(_approvalRequestKey, publicRequest);
+
+  Future<String?> getAcceptedApproval() => _read(_acceptedApprovalKey);
+  Future<void> storeAcceptedApproval(String fingerprint) =>
+      _write(_acceptedApprovalKey, fingerprint);
 
   // Secure storage instance (for native platforms)
   // flutter_secure_storage v10+ uses custom ciphers on Android by default,
@@ -89,14 +102,109 @@ class E2EESecureStorage {
   );
 
   // Web fallback
-  SharedPreferences? _webPrefs;
+  final Map<String, String> _webMemory = {};
   final _mutations = AsyncKeyedSerializer<String>();
 
   /// Initialize storage (required for web platform).
-  Future<void> init() async {
-    if (kIsWeb) {
-      _webPrefs = await SharedPreferences.getInstance();
+  Future<void> init({String? uid, bool Function()? isCurrent}) async {
+    if (!kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    // Remember existing accounts without destroying their only recovery source.
+    for (final scope in FirebaseLocalDataScope.values) {
+      final owner = prefs.getString(scope.preferenceKey('user_uid'));
+      if (owner != null &&
+          _keys.any((key) => prefs.containsKey(scope.secureStorageKey(key)))) {
+        await prefs.setBool(
+          scope.preferenceKey('e2ee_initialized.$owner'),
+          true,
+        );
+      }
     }
+    final scope = FirebaseBackend.localDataScope;
+    if (uid == null ||
+        prefs.getString(scope.preferenceKey('user_uid')) != uid ||
+        _legacyUid == uid ||
+        _webMemory.containsKey(_scopedKey(_devicePrivateKeyKey))) {
+      return;
+    }
+    final legacy = <String, String>{};
+    // Approval proofs belong to the new protocol and are never imported.
+    for (final key in _keys.take(7)) {
+      final value = prefs.getString(scope.secureStorageKey(key));
+      if (value != null) legacy[key] = value;
+    }
+    if (legacy.isEmpty) return;
+    try {
+      if (!RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(legacyKeyHex)) {
+        throw const FormatException('Legacy browser recovery key unavailable');
+      }
+      final key = SecretKey([
+        for (var i = 0; i < 64; i += 2)
+          int.parse(legacyKeyHex.substring(i, i + 2), radix: 16),
+      ]);
+      final restored = <String, String>{};
+      for (final entry in legacy.entries) {
+        final bytes = base64Decode(entry.value);
+        if (bytes.length < 28) {
+          throw const FormatException('Invalid legacy key');
+        }
+        final plaintext = await AesGcm.with256bits().decrypt(
+          SecretBox(
+            bytes.sublist(12, bytes.length - 16),
+            nonce: bytes.sublist(0, 12),
+            mac: Mac(bytes.sublist(bytes.length - 16)),
+          ),
+          secretKey: key,
+        );
+        restored[_scopedKey(entry.key)] = utf8.decode(plaintext);
+      }
+      requireCloudOperation();
+      if (isCurrent != null && !isCurrent()) return;
+      _webMemory.addAll(restored);
+      _legacyUid = uid;
+    } catch (_) {
+      // Preserve the source and fail closed; never bootstrap a replacement UMK.
+      throw const SecureStorageUnavailable(
+        'Legacy browser recovery unavailable',
+      );
+    }
+  }
+
+  /// Called only after recovery has been saved or successfully exercised.
+  Future<void> completeLegacyRecovery(String uid) =>
+      _mutations.run('keys', () async {
+        if (!kIsWeb) return;
+        requireCloudOperation();
+        final prefs = await SharedPreferences.getInstance();
+        final scope = FirebaseBackend.localDataScope;
+        if (prefs.getString(scope.preferenceKey('user_uid')) != uid) return;
+        for (final key in _keys) {
+          requireCloudOperation();
+          await prefs.remove(scope.secureStorageKey(key));
+        }
+        _legacyUid = null;
+      });
+
+  // Non-secret account history prevents browser-key migration/reload from
+  // silently bootstrapping a replacement library if device records disappear.
+  Future<void> rememberInitializedAccount(String uid) async {
+    if (!kIsWeb) return;
+    requireCloudOperation();
+    final key = FirebaseBackend.localDataScope.preferenceKey(
+      'e2ee_initialized.$uid',
+    );
+    final prefs = await SharedPreferences.getInstance();
+    requireCloudOperation();
+    await prefs.setBool(key, true);
+  }
+
+  Future<bool> wasAccountInitialized(String uid) async {
+    if (!kIsWeb) return false;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(
+          FirebaseBackend.localDataScope.preferenceKey('e2ee_initialized.$uid'),
+        ) ??
+        false;
   }
 
   /// Stores the device's private key.
@@ -160,6 +268,7 @@ class E2EESecureStorage {
   /// Retrieves the "remember this device" preference.
   /// Defaults to true if not set.
   Future<bool> getRememberDevice() async {
+    if (kIsWeb) return false;
     final value = await _read(_rememberDeviceKey);
     if (value == null) return true; // Default to remembering
     return value.toLowerCase() == 'true';
@@ -203,18 +312,11 @@ class E2EESecureStorage {
   /// Clears all E2EE data (for logout or key rotation).
   Future<void> clearAll() => _mutations.run('keys', () async {
     requireCloudOperation();
-    for (final key in [
-      _devicePrivateKeyKey,
-      _devicePublicKeyKey,
-      _deviceIdKey,
-      _umkCacheKey,
-      _rememberDeviceKey,
-      _deviceStatusKey,
-      _signInProgressKey,
-    ]) {
+    for (final key in _keys) {
       requireCloudOperation();
       await _deleteDirect(key);
     }
+    _legacyUid = null;
   });
 
   /// Checks if device keys exist.
@@ -236,16 +338,11 @@ class E2EESecureStorage {
     return true;
   }
 
-  // Platform-aware read (with decryption on web)
+  // Platform-aware read; browser values exist only in this session.
   Future<String?> _read(String key) async {
     final scopedKey = _scopedKey(key);
     if (kIsWeb) {
-      if (_webPrefs == null) {
-        throw const SecureStorageUnavailable('Web storage is not initialized');
-      }
-      final encrypted = _webPrefs?.getString(scopedKey);
-      if (encrypted == null) return null;
-      return await _webDecrypt(encrypted);
+      return _webMemory[scopedKey];
     }
     try {
       return await _secureStorage.read(key: scopedKey);
@@ -259,7 +356,7 @@ class E2EESecureStorage {
     }
   }
 
-  // Platform-aware write (with encryption on web)
+  // Platform-aware write; native values use secure storage.
   Future<void> _write(String key, String value) =>
       _mutations.run('keys', () async {
         requireCloudOperation();
@@ -269,12 +366,8 @@ class E2EESecureStorage {
   Future<void> _writeDirect(String key, String value) async {
     final scopedKey = _scopedKey(key);
     if (kIsWeb) {
-      final encrypted = await _webEncrypt(value);
       requireCloudOperation();
-      if (_webPrefs == null) {
-        throw const SecureStorageUnavailable('Web storage unavailable');
-      }
-      await _webPrefs!.setString(scopedKey, encrypted);
+      _webMemory[scopedKey] = value;
     } else {
       try {
         await _secureStorage.write(key: scopedKey, value: value);
@@ -288,53 +381,6 @@ class E2EESecureStorage {
     }
   }
 
-  // Encrypt value using in-app key for web storage
-  Future<String> _webEncrypt(String value) async {
-    final secretKey = SecretKey(_webStorageKey);
-    final nonce = _webCipher.newNonce();
-    final secretBox = await _webCipher.encrypt(
-      utf8.encode(value),
-      secretKey: secretKey,
-      nonce: nonce,
-    );
-    // Combine nonce + ciphertext + mac
-    final combined = Uint8List.fromList([
-      ...secretBox.nonce,
-      ...secretBox.cipherText,
-      ...secretBox.mac.bytes,
-    ]);
-    return base64Encode(combined);
-  }
-
-  // Decrypt value using in-app key for web storage
-  Future<String?> _webDecrypt(String encrypted) async {
-    try {
-      final combined = base64Decode(encrypted);
-      const nonceLength = 12;
-      const macLength = 16;
-      if (combined.length < nonceLength + macLength) {
-        // Invalid data or old unencrypted format - return null
-        throw const FormatException('Invalid encrypted key');
-      }
-      final nonce = combined.sublist(0, nonceLength);
-      final cipherText = combined.sublist(
-        nonceLength,
-        combined.length - macLength,
-      );
-      final macBytes = combined.sublist(combined.length - macLength);
-
-      final secretBox = SecretBox(cipherText, nonce: nonce, mac: Mac(macBytes));
-      final secretKey = SecretKey(_webStorageKey);
-      final plaintext = await _webCipher.decrypt(
-        secretBox,
-        secretKey: secretKey,
-      );
-      return utf8.decode(plaintext);
-    } catch (_) {
-      throw const FormatException('Stored key could not be decrypted');
-    }
-  }
-
   // Platform-aware delete
   Future<void> _delete(String key) => _mutations.run('keys', () async {
     requireCloudOperation();
@@ -344,7 +390,10 @@ class E2EESecureStorage {
   Future<void> _deleteDirect(String key) async {
     final scopedKey = _scopedKey(key);
     if (kIsWeb) {
-      await _webPrefs?.remove(scopedKey);
+      _webMemory.remove(scopedKey);
+      final prefs = await SharedPreferences.getInstance();
+      requireCloudOperation();
+      await prefs.remove(scopedKey);
     } else {
       await _secureStorage.delete(key: scopedKey);
     }

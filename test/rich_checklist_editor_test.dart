@@ -52,7 +52,7 @@ void main() {
         document: document,
       );
 
-      expect(find.byType(QuillEditor), findsOneWidget);
+      expect(find.bySubtype<QuillEditor>(), findsOneWidget);
       expect(
         find.byKey(const ValueKey('rich_checklist_toolbar')),
         findsNothing,
@@ -427,7 +427,7 @@ void main() {
       );
       expect(
         tester
-            .widget<QuillEditor>(find.byType(QuillEditor))
+            .widget<QuillEditor>(find.bySubtype<QuillEditor>())
             .controller
             .readOnly,
         note.readOnly || note.trashed,
@@ -582,7 +582,7 @@ void main() {
       ]),
     );
 
-    expect(find.byType(QuillEditor), findsOneWidget);
+    expect(find.bySubtype<QuillEditor>(), findsOneWidget);
     expect(find.byType(NoteEditorToolbar), findsOneWidget);
     expect(find.byType(TextSizeButton), findsOneWidget);
     expect(find.byType(QuillToolbarFontFamilyButton), findsNothing);
@@ -607,7 +607,7 @@ void main() {
     await tester.tap(find.text('Second', findRichText: true));
     await tester.pump();
 
-    expect(find.byType(QuillEditor), findsOneWidget);
+    expect(find.bySubtype<QuillEditor>(), findsOneWidget);
     final secondToolbar = tester.widget<NoteEditorToolbar>(
       find.byType(NoteEditorToolbar),
     );
@@ -631,9 +631,11 @@ void main() {
 
     await tester.tap(find.text('First', findRichText: true));
     await tester.pump();
-    final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final firstEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     final firstQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     final firstRawEditorState = firstQuillState.editableTextKey.currentState;
     expect(firstEditor.focusNode.hasFocus, isTrue);
@@ -643,9 +645,11 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final secondEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final secondEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     final secondQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     expect(secondQuillState, same(firstQuillState));
     expect(
@@ -676,9 +680,11 @@ void main() {
 
     await tester.tap(find.text('First', findRichText: true));
     await tester.pump();
-    final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final firstEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     final firstQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     final firstRawEditorState = firstQuillState.editableTextKey.currentState;
     expect(tester.testTextInput.isRegistered, isTrue);
@@ -688,9 +694,11 @@ void main() {
     await tester.pump();
 
     expect(find.byType(Dismissible), findsNWidgets(2));
-    final newItemEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final newItemEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     final newItemQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     expect(newItemQuillState, same(firstQuillState));
     expect(
@@ -741,9 +749,11 @@ void main() {
 
     await tester.tap(find.text('First', findRichText: true));
     await tester.pump();
-    final firstEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final firstEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     final firstQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     final firstRawEditorState = firstQuillState.editableTextKey.currentState;
 
@@ -760,9 +770,11 @@ void main() {
 
     expect(find.byType(Dismissible), findsNWidgets(2));
     expect(find.text('First', findRichText: true), findsOneWidget);
-    final newItemEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final newItemEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     final newItemQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     expect(newItemQuillState, same(firstQuillState));
     expect(
@@ -818,8 +830,10 @@ void main() {
 
     await tester.tap(find.text('First', findRichText: true));
     await tester.pump();
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    final quillState = tester.state<QuillEditorState>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
+    final quillState = tester.state<QuillEditorState>(
+      find.bySubtype<QuillEditor>(),
+    );
     final rawEditorState = quillState.editableTextKey.currentState;
 
     tester.testTextInput.updateEditingValue(
@@ -832,8 +846,12 @@ void main() {
     await tester.pump();
 
     expect(find.byType(Dismissible), findsNWidgets(2));
-    final splitEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    final splitState = tester.state<QuillEditorState>(find.byType(QuillEditor));
+    final splitEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
+    final splitState = tester.state<QuillEditorState>(
+      find.bySubtype<QuillEditor>(),
+    );
     expect(splitEditor.controller, same(editor.controller));
     expect(splitEditor.focusNode, same(editor.focusNode));
     expect(splitState, same(quillState));
@@ -858,8 +876,10 @@ void main() {
 
     await tester.tap(find.text('First', findRichText: true));
     await tester.pump();
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    final quillState = tester.state<QuillEditorState>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
+    final quillState = tester.state<QuillEditorState>(
+      find.bySubtype<QuillEditor>(),
+    );
     final rawEditorState = quillState.editableTextKey.currentState;
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -867,8 +887,12 @@ void main() {
     await tester.pump();
 
     expect(find.byType(Dismissible), findsNWidgets(2));
-    final splitEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    final splitState = tester.state<QuillEditorState>(find.byType(QuillEditor));
+    final splitEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
+    final splitState = tester.state<QuillEditorState>(
+      find.bySubtype<QuillEditor>(),
+    );
     expect(splitEditor.controller, same(editor.controller));
     expect(splitEditor.focusNode, same(editor.focusNode));
     expect(splitState, same(quillState));
@@ -897,8 +921,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('checklist-text-lane-empty')));
     await tester.pump();
     await tester.pump();
-    final emptyEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
-    final quillState = tester.state<QuillEditorState>(find.byType(QuillEditor));
+    final emptyEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
+    final quillState = tester.state<QuillEditorState>(
+      find.bySubtype<QuillEditor>(),
+    );
     final rawEditorState = quillState.editableTextKey.currentState;
     expect(emptyEditor.controller.document.toPlainText(), '\n');
 
@@ -907,9 +935,11 @@ void main() {
     await tester.pump();
 
     expect(find.byType(Dismissible), findsOneWidget);
-    final previousEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final previousEditor = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     final previousQuillState = tester.state<QuillEditorState>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     expect(previousQuillState, same(quillState));
     expect(
@@ -948,7 +978,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('checklist-text-lane-empty')));
       await tester.pump();
       await tester.pump();
-      final emptyEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final emptyEditor = tester.widget<QuillEditor>(
+        find.bySubtype<QuillEditor>(),
+      );
       expect(emptyEditor.controller.document.toPlainText(), '$sentinel\n');
       expect(
         emptyEditor.controller.selection,
@@ -966,7 +998,7 @@ void main() {
 
       expect(find.byType(Dismissible), findsOneWidget);
       final previousEditor = tester.widget<QuillEditor>(
-        find.byType(QuillEditor),
+        find.bySubtype<QuillEditor>(),
       );
       expect(previousEditor.focusNode.hasFocus, isTrue);
       expect(tester.testTextInput.isRegistered, isTrue);
@@ -992,7 +1024,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('checklist-text-lane-only')));
       await tester.pump();
-      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
       tester.testTextInput.updateEditingValue(
         const TextEditingValue(
           text: '\n',
@@ -1060,7 +1092,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('checklist-text-lane-only')));
       await tester.pump();
-      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
       editor.controller.formatSelection(Attribute.bold);
       tester.testTextInput.updateEditingValue(
         const TextEditingValue(
@@ -1124,7 +1156,9 @@ void main() {
         );
         await tester.pump();
 
-        final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+        final editor = tester.widget<QuillEditor>(
+          find.bySubtype<QuillEditor>(),
+        );
         editor.controller.formatSelection(Attribute.bold);
         tester.testTextInput.updateEditingValue(
           const TextEditingValue(
@@ -1192,7 +1226,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('checklist-text-lane-empty')));
       await tester.pump();
 
-      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
       tester.testTextInput.updateEditingValue(
         const TextEditingValue(
           text: '${sentinel}teh\n',
@@ -1293,7 +1327,7 @@ void main() {
 
     await tester.tap(find.text('First', findRichText: true));
     await tester.pump();
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     tester.testTextInput.updateEditingValue(
       const TextEditingValue(
         text: 'Firstx\n',
@@ -1333,7 +1367,7 @@ void main() {
     await tester.tap(find.text('abcdef', findRichText: true));
     await tester.pump();
     final controller = tester
-        .widget<QuillEditor>(find.byType(QuillEditor))
+        .widget<QuillEditor>(find.bySubtype<QuillEditor>())
         .controller;
     controller.updateSelection(
       const TextSelection.collapsed(offset: 2),
@@ -1376,7 +1410,7 @@ void main() {
     await tester.tap(find.text('First', findRichText: true));
     await tester.pump();
     final editorBeforeDrag = tester.widget<QuillEditor>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     final selectionBeforeDrag = editorBeforeDrag.controller.selection;
     expect(editorBeforeDrag.focusNode.hasFocus, isTrue);
@@ -1411,7 +1445,7 @@ void main() {
       (widget) => widget.runtimeType.toString().contains('DragItemProxy'),
     );
     expect(proxy, findsOneWidget);
-    expect(find.byType(QuillEditor), findsNothing);
+    expect(find.bySubtype<QuillEditor>(), findsNothing);
     final proxyMaterials = tester.widgetList<Material>(
       find.descendant(of: proxy, matching: find.byType(Material)),
     );
@@ -1435,14 +1469,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<QuillEditor>(find.byType(QuillEditor))
+          .widget<QuillEditor>(find.bySubtype<QuillEditor>())
           .controller
           .document
           .toPlainText(),
       'First\n',
     );
     final editorAfterDrag = tester.widget<QuillEditor>(
-      find.byType(QuillEditor),
+      find.bySubtype<QuillEditor>(),
     );
     expect(editorAfterDrag.focusNode.hasFocus, isTrue);
     expect(editorAfterDrag.controller.selection, selectionBeforeDrag);
@@ -1512,7 +1546,7 @@ void main() {
       SystemMouseCursors.click,
     );
 
-    await mouse.moveTo(tester.getCenter(find.byType(QuillEditor)));
+    await mouse.moveTo(tester.getCenter(find.bySubtype<QuillEditor>()));
     await tester.pump();
     expect(
       RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
@@ -2044,7 +2078,7 @@ void main() {
     expect(find.byType(MaterialBanner), findsNothing);
     expect(
       tester
-          .widget<QuillEditor>(find.byType(QuillEditor))
+          .widget<QuillEditor>(find.bySubtype<QuillEditor>())
           .controller
           .document
           .toPlainText(),
@@ -2075,7 +2109,7 @@ void main() {
     final note = _DeferredSaveNote(content: _content('Tasks', document.items));
     await _pumpEditor(tester, note: note, title: 'Tasks', document: document);
     final controller = tester
-        .widget<QuillEditor>(find.byType(QuillEditor))
+        .widget<QuillEditor>(find.bySubtype<QuillEditor>())
         .controller;
 
     controller.replaceText(
@@ -2142,7 +2176,7 @@ void main() {
       'Remote',
     );
     expect(find.byType(TextField), findsNothing);
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     expect(editor.controller.document.toPlainText(), 'Remote task\n');
     await tester.pump(const Duration(milliseconds: 1200));
     expect(note.saveCalls, 0);
@@ -2340,7 +2374,7 @@ void main() {
       );
       final collectionRowEditor = find.descendant(
         of: collectionEditor,
-        matching: find.byType(QuillEditor),
+        matching: find.bySubtype<QuillEditor>(),
       );
       expect(collectionRowEditor, findsOneWidget);
       expect(
@@ -2389,7 +2423,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 220));
       await tester.pump();
 
-      final normalEditor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final normalEditor = tester.widget<QuillEditor>(
+        find.bySubtype<QuillEditor>(),
+      );
       expect(
         normalEditor.controller.document.toPlainText(),
         'Groceries\nOat milk\n￼\nCalls\nCall Dad\nTail\n',
@@ -2539,7 +2575,7 @@ void main() {
     final editor = tester.widget<NoteEditor>(find.byType(NoteEditor));
     expect(editor.autoFocus, isTrue);
     expect(editor.deleteIfUnchanged, isTrue);
-    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final quill = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     expect(quill.controller.document.toDelta().toJson(), [
       {
         'insert': '\n',
@@ -2566,7 +2602,7 @@ void main() {
     await tester.tap(find.text('Create To-do'));
     await tester.pumpAndSettle();
 
-    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final quill = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     quill.controller.replaceText(
       0,
       0,
@@ -2599,7 +2635,7 @@ void main() {
     await tester.pumpWidget(_host(NoteEditor(note: note)));
     await tester.pumpAndSettle();
 
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     final lists = editor.config.customStyles?.lists;
     expect(lists?.style.height, 1.25);
     expect(lists?.verticalSpacing.top, 0);
@@ -2631,7 +2667,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(RichChecklistEditor), findsNothing);
-    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final quill = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     expect(quill.controller.document.toDelta().toJson().last['attributes'], {
       'list': 'unchecked',
     });
@@ -2713,7 +2749,7 @@ void main() {
     await mouse.up();
     await tester.pump();
     await tester.pump();
-    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final quill = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     expect(quill.controller.selection.baseOffset, inInclusiveRange(11, 22));
     expect(openChecklist, findsOneWidget);
     final secondPopupRect = tester.getRect(
@@ -2809,7 +2845,7 @@ void main() {
       await clickWithMouse(ordinaryText);
       await tester.pump();
       await tester.pump();
-      final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final quill = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
       expect(
         quill.controller.selection.baseOffset,
         lessThanOrEqualTo(ordinary.length),
@@ -2916,7 +2952,7 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     expect(openChecklist, findsOneWidget);
 
-    final quill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final quill = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     quill.focusNode.requestFocus();
     await tester.pump();
     await tester.pump(const Duration(seconds: 3));
@@ -2940,7 +2976,10 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(
-      tester.widget<QuillEditor>(find.byType(QuillEditor)).focusNode.hasFocus,
+      tester
+          .widget<QuillEditor>(find.bySubtype<QuillEditor>())
+          .focusNode
+          .hasFocus,
       isTrue,
     );
 
@@ -2963,7 +3002,9 @@ void main() {
       findsNothing,
     );
 
-    final sameVisitQuill = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final sameVisitQuill = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>(),
+    );
     sameVisitQuill.controller.updateSelection(
       const TextSelection.collapsed(offset: 3),
       ChangeSource.local,
@@ -2996,7 +3037,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NoteEditor), findsOneWidget);
     expect(
-      tester.widget<QuillEditor>(find.byType(QuillEditor)).controller.selection,
+      tester
+          .widget<QuillEditor>(find.bySubtype<QuillEditor>())
+          .controller
+          .selection,
       const TextSelection.collapsed(offset: 3),
     );
     expect(find.byKey(const ValueKey('open_focused_checklist')), findsNothing);
@@ -3104,7 +3148,7 @@ void main() {
         .widget<QuillEditor>(
           find.descendant(
             of: focusedEditor,
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           ),
         )
         .controller;
@@ -3132,7 +3176,7 @@ void main() {
     expect(find.byType(RichChecklistEditor), findsNothing);
     expect(
       tester
-          .widget<QuillEditor>(find.byType(QuillEditor))
+          .widget<QuillEditor>(find.bySubtype<QuillEditor>())
           .controller
           .document
           .toPlainText(),

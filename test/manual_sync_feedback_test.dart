@@ -1,3 +1,7 @@
+import 'package:better_keep/services/firebase_sync_preference.dart';
+import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/services/monetization/entitlements.dart';
+
 import 'dart:async';
 
 import 'package:better_keep/l10n/app_localizations.dart';
@@ -7,6 +11,7 @@ import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
@@ -17,6 +22,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   setUp(() {
+    NoteSortService.refreshOperationOverride = () async =>
+        SyncRefreshOutcome.complete;
+    NoteSortService().syncStatus.value = SyncProgress.idle;
     AuthService.cloudRecovery.stop();
     AuthService.cloudRecovery.setForeground(false);
     AppState.set('show_sync_progress', true);
@@ -26,6 +34,7 @@ void main() {
     LabelSyncService().syncStatus.value = SyncProgress.idle;
   });
   tearDown(() {
+    NoteSortService.refreshOperationOverride = null;
     NoteSyncService.refreshOperationOverride = null;
     LabelSyncService.refreshOperationOverride = null;
     AuthService.cloudRecovery.stop();
@@ -50,7 +59,120 @@ void main() {
     ),
   );
 
+  for (final width in [320.0, 390.0, 800.0]) {
+    testWidgets('long status stays above FAB at width $width and large text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final fabBottom = width == 800 ? 24.0 : 8.0;
+      const safeBottom = 34.0;
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: Size(width, 844),
+              padding: const EdgeInsets.only(bottom: safeBottom),
+              textScaler: const TextScaler.linear(2),
+            ),
+            child: Scaffold(
+              body: Stack(
+                fit: StackFit.expand,
+                children: [
+                  SyncProgressWidget(bottom: fabBottom + 64 + 12),
+                  Positioned(
+                    right: 24,
+                    bottom: fabBottom + safeBottom,
+                    child: SizedBox.square(
+                      dimension: 64,
+                      child: FloatingActionButton(
+                        onPressed: () {},
+                        child: const Icon(Icons.add),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      final request = SyncPresentation.instance.beginManual(() => true);
+      SyncPresentation.instance.finishManual(
+        request,
+        SyncRefreshOutcome.uploadRestricted,
+      );
+      await tester.pumpAndSettle();
+      final pill = tester.getRect(find.byKey(const ValueKey('sync_progress')));
+      final fab = tester.getRect(find.byType(FloatingActionButton));
+      expect(pill.overlaps(fab), isFalse);
+      expect(fab.top - pill.bottom, greaterThanOrEqualTo(12));
+      expect(pill.left, greaterThanOrEqualTo(16));
+      expect(pill.right, lessThanOrEqualTo(width - 16));
+      expect(
+        find.text('Saved on this device. Upgrade to Pro to sync changes.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   for (final cardEnabled in [true, false]) {
+    testWidgets(
+      'all-source pause shows provider guidance once, pill $cardEnabled',
+      (tester) async {
+        final previous = FirebaseSyncPreference.instanceOverride;
+        final snapshots = StreamController<FirebaseSyncSelection>.broadcast(
+          sync: true,
+        );
+        final preference = FirebaseSyncPreference(
+          currentUid: () => 'qa',
+          watch: (_) => snapshots.stream,
+          write: (_, enabled) async =>
+              FirebaseSyncSelection(enabled, confirmed: true),
+        );
+        FirebaseSyncPreference.instanceOverride = preference;
+        preference.bind('qa');
+        snapshots.add(
+          const FirebaseSyncSelection(
+            false,
+            provider: 'none',
+            confirmed: true,
+            firebaseDownloads: false,
+          ),
+        );
+        addTearDown(() async {
+          FirebaseSyncPreference.instanceOverride = previous;
+          preference.dispose();
+          await snapshots.close();
+        });
+        AppState.set('show_sync_progress', cardEnabled);
+        await mountFeedback(tester);
+        final context = tester.element(find.byType(SyncRefreshButton));
+        final request = SyncPresentation.instance.beginManual(() => true);
+        SyncPresentation.instance.finishManual(
+          request,
+          SyncRefreshOutcome.deferred,
+        );
+        showSyncRefreshFeedback(context, SyncRefreshOutcome.deferred);
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Choose one provider to sync your notes across devices.'),
+          findsOneWidget,
+        );
+        expect(find.text('Sync paused. Please retry.'), findsNothing);
+        expect(
+          find.byType(SnackBar),
+          cardEnabled ? findsNothing : findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
     testWidgets(
       'offline refresh shows one message with progress card $cardEnabled',
       (tester) async {
@@ -127,36 +249,52 @@ void main() {
       },
     );
 
-    testWidgets(
-      'restricted result is visible with progress card $cardEnabled',
-      (tester) async {
-        tester.view.reset();
-        tester.view.physicalSize = const Size(320, 640);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        AppState.set('show_sync_progress', cardEnabled);
-        await mountFeedback(tester);
-        final context = tester.element(find.byType(SyncRefreshButton));
-        final request = SyncPresentation.instance.beginManual(() => true);
-        SyncPresentation.instance.finishManual(
-          request,
-          SyncRefreshOutcome.uploadRestricted,
-        );
-        showSyncRefreshFeedback(context, SyncRefreshOutcome.uploadRestricted);
-        await tester.pumpAndSettle();
-        expect(
-          find.text('Changes saved on this device. Uploading requires Pro.'),
-          findsOneWidget,
-        );
-        expect(find.text('Sync complete'), findsNothing);
-        expect(
-          find.byType(SnackBar),
-          cardEnabled ? findsNothing : findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox());
-      },
-    );
+    for (final access in [
+      Entitlements.free,
+      Entitlements.lite,
+      Entitlements.pro,
+    ]) {
+      testWidgets(
+        'restricted result for $access with progress card $cardEnabled',
+        (tester) async {
+          final entitlements =
+              PlanService.instance.entitlementsNotifier
+                  as ValueNotifier<Entitlements>;
+          final previous = entitlements.value;
+          entitlements.value = access;
+          addTearDown(() => entitlements.value = previous);
+          tester.view.reset();
+          tester.view.physicalSize = const Size(320, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          AppState.set('show_sync_progress', cardEnabled);
+          await mountFeedback(tester);
+          final context = tester.element(find.byType(SyncRefreshButton));
+          final request = SyncPresentation.instance.beginManual(() => true);
+          SyncPresentation.instance.finishManual(
+            request,
+            SyncRefreshOutcome.uploadRestricted,
+          );
+          showSyncRefreshFeedback(context, SyncRefreshOutcome.uploadRestricted);
+          await tester.pumpAndSettle();
+          expect(
+            find.text(
+              access.realtimeCloudSync
+                  ? 'Saved on this device. Enable Better Keep cloud to sync changes.'
+                  : 'Saved on this device. Upgrade to Pro to sync changes.',
+            ),
+            findsOneWidget,
+          );
+          expect(find.text('Sync complete'), findsNothing);
+          expect(
+            find.byType(SnackBar),
+            cardEnabled ? findsNothing : findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
     testWidgets(
       'first frame acknowledges refresh with progress card $cardEnabled',
       (tester) async {
@@ -284,6 +422,88 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(SyncPresentation.instance.value.isActive, isFalse);
+  });
+
+  test(
+    'external refresh starts independently of an unavailable Firebase attempt',
+    () async {
+      final firebase = Completer<SyncRefreshOutcome>();
+      var started = false, labelsCalled = false;
+      final refresh = runManualSyncRefresh(
+        notes: () => firebase.future,
+        labels: () async {
+          labelsCalled = true;
+          return SyncRefreshOutcome.complete;
+        },
+        external: () async {
+          started = true;
+          return SyncRefreshOutcome.complete;
+        },
+      );
+      await pumpEventQueue();
+      expect(started, true);
+      firebase.complete(SyncRefreshOutcome.unavailable);
+      expect(await refresh, SyncRefreshOutcome.unavailable);
+      expect(labelsCalled, false);
+    },
+  );
+
+  test('external-only refresh never attempts Firebase and preserves provider failures', () async {
+    for (final outcome in SyncRefreshOutcome.values) {
+      expect(
+        await runManualSyncRefresh(
+          firebaseEnabled: false,
+          notes: () async => throw StateError('Firebase must stay paused'),
+          labels: () async => throw StateError('Firebase must stay paused'),
+          external: () async => outcome,
+        ),
+        outcome,
+      );
+    }
+    expect(
+      await runManualSyncRefresh(
+        firebaseEnabled: false,
+        notes: () async => throw StateError('Unexpected'),
+        labels: () async => throw StateError('Unexpected'),
+        external: () async => null,
+      ),
+      SyncRefreshOutcome.deferred,
+    );
+  });
+
+  test('ordering runs after successful data reconciliation and its failure is preserved', () async {
+    final calls = <String>[];
+    expect(
+      await runManualSyncRefresh(
+        notes: () async {
+          calls.add('notes');
+          return SyncRefreshOutcome.complete;
+        },
+        labels: () async {
+          calls.add('labels');
+          return SyncRefreshOutcome.complete;
+        },
+        ordering: () async {
+          calls.add('ordering');
+          return SyncRefreshOutcome.failed;
+        },
+      ),
+      SyncRefreshOutcome.failed,
+    );
+    expect(calls, ['notes', 'labels', 'ordering']);
+    calls.clear();
+    expect(
+      await runManualSyncRefresh(
+        notes: () async => SyncRefreshOutcome.deferred,
+        labels: () async => SyncRefreshOutcome.complete,
+        ordering: () async {
+          calls.add('ordering');
+          return SyncRefreshOutcome.complete;
+        },
+      ),
+      SyncRefreshOutcome.deferred,
+    );
+    expect(calls, isEmpty);
   });
 
   test('label failures reach the shared refresh result', () async {

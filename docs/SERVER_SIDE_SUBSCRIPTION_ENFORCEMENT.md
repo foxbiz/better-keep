@@ -41,7 +41,7 @@ We now use **Firebase Auth Custom Claims** to enforce subscription status at the
 
 ```typescript
 {
-  plan: 'pro' | 'free',      // Current subscription plan
+  plan: 'pro' | 'lite' | 'free',      // Current subscription plan
   planExpiresAt: number      // Expiration timestamp in milliseconds (null for free)
 }
 ```
@@ -55,16 +55,16 @@ We now use **Firebase Auth Custom Claims** to enforce subscription status at the
 ```typescript
 async function setSubscriptionClaims(
   userId: string,
-  plan: 'pro' | 'free',
+  plan: 'pro' | 'lite' | 'free',
   expiresAt: Date | null,
 ): Promise<void>;
 ```
 
 **Updated Functions:**
 
-- `verifyGooglePlayPurchase()` - Sets Pro claims after successful verification
+- `verifyGooglePlayPurchase()` - Sets verified Lite or Pro claims after successful verification
 - `playStoreWebhook` - Updates claims on subscription lifecycle events
-- `verifyRazorpaySubscription()` - Sets Pro claims after payment verification
+- `verifyRazorpaySubscription()` - Sets verified Lite or Pro claims after payment verification
 - `razorpayWebhook` - Updates claims on Razorpay subscription events
 
 #### 2. Firestore Security Rules (`firestore.rules`)

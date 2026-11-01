@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:better_keep/components/device_verification.dart';
+import 'package:better_keep/services/e2ee/device_verification.dart';
+
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
 import 'package:better_keep/pages/account_recovery_page.dart';
@@ -25,8 +29,13 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
   final DeviceManager _deviceManager = DeviceManager.instance;
   final RecoveryKeyService _recoveryKeyService = RecoveryKeyService.instance;
   Timer? _refreshTimer;
+  DeviceVerificationRequest? _verification;
+  DeviceApprovalReceipt? _receipt;
+  bool _verifyingReceipt = false;
+  bool _refreshing = false;
+  bool _loadingVerification = false;
+  bool _verificationFailed = false;
   bool _rememberDevice = true;
-  String? _masterDeviceName;
   bool _hasRecoveryKey = false;
   bool _isCheckingStatus = false;
   bool _isCancellingRequest = false;
@@ -35,7 +44,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
   void initState() {
     super.initState();
     _loadRememberDevicePreference();
-    _loadMasterDeviceInfo();
+    _loadVerification();
     _checkRecoveryKey();
     // Periodically check for approval (silently)
     _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
@@ -54,34 +63,45 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
     super.dispose();
   }
 
+  Future<void> _loadVerification({bool regenerate = false}) async {
+    if (_loadingVerification ||
+        _e2eeService.status.value == E2EEStatus.revoked) {
+      return;
+    }
+    setState(() {
+      _loadingVerification = true;
+      _verificationFailed = false;
+    });
+    try {
+      final request = await _deviceManager.ensureVerificationRequest(
+        regenerate: regenerate,
+      );
+      final receipt = await _deviceManager.pendingApprovalReceipt();
+      if (receipt?.hasPairingProof == true) {
+        await _e2eeService.refreshStatus();
+        if (!_deviceManager.hasUMK.value) {
+          throw StateError('Device pairing could not be authenticated');
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _verification = request;
+          _receipt = receipt?.hasPairingProof == true ? null : receipt;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _verificationFailed = true);
+    } finally {
+      if (mounted) setState(() => _loadingVerification = false);
+    }
+  }
+
   Future<void> _loadRememberDevicePreference() async {
     final remember = await E2EESecureStorage.instance.getRememberDevice();
     if (mounted) {
       setState(() {
         _rememberDevice = remember;
       });
-    }
-  }
-
-  Future<void> _loadMasterDeviceInfo() async {
-    try {
-      final devices = await _deviceManager.getDevices();
-      // Find the first approved device (master device) by approval date
-      final approvedDevices = devices.where((d) => d.isApproved).toList()
-        ..sort((a, b) {
-          final aApproved = a.approvedAt ?? a.createdAt;
-          final bApproved = b.approvedAt ?? b.createdAt;
-          return aApproved.compareTo(bApproved);
-        });
-
-      if (approvedDevices.isNotEmpty && mounted) {
-        setState(() {
-          _masterDeviceName =
-              '${approvedDevices.first.name} (${approvedDevices.first.platform})';
-        });
-      }
-    } catch (_) {
-      // Ignore errors, we'll just not show the device name
     }
   }
 
@@ -126,9 +146,53 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
 
   /// Silent refresh - called by periodic timer, no snackbar feedback
   Future<void> _silentRefreshStatus() async {
-    await _e2eeService.refreshStatus();
-    if (mounted) {
-      setState(() {});
+    if (_refreshing || _loadingVerification || _verifyingReceipt) return;
+    _refreshing = true;
+    try {
+      await _e2eeService.refreshStatus();
+      final receipt = await _deviceManager.pendingApprovalReceipt();
+      if (mounted) {
+        setState(() {
+          _receipt = receipt?.hasPairingProof == true ? null : receipt;
+          _verificationFailed =
+              receipt?.hasPairingProof == true && !_deviceManager.hasUMK.value;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        // A failed read does not invalidate the last verified request/receipt.
+        // Expiration and request binding are still checked before approval.
+        setState(() {
+          if (_verification == null && _receipt == null) {
+            _verificationFailed = true;
+          }
+        });
+      }
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _verifyReceipt() async {
+    final receipt = _receipt;
+    if (receipt == null || _verifyingReceipt) return;
+    setState(() => _verifyingReceipt = true);
+    try {
+      final verified = await showDeviceReceiptVerificationDialog(
+        context,
+        receipt,
+      );
+      if (!mounted || verified == null) return;
+      await _deviceManager.acceptVerifiedApproval(verified);
+      await _e2eeService.recheckCloudReadinessAfterDeviceChange();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.deviceVerificationRetry)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _verifyingReceipt = false);
     }
   }
 
@@ -164,14 +228,10 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
     setState(() => _isCancellingRequest = true);
 
     try {
-      // Delete the device registration and sign out
-      final deviceId = await E2EESecureStorage.instance.getDeviceId();
-      if (deviceId != null) {
-        try {
-          await _deviceManager.revokeDevice(deviceId);
-        } catch (_) {
-          // Device might not exist, that's ok
-        }
+      try {
+        await _deviceManager.cancelApprovalRequest();
+      } catch (_) {
+        /* Local keys are discarded even if cancellation is offline. */
       }
       await E2EESecureStorage.instance.clearAll();
       await AuthService.signOut();
@@ -188,6 +248,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
       await _deviceManager.requestReapproval();
       _e2eeService.status.value = E2EEStatus.pendingApproval;
       _deviceManager.clearRevokedFlag();
+      await _loadVerification();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.reapprovalRequestSent)),
@@ -206,183 +267,166 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
     }
   }
 
+  Future<void> _showMoreOptions() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, updateSheet) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  context.l10n.moreOptions,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              if (_hasRecoveryKey)
+                ListTile(
+                  leading: const Icon(Icons.key_outlined),
+                  title: Text(context.l10n.recoverWithPassphrase),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _recoverWithPassphrase();
+                  },
+                ),
+              if (_e2eeService.status.value != E2EEStatus.revoked &&
+                  !_deviceManager.wasRevoked.value) ...[
+                ListTile(
+                  leading: const Icon(Icons.refresh),
+                  title: Text(context.l10n.checkStatus),
+                  enabled: !_isCheckingStatus,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _checkApprovalStatus();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.qr_code_2),
+                  title: Text(context.l10n.newVerificationCode),
+                  enabled: !_loadingVerification && !_verifyingReceipt,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _loadVerification(regenerate: true);
+                  },
+                ),
+              ],
+              if (kIsWeb)
+                ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: Text(context.l10n.encryption),
+                  subtitle: Text(context.l10n.browserEncryptionSessionOnly),
+                )
+              else
+                SwitchListTile(
+                  secondary: const Icon(Icons.devices_outlined),
+                  title: Text(context.l10n.rememberThisDevice),
+                  subtitle: Text(context.l10n.deviceRemovedOnSignOut),
+                  value: _rememberDevice,
+                  onChanged: (value) {
+                    _setRememberDevice(value);
+                    updateSheet(() {});
+                  },
+                ),
+              const Divider(indent: 16, endIndent: 16),
+              ListTile(
+                leading: const Icon(Icons.restart_alt),
+                title: Text(context.l10n.startFresh),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const StartFreshConfirmationPage(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final isRevoked =
         _e2eeService.status.value == E2EEStatus.revoked ||
         _deviceManager.wasRevoked.value;
-    final colorScheme = Theme.of(context).colorScheme;
-
+    final hasReceipt = _receipt?.isValidAt(DateTime.now()) == true;
     return AuthScaffold(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            isRevoked
-                ? context.l10n.deviceRevoked
-                : context.l10n.waitingForApprovalTitle,
-            style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          if (isRevoked)
-            Text(
-              context.l10n.deviceRevokedDescription,
-              style: Theme.of(context).textTheme.bodyLarge
-                  ?.copyWith(color: colorScheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-          if (!isRevoked) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: 200,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  minHeight: 6,
-                  backgroundColor: colorScheme.primary.withValues(alpha: 0.2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            if (_masterDeviceName != null) ...[
-              Text(
-                context.l10n.pleaseApproveFrom,
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.smartphone, color: colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        _masterDeviceName!,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.primary,
-                            ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else
-              Text(
-                context.l10n.waitingForApprovalFromDevice,
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: colorScheme.onSurfaceVariant),
-              ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Checkbox(
-                  value: _rememberDevice,
-                  onChanged: (value) => _setRememberDevice(value ?? true),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(context.l10n.rememberThisDevice),
-                      Text(
-                        context.l10n.deviceRemovedOnSignOut,
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: colorScheme.onSurfaceVariant),
-                      ),
-                    ],
+      showLogo: false,
+      child: DeviceApprovalPanel(
+        title: isRevoked
+            ? context.l10n.deviceRevoked
+            : hasReceipt
+            ? context.l10n.verifyTrustedDevice
+            : context.l10n.verifyNewDevice,
+        icon: isRevoked ? Icons.lock_outline : Icons.devices_outlined,
+        onMoreOptions: _isCancellingRequest ? null : _showMoreOptions,
+        onCancel: _isCancellingRequest ? null : _cancelRequest,
+        cancelLabel: _isCancellingRequest
+            ? context.l10n.pleaseWait
+            : isRevoked
+            ? context.l10n.signOut
+            : context.l10n.cancel,
+        child: isRevoked
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    context.l10n.deviceRevokedDescription,
+                    textAlign: TextAlign.center,
                   ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 24),
-          if (_hasRecoveryKey) ...[
-            TextButton.icon(
-              onPressed: _recoverWithPassphrase,
-              icon: const Icon(Icons.key),
-              label: Text(context.l10n.recoverWithPassphrase),
-            ),
-            const SizedBox(height: 8),
-          ],
-          // Start Fresh option - for users who can't access primary device
-          TextButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const StartFreshConfirmationPage(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.restart_alt),
-            label: Text(context.l10n.startFresh),
-          ),
-          const SizedBox(height: 8),
-          if (isRevoked) ...[
-            // Show re-approval button for revoked devices
-            if (_isRequestingReapproval)
-              const CircularProgressIndicator()
-            else
-              ElevatedButton.icon(
-                onPressed: _requestReapproval,
-                icon: const Icon(Icons.refresh),
-                label: Text(context.l10n.requestReapproval),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: _isRequestingReapproval
+                        ? null
+                        : _requestReapproval,
+                    icon: const Icon(Icons.refresh),
+                    label: Text(
+                      _isRequestingReapproval
+                          ? context.l10n.pleaseWait
+                          : context.l10n.requestReapproval,
+                    ),
+                  ),
+                ],
+              )
+            : hasReceipt
+            ? DeviceReceiptVerificationPrompt(
+                key: const ValueKey('receipt-verification-prompt'),
+                receipt: _receipt!,
+                onVerify: _verifyReceipt,
+              )
+            : _verification != null && !_verificationFailed
+            ? DeviceVerificationCard(
+                request: _verification!,
+                onRegenerate: _loadingVerification
+                    ? null
+                    : () => _loadVerification(regenerate: true),
+              )
+            : _loadingVerification
+            ? const Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    context.l10n.deviceVerificationRetry,
+                    textAlign: TextAlign.center,
+                  ),
+                  TextButton(
+                    onPressed: () => _loadVerification(regenerate: true),
+                    child: Text(context.l10n.newVerificationCode),
+                  ),
+                ],
               ),
-            const SizedBox(height: 16),
-          ] else ...[
-            // Manual check button for pending approval
-            ElevatedButton.icon(
-              onPressed: _isCheckingStatus ? null : _checkApprovalStatus,
-              icon: _isCheckingStatus
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh),
-              label: Text(
-                _isCheckingStatus
-                    ? context.l10n.checkingStatus
-                    : context.l10n.checkStatus,
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          OutlinedButton.icon(
-            onPressed: _isCancellingRequest ? null : _cancelRequest,
-            icon: _isCancellingRequest
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(isRevoked ? Icons.logout : Icons.cancel),
-            label: Text(
-              _isCancellingRequest
-                  ? context.l10n.pleaseWait
-                  : (isRevoked
-                        ? context.l10n.signOut
-                        : context.l10n.cancelRequest),
-            ),
-          ),
-        ],
       ),
     );
   }

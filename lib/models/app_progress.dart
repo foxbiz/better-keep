@@ -37,6 +37,8 @@ enum SyncPhase {
   unavailable,
   waitingForApproval,
   signInRequired,
+  providerSetupRequired,
+  storageFull,
   deferred,
   uploadRestricted,
   resuming,
@@ -75,7 +77,8 @@ class SyncProgress {
 
   bool get isEmpty => phase == SyncPhase.idle;
   bool get isSuccess => phase == SyncPhase.complete;
-  bool get isFailure => phase == SyncPhase.failed;
+  bool get isFailure =>
+      phase == SyncPhase.failed || phase == SyncPhase.storageFull;
   bool get isActive => const {
     SyncPhase.checkingConnection,
     SyncPhase.preparing,

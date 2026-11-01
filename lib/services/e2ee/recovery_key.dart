@@ -35,7 +35,7 @@ enum KdfAlgorithm {
   pbkdf2,
 }
 
-enum RecoveryKeyFailureKind { incorrectPassphrase }
+enum RecoveryKeyFailureKind { incorrectPassphrase, alreadyExists }
 
 class RecoveryKeyException implements Exception {
   const RecoveryKeyException(this.kind);
@@ -258,7 +258,44 @@ class RecoveryKeyService {
   Future<void> createRecoveryKey(String passphrase, {String? hint}) =>
       _runForCurrentAccount(() => _createRecoveryKey(passphrase, hint: hint));
 
-  Future<void> _createRecoveryKey(String passphrase, {String? hint}) async {
+  Future<void> verifyLegacyRecovery(String passphrase) => _runForCurrentAccount(
+    () async {
+      final snapshot = await readCloudDocument(
+        _recoveryKeyRef,
+        isCurrent: captureCloudOperation(),
+      );
+      if (!snapshot.exists) throw StateError('Recovery key unavailable');
+      final data = RecoveryKeyData.fromFirestore(snapshot.data()!);
+      final recovered = await _tryDecryptWithAlgorithms(
+        passphrase,
+        base64Decode(data.salt),
+        data,
+      );
+      requireCloudOperation();
+      final current = _deviceManager.getUMK();
+      if (recovered == null ||
+          current == null ||
+          !listEquals(recovered, current)) {
+        throw const RecoveryKeyException(
+          RecoveryKeyFailureKind.incorrectPassphrase,
+        );
+      }
+      final latest = await readCloudDocument(
+        _recoveryKeyRef,
+        isCurrent: captureCloudOperation(),
+      );
+      if (!mapEquals(latest.data(), snapshot.data())) {
+        throw const RecoveryKeyException(RecoveryKeyFailureKind.alreadyExists);
+      }
+      await _secureStorage.completeLegacyRecovery(_userRef.id);
+    },
+  );
+
+  Future<void> _createRecoveryKey(
+    String passphrase, {
+    String? hint,
+    Map<String, dynamic>? replacing,
+  }) async {
     if (_currentUser == null) throw StateError('User not logged in');
 
     final umk = _deviceManager.getUMK();
@@ -296,8 +333,19 @@ class RecoveryKeyService {
       kdfAlgorithm: kdfAlgorithm,
     );
 
-    await _recoveryKeyRef.set(recoveryData.toFirestore());
+    final ref = _recoveryKeyRef;
+    await _firestore.runTransaction((transaction) async {
+      final existing = await transaction.get(ref);
+      requireCloudOperation();
+      if (replacing == null
+          ? existing.exists
+          : !mapEquals(existing.data(), replacing)) {
+        throw const RecoveryKeyException(RecoveryKeyFailureKind.alreadyExists);
+      }
+      transaction.set(ref, recoveryData.toFirestore());
+    });
 
+    await _secureStorage.completeLegacyRecovery(_userRef.id);
     AppLogger.log('E2EE: Recovery key created with $kdfAlgorithm');
   }
 
@@ -321,15 +369,28 @@ class RecoveryKeyService {
     String newPassphrase, {
     String? hint,
   }) async {
-    // Verify current passphrase first
-    final isValid = await verifyPassphrase(currentPassphrase);
-    if (!isValid) {
+    final snapshot = await readCloudDocument(
+      _recoveryKeyRef,
+      isCurrent: captureCloudOperation(),
+    );
+    if (!snapshot.exists) throw StateError('Recovery key unavailable');
+    final data = RecoveryKeyData.fromFirestore(snapshot.data()!);
+    final recovered = await _tryDecryptWithAlgorithms(
+      currentPassphrase,
+      base64Decode(data.salt),
+      data,
+    );
+    if (recovered == null || !listEquals(recovered, _deviceManager.getUMK())) {
       throw const RecoveryKeyException(
         RecoveryKeyFailureKind.incorrectPassphrase,
       );
     }
 
-    await createRecoveryKey(newPassphrase, hint: hint);
+    await _createRecoveryKey(
+      newPassphrase,
+      hint: hint,
+      replacing: snapshot.data(),
+    );
     AppLogger.log('E2EE: Recovery key updated');
   }
 
@@ -464,10 +525,15 @@ class RecoveryKeyService {
       keyPair.privateKey,
       keyPair.publicKey,
     );
-    final wrappedResult = await AuthenticatedCipher.encryptString(
-      base64Encode(umk),
-      sharedSecret,
-    );
+    late CipherResultString wrappedResult;
+    try {
+      wrappedResult = await AuthenticatedCipher.encryptString(
+        base64Encode(umk),
+        sharedSecret,
+      );
+    } finally {
+      sharedSecret.fillRange(0, sharedSecret.length, 0);
+    }
 
     // Get device name
     final deviceName = await DeviceInfo.getDeviceName();
@@ -498,6 +564,8 @@ class RecoveryKeyService {
     await _secureStorage.storeDevicePrivateKey(keyPair.privateKey);
     await _secureStorage.storeDevicePublicKey(keyPair.publicKey);
     await _secureStorage.storeDeviceId(deviceId);
+    await _secureStorage.clearApprovalRequest();
+    await _secureStorage.rememberInitializedAccount(_userRef.id);
     await _secureStorage.cacheUnwrappedUMK(umk);
     await _secureStorage.cacheDeviceStatus('approved');
     requireCloudOperation();
@@ -509,6 +577,7 @@ class RecoveryKeyService {
     // Start listening for status changes and pending approvals
     await _deviceManager.startListeningForCurrentDevice();
 
+    await _secureStorage.completeLegacyRecovery(_userRef.id);
     AppLogger.log('E2EE: Device registered with recovered UMK');
   }
 

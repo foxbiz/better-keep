@@ -96,6 +96,7 @@ const suites = {
 				"test/firebase_emulator_config_test.dart",
 				"test/firebase_emulator_google_auth_test.dart",
 				"test/firebase_emulator_host_test.dart",
+				"test/firebase_storage_emulator_transport_test.dart",
 				"test/firebase_environment_banner_test.dart",
 				"test/firebase_local_data_isolation_test.dart",
 				"test/firebase_selection_screen_test.dart",
@@ -292,6 +293,16 @@ const suites = {
 			suiteStep("hosting"),
 		],
 	),
+	"image-share": defineSuite("Run image sharing regression tests.", () => [
+		flutterTests([
+			"test/shared_image_note_service_test.dart",
+			"test/ios_image_share_inbox_test.dart",
+			"test/image_attachment_preparation_service_test.dart",
+			"test/intent_handler_pending_test.dart",
+		]),
+		processStep("node", ["--test", "test/tool/image_share_native_test.mjs"]),
+		processStep("node", ["--test", "test/tool/image_share_signing_test.mjs"]),
+	]),
 	"ios-build-policy": defineSuite("Run iOS build policy tests.", () => [
 		processStep("node", [
 			"--test",
@@ -327,6 +338,7 @@ const suites = {
 		suiteStep("macos-build-policy"),
 		suiteStep("windows-build-policy"),
 		suiteStep("database-migrations"),
+		suiteStep("image-share"),
 		suiteStep("web-release"),
 		suiteStep("keep-import"),
 		suiteStep("review-prompts"),

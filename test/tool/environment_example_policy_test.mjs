@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const environmentExamples = [
+  ".env.example",
 	"admin-site/.env.example",
 	"functions/.env.example",
+	"functions/.secret.local.example",
 ];
 
 function environmentAssignments(path) {

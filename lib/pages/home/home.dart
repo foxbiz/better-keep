@@ -1,3 +1,5 @@
+import 'package:better_keep/services/e2ee/secure_storage.dart';
+
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
@@ -69,6 +71,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   bool _searchMode = false;
   bool _shrinkDrawer = false;
   bool _hasPendingApprovals = false;
+  bool _recoveryPromptShown = false;
   int _approvalCheckGeneration = 0;
   bool _isBubbleMenuOpen = false;
 
@@ -307,13 +310,18 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   Future<void> _checkRecoveryKeySetup() async {
     // Use post-frame callback to show dialog after widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _recoveryPromptShown) return;
       if (E2EEService.instance.needsRecoveryKeySetup.value) {
+        _recoveryPromptShown = true;
         // Reset the flag
         E2EEService.instance.needsRecoveryKeySetup.value = false;
 
         // Show recovery key setup page
         if (mounted) {
-          final result = await showSetupRecoveryKeyPage(context);
+          final result = await showSetupRecoveryKeyPage(
+            context,
+            legacyRecovery: E2EESecureStorage.instance.needsLegacyRecoverySetup,
+          );
           if (result == true && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -366,6 +374,13 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final showCreateButton =
+        !_selectionMode && AppState.showNotes == NoteType.all && !_searchMode;
+    final fabBottom =
+        8.0 +
+        (kIsWeb || Platform.isWindows || Platform.isMacOS || Platform.isLinux
+            ? 16.0
+            : 0.0);
     return PopScope(
       canPop: !_searchMode && !_selectionMode && AppState.currentFolder == null,
       onPopInvokedWithResult: (didPop, _) {
@@ -469,43 +484,25 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
-                  const SyncProgressWidget(),
+                  // Keep long status messages above the create button. The
+                  // expanded creation menu takes priority over transient status.
+                  if (!_isBubbleMenuOpen)
+                    SyncProgressWidget(
+                      bottom: showCreateButton ? fabBottom + _fabSize + 12 : 32,
+                    ),
                   // FAB with opacity/scale animation
                   Positioned(
                     right: 24,
-                    bottom:
-                        8 +
-                        MediaQuery.of(context).padding.bottom +
-                        // Extra margin for non-mobile platforms
-                        (kIsWeb ||
-                                (!kIsWeb &&
-                                    (Platform.isWindows ||
-                                        Platform.isMacOS ||
-                                        Platform.isLinux))
-                            ? 16
-                            : 0),
+                    bottom: fabBottom + MediaQuery.paddingOf(context).bottom,
                     child: AnimatedOpacity(
-                      opacity:
-                          _selectionMode ||
-                              AppState.showNotes != NoteType.all ||
-                              _searchMode
-                          ? 0.0
-                          : 1.0,
+                      opacity: showCreateButton ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
                       child: AnimatedScale(
-                        scale:
-                            _selectionMode ||
-                                AppState.showNotes != NoteType.all ||
-                                _searchMode
-                            ? 0.0
-                            : 1.0,
+                        scale: showCreateButton ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutBack,
                         child: IgnorePointer(
-                          ignoring:
-                              _selectionMode ||
-                              AppState.showNotes != NoteType.all ||
-                              _searchMode,
+                          ignoring: !showCreateButton,
                           child: _buildBubbleMenu(),
                         ),
                       ),
@@ -918,10 +915,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     );
   }
 
+  static const double _fabSize = 64;
+
   Widget _buildBubbleMenu() {
     return BubbleMenu(
       fabIcon: Icons.add,
-      fabSize: 64,
+      fabSize: _fabSize,
       itemDistance: 110,
       itemSize: 56,
       onMenuStateChanged: (isOpen) {

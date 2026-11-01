@@ -1,5 +1,7 @@
 import 'package:better_keep/services/cloud_session_recovery.dart';
 
+import 'user_plan.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -23,6 +25,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart'
+    show ReplacementMode;
 import 'package:url_launcher/url_launcher.dart';
 
 export 'package:better_keep/services/monetization/purchase_feedback.dart';
@@ -50,7 +54,22 @@ class ProductIds {
   static const String proMonthlyIos = 'pro_monthly';
   static const String proYearlyIos = 'pro_yearly';
 
+  static const String liteSubscription = 'better_keep_lite';
+  static const String liteMonthlyIos = 'lite_monthly';
+  static const String liteYearlyIos = 'lite_yearly';
+
+  static String android(UserPlan plan) =>
+      plan == UserPlan.lite ? liteSubscription : proSubscription;
+  static String apple(UserPlan plan, bool yearly) => plan == UserPlan.lite
+      ? (yearly ? liteYearlyIos : liteMonthlyIos)
+      : (yearly ? proYearlyIos : proMonthlyIos);
+  static String basePlan(UserPlan plan, bool yearly) =>
+      '${plan.toStorageString()}-${yearly ? 'yearly' : 'monthly'}';
+
   static const List<String> subscriptions = [
+    liteSubscription,
+    liteMonthlyIos,
+    liteYearlyIos,
     proSubscription,
     proMonthlyIos,
     proYearlyIos,
@@ -145,6 +164,11 @@ const Map<RazorpayCurrency, Map<String, int>> razorpayPricing = {
     'monthly': 23000, // ₹230
     'yearly': 162500, // ₹1625
   },
+};
+
+const Map<RazorpayCurrency, Map<String, int>> razorpayLitePricing = {
+  RazorpayCurrency.usd: {'monthly': 149, 'yearly': 999},
+  RazorpayCurrency.inr: {'monthly': 11500, 'yearly': 81250},
 };
 
 /// Handles subscription purchases across platforms.
@@ -628,6 +652,7 @@ Expected IDs: ${ProductIds.all}
               final delivered = await _deliverPurchase(
                 purchase,
                 verifiedSubscription: verifyResult.subscription,
+                activeCheckout: belongsToActiveCheckout,
               );
               // Mark that we found a restored subscription
               if (purchase.status == PurchaseStatus.restored && delivered) {
@@ -1106,23 +1131,29 @@ Expected IDs: ${ProductIds.all}
   Future<bool> _deliverPurchase(
     PurchaseDetails purchase, {
     Map<String, dynamic>? verifiedSubscription,
+    bool activeCheckout = false,
   }) async {
     try {
       // Verify step already updates Firestore server-side with canonical
       // subscription data. Avoid overwriting it on the client with guessed values.
-      if (purchase.productID != ProductIds.proSubscription &&
-          purchase.productID != ProductIds.proMonthlyIos &&
-          purchase.productID != ProductIds.proYearlyIos) {
+      if (!ProductIds.subscriptions.contains(purchase.productID)) {
         return false;
       }
 
       // Refresh local subscription
       await PlanService.instance.refreshSubscription();
 
-      if (!PlanService.instance.status.isActiveProviderEntitlement) {
+      final verifiedStatus = parseVerifiedProviderEntitlement(
+        verifiedSubscription,
+      );
+      final current = PlanService.instance.status;
+      if (!current.isActiveProviderEntitlement ||
+          (activeCheckout &&
+              verifiedStatus != null &&
+              current.purchasePlatform == verifiedStatus.purchasePlatform &&
+              current.plan != verifiedStatus.plan)) {
         final payload = <String, dynamic>{
           ...?verifiedSubscription,
-          'plan': 'pro',
           'source': _isApplePlatform ? 'app_store' : 'play_store',
         };
         await PlanService.instance.applyVerifiedEntitlement(payload);
@@ -1142,16 +1173,24 @@ Expected IDs: ${ProductIds.all}
 
   /// Get display price for a base plan from IAP or Razorpay.
   /// Throws [ProductNotAvailableException] if product is not loaded.
-  String getDisplayPrice({required bool yearly}) {
+  Map<String, int> pricingFor(UserPlan plan, RazorpayCurrency currency) {
+    return (plan == UserPlan.lite
+        ? razorpayLitePricing
+        : razorpayPricing)[currency]!;
+  }
+
+  String getDisplayPrice({required bool yearly, UserPlan plan = UserPlan.pro}) {
     // For Razorpay platforms (web, Windows, Linux), return prices based on selected currency
     if (usesRazorpay) {
       final currency = selectedCurrency.value;
-      final pricing = razorpayPricing[currency]!;
+      final pricing = pricingFor(plan, currency);
       final amount = yearly ? pricing['yearly']! : pricing['monthly']!;
       // Format based on currency
       if (currency == RazorpayCurrency.inr) {
         // Format INR: ₹1,625 or ₹230
-        final formatted = (amount / 100).toStringAsFixed(0);
+        final formatted = (amount / 100).toStringAsFixed(
+          amount % 100 == 0 ? 0 : 2,
+        );
         final withCommas = formatted.replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (m) => '${m[1]},',
@@ -1165,9 +1204,7 @@ Expected IDs: ${ProductIds.all}
 
     // For iOS/macOS: look up separate monthly/yearly products directly
     if (_isApplePlatform) {
-      final iosProductId = yearly
-          ? ProductIds.proYearlyIos
-          : ProductIds.proMonthlyIos;
+      final iosProductId = ProductIds.apple(plan, yearly);
       final iosProduct = _products.cast<ProductDetails?>().firstWhere(
         (p) => p?.id == iosProductId,
         orElse: () => null,
@@ -1182,7 +1219,7 @@ Expected IDs: ${ProductIds.all}
 
     // Try to get price from loaded products (Android)
     final product = _products.cast<ProductDetails?>().firstWhere(
-      (p) => p?.id == ProductIds.proSubscription,
+      (p) => p?.id == ProductIds.android(plan),
       orElse: () => null,
     );
 
@@ -1194,9 +1231,7 @@ Expected IDs: ${ProductIds.all}
 
     // For Android subscriptions with base plans, extract price from subscription offers
     if (Platform.isAndroid && product is GooglePlayProductDetails) {
-      final basePlanId = yearly
-          ? ProductIds.basePlanYearly
-          : ProductIds.basePlanMonthly;
+      final basePlanId = ProductIds.basePlan(plan, yearly);
 
       final offers = product.productDetails.subscriptionOfferDetails;
       if (offers != null) {
@@ -1230,9 +1265,12 @@ Expected IDs: ${ProductIds.all}
   }
 
   /// Get display price safely, returns null if not available
-  String? getDisplayPriceSafe({required bool yearly}) {
+  String? getDisplayPriceSafe({
+    required bool yearly,
+    UserPlan plan = UserPlan.pro,
+  }) {
     try {
-      return getDisplayPrice(yearly: yearly);
+      return getDisplayPrice(yearly: yearly, plan: plan);
     } catch (_) {
       return null;
     }
@@ -1240,11 +1278,11 @@ Expected IDs: ${ProductIds.all}
 
   /// Get raw price values for calculating savings.
   /// Throws [ProductNotAvailableException] if product is not loaded.
-  (double, double) getRawPrices() {
+  (double, double) getRawPrices({UserPlan plan = UserPlan.pro}) {
     // For Razorpay platforms (web, Windows, Linux), return prices based on selected currency
     if (usesRazorpay) {
       final currency = selectedCurrency.value;
-      final pricing = razorpayPricing[currency]!;
+      final pricing = pricingFor(plan, currency);
       final divisor = currency == RazorpayCurrency.inr ? 100.0 : 100.0;
       return (pricing['monthly']! / divisor, pricing['yearly']! / divisor);
     }
@@ -1252,11 +1290,11 @@ Expected IDs: ${ProductIds.all}
     // For iOS/macOS: look up separate monthly/yearly products directly
     if (_isApplePlatform) {
       final monthlyProduct = _products.cast<ProductDetails?>().firstWhere(
-        (p) => p?.id == ProductIds.proMonthlyIos,
+        (p) => p?.id == ProductIds.apple(plan, false),
         orElse: () => null,
       );
       final yearlyProduct = _products.cast<ProductDetails?>().firstWhere(
-        (p) => p?.id == ProductIds.proYearlyIos,
+        (p) => p?.id == ProductIds.apple(plan, true),
         orElse: () => null,
       );
       if (monthlyProduct != null && yearlyProduct != null) {
@@ -1268,7 +1306,7 @@ Expected IDs: ${ProductIds.all}
     }
 
     final product = _products.cast<ProductDetails?>().firstWhere(
-      (p) => p?.id == ProductIds.proSubscription,
+      (p) => p?.id == ProductIds.android(plan),
       orElse: () => null,
     );
 
@@ -1292,9 +1330,10 @@ Expected IDs: ${ProductIds.all}
             for (final phase in phases) {
               if (phase.priceAmountMicros > 0) {
                 final priceInCurrency = phase.priceAmountMicros / 1000000.0;
-                if (offer.basePlanId == ProductIds.basePlanMonthly) {
+                if (offer.basePlanId == ProductIds.basePlan(plan, false)) {
                   monthlyPrice = priceInCurrency;
-                } else if (offer.basePlanId == ProductIds.basePlanYearly) {
+                } else if (offer.basePlanId ==
+                    ProductIds.basePlan(plan, true)) {
                   yearlyPrice = priceInCurrency;
                 }
                 break; // Use first non-zero price phase
@@ -1319,11 +1358,11 @@ Expected IDs: ${ProductIds.all}
     // For iOS/macOS: look up separate monthly/yearly products
     if (_isApplePlatform) {
       final monthlyProduct = _products.cast<ProductDetails?>().firstWhere(
-        (p) => p?.id == ProductIds.proMonthlyIos,
+        (p) => p?.id == ProductIds.apple(plan, false),
         orElse: () => null,
       );
       final yearlyProduct = _products.cast<ProductDetails?>().firstWhere(
-        (p) => p?.id == ProductIds.proYearlyIos,
+        (p) => p?.id == ProductIds.apple(plan, true),
         orElse: () => null,
       );
       if (monthlyProduct != null && yearlyProduct != null) {
@@ -1339,9 +1378,9 @@ Expected IDs: ${ProductIds.all}
   }
 
   /// Get raw prices safely, returns null if not available
-  (double, double)? getRawPricesSafe() {
+  (double, double)? getRawPricesSafe({UserPlan plan = UserPlan.pro}) {
     try {
-      return getRawPrices();
+      return getRawPrices(plan: plan);
     } catch (_) {
       return null;
     }
@@ -1349,8 +1388,8 @@ Expected IDs: ${ProductIds.all}
 
   /// Calculate save percentage for yearly vs monthly.
   /// Returns 0 if prices are not available.
-  int calculateSavePercentage() {
-    final prices = getRawPricesSafe();
+  int calculateSavePercentage({UserPlan plan = UserPlan.pro}) {
+    final prices = getRawPricesSafe(plan: plan);
     if (prices == null) return 0;
 
     final (monthlyPrice, yearlyPrice) = prices;
@@ -1370,10 +1409,12 @@ Expected IDs: ${ProductIds.all}
   ///
   /// For web/desktop: Uses Razorpay payment gateway
   /// For mobile: Uses in_app_purchase plugin
-  Future<PurchaseResult> purchaseSubscription({required bool yearly}) async {
-    final basePlanId = yearly
-        ? ProductIds.basePlanYearly
-        : ProductIds.basePlanMonthly;
+  Future<PurchaseResult> purchaseSubscription({
+    required bool yearly,
+    UserPlan plan = UserPlan.pro,
+  }) async {
+    if (!plan.isPaid) return PurchaseResult.failed('Choose a paid plan');
+    final basePlanId = ProductIds.basePlan(plan, yearly);
 
     final user = AuthService.currentUser;
     if (user == null) {
@@ -1391,7 +1432,7 @@ Expected IDs: ${ProductIds.all}
 
     // For web/desktop, use Razorpay
     if (usesRazorpay) {
-      return _purchaseWithRazorpay(yearly: yearly);
+      return _purchaseWithRazorpay(yearly: yearly, plan: plan);
     }
 
     if (purchaseProvider == PurchaseProvider.unavailable) {
@@ -1441,6 +1482,14 @@ Expected IDs: ${ProductIds.all}
           );
         }
         if (restored) {
+          if (PlanService.instance.status.plan != plan) {
+            return await _changePlaySubscription(
+              plan: plan,
+              yearly: yearly,
+              attemptId: attemptId,
+              uid: user.uid,
+            );
+          }
           AppLogger.log(
             'SubscriptionService: Active subscription found and restored',
           );
@@ -1470,13 +1519,31 @@ Expected IDs: ${ProductIds.all}
 
       if (existingCheck.hasSubscription) {
         isLoading.value = false;
-        _finishPurchaseAttempt(attemptId);
         if (!existingCheck.localEntitlementActive) {
+          _finishPurchaseAttempt(attemptId);
           return PurchaseResult.failed(
-            'Payment is confirmed but Pro activation is still pending.',
+            'Payment is confirmed but subscription activation is still pending.',
             outcome: PurchaseOutcome.activationPending,
           );
         }
+        if (PlanService.instance.status.plan != plan) {
+          if (!kIsWeb &&
+              Platform.isAndroid &&
+              PlanService.instance.status.isPlayStoreSubscription) {
+            return await _changePlaySubscription(
+              plan: plan,
+              yearly: yearly,
+              attemptId: attemptId,
+              uid: user.uid,
+            );
+          }
+          _finishPurchaseAttempt(attemptId);
+          return PurchaseResult.failed(
+            'Manage your existing subscription to change plans',
+            outcome: PurchaseOutcome.changePlanRequired,
+          );
+        }
+        _finishPurchaseAttempt(attemptId);
         if (existingCheck.restored) {
           return PurchaseResult.success(
             'Your subscription has been restored!',
@@ -1497,30 +1564,120 @@ Expected IDs: ${ProductIds.all}
       isLoading.value = false;
     }
 
-    // On iOS/macOS, use separate product IDs; on Android, use the single product with base plan
+    // If the backup check failed, cached paid access is still a reason to avoid
+    // a second subscription. Require reconciliation before a new checkout.
+    if (PlanService.instance.status.isActiveProviderEntitlement) {
+      _finishPurchaseAttempt(attemptId);
+      return PurchaseResult.failed(
+        'Restore your existing subscription before changing plans.',
+        outcome: PurchaseOutcome.unavailable,
+      );
+    }
+
+    // Apple uses a product per period; Android uses a product per tier.
     if (_isApplePlatform) {
-      final iosProductId = yearly
-          ? ProductIds.proYearlyIos
-          : ProductIds.proMonthlyIos;
-      return _purchaseWithIAP(iosProductId, attemptId: attemptId);
+      final iosProductId = ProductIds.apple(plan, yearly);
+      return _purchaseWithIAP(
+        iosProductId,
+        attemptId: attemptId,
+        expectedUid: user.uid,
+      );
     }
 
     return _purchaseWithIAP(
-      ProductIds.proSubscription,
+      ProductIds.android(plan),
       basePlanId: basePlanId,
       attemptId: attemptId,
+      expectedUid: user.uid,
     );
   }
 
+  Future<PurchaseResult> _changePlaySubscription({
+    required UserPlan plan,
+    required bool yearly,
+    required int attemptId,
+    required String uid,
+  }) async {
+    isLoading.value = true;
+    try {
+      final current = PlanService.instance.status;
+      if (AuthService.currentUser?.uid != uid ||
+          !current.isActiveProviderEntitlement ||
+          !current.isPlayStoreSubscription ||
+          current.plan == plan) {
+        throw StateError('Subscription ownership changed');
+      }
+      final purchases = await _iap
+          .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>()
+          .queryPastPurchases();
+      final oldPurchase = purchases.error == null
+          ? selectGooglePlayReplacementPurchase(
+              purchases.pastPurchases,
+              currentProductId: ProductIds.android(current.plan),
+              targetProductId: ProductIds.android(plan),
+              uid: uid,
+            )
+          : null;
+      if (oldPurchase == null || AuthService.currentUser?.uid != uid) {
+        throw StateError('Existing Play purchase is unavailable');
+      }
+      final verified = await _verifyPurchase(oldPurchase);
+      final oldStatus = parseVerifiedProviderEntitlement(verified.subscription);
+      if (!verified.valid ||
+          AuthService.currentUser?.uid != uid ||
+          oldStatus?.plan != current.plan ||
+          oldStatus?.isPlayStoreSubscription != true) {
+        throw StateError('Existing Play purchase could not be verified');
+      }
+      return await _purchaseWithIAP(
+        ProductIds.android(plan),
+        basePlanId: ProductIds.basePlan(plan, yearly),
+        attemptId: attemptId,
+        expectedUid: uid,
+        changeSubscription: ChangeSubscriptionParam(
+          oldPurchaseDetails: oldPurchase,
+          replacementMode: ReplacementMode.withTimeProration,
+        ),
+      );
+    } catch (_) {
+      // A replacement failure must never fall through to a fresh purchase.
+      isLoading.value = false;
+      _finishPurchaseAttempt(attemptId);
+      return PurchaseResult.failed(
+        'Unable to verify your current Play subscription. Restore purchases and try again.',
+        outcome: PurchaseOutcome.unavailable,
+      );
+    }
+  }
+
   /// Purchase subscription using Razorpay (for web/desktop)
-  Future<PurchaseResult> _purchaseWithRazorpay({required bool yearly}) async {
+  Future<PurchaseResult> _purchaseWithRazorpay({
+    required bool yearly,
+    UserPlan plan = UserPlan.pro,
+  }) async {
+    final existing = await checkExistingSubscription();
+    if (existing.hasSubscription) {
+      return existing.localEntitlementActive &&
+              PlanService.instance.status.plan == plan
+          ? PurchaseResult.success(
+              'Subscription already active',
+              outcome: PurchaseOutcome.alreadyActive,
+            )
+          : PurchaseResult.failed(
+              'Manage your existing subscription to change plans',
+              outcome: PurchaseOutcome.changePlanRequired,
+            );
+    }
     final razorpayService = RazorpayService.instance;
 
     AppLogger.log('SubscriptionService: Using Razorpay for subscription');
     isLoading.value = true;
 
     try {
-      final result = await razorpayService.purchaseSubscription(yearly: yearly);
+      final result = await razorpayService.purchaseSubscription(
+        yearly: yearly,
+        plan: plan,
+      );
 
       if (result.success) {
         return PurchaseResult.success(
@@ -1616,6 +1773,8 @@ Expected IDs: ${ProductIds.all}
     String productId, {
     String? basePlanId,
     required int attemptId,
+    String? expectedUid,
+    ChangeSubscriptionParam? changeSubscription,
   }) async {
     if (!await _ensureInAppPurchaseReady()) {
       _finishPurchaseAttempt(attemptId);
@@ -1626,7 +1785,7 @@ Expected IDs: ${ProductIds.all}
     }
 
     final user = AuthService.currentUser;
-    if (user == null) {
+    if (user == null || (expectedUid != null && user.uid != expectedUid)) {
       _finishPurchaseAttempt(attemptId);
       return PurchaseResult.failed(
         'Please sign in first',
@@ -1723,7 +1882,7 @@ Expected IDs: ${ProductIds.all}
         purchaseParam = GooglePlayPurchaseParam(
           productDetails: selectedProduct,
           applicationUserName: user.uid,
-          changeSubscriptionParam: null,
+          changeSubscriptionParam: changeSubscription,
         );
         final selectedOffer = selectedProduct
             .productDetails
@@ -1736,6 +1895,9 @@ Expected IDs: ${ProductIds.all}
           'offerId: ${selectedOffer?.offerId}',
         );
       } else {
+        if (changeSubscription != null) {
+          throw StateError('Play replacement product is unavailable');
+        }
         purchaseParam = PurchaseParam(
           productDetails: product,
           applicationUserName: user.uid,
@@ -1754,6 +1916,9 @@ Expected IDs: ${ProductIds.all}
       // StoreKit reports a duplicate pending transaction.
       bool success;
       try {
+        if (AuthService.currentUser?.uid != user.uid) {
+          throw StateError('Account changed before checkout');
+        }
         _awaitStore(attemptId, productId);
         success = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
       } catch (e) {
@@ -1882,7 +2047,7 @@ Expected IDs: ${ProductIds.all}
       }
       if (existing.hasSubscription) {
         return PurchaseResult.failed(
-          'Payment is confirmed but Pro activation is still pending.',
+          'Payment is confirmed but subscription activation is still pending.',
           outcome: PurchaseOutcome.activationPending,
         );
       }
@@ -1918,7 +2083,7 @@ Expected IDs: ${ProductIds.all}
 
       if (paymentWasConfirmed || !existing.contractValid) {
         return PurchaseResult.failed(
-          'Payment is confirmed but Pro activation is still pending.',
+          'Payment is confirmed but subscription activation is still pending.',
           outcome: PurchaseOutcome.activationPending,
         );
       }
@@ -1933,7 +2098,7 @@ Expected IDs: ${ProductIds.all}
       );
       if (paymentWasConfirmed) {
         return PurchaseResult.failed(
-          'Payment is confirmed but Pro activation is still pending.',
+          'Payment is confirmed but subscription activation is still pending.',
           outcome: PurchaseOutcome.activationPending,
         );
       }

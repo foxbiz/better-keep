@@ -1,6 +1,9 @@
 import 'remote_sync_cache_service.dart';
 import 'local_storage_recovery.dart';
 
+import 'google_sign_in_initialization.dart';
+
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/cloud_read.dart';
@@ -9,6 +12,8 @@ import 'package:better_keep/services/e2ee/device_authorization.dart';
 
 import 'dart:io';
 import 'dart:async';
+
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
 
 import 'package:alarm/alarm.dart';
 import 'package:better_keep/components/user_avatar.dart';
@@ -89,8 +94,6 @@ class AuthService {
   static final ValueNotifier<PostSignInState> postSignInState = ValueNotifier(
     PostSignInState.idle,
   );
-
-  static const String? _serverClientId = null;
 
   // Completer for OAuth callback
   static Completer<_OAuthCallbackResult>? _oauthCompleter;
@@ -226,6 +229,7 @@ class AuthService {
       cloudRecovery.state.value == CloudSessionState.ready;
 
   static void setAppForeground(bool foreground) {
+    ExternalSyncService.instance.setForeground(foreground);
     cloudRecovery.setForeground(foreground);
     if (foreground && canSyncCloud && AppState.get('db') != null) {
       final current = captureSession();
@@ -508,6 +512,7 @@ class AuthService {
     bool deferLocalRestore = false,
   }) async {
     _deferLocalRestore = deferLocalRestore;
+    FirebaseSyncPreference.instance.init();
     try {
       await purgeExpiredOAuthTransactions();
     } catch (error, stackTrace) {
@@ -521,7 +526,7 @@ class AuthService {
     // Start GoogleSignIn initialization (doesn't need to complete before continuing)
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
       unawaited(
-        _googleSignIn.initialize(serverClientId: _serverClientId).catchError((
+        initializeNativeGoogleSignIn().catchError((
           Object error,
           StackTrace stack,
         ) {
@@ -1691,6 +1696,9 @@ class AuthService {
         await E2EEService.instance.preloadCachedStatus()) {
       if (!current()) return;
       postSignInState.value = PostSignInState.ready;
+      // Local startup and Firebase recovery must not wait for another provider's
+      // session initialization or for retired provider work to drain.
+      unawaited(ExternalSyncService.instance.resume());
       cloudRecovery.start(user.uid);
       unawaited(cloudRecovery.check());
       return;
@@ -1768,11 +1776,14 @@ class AuthService {
   }
 
   static Future<void> continueOfflineAfterInitializationFailure() async {
+    final current = captureSession();
     if (!canRestoreLocalSession) return;
     if (!await E2EEService.instance.preloadCachedStatus()) {
       return;
     }
+    if (!current()) return;
     postSignInState.value = PostSignInState.ready;
+    unawaited(ExternalSyncService.instance.resume());
     cloudRecovery.start(currentUser!.uid);
     unawaited(cloudRecovery.check());
   }
@@ -1869,6 +1880,9 @@ class AuthService {
         },
       ),
       auxiliaryServices: [
+        PostSignInOperation('external-sync', () async {
+          if (!isReviewSession) await ExternalSyncService.instance.resume();
+        }),
         PostSignInOperation('refresh-linked-providers', () async {
           if (!isReviewSession) await refreshLinkedProviders();
         }),
@@ -2232,6 +2246,7 @@ class AuthService {
     _postSignInFuture = null;
     postSignInState.value = PostSignInState.idle;
     try {
+      await ExternalSyncService.instance.stop();
       try {
         await ReminderSessionService.setSignedIn(false);
       } catch (error) {

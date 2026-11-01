@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:better_keep/services/storage_health_service.dart';
 
 import 'package:better_keep/components/auth_scaffold.dart';
+import 'package:better_keep/components/image_share_progress.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
 import 'package:better_keep/components/post_sign_in_recovery_view.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
@@ -210,8 +211,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             child: Overlay(
               initialEntries: [
                 OverlayEntry(
-                  builder: (context) =>
-                      _BannerLayout(child: child ?? const SizedBox.shrink()),
+                  builder: (context) => ImageShareProgress(
+                    busy: IntentHandlerService.instance.importingImages,
+                    child: _BannerLayout(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ],
             ),

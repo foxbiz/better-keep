@@ -15,8 +15,23 @@ on:
         default: ''
 
 jobs:
+  image-share-native:
+    name: Image sharing native tests
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Run Swift inbox and signing-policy tests
+        run: node --test test/tool/image_share_native_test.mjs test/tool/image_share_signing_test.mjs
+
   release-gate:
     name: Release gate
+    needs: image-share-native
     runs-on: ubuntu-latest
     timeout-minutes: 45
 

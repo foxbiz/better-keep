@@ -29,7 +29,7 @@ class SubscriptionManagementTarget {
 
 const appleSubscriptionsUrl = 'https://apps.apple.com/account/subscriptions';
 const googlePlaySubscriptionsUrl =
-    'https://play.google.com/store/account/subscriptions?sku=better_keep_pro&package=io.foxbiz.better_keep';
+    'https://play.google.com/store/account/subscriptions?package=io.foxbiz.better_keep';
 
 /// Resolves the store currently handling native billing. This is intentionally
 /// separate from [resolveSubscriptionManagementTarget]: ownership conflicts

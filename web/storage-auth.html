@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex, nofollow">
+<title>Connect storage · Better Keep</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; min-height: 100svh; display: grid; place-items: center; }
+  main { padding: 32px 24px; max-width: 360px; text-align: center; }
+  h1 { font-size: 24px; } p { line-height: 1.5; opacity: .8; }
+  a { display: inline-block; margin-top: 12px; padding: 12px 20px; border-radius: 24px;
+      background: #6642ad; color: white; text-decoration: none; font-weight: 600; }
+  [hidden] { display: none; }
+</style></head>
+<body><main><h1>Return to Better Keep</h1>
+<p id="status" role="status">Finish connecting in the app.</p>
+<a id="open-app" hidden>Open Better Keep</a></main><script>
+(() => {
+  const url = window.location.href;
+  const callback = new URL(url);
+  history.replaceState(null, '', window.location.pathname);
+  const params = callback.searchParams;
+  const state = params.get('state') || '';
+  const native = /^app\.[A-Za-z0-9_-]{43}$/.test(state);
+  const desktop = /^loopback\.([1-9][0-9]{3,4})\.[A-Za-z0-9_-]{43}$/.exec(state);
+  const browser = /^[A-Za-z0-9_-]{43}$/.test(state);
+  const code = params.get('code');
+  const error = params.get('error');
+  const validCode = params.getAll('code').length === 1 && code && code.length <= 8192;
+  const validError = params.getAll('error').length === 1 && error && error.length <= 128;
+  if (callback.hash || params.getAll('state').length !== 1 ||
+      !(native || desktop || browser) ||
+      !(validCode && !params.has('error') || validError && !params.has('code')) ||
+      (desktop && (Number(desktop[1]) < 1024 || Number(desktop[1]) > 65535))) {
+    document.getElementById('status').textContent = 'This connection link is invalid. Try connecting again in the app.';
+    return;
+  }
+  if (native || desktop) {
+    // Only fixed app/loopback endpoints are allowed. Never accept a return URL
+    // from the query string. State and PKCE are verified by the waiting client.
+    const target = new URL(native ? 'betterkeep-storage://oauth/callback' :
+      `http://127.0.0.1:${desktop[1]}/storage-oauth`);
+    target.searchParams.set('state', state);
+    target.searchParams.set(code ? 'code' : 'error', code || error);
+    const link = document.getElementById('open-app');
+    link.href = target.href;
+    link.hidden = false;
+    document.getElementById('status').textContent = 'Opening the app to finish connecting…';
+    // Authentication sessions close when the app callback is received. Other
+    // browsers may require a tap, so leave the fallback link available.
+    window.location.replace(target.href);
+  } else if (window.opener) {
+    window.opener.postMessage({type: 'betterkeep-storage-oauth', url}, window.location.origin);
+    window.close();
+  }
+})();
+</script></body></html>

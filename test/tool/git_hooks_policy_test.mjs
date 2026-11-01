@@ -42,7 +42,7 @@ test("only release artifact CI remains and local hook setup is documented", () =
 	assert.match(readme, /version-matched\s+`chromedriver`/);
 });
 
-test("pull requests to main run only the portable release gate", () => {
+test("pull requests to main run portable and native gates without release builds", () => {
 	assert.match(
 		buildReleaseWorkflow,
 		/pull_request:\s*\n\s+branches:\s*\n\s+- main/,
@@ -54,6 +54,11 @@ test("pull requests to main run only the portable release gate", () => {
 		),
 		/^\s+if:/m,
 	);
+	const native = extractWorkflowJob(buildReleaseWorkflow, "image-share-native");
+	assert.match(native, /runs-on: macos-latest/);
+	assert.doesNotMatch(native, /^\s+if:/m);
+	assert.match(native, /node --test test\/tool\/image_share_native_test\.mjs/);
+	assert.match(extractWorkflowJob(buildReleaseWorkflow, "release-gate"), /needs: image-share-native/);
 	for (const job of ["build-android", "build-windows", "build-macos"]) {
 		const definition = extractWorkflowJob(buildReleaseWorkflow, job);
 		assert.match(definition, /if: github\.event_name == 'workflow_dispatch'/);

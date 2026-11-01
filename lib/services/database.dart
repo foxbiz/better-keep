@@ -15,6 +15,10 @@ import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/sync_identity_migration.dart';
 import 'package:better_keep/services/import/import_fingerprint_store.dart';
+import 'package:better_keep/services/external_sync/sync_replica_store.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/external_sync/sync_attachment_store.dart';
+import 'package:better_keep/services/external_sync/sync_status_store.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -42,29 +46,50 @@ Future<Database> initDatabase({bool detectDataLoss = false}) async {
         await LocalStorageRecovery(await SharedPreferences.getInstance())
             .databaseCreated();
       }
+      await SyncReplicaStore.createTables(db);
+      await SyncAttachmentStore.createTable(db);
+      await SyncStatusStore.createTable(db);
+      await SyncMutationJournal.install(db);
     },
-    onUpgrade: (db, oldVersion, newVersion) async {
-      await Note.upgradeTable(db, oldVersion, newVersion);
-      await Label.upgradeTable(db, oldVersion, newVersion);
-      await NoteSyncTrack.upgradeTable(db, oldVersion, newVersion);
-      await FileSyncTrack.upgradeTable(db, oldVersion, newVersion);
-      await LabelSyncTrack.upgradeTable(db, oldVersion, newVersion);
-      await ReminderActionReceiptService.upgradeTable(
-        db,
-        oldVersion,
-        newVersion,
-      );
-      if (oldVersion < 9 && newVersion >= 9) {
-        await SyncIdentityMigration.migrate(db);
-      }
-      await NoteSortService.upgradeTable(db, oldVersion, newVersion);
-      await upgradeMergedFeatureTables(db, oldVersion, newVersion);
-    },
+    onUpgrade: upgradeDatabase,
     version: databaseVersion,
   );
 
   AppState.db = db;
   return db;
+}
+
+/// Shared with upgrade tests so they exercise the same ordered migration chain.
+Future<void> upgradeDatabase(
+  Database db,
+  int oldVersion,
+  int newVersion,
+) async {
+  await Note.upgradeTable(db, oldVersion, newVersion);
+  await Label.upgradeTable(db, oldVersion, newVersion);
+  await NoteSyncTrack.upgradeTable(db, oldVersion, newVersion);
+  await FileSyncTrack.upgradeTable(db, oldVersion, newVersion);
+  await LabelSyncTrack.upgradeTable(db, oldVersion, newVersion);
+  await ReminderActionReceiptService.upgradeTable(db, oldVersion, newVersion);
+  if (oldVersion < 9 && newVersion >= 9) {
+    await SyncIdentityMigration.migrate(db);
+  }
+  await NoteSortService.upgradeTable(db, oldVersion, newVersion);
+  await upgradeMergedFeatureTables(db, oldVersion, newVersion);
+  await upgradeReplicaTables(db, oldVersion, newVersion);
+}
+
+Future<void> upgradeReplicaTables(
+  Database db,
+  int oldVersion,
+  int newVersion,
+) async {
+  if (oldVersion < 12 && newVersion >= 12) {
+    await SyncReplicaStore.createTables(db);
+    await SyncAttachmentStore.createTable(db);
+    await SyncStatusStore.createTable(db);
+    await SyncMutationJournal.install(db);
+  }
 }
 
 /// Reconciles the two different schemas that existed at database version 10.

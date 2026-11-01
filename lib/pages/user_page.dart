@@ -1,9 +1,13 @@
 import 'dart:async';
+
+import 'package:better_keep/components/device_verification.dart';
+
 import 'dart:io';
 
 import 'package:better_keep/components/e2ee_status_card.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/components/user_device_tile.dart';
+import 'package:better_keep/components/user_devices_section.dart';
 import 'package:better_keep/dialogs/loading_dialog.dart';
 import 'package:better_keep/dialogs/otp_dialog.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
@@ -11,8 +15,9 @@ import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/share_link.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/pages/setup_recovery_key_page.dart';
+import 'package:better_keep/pages/settings/storage_sync_page.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/services/sync_logout_check.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
@@ -36,10 +41,17 @@ import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../components/sync_provider_tile.dart';
+
 import 'package:sqflite/sqflite.dart';
 
 class UserPage extends StatefulWidget {
-  const UserPage({super.key});
+  const UserPage({super.key}) : _showAllDevices = false;
+
+  const UserPage._devices() : _showAllDevices = true;
+
+  final bool _showAllDevices;
 
   @override
   State<UserPage> createState() => _UserPageState();
@@ -81,21 +93,25 @@ class _UserPageState extends State<UserPage> {
 
   @override
   void initState() {
-    _fetchStats();
+    if (!widget._showAllDevices) _fetchStats();
     if (!_isManagedReview) {
       _fetchE2EEInfo();
-      _fetchLinkedProviders();
-      _initShareService();
+      if (!widget._showAllDevices) {
+        _fetchLinkedProviders();
+        _initShareService();
+      }
     } else {
       _isLoadingDevices = false;
     }
-    NoteSyncService().isSyncing.addListener(_onSyncChange);
+    if (!widget._showAllDevices) {
+      NoteSyncService().isSyncing.addListener(_onSyncChange);
+      NoteShareService().pendingRequests.addListener(_onShareRequestsChange);
+      NoteShareService().activeShares.addListener(_onActiveSharesChange);
+    }
     E2EEService.instance.status.addListener(_onE2EEStatusChange);
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
       _onPendingApprovalsChange,
     );
-    NoteShareService().pendingRequests.addListener(_onShareRequestsChange);
-    NoteShareService().activeShares.addListener(_onActiveSharesChange);
     super.initState();
   }
 
@@ -147,6 +163,35 @@ class _UserPageState extends State<UserPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget._showAllDevices) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(context.l10n.yourDevices),
+          actions: [
+            IconButton(
+              onPressed: _isLoadingDevices ? null : _fetchE2EEInfo,
+              icon: const Icon(Icons.refresh),
+              tooltip: context.l10n.refresh,
+            ),
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: _fetchE2EEInfo,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: _buildDeviceSection(context),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final user = AuthService.currentUser;
     final cached = AuthService.cachedProfile;
 
@@ -239,6 +284,21 @@ class _UserPageState extends State<UserPage> {
                         // Subscription Section
                         _buildSubscriptionSection(context),
                         const SizedBox(height: 32),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Card(
+                            margin: EdgeInsets.zero,
+                            clipBehavior: Clip.antiAlias,
+                            child: SyncProviderTile(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const StorageSyncPage(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
                         // Connected Accounts Section
                         _buildConnectedPlatformsSection(context),
                         const SizedBox(height: 32),
@@ -300,19 +360,13 @@ class _UserPageState extends State<UserPage> {
   }
 
   Future<void> _handleSignOut(BuildContext context) async {
+    final accountCurrent = AuthService.captureSession();
     // Track if user has already confirmed through a warning dialog
     bool hasConfirmed = false;
 
-    // Check for unsynced notes first
-    int pendingSyncCount = 0;
-    try {
-      pendingSyncCount = await NoteSyncTrack.count(pending: true);
-    } catch (e) {
-      // If we can't check, assume no pending syncs
-      debugPrint('Error checking pending syncs: $e');
-    }
-
-    if (pendingSyncCount > 0 && context.mounted) {
+    final syncState = await currentSyncLogoutState();
+    if (!accountCurrent()) return;
+    if (syncState != SyncLogoutState.complete && context.mounted) {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -331,35 +385,10 @@ class _UserPageState extends State<UserPage> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.cloud_off, color: Colors.red),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        context.l10n.notesNotSynced(pendingSyncCount),
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(context.l10n.unsyncedNotesWarning),
-            ],
+          content: Text(
+            syncState == SyncLogoutState.pending
+                ? context.l10n.externalSyncLogoutPending
+                : context.l10n.externalSyncLogoutUnknown,
           ),
           actions: [
             OutlinedButton(
@@ -379,8 +408,8 @@ class _UserPageState extends State<UserPage> {
       hasConfirmed = true;
     }
 
-    if (!context.mounted) {
-      AppLogger.log('Sign out cancelled because its page was disposed');
+    if (!context.mounted || !accountCurrent()) {
+      AppLogger.log('Sign out cancelled because its page or account changed');
       return;
     }
 
@@ -488,6 +517,7 @@ class _UserPageState extends State<UserPage> {
       if (confirmed != true) return;
     }
 
+    if (!context.mounted || !accountCurrent()) return;
     setState(() {
       _isLoading = true;
     });
@@ -923,6 +953,22 @@ class _UserPageState extends State<UserPage> {
                   // Subscription details for paid users
                   _buildSubscriptionDetails(context, status),
                   const SizedBox(height: 16),
+                  if (!kIsWeb &&
+                      Platform.isAndroid &&
+                      status.isActiveProviderEntitlement &&
+                      status.isPlayStoreSubscription) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => showPaywall(
+                        context,
+                        initialPlan: status.plan == UserPlan.lite
+                            ? UserPlan.pro
+                            : UserPlan.lite,
+                      ),
+                      icon: const Icon(Icons.swap_horiz),
+                      label: Text(context.l10n.choosePlan),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   // Show different buttons based on subscription state
                   if (status.isTrialSubscription) ...[
                     // Trial users - show upgrade button
@@ -932,7 +978,7 @@ class _UserPageState extends State<UserPage> {
                           child: FilledButton.icon(
                             onPressed: () => _handleSubscribe(context),
                             icon: const Icon(Icons.star),
-                            label: Text(context.l10n.upgradeToPro),
+                            label: Text(context.l10n.upgrade),
                           ),
                         ),
                       ],
@@ -1055,7 +1101,7 @@ class _UserPageState extends State<UserPage> {
                 ] else ...[
                   // Upgrade prompt for free users
                   Text(
-                    context.l10n.upgradeToProDescription,
+                    context.l10n.choosePlan,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -1067,7 +1113,7 @@ class _UserPageState extends State<UserPage> {
                         child: FilledButton.icon(
                           onPressed: () => _handleSubscribe(context),
                           icon: const Icon(Icons.star),
-                          label: Text(context.l10n.upgradeToPro),
+                          label: Text(context.l10n.upgrade),
                         ),
                       ),
                     ],
@@ -1102,6 +1148,7 @@ class _UserPageState extends State<UserPage> {
           backgroundColor = theme.colorScheme.surfaceContainerHighest;
           textColor = theme.colorScheme.onSurfaceVariant;
           break;
+        case UserPlan.lite:
         case UserPlan.pro:
           backgroundColor = theme.colorScheme.primaryContainer;
           textColor = theme.colorScheme.onPrimaryContainer;
@@ -1383,7 +1430,7 @@ class _UserPageState extends State<UserPage> {
     }
 
     if (!context.mounted) return;
-    showPaywall(context, feature: GatedFeature.realtimeCloudSync);
+    showPaywall(context);
   }
 
   Future<void> _handleCancelSubscription(BuildContext context) async {
@@ -1961,124 +2008,27 @@ class _UserPageState extends State<UserPage> {
     }
   }
 
-  Widget _buildDeviceSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final approvedDevices = _devices.where((d) => d.isApproved).toList();
-    final pendingDevices = _devices.where((d) => d.isPending).toList();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.devices, size: 24),
-                const SizedBox(width: 12),
-                Text(
-                  context.l10n.yourDevices,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                if (_isLoadingDevices)
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Show error message if there's an error
-            if (_devicesError != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer.withValues(
-                    alpha: 0.3,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.wifi_off,
-                      size: 20,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _devicesError!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _fetchE2EEInfo,
-                      child: Text(context.l10n.retry),
-                    ),
-                  ],
-                ),
-              ),
-            ]
-            // Show skeleton loader while loading
-            else if (_isLoadingDevices && _devices.isEmpty) ...[
-              _buildDeviceSkeletonLoader(context),
-            ]
-            // Show devices
-            else ...[
-              // Pending devices (show approval buttons) - only on primary device
-              if (pendingDevices.isNotEmpty && _isFirstDevice) ...[
-                Text(
-                  context.l10n.pendingApprovalSection,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...pendingDevices.map(
-                  (device) =>
-                      _buildDeviceTile(context, device, isPending: true),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Approved devices
-              if (approvedDevices.isNotEmpty) ...[
-                Text(
-                  context.l10n.authorizedDevices,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...approvedDevices.map(
-                  (device) =>
-                      _buildDeviceTile(context, device, isPending: false),
-                ),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
+  Future<void> _openDevicesPage() async {
+    if (_isManagedReview) return;
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const UserPage._devices()));
+    // Reflect approvals/removals made on the full list when returning.
+    if (mounted) await _fetchE2EEInfo();
   }
+
+  Widget _buildDeviceSection(BuildContext context) => UserDevicesSection(
+    devices: _devices,
+    showAll: widget._showAllDevices,
+    isMainDevice: _isFirstDevice,
+    loading: _isLoadingDevices,
+    error: _devicesError,
+    onRefresh: _fetchE2EEInfo,
+    onShowAll: _openDevicesPage,
+    loadingBuilder: _buildDeviceSkeletonLoader,
+    tileBuilder: (context, device, pending) =>
+        _buildDeviceTile(context, device, isPending: pending),
+  );
 
   /// Builds a skeleton loader for the device list.
   Widget _buildDeviceSkeletonLoader(BuildContext context) {
@@ -2216,7 +2166,17 @@ class _UserPageState extends State<UserPage> {
       );
     }
 
+    final createdAt = device.createdAt.toLocal();
+    final formats = MaterialLocalizations.of(context);
+    final createdDate = formats.formatShortDate(createdAt);
+    final createdTime = formats.formatTimeOfDay(
+      TimeOfDay.fromDateTime(createdAt),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
     return UserDeviceTile(
+      isFlat: widget._showAllDevices,
+      createdAtLabel:
+          '${context.l10n.deviceAdded}: $createdDate · $createdTime',
       name: localizedDeviceName(context.l10n, device.name),
       subtitle: _formatDeviceSubtitle(device),
       platformIcon: platformIcon,
@@ -2404,20 +2364,35 @@ class _UserPageState extends State<UserPage> {
   Future<void> _approveDevice(String deviceId) async {
     setState(() => _processingDeviceIds.add(deviceId));
     try {
-      await E2EEService.instance.deviceManager.approveDevice(deviceId);
-      // Cancel the notification for this device
-      await DeviceApprovalNotificationService().cancelNotification(deviceId);
-      await _fetchE2EEInfo();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(context.l10n.deviceApproved_)));
+      final manager = E2EEService.instance.deviceManager;
+      final request = await manager.pendingVerificationRequest(deviceId);
+      if (!mounted) return;
+      final verified = await showDeviceVerificationDialog(context, request);
+      if (!mounted || verified == null) return;
+      final receipt = await manager.approveDevice(verified);
+      if (!mounted) return;
+      // Show the next step immediately; metadata refresh is not part of pairing.
+      final confirmation = showDeviceApprovalReceipt(
+        context,
+        receipt,
+        finished: manager.approvalReceiptFinished(receipt),
+      );
+      try {
+        await DeviceApprovalNotificationService().cancelNotification(deviceId);
+        await _fetchE2EEInfo();
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to refresh devices after approval',
+          error,
+          stackTrace,
+        );
       }
+      await confirmation;
     } catch (error, stackTrace) {
       AppLogger.error('Failed to approve device', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
+          SnackBar(content: Text(context.l10n.deviceVerificationRetry)),
         );
       }
     } finally {

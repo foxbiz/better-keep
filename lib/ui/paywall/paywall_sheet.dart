@@ -1,6 +1,7 @@
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/ui/paywall/purchase_feedback_listener.dart';
+import 'package:better_keep/ui/paywall/subscription_purchase_options.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:flutter/material.dart';
@@ -13,11 +14,15 @@ Future<bool> showPaywall(
   BuildContext context, {
   GatedFeature? feature,
   String? customMessage,
+  UserPlan initialPlan = UserPlan.pro,
 }) async {
   final result = await Navigator.of(context).push<bool>(
     MaterialPageRoute(
-      builder: (context) =>
-          PaywallPage(feature: feature, customMessage: customMessage),
+      builder: (context) => PaywallPage(
+        feature: feature,
+        customMessage: customMessage,
+        initialPlan: initialPlan,
+      ),
     ),
   );
   return result ?? false;
@@ -130,14 +135,6 @@ class PaywallSheet extends StatelessWidget {
                 // Feature comparison
                 const _FeatureComparisonCard(),
                 const SizedBox(height: 8),
-                Text(
-                  context.l10n.noAdsDescription,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
 
                 // Pricing options
                 const _PricingOptions(),
@@ -185,11 +182,14 @@ class PaywallSheet extends StatelessWidget {
 }
 
 class _FeatureComparisonCard extends StatelessWidget {
-  const _FeatureComparisonCard();
+  const _FeatureComparisonCard({this.plan = UserPlan.pro});
+
+  final UserPlan plan;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     return Container(
       decoration: BoxDecoration(
@@ -198,57 +198,62 @@ class _FeatureComparisonCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Header
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             child: Row(
               children: [
                 Expanded(
-                  flex: 2,
+                  flex: 5,
                   child: Text(
-                    context.l10n.featureTableHeader,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    context.l10n.free,
+                    l10n.featureTableHeader,
                     style: theme.textTheme.labelLarge,
-                    textAlign: TextAlign.center,
                   ),
                 ),
-                Expanded(
-                  child: Text(
-                    context.l10n.pro,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
+                for (final tier in UserPlan.values)
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      tier.localizedDisplayName(l10n),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: tier == plan ? theme.colorScheme.primary : null,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ),
               ],
             ),
           ),
           const Divider(height: 1),
-
-          // Features
           _FeatureRow(
-            feature: context.l10n.paywallLocalNotes,
-            free: context.l10n.unlimited,
-            pro: context.l10n.unlimited,
+            feature: l10n.paywallLocalNotes,
+            free: l10n.unlimited,
+            lite: l10n.unlimited,
+            pro: l10n.unlimited,
           ),
           _FeatureRow(
-            feature: context.l10n.lockedNotes,
-            free: context.l10n.lockedNotesFreeLimit,
-            pro: context.l10n.unlimited,
-          ),
-          _FeatureRow(
-            feature: context.l10n.realtimeCloudSync,
-            free: false,
+            feature: l10n.manualExternalSync,
+            free: true,
+            lite: true,
             pro: true,
+          ),
+          _FeatureRow(
+            feature: l10n.automaticExternalSync,
+            free: false,
+            lite: true,
+            pro: true,
+          ),
+          _FeatureRow(
+            feature: l10n.builtInCloudSync,
+            free: false,
+            lite: false,
+            pro: true,
+          ),
+          _FeatureRow(
+            feature: l10n.lockedNotes,
+            free: Entitlements.free.maxLockedNotes,
+            lite: Entitlements.lite.maxLockedNotes,
+            pro: l10n.unlimited,
           ),
         ],
       ),
@@ -258,12 +263,14 @@ class _FeatureComparisonCard extends StatelessWidget {
 
 class _FeatureRow extends StatelessWidget {
   final String feature;
-  final dynamic free;
-  final dynamic pro;
+  final Object free;
+  final Object lite;
+  final Object pro;
 
   const _FeatureRow({
     required this.feature,
     required this.free,
+    required this.lite,
     required this.pro,
   });
 
@@ -272,42 +279,55 @@ class _FeatureRow extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
         children: [
           Expanded(
-            flex: 2,
-            child: Text(feature, style: theme.textTheme.bodyMedium),
+            flex: 5,
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: Text(feature, style: theme.textTheme.bodyMedium),
+            ),
           ),
-          Expanded(child: _buildValue(context, free, false)),
-          Expanded(child: _buildValue(context, pro, true)),
+          for (final value in [free, lite, pro])
+            Expanded(flex: 2, child: _buildValue(context, value)),
         ],
       ),
     );
   }
 
-  Widget _buildValue(BuildContext context, dynamic value, bool isPro) {
+  Widget _buildValue(BuildContext context, Object value) {
     final theme = Theme.of(context);
 
     if (value is bool) {
       return Icon(
         value ? Icons.check_circle : Icons.remove_circle_outline,
-        size: 20,
-        color: value
-            ? (isPro ? theme.colorScheme.primary : Colors.green)
-            : theme.colorScheme.outline,
+        size: 18,
+        color: value ? theme.colorScheme.primary : theme.colorScheme.outline,
+        semanticLabel: value ? context.l10n.yes : context.l10n.no,
       );
     }
 
-    return Text(
-      value.toString(),
-      style: theme.textTheme.bodySmall?.copyWith(
-        color: isPro
-            ? theme.colorScheme.primary
-            : theme.colorScheme.onSurfaceVariant,
-        fontWeight: isPro ? FontWeight.w600 : FontWeight.normal,
+    if (value == context.l10n.unlimited) {
+      return Tooltip(
+        message: context.l10n.unlimited,
+        child: Icon(
+          Icons.all_inclusive,
+          size: 22,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Text(
+        value.toString(),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        textAlign: TextAlign.center,
       ),
-      textAlign: TextAlign.center,
     );
   }
 }
@@ -320,7 +340,6 @@ class _PricingOptions extends StatefulWidget {
 }
 
 class _PricingOptionsState extends State<_PricingOptions> {
-  bool _yearlySelected = true;
   bool _isLoading = false;
   bool _isLoadingProducts = false;
   PurchaseAttemptPhase _purchasePhase = PurchaseAttemptPhase.idle;
@@ -444,17 +463,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
     if (!_pricesAvailable && !SubscriptionService.instance.usesRazorpay) {
       return Column(
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => _handleSubscribe(context),
-              icon: const Icon(Icons.rocket_launch),
-              label: Text(context.l10n.loadingFailedTryAgain),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-          ),
+          Text(context.l10n.somethingWentWrongCheckConnection),
           const SizedBox(height: 8),
           TextButton(
             onPressed: _loadProducts,
@@ -471,62 +480,13 @@ class _PricingOptionsState extends State<_PricingOptions> {
           const SizedBox(height: 12),
         ],
 
-        // Plan period toggle
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: _PeriodButton(
-                  label: context.l10n.monthly,
-                  sublabel: _monthlyPrice!,
-                  selected: !_yearlySelected,
-                  onTap: () => setState(() => _yearlySelected = false),
-                ),
-              ),
-              Expanded(
-                child: _PeriodButton(
-                  label: context.l10n.yearly,
-                  sublabel: _yearlyPrice!,
-                  badge: _savePercentage > 0
-                      ? context.l10n.savePercent(_savePercentage)
-                      : null,
-                  selected: _yearlySelected,
-                  onTap: () => setState(() => _yearlySelected = true),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Subscribe button
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: _isBusy ? null : () => _handleSubscribe(context),
-            icon: _isBusy
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.rocket_launch),
-            label: Text(
-              _isBusy
-                  ? _progressLabel(context)
-                  : context.l10n.subscribeWithPrice(
-                      _yearlySelected ? _yearlyPrice! : _monthlyPrice!,
-                    ),
-            ),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
+        SubscriptionPurchaseOptions(
+          monthlyPrice: _monthlyPrice!,
+          yearlyPrice: _yearlyPrice!,
+          savePercentage: _savePercentage,
+          isBusy: _isBusy,
+          progressLabel: _progressLabel(context),
+          onSubscribe: (yearly) => _handleSubscribe(context, yearly: yearly),
         ),
       ],
     );
@@ -614,7 +574,11 @@ class _PricingOptionsState extends State<_PricingOptions> {
     );
   }
 
-  Future<void> _handleSubscribe(BuildContext context) async {
+  Future<void> _handleSubscribe(
+    BuildContext context, {
+    required bool yearly,
+  }) async {
+    if (_isBusy) return;
     if (SubscriptionService.instance.usesRazorpay) {
       RazorpayService.instance.setThemeColor(
         Theme.of(context).colorScheme.primary,
@@ -624,7 +588,7 @@ class _PricingOptionsState extends State<_PricingOptions> {
     final PurchaseResult result;
     try {
       result = await SubscriptionService.instance.purchaseSubscription(
-        yearly: _yearlySelected,
+        yearly: yearly,
       );
     } catch (e) {
       AppLogger.error('PaywallSheet: Unexpected purchase error', e);
@@ -643,89 +607,6 @@ class _PricingOptionsState extends State<_PricingOptions> {
     if (!result.isPending) {
       await presentPurchaseOutcome(context, result.outcome);
     }
-  }
-}
-
-class _PeriodButton extends StatelessWidget {
-  final String label;
-  final String sublabel;
-  final String? badge;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PeriodButton({
-    required this.label,
-    required this.sublabel,
-    this.badge,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Badge or placeholder for consistent height
-            SizedBox(
-              height: 22,
-              child: badge != null
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? theme.colorScheme.onPrimary.withValues(alpha: 0.2)
-                            : theme.colorScheme.primary.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        badge!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: selected
-                              ? theme.colorScheme.onPrimary
-                              : theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: selected
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              sublabel,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: selected
-                    ? theme.colorScheme.onPrimary.withValues(alpha: 0.8)
-                    : theme.colorScheme.outline,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -750,15 +631,21 @@ class _SelfHostContactInfo extends StatelessWidget {
 class PaywallPage extends StatefulWidget {
   final GatedFeature? feature;
   final String? customMessage;
+  final UserPlan initialPlan;
 
-  const PaywallPage({super.key, this.feature, this.customMessage});
+  const PaywallPage({
+    super.key,
+    this.feature,
+    this.customMessage,
+    this.initialPlan = UserPlan.pro,
+  });
 
   @override
   State<PaywallPage> createState() => _PaywallPageState();
 }
 
 class _PaywallPageState extends State<PaywallPage> {
-  bool _yearlySelected = true;
+  late UserPlan _selectedPlan;
   bool _isLoading = false;
   bool _isLoadingProducts = false;
   bool _hasPopped = false;
@@ -768,18 +655,23 @@ class _PaywallPageState extends State<PaywallPage> {
       ? _isLoading
       : _purchasePhase != PurchaseAttemptPhase.idle;
 
-  String? get _monthlyPrice =>
-      SubscriptionService.instance.getDisplayPriceSafe(yearly: false);
-  String? get _yearlyPrice =>
-      SubscriptionService.instance.getDisplayPriceSafe(yearly: true);
+  String? get _monthlyPrice => SubscriptionService.instance.getDisplayPriceSafe(
+    yearly: false,
+    plan: _selectedPlan,
+  );
+  String? get _yearlyPrice => SubscriptionService.instance.getDisplayPriceSafe(
+    yearly: true,
+    plan: _selectedPlan,
+  );
   int get _savePercentage =>
-      SubscriptionService.instance.calculateSavePercentage();
+      SubscriptionService.instance.calculateSavePercentage(plan: _selectedPlan);
 
   bool get _pricesAvailable => _monthlyPrice != null && _yearlyPrice != null;
 
   @override
   void initState() {
     super.initState();
+    _selectedPlan = widget.initialPlan;
     _isLoading = SubscriptionService.instance.isLoading.value;
     _purchasePhase = SubscriptionService.instance.purchasePhase.value;
     SubscriptionService.instance.isLoading.addListener(_onLoadingChange);
@@ -828,7 +720,9 @@ class _PaywallPageState extends State<PaywallPage> {
       return;
     }
     // If user has active paid subscription (non-trial), close paywall
-    if (status.isActive && status.plan.isPaid && !status.isTrialSubscription) {
+    if (status.isActive &&
+        status.plan == _selectedPlan &&
+        !status.isTrialSubscription) {
       if (_hasPopped) return;
       _hasPopped = true;
       await presentPurchaseOutcome(context, PurchaseOutcome.alreadyActive);
@@ -988,7 +882,7 @@ class _PaywallPageState extends State<PaywallPage> {
       events: SubscriptionService.instance.purchaseEvents,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(context.l10n.upgradeToPro),
+          title: Text(context.l10n.choosePlan),
           leading: IconButton(
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.pop(context, false),
@@ -1004,47 +898,44 @@ class _PaywallPageState extends State<PaywallPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Compact hero: icon inline with title
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.workspace_premium_rounded,
-                            size: 26,
-                            color: theme.colorScheme.primary,
+                      if (widget.feature != null ||
+                          widget.customMessage != null) ...[
+                        Text(
+                          _getMessage(context),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
-                          const SizedBox(width: 10),
-                          Flexible(
-                            child: Text(
-                              context.l10n.unlockTheFullExperience,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _getMessage(context),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Feature comparison
-                      const _FeatureComparisonCard(),
-                      const SizedBox(height: 8),
-                      Text(
-                        context.l10n.noAdsDescription,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                        const SizedBox(height: 16),
+                      ],
+                      _FeatureComparisonCard(plan: _selectedPlan),
                       const SizedBox(height: 24),
+                      if (SubscriptionService.instance.usesRazorpay) ...[
+                        _buildCurrencySelector(theme),
+                        const SizedBox(height: 16),
+                      ],
+                      if (widget.feature == null) ...[
+                        SegmentedButton<UserPlan>(
+                          segments: [
+                            ButtonSegment(
+                              value: UserPlan.lite,
+                              label: Text(context.l10n.lite),
+                            ),
+                            ButtonSegment(
+                              value: UserPlan.pro,
+                              label: Text(context.l10n.pro),
+                            ),
+                          ],
+                          selected: {_selectedPlan},
+                          onSelectionChanged: _isBusy
+                              ? null
+                              : (values) => setState(
+                                  () => _selectedPlan = values.single,
+                                ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      const SizedBox(height: 8),
 
                       // Pricing section
                       if (_isLoadingProducts) ...[
@@ -1062,75 +953,14 @@ class _PaywallPageState extends State<PaywallPage> {
                         const SizedBox(height: 24),
                       ] else if (_pricesAvailable ||
                           SubscriptionService.instance.usesRazorpay) ...[
-                        // Currency selector for Razorpay platforms
-                        if (SubscriptionService.instance.usesRazorpay) ...[
-                          _buildCurrencySelector(theme),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Pricing toggle
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _PeriodButton(
-                                  label: context.l10n.monthly,
-                                  sublabel: _monthlyPrice!,
-                                  selected: !_yearlySelected,
-                                  onTap: () =>
-                                      setState(() => _yearlySelected = false),
-                                ),
-                              ),
-                              Expanded(
-                                child: _PeriodButton(
-                                  label: context.l10n.yearly,
-                                  sublabel: _yearlyPrice!,
-                                  badge: _savePercentage > 0
-                                      ? context.l10n.savePercent(
-                                          _savePercentage,
-                                        )
-                                      : null,
-                                  selected: _yearlySelected,
-                                  onTap: () =>
-                                      setState(() => _yearlySelected = true),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Subscribe button
-                        SizedBox(
-                          height: 56,
-                          child: FilledButton.icon(
-                            onPressed: _isBusy ? null : _handleSubscribe,
-                            icon: _isBusy
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.rocket_launch),
-                            label: Text(
-                              _isBusy
-                                  ? _progressLabel(context)
-                                  : context.l10n.subscribeWithPrice(
-                                      _yearlySelected
-                                          ? _yearlyPrice!
-                                          : _monthlyPrice!,
-                                    ),
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          ),
+                        SubscriptionPurchaseOptions(
+                          monthlyPrice: _monthlyPrice!,
+                          yearlyPrice: _yearlyPrice!,
+                          savePercentage: _savePercentage,
+                          isBusy: _isBusy,
+                          progressLabel: _progressLabel(context),
+                          onSubscribe: (yearly) =>
+                              _handleSubscribe(yearly: yearly),
                         ),
                       ] else ...[
                         // Products failed to load
@@ -1191,10 +1021,13 @@ class _PaywallPageState extends State<PaywallPage> {
       );
     }
 
-    return context.l10n.unlockAllFeatures;
+    return _selectedPlan == UserPlan.lite
+        ? context.l10n.liteDescription
+        : context.l10n.unlockAllFeatures;
   }
 
-  Future<void> _handleSubscribe() async {
+  Future<void> _handleSubscribe({required bool yearly}) async {
+    if (_isBusy) return;
     if (SubscriptionService.instance.usesRazorpay) {
       RazorpayService.instance.setThemeColor(
         Theme.of(context).colorScheme.primary,
@@ -1204,7 +1037,8 @@ class _PaywallPageState extends State<PaywallPage> {
     final PurchaseResult result;
     try {
       result = await SubscriptionService.instance.purchaseSubscription(
-        yearly: _yearlySelected,
+        yearly: yearly,
+        plan: _selectedPlan,
       );
     } catch (e) {
       AppLogger.error('PaywallPage: Unexpected purchase error', e);
@@ -1253,8 +1087,10 @@ class _LegalLinks extends StatelessWidget {
       decoration: TextDecoration.underline,
     );
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 16,
+      runSpacing: 8,
       children: [
         GestureDetector(
           onTap: () => launchUrl(
@@ -1262,15 +1098,6 @@ class _LegalLinks extends StatelessWidget {
             mode: LaunchMode.externalApplication,
           ),
           child: Text(context.l10n.termsOfUse, style: linkStyle),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Text(
-            '|',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
         ),
         GestureDetector(
           onTap: () => launchUrl(

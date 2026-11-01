@@ -72,9 +72,7 @@ export default onNonReviewCall(
 
 			const userRecord = await auth.getUser(caller.uid);
 			if (
-				!userRecord.providerData.some(
-					(entry) => entry.providerId === provider,
-				)
+				!userRecord.providerData.some((entry) => entry.providerId === provider)
 			) {
 				throw new HttpsError(
 					"failed-precondition",

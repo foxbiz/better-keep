@@ -31,7 +31,7 @@ const platforms = {
 	web: {
 		description: "Run the web server in debug mode on port 63630.",
 		device: "web-server",
-		toolArgs: ["--web-port=63630"],
+		toolArgs: ["--web-port=63630", "--base-href=/app/"],
 	},
 	windows: {
 		description: "Run the Windows application in debug mode.",

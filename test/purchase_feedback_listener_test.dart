@@ -75,13 +75,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text(l10n.welcomeToProMessage), findsOneWidget);
+    expect(find.text(l10n.subscriptionActiveTitle), findsOneWidget);
     expect(find.text(l10n.subscriptionActivated), findsOneWidget);
     expect(find.text(l10n.continue_), findsOneWidget);
 
     await tester.tapAt(const Offset(5, 5));
     await tester.pump();
-    expect(find.text(l10n.welcomeToProMessage), findsOneWidget);
+    expect(find.text(l10n.subscriptionActiveTitle), findsOneWidget);
 
     events.value = const PurchaseEvent(
       id: 1,
@@ -90,6 +90,25 @@ void main() {
     );
     await tester.pump();
     expect(find.byType(AlertDialog), findsOneWidget);
+  });
+
+  testWidgets('changing plans never presents an activation success', (
+    tester,
+  ) async {
+    final events = ValueNotifier<PurchaseEvent?>(null);
+    final l10n = lookupAppLocalizations(const Locale('en'));
+    await tester.pumpWidget(_TestApp(events: events));
+    events.value = const PurchaseEvent(
+      id: 1,
+      attemptId: 1,
+      outcome: PurchaseOutcome.changePlanRequired,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.subscriptionChangePlan), findsOneWidget);
+    expect(find.text(l10n.subscriptionActiveTitle), findsNothing);
+    await tester.tap(find.text(l10n.cancel));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
   testWidgets('activation pending warns against another purchase', (
@@ -128,7 +147,7 @@ void main() {
 
     expect(find.text(l10n.subscriptionAccountMismatchTitle), findsOneWidget);
     expect(find.text(l10n.subscriptionAccountMismatchMessage), findsOneWidget);
-    expect(find.text(l10n.welcomeToProMessage), findsNothing);
+    expect(find.text(l10n.subscriptionActiveTitle), findsNothing);
   });
 }
 

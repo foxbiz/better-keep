@@ -148,10 +148,19 @@ export function evaluateSubscription(
 	const future = expiresAt !== null && expiresAt.toMillis() > now;
 	const stateAllowsAccess =
 		state === null || isActive(state) || isGrace(state) || isCancelled(state);
-	const entitled = plan === "pro" && future && stateAllowsAccess;
+	// A verified replacement retires the old token permanently. Late Play events
+	// may still report its old expiry; they must not restore the replaced tier.
+	const superseded =
+		source === "play_store" && text(data.supersededByPurchaseToken) !== null;
+	const entitled =
+		!superseded &&
+		(plan === "pro" || plan === "lite") &&
+		future &&
+		stateAllowsAccess;
 
 	let entitlementState: EntitlementState;
-	if (entitled && isGrace(state)) entitlementState = "grace";
+	if (superseded) entitlementState = "ended";
+	else if (entitled && isGrace(state)) entitlementState = "grace";
 	else if (entitled && isCancelled(state))
 		entitlementState = "cancelled_access";
 	else if (entitled) entitlementState = "entitled";
@@ -220,7 +229,7 @@ export interface VerifiedEntitlementPayload {
 	billingPeriod: string;
 	entitlementContractVersion: typeof ENTITLEMENT_CONTRACT_VERSION;
 	expiresAt: string;
-	plan: "pro";
+	plan: "pro" | "lite";
 	renewalState: RenewalState;
 	source: PaidSubscriptionSource;
 	subscriptionState: string;
@@ -250,7 +259,7 @@ export function verifiedEntitlementPayload(
 		billingPeriod: evaluated.billingPeriod,
 		entitlementContractVersion: ENTITLEMENT_CONTRACT_VERSION,
 		expiresAt: evaluated.expiresAt.toDate().toISOString(),
-		plan: "pro",
+		plan: evaluated.plan === "lite" ? "lite" : "pro",
 		renewalState: evaluated.renewalState,
 		source: evaluated.source,
 		subscriptionState: evaluated.state ?? evaluated.entitlementState,

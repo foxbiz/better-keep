@@ -42,6 +42,7 @@ import 'package:better_keep/utils/db_init.dart'
     if (dart.library.io) 'package:better_keep/utils/db_init_native.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
 import 'package:better_keep/services/alarm_id_service.dart';
 import 'package:better_keep/services/firebase_auth_redirect_domain.dart';
 import 'package:better_keep/services/firebase_apple_configuration.dart';
@@ -49,6 +50,7 @@ import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/firebase_bootstrap_coordinator.dart';
 import 'package:better_keep/services/firebase_default_app_initializer.dart';
+import 'package:better_keep/services/attachment_startup_cleanup.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -406,9 +408,6 @@ class _BetterKeepState extends State<BetterKeep> {
     // Check notification permission status (read-only, no prompt)
     ReminderPermissionService().checkAndNotify();
 
-    // Initialize intent handler for opening/sharing files
-    IntentHandlerService.instance.init();
-
     // Initialize subscription service for IAP early (doesn't require auth)
     // This allows products to load while user is logging in
     unawaited(
@@ -420,13 +419,19 @@ class _BetterKeepState extends State<BetterKeep> {
       }),
     );
 
-    // Initialize subscription/plan tracking - this sets up auth state listener
-    // so it will react when users sign in/out, even if not currently logged in
-    await PlanService.instance.init();
-
-    // Use the same recoverable post-sign-in pipeline for restored sessions and
-    // fresh sign-ins. A transient cloud failure must not make startup fatal.
-    await AuthService.initializeCurrentUserServices();
+    final intentsReady = Completer<void>();
+    // Listen before account restoration: Android does not replay warm shares.
+    // Imports still wait for restored services and a rendered UI frame.
+    IntentHandlerService.instance.init(ready: intentsReady.future);
+    try {
+      // Restore the session before importing, but keep local sharing available
+      // if optional account services fail during startup.
+      await PlanService.instance.init();
+      ExternalSyncService.instance.init();
+      await AuthService.initializeCurrentUserServices();
+    } finally {
+      completeImageIntentStartup(intentsReady);
+    }
   }
 
   Future<void> _initializeOptionalReminderServices() async {
@@ -467,6 +472,15 @@ class _BetterKeepState extends State<BetterKeep> {
     AppLogger.log(
       '[DeepLink] Received: ${uri.scheme}://${uri.host}${uri.path}',
     );
+
+    // Storage grants are completed by the authenticated controller poll. The
+    // link only brings the app to the foreground; it carries no credentials.
+    if (uri.scheme == 'betterkeep' && uri.host == 'storage-sync') return;
+
+    if (uri.scheme == 'betterkeep' && uri.host == 'image-share') {
+      unawaited(IntentHandlerService.instance.checkPendingIntents());
+      return;
+    }
 
     // Handle OAuth callback (betterkeep://auth?code=xxx&transactionId=xxx)
     if (uri.scheme == 'betterkeep' && uri.host == 'auth') {
@@ -567,6 +581,27 @@ class _BetterKeepState extends State<BetterKeep> {
         operations: protectedFileOperations,
         journal: NewAttachmentTransactionJournal(await AppState.prefs),
       );
+      if (!kIsWeb) {
+        try {
+          final prefs = await AppState.prefs;
+          final unresolved =
+              (await NoteLockJournal(prefs).load()).isNotEmpty ||
+              (await NoteLockRemovalJournal(prefs).load()).isNotEmpty ||
+              (await LegacySketchMigrationJournal(prefs).load()).isNotEmpty ||
+              (await NewAttachmentTransactionJournal(prefs).load()).isNotEmpty;
+          if (!unresolved) {
+            await AttachmentStartupCleanup.run(
+              database: db,
+              operations: protectedFileOperations,
+              retiredPaths: (await PendingAttachmentSourceCleanupJournal(
+                prefs,
+              ).load()).map((r) => r.sourcePath),
+            );
+          }
+        } catch (error, stackTrace) {
+          AppLogger.error('Attachment maintenance deferred', error, stackTrace);
+        }
+      }
       await PendingAttachmentSourceCleanupRecoveryService.recoverPending(
         database: db,
         operations: protectedFileOperations,

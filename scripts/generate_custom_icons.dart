@@ -36,7 +36,7 @@ class IconInfo {
 /// Returns a list of IconInfo with primary name, code point, and aliases
 List<IconInfo> parseCssIcons(String css) {
   final iconPattern = RegExp(
-    r'\.icon-([a-zA-Z0-9_-]+):before\s*\{\s*content:\s*"\\([a-fA-F0-9]+)"',
+    r'''\.icon-([a-zA-Z0-9_-]+):before\s*\{\s*content:\s*(['"])\\([a-fA-F0-9]+)\2''',
     multiLine: true,
   );
 
@@ -45,7 +45,7 @@ List<IconInfo> parseCssIcons(String css) {
 
   for (final match in allMatches) {
     final iconName = match.group(1)!;
-    final codePoint = int.parse(match.group(2)!, radix: 16);
+    final codePoint = int.parse(match.group(3)!, radix: 16);
 
     // Collect all names for each code point
     codePointToNames.putIfAbsent(codePoint, () => []).add(iconName);
@@ -92,6 +92,12 @@ String toCamelCase(String kebabCase) {
 
 /// Generate the Dart file content
 String generateDartFile(List<IconInfo> icons) {
+  if (icons.isEmpty) {
+    throw StateError(
+      'No icons found; refusing to overwrite custom_icons.dart.',
+    );
+  }
+
   final buffer = StringBuffer();
 
   buffer.writeln('import \'package:flutter/material.dart\';');

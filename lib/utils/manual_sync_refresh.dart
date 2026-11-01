@@ -1,3 +1,9 @@
+import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
+import 'package:better_keep/services/note_sort_service.dart';
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
@@ -16,6 +22,9 @@ bool Function()? _manualRefreshCurrent;
 Future<SyncRefreshOutcome> runManualSyncRefresh({
   required Future<SyncRefreshOutcome> Function() notes,
   required Future<SyncRefreshOutcome> Function() labels,
+  Future<SyncRefreshOutcome?> Function()? external,
+  Future<SyncRefreshOutcome> Function()? ordering,
+  bool firebaseEnabled = true,
 }) async {
   Future<SyncRefreshOutcome> attempt(
     Future<SyncRefreshOutcome> Function() action,
@@ -31,12 +40,42 @@ Future<SyncRefreshOutcome> runManualSyncRefresh({
     }
   }
 
-  final noteOutcome = await attempt(notes);
-  if (noteOutcome == SyncRefreshOutcome.unavailable) {
-    return noteOutcome;
+  Future<SyncRefreshOutcome> firebase() async {
+    final noteOutcome = await attempt(notes);
+    if (noteOutcome == SyncRefreshOutcome.unavailable) return noteOutcome;
+    final labelOutcome = await attempt(labels);
+    final outcomes = [noteOutcome, labelOutcome];
+    if (ordering != null &&
+        outcomes.every(
+          (outcome) =>
+              outcome == SyncRefreshOutcome.complete ||
+              outcome == SyncRefreshOutcome.uploadRestricted,
+        )) {
+      outcomes.add(await attempt(ordering));
+    }
+    return combineSyncRefreshOutcomes(outcomes);
   }
-  final labelOutcome = await attempt(labels);
-  return combineSyncRefreshOutcomes([noteOutcome, labelOutcome]);
+
+  Future<SyncRefreshOutcome?> providers() async {
+    try {
+      return await external!();
+    } on CloudOperationCancelled {
+      return SyncRefreshOutcome.deferred;
+    } catch (error) {
+      return isCloudConnectionFailure(error)
+          ? SyncRefreshOutcome.unavailable
+          : SyncRefreshOutcome.failed;
+    }
+  }
+
+  final results = await Future.wait<SyncRefreshOutcome?>([
+    if (firebaseEnabled) firebase(),
+    if (external != null) providers(),
+  ]);
+  final outcomes = results.whereType<SyncRefreshOutcome>().toList();
+  return outcomes.isEmpty
+      ? SyncRefreshOutcome.deferred
+      : combineSyncRefreshOutcomes(outcomes);
 }
 
 /// Feedback belongs only to user actions, never to automatic sync retries.
@@ -54,7 +93,20 @@ Future<void> refreshSyncFromUser(BuildContext context) {
   late final Future<void> operation;
   operation =
       (() async {
+        final preference = FirebaseSyncPreference.instance;
         final outcome = await runManualSyncRefresh(
+          // While selection loads, the services report their readiness without
+          // transferring data. Once confirmed, Sync off still permits downloads.
+          firebaseEnabled:
+              !preference.stoppedLocally &&
+              (preference.selectedProvider == null ||
+                  preference.allowsDownload(preference.accountId)),
+          ordering: () => current()
+              ? NoteSortService().refreshWithOutcome(dataHydrated: true)
+              : Future.value(SyncRefreshOutcome.deferred),
+          external: () => current()
+              ? ExternalSyncService.instance.refreshWithOutcome()
+              : Future.value(SyncRefreshOutcome.deferred),
           notes: () => NoteSyncService().refreshWithOutcome(manual: true),
           labels: () => current()
               ? LabelSyncService().refreshWithOutcome()
@@ -82,11 +134,19 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
         snackbar(context.l10n.noConnectionAvailable);
       }
     case SyncRefreshOutcome.deferred:
+      final chooseProvider =
+          !AuthService.sessionInvalid.value &&
+          E2EEService.instance.status.value != E2EEStatus.pendingApproval &&
+          FirebaseSyncPreference.instance.allTransfersPaused;
+      // The status pill already explains this deliberate pause.
+      if (chooseProvider && AppState.showSyncProgress) return;
       snackbar(
         AuthService.sessionInvalid.value
             ? context.l10n.pleaseSignInAgain
             : E2EEService.instance.status.value == E2EEStatus.pendingApproval
             ? context.l10n.waitingForDeviceApproval
+            : chooseProvider
+            ? context.l10n.externalSyncDescription
             : E2EEService.instance.isCryptoReady
             ? context.l10n.syncPaused
             : context.l10n.e2eeNotReady,
@@ -97,7 +157,13 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
       if (!AppState.showSyncProgress) snackbar(context.l10n.syncComplete);
     case SyncRefreshOutcome.uploadRestricted:
       if (!AppState.showSyncProgress) {
-        snackbar(context.l10n.syncUploadRestricted);
+        snackbar(
+          const SyncProgress(SyncPhase.uploadRestricted).localized(
+            context.l10n,
+            cloudUploadsRequirePro:
+                !PlanService.instance.entitlements.realtimeCloudSync,
+          ),
+        );
       }
   }
 }

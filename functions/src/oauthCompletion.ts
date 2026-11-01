@@ -1,7 +1,8 @@
-import { Timestamp, type Firestore } from "firebase-admin/firestore";
+import { type Firestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { auth, db } from "./config";
 import {
+	type BrowserOAuthProvider,
 	challengeForVerifier,
 	createOpaqueToken,
 	EPHEMERAL_DOCUMENT_RETENTION_MS,
@@ -11,7 +12,6 @@ import {
 	OAUTH_COMPLETION_TTL_MS,
 	OAUTH_REDEMPTION_LEASE_MS,
 	timingSafeStringEqual,
-	type BrowserOAuthProvider,
 } from "./oauthSession";
 
 interface CompletionData {
