@@ -10,6 +10,15 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
+  String get sharedImageNamesConflict =>
+      '공유한 이미지 중 일부의 파일 이름이 같습니다. 한 번에 하나씩 공유해 주세요.';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return '이미지 메모를 만들 수 없습니다($fileName). 50MB 이하, 2,400만 화소 이하의 이미지로 다시 공유해 주세요.';
+  }
+
+  @override
   String get externalSyncContinue => '계속';
 
   @override

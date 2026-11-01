@@ -10,6 +10,14 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get sharedImageNamesConflict => '部分共享图片的文件名相同。请逐张共享。';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return '无法创建图片笔记（$fileName）。请使用不超过 50 MB 和2400万像素的图片重新分享。';
+  }
+
+  @override
   String get externalSyncContinue => '继续';
 
   @override

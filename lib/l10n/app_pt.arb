@@ -1,4 +1,6 @@
 {
+	"sharedImageNamesConflict": "Algumas imagens compartilhadas têm o mesmo nome de arquivo. Compartilhe uma de cada vez.",
+	"sharedImageImportFailed": "Não foi possível criar a nota com imagens ({fileName}). Tente compartilhar novamente com imagens de até 50 MB e 24 megapixels.",
   "externalSyncContinue": "Continuar",
   "externalSyncConnectionInfo": "Informações da conexão",
   "externalSyncConnectPrompt": "Entre para começar a sincronizar suas notas.",

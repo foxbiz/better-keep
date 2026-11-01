@@ -108,6 +108,18 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @sharedImageNamesConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Some shared images have matching filenames. Please share them one at a time.'**
+  String get sharedImageNamesConflict;
+
+  /// An image share failed; filename identifies the failing image
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the image note ({fileName}). Try sharing again with images up to 50 MB and 24 megapixels.'**
+  String sharedImageImportFailed(String fileName);
+
   /// No description provided for @externalSyncContinue.
   ///
   /// In en, this message translates to:

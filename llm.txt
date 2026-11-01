@@ -149,6 +149,8 @@ better-keep/
 │   │   ├── reminder_time_zone_resolver.dart # Full IANA timezone resolution
 │   │   ├── reminder_notification_registration.dart # Pending request verification
 │   │   ├── device_approval_notification_service.dart
+│   │   ├── shared_image_note_service.dart # Atomic image-share import, owned encrypted copies, 50 MiB / 24 MP source limits
+│   │   ├── ios_image_share_inbox.dart # App Group batch import and acknowledgement
 │   │   ├── intent_handler_service.dart
 │   │   ├── reminder_permission_service.dart
 │   │   ├── note_export_service.dart
@@ -457,3 +459,76 @@ pending_remote_sync: id, item_id, item_type, operation, ...
 
 - Native startup source cleanup runs only after recovery journals drain, before UI/sync. It preserves note references, stays inside the app document directory and bounds each pass. Browser source collection and remote history compaction remain separate release risks.
 - DAV listing parsing is streamed with bounded input and one snapshot per continuation sequence; large-history limits still apply.
+
+## Image sharing into notes
+
+`app_links` owns deep links on iOS and Android; native Flutter deep linking is
+disabled to prevent duplicate navigation routes. Image imports display the
+localized processing indicator during actual import until the saved note opens
+or import fails; startup waiting and empty inbox checks do not block the UI.
+
+Apple debug builds using a LAN Firebase emulator route Storage through a local
+loopback relay (`firebase_storage_emulator_transport_io.dart`, port 49199).
+Firebase iOS 12.17 strips Auth on direct non-loopback HTTP. The relay accepts
+only unsigned emulator tokens for the selected project, strips App Check, and
+forwards to the selected emulator without changing Storage rules. Live builds
+and loopback/Android/web emulator routes do not use it. Verify native uploads
+with `integration_test/storage_emulator_lan_test.dart` and a LAN EMULATOR_HOST;
+the fixture uses a separate demo project and cleans up its test objects/users.
+
+Android SEND/SEND_MULTIPLE image/* shares create one image note per batch.
+The Android sharing plugin caches by display name: repeated source paths in one
+batch are rejected before import, with a message to share images individually,
+to avoid silently saving overwritten images. Distinct paths with matching filenames
+remain valid. This does not repair the upstream cache or guarantee isolation
+between overlapping share deliveries.
+iOS
+ShareExtension queues images in group.io.foxbiz.betterKeep.imageShare; the app
+imports after startup services and a UI frame (with a five-second frame watchdog),
+then acknowledges by batch UUID. A remounted startup owner can replace an
+abandoned readiness future without adding another share subscription.
+Successful image shares open the saved note editor. The iOS extension previews
+selected images using sequential, downsampled thumbnails and waits for Create
+note before persisting the batch. Closing the preview creates no note. After
+the button tap it copies images and attempts betterkeep://image-share using the installed
+sharing plugin's responder-chain approach. Apple does not officially support
+this extension-to-app launch; retain the queued batch if opening fails and
+validate physical-device behavior and App Review before release.
+ios/Shared/ImageShareInbox.swift owns the inbox and bounded provider transfer.
+Temporary App Group originals use complete iOS Data Protection and are excluded
+from backups, but are not encrypted with the app's local-data key. Import writes
+owned copies through the normal attachment encryption pipeline. Cleanup runs on
+inbox access: incomplete batches expire after one hour, all batches after seven
+days. Three explicit invalid-input failures (FormatException, including its
+SharedImageImportException wrapper) quarantine a batch; users can share again.
+I/O, session cancellation, and unknown failures remain retryable within the
+retention window and notify once per batch per process. Local imports also work
+while signed out; the cloud-operation guard is not a login requirement.
+Native inbox reads distinguish missing from unreadable metadata; unreadable
+batches remain retryable without blocking other ready shares. The seven-day
+retention still applies. Extension progress says “Saving images…” during copying
+and “Opening Better Keep…” only during handoff.
+No background expiration is guaranteed if neither app nor extension is opened.
+`npm test image-share` runs Dart regressions, native Swift tests on macOS, and
+archive-signing policy tests through an available Python 3 runtime. The macOS
+image-share-native PR job is a dependency of the portable release gate. Xcode Cloud ci_post_xcodebuild.sh verifies App Group
+entitlements in the signed app, extension, and provisioning profiles. Archive-only
+jobs skip signing validation when no export is declared; distribution workflows
+must set IMAGE_SHARE_REQUIRE_SIGNED_EXPORT=1. Auth restoration failures still
+schedule local intent startup after a UI frame. A signed
+archive and physical-device acceptance remain required; simulator tests cannot
+prove distribution provisioning.
+
+Image-share source map: `lib/services/intent_handler_service.dart` coordinates
+startup and incoming shares; `shared_image_note_service.dart` owns note creation;
+`ios_image_share_inbox.dart` handles acknowledgement and retry classification;
+`lib/components/image_share_progress.dart` displays import progress.
+`ios/ShareExtension/` owns extension UI, localization, and target configuration;
+`ios/Shared/ImageShareInbox.swift` owns native storage and transfer cancellation.
+`firebase_storage_emulator_transport{,_io,_stub}.dart` in `lib/services/` selects
+and implements the debug relay. Regression tests live in
+`test/{intent_handler_pending,shared_image_note_service,ios_image_share_inbox,firebase_storage_emulator_transport}_test.dart`,
+`test/native/image_share_test.swift`, and `test/tool/image_share_*`.
+The reproducible iOS preview/cold/warm/cancel/copy-failure UI gate is documented in
+`test/ios_image_share_ui/README.md`. Its disposable simulator fixture requires a
+test-only LOCAL_DATA_KEY and asserts encrypted attachments before reporting success.

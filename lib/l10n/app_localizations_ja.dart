@@ -10,6 +10,15 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get sharedImageNamesConflict =>
+      '共有された画像の一部に同じファイル名があります。1枚ずつ共有してください。';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return '画像メモを作成できませんでした（$fileName）。50 MB 以下、2400万画素以下の画像でもう一度共有してください。';
+  }
+
+  @override
   String get externalSyncContinue => '続行';
 
   @override

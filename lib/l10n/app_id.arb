@@ -1,4 +1,6 @@
 {
+	"sharedImageNamesConflict": "Beberapa gambar yang dibagikan memiliki nama file yang sama. Bagikan satu per satu.",
+	"sharedImageImportFailed": "Tidak dapat membuat catatan gambar ({fileName}). Coba bagikan lagi dengan gambar maksimal 50 MB dan 24 megapiksel.",
   "externalSyncContinue": "Lanjutkan",
   "externalSyncConnectionInfo": "Info koneksi",
   "externalSyncConnectPrompt": "Masuk untuk mulai menyinkronkan catatan Anda.",

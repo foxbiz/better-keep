@@ -65,3 +65,5 @@ web/firebase-config.json
 .env
 .firebase/
 firepit-log.txt
+
+/ios/build/

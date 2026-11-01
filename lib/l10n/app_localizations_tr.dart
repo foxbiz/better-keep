@@ -10,6 +10,15 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String get sharedImageNamesConflict =>
+      'Paylaşılan bazı görsellerin dosya adları aynı. Lütfen bunları tek tek paylaşın.';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return 'Görsel notu oluşturulamadı ($fileName). En fazla 50 MB ve 24 megapiksel olan görsellerle tekrar paylaşmayı deneyin.';
+  }
+
+  @override
   String get externalSyncContinue => 'Devam et';
 
   @override

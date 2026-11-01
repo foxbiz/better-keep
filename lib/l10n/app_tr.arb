@@ -1,4 +1,6 @@
 {
+	"sharedImageNamesConflict": "Paylaşılan bazı görsellerin dosya adları aynı. Lütfen bunları tek tek paylaşın.",
+	"sharedImageImportFailed": "Görsel notu oluşturulamadı ({fileName}). En fazla 50 MB ve 24 megapiksel olan görsellerle tekrar paylaşmayı deneyin.",
   "externalSyncContinue": "Devam et",
   "externalSyncConnectionInfo": "Bağlantı bilgileri",
   "externalSyncConnectPrompt": "Notlarınızı eşitlemeye başlamak için oturum açın.",

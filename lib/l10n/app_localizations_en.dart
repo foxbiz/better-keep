@@ -10,6 +10,15 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get sharedImageNamesConflict =>
+      'Some shared images have matching filenames. Please share them one at a time.';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return 'Could not create the image note ($fileName). Try sharing again with images up to 50 MB and 24 megapixels.';
+  }
+
+  @override
   String get externalSyncContinue => 'Continue';
 
   @override

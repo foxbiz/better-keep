@@ -1,4 +1,7 @@
 {
+	"sharedImageNamesConflict": "Some shared images have matching filenames. Please share them one at a time.",
+	"sharedImageImportFailed": "Could not create the image note ({fileName}). Try sharing again with images up to 50 MB and 24 megapixels.",
+	"@sharedImageImportFailed": { "description": "An image share failed; filename identifies the failing image", "placeholders": { "fileName": { "type": "String" } } },
   "externalSyncContinue": "Continue",
   "externalSyncConnectionInfo": "Connection info",
   "externalSyncConnectPrompt": "Sign in to start syncing your notes.",

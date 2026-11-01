@@ -10,6 +10,15 @@ class AppLocalizationsPt extends AppLocalizations {
   AppLocalizationsPt([String locale = 'pt']) : super(locale);
 
   @override
+  String get sharedImageNamesConflict =>
+      'Algumas imagens compartilhadas têm o mesmo nome de arquivo. Compartilhe uma de cada vez.';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return 'Não foi possível criar a nota com imagens ($fileName). Tente compartilhar novamente com imagens de até 50 MB e 24 megapixels.';
+  }
+
+  @override
   String get externalSyncContinue => 'Continuar';
 
   @override

@@ -37,6 +37,34 @@ import flutter_local_notifications
       GeneratedPluginRegistrant.register(with: registry)
     }
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ImageShareInbox") {
+      let channel = FlutterMethodChannel(name: "com.betterkeep/image_shares", binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        do {
+          switch call.method {
+          case "pending":
+            result(try ImageShareInbox.pending())
+          case "complete", "failed":
+            guard let id = call.arguments as? String else {
+              result(FlutterError(code: "invalid_share", message: "Missing share ID", details: nil))
+              return
+            }
+            if call.method == "failed" {
+              result(try ImageShareInbox.failed(id))
+            } else {
+              try ImageShareInbox.complete(id)
+              result(nil)
+            }
+          default:
+            result(FlutterMethodNotImplemented)
+          }
+        } catch ImageShareError.unavailable {
+          result(FlutterError(code: "image_share_unavailable", message: "Image share container is unavailable", details: nil))
+        } catch {
+          result(FlutterError(code: "image_share_failed", message: error.localizedDescription, details: nil))
+        }
+      }
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "StorageHealth") {
       let channel = FlutterMethodChannel(
         name: "com.betterkeep/storage", binaryMessenger: registrar.messenger())

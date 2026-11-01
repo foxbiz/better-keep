@@ -10,6 +10,15 @@ class AppLocalizationsId extends AppLocalizations {
   AppLocalizationsId([String locale = 'id']) : super(locale);
 
   @override
+  String get sharedImageNamesConflict =>
+      'Beberapa gambar yang dibagikan memiliki nama file yang sama. Bagikan satu per satu.';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return 'Tidak dapat membuat catatan gambar ($fileName). Coba bagikan lagi dengan gambar maksimal 50 MB dan 24 megapiksel.';
+  }
+
+  @override
   String get externalSyncContinue => 'Lanjutkan';
 
   @override
