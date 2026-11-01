@@ -37,6 +37,15 @@ class AppLocalizationsPt extends AppLocalizations {
       'Insira a URL completa da pasta WebDAV e uma senha de aplicativo. A sincronização no navegador exige que seu servidor permita solicitações de outras origens.';
 
   @override
+  String showMoreDevices(int count) {
+    return 'Mostrar mais ($count+)';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly =>
+      'Apenas o seu dispositivo principal pode remover outros dispositivos.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -3792,7 +3801,15 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncUploadRestricted =>
-      'Alterações salvas neste dispositivo. O envio requer o Pro.';
+      'Salvo neste dispositivo. Ative a nuvem Better Keep para sincronizar as alterações.';
+
+  @override
+  String get syncUpgradeReminder =>
+      'Suas alterações estão salvas aqui. Sincronize com o Pro.';
+
+  @override
+  String get syncUpgradeForUploads =>
+      'Salvo neste dispositivo. Faça upgrade para Pro para sincronizar as alterações.';
 
   @override
   String get syncPaused => 'Sincronização pausada. Tente novamente.';
@@ -4001,7 +4018,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get externalSyncCloudDescription =>
-      'Sincronização integrada · Requer Pro';
+      'Sincronização integrada · Envios requerem Pro';
 
   @override
   String externalSyncAction(String action) {
@@ -4127,7 +4144,21 @@ class AppLocalizationsPt extends AppLocalizations {
   String get externalSyncOff => 'Sincronização desativada';
 
   @override
-  String get externalSyncOffDescription => 'Manter notas neste dispositivo';
+  String get externalSyncCloudDownloadDescription =>
+      'Baixe notas salvas · Envios exigem Pro';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Baixe notas do Better Keep cloud. Os envios continuarão pausados.';
+
+  @override
+  String get externalSyncDownloadsOn => 'Envios pausados · Downloads ativados';
+
+  @override
+  String get externalSyncAllPaused => 'Envios e downloads pausados';
+
+  @override
+  String get externalSyncOffDescription => 'Envios pausados';
 
   @override
   String get externalSyncDetails => 'Detalhes da sincronização';
@@ -4327,4 +4358,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get builtInCloudSync => 'Sincronização na nuvem integrada';
+
+  @override
+  String get deviceAdded => 'Adicionado';
 }

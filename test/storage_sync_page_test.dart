@@ -38,6 +38,7 @@ void main() {
     entitlements = ValueNotifier(Entitlements.pro);
     connections = _Connections();
     var revision = 1;
+    var downloads = true;
     selection = FirebaseSyncPreference(
       entitlements: entitlements,
       currentUid: () => 'owner',
@@ -48,11 +49,24 @@ void main() {
       writeProvider: (_, provider) async {
         selectionWrites.add(provider);
         await selectionGate?.future;
+        if (provider != 'none') downloads = provider == 'firebase';
         return FirebaseSyncSelection(
           provider == 'firebase',
           provider: provider,
+          firebaseDownloads: downloads,
           confirmed: true,
           revision: ++revision,
+        );
+      },
+      enableFirebaseDownloads: (_) async {
+        selectionWrites.add('downloads');
+        downloads = true;
+        return FirebaseSyncSelection(
+          false,
+          provider: 'none',
+          confirmed: true,
+          revision: ++revision,
+          firebaseDownloads: true,
         );
       },
     );
@@ -165,6 +179,78 @@ void main() {
   );
 
   testWidgets(
+    'Lite can explicitly restore downloads without enabling built-in uploads',
+    (tester) async {
+      await mount(tester);
+      await tester.pumpAndSettle();
+      await selection.selectProvider('dropbox');
+      await selection.selectProvider('none');
+      entitlements.value = Entitlements.lite;
+      await tester.pumpAndSettle();
+      expect(find.text('Uploads and downloads paused'), findsOneWidget);
+      selectionWrites.clear();
+      await tester.tap(card('firebase'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Download notes from Better Keep cloud. Uploads will stay paused.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(selectionWrites, isEmpty);
+      expect(selection.allowsDownload('owner'), false);
+      await tester.tap(card('firebase'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Download'));
+      await tester.pumpAndSettle();
+      expect(selectionWrites, ['downloads']);
+      expect(selection.selectedProvider, 'none');
+      expect(selection.allowsSync('owner'), false);
+      expect(selection.allowsDownload('owner'), true);
+      expect(find.text('Uploads paused · Downloads on'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'malformed settings can be repaired through an explicit card choice',
+    (tester) async {
+      String? written;
+      final invalid = FirebaseSyncPreference(
+        currentUid: () => 'owner',
+        watch: (_) => Stream.error(const FormatException('Invalid selection')),
+        write: (_, _) async => throw StateError('Unexpected fallback'),
+        writeProvider: (_, provider) async {
+          written = provider;
+          return FirebaseSyncSelection(
+            false,
+            provider: provider,
+            confirmed: true,
+            firebaseDownloads: false,
+            revision: 1,
+          );
+        },
+      );
+      addTearDown(invalid.dispose);
+      invalid.bind('owner');
+      await mount(tester, preference: invalid);
+      await tester.pumpAndSettle();
+      expect(invalid.failed, true);
+      await tester.ensureVisible(card('none'));
+      await tester.tap(card('none'));
+      await tester.pumpAndSettle();
+      expect(written, 'none');
+      expect(invalid.failed, false);
+      expect(invalid.allowsDownload('owner'), false);
+      expect(invalid.allowsSync('owner'), false);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'selected connected card stays compact and does not restart sync',
     (tester) async {
       connections.values['dropbox'] = _connection('dropbox');
@@ -224,7 +310,7 @@ void main() {
         find.textContaining('Storage full. Sync is paused'),
         findsOneWidget,
       );
-      expect(find.textContaining('Requires Pro'), findsOneWidget);
+      expect(find.textContaining('Uploads require Pro'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

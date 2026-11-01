@@ -8,7 +8,9 @@
   "externalSyncWebDavHelp": "Insira a URL completa da pasta WebDAV e uma senha de aplicativo. A sincronização no navegador exige que seu servidor permita solicitações de outras origens.",
 
 	"@@locale": "pt",
-	"@@last_modified": "2026-01-31",
+	"showMoreDevices": "Mostrar mais ({count}+)",
+	"deviceRemovalMainDeviceOnly": "Apenas o seu dispositivo principal pode remover outros dispositivos.",
+	"@@last_modified": "2026-11-01",
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Não foi possível iniciar o Better Keep",
@@ -1100,7 +1102,9 @@
 	"localEncryptionMissing": "As chaves necessárias para abrir suas notas salvas estão ausentes ou danificadas. Reconecte-se para restaurar o acesso ou use a recuperação de conta. Seus dados locais foram mantidos.",
 	"syncCheckingConnection": "Verificando conexão…",
 	"syncPreparing": "Preparando sincronização…",
-	"syncUploadRestricted": "Alterações salvas neste dispositivo. O envio requer o Pro.",
+	"syncUploadRestricted": "Salvo neste dispositivo. Ative a nuvem Better Keep para sincronizar as alterações.",
+	"syncUpgradeReminder": "Suas alterações estão salvas aqui. Sincronize com o Pro.",
+	"syncUpgradeForUploads": "Salvo neste dispositivo. Faça upgrade para Pro para sincronizar as alterações.",
 	"syncPaused": "Sincronização pausada. Tente novamente.",
   "insertTable": "Inserir tabela",
   "tablePickerHint": "Toque em uma célula para inserir ou escolha um tamanho personalizado.",
@@ -1154,7 +1158,7 @@
   "externalSyncUnavailable": "Entre na sua conta e aprove ou recupere este dispositivo para conectar um serviço de armazenamento.",
   "externalSyncAccount": "Conta e criptografia",
   "externalSyncCloud": "Nuvem do Better Keep",
-  "externalSyncCloudDescription": "Sincronização integrada · Requer Pro",
+  "externalSyncCloudDescription": "Sincronização integrada · Envios requerem Pro",
   "externalSyncAction": "{action, select, connect{Conectar} browser{Entrar pelo navegador} manual{Usar uma senha de app} reconnect{Reconectar} continue{Continuar no navegador} pause{Pausar} resume{Retomar} disconnect{Desconectar} sync{Sincronizar agora} other{Tentar novamente}}",
   "externalSyncState": "{state, select, preparing{Preparando autorização…} awaitingConsent{Pronto para autorizar no navegador} authorizing{Conectando…} cancelling{Cancelando autorização…} cancelPending{Não foi possível confirmar o cancelamento. Tente cancelar novamente.} connecting{Conectando…} pausing{Pausando…} enabling{Retomando…} disconnecting{Desconectando…} paused{Pausado} notConnected{Não conectado} keyRecovery{Recupere sua chave de criptografia para usar esta conexão.} pending{Algumas alterações estão aguardando sincronização.} other{Conectado}}",
   "externalSyncFailure": "{reason, select, sharedSetupRequired{Entre na conta do Google Drive conectada neste dispositivo. Suas notas continuam criptografadas.} reconnectRequired{Reconecte esta conta para continuar sincronizando.} quotaExceeded{Seu armazenamento está cheio. Libere espaço neste provedor e tente novamente.} rateLimited{O provedor pediu para aguardar. A sincronização tentará novamente automaticamente.} corruptData{Não foi possível verificar alguns dados de sincronização. Suas notas locais foram mantidas.} unsupported{Este provedor ou navegador não consegue concluir a conexão.} other{Não foi possível acessar este provedor. Verifique sua conexão e tente novamente.}}",
@@ -1176,7 +1180,11 @@
   "externalSyncLogoutUnknown": "Não foi possível verificar se todas as suas alterações foram sincronizadas. Sair da conta remove as notas e mídias locais deste dispositivo. Alterações que não foram salvas em nenhum provedor podem ser perdidas.\n\nVerifique seus provedores de sincronização ou exporte seus dados antes de sair.",
   "externalSyncUnlockSketches": "Algumas notas bloqueadas contêm desenhos antigos que precisam ser atualizados. No dispositivo em que você os criou, abra essas notas e desbloqueie-as com seu PIN. Depois, tente sincronizar novamente.",
 	"externalSyncOff": "Sincronização desativada",
-	"externalSyncOffDescription": "Manter notas neste dispositivo",
+  "externalSyncCloudDownloadDescription": "Baixe notas salvas · Envios exigem Pro",
+  "externalSyncDownloadOnly": "Baixe notas do Better Keep cloud. Os envios continuarão pausados.",
+  "externalSyncDownloadsOn": "Envios pausados · Downloads ativados",
+  "externalSyncAllPaused": "Envios e downloads pausados",
+	"externalSyncOffDescription": "Envios pausados",
 	"externalSyncDetails": "Detalhes da sincronização",
 	"externalSyncNeedsAttention": "Requer atenção · Veja os detalhes",
 	"externalSyncConnectTitle": "Conectar {provider}",
@@ -1242,5 +1250,6 @@
     }
   },
   "subscribe": "Assinar",
-  "builtInCloudSync": "Sincronização na nuvem integrada"
+  "builtInCloudSync": "Sincronização na nuvem integrada",
+  "deviceAdded": "Adicionado"
 }

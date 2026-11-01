@@ -89,7 +89,11 @@ extension RecoveryProgressLocalizations on RecoveryProgress {
 }
 
 extension SyncProgressLocalizations on SyncProgress {
-  String localized(AppLocalizations l10n) => switch (phase) {
+  String localized(
+    AppLocalizations l10n, {
+    bool cloudUploadsRequirePro = false,
+    bool providerSelectionRequired = false,
+  }) => switch (phase) {
     SyncPhase.idle => '',
     SyncPhase.checkingConnection => l10n.syncCheckingConnection,
     SyncPhase.preparing => l10n.syncPreparing,
@@ -98,8 +102,14 @@ extension SyncProgressLocalizations on SyncProgress {
     SyncPhase.signInRequired => l10n.pleaseSignInAgain,
     SyncPhase.storageFull => l10n.externalSyncStorageFull,
     SyncPhase.providerSetupRequired => l10n.externalSyncSharedSetup,
-    SyncPhase.deferred => l10n.syncPaused,
-    SyncPhase.uploadRestricted => l10n.syncUploadRestricted,
+    SyncPhase.deferred =>
+      providerSelectionRequired
+          ? l10n.externalSyncDescription
+          : l10n.syncPaused,
+    SyncPhase.uploadRestricted =>
+      cloudUploadsRequirePro
+          ? l10n.syncUpgradeForUploads
+          : l10n.syncUploadRestricted,
     SyncPhase.complete => l10n.syncComplete,
     SyncPhase.failed when failedCount > 0 => l10n.syncFailedCount(failedCount),
     SyncPhase.failed => l10n.syncFailed,

@@ -445,17 +445,18 @@ pending_remote_sync: id, item_id, item_type, operation, ...
 
 ---
 
-*External-sync context updated: 2026-10-31; unrelated module counts are historical.*
+*External-sync context updated: 2026-11-01; unrelated module counts are historical.*
 
 ## External sync and release boundaries
 
 - Drive, Dropbox, Nextcloud and WebDAV use a shared replica engine with independent provider acknowledgements, cursors and retry state. Switching providers must not reuse another provider's acknowledgement.
 - SQLite v12 adds a local mutation journal and replica tables. Built-in Firebase sync keeps its existing remote format, with transactional version checks; concurrent pushes are bounded and drain before teardown.
-- Free supports manual external sync. Lite/Pro add automatic external updates; built-in cloud sync requires Pro for uploads. Only fresh server-confirmed Lite state may persistently disable a Firebase selection.
+- Free supports manual external sync. Lite/Pro add automatic external updates. Pro is required for built-in uploads, not downloads. Paused built-in sync still downloads notes, media, labels and ordering on every plan. `firebaseDownloads` in the confirmed sync preference prevents an external-provider pause/clear from silently attaching Firebase; legacy missing values retain built-in recovery. Deploy its rules and the Functions clear-selection writer before the client. Local unsynced edits remain queued.
+- Device-list rendering uses `UserDevicesSection` for the compact three-row profile list and full device route. Main-device authorization remains in the existing device manager.
 - Credentials are encrypted on the client with purpose-derived user keys. The OAuth exchange function sees tokens transiently, but does not persist or log them. Notes, media and master keys remain end-to-end encrypted.
 - New browser keys exist only in memory. A read-only legacy WEB_STORAGE_KEY decoder preserves existing users until a recovery passphrase is saved; never rotate/remove that compatibility value prematurely.
 - New device approvals require QR pairing or full security-code verification. Legacy self-declared device status is not proof of credential access; capabilities remain required.
-- See docs/EXTERNAL_SYNC_IMPLEMENTATION.md, docs/EXTERNAL_SYNC_QA.md and docs/EXTERNAL_SYNC_RELEASE_REVIEW.md and docs/EXTERNAL_SYNC_CHANGE_REVIEW_2026-10-31.md for compatibility and outstanding release gates.
+- See docs/EXTERNAL_SYNC_IMPLEMENTATION.md and docs/EXTERNAL_SYNC_QA.md for compatibility and outstanding release gates.
 
 - Native startup source cleanup runs only after recovery journals drain, before UI/sync. It preserves note references, stays inside the app document directory and bounds each pass. Browser source collection and remote history compaction remain separate release risks.
 - DAV listing parsing is streamed with bounded input and one snapshot per continuation sequence; large-history limits still apply.

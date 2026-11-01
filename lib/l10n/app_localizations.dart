@@ -150,6 +150,18 @@ abstract class AppLocalizations {
   /// **'Enter your full WebDAV folder URL and an app password. Browser sync requires your server to allow cross-origin requests.'**
   String get externalSyncWebDavHelp;
 
+  /// Opens the full device list; count is the number of additional devices
+  ///
+  /// In en, this message translates to:
+  /// **'Show more ({count}+)'**
+  String showMoreDevices(int count);
+
+  /// No description provided for @deviceRemovalMainDeviceOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Only your main device can remove other devices.'**
+  String get deviceRemovalMainDeviceOnly;
+
   /// The name of the application
   ///
   /// In en, this message translates to:
@@ -6687,8 +6699,20 @@ abstract class AppLocalizations {
   /// No description provided for @syncUploadRestricted.
   ///
   /// In en, this message translates to:
-  /// **'Changes saved on this device. Uploading requires Pro.'**
+  /// **'Saved on this device. Enable Better Keep cloud to sync changes.'**
   String get syncUploadRestricted;
+
+  /// No description provided for @syncUpgradeReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Your changes are saved here. Sync them with Pro.'**
+  String get syncUpgradeReminder;
+
+  /// No description provided for @syncUpgradeForUploads.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved on this device. Upgrade to Pro to sync changes.'**
+  String get syncUpgradeForUploads;
 
   /// No description provided for @syncPaused.
   ///
@@ -7005,7 +7029,7 @@ abstract class AppLocalizations {
   /// External storage sync settings: externalSyncCloudDescription
   ///
   /// In en, this message translates to:
-  /// **'Built-in sync · Requires Pro'**
+  /// **'Built-in sync · Uploads require Pro'**
   String get externalSyncCloudDescription;
 
   /// External storage sync settings: externalSyncAction
@@ -7134,10 +7158,34 @@ abstract class AppLocalizations {
   /// **'Sync off'**
   String get externalSyncOff;
 
+  /// No description provided for @externalSyncCloudDownloadDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Download saved notes · Uploads require Pro'**
+  String get externalSyncCloudDownloadDescription;
+
+  /// No description provided for @externalSyncDownloadOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Download notes from Better Keep cloud. Uploads will stay paused.'**
+  String get externalSyncDownloadOnly;
+
+  /// No description provided for @externalSyncDownloadsOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads paused · Downloads on'**
+  String get externalSyncDownloadsOn;
+
+  /// No description provided for @externalSyncAllPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads and downloads paused'**
+  String get externalSyncAllPaused;
+
   /// No description provided for @externalSyncOffDescription.
   ///
   /// In en, this message translates to:
-  /// **'Keep notes on this device'**
+  /// **'Uploads paused'**
   String get externalSyncOffDescription;
 
   /// No description provided for @externalSyncDetails.
@@ -7475,6 +7523,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Built-in cloud sync'**
   String get builtInCloudSync;
+
+  /// No description provided for @deviceAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Added'**
+  String get deviceAdded;
 }
 
 class _AppLocalizationsDelegate

@@ -37,6 +37,15 @@ class AppLocalizationsTr extends AppLocalizations {
       'WebDAV klasörünüzün tam URL adresini ve bir uygulama parolasını girin. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.';
 
   @override
+  String showMoreDevices(int count) {
+    return 'Daha fazla göster ($count+)';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly =>
+      'Diğer cihazları yalnızca ana cihazınız kaldırabilir.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -3761,7 +3770,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncUploadRestricted =>
-      'Değişiklikler bu cihaza kaydedildi. Yüklemek için Pro gerekir.';
+      'Bu cihaza kaydedildi. Değişiklikleri eşitlemek için Better Keep bulutunu etkinleştirin.';
+
+  @override
+  String get syncUpgradeReminder =>
+      'Değişiklikleriniz burada kayıtlı. Pro ile eşitleyin.';
+
+  @override
+  String get syncUpgradeForUploads =>
+      'Bu cihaza kaydedildi. Değişiklikleri eşitlemek için Pro’ya yükseltin.';
 
   @override
   String get syncPaused =>
@@ -3947,7 +3964,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get externalSyncCloudDescription =>
-      'Yerleşik eşitleme · Pro gerektirir';
+      'Yerleşik eşitleme · Yükleme için Pro gerekir';
 
   @override
   String externalSyncAction(String action) {
@@ -4075,7 +4092,22 @@ class AppLocalizationsTr extends AppLocalizations {
   String get externalSyncOff => 'Eşitleme kapalı';
 
   @override
-  String get externalSyncOffDescription => 'Notları bu cihazda tut';
+  String get externalSyncCloudDownloadDescription =>
+      'Kayıtlı notları indirin · Yükleme için Pro gerekir';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Better Keep cloud üzerindeki notları indirin. Yüklemeler duraklatılmış olarak kalacak.';
+
+  @override
+  String get externalSyncDownloadsOn =>
+      'Yüklemeler duraklatıldı · İndirmeler açık';
+
+  @override
+  String get externalSyncAllPaused => 'Yüklemeler ve indirmeler duraklatıldı';
+
+  @override
+  String get externalSyncOffDescription => 'Yüklemeler duraklatıldı';
 
   @override
   String get externalSyncDetails => 'Eşitleme ayrıntıları';
@@ -4276,4 +4308,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get builtInCloudSync => 'Yerleşik bulut senkronizasyonu';
+
+  @override
+  String get deviceAdded => 'Eklendi';
 }

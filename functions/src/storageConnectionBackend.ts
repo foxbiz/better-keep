@@ -59,6 +59,7 @@ const repository: EncryptedConnectionRepository = {
 					transaction.set(selection, {
 						provider: "none",
 						enabled: false,
+						firebaseDownloads: false,
 						updatedAt: FieldValue.serverTimestamp(),
 					});
 				}

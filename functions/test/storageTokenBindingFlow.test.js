@@ -412,3 +412,44 @@ test("secret rotation fails closed before contacting the provider", async () => 
 	assert.equal(fetches, count);
 	assert.equal(record(c.uid).lease.exchange, undefined);
 });
+
+
+for (const provider of ["google_drive", "dropbox", "nextcloud", "webdav"]) {
+  for (const selected of [provider, provider === "google_drive" ? "dropbox" : "google_drive"]) {
+    test(`clearing ${provider} preserves download isolation with ${selected} selected`, async () => {
+      let capability;
+      if (provider === "google_drive") {
+        capability = (await connect("alice")).base.capability;
+      } else {
+        capability = randomBytes(32).toString("base64url");
+        await call(connections.registerEncryptedStorageConnection, "alice", {
+          provider, clientId: "fixture-client", generation: 1, capability,
+          encryptedCapability: cipher(), encryptedCredentials: cipher(),
+          libraryId: "a".repeat(64),
+        });
+      }
+      const input = { provider, capability };
+      const path = "users/alice/sync_settings/firebase";
+      records.set(path, { provider: selected, enabled: false });
+      mock.method(config.auth, "getUser", async () => ({ email: "qa@example.invalid", emailVerified: true }));
+      let email;
+      mock.method(require("../lib/utils"), "sendEmail", async (value) => { email = value; });
+      const challenge = await call(connections.requestStorageClearOtp, "alice", input);
+      const code = email.text.match(/\b\d{6}\b/)[0];
+      const operation = await call(connections.beginStorageClear, "alice", {
+        ...input, requestId: challenge.requestId, code,
+      });
+      await call(connections.finishStorageClear, "alice", {
+        ...input, operationId: operation.operationId,
+      });
+      const selection = records.get(path);
+      assert.equal(selection.enabled, false);
+      if (selected === provider) {
+        assert.equal(selection.provider, "none");
+        assert.equal(selection.firebaseDownloads, false);
+      } else {
+        assert.deepEqual(selection, { provider: selected, enabled: false });
+      }
+    });
+  }
+}

@@ -37,6 +37,15 @@ class AppLocalizationsId extends AppLocalizations {
       'Masukkan URL lengkap folder WebDAV dan kata sandi aplikasi. Sinkronisasi browser memerlukan izin permintaan lintas asal dari server Anda.';
 
   @override
+  String showMoreDevices(int count) {
+    return 'Tampilkan lebih banyak ($count+)';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly =>
+      'Hanya perangkat utama Anda yang dapat menghapus perangkat lain.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -3757,7 +3766,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncUploadRestricted =>
-      'Perubahan disimpan di perangkat ini. Mengunggah memerlukan Pro.';
+      'Tersimpan di perangkat ini. Aktifkan cloud Better Keep untuk menyinkronkan perubahan.';
+
+  @override
+  String get syncUpgradeReminder =>
+      'Perubahan Anda tersimpan di sini. Sinkronkan dengan Pro.';
+
+  @override
+  String get syncUpgradeForUploads =>
+      'Tersimpan di perangkat ini. Upgrade ke Pro untuk menyinkronkan perubahan.';
 
   @override
   String get syncPaused => 'Sinkronisasi dijeda. Silakan coba lagi.';
@@ -3942,7 +3959,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get externalSyncCloudDescription =>
-      'Sinkronisasi bawaan · Memerlukan Pro';
+      'Sinkronisasi bawaan · Unggah perlu Pro';
 
   @override
   String externalSyncAction(String action) {
@@ -4069,7 +4086,21 @@ class AppLocalizationsId extends AppLocalizations {
   String get externalSyncOff => 'Sinkronisasi nonaktif';
 
   @override
-  String get externalSyncOffDescription => 'Simpan catatan di perangkat ini';
+  String get externalSyncCloudDownloadDescription =>
+      'Unduh catatan tersimpan · Unggahan memerlukan Pro';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Unduh catatan dari Better Keep cloud. Unggahan akan tetap dijeda.';
+
+  @override
+  String get externalSyncDownloadsOn => 'Unggahan dijeda · Unduhan aktif';
+
+  @override
+  String get externalSyncAllPaused => 'Unggahan dan unduhan dijeda';
+
+  @override
+  String get externalSyncOffDescription => 'Unggahan dijeda';
 
   @override
   String get externalSyncDetails => 'Detail sinkronisasi';
@@ -4269,4 +4300,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get builtInCloudSync => 'Sinkronisasi cloud bawaan';
+
+  @override
+  String get deviceAdded => 'Ditambahkan';
 }

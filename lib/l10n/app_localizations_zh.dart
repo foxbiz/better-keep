@@ -34,6 +34,14 @@ class AppLocalizationsZh extends AppLocalizations {
       '请输入 WebDAV 文件夹的完整网址和应用专用密码。浏览器同步需要服务器允许跨源请求。';
 
   @override
+  String showMoreDevices(int count) {
+    return '显示更多（$count+）';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly => '只有您的主设备可以移除其他设备。';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -3561,7 +3569,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPreparing => '正在准备同步…';
 
   @override
-  String get syncUploadRestricted => '更改已保存在此设备上。上传需要 Pro。';
+  String get syncUploadRestricted => '已保存在此设备上。启用 Better Keep 云端以同步更改。';
+
+  @override
+  String get syncUpgradeReminder => '您的更改已保存在此处。使用 Pro 同步。';
+
+  @override
+  String get syncUpgradeForUploads => '已保存在此设备上。升级到 Pro 以同步更改。';
 
   @override
   String get syncPaused => '同步已暂停。请重试。';
@@ -3738,7 +3752,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalSyncCloud => 'Better Keep 云端';
 
   @override
-  String get externalSyncCloudDescription => '内置同步 · 需要 Pro';
+  String get externalSyncCloudDescription => '内置同步 · 上传需要 Pro';
 
   @override
   String externalSyncAction(String action) {
@@ -3858,7 +3872,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalSyncOff => '关闭同步';
 
   @override
-  String get externalSyncOffDescription => '将笔记保留在此设备上';
+  String get externalSyncCloudDownloadDescription => '下载已保存的笔记 · 上传需要 Pro';
+
+  @override
+  String get externalSyncDownloadOnly => '从 Better Keep cloud 下载笔记。上传将保持暂停。';
+
+  @override
+  String get externalSyncDownloadsOn => '上传已暂停 · 下载已开启';
+
+  @override
+  String get externalSyncAllPaused => '上传和下载已暂停';
+
+  @override
+  String get externalSyncOffDescription => '上传已暂停';
 
   @override
   String get externalSyncDetails => '同步详情';
@@ -4041,4 +4067,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get builtInCloudSync => '内置云同步';
+
+  @override
+  String get deviceAdded => '添加时间';
 }

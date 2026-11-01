@@ -35,6 +35,14 @@ class AppLocalizationsKo extends AppLocalizations {
       'WebDAV 폴더의 전체 URL과 앱 비밀번호를 입력하세요. 브라우저에서 동기화하려면 서버에서 교차 출처 요청을 허용해야 합니다.';
 
   @override
+  String showMoreDevices(int count) {
+    return '더 보기 ($count+)';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly => '기본 기기에서만 다른 기기를 삭제할 수 있습니다.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -3621,7 +3629,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncPreparing => '동기화 준비 중…';
 
   @override
-  String get syncUploadRestricted => '변경 사항이 이 기기에 저장되었습니다. 업로드하려면 Pro가 필요합니다.';
+  String get syncUploadRestricted =>
+      '이 기기에 저장되었습니다. 변경 사항을 동기화하려면 Better Keep 클라우드를 활성화하세요.';
+
+  @override
+  String get syncUpgradeReminder => '변경 사항이 여기에 저장되어 있습니다. Pro로 동기화하세요.';
+
+  @override
+  String get syncUpgradeForUploads =>
+      '이 기기에 저장되었습니다. 변경 사항을 동기화하려면 Pro로 업그레이드하세요.';
 
   @override
   String get syncPaused => '동기화가 일시 중지되었습니다. 다시 시도해 주세요.';
@@ -3800,7 +3816,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get externalSyncCloud => 'Better Keep 클라우드';
 
   @override
-  String get externalSyncCloudDescription => '기본 동기화 · Pro 필요';
+  String get externalSyncCloudDescription => '기본 동기화 · 업로드는 Pro 필요';
 
   @override
   String externalSyncAction(String action) {
@@ -3924,7 +3940,21 @@ class AppLocalizationsKo extends AppLocalizations {
   String get externalSyncOff => '동기화 끄기';
 
   @override
-  String get externalSyncOffDescription => '이 기기에 노트 보관';
+  String get externalSyncCloudDownloadDescription =>
+      '저장된 노트 다운로드 · 업로드에는 Pro 필요';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Better Keep cloud에서 노트를 다운로드합니다. 업로드는 계속 일시 중지됩니다.';
+
+  @override
+  String get externalSyncDownloadsOn => '업로드 일시 중지 · 다운로드 켜짐';
+
+  @override
+  String get externalSyncAllPaused => '업로드 및 다운로드 일시 중지';
+
+  @override
+  String get externalSyncOffDescription => '업로드 일시 중지';
 
   @override
   String get externalSyncDetails => '동기화 세부 정보';
@@ -4112,4 +4142,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get builtInCloudSync => '기본 클라우드 동기화';
+
+  @override
+  String get deviceAdded => '추가됨';
 }

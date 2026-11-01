@@ -9,7 +9,10 @@
   "externalSyncWebDavHelp": "Enter your full WebDAV folder URL and an app password. Browser sync requires your server to allow cross-origin requests.",
 
 	"@@locale": "en",
-	"@@last_modified": "2026-01-31",
+	"showMoreDevices": "Show more ({count}+)",
+	"deviceRemovalMainDeviceOnly": "Only your main device can remove other devices.",
+	"@showMoreDevices": {"description": "Opens the full device list; count is the number of additional devices", "placeholders": {"count": {"type": "int"}}},
+	"@@last_modified": "2026-11-01",
 
 	"appTitle": "Better Keep",
 	"@appTitle": { "description": "The name of the application" },
@@ -3809,7 +3812,9 @@
 	"localEncryptionMissing": "The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept.",
 	"syncCheckingConnection": "Checking connection…",
 	"syncPreparing": "Preparing sync…",
-	"syncUploadRestricted": "Changes saved on this device. Uploading requires Pro.",
+	"syncUploadRestricted": "Saved on this device. Enable Better Keep cloud to sync changes.",
+	"syncUpgradeReminder": "Your changes are saved here. Sync them with Pro.",
+	"syncUpgradeForUploads": "Saved on this device. Upgrade to Pro to sync changes.",
 	"syncPaused": "Sync paused. Please retry.",
   "insertTable": "Insert table",
   "tablePickerHint": "Tap a cell to insert, or choose a custom size.",
@@ -3934,7 +3939,7 @@
   "externalSyncUnavailable": "Sign in and approve or recover this device to connect storage.",
   "externalSyncAccount": "Account and encryption",
   "externalSyncCloud": "Better Keep cloud",
-  "externalSyncCloudDescription": "Built-in sync · Requires Pro",
+  "externalSyncCloudDescription": "Built-in sync · Uploads require Pro",
   "externalSyncAction": "{action, select, connect{Connect} browser{Sign in with browser} manual{Use an app password} reconnect{Reconnect} continue{Continue in browser} pause{Pause} resume{Resume} disconnect{Disconnect} sync{Sync now} other{Retry}}",
   "externalSyncState": "{state, select, preparing{Preparing authorization…} awaitingConsent{Ready to authorize in your browser} authorizing{Connecting…} cancelling{Cancelling authorization…} cancelPending{Cancellation could not be confirmed. Retry Cancel.} connecting{Connecting…} pausing{Pausing…} enabling{Resuming…} disconnecting{Disconnecting…} paused{Paused} notConnected{Not connected} keyRecovery{Recover your encryption key to use this connection.} pending{Some changes are waiting to sync.} other{Connected}}",
   "externalSyncFailure": "{reason, select, sharedSetupRequired{Sign in to the connected Google Drive account on this device. Your notes stay encrypted.} reconnectRequired{Reconnect this account to continue syncing.} quotaExceeded{Your storage is full. Free up space in this provider and retry.} rateLimited{The provider asked us to wait. Sync will retry automatically.} corruptData{Some sync data could not be verified. Your local notes are kept.} unsupported{This provider or browser cannot complete the connection.} other{Could not reach this provider. Check your connection and retry.}}",
@@ -4049,7 +4054,11 @@
   "externalSyncUnlockSketches": "Some locked notes contain older sketches that need updating. On the device where you created them, open those notes and unlock them with your PIN, then retry sync.",
   "@externalSyncUnlockSketches": {"description": "Recovery instructions when a protected legacy sketch cannot be uploaded to an external provider"},
 	"externalSyncOff": "Sync off",
-	"externalSyncOffDescription": "Keep notes on this device",
+  "externalSyncCloudDownloadDescription": "Download saved notes · Uploads require Pro",
+  "externalSyncDownloadOnly": "Download notes from Better Keep cloud. Uploads will stay paused.",
+  "externalSyncDownloadsOn": "Uploads paused · Downloads on",
+  "externalSyncAllPaused": "Uploads and downloads paused",
+	"externalSyncOffDescription": "Uploads paused",
 	"externalSyncDetails": "Sync details",
 	"externalSyncNeedsAttention": "Needs attention · See sync details",
 	"externalSyncConnectTitle": "Connect {provider}",
@@ -4108,5 +4117,6 @@
   "subscriptionActiveTitle": "Subscription active",
   "subscriptionChangePlan": "Manage your current subscription to change plans.",
   "subscribe": "Subscribe",
-  "builtInCloudSync": "Built-in cloud sync"
+  "builtInCloudSync": "Built-in cloud sync",
+  "deviceAdded": "Added"
 }

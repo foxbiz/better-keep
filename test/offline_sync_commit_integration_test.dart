@@ -42,6 +42,7 @@ import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/remote_sync_cache_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
@@ -261,8 +262,12 @@ void main() {
     );
   }
 
-  test('pausing Firebase stops library transfers but keeps identity ready and local edits', () async {
+  test('Sync off starts download listeners but keeps identity ready and local edits', () async {
     allowPaid();
+    AppState.noteCloudSyncCheckpoint = null;
+    AppState.labelCloudSyncCheckpoint = null;
+    backend.firestore.queryResponse = (_, _) async => OfflineQuerySnapshot({});
+    backend.firestore.response = (_, _) async => OfflineSnapshot();
     await backend.firebaseSync.setEnabled(false);
     await NoteSyncService().init();
     await LabelSyncService().init();
@@ -275,16 +280,15 @@ void main() {
     backend.firestore.writes.clear();
     expect(
       await NoteSyncService().refreshWithOutcome(),
-      SyncRefreshOutcome.deferred,
+      SyncRefreshOutcome.uploadRestricted,
     );
     expect(
       await LabelSyncService().refreshWithOutcome(),
-      SyncRefreshOutcome.deferred,
+      SyncRefreshOutcome.complete,
     );
     await NoteSortService().startCloudSync();
     expect(AuthService.canSyncCloud, true);
-    expect(backend.firestore.reads, isEmpty);
-    expect(backend.firestore.queryReads, isEmpty);
+    expect(backend.firestore.queryReads, isNotEmpty);
     expect(backend.firestore.writes, isEmpty);
     expect(
       (await Note.findById(note.id!))!.title,
@@ -636,67 +640,85 @@ void main() {
       },
     );
 
-    test(
-      'free refresh downloads but reports and preserves restricted local work',
-      () async {
-        await Note(
-          id: 202,
-          title: 'Local only',
-          content: '[{"insert":"Local\\n"}]',
-        ).save();
-        final label = Label(name: 'Local label');
-        await label.save();
-        final pendingNote = (await db.query(NoteSyncTrack.model)).single;
-        final pendingLabel = (await db.query(LabelSyncTrack.model)).single;
-        backend.firestore.queryResponse = (path, _) async =>
-            OfflineQuerySnapshot(
-              path.endsWith('/notes')
-                  ? {
-                      'remote-note': {
-                        ...encrypted,
-                        cloudSyncCommittedAtField: Timestamp.fromDate(
-                          DateTime.utc(2026, 9, 11),
-                        ),
-                      },
-                    }
-                  : {},
+    for (final syncOff in [false, true]) {
+      for (final paid in [false, if (syncOff) true]) {
+        test(
+          'refresh downloads and preserves local work (syncOff=$syncOff, paid=$paid)',
+          () async {
+            if (paid) allowPaid();
+            if (syncOff) await backend.firebaseSync.setEnabled(false);
+            final attachment = imageAttachment(remote);
+            encrypted = await e2ee.noteEncryption.prepareNoteForUpload(
+              payload(items: [attachment]),
             );
-        expect(PlanService.instance.isPaid, isFalse);
-        expect(
-          await NoteSyncService().refreshWithOutcome(),
-          SyncRefreshOutcome.uploadRestricted,
+            attachments.response = (_) async => png;
+            await Note(
+              id: 202,
+              title: 'Local only',
+              content: '[{"insert":"Local\\n"}]',
+            ).save();
+            final label = Label(name: 'Local label');
+            await label.save();
+            final pendingNote = (await db.query(NoteSyncTrack.model)).single;
+            final pendingLabel = (await db.query(LabelSyncTrack.model)).single;
+            backend.firestore.queryResponse = (path, _) async =>
+                OfflineQuerySnapshot(
+                  path.endsWith('/notes')
+                      ? {
+                          'remote-note': {
+                            ...encrypted,
+                            cloudSyncCommittedAtField: Timestamp.fromDate(
+                              DateTime.utc(2026, 9, 11),
+                            ),
+                          },
+                        }
+                      : {},
+                );
+            expect(PlanService.instance.isPaid, paid);
+            expect(
+              await NoteSyncService().refreshWithOutcome(),
+              SyncRefreshOutcome.uploadRestricted,
+            );
+            expect(
+              await LabelSyncService().refreshWithOutcome(),
+              SyncRefreshOutcome.uploadRestricted,
+            );
+            final downloaded = (await Note.findById(101))!;
+            expect(downloaded.title, 'Remote');
+            expect(downloaded.attachments, hasLength(1));
+            expect(
+              await File(downloaded.attachments.single.image!.src)
+                  .readAsBytes(),
+              png,
+            );
+            expect(await Note.count(NoteType.all), 2);
+            expect(
+              (await db.query(
+                NoteSyncTrack.model,
+                where: 'local_id = ?',
+                whereArgs: [202],
+              )).single,
+              pendingNote,
+            );
+            expect((await db.query(LabelSyncTrack.model)).single, pendingLabel);
+            expect(
+              backend.firestore.writes.where(
+                (path) => path.contains('/notes/') || path.contains('/labels/'),
+              ),
+              isEmpty,
+            );
+            expect(
+              NoteSyncService().syncStatus.value.phase,
+              SyncPhase.uploadRestricted,
+            );
+            expect(
+              LabelSyncService().syncStatus.value.phase,
+              SyncPhase.uploadRestricted,
+            );
+          },
         );
-        expect(
-          await LabelSyncService().refreshWithOutcome(),
-          SyncRefreshOutcome.uploadRestricted,
-        );
-        expect((await Note.findById(101))!.title, 'Remote');
-        expect(await Note.count(NoteType.all), 2);
-        expect(
-          (await db.query(
-            NoteSyncTrack.model,
-            where: 'local_id = ?',
-            whereArgs: [202],
-          )).single,
-          pendingNote,
-        );
-        expect((await db.query(LabelSyncTrack.model)).single, pendingLabel);
-        expect(
-          backend.firestore.writes.where(
-            (path) => path.contains('/notes/') || path.contains('/labels/'),
-          ),
-          isEmpty,
-        );
-        expect(
-          NoteSyncService().syncStatus.value.phase,
-          SyncPhase.uploadRestricted,
-        );
-        expect(
-          LabelSyncService().syncStatus.value.phase,
-          SyncPhase.uploadRestricted,
-        );
-      },
-    );
+      }
+    }
 
     test(
       'device callbacks survive verification and reject account switches',
@@ -2058,6 +2080,134 @@ void main() {
       isNull,
     );
   });
+  test(
+    'external pause and switch back never import the Firebase library',
+    () async {
+      final selections = StreamController<FirebaseSyncSelection>.broadcast(
+        sync: true,
+      );
+      final preference = FirebaseSyncPreference(
+        currentUid: () => 'account-a',
+        watch: (_) => selections.stream,
+        write: (_, _) async => throw StateError('No selection writes expected'),
+      )..bind('account-a');
+      FirebaseSyncPreference.instanceOverride = preference;
+      addTearDown(() async {
+        preference.dispose();
+        FirebaseSyncPreference.instanceOverride = backend.firebaseSync;
+        await selections.close();
+      });
+      await SyncMutationJournal.install(db);
+      final before = await db.query(SyncMutationJournal.table);
+      backend.firestore.queryResponse = (_, _) async =>
+          OfflineQuerySnapshot({'old-firebase-note': payload()});
+      for (final provider in ['dropbox', 'none', 'dropbox']) {
+        selections.add(
+          FirebaseSyncSelection(
+            false,
+            confirmed: true,
+            provider: provider,
+            firebaseDownloads: false,
+          ),
+        );
+        await NoteSyncService().refreshWithOutcome();
+        await LabelSyncService().refreshWithOutcome();
+        await NoteSortService().refreshWithOutcome(dataHydrated: true);
+        expect(await Note.count(NoteType.all), 0);
+        expect(backend.firestore.queryReads, isEmpty);
+        expect(backend.firestore.writes, isEmpty);
+        expect(await db.query(SyncMutationJournal.table), before);
+      }
+    },
+  );
+
+  test(
+    'label publication repairs a missing creation date for legacy readers',
+    () async {
+      final label = Label(name: 'Legacy missing date');
+      await label.save();
+      await db.update(
+        Label.model,
+        {'created_at': null},
+        where: 'id = ?',
+        whereArgs: [label.id],
+      );
+      final expected = label.updatedAt!.toUtc();
+      allowPaid();
+      backend.firestore.response = (_, _) async => OfflineSnapshot();
+      backend.firestore.queryResponse = (_, _) async =>
+          OfflineQuerySnapshot({});
+      expect(
+        await LabelSyncService().refreshWithOutcome(),
+        SyncRefreshOutcome.complete,
+      );
+      final wire = backend
+          .firestore
+          .documents['users/account-a/labels/${label.syncId}']!;
+      expect(DateTime.parse(wire['created_at'] as String), expected);
+      expect(
+        (await LabelSyncTrack.getByLocalId(label.id!))!.status,
+        LabelSyncStatus.synced,
+      );
+    },
+  );
+
+  test(
+    'note pull backoff survives successful pages before a later fetch failure',
+    () async {
+      AppState.noteCloudSyncCheckpoint = null;
+      var reads = 0;
+      backend.firestore.queryResponse = (_, _) async {
+        switch (reads++ % 3) {
+          case 0:
+            return OfflineQuerySnapshot({});
+          case 1:
+            return OfflineQuerySnapshot({
+              for (var i = 0; i < RemoteSyncCacheService.pageSize; i++)
+                'remote-$i': {...payload(), 'id': i + 1000},
+            });
+          default:
+            throw const FormatException('Synthetic second-page failure');
+        }
+      };
+      final timers = <_ControlledLabelRetryTimer>[];
+      await runZoned(
+        () async {
+          for (final seconds in [1, 2, 4]) {
+            final start = timers.length;
+            expect(
+              await NoteSyncService().refreshWithOutcome(),
+              SyncRefreshOutcome.failed,
+            );
+            expect(AppState.noteCloudSyncCheckpoint, isNull);
+            final retry = timers
+                .skip(start)
+                .firstWhere((timer) => timer.isActive);
+            expect(
+              retry.delay.inMilliseconds,
+              inInclusiveRange(seconds * 1000, seconds * 1200),
+            );
+            retry.fire();
+          }
+        },
+        zoneSpecification: ZoneSpecification(
+          createTimer: (self, parent, zone, delay, callback) {
+            if (delay >= const Duration(seconds: 1) &&
+                delay <= const Duration(seconds: 30)) {
+              final timer = _ControlledLabelRetryTimer(delay, callback);
+              timers.add(timer);
+              return timer;
+            }
+            return parent.createTimer(zone, delay, callback);
+          },
+        ),
+      );
+      for (final timer in timers) {
+        timer.cancel();
+      }
+    },
+  );
+
   Future<void> pullLabels(Map<String, Map<String, dynamic>> values) async {
     AppState.labelCloudSyncCheckpoint = null;
     var reads = 0;
@@ -2066,7 +2216,134 @@ void main() {
     await LabelSyncService().refresh();
   }
 
-  test('Firebase label pulls replace older pending work and preserve source timestamps', () async {
+  for (final created in <Object?>[
+    '2026-08-19T12:23:43.876295',
+    null,
+    Timestamp.fromDate(DateTime.utc(2026, 8, 19, 12, 23)),
+  ]) {
+    test('legacy label creation date survives bootstrap: $created', () async {
+      AppState.labelCloudSyncCheckpoint = null;
+      final stamp = Timestamp.fromDate(DateTime.utc(2026, 11, 1));
+      var reads = 0;
+      backend.firestore.queryResponse = (_, _) async => OfflineQuerySnapshot(
+        reads++ == 1
+            ? {
+                'legacy-label': {
+                  'name': 'Legacy label',
+                  'created_at': created,
+                  'updated_at': '2026-08-19T12:23:43.876295',
+                  'sync_committed_at': stamp,
+                },
+              }
+            : {},
+      );
+      expect(
+        await LabelSyncService().refreshWithOutcome(),
+        SyncRefreshOutcome.complete,
+      );
+      final label = (await Label.findBySyncId('legacy-label'))!;
+      expect(
+        label.createdAt,
+        created is String
+            ? DateTime.parse(created)
+            : created is Timestamp
+            ? created.toDate().toUtc()
+            : stamp.toDate().toUtc(),
+      );
+      expect(label.updatedAt, stamp.toDate().toUtc());
+      expect(AppState.labelCloudSyncCheckpoint?.bootstrapped, true);
+      expect(
+        (await LabelSyncTrack.getByLocalId(label.id!))!.status,
+        LabelSyncStatus.synced,
+      );
+      expect(backend.firestore.writes, isEmpty);
+    });
+  }
+
+  test('invalid label payload retains the checkpoint and backs off across successful fetches', () async {
+    AppState.labelCloudSyncCheckpoint = null;
+    var reads = 0;
+    backend.firestore.queryResponse = (_, _) async => OfflineQuerySnapshot(
+      reads++ % 2 == 1
+          ? {
+              'invalid-label': {
+                'name': 42,
+                'created_at': '2026-01-01T00:00:00Z',
+                'updated_at': '2026-01-01T00:00:00Z',
+              },
+            }
+          : {},
+    );
+    final timers = <_ControlledLabelRetryTimer>[];
+    await runZoned(
+      () async {
+        for (final seconds in [1, 2, 4]) {
+          final start = timers.length;
+          expect(
+            await LabelSyncService().refreshWithOutcome(),
+            SyncRefreshOutcome.failed,
+          );
+          expect(AppState.labelCloudSyncCheckpoint, isNull);
+          expect(await Label.findBySyncId('invalid-label'), isNull);
+          // Fetch timeouts have been cancelled; the first remaining timer is
+          // the pull retry, followed by the two-second presentation reset.
+          final retry = timers
+              .skip(start)
+              .firstWhere((timer) => timer.isActive);
+          expect(
+            retry.delay.inMilliseconds,
+            inInclusiveRange(seconds * 1000, seconds * 1200),
+          );
+          retry.fire();
+        }
+      },
+      zoneSpecification: ZoneSpecification(
+        createTimer: (self, parent, zone, delay, callback) {
+          if (delay >= const Duration(seconds: 1) &&
+              delay <= const Duration(seconds: 30)) {
+            final timer = _ControlledLabelRetryTimer(delay, callback);
+            timers.add(timer);
+            return timer;
+          }
+          return parent.createTimer(zone, delay, callback);
+        },
+      ),
+    );
+    for (final timer in timers) {
+      timer.cancel();
+    }
+  });
+
+  for (final created in <Object>[
+    '2026-08-19T12:23:43.876295',
+    Timestamp.fromDate(DateTime.utc(2026, 8, 19, 12, 23)),
+    DateTime.utc(2026, 8, 19, 12, 23),
+  ]) {
+    test(
+      'note creation metadata is accepted without becoming its edit clock: $created',
+      () async {
+        final stamp = Timestamp.fromDate(DateTime.utc(2026, 11, 1));
+        backend.firestore.response = (_, _) async => OfflineSnapshot(
+          value: {
+            ...payload(),
+            'created_at': created,
+            'updated_at': '2026-08-19T12:23:43.876295',
+            'sync_committed_at': stamp,
+          },
+        );
+        expect(
+          await NoteSyncService().retryFailedRemoteNote('remote-note'),
+          true,
+        );
+        final note = (await Note.findById(101))!;
+        expect(note.createdAt, FirebaseSyncVersion.creationTimestamp(created));
+        expect(note.updatedAt, stamp.toDate().toUtc());
+      },
+    );
+  }
+
+  test('Firebase label pulls replace older pending work with Sync off and preserve source timestamps', () async {
+    await backend.firebaseSync.setEnabled(false);
     final label = Label(name: 'Local');
     await label.save();
     await SyncMutationJournal.install(db);
@@ -2722,7 +2999,7 @@ void main() {
     },
   );
 
-  test('Firebase selection cancels an in-flight order publication without acknowledging it', () async {
+  test('rapid Firebase selection changes cancel an in-flight order publication without acknowledging it', () async {
     allowPaid();
     final sort = NoteSortService();
     final cloud = _PausedSortRepository();
@@ -2738,9 +3015,11 @@ void main() {
     );
     final operation = sort.uploadSnapshotWithRetryForTesting(snapshot);
     await cloud.started.future;
-    await backend.firebaseSync.setEnabled(false);
+    for (final enabled in [false, true, false, true, false]) {
+      await backend.firebaseSync.setEnabled(enabled);
+    }
     expect(AuthService.canSyncCloud, true);
-    expect(sort.canReceiveCloudForTesting, false);
+    expect(sort.canReceiveCloudForTesting, true);
     cloud.release.complete();
     await operation;
     expect(cloud.commits, 0);
@@ -2986,4 +3265,26 @@ class _PausedSortRepository implements NoteSortCloudRepository {
     String revision,
     int chunkCount,
   ) async => null;
+}
+
+// Controlled timers keep the actual label-service retry regression deterministic
+// while SQLite work still runs asynchronously outside a fake clock.
+class _ControlledLabelRetryTimer implements Timer {
+  _ControlledLabelRetryTimer(this.delay, this.callback);
+  final Duration delay;
+  final void Function() callback;
+  bool _active = true;
+  int _tick = 0;
+  @override
+  bool get isActive => _active;
+  @override
+  int get tick => _tick;
+  @override
+  void cancel() => _active = false;
+  void fire() {
+    if (!_active) return;
+    _active = false;
+    _tick = 1;
+    callback();
+  }
 }

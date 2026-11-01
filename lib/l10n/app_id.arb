@@ -8,7 +8,9 @@
   "externalSyncWebDavHelp": "Masukkan URL lengkap folder WebDAV dan kata sandi aplikasi. Sinkronisasi browser memerlukan izin permintaan lintas asal dari server Anda.",
 
 	"@@locale": "id",
-	"@@last_modified": "2026-01-31",
+	"showMoreDevices": "Tampilkan lebih banyak ({count}+)",
+	"deviceRemovalMainDeviceOnly": "Hanya perangkat utama Anda yang dapat menghapus perangkat lain.",
+	"@@last_modified": "2026-11-01",
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Tidak dapat memulai Better Keep",
@@ -1100,7 +1102,9 @@
 	"localEncryptionMissing": "Kunci untuk membuka catatan tersimpan hilang atau rusak. Sambungkan kembali untuk memulihkan akses atau gunakan pemulihan akun. Data lokal Anda tetap disimpan.",
 	"syncCheckingConnection": "Memeriksa koneksi…",
 	"syncPreparing": "Menyiapkan sinkronisasi…",
-	"syncUploadRestricted": "Perubahan disimpan di perangkat ini. Mengunggah memerlukan Pro.",
+	"syncUploadRestricted": "Tersimpan di perangkat ini. Aktifkan cloud Better Keep untuk menyinkronkan perubahan.",
+	"syncUpgradeReminder": "Perubahan Anda tersimpan di sini. Sinkronkan dengan Pro.",
+	"syncUpgradeForUploads": "Tersimpan di perangkat ini. Upgrade ke Pro untuk menyinkronkan perubahan.",
 	"syncPaused": "Sinkronisasi dijeda. Silakan coba lagi.",
   "insertTable": "Sisipkan tabel",
   "tablePickerHint": "Ketuk sel untuk menyisipkan, atau tentukan ukuran sendiri.",
@@ -1154,7 +1158,7 @@
   "externalSyncUnavailable": "Masuk, lalu setujui atau pulihkan perangkat ini untuk menghubungkan penyimpanan.",
   "externalSyncAccount": "Akun dan enkripsi",
   "externalSyncCloud": "Cloud Better Keep",
-  "externalSyncCloudDescription": "Sinkronisasi bawaan · Memerlukan Pro",
+  "externalSyncCloudDescription": "Sinkronisasi bawaan · Unggah perlu Pro",
   "externalSyncAction": "{action, select, connect{Hubungkan} browser{Masuk melalui browser} manual{Gunakan kata sandi aplikasi} reconnect{Hubungkan kembali} continue{Lanjutkan di browser} pause{Jeda} resume{Lanjutkan} disconnect{Putuskan koneksi} sync{Sinkronkan sekarang} other{Coba lagi}}",
   "externalSyncState": "{state, select, preparing{Menyiapkan otorisasi…} awaitingConsent{Siap diotorisasi melalui browser Anda} authorizing{Menghubungkan…} cancelling{Membatalkan otorisasi…} cancelPending{Pembatalan tidak dapat dikonfirmasi. Coba batalkan lagi.} connecting{Menghubungkan…} pausing{Menjeda…} enabling{Melanjutkan…} disconnecting{Memutuskan koneksi…} paused{Dijeda} notConnected{Tidak terhubung} keyRecovery{Pulihkan kunci enkripsi Anda untuk menggunakan koneksi ini.} pending{Beberapa perubahan menunggu untuk disinkronkan.} other{Terhubung}}",
   "externalSyncFailure": "{reason, select, sharedSetupRequired{Masuk ke akun Google Drive yang terhubung di perangkat ini. Catatan Anda tetap terenkripsi.} reconnectRequired{Hubungkan kembali akun ini untuk melanjutkan sinkronisasi.} quotaExceeded{Penyimpanan Anda penuh. Kosongkan ruang di penyedia ini, lalu coba lagi.} rateLimited{Penyedia meminta untuk menunggu. Sinkronisasi akan dicoba lagi secara otomatis.} corruptData{Sebagian data sinkronisasi tidak dapat diverifikasi. Catatan lokal Anda tetap disimpan.} unsupported{Penyedia atau browser ini tidak dapat menyelesaikan koneksi.} other{Tidak dapat menjangkau penyedia ini. Periksa koneksi Anda, lalu coba lagi.}}",
@@ -1176,7 +1180,11 @@
   "externalSyncLogoutUnknown": "Kami tidak dapat memverifikasi apakah semua perubahan Anda sudah disinkronkan. Keluar dari akun akan menghapus catatan dan media lokal perangkat ini. Perubahan yang belum disimpan ke penyedia mana pun dapat hilang.\n\nPeriksa penyedia sinkronisasi Anda atau ekspor data Anda sebelum keluar.",
   "externalSyncUnlockSketches": "Beberapa catatan terkunci berisi sketsa lama yang perlu diperbarui. Di perangkat tempat Anda membuatnya, buka catatan tersebut dan buka kuncinya dengan PIN Anda, lalu coba sinkronkan lagi.",
 	"externalSyncOff": "Sinkronisasi nonaktif",
-	"externalSyncOffDescription": "Simpan catatan di perangkat ini",
+  "externalSyncCloudDownloadDescription": "Unduh catatan tersimpan · Unggahan memerlukan Pro",
+  "externalSyncDownloadOnly": "Unduh catatan dari Better Keep cloud. Unggahan akan tetap dijeda.",
+  "externalSyncDownloadsOn": "Unggahan dijeda · Unduhan aktif",
+  "externalSyncAllPaused": "Unggahan dan unduhan dijeda",
+	"externalSyncOffDescription": "Unggahan dijeda",
 	"externalSyncDetails": "Detail sinkronisasi",
 	"externalSyncNeedsAttention": "Perlu perhatian · Lihat detail",
 	"externalSyncConnectTitle": "Hubungkan {provider}",
@@ -1242,5 +1250,6 @@
     }
   },
   "subscribe": "Langganan",
-  "builtInCloudSync": "Sinkronisasi cloud bawaan"
+  "builtInCloudSync": "Sinkronisasi cloud bawaan",
+  "deviceAdded": "Ditambahkan"
 }

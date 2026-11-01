@@ -35,6 +35,14 @@ class AppLocalizationsJa extends AppLocalizations {
       'WebDAVフォルダーの完全なURLとアプリパスワードを入力してください。ブラウザーで同期するには、サーバーでクロスオリジンリクエストを許可する必要があります。';
 
   @override
+  String showMoreDevices(int count) {
+    return 'もっと見る（$count+）';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly => '他のデバイスを削除できるのはメインデバイスのみです。';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -3621,7 +3629,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncPreparing => '同期を準備中…';
 
   @override
-  String get syncUploadRestricted => '変更はこのデバイスに保存されました。アップロードにはProが必要です。';
+  String get syncUploadRestricted =>
+      'このデバイスに保存済みです。変更を同期するにはBetter Keepクラウドを有効にしてください。';
+
+  @override
+  String get syncUpgradeReminder => '変更はここに保存されています。Proで同期できます。';
+
+  @override
+  String get syncUpgradeForUploads =>
+      'このデバイスに保存済みです。変更を同期するにはProにアップグレードしてください。';
 
   @override
   String get syncPaused => '同期を一時停止しました。再試行してください。';
@@ -3801,7 +3817,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get externalSyncCloud => 'Better Keepクラウド';
 
   @override
-  String get externalSyncCloudDescription => '標準の同期 · Proが必要';
+  String get externalSyncCloudDescription => '標準同期 · アップロードにはProが必要';
 
   @override
   String externalSyncAction(String action) {
@@ -3924,7 +3940,21 @@ class AppLocalizationsJa extends AppLocalizations {
   String get externalSyncOff => '同期オフ';
 
   @override
-  String get externalSyncOffDescription => 'このデバイスにノートを保存';
+  String get externalSyncCloudDownloadDescription =>
+      '保存済みノートをダウンロード · アップロードには Pro が必要';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Better Keep cloud からノートをダウンロードします。アップロードは一時停止したままです。';
+
+  @override
+  String get externalSyncDownloadsOn => 'アップロード停止中 · ダウンロード有効';
+
+  @override
+  String get externalSyncAllPaused => 'アップロードとダウンロードを一時停止中';
+
+  @override
+  String get externalSyncOffDescription => 'アップロードは一時停止中';
 
   @override
   String get externalSyncDetails => '同期の詳細';
@@ -4112,4 +4142,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get builtInCloudSync => '標準のクラウド同期';
+
+  @override
+  String get deviceAdded => '追加日時';
 }

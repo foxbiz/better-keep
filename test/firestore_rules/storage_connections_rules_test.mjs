@@ -85,3 +85,14 @@ test('selection accepts exactly one known provider consistent with the Firebase 
     await assertFails(setDoc(ref, {provider, enabled: false, updatedAt: serverTimestamp()}));
   }
 });
+
+
+test('download preference is optional for old clients and bool-only for new clients', async () => {
+  const ref = doc(env.authenticatedContext('owner').firestore(), 'users/owner/sync_settings/firebase');
+  for (const firebaseDownloads of [true, false]) {
+    await assertSucceeds(setDoc(ref, {provider: 'none', enabled: false, firebaseDownloads, updatedAt: serverTimestamp()}));
+  }
+  for (const firebaseDownloads of ['true', 1, null]) {
+    await assertFails(setDoc(ref, {provider: 'none', enabled: false, firebaseDownloads, updatedAt: serverTimestamp()}));
+  }
+});

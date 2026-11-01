@@ -42,7 +42,13 @@ HTTPS and appropriate CORS for browser use. Keep manual external sync independen
 
 `users/{uid}/sync_settings/firebase` now stores `provider` alongside the legacy
 `enabled` flag and server timestamp. `enabled` is true only for `firebase`.
-The shared confirmed selection gates both Firebase and external adapters. Changing
+The confirmed selection gates outgoing Firebase sync and external adapters.
+Firebase downloads (notes, labels, media and ordering) remain available on every
+plan when Firebase or Sync off is selected. Sync off prevents outgoing changes;
+pending local work is retained. External selections remain isolated from Firebase
+downloads. Unknown/cached selections, account switches and failed selection writes
+still fence transfers. This is client-only; existing owner-read rules already allow it.
+Changing
 selection retires the old external session immediately; failed writes keep sync
 stopped locally until retry. Credentials and per-provider cursors are retained.
 Legacy settings without `provider` map to Firebase when enabled, or Sync off when
@@ -102,7 +108,13 @@ is best effort. Storage credentials never pass through the backend callback.
   captured atomically and the final Firestore replacement compares the latest
   remote version in a transaction. Pending local work is no longer an unconditional
   winner; publication retries retain the captured source version.
-- Firebase note creation dates are sent in UTC. Tests verify that a full Firebase
+- Incoming legacy note/label creation dates without a timezone are retained as
+  display metadata; they never establish conflict ordering. Labels with an absent
+  creation date use the source revision timestamp, including on publication to
+  older clients that reject null. Note and label pull backoff resets only after
+  a complete durable pull, not after each successful page.
+- Firebase creation dates retain timezone-less wall-clock values; dates with an
+  explicit offset represent the same UTC instant. Tests verify that a full Firebase
   round trip produces the same external semantic fingerprint despite independent
   object encryption. They also cover stale deletes, revivals, newer remote edits
   over pending work, local edits during downloads and remote edits during commit.
@@ -257,13 +269,19 @@ is best effort. Storage credentials never pass through the backend callback.
   enabled behavior; cache misses and optimistic enables do not authorize a new
   session. The settings switch pauses locally before writing, waits for server
   confirmation to resume, retains failed intent for retry, and rejects stale or
-  old-account results. Notes, labels and ordering stop their listeners/timers and
-  invalidate in-flight work on pause. Local edits remain queued and external
-  providers remain independent. Rules restrict the preference to its owner,
-  boolean selection and a server timestamp; free users may change it.
+  old-account results. Pausing uploads invalidates in-flight publications while notes, labels and
+  ordering retain download access on Free, Lite and Pro. Local edits remain queued.
+  The optional `firebaseDownloads` boolean preserves the download source:
+  selecting an external provider sets false, selecting `none` retains it in a
+  transaction, and explicitly selecting Firebase sets true. Missing legacy
+  settings retain built-in download access. Clearing external storage also sets
+  false. Rules restrict this preference to the owner and validate its fields.
+  No records need backfilling. An already-saved legacy `none` record cannot reveal
+  a previous external provider; updated clients cannot reconstruct that history.
 
 - Manual refresh now starts external destinations independently of the Firebase
-  note/label attempt and skips Firebase when paused. External refresh waits for
+  note/label attempt and skips Firebase only when its download source is detached.
+  Paused Firebase uploads do not suppress download progress, failures, or manual refresh. External refresh waits for
   connection metadata, drains bounded capture batches, retains per-provider
   errors and rejects completion after account/connection replacement. Pending
   local edits update scheduler status immediately during the save debounce.
@@ -919,3 +937,22 @@ Razorpay catalog plans follow its existing Pro prices (which differ from stores)
 | `better_keep_lite_yearly_usd_v1` | USD 9.99 | `plan_TroEJDYCGYGyWt` |
 
 These are catalog plans, not customer subscriptions. No customer was charged.
+
+
+## 2026-11-01 download-only sync
+
+For the new client, deploy the required (additive, backward-compatible)
+`firebaseDownloads` Firestore-rule support first, then the external-clear
+Functions writer, then publish the client. Existing production 1.4.5 (97) can
+continue using the updated backend without updating the app; the field is
+optional for older writers. See [EXTERNAL_SYNC_QA.md](EXTERNAL_SYNC_QA.md)
+for release checks and mixed-version limits.
+Device-list presentation is shared through `UserDevicesSection`: three rows in
+Account, all rows on the device route, and a quiet main-device removal hint.
+
+The client also fences cached download-permission changes, allows
+explicit fail-closed repair of malformed selections, and lets Lite users restore
+built-in downloads through a confirmation on the cloud card. Restoration writes
+Sync off with downloads enabled; it never enables built-in uploads. The off card
+now distinguishes downloads on from all transfers paused. No additional backend
+API, secret, data migration or production-app update is required for these fixes.

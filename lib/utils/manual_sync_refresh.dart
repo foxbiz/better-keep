@@ -1,3 +1,6 @@
+import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/monetization/plan_service.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/external_sync/external_sync_service.dart';
 import 'package:better_keep/services/firebase_sync_preference.dart';
@@ -92,8 +95,12 @@ Future<void> refreshSyncFromUser(BuildContext context) {
       (() async {
         final preference = FirebaseSyncPreference.instance;
         final outcome = await runManualSyncRefresh(
+          // While selection loads, the services report their readiness without
+          // transferring data. Once confirmed, Sync off still permits downloads.
           firebaseEnabled:
-              preference.enabled != false && !preference.stoppedLocally,
+              !preference.stoppedLocally &&
+              (preference.selectedProvider == null ||
+                  preference.allowsDownload(preference.accountId)),
           ordering: () => current()
               ? NoteSortService().refreshWithOutcome(dataHydrated: true)
               : Future.value(SyncRefreshOutcome.deferred),
@@ -127,11 +134,19 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
         snackbar(context.l10n.noConnectionAvailable);
       }
     case SyncRefreshOutcome.deferred:
+      final chooseProvider =
+          !AuthService.sessionInvalid.value &&
+          E2EEService.instance.status.value != E2EEStatus.pendingApproval &&
+          FirebaseSyncPreference.instance.allTransfersPaused;
+      // The status pill already explains this deliberate pause.
+      if (chooseProvider && AppState.showSyncProgress) return;
       snackbar(
         AuthService.sessionInvalid.value
             ? context.l10n.pleaseSignInAgain
             : E2EEService.instance.status.value == E2EEStatus.pendingApproval
             ? context.l10n.waitingForDeviceApproval
+            : chooseProvider
+            ? context.l10n.externalSyncDescription
             : E2EEService.instance.isCryptoReady
             ? context.l10n.syncPaused
             : context.l10n.e2eeNotReady,
@@ -142,7 +157,13 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
       if (!AppState.showSyncProgress) snackbar(context.l10n.syncComplete);
     case SyncRefreshOutcome.uploadRestricted:
       if (!AppState.showSyncProgress) {
-        snackbar(context.l10n.syncUploadRestricted);
+        snackbar(
+          const SyncProgress(SyncPhase.uploadRestricted).localized(
+            context.l10n,
+            cloudUploadsRequirePro:
+                !PlanService.instance.entitlements.realtimeCloudSync,
+          ),
+        );
       }
   }
 }

@@ -5,6 +5,7 @@ import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/services/sync_presentation.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -58,6 +59,28 @@ void main() {
   tearDown(() {
     recovery.stop();
     presentation.dispose();
+  });
+
+  test('paused uploads still show incoming activity and failure', () async {
+    final preference = FirebaseSyncPreference(
+      currentUid: () => 'account-a',
+      watch: (_) =>
+          Stream.value(const FirebaseSyncSelection(false, confirmed: true)),
+      write: (_, _) async => throw StateError('No writes expected'),
+    )..bind('account-a');
+    addTearDown(preference.dispose);
+    await pumpEventQueue();
+    firebaseEnabled.value = preference.allowsDownload('account-a');
+    expect(preference.allowsSync('account-a'), false);
+    recovery.state.value = CloudSessionState.ready;
+    notes.value = true;
+    expect(presentation.value.phase, SyncPhase.syncing);
+    expect(presentation.showNoteCounts, true);
+    notes.value = false;
+    noteStatus.value = const SyncProgress(SyncPhase.failed, failedCount: 1);
+    expect(presentation.value.phase, SyncPhase.failed);
+    noteStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+    expect(presentation.value.phase, SyncPhase.uploadRestricted);
   });
 
   test(

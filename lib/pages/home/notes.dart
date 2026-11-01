@@ -1,3 +1,4 @@
+import 'package:better_keep/components/cloud_sync_upgrade_notice.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
 
 import 'dart:async';
@@ -218,6 +219,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
               ),
               const SliverToBoxAdapter(child: StorageWarning()),
               SliverToBoxAdapter(
+                child: CloudSyncUpgradeNotice(
+                  visible:
+                      !_selectionMode &&
+                      !widget.searchMode &&
+                      AppState.showNotes == NoteType.all,
+                ),
+              ),
+              SliverToBoxAdapter(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Align(
@@ -296,6 +305,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                   ),
                 ),
               const SliverToBoxAdapter(child: StorageWarning()),
+              SliverToBoxAdapter(
+                child: CloudSyncUpgradeNotice(
+                  visible:
+                      !_selectionMode &&
+                      !widget.searchMode &&
+                      AppState.showNotes == NoteType.all,
+                ),
+              ),
               SliverToBoxAdapter(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),

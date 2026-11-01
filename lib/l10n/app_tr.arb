@@ -8,7 +8,9 @@
   "externalSyncWebDavHelp": "WebDAV klasörünüzün tam URL adresini ve bir uygulama parolasını girin. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.",
 
 	"@@locale": "tr",
-	"@@last_modified": "2026-05-19",
+	"showMoreDevices": "Daha fazla göster ({count}+)",
+	"deviceRemovalMainDeviceOnly": "Diğer cihazları yalnızca ana cihazınız kaldırabilir.",
+	"@@last_modified": "2026-11-01",
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Better Keep başlatılamadı",
@@ -3674,7 +3676,9 @@
 	"localEncryptionMissing": "Kayıtlı notlarınızı açmak için gereken anahtarlar eksik veya hasarlı. Erişimi geri yüklemek için yeniden bağlanın veya hesap kurtarmayı kullanın. Yerel verileriniz korundu.",
 	"syncCheckingConnection": "Bağlantı kontrol ediliyor…",
 	"syncPreparing": "Senkronizasyon hazırlanıyor…",
-	"syncUploadRestricted": "Değişiklikler bu cihaza kaydedildi. Yüklemek için Pro gerekir.",
+	"syncUploadRestricted": "Bu cihaza kaydedildi. Değişiklikleri eşitlemek için Better Keep bulutunu etkinleştirin.",
+	"syncUpgradeReminder": "Değişiklikleriniz burada kayıtlı. Pro ile eşitleyin.",
+	"syncUpgradeForUploads": "Bu cihaza kaydedildi. Değişiklikleri eşitlemek için Pro’ya yükseltin.",
 	"syncPaused": "Senkronizasyon duraklatıldı. Lütfen tekrar deneyin.",
   "insertTable": "Tablo ekle",
   "tablePickerHint": "Eklemek için bir hücreye dokunun veya özel bir boyut seçin.",
@@ -3728,7 +3732,7 @@
   "externalSyncUnavailable": "Depolamayı bağlamak için oturum açın ve bu cihazı onaylayın veya kurtarın.",
   "externalSyncAccount": "Hesap ve şifreleme",
   "externalSyncCloud": "Better Keep bulutu",
-  "externalSyncCloudDescription": "Yerleşik eşitleme · Pro gerektirir",
+  "externalSyncCloudDescription": "Yerleşik eşitleme · Yükleme için Pro gerekir",
   "externalSyncAction": "{action, select, connect{Bağlan} browser{Tarayıcıyla oturum aç} manual{Uygulama parolası kullan} reconnect{Yeniden bağlan} continue{Tarayıcıda devam et} pause{Duraklat} resume{Sürdür} disconnect{Bağlantıyı kes} sync{Şimdi eşitle} other{Yeniden dene}}",
   "externalSyncState": "{state, select, preparing{Yetkilendirme hazırlanıyor…} awaitingConsent{Tarayıcınızda yetkilendirmeye hazır} authorizing{Bağlanıyor…} cancelling{Yetkilendirme iptal ediliyor…} cancelPending{İptal işlemi doğrulanamadı. İptal etmeyi yeniden deneyin.} connecting{Bağlanıyor…} pausing{Duraklatılıyor…} enabling{Sürdürülüyor…} disconnecting{Bağlantı kesiliyor…} paused{Duraklatıldı} notConnected{Bağlı değil} keyRecovery{Bu bağlantıyı kullanmak için şifreleme anahtarınızı kurtarın.} pending{Bazı değişiklikler eşitlenmeyi bekliyor.} other{Bağlı}}",
   "externalSyncFailure": "{reason, select, sharedSetupRequired{Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.} reconnectRequired{Eşitlemeye devam etmek için bu hesabı yeniden bağlayın.} quotaExceeded{Depolama alanınız dolu. Bu sağlayıcıda yer açıp yeniden deneyin.} rateLimited{Sağlayıcı beklememizi istedi. Eşitleme otomatik olarak yeniden denenecek.} corruptData{Bazı eşitleme verileri doğrulanamadı. Yerel notlarınız korunur.} unsupported{Bu sağlayıcı veya tarayıcı bağlantıyı tamamlayamıyor.} other{Bu sağlayıcıya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.}}",
@@ -3750,7 +3754,11 @@
   "externalSyncLogoutUnknown": "Tüm değişikliklerinizin eşitlenip eşitlenmediğini doğrulayamadık. Oturumu kapatmak, bu cihazdaki yerel notları ve medyayı kaldırır. Hiçbir sağlayıcıya kaydedilmemiş değişiklikler kaybolabilir.\n\nOturumu kapatmadan önce eşitleme sağlayıcılarınızı kontrol edin veya verilerinizi dışa aktarın.",
   "externalSyncUnlockSketches": "Bazı kilitli notlar, güncellenmesi gereken eski çizimler içeriyor. Çizimleri oluşturduğunuz cihazda bu notları açın ve PIN'inizle kilitlerini kaldırın, ardından eşitlemeyi yeniden deneyin.",
 	"externalSyncOff": "Eşitleme kapalı",
-	"externalSyncOffDescription": "Notları bu cihazda tut",
+  "externalSyncCloudDownloadDescription": "Kayıtlı notları indirin · Yükleme için Pro gerekir",
+  "externalSyncDownloadOnly": "Better Keep cloud üzerindeki notları indirin. Yüklemeler duraklatılmış olarak kalacak.",
+  "externalSyncDownloadsOn": "Yüklemeler duraklatıldı · İndirmeler açık",
+  "externalSyncAllPaused": "Yüklemeler ve indirmeler duraklatıldı",
+	"externalSyncOffDescription": "Yüklemeler duraklatıldı",
 	"externalSyncDetails": "Eşitleme ayrıntıları",
 	"externalSyncNeedsAttention": "İlgilenmeniz gerekiyor · Ayrıntılara bakın",
 	"externalSyncConnectTitle": "{provider} bağla",
@@ -3816,5 +3824,6 @@
     }
   },
   "subscribe": "Abone ol",
-  "builtInCloudSync": "Yerleşik bulut senkronizasyonu"
+  "builtInCloudSync": "Yerleşik bulut senkronizasyonu",
+  "deviceAdded": "Eklendi"
 }

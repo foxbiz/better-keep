@@ -419,17 +419,18 @@ class NoteSyncService {
     },
   );
 
-  bool _lastFirebaseSyncAllowed = false;
+  (bool, bool) get _firebaseSyncAccess => (
+    FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid),
+    FirebaseSyncPreference.instance.allowsSync(currentUser?.uid),
+  );
+  (bool, bool) _lastFirebaseSyncAccess = (false, false);
   void _onSyncSelectionChange() {
-    final allowed = FirebaseSyncPreference.instance.allowsSync(
-      currentUser?.uid,
-    );
-    if (allowed == _lastFirebaseSyncAllowed) return;
-    _lastFirebaseSyncAllowed = allowed;
-    if (!_canReceiveSync) {
-      _onCloudStateChange();
-      return;
-    }
+    final access = _firebaseSyncAccess;
+    if (access == _lastFirebaseSyncAccess) return;
+    _lastFirebaseSyncAccess = access;
+    // Fence in-flight uploads even when downloads remain available.
+    _onCloudStateChange(force: true);
+    if (!_canReceiveSync) return;
     unawaited(
       _background(() async {
         await init();
@@ -439,9 +440,10 @@ class NoteSyncService {
     );
   }
 
-  void _onCloudStateChange() {
-    if (AuthService.canSyncCloud &&
-        FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
+  void _onCloudStateChange({bool force = false}) {
+    if (!force &&
+        AuthService.canSyncCloud &&
+        FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid)) {
       return;
     }
     _cloudGeneration++;
@@ -476,9 +478,7 @@ class NoteSyncService {
     if (_initialized) return;
     _initialized = true;
     AuthService.cloudRecovery.state.addListener(_onCloudStateChange);
-    _lastFirebaseSyncAllowed = FirebaseSyncPreference.instance.allowsSync(
-      currentUser?.uid,
-    );
+    _lastFirebaseSyncAccess = _firebaseSyncAccess;
     FirebaseSyncPreference.instance.addListener(_onSyncSelectionChange);
 
     AppLogger.log("[SYNC] SyncService initialized");
@@ -676,6 +676,7 @@ class NoteSyncService {
           AppLogger.log(
             "[SYNC] RESUME COMPLETE: Cache cleared after successful sync",
           );
+          _pullRetry.succeeded();
           break;
         case RemoteSyncResumeDisposition.reconcileLegacy:
           // A cache created by an older app has no exact safe cursor. Its
@@ -953,7 +954,7 @@ class NoteSyncService {
       'backendConfigured=${FirebaseBackend.isConfigured}, '
       'cloud=${AuthService.cloudRecovery.state.value.name}, '
       'provider=${FirebaseSyncPreference.instance.selectedProvider ?? 'unconfirmed'}, '
-      'firebaseAllowed=${FirebaseBackend.isConfigured && FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)}, '
+      'firebaseAllowed=${FirebaseBackend.isConfigured && FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid)}, '
       'cryptoReady=${E2EEService.instance.isCryptoReady}, '
       'sessionInvalid=${AuthService.sessionInvalid.value}, review=$_isReviewSession';
 
@@ -968,7 +969,7 @@ class NoteSyncService {
   bool get _canReceiveSync {
     // If session is invalid (user deleted/disabled), disable all sync
     if (!AuthService.canSyncCloud ||
-        !FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
+        !FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid)) {
       return false;
     }
 
@@ -986,7 +987,8 @@ class NoteSyncService {
   /// - Not an authorized review session
   bool get _canPushSync {
     // Must be able to receive sync first
-    if (!_canReceiveSync) {
+    if (!_canReceiveSync ||
+        !FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
       return false;
     }
 
@@ -1743,7 +1745,7 @@ class NoteSyncService {
 
   bool _hasValidRemoteDate(Object? value) {
     return value == null ||
-        (value is String && DateTime.tryParse(value) != null);
+        FirebaseSyncVersion.creationTimestamp(value) != null;
   }
 
   Future<void> _stopRemoteListener({bool cancelRetry = true}) async {
@@ -1957,13 +1959,12 @@ class NoteSyncService {
           return SyncRefreshOutcome.deferred;
         }
         final uploadRestricted =
-            !PlanService.instance.entitlements.realtimeCloudSync &&
-            await NoteSyncTrack.count(pending: true) > 0;
+            !_canPushSync && await NoteSyncTrack.count(pending: true) > 0;
         requireCloudOperation();
         if (uploadRestricted) {
           syncStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
           AppLogger.log(
-            '[SYNC] REFRESH: Downloads complete; local uploads require Pro',
+            '[SYNC] REFRESH: Downloads complete; local uploads are disabled',
           );
           return SyncRefreshOutcome.uploadRestricted;
         }
@@ -2171,7 +2172,7 @@ class NoteSyncService {
         } else {
           final note = await Note.fromJsonAsync(captured.row!);
           payload = note.toJson();
-          payload['created_at'] = note.createdAt?.toUtc().toIso8601String();
+          payload['created_at'] = note.createdAt?.toIso8601String();
           ReminderSyncCodec.encode(note.reminder, payload);
           final content = payload['content'] as String?;
           if (content != null && LocalDataEncryption.isEncrypted(content)) {
@@ -2396,6 +2397,7 @@ class NoteSyncService {
       await _syncCache.clear();
       requireCloudOperation();
       checkpointCommit.commit();
+      _pullRetry.succeeded();
       AppLogger.log("[SYNC] Cache cleared after successful sync");
     } else {
       final failedSyncs = _syncCache.getPendingSyncs();
@@ -2449,7 +2451,6 @@ class NoteSyncService {
       if (snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites) {
         throw const CloudVerificationUnavailable();
       }
-      _pullRetry.succeeded();
       return snapshot;
     } catch (error) {
       throw FirestoreDocumentFetchException(
@@ -3065,7 +3066,7 @@ class NoteSyncService {
       incomingVersion.modifiedAtMicros,
       isUtc: true,
     ).toIso8601String();
-    updatedNoteData['created_at'] = FirebaseSyncVersion.timestamp(
+    updatedNoteData['created_at'] = FirebaseSyncVersion.creationTimestamp(
       updatedNoteData['created_at'],
     )?.toIso8601String();
 

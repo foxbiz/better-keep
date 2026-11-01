@@ -67,8 +67,11 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     externalProgress: () => ExternalSyncService.instance.progress,
     firebaseChanges: FirebaseSyncPreference.instance,
     firebaseSelected: () =>
-        FirebaseSyncPreference.instance.enabled != false &&
-        !FirebaseSyncPreference.instance.stoppedLocally,
+        !FirebaseSyncPreference.instance.stoppedLocally &&
+        (FirebaseSyncPreference.instance.selectedProvider == null ||
+            FirebaseSyncPreference.instance.allowsDownload(
+              FirebaseSyncPreference.instance.accountId,
+            )),
   );
 
   final ValueListenable<SyncProgress>? orderStatus;

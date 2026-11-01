@@ -8,7 +8,9 @@
   "externalSyncWebDavHelp": "WebDAVフォルダーの完全なURLとアプリパスワードを入力してください。ブラウザーで同期するには、サーバーでクロスオリジンリクエストを許可する必要があります。",
 
 	"@@locale": "ja",
-	"@@last_modified": "2026-01-31",
+	"showMoreDevices": "もっと見る（{count}+）",
+	"deviceRemovalMainDeviceOnly": "他のデバイスを削除できるのはメインデバイスのみです。",
+	"@@last_modified": "2026-11-01",
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Better Keep を起動できません",
@@ -1100,7 +1102,9 @@
 	"localEncryptionMissing": "保存されたノートを開くためのキーが見つからないか破損しています。再接続してアクセスを復元するか、アカウント復元を使用してください。ローカルデータは保持されています。",
 	"syncCheckingConnection": "接続を確認中…",
 	"syncPreparing": "同期を準備中…",
-	"syncUploadRestricted": "変更はこのデバイスに保存されました。アップロードにはProが必要です。",
+	"syncUploadRestricted": "このデバイスに保存済みです。変更を同期するにはBetter Keepクラウドを有効にしてください。",
+	"syncUpgradeReminder": "変更はここに保存されています。Proで同期できます。",
+	"syncUpgradeForUploads": "このデバイスに保存済みです。変更を同期するにはProにアップグレードしてください。",
 	"syncPaused": "同期を一時停止しました。再試行してください。",
   "insertTable": "表を挿入",
   "tablePickerHint": "セルをタップして挿入するか、サイズを指定してください。",
@@ -1154,7 +1158,7 @@
   "externalSyncUnavailable": "ストレージに接続するには、ログインしてこのデバイスを承認するか、復旧してください。",
   "externalSyncAccount": "アカウントと暗号化",
   "externalSyncCloud": "Better Keepクラウド",
-  "externalSyncCloudDescription": "標準の同期 · Proが必要",
+  "externalSyncCloudDescription": "標準同期 · アップロードにはProが必要",
   "externalSyncAction": "{action, select, connect{接続} browser{ブラウザーでログイン} manual{アプリパスワードを使用} reconnect{再接続} continue{ブラウザーで続行} pause{一時停止} resume{再開} disconnect{接続を解除} sync{今すぐ同期} other{再試行}}",
   "externalSyncState": "{state, select, preparing{認証の準備中…} awaitingConsent{ブラウザーで認証できます} authorizing{接続中…} cancelling{認証をキャンセル中…} cancelPending{キャンセルを確認できませんでした。もう一度キャンセルしてください。} connecting{接続中…} pausing{一時停止中…} enabling{再開中…} disconnecting{接続を解除中…} paused{一時停止中} notConnected{未接続} keyRecovery{この接続を使用するには暗号化キーを復旧してください。} pending{一部の変更が同期待ちです。} other{接続済み}}",
   "externalSyncFailure": "{reason, select, sharedSetupRequired{このデバイスで接続済みのGoogle Driveアカウントにログインしてください。ノートは暗号化されたままです。} reconnectRequired{同期を続けるには、このアカウントに再接続してください。} quotaExceeded{ストレージがいっぱいです。このプロバイダーの空き容量を増やしてから再試行してください。} rateLimited{プロバイダーから待機を求められました。同期は自動的に再試行されます。} corruptData{一部の同期データを検証できませんでした。ローカルのノートは保持されます。} unsupported{このプロバイダーまたはブラウザーでは接続を完了できません。} other{このプロバイダーに接続できませんでした。通信状況を確認して再試行してください。}}",
@@ -1176,7 +1180,11 @@
   "externalSyncLogoutUnknown": "すべての変更が同期済みかどうか確認できませんでした。ログアウトすると、このデバイスのローカルのノートとメディアが削除されます。どのプロバイダーにも保存されていない変更は失われる可能性があります。\n\nログアウトする前に同期先のプロバイダーを確認するか、データをエクスポートしてください。",
   "externalSyncUnlockSketches": "一部のロックされたノートに、更新が必要な古いスケッチが含まれています。スケッチを作成したデバイスでそのノートを開き、PINでロックを解除してから同期を再試行してください。",
 	"externalSyncOff": "同期オフ",
-	"externalSyncOffDescription": "このデバイスにノートを保存",
+  "externalSyncCloudDownloadDescription": "保存済みノートをダウンロード · アップロードには Pro が必要",
+  "externalSyncDownloadOnly": "Better Keep cloud からノートをダウンロードします。アップロードは一時停止したままです。",
+  "externalSyncDownloadsOn": "アップロード停止中 · ダウンロード有効",
+  "externalSyncAllPaused": "アップロードとダウンロードを一時停止中",
+	"externalSyncOffDescription": "アップロードは一時停止中",
 	"externalSyncDetails": "同期の詳細",
 	"externalSyncNeedsAttention": "確認が必要 · 同期の詳細を表示",
 	"externalSyncConnectTitle": "{provider}に接続",
@@ -1242,5 +1250,6 @@
     }
   },
   "subscribe": "登録する",
-  "builtInCloudSync": "標準のクラウド同期"
+  "builtInCloudSync": "標準のクラウド同期",
+  "deviceAdded": "追加日時"
 }

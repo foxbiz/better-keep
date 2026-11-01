@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:better_keep/components/e2ee_status_card.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/components/user_device_tile.dart';
+import 'package:better_keep/components/user_devices_section.dart';
 import 'package:better_keep/dialogs/loading_dialog.dart';
 import 'package:better_keep/dialogs/otp_dialog.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
@@ -46,7 +47,11 @@ import '../components/sync_provider_tile.dart';
 import 'package:sqflite/sqflite.dart';
 
 class UserPage extends StatefulWidget {
-  const UserPage({super.key});
+  const UserPage({super.key}) : _showAllDevices = false;
+
+  const UserPage._devices() : _showAllDevices = true;
+
+  final bool _showAllDevices;
 
   @override
   State<UserPage> createState() => _UserPageState();
@@ -88,21 +93,25 @@ class _UserPageState extends State<UserPage> {
 
   @override
   void initState() {
-    _fetchStats();
+    if (!widget._showAllDevices) _fetchStats();
     if (!_isManagedReview) {
       _fetchE2EEInfo();
-      _fetchLinkedProviders();
-      _initShareService();
+      if (!widget._showAllDevices) {
+        _fetchLinkedProviders();
+        _initShareService();
+      }
     } else {
       _isLoadingDevices = false;
     }
-    NoteSyncService().isSyncing.addListener(_onSyncChange);
+    if (!widget._showAllDevices) {
+      NoteSyncService().isSyncing.addListener(_onSyncChange);
+      NoteShareService().pendingRequests.addListener(_onShareRequestsChange);
+      NoteShareService().activeShares.addListener(_onActiveSharesChange);
+    }
     E2EEService.instance.status.addListener(_onE2EEStatusChange);
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
       _onPendingApprovalsChange,
     );
-    NoteShareService().pendingRequests.addListener(_onShareRequestsChange);
-    NoteShareService().activeShares.addListener(_onActiveSharesChange);
     super.initState();
   }
 
@@ -154,6 +163,35 @@ class _UserPageState extends State<UserPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget._showAllDevices) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(context.l10n.yourDevices),
+          actions: [
+            IconButton(
+              onPressed: _isLoadingDevices ? null : _fetchE2EEInfo,
+              icon: const Icon(Icons.refresh),
+              tooltip: context.l10n.refresh,
+            ),
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: _fetchE2EEInfo,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: _buildDeviceSection(context),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final user = AuthService.currentUser;
     final cached = AuthService.cachedProfile;
 
@@ -1970,125 +2008,27 @@ class _UserPageState extends State<UserPage> {
     }
   }
 
-  Widget _buildDeviceSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final approvedDevices = _devices.where((d) => d.isApproved).toList();
-    final now = DateTime.now();
-    final pendingDevices = _devices.where((d) => d.canApproveAt(now)).toList();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.devices, size: 24),
-                const SizedBox(width: 12),
-                Text(
-                  context.l10n.yourDevices,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                if (_isLoadingDevices)
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Show error message if there's an error
-            if (_devicesError != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer.withValues(
-                    alpha: 0.3,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.wifi_off,
-                      size: 20,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _devicesError!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _fetchE2EEInfo,
-                      child: Text(context.l10n.retry),
-                    ),
-                  ],
-                ),
-              ),
-            ]
-            // Show skeleton loader while loading
-            else if (_isLoadingDevices && _devices.isEmpty) ...[
-              _buildDeviceSkeletonLoader(context),
-            ]
-            // Show devices
-            else ...[
-              // Pending devices (show approval buttons) - only on primary device
-              if (pendingDevices.isNotEmpty && _isFirstDevice) ...[
-                Text(
-                  context.l10n.pendingApprovalSection,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...pendingDevices.map(
-                  (device) =>
-                      _buildDeviceTile(context, device, isPending: true),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Approved devices
-              if (approvedDevices.isNotEmpty) ...[
-                Text(
-                  context.l10n.authorizedDevices,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...approvedDevices.map(
-                  (device) =>
-                      _buildDeviceTile(context, device, isPending: false),
-                ),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
+  Future<void> _openDevicesPage() async {
+    if (_isManagedReview) return;
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const UserPage._devices()));
+    // Reflect approvals/removals made on the full list when returning.
+    if (mounted) await _fetchE2EEInfo();
   }
+
+  Widget _buildDeviceSection(BuildContext context) => UserDevicesSection(
+    devices: _devices,
+    showAll: widget._showAllDevices,
+    isMainDevice: _isFirstDevice,
+    loading: _isLoadingDevices,
+    error: _devicesError,
+    onRefresh: _fetchE2EEInfo,
+    onShowAll: _openDevicesPage,
+    loadingBuilder: _buildDeviceSkeletonLoader,
+    tileBuilder: (context, device, pending) =>
+        _buildDeviceTile(context, device, isPending: pending),
+  );
 
   /// Builds a skeleton loader for the device list.
   Widget _buildDeviceSkeletonLoader(BuildContext context) {
@@ -2226,7 +2166,17 @@ class _UserPageState extends State<UserPage> {
       );
     }
 
+    final createdAt = device.createdAt.toLocal();
+    final formats = MaterialLocalizations.of(context);
+    final createdDate = formats.formatShortDate(createdAt);
+    final createdTime = formats.formatTimeOfDay(
+      TimeOfDay.fromDateTime(createdAt),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
     return UserDeviceTile(
+      isFlat: widget._showAllDevices,
+      createdAtLabel:
+          '${context.l10n.deviceAdded}: $createdDate · $createdTime',
       name: localizedDeviceName(context.l10n, device.name),
       subtitle: _formatDeviceSubtitle(device),
       platformIcon: platformIcon,

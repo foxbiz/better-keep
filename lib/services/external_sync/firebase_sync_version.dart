@@ -109,6 +109,12 @@ class FirebaseSyncVersion {
     return parsed.isUtc ? parsed : null;
   }
 
+  /// Creation dates are display metadata, not conflict clocks. Keep legacy
+  /// timezone-less wall clocks as supplied rather than rejecting or re-dating
+  /// old records. Never use this permissive parser to order edits.
+  static DateTime? creationTimestamp(Object? value) =>
+      timestamp(value) ?? (value is String ? DateTime.tryParse(value) : null);
+
   /// Compare the content of two snapshots without transport-only markers.
   static bool samePayload(Map<String, dynamic> a, Map<String, dynamic> b) =>
       _digest(a) == _digest(b);

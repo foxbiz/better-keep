@@ -15,11 +15,16 @@ class FirebaseSyncSelection {
     required this.confirmed,
     this.revision = 0,
     this.provider,
+    this.firebaseDownloads,
   });
   final bool enabled;
   final bool confirmed;
   final int revision;
   final String? provider;
+  final bool? firebaseDownloads;
+  bool get downloadsFirebase =>
+      selectedProvider == 'firebase' ||
+      (selectedProvider == 'none' && firebaseDownloads != false);
   String get selectedProvider => provider ?? (enabled ? 'firebase' : 'none');
 
   static FirebaseSyncSelection fromDocument(
@@ -31,6 +36,10 @@ class FirebaseSyncSelection {
     if (data == null) return FirebaseSyncSelection(true, confirmed: confirmed);
     final enabled = data['enabled'], updatedAt = data['updatedAt'];
     final provider = data['provider'];
+    final firebaseDownloads = data['firebaseDownloads'];
+    if (data.containsKey('firebaseDownloads') && firebaseDownloads is! bool) {
+      throw const FormatException('Invalid Firebase download preference');
+    }
     if (provider != null &&
         (!FirebaseSyncPreference.providers.contains(provider) ||
             enabled != (provider == 'firebase'))) {
@@ -44,6 +53,7 @@ class FirebaseSyncSelection {
       confirmed: confirmed,
       revision: updatedAt is Timestamp ? updatedAt.microsecondsSinceEpoch : 0,
       provider: provider as String?,
+      firebaseDownloads: firebaseDownloads as bool?,
     );
   }
 }
@@ -58,6 +68,7 @@ class FirebaseSyncPreference extends ChangeNotifier {
     this.writeProvider,
     this.entitlements,
     this.disableFirebase,
+    this.enableFirebaseDownloads,
     this.confirmedLiteAccount,
   }) {
     confirmedLiteAccount?.addListener(_entitlementsChanged);
@@ -82,18 +93,35 @@ class FirebaseSyncPreference extends ChangeNotifier {
             .snapshots(includeMetadataChanges: true)
             .map(FirebaseSyncSelection.fromDocument),
     disableFirebase: _disableFirebase,
+    enableFirebaseDownloads: (uid) =>
+        _writeProvider(uid, 'none', restoreDownloads: true),
     writeProvider: _writeProvider,
     write: (uid, enabled) => _writeProvider(uid, enabled ? 'firebase' : 'none'),
   );
   static Future<FirebaseSyncSelection> _writeProvider(
     String uid,
-    String provider,
-  ) async {
+    String provider, {
+    bool restoreDownloads = false,
+  }) async {
     final ref = _document(uid);
-    await ref.set({
-      'enabled': provider == 'firebase',
-      'provider': provider,
-      'updatedAt': FieldValue.serverTimestamp(),
+    await FirebaseBackend.firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ref);
+      var downloadsFirebase = false;
+      try {
+        downloadsFirebase = FirebaseSyncSelection.fromDocument(snapshot)
+            .downloadsFirebase;
+      } on FormatException {
+        // An explicit selection can repair malformed settings. Unknown history
+        // stays detached; only an explicit cloud choice restores downloads.
+      }
+      transaction.set(ref, {
+        'enabled': provider == 'firebase',
+        'provider': provider,
+        'firebaseDownloads':
+            provider == 'firebase' ||
+            (provider == 'none' && (restoreDownloads || downloadsFirebase)),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
     return FirebaseSyncSelection.fromDocument(
       await ref.get(const GetOptions(source: Source.server)),
@@ -124,6 +152,7 @@ class FirebaseSyncPreference extends ChangeNotifier {
       transaction.set(ref, {
         'enabled': false,
         'provider': 'none',
+        'firebaseDownloads': true,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
@@ -145,6 +174,8 @@ class FirebaseSyncPreference extends ChangeNotifier {
   final ValueListenable<Entitlements>? entitlements;
   final ValueListenable<String?>? confirmedLiteAccount;
   final Future<FirebaseSyncSelection> Function(String uid)? disableFirebase;
+  final Future<FirebaseSyncSelection> Function(String uid)?
+  enableFirebaseDownloads;
   final String? Function() currentUid;
   final Stream<FirebaseSyncSelection> Function(String uid) watch;
   final Future<FirebaseSyncSelection> Function(String uid, bool enabled) write;
@@ -162,10 +193,11 @@ class FirebaseSyncPreference extends ChangeNotifier {
       _cachePaused = false;
   int _generation = 0;
   bool _requestedConditional = false;
+  bool _requestedDownloads = false;
   bool _automaticPauseRejected = false;
 
-  // Lite is an external-storage plan. Free keeps its legacy download/recovery
-  // behavior, but a Lite downgrade durably turns a built-in selection off.
+  // This controls built-in upload selection, not access to existing cloud notes.
+  // Free and Lite retain downloads; Lite durably pauses built-in uploads.
   bool get firebaseAvailable {
     final access = entitlements?.value;
     return access == null ||
@@ -226,6 +258,25 @@ class FirebaseSyncPreference extends ChangeNotifier {
   bool get loading => accountId != null && _selection?.confirmed != true;
   bool get stoppedLocally => _localStop;
   bool get allowsCurrentAccount => allowsSync(accountId);
+
+  /// A confirmed choice to pause every source, not a transient readiness error.
+  bool get allTransfersPaused =>
+      allowsProvider('none') &&
+      _selection?.downloadsFirebase == false &&
+      !_busy &&
+      !_failed;
+
+  /// Pausing built-in uploads preserves downloads; pausing an external provider
+  /// must not attach a different remote library.
+  bool allowsDownload(String? uid) =>
+      !_disposed &&
+      uid != null &&
+      uid == accountId &&
+      _selection?.confirmed == true &&
+      _selection!.downloadsFirebase &&
+      !_localStop &&
+      !_cachePaused;
+
   bool allowsSync(String? uid) =>
       !_disposed &&
       uid != null &&
@@ -254,6 +305,7 @@ class FirebaseSyncPreference extends ChangeNotifier {
     _uid = uid;
     _requested = null;
     _requestedConditional = false;
+    _requestedDownloads = false;
     _automaticPauseRejected = false;
     _selection = null;
     _busy = _localStop = _failed = _cachePaused = false;
@@ -280,7 +332,8 @@ class FirebaseSyncPreference extends ChangeNotifier {
   void _receive(FirebaseSyncSelection value) {
     // Cache misses and optimistic enabling writes never start replication.
     if (!value.confirmed) {
-      if (value.selectedProvider != _selection?.selectedProvider) {
+      if (value.selectedProvider != _selection?.selectedProvider ||
+          value.downloadsFirebase != _selection?.downloadsFirebase) {
         _cachePaused = true;
         notifyListeners();
       }
@@ -293,7 +346,8 @@ class FirebaseSyncPreference extends ChangeNotifier {
     // explicit retry after a failed write so old snapshots cannot resume it.
     if (value.selectedProvider == 'none' &&
         !_busy &&
-        (_requested == null || _requested == 'none')) {
+        (_requested == null || _requested == 'none') &&
+        (!_requestedDownloads || value.downloadsFirebase)) {
       _localStop = false;
       _failed = false;
       _requested = null;
@@ -307,7 +361,11 @@ class FirebaseSyncPreference extends ChangeNotifier {
   Future<void> retry() async {
     final requested = _requested;
     if (requested != null && accountId != null) {
-      await _selectProvider(requested, conditional: _requestedConditional);
+      await _selectProvider(
+        requested,
+        conditional: _requestedConditional,
+        downloadOnly: _requestedDownloads,
+      );
     } else {
       bind(currentUid(), force: true);
     }
@@ -318,9 +376,14 @@ class FirebaseSyncPreference extends ChangeNotifier {
 
   Future<void> selectProvider(String provider) => _selectProvider(provider);
 
+  /// Explicitly reattach built-in downloads while leaving every upload paused.
+  Future<void> restoreFirebaseDownloads() =>
+      _selectProvider('none', downloadOnly: true);
+
   Future<void> _selectProvider(
     String provider, {
     bool conditional = false,
+    bool downloadOnly = false,
   }) async {
     if (!providers.contains(provider)) throw ArgumentError.value(provider);
     if (provider == 'firebase' && !firebaseAvailable) {
@@ -333,13 +396,19 @@ class FirebaseSyncPreference extends ChangeNotifier {
     _busy = true;
     _requested = provider;
     _requestedConditional = conditional;
+    _requestedDownloads = downloadOnly;
     _failed = false;
     _localStop = true;
     notifyListeners();
     try {
       final writer = writeProvider;
       final result =
-          await (conditional && disableFirebase != null
+          await (downloadOnly
+                  ? enableFirebaseDownloads?.call(uid) ??
+                        Future<FirebaseSyncSelection>.error(
+                          StateError('Download selection unavailable'),
+                        )
+                  : conditional && disableFirebase != null
                   ? disableFirebase!(uid)
                   : writer != null
                   ? writer(uid, provider)
@@ -358,6 +427,7 @@ class FirebaseSyncPreference extends ChangeNotifier {
       _localStop = false;
       _requested = null;
       _requestedConditional = false;
+      _requestedDownloads = false;
       if (conditional && result.selectedProvider == 'firebase') {
         _selection = result;
         _automaticPauseRejected = true;

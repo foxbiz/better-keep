@@ -147,7 +147,7 @@ class NoteSortService {
       final user = AuthService.currentUser;
       return user != null &&
           AuthService.canSyncCloud &&
-          FirebaseSyncPreference.instance.allowsSync(user.uid) &&
+          FirebaseSyncPreference.instance.allowsDownload(user.uid) &&
           !ReviewAccess.isAuthorizedSessionFor(user);
     } catch (_) {
       return false;
@@ -159,7 +159,9 @@ class NoteSortService {
 
   bool get _canPushCloud =>
       canPushCloudOverride ??
-      (_canReceiveCloud && PlanService.instance.entitlements.realtimeCloudSync);
+      (_canReceiveCloud &&
+          FirebaseSyncPreference.instance.allowsCurrentAccount &&
+          PlanService.instance.entitlements.realtimeCloudSync);
 
   bool _isCurrentCloudRun(_NoteSortCloudRun run) =>
       identical(_cloudRun, run) && (run.session.isCurrent?.call() ?? true);
@@ -379,25 +381,36 @@ class NoteSortService {
     _lastKnownCryptoReady = _isCryptoReady;
     E2EEService.instance.status.addListener(_handleE2EEStatusChange);
     AuthService.cloudRecovery.state.addListener(_handleCloudSessionChange);
-    _lastFirebaseSyncAllowed =
-        FirebaseSyncPreference.instance.allowsCurrentAccount;
+    _lastFirebaseSyncAccess = _firebaseSyncAccess;
     FirebaseSyncPreference.instance.addListener(_handleSyncSelectionChange);
     E2EEService.instance.deviceManager.hasUMK.addListener(
       _handleE2EEStatusChange,
     );
   }
 
-  bool _lastFirebaseSyncAllowed = false;
+  (bool, bool) get _firebaseSyncAccess => (
+    FirebaseSyncPreference.instance.allowsDownload(
+      FirebaseSyncPreference.instance.accountId,
+    ),
+    FirebaseSyncPreference.instance.allowsCurrentAccount,
+  );
+  (bool, bool) _lastFirebaseSyncAccess = (false, false);
+  int _selectionTransition = 0;
   void _handleSyncSelectionChange() {
-    final allowed = FirebaseSyncPreference.instance.allowsCurrentAccount;
-    if (allowed == _lastFirebaseSyncAllowed) return;
-    _lastFirebaseSyncAllowed = allowed;
-    if (!_canReceiveCloud) {
-      _handleCloudSessionChange();
-      return;
-    }
+    final access = _firebaseSyncAccess;
+    if (access == _lastFirebaseSyncAccess) return;
+    _lastFirebaseSyncAccess = access;
+    final transition = ++_selectionTransition;
+    final stopped = _stopCloudSync();
     unawaited(
-      startCloudSync().catchError((Object error, StackTrace stack) {
+      (() async {
+        await stopped;
+        if (_initialized &&
+            transition == _selectionTransition &&
+            _canReceiveCloud) {
+          await startCloudSync();
+        }
+      })().catchError((Object error, StackTrace stack) {
         AppLogger.error(
           '[NOTE_SORT] Firebase sync resume deferred',
           error,
@@ -409,7 +422,9 @@ class NoteSortService {
 
   void _handleCloudSessionChange() {
     if (AuthService.cloudRecovery.state.value == CloudSessionState.ready &&
-        FirebaseSyncPreference.instance.allowsCurrentAccount) {
+        FirebaseSyncPreference.instance.allowsDownload(
+          FirebaseSyncPreference.instance.accountId,
+        )) {
       return;
     }
     // Invalidate synchronously before awaiting listener cancellation.
@@ -2881,6 +2896,7 @@ class NoteSortService {
   }
 
   Future<void> dispose() async {
+    _selectionTransition++;
     E2EEService.instance.status.removeListener(_handleE2EEStatusChange);
     AuthService.cloudRecovery.state.removeListener(_handleCloudSessionChange);
     FirebaseSyncPreference.instance.removeListener(_handleSyncSelectionChange);

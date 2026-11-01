@@ -8,7 +8,9 @@
   "externalSyncWebDavHelp": "请输入 WebDAV 文件夹的完整网址和应用专用密码。浏览器同步需要服务器允许跨源请求。",
 
 	"@@locale": "zh",
-	"@@last_modified": "2026-01-31",
+	"showMoreDevices": "显示更多（{count}+）",
+	"deviceRemovalMainDeviceOnly": "只有您的主设备可以移除其他设备。",
+	"@@last_modified": "2026-11-01",
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "无法启动 Better Keep",
@@ -1100,7 +1102,9 @@
 	"localEncryptionMissing": "打开已保存笔记所需的密钥丢失或损坏。请重新连接以恢复访问，或使用账户恢复。本地数据已保留。",
 	"syncCheckingConnection": "正在检查连接…",
 	"syncPreparing": "正在准备同步…",
-	"syncUploadRestricted": "更改已保存在此设备上。上传需要 Pro。",
+	"syncUploadRestricted": "已保存在此设备上。启用 Better Keep 云端以同步更改。",
+	"syncUpgradeReminder": "您的更改已保存在此处。使用 Pro 同步。",
+	"syncUpgradeForUploads": "已保存在此设备上。升级到 Pro 以同步更改。",
 	"syncPaused": "同步已暂停。请重试。",
   "insertTable": "插入表格",
   "tablePickerHint": "点按单元格插入，或自定义大小。",
@@ -1154,7 +1158,7 @@
   "externalSyncUnavailable": "请登录并批准或恢复此设备，然后连接存储服务。",
   "externalSyncAccount": "账户与加密",
   "externalSyncCloud": "Better Keep 云端",
-  "externalSyncCloudDescription": "内置同步 · 需要 Pro",
+  "externalSyncCloudDescription": "内置同步 · 上传需要 Pro",
   "externalSyncAction": "{action, select, connect{连接} browser{通过浏览器登录} manual{使用应用密码} reconnect{重新连接} continue{在浏览器中继续} pause{暂停} resume{恢复} disconnect{断开连接} sync{立即同步} other{重试}}",
   "externalSyncState": "{state, select, preparing{正在准备授权…} awaitingConsent{已准备好，请在浏览器中授权} authorizing{正在连接…} cancelling{正在取消授权…} cancelPending{无法确认是否已取消。请再次取消。} connecting{正在连接…} pausing{正在暂停…} enabling{正在恢复…} disconnecting{正在断开连接…} paused{已暂停} notConnected{未连接} keyRecovery{请恢复您的加密密钥以使用此连接。} pending{部分更改正在等待同步。} other{已连接}}",
   "externalSyncFailure": "{reason, select, sharedSetupRequired{请在此设备上登录已连接的 Google Drive 账号。您的笔记仍保持加密。} reconnectRequired{请重新连接此账户以继续同步。} quotaExceeded{您的存储空间已满。请在此服务商处释放空间后重试。} rateLimited{服务商要求稍候。同步将自动重试。} corruptData{无法验证部分同步数据。您的本地笔记会保留。} unsupported{此服务商或浏览器无法完成连接。} other{无法连接此服务商。请检查网络连接后重试。}}",
@@ -1176,7 +1180,11 @@
   "externalSyncLogoutUnknown": "我们无法确认您的所有更改是否已同步。退出登录会移除此设备上的本地笔记和媒体文件。尚未保存到任何服务商的更改可能会丢失。\n\n请在退出登录前检查同步服务商或导出数据。",
   "externalSyncUnlockSketches": "部分已锁定的笔记包含需要更新的旧版草图。请在创建草图的设备上打开这些笔记，用 PIN 解锁后再重试同步。",
 	"externalSyncOff": "关闭同步",
-	"externalSyncOffDescription": "将笔记保留在此设备上",
+  "externalSyncCloudDownloadDescription": "下载已保存的笔记 · 上传需要 Pro",
+  "externalSyncDownloadOnly": "从 Better Keep cloud 下载笔记。上传将保持暂停。",
+  "externalSyncDownloadsOn": "上传已暂停 · 下载已开启",
+  "externalSyncAllPaused": "上传和下载已暂停",
+	"externalSyncOffDescription": "上传已暂停",
 	"externalSyncDetails": "同步详情",
 	"externalSyncNeedsAttention": "需要处理 · 查看同步详情",
 	"externalSyncConnectTitle": "连接 {provider}",
@@ -1242,5 +1250,6 @@
     }
   },
   "subscribe": "订阅",
-  "builtInCloudSync": "内置云同步"
+  "builtInCloudSync": "内置云同步",
+  "deviceAdded": "添加时间"
 }

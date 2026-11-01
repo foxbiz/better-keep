@@ -288,8 +288,10 @@ service cloud.firestore {
         allow read: if isMutableOwner(userId) && settingId == 'firebase';
         allow create, update: if isMutableOwner(userId)
           && settingId == 'firebase'
-          && request.resource.data.keys().hasOnly(['enabled', 'provider', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['enabled', 'provider', 'firebaseDownloads', 'updatedAt'])
           && request.resource.data.enabled is bool
+          && (!('firebaseDownloads' in request.resource.data) ||
+            request.resource.data.firebaseDownloads is bool)
           && (!('provider' in request.resource.data) ||
             (request.resource.data.provider in ['firebase', 'google_drive', 'dropbox', 'nextcloud', 'webdav', 'none']
               && request.resource.data.enabled == (request.resource.data.provider == 'firebase')))

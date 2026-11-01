@@ -1,3 +1,5 @@
+import 'package:better_keep/services/monetization/plan_service.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -1294,7 +1296,13 @@ class _NoteCardState extends State<NoteCard>
                       if (_isSyncFailed)
                         Tooltip(
                           message:
-                              _syncStatus?.localized(context.l10n) ??
+                              _syncStatus?.localized(
+                                context.l10n,
+                                cloudUploadsRequirePro: !PlanService
+                                    .instance
+                                    .entitlements
+                                    .realtimeCloudSync,
+                              ) ??
                               context.l10n.syncFailed,
                           child: GestureDetector(
                             onTap: () async {
@@ -1359,7 +1367,13 @@ class _NoteCardState extends State<NoteCard>
                     Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
-                        _syncStatus!.localized(context.l10n),
+                        _syncStatus!.localized(
+                          context.l10n,
+                          cloudUploadsRequirePro: !PlanService
+                              .instance
+                              .entitlements
+                              .realtimeCloudSync,
+                        ),
                         style: TextStyle(
                           fontSize: 9,
                           color: Colors.blue,

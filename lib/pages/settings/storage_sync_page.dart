@@ -36,7 +36,8 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
       widget.firebasePreference ?? FirebaseSyncPreference.instance;
   static const _providers = syncProviderOptions;
   bool _switching = false;
-  bool get _busy => _switching || _firebase.busy || _firebase.loading;
+  bool get _busy =>
+      _switching || _firebase.busy || (_firebase.loading && !_firebase.failed);
 
   void _account() =>
       Navigator.of(context)
@@ -87,6 +88,49 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
         );
       }
     } finally {
+      if (mounted) setState(() => _switching = false);
+    }
+  }
+
+  bool _confirmingDownloads = false;
+
+  Future<void> _restoreFirebaseDownloads() async {
+    if (_busy || _confirmingDownloads) return;
+    final uid = _firebase.accountId;
+    if (uid == null) return;
+    _confirmingDownloads = true;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(context.l10n.externalSyncCloud),
+          content: Text(context.l10n.externalSyncDownloadOnly),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(context.l10n.download),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true || uid != _firebase.accountId) return;
+      if (_busy) return;
+      setState(() => _switching = true);
+      await _firebase.restoreFirebaseDownloads();
+    } catch (_) {
+      if (mounted && uid == _firebase.accountId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.externalSyncFailure('unavailable')),
+          ),
+        );
+      }
+    } finally {
+      _confirmingDownloads = false;
       if (mounted) setState(() => _switching = false);
     }
   }
@@ -516,13 +560,22 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
                     id: 'firebase',
                     title: context.l10n.externalSyncCloud,
                     icon: Icons.cloud_outlined,
-                    subtitle: context.l10n.externalSyncCloudDescription,
+                    subtitle:
+                        !_firebase.firebaseAvailable &&
+                            !_firebase.allowsDownload(_firebase.accountId)
+                        ? context.l10n.externalSyncCloudDownloadDescription
+                        : context.l10n.externalSyncCloudDescription,
                     selected: _firebase.selectedProvider == 'firebase',
                     onTap: _firebase.accountId == null
                         ? _account
-                        : _busy || !_firebase.firebaseAvailable
+                        : _busy
                         ? null
-                        : () => _select('firebase'),
+                        : _firebase.firebaseAvailable
+                        ? () => _select('firebase')
+                        : _firebase.allowsDownload(_firebase.accountId)
+                        ? null
+                        : _restoreFirebaseDownloads,
+                    radioEnabled: _firebase.firebaseAvailable,
                   ),
                   if (session != null)
                     for (final provider
@@ -533,7 +586,11 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
                       id: 'none',
                       title: context.l10n.externalSyncOff,
                       icon: Icons.cloud_off_outlined,
-                      subtitle: context.l10n.externalSyncOffDescription,
+                      subtitle: _firebase.selectedProvider != 'none'
+                          ? context.l10n.externalSyncOffDescription
+                          : _firebase.allowsDownload(_firebase.accountId)
+                          ? context.l10n.externalSyncDownloadsOn
+                          : context.l10n.externalSyncAllPaused,
                       selected: _firebase.selectedProvider == 'none',
                       onTap: _busy ? null : () => _select('none'),
                     ),
@@ -591,6 +648,7 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
     Widget? menu,
     Widget? detail,
     bool radio = true,
+    bool radioEnabled = true,
     bool busy = false,
   }) {
     final colors = Theme.of(context).colorScheme;
@@ -650,7 +708,10 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
                   ),
                 )
               else if (radio)
-                Radio<String>(value: id, enabled: onTap != null),
+                Radio<String>(
+                  value: id,
+                  enabled: radioEnabled && onTap != null,
+                ),
               if (menu == null && !radio && !busy)
                 const Padding(
                   padding: EdgeInsets.all(12),

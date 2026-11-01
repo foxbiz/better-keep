@@ -1,5 +1,57 @@
 # External sync QA — 24 October 2026
 
+## 2026-11-01 download-only release checks
+
+Older dated entries below describe their original runs only.
+
+Before publishing, manually verify on release Android/iOS/web builds:
+
+- Free and Lite accounts can download existing built-in notes, media, labels and
+  ordering. Sync off preserves local changes and sends no note/media mutations.
+- For Lite after external → Sync off, tap the built-in card and cancel the
+  download-only confirmation: no setting changes. Confirm Download on the next
+  attempt: Sync off stays selected, downloads resume, uploads remain paused,
+  and the choice survives restart. Verify failed saves can be retried.
+- With a synthetic malformed preference in an isolated test, verify an explicit
+  card selection repairs it without silently attaching Firebase; a network or
+  permission failure must leave the record and transfer fence intact.
+- Downgrade Pro to Lite with built-in sync selected: uploads stop, downloads stay
+  available, and the selected card becomes Sync off.
+- Switch each external provider to off, restart/sign in on another device, and
+  switch back. Old Firebase-only notes must not enter the external library.
+- Clear external storage with the OTP flow. Confirm it stays off and does not
+  import Firebase content; switching to another provider during clear preserves
+  the newer selection.
+- Upgrade an account with legacy `enabled: false` settings and a large cloud
+  library. Built-in downloads now start when foreground/authorized, including on
+  cellular data; test interrupted transfers, media integrity and resumption.
+  Communicate this intentional behavior change in release notes. Legacy `none`
+  records without source history remain eligible for built-in recovery; provider
+  history cannot be inferred retroactively.
+- Test a published 1.4.5 device alongside the new build with legacy labels missing
+  creation dates. The new client must publish a valid date after editing them.
+- Check incoming progress/error feedback while uploads are off, rapid provider
+  toggles, and newer unsynced local edits versus older incoming revisions.
+- Check Account shows at most three devices, Show more displays the hidden count,
+  the full list has flat rows, and non-main devices show the removal hint without
+  delete controls. Check date/time display in a non-English locale and large text.
+
+For the new client, deploy the updated Firestore rules first, then the
+external-clear Functions writer, then publish the client. Rule support is
+required by new-client writes; the field itself remains optional for older
+clients. Existing production 1.4.5 (97) can keep using the updated server without
+an app update or migration. No new secret is needed for this
+preference-field change. Do not claim manual cases passed from unit tests.
+
+Before release, keep a published 1.4.5 (97) installation unchanged and verify
+sign-in, existing-note/media download, Pro note/label/order uploads, edit/delete,
+and subscription restore against the updated backend in an authorized QA setup.
+Do not assume selecting external storage on a newer device disables this old
+client's built-in uploads: it does not understand that setting. Verified Start
+Fresh retains reset-to-default behavior and retires new storage connections;
+ordinary deployment does neither.
+
+
 ## Lite automatic-update checks
 
 - Passed: 43 focused backend billing tests, including Lite/Pro reconciliation,

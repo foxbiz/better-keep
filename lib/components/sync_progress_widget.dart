@@ -1,4 +1,6 @@
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
+import 'package:better_keep/services/monetization/plan_service.dart';
 
 import 'dart:async';
 import 'dart:ui';
@@ -14,7 +16,10 @@ import 'package:flutter/material.dart';
 /// A floating widget that shows sync progress at the bottom of the screen.
 /// Shows synced count / total count and current status message.
 class SyncProgressWidget extends StatefulWidget {
-  const SyncProgressWidget({super.key});
+  const SyncProgressWidget({super.key, this.bottom = 32});
+
+  /// Distance above the bottom safe area, including any floating controls.
+  final double bottom;
 
   @override
   State<SyncProgressWidget> createState() => _SyncProgressWidgetState();
@@ -102,9 +107,9 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
       return const SizedBox.shrink();
     }
     return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 32 + MediaQuery.of(context).padding.bottom,
+      left: 16,
+      right: 16,
+      bottom: widget.bottom + MediaQuery.paddingOf(context).bottom,
       child: SlideTransition(
         position: _slideAnimation,
         child: FadeTransition(
@@ -122,6 +127,8 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
                 listenable: Listenable.merge([
                   NoteSyncService().syncProgress,
                   NoteSyncService().isSyncing,
+                  PlanService.instance.entitlementsNotifier,
+                  FirebaseSyncPreference.instance,
                 ]),
                 builder: (context, _) {
                   final counts = NoteSyncService().syncProgress.value;
@@ -340,7 +347,13 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
       return "$syncedCount/$totalCount";
     }
     if (!syncStatus.isEmpty) {
-      return syncStatus.localized(context.l10n);
+      return syncStatus.localized(
+        context.l10n,
+        providerSelectionRequired:
+            FirebaseSyncPreference.instance.allTransfersPaused,
+        cloudUploadsRequirePro:
+            !PlanService.instance.entitlements.realtimeCloudSync,
+      );
     }
     // This case shouldn't be reached since widget won't show without content
     return "";

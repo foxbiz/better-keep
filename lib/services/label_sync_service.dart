@@ -126,7 +126,7 @@ class LabelSyncService {
       'backendConfigured=${FirebaseBackend.isConfigured}, '
       'cloud=${AuthService.cloudRecovery.state.value.name}, '
       'provider=${FirebaseSyncPreference.instance.selectedProvider ?? 'unconfirmed'}, '
-      'firebaseAllowed=${FirebaseBackend.isConfigured && FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)}, '
+      'firebaseAllowed=${FirebaseBackend.isConfigured && FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid)}, '
       'cryptoReady=${E2EEService.instance.isCryptoReady}, '
       'sessionInvalid=${AuthService.sessionInvalid.value}, review=$_isReviewSession';
 
@@ -140,7 +140,7 @@ class LabelSyncService {
   bool get _canReceiveSync {
     // If session is invalid (user deleted/disabled), disable all sync
     if (!AuthService.canSyncCloud ||
-        !FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
+        !FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid)) {
       return false;
     }
 
@@ -154,7 +154,8 @@ class LabelSyncService {
   /// - Must have Pro subscription (cloud sync upload is a Pro feature)
   /// - Not an authorized review session
   bool get _canPushSync {
-    if (!_canReceiveSync) {
+    if (!_canReceiveSync ||
+        !FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
       return false;
     }
     // Cloud sync upload requires Pro subscription
@@ -197,17 +198,18 @@ class LabelSyncService {
     },
   );
 
-  bool _lastFirebaseSyncAllowed = false;
+  (bool, bool) get _firebaseSyncAccess => (
+    FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid),
+    FirebaseSyncPreference.instance.allowsSync(currentUser?.uid),
+  );
+  (bool, bool) _lastFirebaseSyncAccess = (false, false);
   void _onSyncSelectionChange() {
-    final allowed = FirebaseSyncPreference.instance.allowsSync(
-      currentUser?.uid,
-    );
-    if (allowed == _lastFirebaseSyncAllowed) return;
-    _lastFirebaseSyncAllowed = allowed;
-    if (!_canReceiveSync) {
-      _onCloudStateChange();
-      return;
-    }
+    final access = _firebaseSyncAccess;
+    if (access == _lastFirebaseSyncAccess) return;
+    _lastFirebaseSyncAccess = access;
+    // Fence in-flight uploads even when downloads remain available.
+    _onCloudStateChange(force: true);
+    if (!_canReceiveSync) return;
     unawaited(
       _background(() async {
         await init();
@@ -217,9 +219,10 @@ class LabelSyncService {
     );
   }
 
-  void _onCloudStateChange() {
-    if (AuthService.canSyncCloud &&
-        FirebaseSyncPreference.instance.allowsSync(currentUser?.uid)) {
+  void _onCloudStateChange({bool force = false}) {
+    if (!force &&
+        AuthService.canSyncCloud &&
+        FirebaseSyncPreference.instance.allowsDownload(currentUser?.uid)) {
       return;
     }
     _cloudGeneration++;
@@ -248,9 +251,7 @@ class LabelSyncService {
     if (_initialized) return;
     _initialized = true;
     AuthService.cloudRecovery.state.addListener(_onCloudStateChange);
-    _lastFirebaseSyncAllowed = FirebaseSyncPreference.instance.allowsSync(
-      currentUser?.uid,
-    );
+    _lastFirebaseSyncAccess = _firebaseSyncAccess;
     FirebaseSyncPreference.instance.addListener(_onSyncSelectionChange);
 
     AppLogger.log("[LABEL_SYNC] LabelSyncService initialized");
@@ -628,7 +629,7 @@ class LabelSyncService {
 
   bool _hasValidRemoteDate(Object? value) {
     return value == null ||
-        (value is String && DateTime.tryParse(value) != null);
+        FirebaseSyncVersion.creationTimestamp(value) != null;
   }
 
   Future<void> _stopRemoteListener({bool cancelRetry = true}) async {
@@ -761,7 +762,7 @@ class LabelSyncService {
       requireCloudOperation();
       final uploadRestricted =
           syncFailed.value.isEmpty &&
-          !PlanService.instance.entitlements.realtimeCloudSync &&
+          !_canPushSync &&
           await LabelSyncTrack.count(pending: true) > 0;
       requireCloudOperation();
       if (uploadRestricted) {
@@ -913,9 +914,13 @@ class LabelSyncService {
           if (row != null) ...{
             'name': row['name'],
             'is_system': row['is_system'] ?? 0,
-            'created_at': DateTime.tryParse(row['created_at']?.toString() ?? '')
-                ?.toUtc()
-                .toIso8601String(),
+            'created_at':
+                (FirebaseSyncVersion.creationTimestamp(row['created_at']) ??
+                        DateTime.fromMicrosecondsSinceEpoch(
+                          version.modifiedAtMicros,
+                          isUtc: true,
+                        ))
+                    .toIso8601String(),
           },
         }, version);
         payload[cloudSyncCommittedAtField] = FieldValue.serverTimestamp();
@@ -999,9 +1004,7 @@ class LabelSyncService {
           _pullRetry.schedule(
             _background(() async {
               if (_initialized && currentUser != null && _canReceiveSync) {
-                AppLogger.log(
-                  '[LABEL_SYNC] Retrying full label pull after Firestore failure',
-                );
+                AppLogger.log('[LABEL_SYNC] Retrying incomplete label pull');
                 await refresh();
               }
             }),
@@ -1119,6 +1122,8 @@ class LabelSyncService {
     );
     requireCloudOperation();
     checkpointCommit.commit();
+    // Reset only after every label has been applied, not after each fetch.
+    _pullRetry.succeeded();
   }
 
   Future<CloudSyncCursor?> _captureBootstrapBoundary() async {
@@ -1168,7 +1173,6 @@ class LabelSyncService {
       if (snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites) {
         throw const CloudVerificationUnavailable();
       }
-      _pullRetry.succeeded();
       return snapshot;
     } catch (error) {
       throw FirestoreDocumentFetchException(
@@ -1263,14 +1267,20 @@ class LabelSyncService {
             'sync_id': remoteId,
             'name': data['name'],
             'is_system': data['is_system'] == 1 ? 1 : 0,
-            'created_at': FirebaseSyncVersion.timestamp(data['created_at'])
-                ?.toIso8601String(),
+            'created_at':
+                (FirebaseSyncVersion.creationTimestamp(data['created_at']) ??
+                        DateTime.fromMicrosecondsSinceEpoch(
+                          version.modifiedAtMicros,
+                          isUtc: true,
+                        ))
+                    .toIso8601String(),
             'updated_at': DateTime.fromMicrosecondsSinceEpoch(
               version.modifiedAtMicros,
               isUtc: true,
             ).toIso8601String(),
           };
-          if (data['name'] is! String || row['created_at'] == null) {
+          if (data['name'] is! String ||
+              !_hasValidRemoteDate(data['created_at'])) {
             throw const FormatException('Invalid label payload');
           }
           if (rows.isEmpty) {

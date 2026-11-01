@@ -4,18 +4,21 @@ import 'package:flutter/foundation.dart';
 import 'package:better_keep/services/monetization/entitlements.dart';
 
 import 'package:better_keep/services/firebase_sync_preference.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'support/offline_firebase.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late String? uid;
   late ValueNotifier<Entitlements> entitlements;
   late ValueNotifier<String?> confirmedLiteAccount;
   late FirebaseSyncPreference preference;
   late StreamController<FirebaseSyncSelection> snapshots;
   late Future<FirebaseSyncSelection> Function(String, bool) write;
+  late Future<FirebaseSyncSelection> Function(String) download;
   setUp(() {
     uid = 'owner';
     confirmedLiteAccount = ValueNotifier('owner');
@@ -23,12 +26,20 @@ void main() {
     snapshots = StreamController.broadcast(sync: true);
     write = (_, enabled) async =>
         FirebaseSyncSelection(enabled, confirmed: true, revision: 2);
+    download = (_) async => const FirebaseSyncSelection(
+      false,
+      provider: 'none',
+      confirmed: true,
+      revision: 4,
+      firebaseDownloads: true,
+    );
     preference = FirebaseSyncPreference(
       entitlements: entitlements,
       confirmedLiteAccount: confirmedLiteAccount,
       currentUid: () => uid,
       watch: (_) => snapshots.stream,
       write: (uid, enabled) => write(uid, enabled),
+      enableFirebaseDownloads: (uid) => download(uid),
     );
     preference.bind(uid);
   });
@@ -46,6 +57,304 @@ void main() {
           revision: revision,
         ),
       );
+
+  test('provider guidance requires a confirmed pause of every source', () {
+    expect(preference.allTransfersPaused, false);
+    for (final confirmed in [false, true]) {
+      snapshots.add(
+        FirebaseSyncSelection(
+          false,
+          provider: 'none',
+          confirmed: confirmed,
+          firebaseDownloads: false,
+        ),
+      );
+      expect(preference.allTransfersPaused, confirmed);
+    }
+    // A cached change is a verification pause, not an explicit all-source pause.
+    snapshots.add(
+      const FirebaseSyncSelection(
+        false,
+        provider: 'none',
+        confirmed: false,
+        firebaseDownloads: true,
+      ),
+    );
+    expect(preference.allTransfersPaused, false);
+    snapshots.add(
+      const FirebaseSyncSelection(
+        false,
+        provider: 'none',
+        confirmed: true,
+        firebaseDownloads: true,
+      ),
+    );
+    expect(preference.allTransfersPaused, false);
+    snapshots.add(
+      const FirebaseSyncSelection(
+        false,
+        provider: 'dropbox',
+        confirmed: true,
+        firebaseDownloads: false,
+      ),
+    );
+    expect(preference.allTransfersPaused, false);
+    preference.bind(null);
+    expect(preference.allTransfersPaused, false);
+  });
+
+  test(
+    'Lite with confirmed Firebase keeps downloads without uploads',
+    () async {
+      confirmedLiteAccount.value = null;
+      entitlements.value = Entitlements.lite;
+      selection(true);
+      expect(preference.selectedProvider, 'none');
+      expect(preference.allowsDownload(uid), true);
+      expect(preference.allowsSync(uid), false);
+    },
+  );
+
+  test('persisted external pause survives a new session and explicit cloud selection', () async {
+    final backend = OfflineFirebase()..configure();
+    final previousOverride = FirebaseSyncPreference.instanceOverride;
+    FirebaseSyncPreference.instanceOverride = null;
+    final production = FirebaseSyncPreference.instance;
+    production.bind('account-a', force: true);
+    const path = 'users/account-a/sync_settings/firebase';
+    var revision = 0;
+    backend.firestore.response = (_, _) async => OfflineSnapshot(
+      value: backend.firestore.documents[path] == null
+          ? null
+          : {
+              ...backend.firestore.documents[path]!,
+              'updatedAt': Timestamp(++revision, 0),
+            },
+    );
+    try {
+      for (final external in [
+        'google_drive',
+        'dropbox',
+        'nextcloud',
+        'webdav',
+      ]) {
+        await production.selectProvider(external);
+        expect(production.allowsDownload('account-a'), false);
+        await production.setEnabled(false);
+        expect(backend.firestore.documents[path]!['firebaseDownloads'], false);
+        expect(production.allowsDownload('account-a'), false);
+        production.bind('account-a', force: true);
+        backend.firestore.events.add(
+          await backend.firestore.response!(path, null),
+        );
+        await pumpEventQueue();
+        expect(production.selectedProvider, 'none');
+        expect(production.allowsDownload('account-a'), false);
+        await production.selectProvider(external);
+        expect(production.allowsDownload('account-a'), false);
+      }
+      await production.selectProvider('firebase');
+      await production.setEnabled(false);
+      expect(production.allowsDownload('account-a'), true);
+      expect(production.allowsSync('account-a'), false);
+      expect(backend.firestore.documents[path]!['firebaseDownloads'], true);
+      for (final malformed in [
+        <String, dynamic>{'enabled': null},
+        <String, dynamic>{'enabled': false, 'provider': 'unknown'},
+        <String, dynamic>{
+          'enabled': false,
+          'provider': 'none',
+          'firebaseDownloads': 'yes',
+        },
+      ]) {
+        for (final target in ['none', 'dropbox', 'firebase']) {
+          backend.firestore.documents[path] = malformed;
+          await production.selectProvider(target);
+          expect(production.selectedProvider, target);
+          expect(production.allowsDownload('account-a'), target == 'firebase');
+          expect(
+            backend.firestore.documents[path]!['firebaseDownloads'],
+            target == 'firebase',
+          );
+        }
+      }
+
+      await production.selectProvider('dropbox');
+      await production.restoreFirebaseDownloads();
+      expect(backend.firestore.documents[path]!['provider'], 'none');
+      expect(backend.firestore.documents[path]!['enabled'], false);
+      expect(backend.firestore.documents[path]!['firebaseDownloads'], true);
+      production.bind('account-a', force: true);
+      backend.firestore.events.add(
+        await backend.firestore.response!(path, null),
+      );
+      await pumpEventQueue();
+      expect(production.allowsDownload('account-a'), true);
+      expect(production.allowsSync('account-a'), false);
+      final before = Map<String, dynamic>.of(
+        backend.firestore.documents[path]!,
+      );
+      backend.firestore.response = (_, _) async => throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'permission-denied',
+      );
+      await expectLater(
+        production.selectProvider('firebase'),
+        throwsStateError,
+      );
+      expect(backend.firestore.documents[path], before);
+      expect(production.allowsDownload('account-a'), false);
+    } finally {
+      production.bind(null);
+      previousOverride?.dispose();
+      FirebaseSyncPreference.instanceOverride = null;
+      FirebaseBackend.resetForTesting();
+    }
+  });
+
+  test(
+    'explicit download restoration keeps uploads off on every plan',
+    () async {
+      for (final plan in [
+        Entitlements.free,
+        Entitlements.lite,
+        Entitlements.pro,
+      ]) {
+        preference.bind(uid, force: true);
+        entitlements.value = plan;
+        snapshots.add(
+          const FirebaseSyncSelection(
+            false,
+            provider: 'none',
+            firebaseDownloads: false,
+            confirmed: true,
+          ),
+        );
+        expect(preference.allowsDownload(uid), false);
+        await preference.restoreFirebaseDownloads();
+        expect(preference.selectedProvider, 'none');
+        expect(preference.allowsDownload(uid), true);
+        expect(preference.allowsSync(uid), false);
+        expect(preference.allowsProvider('dropbox'), false);
+      }
+    },
+  );
+
+  test('failed download restoration retains intent for retry and fences account changes', () async {
+    snapshots.add(
+      const FirebaseSyncSelection(
+        false,
+        provider: 'none',
+        firebaseDownloads: false,
+        confirmed: true,
+      ),
+    );
+    download = (_) async => throw StateError('offline');
+    await expectLater(preference.restoreFirebaseDownloads(), throwsStateError);
+    snapshots.add(
+      const FirebaseSyncSelection(
+        false,
+        provider: 'none',
+        firebaseDownloads: false,
+        confirmed: true,
+        revision: 2,
+      ),
+    );
+    expect(preference.failed, true);
+    final pending = Completer<FirebaseSyncSelection>();
+    download = (_) => pending.future;
+    final retry = preference.retry();
+    expect(preference.allowsDownload(uid), false);
+    pending.complete(
+      const FirebaseSyncSelection(
+        false,
+        provider: 'none',
+        firebaseDownloads: true,
+        confirmed: true,
+        revision: 3,
+      ),
+    );
+    await retry;
+    expect(preference.allowsDownload(uid), true);
+    expect(preference.allowsSync(uid), false);
+    final stale = Completer<FirebaseSyncSelection>();
+    download = (_) => stale.future;
+    final changingAccount = preference.restoreFirebaseDownloads();
+    uid = 'other';
+    preference.bind(uid);
+    stale.complete(
+      const FirebaseSyncSelection(
+        false,
+        provider: 'none',
+        firebaseDownloads: true,
+        confirmed: true,
+        revision: 4,
+      ),
+    );
+    await expectLater(changingAccount, throwsStateError);
+    expect(preference.allowsDownload(uid), false);
+  });
+
+  test('Sync off permits downloads on every plan but never uploads', () async {
+    for (final plan in [
+      Entitlements.free,
+      Entitlements.lite,
+      Entitlements.pro,
+    ]) {
+      entitlements.value = plan;
+      selection(false);
+      expect(preference.allowsDownload(uid), true);
+      expect(preference.allowsSync(uid), false);
+      expect(preference.allowsDownload('different-user'), false);
+    }
+    uid = null;
+    expect(preference.allowsDownload('owner'), false);
+  });
+
+  test(
+    'downloads wait for confirmed selection and stop on errors and switching',
+    () async {
+      expect(preference.allowsDownload(uid), false);
+      selection(false, confirmed: false);
+      expect(preference.allowsDownload(uid), false);
+      selection(false);
+      expect(preference.allowsDownload(uid), true);
+      snapshots.addError(StateError('offline'));
+      expect(preference.allowsDownload(uid), false);
+      selection(false, revision: 2);
+      expect(preference.allowsDownload(uid), true);
+      final pending = Completer<FirebaseSyncSelection>();
+      write = (_, _) => pending.future;
+      final changing = preference.setEnabled(true);
+      expect(preference.allowsDownload(uid), false);
+      pending.complete(
+        const FirebaseSyncSelection(true, confirmed: true, revision: 3),
+      );
+      await changing;
+      expect(preference.allowsDownload(uid), true);
+      preference.dispose();
+      expect(preference.allowsDownload(uid), false);
+    },
+  );
+
+  test(
+    'external selection does not mix Firebase downloads into its library',
+    () {
+      for (final provider in [
+        'google_drive',
+        'dropbox',
+        'nextcloud',
+        'webdav',
+      ]) {
+        snapshots.add(
+          FirebaseSyncSelection(false, confirmed: true, provider: provider),
+        );
+        expect(preference.allowsDownload(uid), false);
+      }
+      selection(false);
+      expect(preference.allowsDownload(uid), true);
+    },
+  );
 
   test(
     'cached Lite cannot persist a pause before fresh account validation',
@@ -252,6 +561,20 @@ void main() {
     );
     expect(saved.enabled, false);
     expect(saved.revision, 1000000);
+    expect(saved.downloadsFirebase, true);
+    expect(
+      () => FirebaseSyncSelection.fromDocument(
+        OfflineSnapshot(
+          value: {
+            'enabled': false,
+            'provider': 'none',
+            'updatedAt': Timestamp(1, 0),
+            'firebaseDownloads': 'yes',
+          },
+        ),
+      ),
+      throwsFormatException,
+    );
     expect(
       () => FirebaseSyncSelection.fromDocument(
         OfflineSnapshot(value: {'enabled': true}),
@@ -356,6 +679,30 @@ void main() {
       }
     },
   );
+
+  test('cached download-only changes fence transfers until confirmed', () {
+    void emit(bool downloads, bool confirmed, int revision) => snapshots.add(
+      FirebaseSyncSelection(
+        false,
+        provider: 'none',
+        confirmed: confirmed,
+        revision: revision,
+        firebaseDownloads: downloads,
+      ),
+    );
+    emit(true, true, 1);
+    expect(preference.allowsDownload(uid), true);
+    emit(false, false, 2);
+    expect(preference.allowsDownload(uid), false);
+    emit(true, false, 1);
+    expect(preference.allowsDownload(uid), false);
+    emit(false, true, 2);
+    emit(true, false, 3);
+    expect(preference.allowsDownload(uid), false);
+    emit(true, true, 3);
+    expect(preference.allowsDownload(uid), true);
+    expect(preference.allowsSync(uid), false);
+  });
 
   test('cached defaults and optimistic enables cannot start a new session', () {
     expect(preference.allowsSync(uid), false);
