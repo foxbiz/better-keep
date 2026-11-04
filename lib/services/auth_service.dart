@@ -1,3 +1,4 @@
+import 'auth_error_messages.dart';
 import 'remote_sync_cache_service.dart';
 import 'local_storage_recovery.dart';
 
@@ -1911,6 +1912,7 @@ class AuthService {
         }),
       ],
       isFatalIdentityFailure: _isDefinitiveIdentityFailure,
+      isAccountDeletionInProgress: isAccountDeletionInProgress,
       isSessionCurrent: isCurrent,
       signOut: signOut,
       clearSignInProgress: () async {
@@ -2031,34 +2033,12 @@ class AuthService {
             AppLogger.log(
               "[AUTH] Found scheduled deletion, calling cancelScheduledDeletion Cloud Function",
             );
-            try {
-              // Call Cloud Function to cancel deletion (sends email notification)
-              final result = await callCloudFunction('cancelScheduledDeletion');
-              AppLogger.log(
-                "[AUTH] Cancelled scheduled deletion via Cloud Function for user: ${user.uid}, result: ${result.data}",
-              );
-              AppLogger.log(
-                "[AUTH] Account deletion cancelled successfully for user: ${user.uid}",
-              );
-            } catch (e, stack) {
-              // Fallback to direct Firestore update if Cloud Function fails
-              AppLogger.log(
-                "[AUTH] Cloud Function failed, falling back to direct update: $e",
-              );
-              AppLogger.log(
-                "[AUTH] cancelScheduledDeletion Cloud Function failed: $e\n$stack",
-              );
-              await userRef
-                  .update({
-                    'scheduledDeletion': FieldValue.delete(),
-                    'tokensRevokedAt': FieldValue.delete(),
-                    'lastSeen': FieldValue.serverTimestamp(),
-                  })
-                  .timeout(const Duration(seconds: 30));
-              AppLogger.log(
-                "[AUTH] Cancelled scheduled deletion directly for user: ${user.uid}",
-              );
-            }
+            // Only the backend can cancel: a direct write could erase a worker's
+            // irreversible deletion claim after cancellation was rejected.
+            await callCloudFunction('cancelScheduledDeletion');
+            AppLogger.log(
+              "[AUTH] Account deletion cancelled for user: ${user.uid}",
+            );
           } else {
             AppLogger.log(
               "[AUTH] No scheduled deletion found for user: ${user.uid}",
@@ -2121,7 +2101,9 @@ class AuthService {
 
         return; // Success
       } catch (e) {
-        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+        if (isAccountDeletionInProgress(e) ||
+            e is CloudOperationCancelled ||
+            isCloudConnectionFailure(e)) {
           rethrow;
         }
         AppLogger.log("[AUTH] Attempt $attempts failed: $e");

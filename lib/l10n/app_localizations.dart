@@ -4317,7 +4317,7 @@ abstract class AppLocalizations {
   /// Logged out all devices warning
   ///
   /// In en, this message translates to:
-  /// **'You will be logged out from all devices'**
+  /// **'Other devices may take time to sign out. Device approval stays until deletion; remove any lost devices first.'**
   String get loggedOutAllDevices;
 
   /// Account cannot be recovered warning
@@ -4377,7 +4377,7 @@ abstract class AppLocalizations {
   /// Account deletion date message
   ///
   /// In en, this message translates to:
-  /// **'Your account will be deleted on {date}.'**
+  /// **'Your account is eligible for deletion from {date}.'**
   String accountWillBeDeletedOn(String date);
 
   /// Export before sign out message
@@ -4431,7 +4431,7 @@ abstract class AppLocalizations {
   /// Deletion scheduled snackbar message
   ///
   /// In en, this message translates to:
-  /// **'Account deletion scheduled for {date}. Sign in again to cancel.'**
+  /// **'Deletion is scheduled from {date}. Sign in again to cancel.'**
   String deletionScheduledMessage(String date);
 
   /// iPhone/iPad platform name
@@ -7221,7 +7221,7 @@ abstract class AppLocalizations {
   /// No description provided for @deviceVerificationInstructions.
   ///
   /// In en, this message translates to:
-  /// **'On your trusted device, scan the QR shown on the new device, or compare the entire security code on both screens.'**
+  /// **'On your trusted device, scan the QR shown on the new device.'**
   String get deviceVerificationInstructions;
 
   /// No description provided for @deviceVerificationExpired.
@@ -7275,7 +7275,7 @@ abstract class AppLocalizations {
   /// No description provided for @deviceCameraUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Camera unavailable. You can compare the security code instead.'**
+  /// **'Camera unavailable. Enable camera access or recover with your passphrase.'**
   String get deviceCameraUnavailable;
 
   /// No description provided for @deviceVerificationRetry.
@@ -7299,7 +7299,7 @@ abstract class AppLocalizations {
   /// No description provided for @verifyTrustedDeviceInstructions.
   ///
   /// In en, this message translates to:
-  /// **'On your trusted device, keep the confirmation screen open. Scan its QR code or compare all 32 characters of the security code before accepting your encryption key.'**
+  /// **'Scan the QR on your trusted device to accept your encryption key.'**
   String get verifyTrustedDeviceInstructions;
 
   /// No description provided for @scanTrustedDevice.
@@ -7323,7 +7323,7 @@ abstract class AppLocalizations {
   /// No description provided for @confirmOnNewDeviceInstructions.
   ///
   /// In en, this message translates to:
-  /// **'On the new device, choose “Verify trusted device”. Scan this QR code or confirm that its complete security code matches the one below. Keep this screen open until the new device unlocks. The original ten-minute expiry still applies.'**
+  /// **'Scan this QR with the new device. Keep this screen open until it unlocks.'**
   String get confirmOnNewDeviceInstructions;
 
   /// No description provided for @storageSecurityUpgrade.
@@ -7343,12 +7343,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'On your trusted device, open the approval request and scan this code.'**
   String get devicePairingScanInstruction;
-
-  /// No description provided for @devicePairingCodeInstruction.
-  ///
-  /// In en, this message translates to:
-  /// **'Compare this entire code with the one on your trusted device.'**
-  String get devicePairingCodeInstruction;
 
   /// No description provided for @showQrCode.
   ///
@@ -7529,6 +7523,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Added'**
   String get deviceAdded;
+
+  /// No description provided for @accountDeletionInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion has already started. Contact support@betterkeep.app for help.'**
+  String get accountDeletionInProgress;
+
+  /// No description provided for @deletionCodeRecentlyRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'A code was recently requested. Check your email or wait one minute before requesting another.'**
+  String get deletionCodeRecentlyRequested;
+
+  /// No description provided for @deviceCodeApprovalInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare this code with your new device. Approve only if the whole code matches.'**
+  String get deviceCodeApprovalInstruction;
+
+  /// No description provided for @providerSignInVerificationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not verify your sign-in. Please try signing in again.'**
+  String get providerSignInVerificationFailed;
+
+  /// No description provided for @accountDeletionPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion is temporarily paused. Contact support@betterkeep.app.'**
+  String get accountDeletionPaused;
+
+  /// No description provided for @deviceUsePairingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a code instead'**
+  String get deviceUsePairingCode;
+
+  /// No description provided for @deviceEnterPairingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter pairing code'**
+  String get deviceEnterPairingCode;
+
+  /// No description provided for @devicePairingCodeInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'On your trusted device, choose Enter pairing code and enter these eight digits.'**
+  String get devicePairingCodeInstruction;
+
+  /// No description provided for @devicePairingCodeEntryInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the eight digits shown on your new device.'**
+  String get devicePairingCodeEntryInstruction;
+
+  /// No description provided for @devicePairingCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing code'**
+  String get devicePairingCodeLabel;
+
+  /// No description provided for @devicePairingCodeExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'This code is no longer available. Generate a new one.'**
+  String get devicePairingCodeExpired;
+
+  /// No description provided for @devicePairingCodeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the code on your new device and try again. Generate a new code if it has expired.'**
+  String get devicePairingCodeFailed;
+
+  /// No description provided for @devicePairingConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get devicePairingConnecting;
 }
 
 class _AppLocalizationsDelegate

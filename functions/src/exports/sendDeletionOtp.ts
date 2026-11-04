@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError } from "firebase-functions/v2/https";
+import { requireDeletionEnabled } from "../accountDeletionLifecycle";
 import { auth, db, emailPassword } from "../config";
 import { generateOtpEmailHtml, generateOtpEmailText } from "../email_templates";
 import { onNonReviewCall } from "../nonReviewCallable";
@@ -19,6 +20,7 @@ export default onNonReviewCall(
 				"User must be signed in to request OTP",
 			);
 		}
+		requireDeletionEnabled();
 		const userId = request.auth.uid;
 
 		try {
@@ -33,29 +35,45 @@ export default onNonReviewCall(
 				);
 			}
 
-			// Ensure user document exists (required for subcollection)
+			const [local, domain] = email.split("@");
+			const maskedEmail = `${local.length > 1 ? local[0] : ""}***@${domain}`;
 			const userRef = db.collection("users").doc(userId);
-			const userDoc = await userRef.get();
-			if (!userDoc.exists) {
-				// Create minimal user document if it doesn't exist
-				await userRef.set({
-					email: email,
-					createdAt: Timestamp.now(),
-				});
-			}
-
-			// Generate OTP
+			const otpRef = userRef.collection("otpVerification").doc("deletion");
 			const otp = generateOtp();
-			const expiresAt = Timestamp.fromMillis(
-				Date.now() + 10 * 60 * 1000, // 10 minutes expiry
-			);
-
-			// Store OTP in Firestore
-			await userRef.collection("otpVerification").doc("deletion").set({
-				otp: otp,
-				expiresAt: expiresAt,
-				attempts: 0,
-				createdAt: Timestamp.now(),
+			const now = Timestamp.now();
+			await db.runTransaction(async (tx) => {
+				const userDoc = await tx.get(userRef);
+				const previous = await tx.get(otpRef);
+				if (userDoc.data()?.scheduledDeletion != null) {
+					throw new HttpsError(
+						"failed-precondition",
+						"Cancel the existing deletion request first",
+					);
+				}
+				const createdAt = previous.data()?.createdAt;
+				if (
+					createdAt instanceof Timestamp &&
+					now.toMillis() - createdAt.toMillis() < 60_000
+				) {
+					throw new HttpsError(
+						"resource-exhausted",
+						"Wait one minute before requesting another code",
+						{
+							reason: "deletion-otp-cooldown",
+							email: maskedEmail,
+							retryAfterSeconds: Math.ceil(
+								(60_000 - now.toMillis() + createdAt.toMillis()) / 1000,
+							),
+						},
+					);
+				}
+				if (!userDoc.exists) tx.create(userRef, { email, createdAt: now });
+				tx.set(otpRef, {
+					otp,
+					expiresAt: Timestamp.fromMillis(now.toMillis() + 600_000),
+					attempts: 0,
+					createdAt: now,
+				});
 			});
 
 			// Send email
@@ -82,14 +100,7 @@ export default onNonReviewCall(
 
 			await sendEmail(mailOptions);
 
-			// Mask email for display
-			const maskedEmail = email.replace(
-				/(.{2})(.*)(@.*)/,
-				(_, start, middle, end) =>
-					start + "*".repeat(Math.min(middle.length, 5)) + end,
-			);
-
-			console.log(`Sent deletion OTP to user ${userId} (${maskedEmail})`);
+			console.log(`Sent deletion OTP for user ${userId}`);
 
 			return {
 				success: true,
@@ -98,12 +109,11 @@ export default onNonReviewCall(
 				expiresIn: 600, // 10 minutes in seconds
 			};
 		} catch (error) {
-			console.error(`Error sending OTP to ${userId}:`, error);
-
 			if (error instanceof HttpsError) {
 				throw error;
 			}
 
+			console.error(`Error sending OTP for user ${userId}:`, error);
 			throw new HttpsError("internal", "Failed to send verification code");
 		}
 	},

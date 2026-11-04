@@ -19,6 +19,7 @@ import 'package:better_keep/pages/settings/storage_sync_page.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/sync_logout_check.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -2367,7 +2368,13 @@ class _UserPageState extends State<UserPage> {
       final manager = E2EEService.instance.deviceManager;
       final request = await manager.pendingVerificationRequest(deviceId);
       if (!mounted) return;
-      final verified = await showDeviceVerificationDialog(context, request);
+      final verified = await showDeviceVerificationDialog(
+        context,
+        request,
+        updates: manager.watchPendingVerificationRequest(deviceId),
+        verifyCode: (request, code, current) =>
+            manager.verifyDevicePairingCode(request, code, isCurrent: current),
+      );
       if (!mounted || verified == null) return;
       final receipt = await manager.approveDevice(verified);
       if (!mounted) return;
@@ -2777,17 +2784,29 @@ class _UserPageState extends State<UserPage> {
       return null;
     }
 
-    if (!loadingResult.success) {
+    final cooldown = deletionOtpCooldown(loadingResult.error);
+    if (!loadingResult.success && cooldown == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.l10n.failedSendCode),
+          content: Text(
+            isAccountDeletionPaused(loadingResult.error)
+                ? context.l10n.accountDeletionPaused
+                : context.l10n.failedSendCode,
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return null;
     }
-
-    final maskedEmail = loadingResult.data?['email'] as String?;
+    if (cooldown != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.deletionCodeRecentlyRequested)),
+      );
+    }
+    // A retry during cooldown can still use the original code; do not strand
+    // users outside the input dialog after a cancelled or timed-out send.
+    final maskedEmail =
+        (loadingResult.data?['email'] ?? cooldown?['email']) as String?;
 
     // Show OTP input dialog using reusable component
     // Note: We don't verify on server here - just collect the OTP
@@ -2967,7 +2986,11 @@ class _UserPageState extends State<UserPage> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.l10n.failedScheduleDeletion),
+            content: Text(
+              isAccountDeletionPaused(error)
+                  ? context.l10n.accountDeletionPaused
+                  : context.l10n.failedScheduleDeletion,
+            ),
             backgroundColor: Colors.red,
           ),
         );

@@ -37,8 +37,15 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    function deletionInProgress(userId) {
+      let schedule = get(/databases/$(database)/documents/users/$(userId)).data.get('scheduledDeletion', null);
+      return schedule is map && schedule.get('state', '') == 'deleting';
+    }
+
     function isMutableOwner(userId) {
-      return isOwner(userId) && !isReviewAccount();
+      return isOwner(userId) && !isReviewAccount()
+        && (!exists(/databases/$(database)/documents/users/$(userId))
+          || !deletionInProgress(userId));
     }
 
     // Public statistics - read-only access for user count badges
@@ -185,12 +192,18 @@ service cloud.firestore {
       // Allow creating/reading/updating/deleting the user document itself
       // ONLY if the request comes from the authenticated user with that UID
       allow read: if isOwner(userId);
-      allow write: if isMutableOwner(userId);
+      // Deletion authorization and progress are exclusively backend-owned.
+      allow create: if isMutableOwner(userId)
+        && !request.resource.data.keys().hasAny(['scheduledDeletion', 'tokensRevokedAt', 'deletionCancelledAt']);
+      allow update: if isMutableOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['scheduledDeletion', 'tokensRevokedAt', 'deletionCancelledAt']);
+      allow delete: if false;
 
       // Notes subcollection - requires Pro subscription for writes
       match /notes/{noteId} {
         // Allow reads for all authenticated owners (needed for migration/download)
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         
         // Only Pro users can write (create/update) notes to the cloud
         // Also validates attachment count
@@ -211,7 +224,7 @@ service cloud.firestore {
 
       // Labels subcollection - same rules as notes
       match /labels/{labelId} {
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         allow create: if isMutableOwner(userId)
           && isPro()
           && hasValidSyncCommitMarkerOnCreate();
@@ -223,7 +236,7 @@ service cloud.firestore {
       }
 
       match /preferences/{preferenceId} {
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         allow create, update: if isMutableOwner(userId)
           && isPro()
           && preferenceId == 'note_sort'
@@ -233,7 +246,7 @@ service cloud.firestore {
       }
 
       match /note_order_snapshots/{revision}/chunks/{chunkId} {
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         allow create, update: if isMutableOwner(userId)
           && isPro()
           && hasValidNoteOrderChunk(revision);
@@ -242,7 +255,7 @@ service cloud.firestore {
       }
 
       match /note_order_contexts/{contextId} {
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         allow create, update: if isMutableOwner(userId)
           && isPro()
           && hasValidContextOrderManifest(contextId);
@@ -251,7 +264,7 @@ service cloud.firestore {
       }
 
       match /note_order_context_snapshots/{revision}/chunks/{chunkId} {
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         allow create, update: if isMutableOwner(userId)
           && isPro()
           && hasValidContextOrderChunk(revision);
@@ -260,7 +273,7 @@ service cloud.firestore {
 
       // Subscription subcollection - read only for owner, write only by Cloud Functions
       match /subscription/{document=**} {
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         // Writes are handled by Cloud Functions with admin SDK, so deny client writes
         allow write: if false;
       }
@@ -285,7 +298,7 @@ service cloud.firestore {
       }
 
       match /sync_settings/{settingId} {
-        allow read: if isMutableOwner(userId) && settingId == 'firebase';
+        allow read: if isOwner(userId) && !isReviewAccount() && settingId == 'firebase';
         allow create, update: if isMutableOwner(userId)
           && settingId == 'firebase'
           && request.resource.data.keys().hasOnly(['enabled', 'provider', 'firebaseDownloads', 'updatedAt'])
@@ -300,7 +313,7 @@ service cloud.firestore {
       }
 
       match /storage_connections/{document=**} {
-        allow read: if isMutableOwner(userId);
+        allow read: if isOwner(userId) && !isReviewAccount();
         allow write: if false;
       }
 
@@ -318,7 +331,7 @@ service cloud.firestore {
             && data.token is string && data.token.size() > 0 && data.token.size() <= 128
             && data.updatedAt == request.time;
         }
-        allow read: if isMutableOwner(userId) && hasAutomaticExternalSync();
+        allow read: if isOwner(userId) && !isReviewAccount() && hasAutomaticExternalSync();
         allow create: if isMutableOwner(userId) && hasAutomaticExternalSync() && validSignal();
         allow update: if isMutableOwner(userId) && hasAutomaticExternalSync() && validSignal()
           && (request.resource.data.generation != resource.data.generation
@@ -348,6 +361,14 @@ service cloud.firestore {
             'note_order_context_snapshots'
           ]);
       }
+    }
+
+    match /accountDeletionRequests/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /accountDeletionWorker/{document=**} {
+      allow read, write: if false;
     }
 
     // Global subscriptions collection - used for subscription lookups
@@ -434,6 +455,7 @@ service cloud.firestore {
         
         // Anyone can create a request (to request access)
         allow create: if !isReviewAccount()
+          && exists(/databases/$(database)/documents/shares/$(shareId))
           && request.resource.data.status == 'pending';
         
         // Only owner can update (approve/deny)

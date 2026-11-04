@@ -1,5 +1,6 @@
 import { type Firestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { cancelDeletion } from "./accountDeletionLifecycle";
 import { auth, db } from "./config";
 import {
 	type BrowserOAuthProvider,
@@ -76,7 +77,10 @@ export async function redeemOAuthCompletion({
 		code,
 		verifier,
 		firestore: db,
-		createCustomToken: (uid) => auth.createCustomToken(uid),
+		createCustomToken: async (uid) => {
+			await cancelDeletion(db, uid, "redeemOAuthCompletion");
+			return auth.createCustomToken(uid);
+		},
 	});
 }
 

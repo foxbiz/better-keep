@@ -220,6 +220,24 @@ emulators with:
 npm test firebase-emulator-functions
 ```
 
+Run account-deletion safety and HTTP end-to-end tests against isolated Auth,
+Firestore, and Storage emulators (synthetic accounts only):
+
+```bash
+npm --prefix functions run test:deletion
+```
+
+Automatic deletion fails closed unless `ACCOUNT_DELETION_ENABLED=true` is set
+on the worker. Legacy schedules have no verified request record and remain on
+hold; do not convert them into verified requests without renewed user consent.
+Keep the deletion scheduler paused during rollout and incident review. Deploy
+protected-field Firestore rules first, then the backend with deletion disabled.
+See [account deletion operations](docs/ACCOUNT_DELETION.md) for the token-expiry
+wait, partial-deletion recovery procedure, release gate, and remaining rollout checks.
+The suite covers cancellation/worker races, OTP replay, provider sign-in hooks,
+reminders, and complete deletion/retry using synthetic data. OAuth provider
+consent screens and real email delivery still require separate live validation.
+
 Run the Firestore and Storage security-rules suite together, then exercise the
 managed review token directly against Auth, Functions, Firestore, and Storage:
 
@@ -303,13 +321,21 @@ npm run build web
 
 This builds the indexable Astro marketing site at `/`, embeds Flutter Web at
 `/app/`, and validates the complete Firebase Hosting artifact in `build/web/`.
-Deploy that artifact to Firebase Hosting with:
+Use the scoped Hosting commands for releases:
 
 ```bash
-npm run deploy hosting
+npm run deploy hosting-web       # Website only; keep the live app
+npm run deploy hosting-app-beta  # New opt-in app beta; keep the website
+npm run deploy hosting-app-prod  # Promote the published beta; keep the website
+npm run deploy hosting-beta      # Website + new opt-in app beta
+npm run deploy hosting-prod      # Website + promote the published beta
 ```
 
-The Hosting deployment always rebuilds the web application first.
+Promotion reuses the published beta's paired builds and preserves each browser's
+storage. It never compiles current app source. Add `--prepare-only` to prepare a
+reviewable release without publishing. See [the Hosting release workflow](docs/WEB_BETA.md)
+for preparation, approval, validation and recovery. These commands deploy only the
+public Hosting site; backend and admin Hosting are excluded.
 
 ### Checks and release gate
 

@@ -1,6 +1,6 @@
 import 'dart:js_interop';
 
-import 'package:web/web.dart' as web;
+import 'package:firebase_core/firebase_core.dart';
 
 import 'firebase_emulator_host.dart';
 
@@ -13,9 +13,36 @@ void configureFirebaseEmulatorWebProxy(FirebaseEmulatorEndpoints endpoints) {
   }
 }
 
-/// FlutterFire restores this hint only on localhost, but skips explicit setup
-/// whenever it matches. Clear it before creating a fresh emulator app so HTTPS
-/// debug sessions cannot accidentally use production Auth after a reload.
-void prepareFirebaseAuthEmulator(String appName) {
-  web.window.sessionStorage.removeItem('$appName-firebaseEmulatorOrigin');
+@JS('betterKeepPrepareAuthEmulator')
+external void _prepareAuth(
+  JSString appName,
+  JSAny options,
+  JSString host,
+  JSNumber port,
+);
+
+/// Configure the JavaScript Auth instance before FlutterFire can restore a
+/// persisted session. Also validates real routing when reusing a hot-restart app.
+void prepareFirebaseAuthEmulator(
+  String appName,
+  FirebaseOptions options,
+  FirebaseEmulatorEndpoints endpoints,
+) {
+  _prepareAuth(
+    appName.toJS,
+    // Match FlutterFire's web options exactly. Native-only fields from asMap()
+    // would make its subsequent initializeApp call reject the existing app.
+    {
+      'apiKey': options.apiKey,
+      'authDomain': options.authDomain,
+      'databaseURL': options.databaseURL,
+      'projectId': options.projectId,
+      'storageBucket': options.storageBucket,
+      'messagingSenderId': options.messagingSenderId,
+      'measurementId': options.measurementId,
+      'appId': options.appId,
+    }.jsify()!,
+    endpoints.host.toJS,
+    FirebaseEmulatorEndpoints.authPort.toJS,
+  );
 }

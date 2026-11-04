@@ -2311,7 +2311,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get allAttachmentsRemoved => 'すべての添付ファイルとメディアが削除されます';
 
   @override
-  String get loggedOutAllDevices => 'すべてのデバイスからログアウトされます';
+  String get loggedOutAllDevices =>
+      '他の端末からのログアウトには時間がかかる場合があります。端末の承認は削除まで有効です。紛失した端末は先に削除してください。';
 
   @override
   String get accountCannotBeRecovered => 'アカウントは復元できません';
@@ -2342,7 +2343,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'アカウントは$dateに削除されます。';
+    return 'アカウントは$date以降に削除されます。';
   }
 
   @override
@@ -2373,7 +2374,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'アカウント削除が$dateにスケジュールされました。再度サインインするとキャンセルできます。';
+    return '削除は$date以降に予定されています。再度サインインするとキャンセルできます。';
   }
 
   @override
@@ -3976,7 +3977,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceVerificationInstructions =>
-      '信頼済み端末で新しい端末のQRコードを読み取るか、両画面のセキュリティコード全体を比較してください。';
+      '信頼済みのデバイスで、新しいデバイスのQRコードをスキャンしてください。';
 
   @override
   String get deviceVerificationExpired =>
@@ -4004,7 +4005,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get approveVerifiedDevice => '端末を承認';
 
   @override
-  String get deviceCameraUnavailable => 'カメラを利用できません。代わりにセキュリティコードを比較してください。';
+  String get deviceCameraUnavailable =>
+      'カメラを使用できません。カメラへのアクセスを許可するか、パスフレーズで復元してください。';
 
   @override
   String get deviceVerificationRetry =>
@@ -4019,7 +4021,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get verifyTrustedDeviceInstructions =>
-      '信頼済み端末の確認画面を開いたままにしてください。暗号化キーを受け入れる前に、QRコードを読み取るか、セキュリティコードの32文字すべてを比較してください。';
+      '信頼済みのデバイスのQRコードをスキャンして暗号化キーを受け取ってください。';
 
   @override
   String get scanTrustedDevice => '信頼済み端末をスキャン';
@@ -4032,7 +4034,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get confirmOnNewDeviceInstructions =>
-      '新しい端末で「信頼済み端末を確認」を選択してください。このQRコードを読み取るか、コード全体が下のコードと一致することを確認してください。新しい端末のロックが解除されるまで画面を開いたままにしてください。有効期限は最初の生成から10分です。';
+      '新しいデバイスでこのQRコードをスキャンしてください。ロックが解除されるまでこの画面を開いておいてください。';
 
   @override
   String get storageSecurityUpgrade => '安全に再接続';
@@ -4044,9 +4046,6 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get devicePairingScanInstruction =>
       '信頼できるデバイスで承認リクエストを開き、このコードをスキャンしてください。';
-
-  @override
-  String get devicePairingCodeInstruction => 'このコード全体を、信頼できるデバイスのコードと比較してください。';
 
   @override
   String get showQrCode => 'QRコードを表示';
@@ -4145,4 +4144,50 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceAdded => '追加日時';
+
+  @override
+  String get accountDeletionInProgress =>
+      'アカウントの削除はすでに開始されています。support@betterkeep.app にお問い合わせください。';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      '確認コードはすでにリクエストされています。メールを確認するか、1分待ってから再度リクエストしてください。';
+
+  @override
+  String get deviceCodeApprovalInstruction =>
+      '新しい端末のコードと比較してください。コード全体が一致する場合のみ承認してください。';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'サインインを確認できませんでした。もう一度サインインしてください。';
+
+  @override
+  String get accountDeletionPaused =>
+      'アカウントの削除は一時停止中です。support@betterkeep.app にお問い合わせください。';
+
+  @override
+  String get deviceUsePairingCode => 'コードを使う';
+
+  @override
+  String get deviceEnterPairingCode => 'ペアリングコードを入力';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      '信頼済みのデバイスで「ペアリングコードを入力」を選び、この8桁を入力してください。';
+
+  @override
+  String get devicePairingCodeEntryInstruction => '新しいデバイスに表示されている8桁を入力してください。';
+
+  @override
+  String get devicePairingCodeLabel => 'ペアリングコード';
+
+  @override
+  String get devicePairingCodeExpired => 'このコードは使用できません。新しいコードを生成してください。';
+
+  @override
+  String get devicePairingCodeFailed =>
+      '新しいデバイスのコードを確認して再試行してください。期限切れの場合は新しいコードを生成してください。';
+
+  @override
+  String get devicePairingConnecting => '接続中…';
 }

@@ -2376,7 +2376,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'All attachments and media will be removed';
 
   @override
-  String get loggedOutAllDevices => 'You will be logged out from all devices';
+  String get loggedOutAllDevices =>
+      'Other devices may take time to sign out. Device approval stays until deletion; remove any lost devices first.';
 
   @override
   String get accountCannotBeRecovered => 'Your account cannot be recovered';
@@ -2409,7 +2410,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'Your account will be deleted on $date.';
+    return 'Your account is eligible for deletion from $date.';
   }
 
   @override
@@ -2441,7 +2442,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'Account deletion scheduled for $date. Sign in again to cancel.';
+    return 'Deletion is scheduled from $date. Sign in again to cancel.';
   }
 
   @override
@@ -4139,7 +4140,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceVerificationInstructions =>
-      'On your trusted device, scan the QR shown on the new device, or compare the entire security code on both screens.';
+      'On your trusted device, scan the QR shown on the new device.';
 
   @override
   String get deviceVerificationExpired =>
@@ -4171,7 +4172,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceCameraUnavailable =>
-      'Camera unavailable. You can compare the security code instead.';
+      'Camera unavailable. Enable camera access or recover with your passphrase.';
 
   @override
   String get deviceVerificationRetry =>
@@ -4186,7 +4187,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get verifyTrustedDeviceInstructions =>
-      'On your trusted device, keep the confirmation screen open. Scan its QR code or compare all 32 characters of the security code before accepting your encryption key.';
+      'Scan the QR on your trusted device to accept your encryption key.';
 
   @override
   String get scanTrustedDevice => 'Scan trusted device';
@@ -4199,7 +4200,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get confirmOnNewDeviceInstructions =>
-      'On the new device, choose “Verify trusted device”. Scan this QR code or confirm that its complete security code matches the one below. Keep this screen open until the new device unlocks. The original ten-minute expiry still applies.';
+      'Scan this QR with the new device. Keep this screen open until it unlocks.';
 
   @override
   String get storageSecurityUpgrade => 'Reconnect securely';
@@ -4211,10 +4212,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get devicePairingScanInstruction =>
       'On your trusted device, open the approval request and scan this code.';
-
-  @override
-  String get devicePairingCodeInstruction =>
-      'Compare this entire code with the one on your trusted device.';
 
   @override
   String get showQrCode => 'Show QR code';
@@ -4318,4 +4315,52 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceAdded => 'Added';
+
+  @override
+  String get accountDeletionInProgress =>
+      'Account deletion has already started. Contact support@betterkeep.app for help.';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      'A code was recently requested. Check your email or wait one minute before requesting another.';
+
+  @override
+  String get deviceCodeApprovalInstruction =>
+      'Compare this code with your new device. Approve only if the whole code matches.';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'Could not verify your sign-in. Please try signing in again.';
+
+  @override
+  String get accountDeletionPaused =>
+      'Account deletion is temporarily paused. Contact support@betterkeep.app.';
+
+  @override
+  String get deviceUsePairingCode => 'Use a code instead';
+
+  @override
+  String get deviceEnterPairingCode => 'Enter pairing code';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'On your trusted device, choose Enter pairing code and enter these eight digits.';
+
+  @override
+  String get devicePairingCodeEntryInstruction =>
+      'Enter the eight digits shown on your new device.';
+
+  @override
+  String get devicePairingCodeLabel => 'Pairing code';
+
+  @override
+  String get devicePairingCodeExpired =>
+      'This code is no longer available. Generate a new one.';
+
+  @override
+  String get devicePairingCodeFailed =>
+      'Check the code on your new device and try again. Generate a new code if it has expired.';
+
+  @override
+  String get devicePairingConnecting => 'Connecting…';
 }

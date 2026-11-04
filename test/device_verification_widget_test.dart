@@ -4,6 +4,10 @@ import 'dart:convert';
 import 'package:better_keep/components/device_verification.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/services/e2ee/device_verification.dart';
+import 'package:better_keep/services/e2ee/device_pairing_channel.dart';
+
+import 'device_pairing_code_test.dart' show MemoryPairingMailbox;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,12 +15,14 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
-  DeviceVerificationRequest request() => DeviceVerificationRequest.create(
-    account: 'user',
-    environment: 'test',
-    deviceId: 'new',
-    publicKey: Uint8List(32),
-  );
+  DeviceVerificationRequest request({bool codeApproval = false}) =>
+      DeviceVerificationRequest.create(
+        codeApproval: codeApproval,
+        account: 'user',
+        environment: 'test',
+        deviceId: 'new',
+        publicKey: Uint8List(32),
+      );
   Widget app(Future<void> Function(BuildContext) open) => MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
@@ -34,6 +40,187 @@ void main() {
     approverPublicKey: base64Encode(Uint8List(32)),
     ciphertext: base64Encode(Uint8List(100)),
     nonce: base64Encode(Uint8List(24)),
+  );
+
+  testWidgets('method switch is hidden while code approval is in flight', (
+    tester,
+  ) async {
+    final local = request();
+    final mailbox = MemoryPairingMailbox();
+    late PendingPairingCode host;
+    await tester.runAsync(() async {
+      host = await PendingPairingCode.start(
+        local,
+        mailbox,
+        isCurrent: () => true,
+      );
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: DeviceVerificationCard(
+            request: local,
+            codeSession: host,
+            onRegenerate: () {},
+            onShowQr: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Show QR code'), findsOneWidget);
+    await tester.runAsync(() async {
+      await verifyPairingCode(
+        DeviceVerificationRequest.fromJson(local.toJson()),
+        host.code,
+        mailbox,
+        isCurrent: () => true,
+      );
+    });
+    await tester.pump();
+    expect(host.handoffInProgress, true);
+    expect(find.text('Show QR code'), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    host.dispose();
+    await mailbox.close();
+  });
+
+  testWidgets('camera-free approval accepts eight digits with one tap', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    await tester.binding.setSurfaceSize(const Size(390, 600));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+    addTearDown(tester.view.resetViewInsets);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final local = request();
+    VerifiedDeviceApproval? verified;
+    String? entered;
+    await tester.pumpWidget(
+      app((context) async {
+        verified = await showDeviceVerificationDialog(
+          context,
+          DeviceVerificationRequest.fromJson(local.toJson()),
+          verifyCode: (pending, code, current) async {
+            expect(current(), true);
+            entered = code;
+            return pending.verifyQr(local.qrData);
+          },
+        );
+      }),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      isNull,
+    );
+    await tester.enterText(find.byType(TextField), '0123 4567');
+    await tester.pump();
+    await tester.tap(find.text('Approve'));
+    await tester.pumpAndSettle();
+    expect(entered, '01234567');
+    expect(verified, isNotNull);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('cancelling a code exchange cannot return an approval', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final local = request();
+    final exchange = Completer<VerifiedDeviceApproval>();
+    bool Function()? current;
+    VerifiedDeviceApproval? verified;
+    await tester.pumpWidget(
+      app((context) async {
+        verified = await showDeviceVerificationDialog(
+          context,
+          local,
+          verifyCode: (_, _, isCurrent) {
+            current = isCurrent;
+            return exchange.future;
+          },
+        );
+      }),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '01234567');
+    await tester.pump();
+    await tester.tap(find.text('Approve'));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(current!(), true);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(current!(), false);
+    exchange.complete(local.verifyQr(local.qrData));
+    await tester.pumpAndSettle();
+    expect(verified, isNull);
+    debugDefaultTargetPlatformOverride = null;
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets(
+    'scanner offers a code fallback when camera permission is denied',
+    (tester) async {
+      final previous = MobileScannerPlatform.instance;
+      MobileScannerPlatform.instance = _DeniedCamera();
+      addTearDown(() => MobileScannerPlatform.instance = previous);
+      await tester.pumpWidget(
+        app((context) async {
+          await showDeviceVerificationDialog(
+            context,
+            request(),
+            verifyCode: (pending, _, _) async =>
+                pending.verifyQr(pending.qrData),
+          );
+        }),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Enter pairing code'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MobileScanner), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'terminal request update closes comparison without a retry error',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final updates = StreamController<DeviceVerificationRequest?>();
+      addTearDown(updates.close);
+      await tester.pumpWidget(
+        app((context) async {
+          await showDeviceVerificationDialog(
+            context,
+            request(codeApproval: true),
+            updates: updates.stream,
+          );
+        }),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      updates.add(null);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Open').hitTestable(), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+    },
   );
 
   testWidgets(
@@ -82,6 +269,38 @@ void main() {
     },
   );
 
+  testWidgets('invalidated request removes approval from an open dialog', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final updates = StreamController<DeviceVerificationRequest>();
+    addTearDown(updates.close);
+    VerifiedDeviceApproval? verified;
+    await tester.pumpWidget(
+      app((context) async {
+        verified = await showDeviceVerificationDialog(
+          context,
+          request(codeApproval: true),
+          updates: updates.stream,
+        );
+      }),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Approve'), findsNothing);
+    expect(find.byType(AlertDialog), findsOneWidget);
+    updates.addError(StateError('Request cancelled or no longer valid'));
+    await tester.pumpAndSettle();
+    expect(find.text('Approve'), findsNothing);
+    expect(find.byType(SelectableText), findsNothing);
+    expect(verified, isNull);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(updates.hasListener, false);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets(
     'trusted device renders the return QR dialog without a stranded barrier',
     (tester) async {
@@ -95,7 +314,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.byType(QrImageView), findsOneWidget);
-      expect(find.text(value.securityCode), findsOneWidget);
+      expect(find.byType(SelectableText), findsNothing);
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
@@ -230,10 +449,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(verified, isNull);
     expect(find.byType(AlertDialog), findsOneWidget);
-    expect(
-      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-      isNull,
-    );
+    expect(find.byType(FilledButton), findsNothing);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
   });
@@ -266,9 +482,11 @@ void main() {
                   onMoreOptions: () => moreOptions++,
                   onCancel: () {},
                   cancelLabel: l10n.cancel,
-                  child: DeviceVerificationCard(
-                    request: value,
-                    onRegenerate: () {},
+                  child: StatefulBuilder(
+                    builder: (context, setState) => DeviceVerificationCard(
+                      request: value,
+                      onRegenerate: () {},
+                    ),
                   ),
                 ),
               ),
@@ -277,20 +495,19 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.byType(QrImageView), findsOneWidget);
-        expect(find.text(value.securityCode), findsNothing);
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is SelectableText &&
+                widget.data?.replaceAll('\n', ' ') == value.securityCode,
+          ),
+          findsNothing,
+        );
         expect(find.text(l10n.newVerificationCode), findsNothing);
         expect(find.text(l10n.startFresh), findsNothing);
         expect(find.text(l10n.verifyNewDevice), findsOneWidget);
         expect(tester.takeException(), isNull);
-        await tester.ensureVisible(find.text(l10n.compareSecurityCode));
-        await tester.tap(find.text(l10n.compareSecurityCode));
-        await tester.pumpAndSettle();
-        expect(find.byType(QrImageView), findsNothing);
-        expect(find.text(value.securityCode), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await tester.ensureVisible(find.text(l10n.showQrCode));
-        await tester.tap(find.text(l10n.showQrCode));
-        await tester.pumpAndSettle();
+        expect(find.text(l10n.compareSecurityCode), findsNothing);
         expect(
           tester
               .widget<DeviceVerificationCard>(
@@ -342,10 +559,7 @@ void main() {
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(prompts, 1);
       expect(verified, isNull);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
+      expect(find.byType(FilledButton), findsNothing);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       refresh(() {}); // Polling the same handoff must not reopen the dialog.
@@ -355,18 +569,8 @@ void main() {
       await tester.tap(find.text('Verify trusted device'));
       await tester.pumpAndSettle();
       expect(prompts, 2);
-      await tester.tap(find.text('Compare security code'));
-      await tester.pumpAndSettle();
-      expect(verified, isNull);
-      await tester.tap(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(FilledButton));
-      await tester.pumpAndSettle();
-      expect(verified?.receipt.fingerprint, value.fingerprint);
-      refresh(() => value = receipt());
-      await tester.pumpAndSettle();
-      expect(prompts, 3);
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text('Compare security code'), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
     },
@@ -437,41 +641,27 @@ void main() {
     },
   );
 
-  testWidgets(
-    'unsupported camera uses explicit complete-code confirmation before approval',
-    (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-
-      VerifiedDeviceApproval? verified;
-      final value = request();
-      await tester.pumpWidget(
-        app((context) async {
-          verified = await showDeviceVerificationDialog(context, value);
-        }),
-      );
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-      expect(find.text('Scan new device'), findsNothing);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
-      await tester.tap(find.text('Compare security code'));
-      await tester.pumpAndSettle();
-      expect(find.text(value.securityCode), findsOneWidget);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
-      expect(verified, isNull);
-      await tester.tap(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(FilledButton));
-      await tester.pumpAndSettle();
-      expect(verified?.request.canonical, value.canonical);
-      debugDefaultTargetPlatformOverride = null;
-    },
-  );
+  testWidgets('unsupported camera never offers unverified code approval', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    VerifiedDeviceApproval? verified;
+    await tester.pumpWidget(
+      app((context) async {
+        verified = await showDeviceVerificationDialog(context, request());
+      }),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Approve'), findsNothing);
+    expect(find.text('Compare security code'), findsNothing);
+    expect(find.byType(SelectableText), findsNothing);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(verified, isNull);
+    debugDefaultTargetPlatformOverride = null;
+  });
   testWidgets(
     'new device can cancel return verification without accepting a handoff',
     (tester) async {
@@ -490,17 +680,14 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
       expect(find.text('Verify trusted device'), findsOneWidget);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
+      expect(find.byType(FilledButton), findsNothing);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(verified, isNull);
     },
   );
   testWidgets(
-    'Approve opens the camera directly and denial offers code comparison',
+    'Approve opens the camera directly and denial never offers code approval',
     (tester) async {
       final previous = MobileScannerPlatform.instance;
       final camera = _DeniedCamera();
@@ -518,17 +705,12 @@ void main() {
       expect(camera.starts, 1);
       expect(
         find.text(
-          'Camera unavailable. You can compare the security code instead.',
+          'Camera unavailable. Enable camera access or recover with your passphrase.',
         ),
         findsOneWidget,
       );
-      await tester.tap(find.text('Compare security code'));
-      await tester.pumpAndSettle();
-      expect(find.text(value.securityCode), findsOneWidget);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
+      expect(find.text('Compare security code'), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
     },

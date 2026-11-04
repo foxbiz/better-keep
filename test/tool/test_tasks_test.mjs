@@ -59,11 +59,14 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 	assert.deepEqual(TEST_SUITE_NAMES, [
 		"client-sync",
 		"database-migrations",
+		"device-pairing",
 		"external-links",
 		"firebase-apple",
 		"firebase-emulator-android",
 		"firebase-emulator-config",
+		"firebase-emulator-deletion",
 		"firebase-emulator-functions",
+		"firebase-emulator-pairing",
 		"firebase-emulator-review",
 		"firebase-environment-android",
 		"firebase-environment-web",
@@ -93,7 +96,8 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 
 test("declared task commands reference existing repository files", () => {
 	const root = new URL("../../", import.meta.url);
-	const sourceFile = /^(?:\.\/)?(?:scripts|test|tool)\/[\w/.-]+\.(?:dart|mjs|mts|ts|py|sh)$/;
+	const sourceFile =
+		/^(?:\.\/)?(?:scripts|test|tool)\/[\w/.-]+\.(?:dart|mjs|mts|ts|py|sh)$/;
 	for (const suite of TEST_SUITE_NAMES) {
 		for (const operation of resolveTestTask([suite]).operations) {
 			for (const argument of [operation.command, ...(operation.args ?? [])]) {
@@ -215,14 +219,14 @@ test("web release builds the combined site before deterministic validation", () 
 		environment: {},
 		type: "process",
 	});
-	assert.deepEqual(operations.at(-2), {
+	assert.deepEqual(operations.at(-3), {
 		args: ["--prefix", "site", "run", "test:mobile"],
 		command: "npm",
 		environment: {},
 		type: "process",
 	});
-	assert.equal(operations.at(-1).type, "firebase");
-	assert.deepEqual(operations.at(-1).args, [
+	assert.equal(operations.at(-2).type, "firebase");
+	assert.deepEqual(operations.at(-2).args, [
 		"--",
 		"emulators:exec",
 		"--only",
@@ -232,6 +236,11 @@ test("web release builds the combined site before deterministic validation", () 
 		"--project",
 		"better-keep-notes",
 		"./scripts/test_hosting_routes.sh",
+	]);
+	assert.deepEqual(operations.at(-1).args, [
+		"--test",
+		"test/web/beta_launcher_test.mjs",
+		"test/web/firebase_emulator_auth_restart_test.mjs",
 	]);
 });
 
@@ -287,6 +296,7 @@ test("release expands suites in the established order and excludes devices", () 
 		"run_flutter_web_integration.mjs",
 		"test_firebase_rules.sh",
 		"test:emulator",
+		"test:deletion",
 		"review_isolation_acceptance_test.mjs",
 	];
 	let previousIndex = -1;
@@ -379,4 +389,29 @@ test("passes merged environments to Firebase without changing the parent", async
 		"true",
 	);
 	assert.equal(process.env.OAUTH_LEGACY_V1_ENABLED, originalLegacyValue);
+});
+
+test("release gates pairing and both compiled web storage modes", () => {
+	const operations = resolveTestTask(["release"]).operations;
+	const pairing = operations.find((op) =>
+		op.args?.includes("test/device_pairing_code_test.dart"),
+	);
+	assert.ok(pairing.args.includes("test/device_approval_service_test.dart"));
+	assert.ok(pairing.args.includes("test/device_verification_widget_test.dart"));
+	const emulator = operations.find((op) =>
+		op.args?.includes("demo-better-keep-pairing"),
+	);
+	assert.equal(emulator.type, "firebase");
+	assert.ok(emulator.args.includes("firebase.emulator-tests.json"));
+	assert.ok(emulator.args.at(-1).includes("test/emulator/device_pairing.dart"));
+	assert.ok(emulator.environment.CHROME_EXECUTABLE);
+	for (const mode of ["true", "false"]) {
+		assert.ok(
+			operations.some(
+				(op) =>
+					op.args?.includes(`--dart-define=WEB_BETA=${mode}`) &&
+					op.args.includes("test/web_release_test.dart"),
+			),
+		);
+	}
 });

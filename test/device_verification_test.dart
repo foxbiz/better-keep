@@ -51,6 +51,50 @@ void main() {
     pairingTag: tag,
   );
 
+  test('code mode is canonical-bound, expires and never bypasses an invalid QR proof', () {
+    final code = DeviceVerificationRequest.fromJson({
+      ...request.toJson(),
+      'approvalMode': 'code',
+    });
+    expect(code.canonical, isNot(request.canonical));
+    expect(code.securityCode, isNot(request.securityCode));
+    expect(
+      DeviceVerificationRequest.fromLocalData(code.qrData).codeApproval,
+      true,
+    );
+    final receipt = handoff(identity: code);
+    expect(code.verifyAutomaticReceipt(receipt, now: now), isNull);
+    expect(request.verifyAutomaticReceipt(handoff(), now: now), isNull);
+    expect(code.verifyAutomaticReceipt(handoff(), now: now), isNull);
+    expect(
+      code.verifyAutomaticReceipt(
+        receipt,
+        now: now.add(const Duration(minutes: 10)),
+      ),
+      isNull,
+    );
+    expect(
+      () => code.confirmCode(request.securityCode, now: now),
+      throwsFormatException,
+    );
+    expect(
+      () => code.verifyAutomaticReceipt(
+        handoff(identity: code, tag: base64UrlEncode(List.filled(32, 0))),
+        now: now,
+      ),
+      throwsStateError,
+    );
+    for (final mode in [false, null, 'qr', 'unknown']) {
+      expect(
+        () => DeviceVerificationRequest.fromJson({
+          ...request.toJson(),
+          'approvalMode': mode,
+        }),
+        throwsFormatException,
+      );
+    }
+  });
+
   test('pairing secret stays in local QR data and never enters public serialization', () {
     final qr = jsonDecode(request.qrData) as Map<String, dynamic>;
     final secret = qr['secret'] as String;

@@ -5,6 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'deletion support message hides retry without removing local access',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          PostSignInRecoveryView(
+            message: 'Account deletion has already started. Contact support@betterkeep.app for help.',
+            canRetry: false,
+            onRetry: () async {},
+            onContinueOffline: () async {},
+            onSignOut: () async {},
+          ),
+        ),
+      );
+      expect(
+        find.textContaining('Contact support@betterkeep.app'),
+        findsOneWidget,
+      );
+      expect(find.text('Retry'), findsNothing);
+      expect(find.text('Continue Offline'), findsOneWidget);
+    },
+  );
+
   testWidgets('authenticated recovery exposes retry and offline actions', (
     tester,
   ) async {

@@ -2402,7 +2402,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get loggedOutAllDevices =>
-      'Você será desconectado de todos os dispositivos';
+      'Outros dispositivos podem demorar para sair. A aprovação permanece até a exclusão; remova primeiro os dispositivos perdidos.';
 
   @override
   String get accountCannotBeRecovered => 'Sua conta não pode ser recuperada';
@@ -2435,7 +2435,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'Sua conta será excluída em $date.';
+    return 'Sua conta poderá ser excluída a partir de $date.';
   }
 
   @override
@@ -2467,7 +2467,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'Exclusão da conta agendada para $date. Faça login novamente para cancelar.';
+    return 'Exclusão agendada a partir de $date. Faça login novamente para cancelar.';
   }
 
   @override
@@ -4180,7 +4180,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceVerificationInstructions =>
-      'No dispositivo confiável, leia o QR exibido no novo dispositivo ou compare o código de segurança completo nas duas telas.';
+      'No dispositivo confiável, escaneie o QR do novo dispositivo.';
 
   @override
   String get deviceVerificationExpired =>
@@ -4212,7 +4212,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceCameraUnavailable =>
-      'Câmera indisponível. Você pode comparar o código de segurança.';
+      'Câmera indisponível. Permita o acesso à câmera ou recupere com sua frase secreta.';
 
   @override
   String get deviceVerificationRetry =>
@@ -4227,7 +4227,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get verifyTrustedDeviceInstructions =>
-      'Mantenha a tela de confirmação aberta no dispositivo confiável. Leia o QR ou compare todos os 32 caracteres do código de segurança antes de aceitar sua chave de criptografia.';
+      'Escaneie o QR do dispositivo confiável para receber sua chave de criptografia.';
 
   @override
   String get scanTrustedDevice => 'Ler QR do dispositivo confiável';
@@ -4240,7 +4240,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get confirmOnNewDeviceInstructions =>
-      'No novo dispositivo, escolha “Verificar dispositivo confiável”. Leia este QR ou confirme que o código completo corresponde ao exibido abaixo. Mantenha esta tela aberta até o novo dispositivo ser desbloqueado. O prazo original de dez minutos continua valendo.';
+      'Escaneie este QR com o novo dispositivo. Mantenha esta tela aberta até ele ser desbloqueado.';
 
   @override
   String get storageSecurityUpgrade => 'Reconectar com segurança';
@@ -4252,10 +4252,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get devicePairingScanInstruction =>
       'No dispositivo de confiança, abra o pedido de aprovação e leia este código.';
-
-  @override
-  String get devicePairingCodeInstruction =>
-      'Compare este código completo com o do dispositivo de confiança.';
 
   @override
   String get showQrCode => 'Mostrar código QR';
@@ -4361,4 +4357,52 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceAdded => 'Adicionado';
+
+  @override
+  String get accountDeletionInProgress =>
+      'A exclusão da conta já começou. Entre em contato com support@betterkeep.app para obter ajuda.';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      'Um código foi solicitado recentemente. Verifique seu e-mail ou aguarde um minuto antes de solicitar outro.';
+
+  @override
+  String get deviceCodeApprovalInstruction =>
+      'Compare este código com o do novo dispositivo. Aprove apenas se o código inteiro for igual.';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'Não foi possível verificar seu login. Tente entrar novamente.';
+
+  @override
+  String get accountDeletionPaused =>
+      'A exclusão de contas está temporariamente pausada. Contate support@betterkeep.app.';
+
+  @override
+  String get deviceUsePairingCode => 'Usar um código';
+
+  @override
+  String get deviceEnterPairingCode => 'Inserir código de pareamento';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'No dispositivo confiável, escolha Inserir código de pareamento e digite estes oito dígitos.';
+
+  @override
+  String get devicePairingCodeEntryInstruction =>
+      'Digite os oito dígitos exibidos no novo dispositivo.';
+
+  @override
+  String get devicePairingCodeLabel => 'Código de pareamento';
+
+  @override
+  String get devicePairingCodeExpired =>
+      'Este código não está mais disponível. Gere um novo.';
+
+  @override
+  String get devicePairingCodeFailed =>
+      'Confira o código no novo dispositivo e tente novamente. Gere um novo código se ele tiver expirado.';
+
+  @override
+  String get devicePairingConnecting => 'Conectando…';
 }

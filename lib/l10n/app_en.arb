@@ -2330,7 +2330,7 @@
 		"description": "All attachments removed warning"
 	},
 
-	"loggedOutAllDevices": "You will be logged out from all devices",
+	"loggedOutAllDevices": "Other devices may take time to sign out. Device approval stays until deletion; remove any lost devices first.",
 	"@loggedOutAllDevices": { "description": "Logged out all devices warning" },
 
 	"accountCannotBeRecovered": "Your account cannot be recovered",
@@ -2366,7 +2366,7 @@
 	"deletionScheduled": "Deletion Scheduled",
 	"@deletionScheduled": { "description": "Deletion scheduled dialog title" },
 
-	"accountWillBeDeletedOn": "Your account will be deleted on {date}.",
+	"accountWillBeDeletedOn": "Your account is eligible for deletion from {date}.",
 	"@accountWillBeDeletedOn": {
 		"description": "Account deletion date message",
 		"placeholders": {
@@ -2403,7 +2403,7 @@
 		}
 	},
 
-	"deletionScheduledMessage": "Account deletion scheduled for {date}. Sign in again to cancel.",
+	"deletionScheduledMessage": "Deletion is scheduled from {date}. Sign in again to cancel.",
 	"@deletionScheduledMessage": {
 		"description": "Deletion scheduled snackbar message",
 		"placeholders": {
@@ -4065,7 +4065,7 @@
 	"externalSyncConnectHelp": "Sign in to grant access to your storage. Once connected, this provider will be selected for sync.",
 	"@externalSyncConnectTitle": {"placeholders": {"provider": {"type": "String"}}},
 	"verifyNewDevice": "Verify new device",
-	"deviceVerificationInstructions": "On your trusted device, scan the QR shown on the new device, or compare the entire security code on both screens.",
+	"deviceVerificationInstructions": "On your trusted device, scan the QR shown on the new device.",
 	"deviceVerificationExpired": "This verification code has expired. Generate a new code on the new device.",
 	"newVerificationCode": "Generate new code",
 	"deviceVerificationMismatch": "The devices do not match. Do not approve this request.",
@@ -4074,19 +4074,18 @@
 	"compareSecurityCode": "Compare security code",
 	"completeSecurityCodeMatches": "I compared the entire code on both devices. They match.",
 	"approveVerifiedDevice": "Approve device",
-	"deviceCameraUnavailable": "Camera unavailable. You can compare the security code instead.",
+	"deviceCameraUnavailable": "Camera unavailable. Enable camera access or recover with your passphrase.",
 	"deviceVerificationRetry": "Verification could not be completed. Update both devices and generate a new code on the new device, then try again.",
 	"browserEncryptionSessionOnly": "Encryption keys stay in this browser session only. After a reload, approve this browser again or use your recovery passphrase.",
 	"verifyTrustedDevice": "Verify trusted device",
-	"verifyTrustedDeviceInstructions": "On your trusted device, keep the confirmation screen open. Scan its QR code or compare all 32 characters of the security code before accepting your encryption key.",
+	"verifyTrustedDeviceInstructions": "Scan the QR on your trusted device to accept your encryption key.",
 	"scanTrustedDevice": "Scan trusted device",
 	"acceptVerifiedKey": "Accept verified key",
 	"confirmOnNewDevice": "Confirm on your new device",
-	"confirmOnNewDeviceInstructions": "On the new device, choose “Verify trusted device”. Scan this QR code or confirm that its complete security code matches the one below. Keep this screen open until the new device unlocks. The original ten-minute expiry still applies.",
+	"confirmOnNewDeviceInstructions": "Scan this QR with the new device. Keep this screen open until it unlocks.",
 	"storageSecurityUpgrade": "Reconnect securely",
 	"storageSecurityUpgradeInstructions": "This connection used the old server-managed credential storage. First revoke Better Keep access in your provider’s connected-app settings (or remove its Nextcloud app password), then reconnect here. Your notes and remote files are kept. New credentials are encrypted on your device with your note-encryption key.",
   "devicePairingScanInstruction": "On your trusted device, open the approval request and scan this code.",
-  "devicePairingCodeInstruction": "Compare this entire code with the one on your trusted device.",
   "showQrCode": "Show QR code",
   "externalSyncSharedSetup": "Sign in to Google Drive on this device.",
   "externalSyncSharedSetupHelp": "Sign in to the connected Google Drive account on this device. Your notes stay encrypted.",
@@ -4102,8 +4101,7 @@
   "externalSyncCapacity": "{used} used of {total}",
   "@externalSyncCapacity": {"placeholders": {"used": {"type": "String"}, "total": {"type": "String"}}},
   "externalSyncCapacityLoading": "Checking storage…",
-  "externalSyncCapacityUnavailable": "Storage information unavailable"
-,
+  "externalSyncCapacityUnavailable": "Storage information unavailable",
   "externalSyncClearVerifyTitle": "Verify to clear",
   "externalSyncClearSendCode": "Send code",
   "lite": "Lite",
@@ -4118,5 +4116,18 @@
   "subscriptionChangePlan": "Manage your current subscription to change plans.",
   "subscribe": "Subscribe",
   "builtInCloudSync": "Built-in cloud sync",
-  "deviceAdded": "Added"
+  "deviceAdded": "Added",
+	"accountDeletionInProgress": "Account deletion has already started. Contact support@betterkeep.app for help.",
+	"deletionCodeRecentlyRequested": "A code was recently requested. Check your email or wait one minute before requesting another.",
+  "deviceCodeApprovalInstruction": "Compare this code with your new device. Approve only if the whole code matches.",
+  "providerSignInVerificationFailed": "Could not verify your sign-in. Please try signing in again.",
+	"accountDeletionPaused": "Account deletion is temporarily paused. Contact support@betterkeep.app.",
+  "deviceUsePairingCode": "Use a code instead",
+  "deviceEnterPairingCode": "Enter pairing code",
+  "devicePairingCodeInstruction": "On your trusted device, choose Enter pairing code and enter these eight digits.",
+  "devicePairingCodeEntryInstruction": "Enter the eight digits shown on your new device.",
+  "devicePairingCodeLabel": "Pairing code",
+  "devicePairingCodeExpired": "This code is no longer available. Generate a new one.",
+  "devicePairingCodeFailed": "Check the code on your new device and try again. Generate a new code if it has expired.",
+  "devicePairingConnecting": "Connecting…"
 }

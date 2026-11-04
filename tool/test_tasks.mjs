@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import path from "node:path";
+import { chromeBinary } from "./chrome_binary.mjs";
 import { fileURLToPath } from "node:url";
 import { runFirebaseCli } from "./firebase_cli.mjs";
 import { runFunctionsCommand } from "./functions_runtime.mjs";
@@ -28,7 +29,11 @@ const firebaseStep = (args, environment = {}) => ({
 const functionsStep = (args) => ({ args, type: "functions" });
 const suiteStep = (name) => ({ name, type: "suite" });
 
-function defineSuite(description, createSteps, { acceptsArguments = false } = {}) {
+function defineSuite(
+	description,
+	createSteps,
+	{ acceptsArguments = false } = {},
+) {
 	return { acceptsArguments, createSteps, description };
 }
 
@@ -37,6 +42,37 @@ function flutterTests(files) {
 }
 
 const suites = {
+	"device-pairing": defineSuite(
+		"Run pairing protocol, service, and UI regressions.",
+		() => [
+			flutterTests([
+				"test/device_pairing_code_test.dart",
+				"test/srp_pairing_library_test.dart",
+				"test/device_approval_service_test.dart",
+				"test/device_verification_test.dart",
+				"test/device_verification_widget_test.dart",
+			]),
+		],
+	),
+	"firebase-emulator-pairing": defineSuite(
+		"Run pairing in isolated demo emulators and Chrome.",
+		() => [
+			firebaseStep(
+				[
+					"--",
+					"emulators:exec",
+					"--only",
+					"auth,firestore",
+					"--project",
+					"demo-better-keep-pairing",
+					"--config",
+					"firebase.emulator-tests.json",
+					"flutter test --no-pub --platform chrome test/emulator/device_pairing.dart",
+				],
+				{ CHROME_EXECUTABLE: chromeBinary() },
+			),
+		],
+	),
 	"client-sync": defineSuite("Run client synchronization tests.", () => [
 		flutterTests([
 			"test/async_keyed_serializer_test.dart",
@@ -65,6 +101,7 @@ const suites = {
 		flutterTests([
 			"test/apple_auth_test.dart",
 			"test/auth_error_messages_test.dart",
+			"test/cloud_functions_helper_test.dart",
 			"test/firebase_apple_configuration_test.dart",
 			"test/login_page_apple_auth_test.dart",
 		]),
@@ -102,6 +139,19 @@ const suites = {
 				"test/firebase_selection_screen_test.dart",
 				"test/reminder_session_service_test.dart",
 				"test/reminder_navigation_service_test.dart",
+			]),
+		],
+	),
+	"firebase-emulator-deletion": defineSuite(
+		"Run account deletion safety tests in isolated demo emulators.",
+		() => [
+			functionsStep([
+				"--",
+				"npm",
+				"--prefix",
+				"functions",
+				"run",
+				"test:deletion",
 			]),
 		],
 	),
@@ -188,46 +238,53 @@ const suites = {
 	functions: defineSuite("Run Cloud Functions unit tests.", () => [
 		functionsStep(["--", "npm", "--prefix", "functions", "test"]),
 	]),
-	hosting: defineSuite("Validate routes in an isolated Hosting emulator.", () => [
-		firebaseStep([
-			"--",
-			"emulators:exec",
-			"--only",
-			"hosting",
-			"--config",
-			"firebase.emulators.json",
-			"--project",
-			projectId,
-			"./scripts/test_hosting_routes.sh",
-		]),
-	]),
-	"keep-import": defineSuite("Run Google Keep import reliability tests.", () => [
-		flutterTests([
-			"test/google_keep_import_service_test.dart",
-			"test/google_keep_import_discoverability_test.dart",
-		]),
-	]),
+	hosting: defineSuite(
+		"Validate routes in an isolated Hosting emulator.",
+		() => [
+			firebaseStep([
+				"--",
+				"emulators:exec",
+				"--only",
+				"hosting",
+				"--config",
+				"firebase.emulators.json",
+				"--project",
+				projectId,
+				"./scripts/test_hosting_routes.sh",
+			]),
+		],
+	),
+	"keep-import": defineSuite(
+		"Run Google Keep import reliability tests.",
+		() => [
+			flutterTests([
+				"test/google_keep_import_service_test.dart",
+				"test/google_keep_import_discoverability_test.dart",
+			]),
+		],
+	),
 	lighthouse: defineSuite("Audit the marketing site with Lighthouse.", () => [
 		processStep("npm", ["--prefix", "site", "run", "lighthouse"]),
 	]),
-	localization: defineSuite("Generate and verify production localization.", () => [
-		processStep("flutter", ["gen-l10n"]),
-		processStep("node", [
-			"--test",
-			"test/tool/localization_policy_test.mjs",
-		]),
-		flutterTests([
-			"test/auth_error_messages_test.dart",
-			"test/device_localizations_test.dart",
-			"test/firebase_startup_error_view_test.dart",
-			"test/localized_common_surfaces_test.dart",
-			"test/progress_localizations_test.dart",
-			"test/reminder_schedule_result_presenter_test.dart",
-		]),
-	]),
-	"mobile-web": defineSuite("Run the marketing homepage mobile browser acceptance test.", () => [
-		processStep("npm", ["--prefix", "site", "run", "test:mobile"]),
-	]),
+	localization: defineSuite(
+		"Generate and verify production localization.",
+		() => [
+			processStep("flutter", ["gen-l10n"]),
+			processStep("node", ["--test", "test/tool/localization_policy_test.mjs"]),
+			flutterTests([
+				"test/auth_error_messages_test.dart",
+				"test/device_localizations_test.dart",
+				"test/firebase_startup_error_view_test.dart",
+				"test/localized_common_surfaces_test.dart",
+				"test/progress_localizations_test.dart",
+				"test/reminder_schedule_result_presenter_test.dart",
+			]),
+		],
+	),
+	"mobile-web": defineSuite(
+		"Run the marketing homepage mobile browser acceptance test.",
+		() => [processStep("npm", ["--prefix", "site", "run", "test:mobile"])],
+	),
 	"oauth-recovery": defineSuite("Run OAuth recovery tests.", () => [
 		processStep("node", [
 			"--test",
@@ -281,16 +338,38 @@ const suites = {
 		"Run subscription management routing tests.",
 		() => [flutterTests(["test/subscription_management_test.dart"])],
 	),
-	visibility: defineSuite("Validate the built website's search visibility.", () => [
-		processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),
-	]),
+	visibility: defineSuite(
+		"Validate the built website's search visibility.",
+		() => [
+			processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),
+		],
+	),
 	"web-release": defineSuite(
 		"Build and validate the combined Flutter and Astro website.",
 		() => [
 			processStep("./scripts/build_web.sh", []),
+			...["false", "true"].map((beta) =>
+				processStep(
+					"flutter",
+					[
+						"test",
+						"--no-pub",
+						"--platform",
+						"chrome",
+						`--dart-define=WEB_BETA=${beta}`,
+						"test/web_release_test.dart",
+					],
+					{ CHROME_EXECUTABLE: chromeBinary() },
+				),
+			),
 			suiteStep("search"),
 			suiteStep("mobile-web"),
 			suiteStep("hosting"),
+			processStep("node", [
+				"--test",
+				"test/web/beta_launcher_test.mjs",
+				"test/web/firebase_emulator_auth_restart_test.mjs",
+			]),
 		],
 	),
 	"image-share": defineSuite("Run image sharing regression tests.", () => [
@@ -320,6 +399,9 @@ const suites = {
 			"--test",
 			"test/tool/android_release_resource_policy_test.mjs",
 			"test/tool/build_tasks_test.mjs",
+			"test/tool/chrome_binary_test.mjs",
+			"test/tool/beta_web_test.mjs",
+			"test/tool/hosting_release_test.mjs",
 			"test/tool/billing_reconciliation_runner_test.mjs",
 			"test/tool/check_tasks_test.mjs",
 			"test/tool/dependency_override_policy_test.mjs",
@@ -333,6 +415,8 @@ const suites = {
 			"test/tool/release_tasks_test.mjs",
 			"test/tool/test_tasks_test.mjs",
 		]),
+		suiteStep("device-pairing"),
+		suiteStep("firebase-emulator-pairing"),
 		suiteStep("firebase-runtime"),
 		suiteStep("ios-build-policy"),
 		suiteStep("macos-build-policy"),
@@ -353,6 +437,7 @@ const suites = {
 		suiteStep("firebase-environment-web"),
 		suiteStep("firebase-rules"),
 		suiteStep("firebase-emulator-functions"),
+		suiteStep("firebase-emulator-deletion"),
 		suiteStep("firebase-emulator-review"),
 	]),
 	"windows-build-policy": defineSuite("Run Windows build policy tests.", () => [

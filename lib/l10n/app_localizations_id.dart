@@ -2398,7 +2398,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get allAttachmentsRemoved => 'Semua lampiran dan media akan dihapus';
 
   @override
-  String get loggedOutAllDevices => 'Anda akan keluar dari semua perangkat';
+  String get loggedOutAllDevices =>
+      'Perangkat lain mungkin perlu waktu untuk keluar. Persetujuan perangkat tetap berlaku hingga penghapusan; hapus perangkat yang hilang terlebih dahulu.';
 
   @override
   String get accountCannotBeRecovered => 'Akun Anda tidak dapat dipulihkan';
@@ -2431,7 +2432,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'Akun Anda akan dihapus pada $date.';
+    return 'Akun Anda dapat dihapus mulai $date.';
   }
 
   @override
@@ -2463,7 +2464,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'Penghapusan akun dijadwalkan untuk $date. Masuk lagi untuk membatalkan.';
+    return 'Penghapusan dijadwalkan mulai $date. Masuk lagi untuk membatalkan.';
   }
 
   @override
@@ -4122,7 +4123,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceVerificationInstructions =>
-      'Di perangkat tepercaya, pindai QR pada perangkat baru atau bandingkan seluruh kode keamanan di kedua layar.';
+      'Di perangkat tepercaya, pindai QR di perangkat baru.';
 
   @override
   String get deviceVerificationExpired =>
@@ -4154,7 +4155,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceCameraUnavailable =>
-      'Kamera tidak tersedia. Bandingkan kode keamanan sebagai gantinya.';
+      'Kamera tidak tersedia. Izinkan akses kamera atau pulihkan dengan frasa sandi.';
 
   @override
   String get deviceVerificationRetry =>
@@ -4169,7 +4170,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get verifyTrustedDeviceInstructions =>
-      'Biarkan layar konfirmasi terbuka di perangkat tepercaya. Pindai QR-nya atau bandingkan seluruh 32 karakter kode keamanan sebelum menerima kunci enkripsi.';
+      'Pindai QR di perangkat tepercaya untuk menerima kunci enkripsi.';
 
   @override
   String get scanTrustedDevice => 'Pindai perangkat tepercaya';
@@ -4182,7 +4183,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get confirmOnNewDeviceInstructions =>
-      'Di perangkat baru, pilih “Verifikasi perangkat tepercaya”. Pindai QR ini atau pastikan seluruh kode keamanannya cocok dengan kode di bawah. Biarkan layar terbuka hingga perangkat baru terbuka. Batas waktu awal sepuluh menit tetap berlaku.';
+      'Pindai QR ini dengan perangkat baru. Biarkan layar ini terbuka hingga perangkat terbuka.';
 
   @override
   String get storageSecurityUpgrade => 'Hubungkan ulang dengan aman';
@@ -4194,10 +4195,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get devicePairingScanInstruction =>
       'Di perangkat tepercaya, buka permintaan persetujuan dan pindai kode ini.';
-
-  @override
-  String get devicePairingCodeInstruction =>
-      'Bandingkan seluruh kode ini dengan kode di perangkat tepercaya Anda.';
 
   @override
   String get showQrCode => 'Tampilkan kode QR';
@@ -4303,4 +4300,52 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceAdded => 'Ditambahkan';
+
+  @override
+  String get accountDeletionInProgress =>
+      'Penghapusan akun sudah dimulai. Hubungi support@betterkeep.app untuk bantuan.';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      'Kode baru saja diminta. Periksa email Anda atau tunggu satu menit sebelum meminta kode lain.';
+
+  @override
+  String get deviceCodeApprovalInstruction =>
+      'Bandingkan kode ini dengan perangkat baru. Setujui hanya jika seluruh kode cocok.';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'Login Anda tidak dapat diverifikasi. Coba login lagi.';
+
+  @override
+  String get accountDeletionPaused =>
+      'Penghapusan akun dijeda sementara. Hubungi support@betterkeep.app.';
+
+  @override
+  String get deviceUsePairingCode => 'Gunakan kode';
+
+  @override
+  String get deviceEnterPairingCode => 'Masukkan kode pemasangan';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'Di perangkat tepercaya, pilih Masukkan kode pemasangan lalu masukkan delapan digit ini.';
+
+  @override
+  String get devicePairingCodeEntryInstruction =>
+      'Masukkan delapan digit yang ditampilkan di perangkat baru.';
+
+  @override
+  String get devicePairingCodeLabel => 'Kode pemasangan';
+
+  @override
+  String get devicePairingCodeExpired =>
+      'Kode ini tidak tersedia lagi. Buat kode baru.';
+
+  @override
+  String get devicePairingCodeFailed =>
+      'Periksa kode di perangkat baru dan coba lagi. Buat kode baru jika sudah kedaluwarsa.';
+
+  @override
+  String get devicePairingConnecting => 'Menghubungkan…';
 }

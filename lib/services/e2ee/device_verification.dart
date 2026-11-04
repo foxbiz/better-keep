@@ -24,6 +24,7 @@ class DeviceVerificationRequest
     required this.requestId,
     required this.createdAt,
     this._pairingSecret,
+    this.codeApproval = false,
   });
 
   static const version = 2;
@@ -34,6 +35,9 @@ class DeviceVerificationRequest
   final String publicKey;
   final String requestId;
   final int createdAt;
+
+  /// Legacy request marker retained for decoding. It never bypasses QR proof.
+  final bool codeApproval;
   final String? _pairingSecret;
   bool get hasPairingSecret => _pairingSecret != null;
 
@@ -43,10 +47,12 @@ class DeviceVerificationRequest
     required String deviceId,
     required Uint8List publicKey,
     DateTime? now,
+    bool codeApproval = false,
   }) {
     final random = Random.secure();
     final request = DeviceVerificationRequest.fromJson({
       'version': version,
+      if (codeApproval) 'approvalMode': 'code',
       'account': account,
       'environment': environment,
       'deviceId': deviceId,
@@ -70,6 +76,7 @@ class DeviceVerificationRequest
         requestId: requestId,
         createdAt: createdAt,
         pairingSecret: secret,
+        codeApproval: codeApproval,
       );
 
   /// Only for native secure storage / browser memory. Server records must use
@@ -102,7 +109,10 @@ class DeviceVerificationRequest
   }
 
   factory DeviceVerificationRequest.fromJson(Map<String, dynamic> json) {
-    if (json.length != 7 || json['version'] != version) {
+    final codeApproval = json['approvalMode'] == 'code';
+    if (json.length != (codeApproval ? 8 : 7) ||
+        (!codeApproval && json.containsKey('approvalMode')) ||
+        json['version'] != version) {
       throw const FormatException('Unsupported device verification request');
     }
     for (final key in [
@@ -135,6 +145,7 @@ class DeviceVerificationRequest
       publicKey: publicKey,
       requestId: requestId,
       createdAt: json['createdAt'] as int,
+      codeApproval: codeApproval,
     );
   }
 
@@ -147,6 +158,7 @@ class DeviceVerificationRequest
     'publicKey': publicKey,
     'requestId': requestId,
     'createdAt': createdAt,
+    if (codeApproval) 'approvalMode': 'code',
   };
 
   String get canonical => jsonEncode([
@@ -158,6 +170,7 @@ class DeviceVerificationRequest
     publicKey,
     requestId,
     createdAt,
+    if (codeApproval) 'code',
   ]);
   @override
   String get qrData => _pairingSecret == null
@@ -168,6 +181,12 @@ class DeviceVerificationRequest
           'request': toJson(),
           'secret': _pairingSecret,
         });
+
+  /// Only a proof authenticated by the local QR secret permits automatic acceptance.
+  VerifiedDeviceReceipt? verifyAutomaticReceipt(
+    DeviceApprovalReceipt receipt, {
+    DateTime? now,
+  }) => verifyPairingReceipt(receipt, now: now);
 
   /// Authentication by the out-of-band QR secret replaces the return scan.
   /// No server-supplied flag or unkeyed fingerprint can produce this proof.
@@ -360,6 +379,7 @@ class DeviceApprovalReceipt
   final String nonce;
   final String? _pairingTag;
   bool get hasPairingProof => _pairingTag != null;
+  bool get requiresReturnVerification => !hasPairingProof;
   Map<String, dynamic>? get pairingProof =>
       _pairingTag == null ? null : {'version': 1, 'tag': _pairingTag};
   String get fingerprint => sha256

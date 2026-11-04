@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:better_keep/services/e2ee/device_verification.dart';
+import 'package:better_keep/services/e2ee/device_pairing_channel.dart';
+import 'package:flutter/services.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,33 +11,41 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 /// The public identity shown here must come from the requesting device's local
 /// secure storage, never from a server round trip.
-class DeviceVerificationCard extends StatefulWidget {
+class DeviceVerificationCard extends StatelessWidget {
   const DeviceVerificationCard({
     super.key,
     required this.request,
     required this.onRegenerate,
+    this.onUseCode,
+    this.onShowQr,
+    this.codeSession,
   });
   final DeviceVerificationRequest request;
   final VoidCallback? onRegenerate;
-
-  @override
-  State<DeviceVerificationCard> createState() => _DeviceVerificationCardState();
-}
-
-class _DeviceVerificationCardState extends State<DeviceVerificationCard> {
-  bool _showCode = false;
+  final VoidCallback? onUseCode;
+  final VoidCallback? onShowQr;
+  final PendingPairingCode? codeSession;
 
   @override
   Widget build(BuildContext context) {
-    final valid = widget.request.isValidAt(DateTime.now());
+    final code = codeSession;
+    if (code != null) {
+      return ListenableBuilder(
+        listenable: code,
+        builder: (context, _) => _PairingCodeDisplay(
+          session: code,
+          onRegenerate: onRegenerate,
+          onShowQr: onShowQr,
+        ),
+      );
+    }
+    final valid = request.isValidAt(DateTime.now());
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           !valid
               ? context.l10n.deviceVerificationExpired
-              : _showCode
-              ? context.l10n.devicePairingCodeInstruction
               : context.l10n.devicePairingScanInstruction,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium
@@ -43,53 +53,28 @@ class _DeviceVerificationCardState extends State<DeviceVerificationCard> {
         ),
         const SizedBox(height: 24),
         if (valid) ...[
-          if (_showCode)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(16),
+          LayoutBuilder(
+            builder: (context, constraints) => ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: QrImageView(
+                data: request.qrData,
+                size: constraints.maxWidth.clamp(0, 240),
+                padding: const EdgeInsets.all(12),
+                backgroundColor: Colors.white,
+                semanticsLabel: context.l10n.verifyNewDevice,
               ),
-              child: SelectableText(
-                widget.request.securityCode,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 20,
-                  height: 1.6,
-                ),
-              ),
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) => ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: QrImageView(
-                  data: widget.request.qrData,
-                  size: constraints.maxWidth.clamp(0, 240),
-                  padding: const EdgeInsets.all(12),
-                  backgroundColor: Colors.white,
-                  semanticsLabel: context.l10n.verifyNewDevice,
-                ),
-              ),
-            ),
-          const SizedBox(height: 16),
-          TextButton.icon(
-            onPressed: () => setState(() => _showCode = !_showCode),
-            icon: Icon(
-              _showCode ? Icons.qr_code_2 : Icons.pin_outlined,
-              size: 18,
-            ),
-            label: Text(
-              _showCode
-                  ? context.l10n.showQrCode
-                  : context.l10n.compareSecurityCode,
             ),
           ),
+          if (onUseCode != null) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: onUseCode,
+              child: Text(context.l10n.deviceUsePairingCode),
+            ),
+          ],
         ] else
           FilledButton.icon(
-            onPressed: widget.onRegenerate,
+            onPressed: onRegenerate,
             icon: const Icon(Icons.refresh),
             label: Text(context.l10n.newVerificationCode),
           ),
@@ -97,6 +82,67 @@ class _DeviceVerificationCardState extends State<DeviceVerificationCard> {
     );
   }
 }
+
+class _PairingCodeDisplay extends StatelessWidget {
+  const _PairingCodeDisplay({
+    required this.session,
+    this.onRegenerate,
+    this.onShowQr,
+  });
+  final PendingPairingCode session;
+  final VoidCallback? onRegenerate;
+  final VoidCallback? onShowQr;
+  @override
+  Widget build(BuildContext context) {
+    final waiting = session.state == PairingCodeState.waiting;
+    final unavailable = session.state == PairingCodeState.unavailable;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          unavailable
+              ? context.l10n.devicePairingCodeExpired
+              : waiting
+              ? context.l10n.devicePairingCodeInstruction
+              : context.l10n.devicePairingConnecting,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 20),
+        if (waiting)
+          Semantics(
+            label: context.l10n.devicePairingCodeLabel,
+            child: SelectableText(
+              '${session.code.substring(0, 4)} ${session.code.substring(4)}',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontFeatures: [const FontFeature.tabularFigures()],
+              ),
+            ),
+          )
+        else if (!unavailable)
+          const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        const SizedBox(height: 12),
+        if (unavailable)
+          FilledButton(
+            onPressed: onRegenerate,
+            child: Text(context.l10n.newVerificationCode),
+          ),
+        if (!session.handoffInProgress)
+          TextButton(onPressed: onShowQr, child: Text(context.l10n.showQrCode)),
+      ],
+    );
+  }
+}
+
+typedef PairingCodeVerifier = Future<VerifiedDeviceApproval> Function(
+  DeviceVerificationRequest request,
+  String code,
+  bool Function() isCurrent,
+);
 
 /// A focused pairing surface, shared by waiting, verification and revoked states.
 class DeviceApprovalPanel extends StatelessWidget {
@@ -182,17 +228,22 @@ class DeviceApprovalPanel extends StatelessWidget {
 
 Future<VerifiedDeviceApproval?> showDeviceVerificationDialog(
   BuildContext context,
-  DeviceVerificationRequest request,
-) async {
+  DeviceVerificationRequest request, {
+  Stream<DeviceVerificationRequest?>? updates,
+  PairingCodeVerifier? verifyCode,
+}) async {
   var mismatch = false;
   if (_scannerSupported && request.isValidAt(DateTime.now())) {
     final value = await Navigator.of(context, rootNavigator: true).push<String>(
       MaterialPageRoute(
-        builder: (_) => _DeviceQrScanner(title: context.l10n.scanNewDevice),
+        builder: (_) => _DeviceQrScanner(
+          title: context.l10n.scanNewDevice,
+          allowCode: verifyCode != null,
+        ),
       ),
     );
     if (!context.mounted || value == null) return null;
-    if (value.isNotEmpty) {
+    if (value.isNotEmpty && value != 'pairing-code') {
       try {
         return request.verifyQr(value);
       } catch (_) {
@@ -203,10 +254,47 @@ Future<VerifiedDeviceApproval?> showDeviceVerificationDialog(
   if (!context.mounted) return null;
   return showDialog<VerifiedDeviceApproval>(
     context: context,
-    builder: (_) => _DeviceVerificationDialog<VerifiedDeviceApproval>(
-      request: request,
-      comparing: !mismatch,
-      mismatch: mismatch,
+    builder: (_) => StreamBuilder<DeviceVerificationRequest?>(
+      stream: updates,
+      initialData: request,
+      builder: (context, snapshot) {
+        if (!snapshot.hasError &&
+            snapshot.connectionState == ConnectionState.active &&
+            snapshot.data == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted && ModalRoute.of(context)?.isCurrent == true) {
+              Navigator.pop(context);
+            }
+          });
+          return const SizedBox.shrink();
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return AlertDialog(
+            title: Text(context.l10n.verifyNewDevice),
+            content: Text(context.l10n.deviceVerificationRetry),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(context.l10n.cancel),
+              ),
+            ],
+          );
+        }
+        final current = snapshot.requireData!;
+        final changed = current.canonical != request.canonical;
+        if (verifyCode != null) {
+          return _PairingCodeEntry(
+            key: ValueKey(current.canonical),
+            request: current,
+            verify: verifyCode,
+          );
+        }
+        return _DeviceVerificationDialog<VerifiedDeviceApproval>(
+          key: ValueKey(current.canonical),
+          request: current,
+          mismatch: !changed && mismatch,
+        );
+      },
     ),
   );
 }
@@ -267,7 +355,7 @@ class _DeviceReceiptVerificationPromptState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           _prompting ||
-          widget.receipt.hasPairingProof ||
+          !widget.receipt.requiresReturnVerification ||
           _promptedFingerprint == widget.receipt.fingerprint ||
           ModalRoute.of(context)?.isCurrent != true ||
           !widget.receipt.isValidAt(DateTime.now())) {
@@ -316,7 +404,7 @@ Future<void> showDeviceApprovalReceipt(
   DeviceApprovalReceipt receipt, {
   Stream<bool>? finished,
 }) {
-  if (receipt.hasPairingProof) {
+  if (!receipt.requiresReturnVerification) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(context.l10n.deviceApproved)));
     return Future.value();
@@ -341,12 +429,6 @@ Future<void> showDeviceApprovalReceipt(
                   size: 240,
                   backgroundColor: Colors.white,
                   semanticsLabel: context.l10n.verifyTrustedDevice,
-                ),
-                const SizedBox(height: 12),
-                SelectableText(
-                  receipt.securityCode,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 18),
                 ),
               ],
             ),
@@ -422,14 +504,13 @@ class _ApprovalReceiptLifetimeState extends State<_ApprovalReceiptLifetime> {
 
 class _DeviceVerificationDialog<T> extends StatefulWidget {
   const _DeviceVerificationDialog({
+    super.key,
     required this.request,
     this.trustedDevice = false,
-    this.comparing = false,
     this.mismatch = false,
   });
   final DeviceVerificationChallenge<T> request;
   final bool trustedDevice;
-  final bool comparing;
   final bool mismatch;
   @override
   State<_DeviceVerificationDialog<T>> createState() =>
@@ -438,8 +519,6 @@ class _DeviceVerificationDialog<T> extends StatefulWidget {
 
 class _DeviceVerificationDialogState<T>
     extends State<_DeviceVerificationDialog<T>> {
-  bool _comparing = false;
-  bool _matches = false;
   bool _scanning = false;
   bool _mismatch = false;
   late final Timer _timer;
@@ -447,7 +526,6 @@ class _DeviceVerificationDialogState<T>
   @override
   void initState() {
     super.initState();
-    _comparing = widget.comparing;
     _mismatch = widget.mismatch;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!widget.request.isValidAt(DateTime.now())) setState(() {});
@@ -463,7 +541,6 @@ class _DeviceVerificationDialogState<T>
   Future<void> _scan() async {
     setState(() {
       _scanning = true;
-      _matches = false;
       _mismatch = false;
     });
     final value = await Navigator.of(context).push<String>(
@@ -491,7 +568,6 @@ class _DeviceVerificationDialogState<T>
     }
     setState(() {
       _scanning = false;
-      _comparing = true;
     });
   }
 
@@ -499,6 +575,7 @@ class _DeviceVerificationDialogState<T>
   Widget build(BuildContext context) {
     final valid = widget.request.isValidAt(DateTime.now());
     return AlertDialog(
+      scrollable: true,
       title: Text(
         widget.trustedDevice
             ? context.l10n.verifyTrustedDevice
@@ -537,26 +614,8 @@ class _DeviceVerificationDialogState<T>
                           : context.l10n.scanNewDevice,
                     ),
                   ),
-                TextButton(
-                  onPressed: () => setState(() => _comparing = true),
-                  child: Text(context.l10n.compareSecurityCode),
-                ),
-                if (_comparing) ...[
-                  SelectableText(
-                    widget.request.securityCode,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 18,
-                    ),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _matches,
-                    onChanged: (value) =>
-                        setState(() => _matches = value ?? false),
-                    title: Text(context.l10n.completeSecurityCodeMatches),
-                  ),
-                ],
+                if (!_scannerSupported)
+                  Text(context.l10n.deviceCameraUnavailable),
               ],
             ],
           ),
@@ -567,33 +626,15 @@ class _DeviceVerificationDialogState<T>
           onPressed: () => Navigator.pop(context),
           child: Text(context.l10n.cancel),
         ),
-        FilledButton(
-          onPressed: valid && _comparing && _matches
-              ? () {
-                  if (!widget.request.isValidAt(DateTime.now())) {
-                    setState(() {});
-                    return;
-                  }
-                  Navigator.pop(
-                    context,
-                    widget.request.confirmCode(widget.request.securityCode),
-                  );
-                }
-              : null,
-          child: Text(
-            widget.trustedDevice
-                ? context.l10n.acceptVerifiedKey
-                : context.l10n.approveVerifiedDevice,
-          ),
-        ),
       ],
     );
   }
 }
 
 class _DeviceQrScanner extends StatefulWidget {
-  const _DeviceQrScanner({required this.title});
+  const _DeviceQrScanner({required this.title, this.allowCode = false});
   final String title;
+  final bool allowCode;
   @override
   State<_DeviceQrScanner> createState() => _DeviceQrScannerState();
 }
@@ -632,8 +673,17 @@ class _DeviceQrScannerState extends State<_DeviceQrScanner> {
         Expanded(
           child: MobileScanner(
             controller: _controller,
-            errorBuilder: (context, error) =>
-                Center(child: Text(context.l10n.deviceCameraUnavailable)),
+            errorBuilder: (context, error) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  widget.allowCode
+                      ? context.l10n.devicePairingCodeEntryInstruction
+                      : context.l10n.deviceCameraUnavailable,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
             onDetect: (capture) {
               if (_returned || !mounted) return;
               final values = capture.barcodes
@@ -646,12 +696,164 @@ class _DeviceQrScannerState extends State<_DeviceQrScanner> {
           ),
         ),
         SafeArea(
-          child: TextButton(
-            onPressed: () => Navigator.pop(context, ''),
-            child: Text(context.l10n.compareSecurityCode),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            children: [
+              if (widget.allowCode)
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'pairing-code'),
+                  child: Text(context.l10n.deviceEnterPairingCode),
+                ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(context.l10n.cancel),
+              ),
+            ],
           ),
         ),
       ],
     ),
   );
+}
+
+class _PairingCodeEntry extends StatefulWidget {
+  const _PairingCodeEntry({
+    super.key,
+    required this.request,
+    required this.verify,
+  });
+  final DeviceVerificationRequest request;
+  final PairingCodeVerifier verify;
+  @override
+  State<_PairingCodeEntry> createState() => _PairingCodeEntryState();
+}
+
+class _PairingCodeEntryState extends State<_PairingCodeEntry> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  bool _failed = false;
+  bool _cancelled = false;
+  Timer? _timer;
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!widget.request.isValidAt(DateTime.now())) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _cancelled = true;
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connect() async {
+    if (_busy ||
+        _controller.text.length != 8 ||
+        !widget.request.isValidAt(DateTime.now())) {
+      return;
+    }
+    final code = _controller.text;
+    setState(() {
+      _busy = true;
+      _failed = false;
+    });
+    // Let the spinner paint before the browser's SRP calculation.
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    if (!mounted || _cancelled) return;
+    try {
+      final proof = await widget.verify(
+        widget.request,
+        code,
+        () => mounted && !_cancelled,
+      );
+      if (mounted && !_cancelled) Navigator.pop(context, proof);
+    } catch (_) {
+      if (mounted && !_cancelled) {
+        setState(() {
+          _busy = false;
+          _failed = true;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final valid = widget.request.isValidAt(DateTime.now());
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _cancelled = true;
+      },
+      child: AlertDialog(
+        scrollable: true,
+        title: Text(context.l10n.deviceEnterPairingCode),
+        content: SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                valid
+                    ? context.l10n.devicePairingCodeEntryInstruction
+                    : context.l10n.deviceVerificationExpired,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _controller,
+                enabled: valid && !_busy,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                autocorrect: false,
+                enableSuggestions: false,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                decoration: InputDecoration(
+                  labelText: context.l10n.devicePairingCodeLabel,
+                  border: const OutlineInputBorder(),
+                  errorText: _failed
+                      ? context.l10n.devicePairingCodeFailed
+                      : null,
+                  errorMaxLines: 3,
+                ),
+                onChanged: (_) => setState(() => _failed = false),
+                onSubmitted: (_) => _connect(),
+              ),
+              if (_busy) ...[
+                const SizedBox(height: 16),
+                const LinearProgressIndicator(),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _cancelled = true;
+              Navigator.pop(context);
+            },
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: !valid || _busy || _controller.text.length != 8
+                ? null
+                : _connect,
+            child: Text(
+              _busy
+                  ? context.l10n.devicePairingConnecting
+                  : context.l10n.approve,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

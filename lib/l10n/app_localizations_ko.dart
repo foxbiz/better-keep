@@ -2309,7 +2309,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get allAttachmentsRemoved => '모든 첨부 파일과 미디어가 제거됩니다';
 
   @override
-  String get loggedOutAllDevices => '모든 기기에서 로그아웃됩니다';
+  String get loggedOutAllDevices =>
+      '다른 기기에서 로그아웃되기까지 시간이 걸릴 수 있습니다. 기기 승인은 삭제할 때까지 유지됩니다. 분실한 기기는 먼저 삭제하세요.';
 
   @override
   String get accountCannotBeRecovered => '계정을 복구할 수 없습니다';
@@ -2340,7 +2341,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return '계정이 $date에 삭제됩니다.';
+    return '계정은 $date부터 삭제 대상이 됩니다.';
   }
 
   @override
@@ -2371,7 +2372,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return '$date에 계정 삭제 예약됨. 다시 로그인하면 취소됩니다.';
+    return '삭제는 $date부터 예정되어 있습니다. 다시 로그인하면 취소됩니다.';
   }
 
   @override
@@ -3975,8 +3976,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get verifyNewDevice => '새 기기 확인';
 
   @override
-  String get deviceVerificationInstructions =>
-      '신뢰하는 기기에서 새 기기의 QR 코드를 스캔하거나 두 화면의 보안 코드 전체를 비교하세요.';
+  String get deviceVerificationInstructions => '신뢰하는 기기에서 새 기기의 QR 코드를 스캔하세요.';
 
   @override
   String get deviceVerificationExpired =>
@@ -4004,7 +4004,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get approveVerifiedDevice => '기기 승인';
 
   @override
-  String get deviceCameraUnavailable => '카메라를 사용할 수 없습니다. 대신 보안 코드를 비교하세요.';
+  String get deviceCameraUnavailable =>
+      '카메라를 사용할 수 없습니다. 카메라 접근을 허용하거나 암호 문구로 복구하세요.';
 
   @override
   String get deviceVerificationRetry =>
@@ -4019,7 +4020,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get verifyTrustedDeviceInstructions =>
-      '신뢰하는 기기에서 확인 화면을 열어 두세요. 암호화 키를 받기 전에 QR 코드를 스캔하거나 보안 코드 32자 전체를 비교하세요.';
+      '신뢰하는 기기의 QR 코드를 스캔하여 암호화 키를 받으세요.';
 
   @override
   String get scanTrustedDevice => '신뢰하는 기기 스캔';
@@ -4032,7 +4033,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get confirmOnNewDeviceInstructions =>
-      '새 기기에서 “신뢰하는 기기 확인”을 선택하세요. 이 QR 코드를 스캔하거나 전체 보안 코드가 아래 코드와 일치하는지 확인하세요. 새 기기가 잠금 해제될 때까지 화면을 열어 두세요. 최초 생성 후 10분의 유효 기간이 그대로 적용됩니다.';
+      '새 기기로 이 QR 코드를 스캔하세요. 잠금이 해제될 때까지 이 화면을 열어 두세요.';
 
   @override
   String get storageSecurityUpgrade => '안전하게 다시 연결';
@@ -4043,9 +4044,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get devicePairingScanInstruction => '신뢰하는 기기에서 승인 요청을 열고 이 코드를 스캔하세요.';
-
-  @override
-  String get devicePairingCodeInstruction => '이 코드 전체를 신뢰하는 기기의 코드와 비교하세요.';
 
   @override
   String get showQrCode => 'QR 코드 표시';
@@ -4145,4 +4143,50 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceAdded => '추가됨';
+
+  @override
+  String get accountDeletionInProgress =>
+      '계정 삭제가 이미 시작되었습니다. 도움이 필요하면 support@betterkeep.app으로 문의하세요.';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      '최근에 코드를 요청했습니다. 이메일을 확인하거나 1분 후에 새 코드를 요청하세요.';
+
+  @override
+  String get deviceCodeApprovalInstruction =>
+      '새 기기의 코드와 비교하세요. 전체 코드가 일치할 때만 승인하세요.';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      '로그인을 확인할 수 없습니다. 다시 로그인해 주세요.';
+
+  @override
+  String get accountDeletionPaused =>
+      '계정 삭제가 일시 중지되었습니다. support@betterkeep.app으로 문의하세요.';
+
+  @override
+  String get deviceUsePairingCode => '코드 사용';
+
+  @override
+  String get deviceEnterPairingCode => '페어링 코드 입력';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      '신뢰하는 기기에서 페어링 코드 입력을 선택하고 이 8자리 숫자를 입력하세요.';
+
+  @override
+  String get devicePairingCodeEntryInstruction => '새 기기에 표시된 8자리 숫자를 입력하세요.';
+
+  @override
+  String get devicePairingCodeLabel => '페어링 코드';
+
+  @override
+  String get devicePairingCodeExpired => '이 코드는 더 이상 사용할 수 없습니다. 새 코드를 생성하세요.';
+
+  @override
+  String get devicePairingCodeFailed =>
+      '새 기기의 코드를 확인하고 다시 시도하세요. 만료되었다면 새 코드를 생성하세요.';
+
+  @override
+  String get devicePairingConnecting => '연결 중…';
 }

@@ -55,9 +55,13 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_options.dart';
+import 'services/web_release.dart';
 
 void main() async {
   BetterKeepWidgetsBinding.ensureInitialized();
+
+  // Set before any service can read preferences, including motion settings.
+  if (isBetaWebBuild) SharedPreferences.setPrefix('flutter.beta.');
 
   // Enable edge-to-edge display for Android 15+ compatibility
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -186,7 +190,7 @@ void _activateAppCheckInBackground() {
     return;
   }
 
-  FirebaseAppCheck.instance
+  FirebaseAppCheck.instanceFor(app: FirebaseBackend.app)
       .activate(
         providerWeb: ReCaptchaV3Provider(
           const String.fromEnvironment('GOOGLE_RECAPTCHA_SITE_KEY'),

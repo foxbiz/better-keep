@@ -183,11 +183,27 @@ Path: `users/{uid}/e2ee/recovery_key`
 
 ### 2. Adding a New Device
 
-The pending device generates a ten-minute request from its locally held public key, account/environment, device ID and random request ID. Its QR also contains a fresh one-time pairing secret. That secret never goes to Firebase and is not a master key or provider credential.
+The pending device generates a ten-minute request from its locally held public key, account/environment, device ID and random request ID. Its QR also contains a fresh one-time pairing secret. That secret never goes to Firebase in plaintext and is not a master key or provider credential.
 
 The trusted device scans the QR, checks the pending request and wraps the master key for the exact verified public key. The recipient verifies the request-bound handoff using its local pairing secret before accepting it. A successful scan completes pairing without an extra approval button.
 
-Camera-free pairing compares all 32 hexadecimal characters on both devices and requires explicit confirmation in each direction. Cancellation, expiry, regeneration and identity changes invalidate pending verification. An accepted receipt fingerprint is retained so an already accepted handoff can be reloaded after the original request expires.
+Without a camera, the new device offers **Use a code instead**. It displays eight random digits; the trusted device enters them once and taps **Approve**. Both devices must remain online during this exchange. No second confirmation is needed on the new device.
+
+Both clients run SRP-6a using Pointy Castle 4.0.0, the fixed RFC 5054 3072-bit group and SHA-256. The canonical request binds the account, environment, device, public key and request ID. Firebase relays public SRP values and evidence in the pending device's `code_pairing` field; the code, verifier and private ephemeral values remain in memory. After mutual evidence verification, an HKDF-derived key bound to the entire exchange encrypts the QR handoff secret. The trusted device then uses the same verified approval operation as QR, and the new device still requires the existing keyed pairing proof before accepting its master key.
+
+A code expires after five minutes, allows at most three attempts enforced on the new device, and is invalidated by cancellation, regeneration, logout or request/key changes. Each attempt consumes a fresh ephemeral before processing evidence. Reloading loses the code and attempt state; a fresh request must be generated locally. Concurrent responses cannot reuse an ephemeral. An untrusted mailbox can deny service but cannot reset the local attempt budget or authorize a device by setting a flag.
+
+Legacy code-mode requests remain decodable but a receipt without the QR secret proof is never accepted automatically. Older public-QR requests require a return QR scan. Both devices need an updated app to use the short-code fallback; QR and recovery remain available. This protocol composition has regression coverage, not an independent cryptographic audit; Dart BigInt arithmetic is not claimed to be constant-time. Compromised clients, observed codes and local side-channel attackers are outside its protection.
+
+Isolated transport regression (creates only synthetic records in a disposable demo project):
+
+```sh
+node tool/firebase_cli.mjs -- emulators:exec --only auth,firestore \
+  --project demo-better-keep-pairing --config firebase.emulator-tests.json \
+  'flutter test --no-pub --platform chrome test/emulator/device_pairing.dart'
+```
+
+Cancellation, expiry, regeneration and identity changes invalidate pending verification. An accepted receipt fingerprint is retained so an already accepted handoff can be reloaded after the original request expires.
 
 Existing devices with a cached master key remain usable. If that cache is missing, an unverified legacy envelope supplied by another device is rejected; use verified approval or recovery. First-device and recovery self-wrapping remain supported. Older approving clients retain their original trust weakness, so update all approving devices before relying on substitution protection.
 
@@ -292,7 +308,7 @@ if (await E2EEService.instance.deviceManager.isFirstDevice()) {
 
 ### Approving a New Device
 
-Use the device-verification UI to scan the new device or compare security codes. `DeviceManager.approveDevice` requires a `VerifiedDeviceApproval`; a device ID alone is insufficient. Notifications open verification and do not grant access themselves.
+Use the device-verification UI to scan the new device or enter its eight-digit pairing code. `DeviceManager.approveDevice` requires a `VerifiedDeviceApproval`; a device ID alone is insufficient. Notifications open verification and do not grant access themselves.
 
 ### External-provider credentials
 
@@ -344,3 +360,28 @@ lib/services/e2ee/
 - [ ] Key rotation support
 - [ ] Audit log for device approvals
 - [ ] Hardware key (FIDO2/WebAuthn) support for recovery
+
+
+### Pairing failure recovery
+
+Code approval hides method changes while the authenticated handoff is in progress. If
+approval does not arrive within 60 seconds of the code exchange, the waiting UI exposes
+retry. That UI timeout does not revoke an already shared secret: choosing a new code/QR
+regenerates the request and invalidates the abandoned handoff. A delayed, correctly bound
+approval may still finish before regeneration.
+
+Request publication journals only locally generated candidates and the previous accepted
+fingerprint in native secure storage (browser memory only). After an uncertain write, a
+server read selects only a matching local candidate; an unknown request is never adopted.
+Explicit regeneration can abandon a conflicting journal. Account/session fences remain
+in force, including during rollback and cancellation.
+
+SRP host/client setup and response computation use Flutter `compute`, which runs off the
+UI isolate on native platforms. Web executes the same code on its main event loop; test
+optimized builds on lower-end browsers before release. A dedicated web worker is not
+implemented. The eight-digit field remains visible for usability; codes are short-lived
+secrets and should not be shared, photographed or pasted into support logs.
+
+Release checks include `npm test device-pairing` and the isolated demo-project
+`npm test firebase-emulator-pairing`. The latter exercises protocol/services with a
+ciphertext fixture; it is not a substitute for physical-device camera/keyboard UX checks.

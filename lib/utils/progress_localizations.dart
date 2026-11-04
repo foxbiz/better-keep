@@ -18,7 +18,10 @@ extension AuthFailureLocalizations on AuthFailureKind {
     AuthFailureKind.accountExists => l10n.emailAlreadyInUse,
     AuthFailureKind.accountNotFound => l10n.accountNotFound,
     AuthFailureKind.invalidCredentials => l10n.invalidCredentials,
+    AuthFailureKind.providerVerification =>
+      l10n.providerSignInVerificationFailed,
     AuthFailureKind.accountDisabled => l10n.accountDisabled,
+    AuthFailureKind.deletionInProgress => l10n.accountDeletionInProgress,
     AuthFailureKind.tooManyRequests => l10n.pleaseWaitBeforeRequesting,
     AuthFailureKind.network => l10n.noInternetConnection,
     AuthFailureKind.cancelled ||

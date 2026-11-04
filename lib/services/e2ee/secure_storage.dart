@@ -5,6 +5,9 @@
 library;
 
 import 'package:better_keep/services/e2ee/device_authorization.dart';
+
+import 'device_verification.dart';
+
 import 'package:better_keep/services/async_keyed_serializer.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 
@@ -58,6 +61,7 @@ class E2EESecureStorage {
   static const String _deviceStatusKey = 'e2ee_device_status';
   static const String _signInProgressKey = 'e2ee_sign_in_progress';
   static const String _approvalRequestKey = 'e2ee_approval_request';
+  static const String _approvalPublicationKey = 'e2ee_approval_publication';
   static const String _acceptedApprovalKey = 'e2ee_accepted_approval';
   static const _keys = [
     _devicePrivateKeyKey,
@@ -69,25 +73,104 @@ class E2EESecureStorage {
     _signInProgressKey,
     _approvalRequestKey,
     _acceptedApprovalKey,
+    _approvalPublicationKey,
   ];
 
   Future<void> clearApprovalRequest() => _mutations.run('keys', () async {
     requireCloudOperation();
     await _deleteDirect(_approvalRequestKey);
     await _deleteDirect(_acceptedApprovalKey);
+    await _deleteDirect(_approvalPublicationKey);
   });
 
   Future<String?> getApprovalRequest() => _read(_approvalRequestKey);
   Future<void> storeApprovalRequest(String value) =>
       _mutations.run('keys', () async {
         requireCloudOperation();
+        await _deleteDirect(_approvalPublicationKey);
         await _deleteDirect(_acceptedApprovalKey);
         await _writeDirect(_approvalRequestKey, value);
       });
 
+  /// Journal both locally generated requests before publishing. A lost network
+  /// acknowledgement must not discard the only secret for a committed request.
+  Future<void> beginApprovalPublication(String candidate) =>
+      _mutations.run('keys', () async {
+        requireCloudOperation();
+        if (await _read(_approvalPublicationKey) != null) {
+          throw StateError('Resolve the previous approval publication first');
+        }
+        final journal = jsonEncode({
+          'candidate': candidate,
+          'previous': await _read(_approvalRequestKey),
+          'accepted': await _read(_acceptedApprovalKey),
+        });
+        requireCloudOperation();
+        await _writeDirect(_approvalPublicationKey, journal);
+        requireCloudOperation();
+        await _deleteDirect(_acceptedApprovalKey);
+        requireCloudOperation();
+        await _writeDirect(_approvalRequestKey, candidate);
+      });
+
+  /// Explicit regeneration abandons uncertain publication; it never accepts it.
+  Future<void> abandonApprovalPublication() => _mutations.run('keys', () async {
+    requireCloudOperation();
+    await _deleteDirect(_approvalPublicationKey);
+  });
+
+  /// Only recover a request/secret already journaled on this device. Never
+  /// adopt a server-supplied request or overwrite a newer local operation.
+  Future<void> reconcileApprovalPublication(
+    DeviceVerificationRequest? remote,
+  ) => _mutations.run('keys', () async {
+    requireCloudOperation();
+    final raw = await _read(_approvalPublicationKey);
+    if (raw == null) return;
+    final journal = jsonDecode(raw) as Map<String, dynamic>;
+    final candidate = journal['candidate'] as String;
+    final previous = journal['previous'] as String?;
+    final local = await _read(_approvalRequestKey);
+    if (local != candidate && local != previous) {
+      throw StateError('Local approval request changed');
+    }
+    final candidateMatches =
+        DeviceVerificationRequest.fromLocalData(candidate).canonical ==
+        remote?.canonical;
+    final previousMatches = previous == null
+        ? remote == null
+        : DeviceVerificationRequest.fromLocalData(previous).canonical ==
+              remote?.canonical;
+    if (!candidateMatches && !previousMatches) {
+      throw StateError('Device verification request changed');
+    }
+    requireCloudOperation();
+    await _deleteDirect(_acceptedApprovalKey);
+    requireCloudOperation();
+    if (!candidateMatches && previous == null) {
+      await _deleteDirect(_approvalRequestKey);
+    } else {
+      await _writeDirect(
+        _approvalRequestKey,
+        candidateMatches ? candidate : previous!,
+      );
+    }
+    if (!candidateMatches && journal['accepted'] is String) {
+      requireCloudOperation();
+      await _writeDirect(_acceptedApprovalKey, journal['accepted'] as String);
+    }
+    requireCloudOperation();
+    await _deleteDirect(_approvalPublicationKey);
+  });
+
   /// Remove the one-time QR secret without invalidating the accepted fingerprint.
   Future<void> completeApprovalRequest(String publicRequest) =>
-      _write(_approvalRequestKey, publicRequest);
+      _mutations.run('keys', () async {
+        requireCloudOperation();
+        await _writeDirect(_approvalRequestKey, publicRequest);
+        requireCloudOperation();
+        await _deleteDirect(_approvalPublicationKey);
+      });
 
   Future<String?> getAcceptedApproval() => _read(_acceptedApprovalKey);
   Future<void> storeAcceptedApproval(String fingerprint) =>

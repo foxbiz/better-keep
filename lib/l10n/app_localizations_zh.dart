@@ -2278,7 +2278,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get allAttachmentsRemoved => '所有附件和媒体将被移除';
 
   @override
-  String get loggedOutAllDevices => '您将从所有设备退出登录';
+  String get loggedOutAllDevices =>
+      '其他设备可能需要一段时间才会退出登录。设备授权在删除前仍然有效；请先移除丢失的设备。';
 
   @override
   String get accountCannotBeRecovered => '您的账户无法恢复';
@@ -2309,7 +2310,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return '您的账户将于 $date 被删除。';
+    return '您的账户将从 $date 起进入可删除状态。';
   }
 
   @override
@@ -2340,7 +2341,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return '账户删除计划于 $date。重新登录以取消。';
+    return '删除计划从 $date 起执行。重新登录以取消。';
   }
 
   @override
@@ -3904,8 +3905,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get verifyNewDevice => '验证新设备';
 
   @override
-  String get deviceVerificationInstructions =>
-      '在可信设备上扫描新设备显示的二维码，或比较两个屏幕上的完整安全码。';
+  String get deviceVerificationInstructions => '在可信设备上扫描新设备显示的二维码。';
 
   @override
   String get deviceVerificationExpired => '此验证码已过期。请在新设备上生成新码。';
@@ -3932,7 +3932,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get approveVerifiedDevice => '批准设备';
 
   @override
-  String get deviceCameraUnavailable => '无法使用相机。您可以改为比较安全码。';
+  String get deviceCameraUnavailable => '摄像头不可用。请允许摄像头访问，或使用恢复口令恢复。';
 
   @override
   String get deviceVerificationRetry => '无法完成验证。请更新两台设备，在新设备上生成新码，然后重试。';
@@ -3945,8 +3945,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get verifyTrustedDevice => '验证可信设备';
 
   @override
-  String get verifyTrustedDeviceInstructions =>
-      '请保持可信设备的确认页面打开。在接受加密密钥前，扫描其二维码或比较安全码的全部32个字符。';
+  String get verifyTrustedDeviceInstructions => '扫描可信设备上的二维码以接收加密密钥。';
 
   @override
   String get scanTrustedDevice => '扫描可信设备';
@@ -3958,8 +3957,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get confirmOnNewDevice => '在新设备上确认';
 
   @override
-  String get confirmOnNewDeviceInstructions =>
-      '在新设备上选择“验证可信设备”。扫描此二维码，或确认完整安全码与下方一致。请保持此页面打开，直到新设备解锁。最初的十分钟有效期仍然适用。';
+  String get confirmOnNewDeviceInstructions => '使用新设备扫描此二维码。在设备解锁前保持此屏幕打开。';
 
   @override
   String get storageSecurityUpgrade => '安全地重新连接';
@@ -3970,9 +3968,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get devicePairingScanInstruction => '在受信任的设备上打开批准请求，然后扫描此码。';
-
-  @override
-  String get devicePairingCodeInstruction => '请将此完整代码与受信任设备上的代码进行比较。';
 
   @override
   String get showQrCode => '显示二维码';
@@ -4070,4 +4065,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceAdded => '添加时间';
+
+  @override
+  String get accountDeletionInProgress =>
+      '帐户删除已开始。如需帮助，请联系 support@betterkeep.app。';
+
+  @override
+  String get deletionCodeRecentlyRequested => '刚刚已请求验证码。请检查电子邮件，或等待一分钟后再请求。';
+
+  @override
+  String get deviceCodeApprovalInstruction => '与新设备上的代码进行比较。仅在完整代码一致时批准。';
+
+  @override
+  String get providerSignInVerificationFailed => '无法验证您的登录。请重新登录。';
+
+  @override
+  String get accountDeletionPaused => '账户删除已暂时暂停。请联系 support@betterkeep.app。';
+
+  @override
+  String get deviceUsePairingCode => '改用配对码';
+
+  @override
+  String get deviceEnterPairingCode => '输入配对码';
+
+  @override
+  String get devicePairingCodeInstruction => '在受信任的设备上选择“输入配对码”，然后输入这八位数字。';
+
+  @override
+  String get devicePairingCodeEntryInstruction => '输入新设备上显示的八位数字。';
+
+  @override
+  String get devicePairingCodeLabel => '配对码';
+
+  @override
+  String get devicePairingCodeExpired => '此配对码已不可用。请生成新的配对码。';
+
+  @override
+  String get devicePairingCodeFailed => '请检查新设备上的配对码并重试。如果已过期，请生成新的配对码。';
+
+  @override
+  String get devicePairingConnecting => '正在连接…';
 }

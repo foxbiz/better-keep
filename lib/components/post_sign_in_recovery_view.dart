@@ -8,6 +8,7 @@ class PostSignInRecoveryView extends StatelessWidget {
     required this.onSignOut,
     this.message,
     this.canContinueOffline = true,
+    this.canRetry = true,
     super.key,
   });
 
@@ -16,6 +17,7 @@ class PostSignInRecoveryView extends StatelessWidget {
   final Future<void> Function() onSignOut;
   final String? message;
   final bool canContinueOffline;
+  final bool canRetry;
 
   Future<void> _confirmSignOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -65,11 +67,12 @@ class PostSignInRecoveryView extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        ElevatedButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh),
-          label: Text(context.l10n.retry),
-        ),
+        if (canRetry)
+          ElevatedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: Text(context.l10n.retry),
+          ),
         const SizedBox(height: 16),
         TextButton.icon(
           onPressed: () => _confirmSignOut(context),

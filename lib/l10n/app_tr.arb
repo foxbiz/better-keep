@@ -2277,7 +2277,7 @@
 		"description": "All attachments removed warning"
 	},
 
-	"loggedOutAllDevices": "Tüm cihazlardan çıkış yapacaksınız",
+	"loggedOutAllDevices": "Diğer cihazların çıkış yapması zaman alabilir. Cihaz onayı silinene kadar geçerlidir; kayıp cihazları önce kaldırın.",
 	"@loggedOutAllDevices": { "description": "Logged out all devices warning" },
 
 	"accountCannotBeRecovered": "Hesabınız kurtarılamaz",
@@ -2313,7 +2313,7 @@
 	"deletionScheduled": "Silme İşlemi Planlandı",
 	"@deletionScheduled": { "description": "Deletion scheduled dialog title" },
 
-	"accountWillBeDeletedOn": "Hesabınız {date} tarihinde silinecek.",
+	"accountWillBeDeletedOn": "Hesabınız {date} tarihinden itibaren silinebilir.",
 	"@accountWillBeDeletedOn": {
 		"description": "Account deletion date message",
 		"placeholders": {
@@ -2350,7 +2350,7 @@
 		}
 	},
 
-	"deletionScheduledMessage": "Hesap silme işlemi {date} için planlandı. İptal etmek için tekrar giriş yapın.",
+	"deletionScheduledMessage": "Silme işlemi {date} tarihinden itibaren planlandı. İptal etmek için tekrar giriş yapın.",
 	"@deletionScheduledMessage": {
 		"description": "Deletion scheduled snackbar message",
 		"placeholders": {
@@ -3764,7 +3764,7 @@
 	"externalSyncConnectTitle": "{provider} bağla",
 	"externalSyncConnectHelp": "Depolama erişimine izin vermek için giriş yapın. Bağlandıktan sonra bu sağlayıcı eşitleme için seçilecektir.",
 	"verifyNewDevice": "Yeni cihazı doğrula",
-	"deviceVerificationInstructions": "Güvenilir cihazınızda yeni cihazdaki QR kodunu tarayın veya iki ekrandaki güvenlik kodunun tamamını karşılaştırın.",
+	"deviceVerificationInstructions": "Güvenilir cihazınızda yeni cihazdaki QR kodunu tarayın.",
 	"deviceVerificationExpired": "Doğrulama kodunun süresi doldu. Yeni cihazda yeni bir kod oluşturun.",
 	"newVerificationCode": "Yeni kod oluştur",
 	"deviceVerificationMismatch": "Cihazlar eşleşmiyor. Bu isteği onaylamayın.",
@@ -3773,19 +3773,18 @@
 	"compareSecurityCode": "Güvenlik kodunu karşılaştır",
 	"completeSecurityCodeMatches": "Her iki cihazdaki kodun tamamını karşılaştırdım. Kodlar eşleşiyor.",
 	"approveVerifiedDevice": "Cihazı onayla",
-	"deviceCameraUnavailable": "Kamera kullanılamıyor. Bunun yerine güvenlik kodunu karşılaştırabilirsiniz.",
+	"deviceCameraUnavailable": "Kamera kullanılamıyor. Kamera erişimine izin verin veya kurtarma parolanızla erişimi geri yükleyin.",
 	"deviceVerificationRetry": "Doğrulama tamamlanamadı. Her iki cihazı güncelleyin, yeni cihazda yeni bir kod oluşturun ve tekrar deneyin.",
 	"browserEncryptionSessionOnly": "Şifreleme anahtarları yalnızca bu tarayıcı oturumunda tutulur. Yeniden yükledikten sonra tarayıcıyı tekrar onaylayın veya kurtarma parolanızı kullanın.",
 	"verifyTrustedDevice": "Güvenilir cihazı doğrula",
-	"verifyTrustedDeviceInstructions": "Güvenilir cihazınızda onay ekranını açık tutun. Şifreleme anahtarınızı kabul etmeden önce QR kodunu tarayın veya güvenlik kodunun 32 karakterinin tamamını karşılaştırın.",
+	"verifyTrustedDeviceInstructions": "Şifreleme anahtarınızı almak için güvenilir cihazınızdaki QR kodunu tarayın.",
 	"scanTrustedDevice": "Güvenilir cihazı tara",
 	"acceptVerifiedKey": "Doğrulanmış anahtarı kabul et",
 	"confirmOnNewDevice": "Yeni cihazınızda onaylayın",
-	"confirmOnNewDeviceInstructions": "Yeni cihazda “Güvenilir cihazı doğrula” seçeneğini seçin. Bu QR kodunu tarayın veya güvenlik kodunun tamamının aşağıdakiyle eşleştiğini onaylayın. Yeni cihazın kilidi açılana kadar ekranı açık tutun. İlk on dakikalık süre geçerli olmaya devam eder.",
+	"confirmOnNewDeviceInstructions": "Bu QR kodunu yeni cihazla tarayın. Kilit açılana kadar bu ekranı açık tutun.",
 	"storageSecurityUpgrade": "Güvenle yeniden bağlan",
 	"storageSecurityUpgradeInstructions": "Bu bağlantı, sunucunun yönettiği eski kimlik bilgisi deposunu kullanıyordu. Önce sağlayıcınızın bağlı uygulama ayarlarından Better Keep erişimini iptal edin (veya Nextcloud uygulama parolasını kaldırın), sonra buradan yeniden bağlanın. Notlarınız ve uzak dosyalarınız korunur. Yeni kimlik bilgileri, not şifreleme anahtarınızla cihazınızda şifrelenir.",
   "devicePairingScanInstruction": "Güvendiğiniz cihazda onay isteğini açın ve bu kodu tarayın.",
-  "devicePairingCodeInstruction": "Bu kodun tamamını güvendiğiniz cihazdaki kodla karşılaştırın.",
   "showQrCode": "QR kodunu göster",
   "externalSyncSharedSetup": "Bu cihazda Google Drive’a giriş yapın.",
   "externalSyncSharedSetupHelp": "Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.",
@@ -3825,5 +3824,18 @@
   },
   "subscribe": "Abone ol",
   "builtInCloudSync": "Yerleşik bulut senkronizasyonu",
-  "deviceAdded": "Eklendi"
+  "deviceAdded": "Eklendi",
+	"accountDeletionInProgress": "Hesap silme işlemi başladı. Yardım için support@betterkeep.app ile iletişime geçin.",
+	"deletionCodeRecentlyRequested": "Kısa süre önce bir kod istendi. E-postanızı kontrol edin veya yeni bir kod istemeden önce bir dakika bekleyin.",
+  "deviceCodeApprovalInstruction": "Bu kodu yeni cihazınızdaki kodla karşılaştırın. Yalnızca kodun tamamı eşleşiyorsa onaylayın.",
+  "providerSignInVerificationFailed": "Oturum açma işleminiz doğrulanamadı. Lütfen tekrar oturum açmayı deneyin.",
+	"accountDeletionPaused": "Hesap silme geçici olarak duraklatıldı. support@betterkeep.app ile iletişime geçin.",
+  "deviceUsePairingCode": "Kod kullan",
+  "deviceEnterPairingCode": "Eşleştirme kodunu gir",
+  "devicePairingCodeInstruction": "Güvenilir cihazınızda Eşleştirme kodunu gir seçeneğini seçin ve bu sekiz rakamı girin.",
+  "devicePairingCodeEntryInstruction": "Yeni cihazınızda gösterilen sekiz rakamı girin.",
+  "devicePairingCodeLabel": "Eşleştirme kodu",
+  "devicePairingCodeExpired": "Bu kod artık kullanılamıyor. Yeni bir kod oluşturun.",
+  "devicePairingCodeFailed": "Yeni cihazınızdaki kodu kontrol edip tekrar deneyin. Süresi dolduysa yeni bir kod oluşturun.",
+  "devicePairingConnecting": "Bağlanıyor…"
 }

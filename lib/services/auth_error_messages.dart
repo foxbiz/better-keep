@@ -8,7 +8,9 @@ enum AuthFailureKind {
   accountExists,
   accountNotFound,
   invalidCredentials,
+  providerVerification,
   accountDisabled,
+  deletionInProgress,
   tooManyRequests,
   network,
   cancelled,
@@ -131,6 +133,45 @@ VerificationFailureKind resolveVerificationFailure(
   };
 }
 
+bool isAccountDeletionPaused(Object? error) =>
+    error is FirebaseFunctionsException &&
+    error.details is Map &&
+    (error.details as Map)['reason'] == 'account-deletion-paused';
+
+bool isAccountDeletionInProgress(Object? error) {
+  if (error is FirebaseFunctionsException) {
+    final details = error.details;
+    return error.code == 'failed-precondition' &&
+        details is Map &&
+        details['reason'] == 'account-deletion-in-progress';
+  }
+  // Blocking Auth functions and legacy OAuth callbacks wrap the server error.
+  // Auth wrappers may drop details; keep a stable marker plus the legacy fallback.
+  return error is FirebaseAuthException &&
+      [
+        'internal-error',
+        'internal',
+        'failed-precondition',
+        'oauth-error',
+      ].contains(error.code) &&
+      ((error.message?.contains('[account-deletion-in-progress]') ?? false) ||
+          (error.message?.contains(
+                'Account deletion has already started. Contact support.',
+              ) ??
+              false));
+}
+
+Map? deletionOtpCooldown(Object? error) {
+  if (error is! FirebaseFunctionsException ||
+      error.code != 'resource-exhausted') {
+    return null;
+  }
+  final details = error.details;
+  return details is Map && details['reason'] == 'deletion-otp-cooldown'
+      ? details
+      : null;
+}
+
 AuthFailureKind resolveSignInFailure({
   required String provider,
   required Object error,
@@ -142,6 +183,9 @@ AuthFailureKind resolveSignInFailure({
   if (error is SignInWithAppleAuthorizationException &&
       error.code == AuthorizationErrorCode.canceled) {
     return AuthFailureKind.cancelled;
+  }
+  if (isAccountDeletionInProgress(error)) {
+    return AuthFailureKind.deletionInProgress;
   }
   if (error is! FirebaseAuthException) return AuthFailureKind.unknown;
   final code = error.code;
@@ -157,7 +201,9 @@ AuthFailureKind resolveSignInFailure({
     return AuthFailureKind.accountNotFound;
   }
   if (code == 'wrong-password' || code == 'invalid-credential') {
-    return AuthFailureKind.invalidCredentials;
+    return provider == 'password'
+        ? AuthFailureKind.invalidCredentials
+        : AuthFailureKind.providerVerification;
   }
   if (code == 'user-disabled') {
     return AuthFailureKind.accountDisabled;

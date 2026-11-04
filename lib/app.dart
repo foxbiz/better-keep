@@ -291,17 +291,23 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                               const AccountRecoveryPage(),
                             AuthenticatedStartupRoute.recovery => AuthScaffold(
                               child: PostSignInRecoveryView(
+                                canRetry:
+                                    !postSignInState.accountDeletionInProgress,
                                 canContinueOffline:
                                     E2EEService.instance.isCryptoReady,
                                 message:
-                                    switch (E2EEService.instance.localState) {
-                                      LocalEncryptionState.unavailable =>
-                                        context.l10n.localEncryptionUnavailable,
-                                      LocalEncryptionState.missing ||
-                                      LocalEncryptionState.corrupt =>
-                                        context.l10n.localEncryptionMissing,
-                                      _ => null,
-                                    },
+                                    postSignInState.accountDeletionInProgress
+                                    ? context.l10n.accountDeletionInProgress
+                                    : switch (E2EEService.instance.localState) {
+                                        LocalEncryptionState.unavailable =>
+                                          context
+                                              .l10n
+                                              .localEncryptionUnavailable,
+                                        LocalEncryptionState.missing ||
+                                        LocalEncryptionState.corrupt =>
+                                          context.l10n.localEncryptionMissing,
+                                        _ => null,
+                                      },
                                 onRetry: () => _retryPostSignInSafely(
                                   'authenticated startup screen',
                                 ),

@@ -8,7 +8,7 @@
 
 Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app inspired by Google Keep. Built with **Flutter** (Dart), backed by **Firebase** (Auth, Firestore, Storage, Cloud Functions). Features rich-text editing, E2E encryption, AI audio transcription (Whisper), reminders, sketches, labels, folders, and subscription monetization.
 
-- **Version**: 1.4.5+97
+- **Version**: 1.5.0+98
 - **License**: PolyForm Noncommercial 1.0.0
 - **Publisher**: Foxbiz Software Pvt. Ltd.
 - **Firebase Project**: `better-keep-notes`
@@ -212,9 +212,9 @@ better-keep/
 │   │
 │   └── l10n/                     # Localization
 │
-├── functions/                    # Firebase Cloud Functions (TypeScript, 47 files)
+├── functions/                    # Firebase Cloud Functions (TypeScript)
 │   └── src/
-│       ├── index.ts              # Entry point — exports 41 cloud functions
+│       ├── index.ts              # Entry point — exports backend functions
 │       └── exports/              # Individual function modules
 │
 ├── test/                         # Tests
@@ -395,7 +395,7 @@ npm run release
 | `lib/services/note_sync_service.dart` | ~500 | Firestore note sync |
 | `lib/pages/home/notes.dart` | ~800 | Masonry grid + list + folder views |
 | `lib/pages/note_editor/note_editor.dart` | ~600 | Rich-text editor |
-| `functions/src/index.ts` | ~200 | Cloud Functions entry (exports 41 functions) |
+| `functions/src/index.ts` | ~200 | Cloud Functions entry |
 | `pubspec.yaml` | ~200 | 50+ Flutter dependencies |
 | `docs/E2EE.md` | 363 | E2EE architecture docs |
 
@@ -421,7 +421,7 @@ pending_remote_sync: id, item_id, item_type, operation, ...
 
 ---
 
-## Cloud Functions (41 total)
+## Cloud Functions
 
 - **Auth**: custom tokens, OTPs, password reset, account linking, account deletion, token revocation, device approval, start-fresh
 - **Subscriptions**: Razorpay CRUD, Play Store/App Store webhooks, purchase verification, expiry checks, trial grants
@@ -533,3 +533,27 @@ and implements the debug relay. Regression tests live in
 The reproducible iOS preview/cold/warm/cancel/copy-failure UI gate is documented in
 `test/ios_image_share_ui/README.md`. Its disposable simulator fixture requires a
 test-only LOCAL_DATA_KEY and asserts encrypted attachments before reporting success.
+
+## Account deletion hardening (local, not deployed)
+
+- `functions/src/accountDeletionLifecycle.ts`: atomic OTP/schedule/audit proof, transactional
+  cancellation, claim leases, token-drain checkpoint, and reminder proof validation.
+- Backend-only collections: `accountDeletionRequests` (incident audit retention hold) and
+  `accountDeletionWorker/scan` (bounded worker pagination cursor).
+- The worker is disabled unless `ACCOUNT_DELETION_ENABLED=true`; Scheduler was paused
+  during incident response; recheck its status before any approved production operation. No deployment/re-enablement without explicit permission.
+- `functions/scripts/runTests.mjs` keeps test manifests out of package.json. The isolated
+  `tool/test_account_deletion.sh` suite participates in `npm run release` through the
+  `firebase-emulator-deletion` suite.
+- See `docs/ACCOUNT_DELETION.md` for rules-first rollout, 65-minute token drain before purge,
+  partial-deletion recovery, shared-data cleanup, and staging/retention limitations.
+
+- Direct callable HTTP errors on iOS/macOS/Windows preserve structured details via
+  `parseCloudFunctionError` in `lib/services/cloud_functions_helper.dart`. The mapper's
+  regression tests in `test/cloud_functions_helper_test.dart` run in the release gate.
+
+
+Device pairing supports QR and an eight-digit client-only SRP-6a fallback. The server
+relays public values/evidence and encrypted handoff data, never the code or master key.
+Deletion scheduling enters a durable revoking phase before cancellation/sign-in can
+resume; audit triggers handle session revocation and cancellation notifications.

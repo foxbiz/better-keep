@@ -59,3 +59,45 @@ test('rejects insecure or credential-bearing proxy destinations before installat
     assert.equal(window.fetch, original);
   }
 });
+
+function authSetup({configured = null, fails = false} = {}) {
+  const result = setup();
+  const {window} = result;
+  const hints = new Map();
+  const order = [];
+  const auth = {emulatorConfig: configured};
+  window.sessionStorage = {setItem: (key, value) => hints.set(key, value)};
+  window.firebase_core = {initializeApp: (options, name) => { order.push('app'); return {options, name}; }};
+  window.firebase_auth = {
+    initializeAuth: () => { order.push('auth'); return auth; },
+    connectAuthEmulator: (_, origin) => {
+      order.push('connect');
+      if (fails) throw new Error('SDK routing failed');
+      const url = new URL(origin);
+      auth.emulatorConfig = {protocol: 'http', host: url.hostname, port: +url.port};
+    },
+  };
+  return {...result, hints, order, auth};
+}
+
+test('stale session hints never skip actual Auth routing; setup is synchronous', () => {
+  const {window, hints, order} = authSetup();
+  const name = 'better-keep-emulator-qa';
+  hints.set(`${name}-firebaseEmulatorOrigin`, 'http://127.0.0.1:9099');
+  window.betterKeepPrepareAuthEmulator(name, {}, '127.0.0.1', 9099);
+  assert.deepEqual(order, ['app', 'auth', 'connect']);
+  assert.equal(hints.get(`${name}-firebaseEmulatorOrigin`), 'http://127.0.0.1:9099');
+  window.betterKeepPrepareAuthEmulator(name, {}, '127.0.0.1', 9099);
+  assert.deepEqual(order, ['app', 'auth', 'connect', 'app', 'auth']);
+});
+
+test('routing failures and different existing endpoints fail closed', () => {
+  for (const state of [{fails: true}, {configured: {protocol: 'http', host: 'other.test', port: 9099}}]) {
+    const {window, hints} = authSetup(state);
+    assert.throws(() => window.betterKeepPrepareAuthEmulator('better-keep-emulator-qa', {}, '127.0.0.1', 9099));
+    assert.equal(hints.size, 0);
+  }
+  const {window, order} = authSetup();
+  assert.throws(() => window.betterKeepPrepareAuthEmulator('[DEFAULT]', {}, '127.0.0.1', 9099));
+  assert.deepEqual(order, []);
+});

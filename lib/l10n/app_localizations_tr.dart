@@ -2386,7 +2386,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get allAttachmentsRemoved => 'Tüm ekler ve medya kaldırılacaktır';
 
   @override
-  String get loggedOutAllDevices => 'Tüm cihazlardan çıkış yapacaksınız';
+  String get loggedOutAllDevices =>
+      'Diğer cihazların çıkış yapması zaman alabilir. Cihaz onayı silinene kadar geçerlidir; kayıp cihazları önce kaldırın.';
 
   @override
   String get accountCannotBeRecovered => 'Hesabınız kurtarılamaz';
@@ -2419,7 +2420,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'Hesabınız $date tarihinde silinecek.';
+    return 'Hesabınız $date tarihinden itibaren silinebilir.';
   }
 
   @override
@@ -2451,7 +2452,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'Hesap silme işlemi $date için planlandı. İptal etmek için tekrar giriş yapın.';
+    return 'Silme işlemi $date tarihinden itibaren planlandı. İptal etmek için tekrar giriş yapın.';
   }
 
   @override
@@ -4130,7 +4131,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceVerificationInstructions =>
-      'Güvenilir cihazınızda yeni cihazdaki QR kodunu tarayın veya iki ekrandaki güvenlik kodunun tamamını karşılaştırın.';
+      'Güvenilir cihazınızda yeni cihazdaki QR kodunu tarayın.';
 
   @override
   String get deviceVerificationExpired =>
@@ -4162,7 +4163,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceCameraUnavailable =>
-      'Kamera kullanılamıyor. Bunun yerine güvenlik kodunu karşılaştırabilirsiniz.';
+      'Kamera kullanılamıyor. Kamera erişimine izin verin veya kurtarma parolanızla erişimi geri yükleyin.';
 
   @override
   String get deviceVerificationRetry =>
@@ -4177,7 +4178,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get verifyTrustedDeviceInstructions =>
-      'Güvenilir cihazınızda onay ekranını açık tutun. Şifreleme anahtarınızı kabul etmeden önce QR kodunu tarayın veya güvenlik kodunun 32 karakterinin tamamını karşılaştırın.';
+      'Şifreleme anahtarınızı almak için güvenilir cihazınızdaki QR kodunu tarayın.';
 
   @override
   String get scanTrustedDevice => 'Güvenilir cihazı tara';
@@ -4190,7 +4191,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get confirmOnNewDeviceInstructions =>
-      'Yeni cihazda “Güvenilir cihazı doğrula” seçeneğini seçin. Bu QR kodunu tarayın veya güvenlik kodunun tamamının aşağıdakiyle eşleştiğini onaylayın. Yeni cihazın kilidi açılana kadar ekranı açık tutun. İlk on dakikalık süre geçerli olmaya devam eder.';
+      'Bu QR kodunu yeni cihazla tarayın. Kilit açılana kadar bu ekranı açık tutun.';
 
   @override
   String get storageSecurityUpgrade => 'Güvenle yeniden bağlan';
@@ -4202,10 +4203,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get devicePairingScanInstruction =>
       'Güvendiğiniz cihazda onay isteğini açın ve bu kodu tarayın.';
-
-  @override
-  String get devicePairingCodeInstruction =>
-      'Bu kodun tamamını güvendiğiniz cihazdaki kodla karşılaştırın.';
 
   @override
   String get showQrCode => 'QR kodunu göster';
@@ -4311,4 +4308,52 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceAdded => 'Eklendi';
+
+  @override
+  String get accountDeletionInProgress =>
+      'Hesap silme işlemi başladı. Yardım için support@betterkeep.app ile iletişime geçin.';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      'Kısa süre önce bir kod istendi. E-postanızı kontrol edin veya yeni bir kod istemeden önce bir dakika bekleyin.';
+
+  @override
+  String get deviceCodeApprovalInstruction =>
+      'Bu kodu yeni cihazınızdaki kodla karşılaştırın. Yalnızca kodun tamamı eşleşiyorsa onaylayın.';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'Oturum açma işleminiz doğrulanamadı. Lütfen tekrar oturum açmayı deneyin.';
+
+  @override
+  String get accountDeletionPaused =>
+      'Hesap silme geçici olarak duraklatıldı. support@betterkeep.app ile iletişime geçin.';
+
+  @override
+  String get deviceUsePairingCode => 'Kod kullan';
+
+  @override
+  String get deviceEnterPairingCode => 'Eşleştirme kodunu gir';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'Güvenilir cihazınızda Eşleştirme kodunu gir seçeneğini seçin ve bu sekiz rakamı girin.';
+
+  @override
+  String get devicePairingCodeEntryInstruction =>
+      'Yeni cihazınızda gösterilen sekiz rakamı girin.';
+
+  @override
+  String get devicePairingCodeLabel => 'Eşleştirme kodu';
+
+  @override
+  String get devicePairingCodeExpired =>
+      'Bu kod artık kullanılamıyor. Yeni bir kod oluşturun.';
+
+  @override
+  String get devicePairingCodeFailed =>
+      'Yeni cihazınızdaki kodu kontrol edip tekrar deneyin. Süresi dolduysa yeni bir kod oluşturun.';
+
+  @override
+  String get devicePairingConnecting => 'Bağlanıyor…';
 }

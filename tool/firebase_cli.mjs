@@ -201,6 +201,14 @@ export async function runFirebaseCli(
 			command: nodeRuntime.bin,
 			args: [firebaseBin, ...options.firebaseArgs],
 			cwd: root,
+			// Keep terminal Ctrl+C from reaching Firebase both directly and via
+			// our wrappers. A second interrupt makes Firebase skip child cleanup.
+			// Remain attached to its exit promise so shutdown can finish normally.
+			detached:
+				platform !== "win32" &&
+				options.firebaseArgs.some((arg) =>
+					["emulators:start", "emulators:exec"].includes(arg),
+				),
 			env: childEnvironment,
 			signalHost,
 		});

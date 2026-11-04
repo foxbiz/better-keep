@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - Unreleased
+
+### Fixed
+
+- Device pairing can recover interrupted approval publication without accepting a server-supplied key. Code pairing prevents method changes during approval and offers retry after an abandoned handoff.
+- Account deletion durably revokes sessions before allowing cancellation or a new sign-in, with retry on service outages.
+- Admin deployment builds the configured artifact directory and verifies the published dashboard. Release checks now include pairing and both web storage modes.
+
 ### Added
 
 - Local-only Google Keep Takeout importer with metadata preservation, duplicate
@@ -20,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Lighthouse quality gates.
 
 ### Changed
+
+- Account deletion now requires an atomic OTP-backed request, protects deletion fields
+  from client writes, and cancels through verified sign-in paths. Device/E2EE records
+  remain intact throughout the grace period.
+- Automatic deletion defaults to disabled. Verified cleanup waits for Auth token expiry,
+  includes shared data, and preserves a retry claim on failure. Reminder deadlines use UTC.
+- Deletion safety tests now participate in the release gate; authentication/deletion OTP
+  failures provide actionable localized messages.
 
 - Flutter Web now lives under `/app/`; the indexable marketing site is served
   at `/`.

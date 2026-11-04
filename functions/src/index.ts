@@ -39,6 +39,7 @@ import resumeRazorpaySubscription from "./exports/resumeRazorpaySubscription";
 import retryAdminRevenueEvents from "./exports/retryAdminRevenueEvents";
 import revokeSharesOnNoteDelete from "./exports/revokeSharesOnNoteDelete";
 import scheduleAccountDeletion from "./exports/scheduleAccountDeletion";
+import sendDeletionCancellation from "./exports/sendDeletionCancellation";
 import sendDeletionOtp from "./exports/sendDeletionOtp";
 import sendDeletionReminders from "./exports/sendDeletionReminders";
 import sendEmailVerificationOtp from "./exports/sendEmailVerificationOtp";
@@ -60,6 +61,7 @@ import verifyPasswordResetOtp from "./exports/verifyPasswordResetOtp";
 import verifyPurchase from "./exports/verifyPurchase";
 import verifyRazorpaySubscription from "./exports/verifyRazorpaySubscription";
 
+export { default as revokeScheduledDeletionSessions } from "./exports/revokeScheduledDeletionSessions";
 export {
 	acquireStorageRefreshLease,
 	beginStorageClear,
@@ -126,6 +128,7 @@ export {
 	retryAdminRevenueEvents,
 	revokeSharesOnNoteDelete,
 	scheduleAccountDeletion,
+	sendDeletionCancellation,
 	sendDeletionOtp,
 	sendDeletionReminders,
 	sendEmailVerificationOtp,

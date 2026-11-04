@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/e2ee/crypto_primitives.dart';
 import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
+import 'package:better_keep/services/e2ee/device_pairing_code.dart';
 import 'package:better_keep/services/e2ee/device_verification.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -65,6 +67,32 @@ void main() {
     };
     manager.setCachedUMKForTesting(master);
   });
+  test(
+    'short-code mutual authentication reuses automatic QR key acceptance',
+    () async {
+      final host = PairingCodeHost(request);
+      final public = DeviceVerificationRequest.fromJson(request.toJson());
+      final client = PairingCodeClient(public, host.code, host.offer);
+      final verified = await client.finish(
+        (await host.answer(client.response))!,
+      );
+      expect(
+        backend.firestore.documents[path]!.containsKey('wrapped_umk'),
+        false,
+      );
+      final receipt = await manager.approveDevice(verified);
+      expect(receipt.hasPairingProof, true);
+      await local(recipient, 'device-a', pending: true);
+      expect(await manager.tryRetrieveUMK(), true);
+      expect(manager.getUMK(), master);
+      expect(
+        await manager.readServerAuthorization(),
+        DeviceAuthorization.approved,
+      );
+      expect(await storage.getAcceptedApproval(), receipt.fingerprint);
+    },
+  );
+
   test(
     'legacy server-selected sender cannot replace a lost cached master key',
     () async {
@@ -200,6 +228,129 @@ void main() {
     );
   });
 
+  Future<void> useCodeMode() async {
+    request = DeviceVerificationRequest.create(
+      account: request.account,
+      environment: request.environment,
+      deviceId: request.deviceId,
+      publicKey: recipient.publicKey,
+      codeApproval: true,
+    );
+    backend.firestore.documents[path]!['approval_request'] = request.toJson();
+  }
+
+  test(
+    'legacy code-mode receipt cannot auto-accept a server-chosen key',
+    () async {
+      await useCodeMode();
+      manager.setCachedUMKForTesting(Uint8List.fromList(List.filled(32, 99)));
+      final receipt = await manager.approveDevice(
+        request.confirmCode(request.securityCode),
+      );
+      expect(receipt.hasPairingProof, false);
+      expect(receipt.requiresReturnVerification, true);
+      await local(recipient, 'device-a', pending: true);
+      expect(await manager.tryRetrieveUMK(), false);
+      expect(await storage.getAcceptedApproval(), isNull);
+      expect(await storage.getCachedUMK(), isNull);
+      expect(manager.hasUMK.value, false);
+    },
+  );
+
+  test('changing method regenerates locally before publication and invalidates prior approval', () async {
+    final old = request;
+    await local(recipient, 'device-a', pending: true);
+    request = await manager.ensureVerificationRequest(codeApproval: true);
+    expect(request.codeApproval, true);
+    expect(request.requestId, isNot(old.requestId));
+    expect(
+      (await manager.localVerificationRequest())!.canonical,
+      request.canonical,
+    );
+    expect(
+      backend.firestore.documents[path]!['approval_request'],
+      request.toJson(),
+    );
+    await local(trusted, 'trusted');
+    manager.setCachedUMKForTesting(master);
+    await expectLater(
+      manager.approveDevice(old.confirmCode(old.securityCode)),
+      throwsStateError,
+    );
+    await local(recipient, 'device-a', pending: true);
+    final codeRequest = request;
+    request = await manager.ensureVerificationRequest(codeApproval: false);
+    expect(request.codeApproval, false);
+    expect(request.requestId, isNot(codeRequest.requestId));
+    expect(request.toJson().containsKey('approvalMode'), false);
+  });
+
+  test('comparison stream follows current requests and rejects stale or invalid data', () async {
+    final seen = <DeviceVerificationRequest?>[];
+    final errors = <Object>[];
+    final subscription = manager
+        .watchPendingVerificationRequest('device-a')
+        .listen(seen.add, onError: (Object error) => errors.add(error));
+    addTearDown(subscription.cancel);
+    final initial = Map<String, dynamic>.from(
+      backend.firestore.documents[path]!,
+    );
+    final next = DeviceVerificationRequest.create(
+      account: request.account,
+      environment: request.environment,
+      deviceId: request.deviceId,
+      publicKey: recipient.publicKey,
+      codeApproval: true,
+    );
+    final changed = {...initial, 'approval_request': next.toJson()};
+    backend.firestore.events.add(OfflineSnapshot(value: initial));
+    backend.firestore.events.add(OfflineSnapshot(value: changed));
+    backend.firestore.events.add(OfflineSnapshot(value: initial, cached: true));
+    backend.firestore.events.add(
+      OfflineSnapshot(value: initial, pending: true),
+    );
+    backend.firestore.events.add(
+      OfflineSnapshot(value: {...changed, 'status': 'revoked'}),
+    );
+    backend.firestore.events.add(
+      OfflineSnapshot(
+        value: {...changed, 'public_key': trusted.publicKeyBase64},
+      ),
+    );
+    backend.firestore.events.add(OfflineSnapshot());
+    await Future<void>.delayed(Duration.zero);
+    expect(seen.map((value) => value?.securityCode), [
+      request.securityCode,
+      next.securityCode,
+      null,
+      null,
+    ]);
+    expect(errors, hasLength(1));
+    manager.invalidateSession();
+    backend.firestore.events.add(OfflineSnapshot(value: changed));
+    await Future<void>.delayed(Duration.zero);
+    expect(seen, hasLength(4));
+    expect(errors, hasLength(2));
+  });
+
+  test('server cannot inject code mode or remove proof to auto-accept a QR request', () async {
+    final receipt = await manager.approveDevice(
+      request.verifyQr(request.qrData),
+    );
+    await local(recipient, 'device-a', pending: true);
+    final data = backend.firestore.documents[path]!;
+    data.remove('pairing_proof');
+    expect(await manager.tryRetrieveUMK(), false);
+    data['approval_request'] = {...request.toJson(), 'approvalMode': 'code'};
+    expect(await manager.tryRetrieveUMK(), false);
+    expect(await storage.getAcceptedApproval(), isNull);
+    expect(await storage.getCachedUMK(), isNull);
+    // The original proof still completes the unchanged local request.
+    data['approval_request'] = request.toJson();
+    data['pairing_proof'] = receipt.pairingProof;
+    expect(await manager.tryRetrieveUMK(), true);
+  });
+
   test('one scan authenticates and restores the key automatically without publishing the secret', () async {
     final pending = await manager.pendingVerificationRequest('device-a');
     expect(pending.hasPairingSecret, false);
@@ -262,6 +413,166 @@ void main() {
       );
       expect(await manager.tryRetrieveUMK(), false);
       expect(await storage.getAcceptedApproval(), null);
+    },
+  );
+
+  test(
+    'approval before mode change keeps the approved request and handoff',
+    () async {
+      await manager.approveDevice(request.verifyQr(request.qrData));
+      final approved = Map<String, dynamic>.from(
+        backend.firestore.documents[path]!,
+      );
+      await local(recipient, 'device-a', pending: true);
+      await expectLater(
+        manager.ensureVerificationRequest(codeApproval: true),
+        throwsStateError,
+      );
+      expect(backend.firestore.documents[path], approved);
+      expect(
+        (await manager.localVerificationRequest())!.canonical,
+        request.canonical,
+      );
+      expect(await manager.tryRetrieveUMK(), true);
+      expect(manager.getUMK(), master);
+    },
+  );
+
+  test('concurrent approval restores the previous local request when mode publication loses', () async {
+    await local(recipient, 'device-a', pending: true);
+    backend.firestore.commit = () async {
+      backend.firestore.commit = null;
+      backend.firestore.documents[path] = {
+        ...backend.firestore.documents[path]!,
+        'status': 'approved',
+      };
+    };
+    await expectLater(
+      manager.ensureVerificationRequest(codeApproval: true),
+      throwsStateError,
+    );
+    expect(backend.firestore.documents[path]!['status'], 'approved');
+    expect((await manager.localVerificationRequest())!.qrData, request.qrData);
+  });
+
+  test('uncertain publication restores only a locally held matching request and fingerprint', () async {
+    await local(recipient, 'device-a', pending: true);
+    await storage.storeAcceptedApproval('previous-fingerprint');
+    final candidate = DeviceVerificationRequest.create(
+      account: request.account,
+      environment: request.environment,
+      deviceId: request.deviceId,
+      publicKey: recipient.publicKey,
+    );
+    await storage.beginApprovalPublication(candidate.qrData);
+    expect(await storage.getAcceptedApproval(), isNull);
+    await manager.ensureVerificationRequest();
+    expect(await storage.getApprovalRequest(), request.qrData);
+    expect(await storage.getAcceptedApproval(), 'previous-fingerprint');
+
+    await storage.beginApprovalPublication(candidate.qrData);
+    backend.firestore.documents[path]!['approval_request'] = candidate.toJson();
+    expect(
+      (await manager.ensureVerificationRequest()).qrData,
+      candidate.qrData,
+    );
+    expect(await storage.getAcceptedApproval(), isNull);
+  });
+
+  test(
+    'publication reconciliation never adopts an unknown remote request',
+    () async {
+      await local(recipient, 'device-a', pending: true);
+      final candidate = DeviceVerificationRequest.create(
+        account: request.account,
+        environment: request.environment,
+        deviceId: request.deviceId,
+        publicKey: recipient.publicKey,
+      );
+      await storage.beginApprovalPublication(candidate.qrData);
+      final substituted = DeviceVerificationRequest.create(
+        account: request.account,
+        environment: request.environment,
+        deviceId: request.deviceId,
+        publicKey: recipient.publicKey,
+      );
+      backend.firestore.documents[path]!['approval_request'] = substituted
+          .toJson();
+      await expectLater(manager.ensureVerificationRequest(), throwsStateError);
+      expect(await storage.getApprovalRequest(), candidate.qrData);
+      expect(await storage.getAcceptedApproval(), isNull);
+      final fresh = await manager.ensureVerificationRequest(regenerate: true);
+      expect(fresh.canonical, isNot(candidate.canonical));
+      expect(fresh.canonical, isNot(substituted.canonical));
+      expect(
+        backend.firestore.documents[path]!['approval_request'],
+        fresh.toJson(),
+      );
+    },
+  );
+
+  test('session invalidation during journal write cannot replace the local request', () async {
+    await local(recipient, 'device-a', pending: true);
+    final delayed = _DelayedKeyWrite({
+      'e2ee_approval_request': request.qrData,
+      'e2ee_accepted_approval': 'accepted',
+    }, keyToDelay: 'e2ee_approval_publication');
+    FlutterSecureStoragePlatform.instance = delayed;
+    var current = true;
+    final writing = runCloudOperation(
+      () => current,
+      () => storage.beginApprovalPublication(request.qrData),
+    );
+    final rejected = expectLater(
+      writing,
+      throwsA(isA<CloudOperationCancelled>()),
+    );
+    await delayed.started.future;
+    current = false;
+    delayed.release.complete();
+    await rejected;
+    expect(await storage.getApprovalRequest(), request.qrData);
+    expect(await storage.getAcceptedApproval(), 'accepted');
+    await storage.clearApprovalRequest();
+    await storage.reconcileApprovalPublication(request);
+    expect(await storage.getApprovalRequest(), null);
+    expect(await storage.getAcceptedApproval(), null);
+  });
+
+  test('a lost commit reply retains the committed local secret', () async {
+    await local(recipient, 'device-a', pending: true);
+    backend.firestore.commit = () async {
+      backend.firestore.commit = null;
+      final committed = DeviceVerificationRequest.fromLocalData(
+        (await storage.getApprovalRequest())!,
+      );
+      backend.firestore.documents[path]!['approval_request'] = committed
+          .toJson();
+      throw StateError('Synthetic lost commit acknowledgement');
+    };
+    await expectLater(
+      manager.ensureVerificationRequest(regenerate: true),
+      throwsStateError,
+    );
+    final restored = await manager.ensureVerificationRequest();
+    expect(restored.canonical, isNot(request.canonical));
+    expect(restored.hasPairingSecret, true);
+    expect(
+      backend.firestore.documents[path]!['approval_request'],
+      restored.toJson(),
+    );
+  });
+
+  test(
+    'an uncommitted first publication can restore an absent request',
+    () async {
+      await storage.clearApprovalRequest();
+      await storage.beginApprovalPublication(request.qrData);
+      await storage.reconcileApprovalPublication(null);
+      expect(await storage.getApprovalRequest(), null);
+      await storage.beginApprovalPublication(request.qrData);
+      await storage.reconcileApprovalPublication(request);
+      expect(await storage.getApprovalRequest(), request.qrData);
     },
   );
 
@@ -371,25 +682,31 @@ void main() {
         final invalidating = cancel
             ? manager.cancelApprovalRequest()
             : manager.ensureVerificationRequest(regenerate: true);
+        final invalidated = cancel
+            ? invalidating
+            : expectLater(invalidating, throwsStateError);
         await Future<void>.delayed(Duration.zero);
         delayed.release.complete();
         expect(await checking, isNot(DeviceAuthorization.approved));
-        await invalidating;
-        expect(await storage.getAcceptedApproval(), null);
+        await invalidated;
+        if (cancel) expect(await storage.getAcceptedApproval(), null);
         expect(await storage.getCachedUMK(), null);
         final current = await manager.localVerificationRequest();
-        expect(current?.requestId, isNot(request.requestId));
+        expect(current?.requestId, cancel ? null : request.requestId);
         expect(manager.hasUMK.value, false);
       },
     );
   }
-  for (final automatic in [false, true]) {
+  for (final method in ['manual', 'QR']) {
     for (final cancel in [false, true]) {
       test(
-        '${automatic ? 'QR' : 'manual'} ${cancel ? 'cancellation' : 'regeneration'} fences an accepted handoff whose key-cache write is still in flight',
+        '$method ${cancel ? 'cancellation' : 'regeneration'} fences an accepted handoff whose key-cache write is still in flight',
         () async {
+          if (method == 'code') await useCodeMode();
           final receipt = await manager.approveDevice(
-            request.verifyQr(request.qrData),
+            method == 'code'
+                ? request.confirmCode(request.securityCode)
+                : request.verifyQr(request.qrData),
           );
           await local(recipient, 'device-a', pending: true);
           final delayed = _DelayedKeyWrite({
@@ -400,7 +717,7 @@ void main() {
             'e2ee_device_status': 'pending',
           });
           FlutterSecureStoragePlatform.instance = delayed;
-          final accepting = automatic
+          final accepting = method != 'manual'
               ? manager.init()
               : manager.acceptVerifiedApproval(
                   receipt.verifyQr(receipt.qrData),
@@ -413,26 +730,34 @@ void main() {
           final invalidating = cancel
               ? manager.cancelApprovalRequest()
               : manager.ensureVerificationRequest(regenerate: true);
+          final invalidated = cancel
+              ? invalidating
+              : expectLater(invalidating, throwsStateError);
           // Drain ready microtasks: regeneration reaches the serialized key store
           // while the old native write is deliberately held by this fixture.
           await Future<void>.delayed(Duration.zero);
           delayed.release.complete();
           await rejected;
-          await invalidating;
+          await invalidated;
           final fresh = await manager.localVerificationRequest();
           if (cancel) {
             expect(fresh, null);
             expect(await storage.hasDeviceKeys(), false);
           } else {
-            expect(fresh!.requestId, isNot(request.requestId));
+            expect(fresh!.requestId, request.requestId);
           }
           expect(manager.hasUMK.value, false);
-          expect(await storage.getCachedUMK(), null);
-          expect(await storage.getAcceptedApproval(), null);
+          if (cancel) {
+            expect(await storage.getCachedUMK(), null);
+            expect(await storage.getAcceptedApproval(), null);
+          } else {
+            expect(await manager.tryRetrieveUMK(), true);
+            expect(manager.getUMK(), master);
+          }
           if (cancel) {
             expect(backend.firestore.documents.containsKey(path), false);
           } else {
-            expect(backend.firestore.documents[path]!['status'], 'pending');
+            expect(backend.firestore.documents[path]!['status'], 'approved');
           }
         },
       );

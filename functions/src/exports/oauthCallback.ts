@@ -1,6 +1,7 @@
 import type * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { cancelDeletion } from "../accountDeletionLifecycle";
 import { consumeAccountLinkSession } from "../accountLinkSession";
 import {
 	auth,
@@ -657,6 +658,8 @@ export default onRequest(
 					),
 				);
 			}
+
+			await cancelDeletion(db, firebaseUser.uid, "oauthCallback");
 
 			let popupPayload: Record<string, unknown>;
 			let mobileQuery: URLSearchParams;

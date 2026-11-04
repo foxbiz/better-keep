@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:better_keep/components/device_verification.dart';
 import 'package:better_keep/services/e2ee/device_verification.dart';
+import 'package:better_keep/services/e2ee/device_pairing_channel.dart';
 
 import 'package:better_keep/components/auth_scaffold.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
@@ -30,6 +31,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
   final RecoveryKeyService _recoveryKeyService = RecoveryKeyService.instance;
   Timer? _refreshTimer;
   DeviceVerificationRequest? _verification;
+  PendingPairingCode? _codePairing;
   DeviceApprovalReceipt? _receipt;
   bool _verifyingReceipt = false;
   bool _refreshing = false;
@@ -57,14 +59,53 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
 
   @override
   void dispose() {
+    _codePairing?.dispose();
     _refreshTimer?.cancel();
     _deviceManager.hasUMK.removeListener(_onUMKChanged);
     _deviceManager.wasRevoked.removeListener(_onRevokedChanged);
     super.dispose();
   }
 
+  bool get _pairingBusy =>
+      _codePairing?.handoffInProgress == true ||
+      _receipt != null ||
+      _verifyingReceipt;
+
+  Future<void> _startPairingCode() async {
+    if (_loadingVerification || _pairingBusy) return;
+    setState(() {
+      _loadingVerification = true;
+      _verificationFailed = false;
+    });
+    _codePairing?.dispose();
+    _codePairing = null;
+    try {
+      final session = await _deviceManager.startPairingCode();
+      if (!mounted) {
+        session.dispose();
+        return;
+      }
+      setState(() {
+        _codePairing = session;
+        _verification = session.request;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _verificationFailed = true);
+    } finally {
+      if (mounted) setState(() => _loadingVerification = false);
+    }
+  }
+
+  Future<void> _showQr() async {
+    if (_loadingVerification || _pairingBusy) return;
+    _codePairing?.dispose();
+    _codePairing = null;
+    await _loadVerification(regenerate: true);
+  }
+
   Future<void> _loadVerification({bool regenerate = false}) async {
     if (_loadingVerification ||
+        (regenerate && _pairingBusy) ||
         _e2eeService.status.value == E2EEStatus.revoked) {
       return;
     }
@@ -77,16 +118,24 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
         regenerate: regenerate,
       );
       final receipt = await _deviceManager.pendingApprovalReceipt();
-      if (receipt?.hasPairingProof == true) {
+      if (receipt?.requiresReturnVerification == false) {
         await _e2eeService.refreshStatus();
         if (!_deviceManager.hasUMK.value) {
           throw StateError('Device pairing could not be authenticated');
         }
       }
       if (mounted) {
+        if (regenerate ||
+            receipt != null ||
+            _codePairing?.request.canonical != request.canonical) {
+          _codePairing?.dispose();
+          _codePairing = null;
+        }
         setState(() {
           _verification = request;
-          _receipt = receipt?.hasPairingProof == true ? null : receipt;
+          _receipt = receipt?.requiresReturnVerification == false
+              ? null
+              : receipt;
         });
       }
     } catch (_) {
@@ -153,9 +202,12 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
       final receipt = await _deviceManager.pendingApprovalReceipt();
       if (mounted) {
         setState(() {
-          _receipt = receipt?.hasPairingProof == true ? null : receipt;
+          _receipt = receipt?.requiresReturnVerification == false
+              ? null
+              : receipt;
           _verificationFailed =
-              receipt?.hasPairingProof == true && !_deviceManager.hasUMK.value;
+              receipt?.requiresReturnVerification == false &&
+              !_deviceManager.hasUMK.value;
         });
       }
     } catch (_) {
@@ -308,7 +360,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                 ListTile(
                   leading: const Icon(Icons.qr_code_2),
                   title: Text(context.l10n.newVerificationCode),
-                  enabled: !_loadingVerification && !_verifyingReceipt,
+                  enabled: !_loadingVerification && !_pairingBusy,
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _loadVerification(regenerate: true);
@@ -402,17 +454,22 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                 receipt: _receipt!,
                 onVerify: _verifyReceipt,
               )
-            : _verification != null && !_verificationFailed
-            ? DeviceVerificationCard(
-                request: _verification!,
-                onRegenerate: _loadingVerification
-                    ? null
-                    : () => _loadVerification(regenerate: true),
-              )
             : _loadingVerification
             ? const Padding(
                 padding: EdgeInsets.all(24),
                 child: CircularProgressIndicator(),
+              )
+            : _verification != null && !_verificationFailed
+            ? DeviceVerificationCard(
+                request: _verification!,
+                codeSession: _codePairing,
+                onUseCode: _loadingVerification ? null : _startPairingCode,
+                onShowQr: _loadingVerification ? null : _showQr,
+                onRegenerate: _loadingVerification
+                    ? null
+                    : _codePairing != null
+                    ? _startPairingCode
+                    : () => _loadVerification(regenerate: true),
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,

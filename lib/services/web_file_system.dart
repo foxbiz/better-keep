@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'file_system_base.dart';
+import 'web_release.dart';
 
 class WebFileSystem implements FileSystem {
   WebFileSystem._(this._backend);
@@ -90,8 +91,13 @@ class WebFileSystem implements FileSystem {
   Future<bool> isFile(String path) => _backend.isFile(path);
 
   @override
-  Future<List<String>> list([String directory = '/']) =>
-      _backend.list(directory);
+  Future<List<String>> list([String directory = '/']) async {
+    final prefix = '/${_segments(directory).join('/')}';
+    final entries = await _backend.list(prefix);
+    return entries
+        .map((name) => prefix == '/' ? '/$name' : '$prefix/$name')
+        .toList();
+  }
 
   @override
   Future<String> copy(String sourcePath, String targetPath) async {
@@ -176,7 +182,7 @@ class WebFileSystem implements FileSystem {
 
     List<String> entries;
     try {
-      entries = await list(directory);
+      entries = await _backend.list(directory);
     } catch (e) {
       result.add({
         'path': directory,
@@ -228,7 +234,7 @@ class WebFileSystem implements FileSystem {
       } else {
         // Try as directory
         try {
-          final subEntries = await list(fullPath);
+          final subEntries = await _backend.list(fullPath);
           result.add({
             'path': fullPath,
             'type': 'directory',
@@ -297,7 +303,9 @@ class WebFileSystem implements FileSystem {
       return backend;
     }
 
-    final backend = _IndexedDbBackend(dbName: 'better_keep_fs');
+    final backend = _IndexedDbBackend(
+      dbName: '${webStoragePrefix}better_keep_fs',
+    );
     await backend.init().timeout(
       const Duration(seconds: 5),
       onTimeout: () => throw TimeoutException('IndexedDB init timed out'),
@@ -336,6 +344,14 @@ class _OpfsBackend implements _FileSystemBackend {
   Future<void> init() async {
     final storage = js_util.getProperty(html.window.navigator, 'storage');
     _root = await _promise(js_util.callMethod(storage, 'getDirectory', []));
+    if (isBetaWebBuild) {
+      _root = await _promise(
+        js_util.callMethod(_root, 'getDirectoryHandle', [
+          'better_keep_beta',
+          js_util.jsify({'create': true}),
+        ]),
+      );
+    }
 
     // Test that createWritable is actually available (Safari doesn't support it)
     await _testCreateWritable();
@@ -468,7 +484,7 @@ class _OpfsBackend implements _FileSystemBackend {
   @override
   Future<List<String>> list(String directory) async {
     final segments = _segments(directory);
-    final dirHandle = await _resolveDirectory(segments, create: false) ?? _root;
+    final dirHandle = await _resolveDirectory(segments, create: false);
     if (dirHandle == null) return const [];
 
     final iterator = js_util.callMethod(dirHandle, 'entries', []);
