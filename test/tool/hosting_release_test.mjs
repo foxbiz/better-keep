@@ -351,7 +351,13 @@ test("publishing is Hosting-only and fails closed on artifact changes, upload fa
 test("complete snapshots retain live configuration and reject drift or hash mismatches", async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), "hosting-snapshot-"));
 	try {
-		const data = { "/app/index.html": "app", "/index.html": "website" };
+		const data = {
+			"/app/index.html": "app",
+			"/index.html": "website",
+			"/__assets/icon.svg": "ordinary site asset",
+			"/__/firebase/init.js": "listed script",
+			"/__/firebase/init.json": "listed config",
+		};
 		for (const mode of ["success", "drift", "mismatch"]) {
 			let calls = 0;
 			const directory = path.join(root, mode);
@@ -367,15 +373,22 @@ test("complete snapshots retain live configuration and reject drift or hash mism
 							hash: hostingHash(data),
 						})),
 				},
-				fetchFile: async (url) =>
-					new Response(mode === "mismatch" ? "wrong" : data[url.pathname]),
+				fetchFile: async (url) => {
+					assert.ok(!url.pathname.startsWith("/__/"));
+					return new Response(
+						mode === "mismatch" ? "wrong" : data[url.pathname],
+					);
+				},
 			};
 			if (mode === "success") {
 				await snapshotHosting(directory, options);
 				const manifest = await readJson(path.join(directory, "snapshot.json"));
 				assert.equal(manifest.completeSite, true);
 				assert.deepEqual(manifest.config, config);
-				assert.equal(manifest.files.length, 2);
+				assert.deepEqual(
+					manifest.files.map((f) => f.path).sort(),
+					["/__assets/icon.svg", "/app/index.html", "/index.html"],
+				);
 			} else {
 				await assert.rejects(
 					snapshotHosting(directory, options),

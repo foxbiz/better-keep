@@ -66,8 +66,10 @@ export async function snapshotHosting(
 ) {
 	api ??= await connectHosting();
 	const live = await api.live();
+	// Firebase serves /__/ dynamically, even when a version lists those paths.
 	const files = (await api.files(live.name)).filter(
-		(f) => !appOnly || f.path.startsWith("/app/"),
+		(f) =>
+			!f.path.startsWith("/__/") && (!appOnly || f.path.startsWith("/app/")),
 	);
 	if (!files.some((f) => f.path === "/app/index.html"))
 		throw new Error("Live app index missing");
