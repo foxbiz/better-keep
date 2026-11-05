@@ -110,6 +110,18 @@ const suites = {
 			"test/tool/firebase_apple_config_policy_test.mjs",
 		]),
 	]),
+	"firebase-emulator-auth-recovery": defineSuite(
+		"Run signup, account switching and recovery on an iOS or Android emulator.",
+		(extraArgs) => [
+			processStep("flutter", [
+				"test",
+				"integration_test/auth_recovery_emulator_test.dart",
+				"--dart-define-from-file=.env",
+				...extraArgs,
+			]),
+		],
+		{ acceptsArguments: true },
+	),
 	"firebase-emulator-android": defineSuite(
 		"Run the physical Android download smoke test.",
 		(extraArgs) => [

@@ -2373,6 +2373,22 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get useOriginalSignInMethod =>
+      'Masuk dengan metode yang Anda gunakan sebelumnya, lalu tautkan penyedia baru di pengaturan akun.';
+
+  @override
+  String get localAccountMismatch =>
+      'Perangkat ini menyimpan catatan dari akun lain. Masuk dengan akun yang menyimpannya.';
+
+  @override
+  String get recoveryCheckUnavailable =>
+      'Opsi pemulihan tidak dapat diperiksa. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get signInToExistingAccount =>
+      'Akun dengan email ini sudah ada. Masuk untuk melanjutkan.';
+
+  @override
   String get emailAlreadyInUse =>
       'Akun dengan email ini sudah ada. Masuk dengan akun tersebut terlebih dahulu, lalu tautkan dari sana.';
 
@@ -3323,15 +3339,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'Tidak ada perangkat aktif yang ditemukan. Gunakan frasa sandi pemulihan Anda untuk memulihkan akses ke catatan terenkripsi Anda.';
+      'Gunakan frasa sandi pemulihan untuk membuka catatan terenkripsi Anda di perangkat ini.';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'Tidak ada perangkat aktif yang ditemukan dan tidak ada kunci pemulihan yang diatur. Anda dapat memulai dari awal dengan akun baru, tetapi catatan sebelumnya tidak dapat dipulihkan.';
+      'Akun ini tidak memiliki frasa sandi pemulihan. Anda dapat meminta persetujuan dari perangkat tepercaya.';
 
   @override
   String get previousNotesEncryptedWarning =>
-      'Catatan sebelumnya Anda dienkripsi dan tidak dapat dipulihkan tanpa kunci pemulihan.';
+      'Memulai dari awal membuat catatan terenkripsi sebelumnya tidak dapat diakses.';
 
   @override
   String get notYourMainDevice => 'Bukan perangkat utama Anda?';

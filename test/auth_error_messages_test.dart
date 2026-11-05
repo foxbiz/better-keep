@@ -6,6 +6,25 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 void main() {
+  test('Firebase signup, OAuth collision and malformed email have distinct guidance', () {
+    for (final (provider, code, kind) in [
+      ('password', 'email-already-in-use', AuthFailureKind.accountExists),
+      (
+        'google',
+        'account-exists-with-different-credential',
+        AuthFailureKind.differentSignInMethod,
+      ),
+      ('password', 'invalid-email', AuthFailureKind.invalidEmail),
+    ]) {
+      expect(
+        resolveSignInFailure(
+          provider: provider,
+          error: FirebaseAuthException(code: code),
+        ),
+        kind,
+      );
+    }
+  });
   test(
     'Auth wrapping preserves the deletion marker and paused callable reason',
     () {

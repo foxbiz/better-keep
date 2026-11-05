@@ -2375,6 +2375,22 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get useOriginalSignInMethod =>
+      'Entre com o método usado anteriormente e vincule o novo provedor nas configurações da conta.';
+
+  @override
+  String get localAccountMismatch =>
+      'Este dispositivo contém notas de outra conta. Entre com a conta que as salvou.';
+
+  @override
+  String get recoveryCheckUnavailable =>
+      'Não foi possível verificar as opções de recuperação. Verifique sua conexão e tente novamente.';
+
+  @override
+  String get signInToExistingAccount =>
+      'Já existe uma conta com este e-mail. Faça login para continuar.';
+
+  @override
   String get emailAlreadyInUse =>
       'Uma conta com este e-mail já existe. Faça login com essa conta primeiro e depois vincule a partir de lá.';
 
@@ -3351,15 +3367,15 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'Nenhum dispositivo ativo encontrado. Use sua frase-senha de recuperação para restaurar o acesso às suas notas criptografadas.';
+      'Use sua frase-senha de recuperação para abrir suas notas criptografadas neste dispositivo.';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'Nenhum dispositivo ativo encontrado e nenhuma chave de recuperação está configurada. Você pode começar do zero com uma nova conta, mas suas notas anteriores não podem ser recuperadas.';
+      'Esta conta não tem uma frase-senha de recuperação. Você pode pedir aprovação em um dispositivo confiável.';
 
   @override
   String get previousNotesEncryptedWarning =>
-      'Suas notas anteriores estão criptografadas e não podem ser recuperadas sem uma chave de recuperação.';
+      'Ao começar do zero, você perde o acesso às notas criptografadas anteriores.';
 
   @override
   String get notYourMainDevice => 'Não é seu dispositivo principal?';

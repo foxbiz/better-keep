@@ -68,14 +68,13 @@ export async function finalizeBetaBuild(
 	if (start < 0 || source.indexOf(marker) !== start)
 		throw new Error("Unrecognized Flutter bootstrap; refusing to patch");
 	// Every runtime asset comes from the same immutable release. No beta service worker.
-	const config = {
-		entrypointBaseUrl: base,
-		assetBase: base,
-		canvasKitBaseUrl: `${base}canvaskit/`,
-	};
+	// package_info_plus resolves version.json from assetBase and requires an origin.
+	// Resolve at load time so the same artifact works on a preview or custom domain.
+	const loader = `const base = new URL(${JSON.stringify(base)}, document.baseURI).href;
+_flutter.loader.load({config: {entrypointBaseUrl: base, assetBase: base, canvasKitBaseUrl: base + "canvaskit/"}});`;
 	await writeFile(
 		bootstrapFile,
-		`${source.slice(0, start)}\n_flutter.loader.load({config: ${JSON.stringify(config)}});\n`,
+		`${source.slice(0, start)}\n{\n${loader}\n}\n`,
 	);
 	const manifestFile = path.join(directory, "manifest.json");
 	const manifest = JSON.parse(await readFile(manifestFile, "utf8"));

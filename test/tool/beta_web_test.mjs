@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,31 @@ import {
 	finalizeBetaBuild,
 	buildBetaRelease,
 } from "../../tool/beta_web.mjs";
+
+function assertLoaderPaths(bootstrap, basePath) {
+	let configAtLoad;
+	const context = {
+		URL,
+		document: { baseURI: "https://preview.example/app/" },
+		_flutter: {
+			loader: {
+				load({ config }) {
+					configAtLoad = config;
+				},
+			},
+		},
+	};
+	context.window = context;
+	runInNewContext(bootstrap, context);
+	const expected = new URL(basePath, context.document.baseURI).href;
+	assert.equal(configAtLoad.assetBase, expected);
+	assert.equal(configAtLoad.entrypointBaseUrl, expected);
+	assert.equal(configAtLoad.canvasKitBaseUrl, expected + "canvaskit/");
+	assert.equal(
+		new URL("version.json", configAtLoad.assetBase).href,
+		expected + "version.json",
+	);
+}
 
 test("staging preserves deployed bytes and refuses modified baselines or unsafe builds", async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), "beta-stage-"));
@@ -40,7 +66,7 @@ test("staging preserves deployed bytes and refuses modified baselines or unsafe 
 		);
 		await writeFile(
 			path.join(beta, "flutter_bootstrap.js"),
-			"window._flutter = {};\n_flutter.loader.load({serviceWorkerSettings:{}});",
+			"window._flutter = window._flutter || {};\n_flutter.loader.load({serviceWorkerSettings:{}});",
 		);
 		await writeFile(path.join(beta, "manifest.json"), "{}");
 		await finalizeBetaBuild(beta, "beta-test");
@@ -48,7 +74,7 @@ test("staging preserves deployed bytes and refuses modified baselines or unsafe 
 			path.join(beta, "flutter_bootstrap.js"),
 			"utf8",
 		);
-		assert.ok(bootstrap.includes('"assetBase":"/app/releases/beta-test/"'));
+		assertLoaderPaths(bootstrap, "/app/releases/beta-test/");
 		assert.ok(!bootstrap.includes("serviceWorkerSettings"));
 		const output = path.join(root, "output");
 		const report = await stageBeta({ snapshot, beta, output });
@@ -119,7 +145,7 @@ test("paired build uses distinct compile-time storage modes and compiles both wo
 				await mkdir(output, { recursive: true });
 				await writeFile(
 					path.join(output, "flutter_bootstrap.js"),
-					"window._flutter={};\n_flutter.loader.load({});",
+					"window._flutter=window._flutter || {};\n_flutter.loader.load({});",
 				);
 				await writeFile(path.join(output, "manifest.json"), "{}");
 			},
@@ -133,6 +159,16 @@ test("paired build uses distinct compile-time storage modes and compiles both wo
 		const stable = JSON.parse(
 			await readFile(path.join(root, "stable/beta-build.json")),
 		);
+		for (const [directory, basePath] of [
+			[root, "/app/releases/pair-test/"],
+			[path.join(root, "stable"), "/app/releases/pair-test/stable/"],
+		]) {
+			const bootstrap = await readFile(
+				path.join(directory, "flutter_bootstrap.js"),
+				"utf8",
+			);
+			assertLoaderPaths(bootstrap, basePath);
+		}
 		assert.equal(beta.storage, "isolated-v1");
 		assert.equal(stable.storage, "stable-v1");
 		assert.equal(beta.stableBase, stable.base);

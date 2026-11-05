@@ -2351,6 +2351,22 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get useOriginalSignInMethod =>
+      'Sign in with the method you used before, then link the new provider in your account settings.';
+
+  @override
+  String get localAccountMismatch =>
+      'This device has notes from a different account. Sign in with the account that saved them.';
+
+  @override
+  String get recoveryCheckUnavailable =>
+      'Couldn’t check your recovery options. Check your connection and try again.';
+
+  @override
+  String get signInToExistingAccount =>
+      'An account with this email already exists. Sign in to continue.';
+
+  @override
   String get emailAlreadyInUse =>
       'An account with this email already exists. Sign in with that account first, then link from there.';
 
@@ -3317,15 +3333,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'No active devices found. Use your recovery passphrase to restore access to your encrypted notes.';
+      'Use your recovery passphrase to open your encrypted notes on this device.';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'No active devices found and no recovery key is set up. You can start fresh with a new account, but your previous notes cannot be recovered.';
+      'This account has no recovery passphrase. You can request approval from a trusted device.';
 
   @override
   String get previousNotesEncryptedWarning =>
-      'Your previous notes are encrypted and cannot be recovered without a recovery key.';
+      'Starting fresh makes your previously encrypted notes inaccessible.';
 
   @override
   String get notYourMainDevice => 'Not your main device?';

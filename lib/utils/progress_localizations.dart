@@ -15,7 +15,9 @@ extension AuthProgressLocalizations on AuthProgress {
 
 extension AuthFailureLocalizations on AuthFailureKind {
   String localized(AppLocalizations l10n) => switch (this) {
-    AuthFailureKind.accountExists => l10n.emailAlreadyInUse,
+    AuthFailureKind.accountExists => l10n.signInToExistingAccount,
+    AuthFailureKind.differentSignInMethod => l10n.useOriginalSignInMethod,
+    AuthFailureKind.invalidEmail => l10n.pleaseEnterAValidEmail,
     AuthFailureKind.accountNotFound => l10n.accountNotFound,
     AuthFailureKind.invalidCredentials => l10n.invalidCredentials,
     AuthFailureKind.providerVerification =>

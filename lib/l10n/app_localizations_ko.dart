@@ -2285,6 +2285,21 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get useOriginalSignInMethod =>
+      '이전에 사용한 방법으로 로그인한 다음 계정 설정에서 새 로그인 방법을 연결하세요.';
+
+  @override
+  String get localAccountMismatch =>
+      '이 기기에 다른 계정의 노트가 있습니다. 노트를 저장한 계정으로 로그인하세요.';
+
+  @override
+  String get recoveryCheckUnavailable =>
+      '복구 옵션을 확인할 수 없습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String get signInToExistingAccount => '이 이메일 주소로 등록된 계정이 있습니다. 로그인하여 계속하세요.';
+
+  @override
   String get emailAlreadyInUse =>
       '이 이메일로 계정이 이미 존재합니다. 해당 계정으로 먼저 로그인한 후 연결하세요.';
 
@@ -3210,15 +3225,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      '활성 기기가 없습니다. 복구 암호 문구를 사용하여 암호화된 노트에 대한 접근을 복원하세요.';
+      '이 기기에서 암호화된 노트를 열려면 복구 암호 문구를 입력하세요.';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      '활성 기기가 없고 복구 키가 설정되지 않았습니다. 새 계정으로 시작할 수 있지만 이전 노트는 복구할 수 없습니다.';
+      '이 계정에는 복구 암호 문구가 없습니다. 신뢰하는 기기에 승인을 요청할 수 있습니다.';
 
   @override
   String get previousNotesEncryptedWarning =>
-      '이전 노트는 암호화되어 있으며 복구 키 없이는 복구할 수 없습니다.';
+      '새로 시작하면 이전에 암호화된 노트에 접근할 수 없게 됩니다.';
 
   @override
   String get notYourMainDevice => '주 기기가 아닌가요?';

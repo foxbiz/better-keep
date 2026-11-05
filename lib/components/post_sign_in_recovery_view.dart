@@ -4,43 +4,18 @@ import 'package:flutter/material.dart';
 class PostSignInRecoveryView extends StatelessWidget {
   const PostSignInRecoveryView({
     required this.onRetry,
-    required this.onContinueOffline,
+    this.onContinueOffline,
     required this.onSignOut,
     this.message,
-    this.canContinueOffline = true,
     this.canRetry = true,
     super.key,
   });
 
   final Future<void> Function() onRetry;
-  final Future<void> Function() onContinueOffline;
+  final Future<void> Function()? onContinueOffline;
   final Future<void> Function() onSignOut;
   final String? message;
-  final bool canContinueOffline;
   final bool canRetry;
-
-  Future<void> _confirmSignOut(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.logout, color: Colors.orange, size: 32),
-        title: Text(context.l10n.signOut),
-        content: Text(context.l10n.signOutConfirmation),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text(context.l10n.signOut),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) await onSignOut();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,12 +50,12 @@ class PostSignInRecoveryView extends StatelessWidget {
           ),
         const SizedBox(height: 16),
         TextButton.icon(
-          onPressed: () => _confirmSignOut(context),
+          onPressed: onSignOut,
           icon: const Icon(Icons.logout),
           label: Text(context.l10n.signOut),
         ),
         const SizedBox(height: 8),
-        if (canContinueOffline)
+        if (onContinueOffline != null)
           TextButton(
             onPressed: onContinueOffline,
             child: Text(context.l10n.continueOffline),

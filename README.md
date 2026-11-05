@@ -254,6 +254,15 @@ npm test firebase-emulator-android -- -d <device-id>
 npm test firebase-environment-android -- -d <device-id>
 ```
 
+Use a fresh iOS simulator or Android emulator and disposable local Firebase
+emulators to test account switching and recovery. The test creates synthetic
+accounts, saves a local-only note, removes the QA device’s cached key, and
+checks that passphrase recovery restores access to the same note.
+
+```bash
+npm test firebase-emulator-auth-recovery -- -d <simulator-or-emulator-id>
+```
+
 ### Building the app
 
 Build release versions for distribution:

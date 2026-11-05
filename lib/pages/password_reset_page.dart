@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_keep/components/otp_input_field.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/utils/email_address.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
@@ -66,12 +67,6 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
   String get _password => _passwordController.text;
   String get _confirmPassword => _confirmPasswordController.text;
 
-  /// Validate email format
-  bool _isValidEmail(String email) {
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    return emailRegex.hasMatch(email);
-  }
-
   /// Check password strength and return warning message if weak
   String? _getPasswordWarning() {
     if (_password.isEmpty) return null;
@@ -98,7 +93,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       return;
     }
 
-    if (!_isValidEmail(_email)) {
+    if (!isValidEmailAddress(_email)) {
       setState(() {
         _errorMessage = context.l10n.pleaseEnterValidEmail;
       });

@@ -2249,6 +2249,10 @@
 		}
 	},
 
+	"useOriginalSignInMethod": "Daha önce kullandığınız yöntemle giriş yapın, ardından hesap ayarlarından yeni sağlayıcıyı bağlayın.",
+	"localAccountMismatch": "Bu cihazda başka bir hesaba ait notlar var. Notları kaydeden hesapla giriş yapın.",
+	"recoveryCheckUnavailable": "Kurtarma seçenekleri kontrol edilemedi. Bağlantınızı kontrol edip tekrar deneyin.",
+	"signInToExistingAccount": "Bu e-postaya sahip bir hesap zaten var. Devam etmek için giriş yapın.",
 	"emailAlreadyInUse": "Bu e-postaya sahip bir hesap zaten var. Önce o hesapla giriş yapın, ardından oradan bağlantı kurun.",
 	"@emailAlreadyInUse": { "description": "Email already in use error" },
 
@@ -3341,17 +3345,17 @@
 		"description": "Account recovery required heading"
 	},
 
-	"noActiveDevicesRecoveryKey": "Aktif cihaz bulunamadı. Şifrelenmiş notlarınıza erişimi geri yüklemek için kurtarma ifadenizi kullanın.",
+	"noActiveDevicesRecoveryKey": "Bu cihazda şifrelenmiş notlarınızı açmak için kurtarma ifadenizi kullanın.",
 	"@noActiveDevicesRecoveryKey": {
 		"description": "No active devices with recovery key message"
 	},
 
-	"noActiveDevicesNoRecoveryKey": "Aktif cihaz bulunamadı ve Kurtarma Anahtarı ayarlanmamış. Yeni bir hesapla baştan başlayabilirsiniz, ancak önceki notlarınız kurtarılamaz.",
+	"noActiveDevicesNoRecoveryKey": "Bu hesapta kurtarma ifadesi yok. Güvenilir bir cihazdan onay isteyebilirsiniz.",
 	"@noActiveDevicesNoRecoveryKey": {
 		"description": "No active devices without recovery key message"
 	},
 
-	"previousNotesEncryptedWarning": "Önceki notlarınız şifrelenmiştir ve Kurtarma Anahtarı olmadan kurtarılamaz.",
+	"previousNotesEncryptedWarning": "Baştan başlarsanız önceki şifrelenmiş notlarınıza erişemezsiniz.",
 	"@previousNotesEncryptedWarning": {
 		"description": "Previous notes encrypted warning message"
 	},

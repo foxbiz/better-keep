@@ -163,6 +163,7 @@ class E2EEService {
         case LocalEncryptionState.corrupt:
         case LocalEncryptionState.unavailable:
           status.value = E2EEStatus.error;
+        case LocalEncryptionState.approvedKeyMissing:
         case LocalEncryptionState.missing:
         case LocalEncryptionState.stale:
           break;
@@ -396,7 +397,7 @@ class E2EEService {
               if (!isAvailable) await _deviceManager.init(isCurrent: current);
               if (!current()) return DeviceAuthorization.unavailable;
               if (!isAvailable) {
-                localState = LocalEncryptionState.missing;
+                localState = LocalEncryptionState.approvedKeyMissing;
                 status.value = E2EEStatus.error;
                 throw const FormatException(
                   'Approved device has no usable master key',
@@ -514,6 +515,7 @@ class E2EEService {
   /// Call this on sign-out to allow re-initialization for a new user.
   void resetInitialization() {
     _sessionGeneration++;
+    localState = LocalEncryptionState.missing;
     status.value = E2EEStatus.notInitialized;
     _initializationGate.reset();
     AppLogger.log('E2EE: Initialization guard reset');

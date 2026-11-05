@@ -1,3 +1,4 @@
+import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/utils/authenticated_startup_routing.dart';
@@ -85,6 +86,27 @@ void main() {
     }
   });
 
+  test(
+    'confirmed key loss opens recovery while an uninitialized device can retry',
+    () {
+      for (final localState in [
+        LocalEncryptionState.approvedKeyMissing,
+        LocalEncryptionState.corrupt,
+        LocalEncryptionState.missing,
+      ]) {
+        expect(
+          resolveAuthenticatedStartupRoute(
+            postSignInState: PostSignInState.idle,
+            e2eeStatus: E2EEStatus.error,
+            localState: localState,
+          ),
+          localState == LocalEncryptionState.missing
+              ? AuthenticatedStartupRoute.recovery
+              : AuthenticatedStartupRoute.accountRecovery,
+        );
+      }
+    },
+  );
   test('special encryption states retain their existing destinations', () {
     const expectedRoutes = {
       E2EEStatus.pendingApproval: AuthenticatedStartupRoute.pendingApproval,

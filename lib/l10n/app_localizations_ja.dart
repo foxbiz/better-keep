@@ -2287,6 +2287,21 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get useOriginalSignInMethod =>
+      '以前使った方法でサインインし、アカウント設定で新しいプロバイダーをリンクしてください。';
+
+  @override
+  String get localAccountMismatch =>
+      'このデバイスには別のアカウントのノートがあります。保存に使用したアカウントでサインインしてください。';
+
+  @override
+  String get recoveryCheckUnavailable => '復元方法を確認できませんでした。接続を確認して、もう一度お試しください。';
+
+  @override
+  String get signInToExistingAccount =>
+      'このメールアドレスのアカウントはすでにあります。サインインして続けてください。';
+
+  @override
   String get emailAlreadyInUse =>
       'このメールアドレスのアカウントはすでに存在します。そのアカウントで先にサインインし、そこからリンクしてください。';
 
@@ -3211,15 +3226,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'アクティブなデバイスが見つかりません。リカバリーパスフレーズを使用して暗号化されたノートへのアクセスを復元してください。';
+      'リカバリーパスフレーズを使って、このデバイスで暗号化されたノートを開いてください。';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'アクティブなデバイスが見つからず、リカバリーキーも設定されていません。新しいアカウントで最初から始めることができますが、以前のノートは復元できません。';
+      'このアカウントには復元用パスフレーズがありません。信頼できるデバイスに承認をリクエストできます。';
 
   @override
   String get previousNotesEncryptedWarning =>
-      '以前のノートは暗号化されており、リカバリーキーなしでは復元できません。';
+      '最初からやり直すと、以前の暗号化されたノートにアクセスできなくなります。';
 
   @override
   String get notYourMainDevice => 'メインのデバイスではありませんか？';

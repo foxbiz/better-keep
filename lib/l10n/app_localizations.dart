@@ -4272,6 +4272,30 @@ abstract class AppLocalizations {
   /// **'This {provider} account is already linked to another user.'**
   String providerLinkedToAnother(String provider);
 
+  /// OAuth collision sign-in guidance
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with the method you used before, then link the new provider in your account settings.'**
+  String get useOriginalSignInMethod;
+
+  /// Local account mismatch guidance
+  ///
+  /// In en, this message translates to:
+  /// **'This device has notes from a different account. Sign in with the account that saved them.'**
+  String get localAccountMismatch;
+
+  /// Recovery lookup retry message
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t check your recovery options. Check your connection and try again.'**
+  String get recoveryCheckUnavailable;
+
+  /// Signup with an already registered email
+  ///
+  /// In en, this message translates to:
+  /// **'An account with this email already exists. Sign in to continue.'**
+  String get signInToExistingAccount;
+
   /// Email already in use error
   ///
   /// In en, this message translates to:
@@ -5922,22 +5946,22 @@ abstract class AppLocalizations {
   /// **'Account Recovery Required'**
   String get accountRecoveryRequired;
 
-  /// No active devices with recovery key message
+  /// Instructions when a recovery passphrase is available
   ///
   /// In en, this message translates to:
-  /// **'No active devices found. Use your recovery passphrase to restore access to your encrypted notes.'**
+  /// **'Use your recovery passphrase to open your encrypted notes on this device.'**
   String get noActiveDevicesRecoveryKey;
 
-  /// No active devices without recovery key message
+  /// Recovery options when the account has no passphrase
   ///
   /// In en, this message translates to:
-  /// **'No active devices found and no recovery key is set up. You can start fresh with a new account, but your previous notes cannot be recovered.'**
+  /// **'This account has no recovery passphrase. You can request approval from a trusted device.'**
   String get noActiveDevicesNoRecoveryKey;
 
   /// Previous notes encrypted warning message
   ///
   /// In en, this message translates to:
-  /// **'Your previous notes are encrypted and cannot be recovered without a recovery key.'**
+  /// **'Starting fresh makes your previously encrypted notes inaccessible.'**
   String get previousNotesEncryptedWarning;
 
   /// Not your main device question

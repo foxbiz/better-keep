@@ -2255,6 +2255,18 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get useOriginalSignInMethod => '请使用之前的方式登录，然后在账户设置中关联新的登录方式。';
+
+  @override
+  String get localAccountMismatch => '此设备上有其他账户的笔记。请使用保存这些笔记的账户登录。';
+
+  @override
+  String get recoveryCheckUnavailable => '无法检查恢复选项。请检查网络连接后重试。';
+
+  @override
+  String get signInToExistingAccount => '此邮箱已注册。请登录以继续。';
+
+  @override
   String get emailAlreadyInUse => '使用此邮箱的账户已存在。请先登录该账户，然后从那里链接。';
 
   @override
@@ -3158,14 +3170,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountRecoveryRequired => '需要账户恢复';
 
   @override
-  String get noActiveDevicesRecoveryKey => '未找到活动设备。使用您的恢复密码短语恢复对加密笔记的访问。';
+  String get noActiveDevicesRecoveryKey => '使用恢复密码短语在此设备上打开您的加密笔记。';
 
   @override
-  String get noActiveDevicesNoRecoveryKey =>
-      '未找到活动设备且未设置恢复密钥。您可以使用新账户重新开始，但无法恢复之前的笔记。';
+  String get noActiveDevicesNoRecoveryKey => '此账户没有恢复密码短语。您可以向受信任的设备请求批准。';
 
   @override
-  String get previousNotesEncryptedWarning => '您之前的笔记已加密，没有恢复密钥无法恢复。';
+  String get previousNotesEncryptedWarning => '重新开始后，您将无法访问之前加密的笔记。';
 
   @override
   String get notYourMainDevice => '不是您的主设备？';

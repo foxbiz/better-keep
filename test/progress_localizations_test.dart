@@ -19,6 +19,18 @@ void main() {
       expect(AuthProgress.creatingAccount.localized(ja), ja.creatingAccount);
       expect(AuthFailureKind.network.localized(en), en.noInternetConnection);
       expect(
+        AuthFailureKind.accountExists.localized(en),
+        en.signInToExistingAccount,
+      );
+      expect(
+        AuthFailureKind.differentSignInMethod.localized(en),
+        en.useOriginalSignInMethod,
+      );
+      expect(
+        AuthFailureKind.invalidEmail.localized(en),
+        en.pleaseEnterAValidEmail,
+      );
+      expect(
         VerificationFailureKind.invalidCode.localized(ja),
         ja.invalidVerificationCode,
       );

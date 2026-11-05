@@ -566,7 +566,7 @@ void main() {
       storage.data.remove('e2ee_umk_cache');
       final before = Map.of(storage.data);
       expect(await e2ee.preloadCachedStatus(), isFalse);
-      expect(e2ee.localState, LocalEncryptionState.missing);
+      expect(e2ee.localState, LocalEncryptionState.approvedKeyMissing);
       await expectLater(e2ee.initialize(), throwsA(isA<FirebaseException>()));
       expect(storage.data, before);
       expect(backend.firestore.writes, isEmpty);

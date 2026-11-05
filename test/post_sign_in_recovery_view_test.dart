@@ -61,28 +61,27 @@ void main() {
     expect(offlineCount, 1);
   });
 
-  testWidgets('sign out requires confirmation', (tester) async {
-    var signOutCount = 0;
-    await tester.pumpWidget(
-      _host(
-        PostSignInRecoveryView(
-          onRetry: () async {},
-          onContinueOffline: () async {},
-          onSignOut: () async {
-            signOutCount++;
-          },
+  testWidgets(
+    'sign out delegates to the caller for account-aware confirmation',
+    (tester) async {
+      var signOutCount = 0;
+      await tester.pumpWidget(
+        _host(
+          PostSignInRecoveryView(
+            onRetry: () async {},
+            onContinueOffline: () async {},
+            onSignOut: () async {
+              signOutCount++;
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Sign Out'));
-    await tester.pumpAndSettle();
-    expect(signOutCount, 0);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Sign Out'));
-    await tester.pumpAndSettle();
-    expect(signOutCount, 1);
-  });
+      await tester.tap(find.text('Sign Out'));
+      await tester.pumpAndSettle();
+      expect(signOutCount, 1);
+    },
+  );
 }
 
 Widget _host(Widget child) => MaterialApp(

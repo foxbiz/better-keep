@@ -1,3 +1,5 @@
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -280,6 +282,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
     setState(() => _isCancellingRequest = true);
 
     try {
+      if (!await confirmDeviceSignOut(context)) return;
       try {
         await _deviceManager.cancelApprovalRequest();
       } catch (_) {

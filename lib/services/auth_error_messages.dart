@@ -6,6 +6,8 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 enum AuthFailureKind {
   appleVerification,
   accountExists,
+  differentSignInMethod,
+  invalidEmail,
   accountNotFound,
   invalidCredentials,
   providerVerification,
@@ -193,8 +195,11 @@ AuthFailureKind resolveSignInFailure({
   if (provider == 'apple' && code == 'invalid-credential') {
     return AuthFailureKind.appleVerification;
   }
-  if (code == 'account-exists-with-different-credential' ||
-      code == 'email-already-in-use') {
+  if (code == 'invalid-email') return AuthFailureKind.invalidEmail;
+  if (code == 'account-exists-with-different-credential') {
+    return AuthFailureKind.differentSignInMethod;
+  }
+  if (code == 'email-already-in-use') {
     return AuthFailureKind.accountExists;
   }
   if (code == 'user-not-found') {

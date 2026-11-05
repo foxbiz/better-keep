@@ -158,6 +158,7 @@ class AuthService {
       final user = currentUser;
       if (_deferLocalRestore) return CloudSessionState.pending;
       if (user == null ||
+          hasDifferentLocalAccount ||
           sessionInvalid.value ||
           ReviewAccess.isReviewIdentity(user)) {
         return CloudSessionState.blocked;
@@ -226,6 +227,7 @@ class AuthService {
   );
 
   static bool get canSyncCloud =>
+      !hasDifferentLocalAccount &&
       !sessionInvalid.value &&
       cloudRecovery.state.value == CloudSessionState.ready;
 
@@ -1835,6 +1837,9 @@ class AuthService {
         !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
     final coordinator = PostSignInCoordinator(
       validateIdentity: PostSignInOperation('validate-identity', () async {
+        if (hasDifferentLocalAccount) {
+          throw StateError('Local account mismatch');
+        }
         request.onStatusChange?.call(AuthProgress.verifying);
         await user.getIdToken(true).timeout(const Duration(seconds: 10));
         requireCurrentSession(isCurrent);
@@ -2209,7 +2214,16 @@ class AuthService {
 
   static Future<void>? _signOutFuture;
 
+  static Future<void> returnToLocalAccount() async {
+    if (currentUser != null && hasDifferentLocalAccount) {
+      await _auth.signOut();
+    }
+  }
+
   static Future<void> signOut() {
+    if (currentUser != null && hasDifferentLocalAccount) {
+      return returnToLocalAccount();
+    }
     return _signOutFuture ??= _performSignOut().whenComplete(() {
       _signOutFuture = null;
     });

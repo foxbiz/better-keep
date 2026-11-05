@@ -2302,6 +2302,14 @@
 		}
 	},
 
+	"useOriginalSignInMethod": "Sign in with the method you used before, then link the new provider in your account settings.",
+	"@useOriginalSignInMethod": { "description": "OAuth collision sign-in guidance" },
+	"localAccountMismatch": "This device has notes from a different account. Sign in with the account that saved them.",
+	"@localAccountMismatch": { "description": "Local account mismatch guidance" },
+	"recoveryCheckUnavailable": "Couldn’t check your recovery options. Check your connection and try again.",
+	"@recoveryCheckUnavailable": { "description": "Recovery lookup retry message" },
+	"@signInToExistingAccount": { "description": "Signup with an already registered email" },
+	"signInToExistingAccount": "An account with this email already exists. Sign in to continue.",
 	"emailAlreadyInUse": "An account with this email already exists. Sign in with that account first, then link from there.",
 	"@emailAlreadyInUse": { "description": "Email already in use error" },
 
@@ -3398,17 +3406,17 @@
 		"description": "Account recovery required heading"
 	},
 
-	"noActiveDevicesRecoveryKey": "No active devices found. Use your recovery passphrase to restore access to your encrypted notes.",
+	"noActiveDevicesRecoveryKey": "Use your recovery passphrase to open your encrypted notes on this device.",
 	"@noActiveDevicesRecoveryKey": {
-		"description": "No active devices with recovery key message"
+		"description": "Instructions when a recovery passphrase is available"
 	},
 
-	"noActiveDevicesNoRecoveryKey": "No active devices found and no recovery key is set up. You can start fresh with a new account, but your previous notes cannot be recovered.",
+	"noActiveDevicesNoRecoveryKey": "This account has no recovery passphrase. You can request approval from a trusted device.",
 	"@noActiveDevicesNoRecoveryKey": {
-		"description": "No active devices without recovery key message"
+		"description": "Recovery options when the account has no passphrase"
 	},
 
-	"previousNotesEncryptedWarning": "Your previous notes are encrypted and cannot be recovered without a recovery key.",
+	"previousNotesEncryptedWarning": "Starting fresh makes your previously encrypted notes inaccessible.",
 	"@previousNotesEncryptedWarning": {
 		"description": "Previous notes encrypted warning message"
 	},

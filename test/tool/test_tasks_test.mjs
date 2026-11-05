@@ -63,6 +63,7 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"external-links",
 		"firebase-apple",
 		"firebase-emulator-android",
+		"firebase-emulator-auth-recovery",
 		"firebase-emulator-config",
 		"firebase-emulator-deletion",
 		"firebase-emulator-functions",

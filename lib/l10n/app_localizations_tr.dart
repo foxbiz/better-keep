@@ -2362,6 +2362,22 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get useOriginalSignInMethod =>
+      'Daha önce kullandığınız yöntemle giriş yapın, ardından hesap ayarlarından yeni sağlayıcıyı bağlayın.';
+
+  @override
+  String get localAccountMismatch =>
+      'Bu cihazda başka bir hesaba ait notlar var. Notları kaydeden hesapla giriş yapın.';
+
+  @override
+  String get recoveryCheckUnavailable =>
+      'Kurtarma seçenekleri kontrol edilemedi. Bağlantınızı kontrol edip tekrar deneyin.';
+
+  @override
+  String get signInToExistingAccount =>
+      'Bu e-postaya sahip bir hesap zaten var. Devam etmek için giriş yapın.';
+
+  @override
   String get emailAlreadyInUse =>
       'Bu e-postaya sahip bir hesap zaten var. Önce o hesapla giriş yapın, ardından oradan bağlantı kurun.';
 
@@ -3324,15 +3340,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'Aktif cihaz bulunamadı. Şifrelenmiş notlarınıza erişimi geri yüklemek için kurtarma ifadenizi kullanın.';
+      'Bu cihazda şifrelenmiş notlarınızı açmak için kurtarma ifadenizi kullanın.';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'Aktif cihaz bulunamadı ve Kurtarma Anahtarı ayarlanmamış. Yeni bir hesapla baştan başlayabilirsiniz, ancak önceki notlarınız kurtarılamaz.';
+      'Bu hesapta kurtarma ifadesi yok. Güvenilir bir cihazdan onay isteyebilirsiniz.';
 
   @override
   String get previousNotesEncryptedWarning =>
-      'Önceki notlarınız şifrelenmiştir ve Kurtarma Anahtarı olmadan kurtarılamaz.';
+      'Baştan başlarsanız önceki şifrelenmiş notlarınıza erişemezsiniz.';
 
   @override
   String get notYourMainDevice => 'Ana cihazınız değil mi?';

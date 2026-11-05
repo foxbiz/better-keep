@@ -17,7 +17,7 @@ import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/pages/setup_recovery_key_page.dart';
 import 'package:better_keep/pages/settings/storage_sync_page.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/services/sync_logout_check.dart';
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/ui/custom_icons.dart';
@@ -362,162 +362,12 @@ class _UserPageState extends State<UserPage> {
 
   Future<void> _handleSignOut(BuildContext context) async {
     final accountCurrent = AuthService.captureSession();
-    // Track if user has already confirmed through a warning dialog
-    bool hasConfirmed = false;
-
-    final syncState = await currentSyncLogoutState();
-    if (!accountCurrent()) return;
-    if (syncState != SyncLogoutState.complete && context.mounted) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.sync_problem, color: Colors.red, size: 48),
-          ),
-          title: Text(
-            "⚠️ ${context.l10n.dataLossWarning}",
-            style: const TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Text(
-            syncState == SyncLogoutState.pending
-                ? context.l10n.externalSyncLogoutPending
-                : context.l10n.externalSyncLogoutUnknown,
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: Text(context.l10n.signOutAnyway),
-            ),
-          ],
-        ),
-      );
-
-      if (proceed != true) return;
-      hasConfirmed = true;
-    }
-
-    if (!context.mounted || !accountCurrent()) {
-      AppLogger.log('Sign out cancelled because its page or account changed');
+    if (!await confirmDeviceSignOut(
+      context,
+      warnWithoutRecovery: !_hasRecoveryKey && _devices.isNotEmpty,
+    )) {
       return;
     }
-
-    // Check if recovery key is set - warn user if not
-    if (!_hasRecoveryKey && _devices.isNotEmpty) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.warning_rounded,
-              color: Colors.red,
-              size: 48,
-            ),
-          ),
-          title: Text(
-            "⚠️ ${context.l10n.dataLossWarning}",
-            style: const TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.key_off, color: Colors.red),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        context.l10n.noRecoveryKeySet,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(context.l10n.signOutNoRecoveryKeyWarning),
-            ],
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: Text(context.l10n.signOutAnyway),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed != true) return;
-    } else if (!hasConfirmed) {
-      // Standard confirmation dialog (only if user hasn't already confirmed)
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.logout, color: Colors.orange, size: 32),
-          ),
-          title: Text(
-            context.l10n.signOut,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Text(context.l10n.signOutConfirmation),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-              child: Text(context.l10n.signOut),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed != true) return;
-    }
-
     if (!context.mounted || !accountCurrent()) return;
     setState(() {
       _isLoading = true;

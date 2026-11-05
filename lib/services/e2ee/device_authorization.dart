@@ -20,6 +20,7 @@ enum LocalEncryptionState {
   revoked,
   needsRecovery,
   missing,
+  approvedKeyMissing,
   corrupt,
   unavailable,
   stale,
@@ -51,10 +52,13 @@ Future<LocalEncryptionState> readLocalEncryption({
     }
     final hasKeys = await hasDeviceKeys();
     if (!isCurrent()) return LocalEncryptionState.stale;
-    if (!hasKeys || status != 'approved') return LocalEncryptionState.missing;
+    if (status != 'approved') return LocalEncryptionState.missing;
+    if (!hasKeys) return LocalEncryptionState.approvedKeyMissing;
     final loaded = await loadKey();
     if (!isCurrent()) return LocalEncryptionState.stale;
-    return loaded ? LocalEncryptionState.ready : LocalEncryptionState.missing;
+    return loaded
+        ? LocalEncryptionState.ready
+        : LocalEncryptionState.approvedKeyMissing;
   } on SecureStorageUnavailable {
     return isCurrent()
         ? LocalEncryptionState.unavailable
