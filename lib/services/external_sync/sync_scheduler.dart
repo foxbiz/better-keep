@@ -33,6 +33,7 @@ class SyncConnectionProgress {
 class SyncScheduler extends ChangeNotifier {
   SyncScheduler({
     required this.sync,
+    this.restore,
     required this.isCurrent,
     this.blockedEntities,
     this.notesRequiringUnlock,
@@ -46,6 +47,9 @@ class SyncScheduler extends ChangeNotifier {
   }) : now = now ?? DateTime.now;
 
   final Future<void> Function(SyncProviderAdapter) sync;
+
+  /// Initial downloads are available independently of automatic uploads.
+  final Future<void> Function(SyncProviderAdapter)? restore;
   final bool Function() isCurrent;
   final int Function()? blockedEntities;
   final int Function()? notesRequiringUnlock;
@@ -83,9 +87,12 @@ class SyncScheduler extends ChangeNotifier {
     });
     for (final adapter in next.values) {
       if (_entries.containsKey(adapter.connectionId)) continue;
-      final entry = _ScheduledConnection(adapter);
+      final entry = _ScheduledConnection(
+        adapter,
+        needsRestore: restore != null,
+      );
       _entries[adapter.connectionId] = entry;
-      if (_automatic) unawaited(_request(entry));
+      unawaited(_request(entry));
     }
     notifyListeners();
   }
@@ -116,14 +123,14 @@ class SyncScheduler extends ChangeNotifier {
     if (!_active || enabled == _automatic) return;
     _automatic = enabled;
     _cancelTimers();
-    if (enabled && _foreground) unawaited(_requestAll());
+    if (_foreground) unawaited(_requestAll());
   }
 
   void setForeground(bool foreground) {
     if (!_active || foreground == _foreground) return;
     _foreground = foreground;
     _cancelTimers();
-    if (foreground && _automatic) unawaited(_requestAll());
+    if (foreground) unawaited(_requestAll());
   }
 
   void _cancelTimers() {
@@ -155,7 +162,11 @@ class SyncScheduler extends ChangeNotifier {
       Future.wait(_entries.values.toList().map(_request));
 
   Future<void> _request(_ScheduledConnection entry, {bool force = false}) {
-    if (!_owns(entry) || !_foreground || (!force && !_automatic)) {
+    if (!_owns(entry) ||
+        !_foreground ||
+        (!force &&
+            !_automatic &&
+            (!entry.needsRestore || entry.restoreAttempts >= 3))) {
       return Future.value();
     }
     // Consent requires a user gesture. Authorization replaces the adapter and
@@ -163,11 +174,7 @@ class SyncScheduler extends ChangeNotifier {
     if (entry.progress.failure == SyncProviderFailureKind.sharedSetupRequired) {
       return Future.value();
     }
-    if (!force &&
-        const {
-          SyncProviderFailureKind.corruptData,
-          SyncProviderFailureKind.quotaExceeded,
-        }.contains(entry.progress.failure)) {
+    if (!force && _requiresManualRetry(entry.progress.failure)) {
       return Future.value();
     }
     if (entry.running != null) {
@@ -184,7 +191,7 @@ class SyncScheduler extends ChangeNotifier {
     // coalesce into the engine's still-running old adapter operation.
     late final Future<void> task;
     task = _serial
-        .run(entry.adapter.connectionId, () => _run(entry))
+        .run(entry.adapter.connectionId, () => _run(entry, force: force))
         .whenComplete(() {
           entry.running = null;
           _tasks.remove(task);
@@ -194,9 +201,12 @@ class SyncScheduler extends ChangeNotifier {
     return task;
   }
 
-  Future<void> _run(_ScheduledConnection entry) async {
+  Future<void> _run(_ScheduledConnection entry, {required bool force}) async {
+    force |= entry.forceAgain;
     do {
       if (!_owns(entry) || !_foreground) return;
+      final restoring = !_automatic && !force && entry.needsRestore;
+      if (restoring) entry.restoreAttempts++;
       entry.again = entry.forceAgain = false;
       final previous = entry.progress;
       var lastSuccess = previous.lastSuccess;
@@ -213,9 +223,9 @@ class SyncScheduler extends ChangeNotifier {
         if (!_owns(entry)) return;
         lastSuccess ??= await loadLastSuccess?.call(entry.adapter.connectionId);
         if (!_owns(entry)) return;
-        await sync(entry.adapter);
+        await (restoring ? restore! : sync)(entry.adapter);
         if (!_owns(entry)) return;
-        final blocked = blockedEntities?.call() ?? 0;
+        final blocked = restoring ? 0 : blockedEntities?.call() ?? 0;
         final pending = pendingLocalChanges?.call() ?? false;
         if (blocked == 0 && !pending) {
           final clock = now();
@@ -226,6 +236,7 @@ class SyncScheduler extends ChangeNotifier {
           if (!_owns(entry)) return;
           lastSuccess = success;
         }
+        entry.needsRestore = false;
         entry.failures = 0;
         entry.progress = SyncConnectionProgress(
           lastSuccess: lastSuccess,
@@ -253,8 +264,8 @@ class SyncScheduler extends ChangeNotifier {
           failure: failure,
           retryAt:
               failure == SyncProviderFailureKind.sharedSetupRequired ||
-                  failure == SyncProviderFailureKind.corruptData ||
-                  failure == SyncProviderFailureKind.quotaExceeded
+                  _requiresManualRetry(failure) ||
+                  (restoring && entry.restoreAttempts >= 3)
               ? null
               : now().add(retry != null && retry > delay ? retry : delay),
           blockedEntities: blockedEntities?.call() ?? 0,
@@ -264,20 +275,31 @@ class SyncScheduler extends ChangeNotifier {
       }
       notifyListeners();
       _scheduleRetry(entry);
+      force = entry.forceAgain;
     } while (entry.again &&
         (_automatic || entry.forceAgain) &&
         entry.progress.failure != SyncProviderFailureKind.sharedSetupRequired &&
         (entry.forceAgain ||
-            (entry.progress.failure != SyncProviderFailureKind.corruptData &&
-                entry.progress.failure !=
-                    SyncProviderFailureKind.quotaExceeded &&
+            (!_requiresManualRetry(entry.progress.failure) &&
                 !(entry.progress.retryAt?.isAfter(now()) ?? false))));
   }
+
+  static bool _requiresManualRetry(SyncProviderFailureKind? failure) => const {
+    SyncProviderFailureKind.corruptData,
+    SyncProviderFailureKind.quotaExceeded,
+    SyncProviderFailureKind.reconnectRequired,
+    SyncProviderFailureKind.unsupported,
+  }.contains(failure);
 
   void _scheduleRetry(_ScheduledConnection entry) {
     entry.retry?.cancel();
     final retryAt = entry.progress.retryAt;
-    if (!_owns(entry) || !_foreground || !_automatic || retryAt == null) return;
+    if (!_owns(entry) ||
+        !_foreground ||
+        (!_automatic && (!entry.needsRestore || entry.restoreAttempts >= 3)) ||
+        retryAt == null) {
+      return;
+    }
     final delay = retryAt.difference(now());
     entry.retry = Timer(delay.isNegative ? Duration.zero : delay, () {
       unawaited(_request(entry));
@@ -301,11 +323,13 @@ class SyncScheduler extends ChangeNotifier {
 }
 
 class _ScheduledConnection {
-  _ScheduledConnection(this.adapter);
+  _ScheduledConnection(this.adapter, {required this.needsRestore});
+  bool needsRestore;
   final SyncProviderAdapter adapter;
   SyncConnectionProgress progress = const SyncConnectionProgress();
   Future<void>? running;
   Timer? retry;
   int failures = 0;
+  int restoreAttempts = 0;
   bool again = false, forceAgain = false;
 }

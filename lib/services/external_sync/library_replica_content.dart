@@ -49,6 +49,14 @@ class LibraryReplicaContent
       .length;
 
   @override
+  Future<bool> contains(String objectId) async {
+    _guard();
+    final exists = await objects.contains(objectId);
+    _guard();
+    return exists;
+  }
+
+  @override
   Future<Uint8List?> read(String objectId) async {
     _guard();
     final bytes = await objects.read(objectId);

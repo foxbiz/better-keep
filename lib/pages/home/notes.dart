@@ -62,6 +62,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   int? _notesCountWithoutLabels;
   int _loadGeneration = 0;
   int _noteRevision = 0;
+  bool _refreshOnReturn = false;
+  final Map<int, NoteCard> _noteCards = {};
   bool _hasStoredNotes = true;
   double _pendingOffset = 0.0;
   bool _showLoader = false;
@@ -147,6 +149,16 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _noteCards.clear();
+    if (_refreshOnReturn && ModalRoute.isCurrentOf(context) != false) {
+      _refreshOnReturn = false;
+      _fetchData();
+    }
+  }
+
+  @override
   void didUpdateWidget(Notes oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.searchQuery != widget.searchQuery ||
@@ -181,7 +193,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
             );
           }
         } else if (AppState.currentFolder != null) {
-          content = _buildNotesView();
+          content = const SizedBox.shrink();
         } else {
           content = _buildFoldersGrid();
         }
@@ -226,18 +238,23 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                       AppState.showNotes == NoteType.all,
                 ),
               ),
-              SliverToBoxAdapter(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 1200),
-                      child: content,
+              if (AppState.currentFolder != null)
+                _buildNotesSliver()
+              else
+                SliverToBoxAdapter(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: 1200),
+                        child: content,
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         );
@@ -313,18 +330,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                       AppState.showNotes == NoteType.all,
                 ),
               ),
-              SliverToBoxAdapter(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 1200),
-                      child: _buildNotesView(),
-                    ),
-                  ),
-                ),
-              ),
+              _buildNotesSliver(),
             ],
           ),
         );
@@ -399,6 +405,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       await _fetchData();
       return;
     }
+    _noteCards.clear();
     _notes = notes;
     _hasStoredNotes = hasStoredNotes;
     _colors = colors;
@@ -958,17 +965,28 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
   }
 
-  Widget _buildNoteCard(Note note, int index) {
+  Widget _buildNoteCard(Note note) {
     final id = note.id;
-    return NoteCard(
+    final canReorder = _canReorder && id != null;
+    final dragging = id != null && id == _draggingNoteId;
+    final cached = _noteCards[id];
+    if (cached != null &&
+        identical(cached.note, note) &&
+        (cached.reorderConfig != null) == canReorder &&
+        (cached.reorderConfig?.dragging ?? false) == dragging) {
+      return cached;
+    }
+    // Mutable notes must emit NoteEvent after every change; the listener
+    // invalidates this cache even when the Note instance is unchanged.
+    final card = NoteCard(
       key: ValueKey('note_card_$id'),
       note: note,
-      index: index,
-      reorderConfig: !_canReorder || id == null
+      animateEntrance: false,
+      reorderConfig: !canReorder
           ? null
           : NoteCardReorderConfig(
               enabled: true,
-              dragging: id == _draggingNoteId,
+              dragging: dragging,
               dragLabel: context.l10n.dragToReorder,
               moveBeforeLabel: context.l10n.moveNoteBefore,
               moveAfterLabel: context.l10n.moveNoteAfter,
@@ -980,10 +998,25 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
               onMoveAfter: () => unawaited(_moveNoteWithKeyboard(note, 1)),
             ),
     );
+    if (id != null) _noteCards[id] = card;
+    return card;
   }
 
   void _notesListener(NoteEvent event) {
     _noteRevision++;
+    // Models are mutable; invalidate on every event, not just identity changes.
+    _noteCards.remove(event.note.id);
+    // Bulk downloads must not rebuild the entire grid behind another page.
+    // Subscribe to route changes and reload committed state once on return.
+    if (ModalRoute.isCurrentOf(context) == false) {
+      _refreshOnReturn = true;
+      if (AppState.selectedNotes.isNotEmpty) AppState.selectedNotes = [];
+      if (_activeReorderController != null) {
+        _pendingRefreshAfterDrag = false;
+        unawaited(_cancelDrag());
+      }
+      return;
+    }
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       _fetchData();
       return;
@@ -1154,97 +1187,116 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       );
     }
 
-    return _buildNotesLayout();
+    return const SizedBox.shrink();
   }
 
-  Widget _buildNotesLayout() {
+  Widget _buildNotesSliver() {
+    if (_notes == null || _notes!.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: _buildNotesView(),
+          ),
+        ),
+      );
+    }
     final sortedNotes = _sortNotes(_notes!.toList());
     final listMode =
         !widget.searchMode && AppState.notesViewMode == NoteViewMode.list;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(_gap, 0, _gap, 24),
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: listMode ? 600 : 1200),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final availableWidth = constraints.maxWidth;
-              final crossAxisCount = listMode
-                  ? 1
-                  : availableWidth > 900
-                  ? 4
-                  : availableWidth > 600
-                  ? 3
-                  : 2;
-              if (_activeReorderController != null &&
-                  _lastNoteCrossAxisCount != null &&
-                  _lastNoteCrossAxisCount != crossAxisCount) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _activeReorderController != null) {
-                    unawaited(_cancelDrag());
-                  }
-                });
-              }
-              _lastNoteCrossAxisCount = crossAxisCount;
-              final partition = NoteSectionPartition.from(
-                sortedNotes,
-                isPinned: (note) => note.pinned,
-              );
-              final pinned = _sectionNotes(partition.pinned, true);
-              final others = _sectionNotes(partition.others, false);
-              final separateSections =
-                  !widget.searchMode &&
-                  AppState.showNotes == NoteType.all &&
-                  partition.hasBoth;
-
-              if (!separateSections) {
-                final sectionNotes = pinned.isNotEmpty && others.isEmpty
-                    ? pinned
-                    : others.isNotEmpty && pinned.isEmpty
-                    ? others
-                    : sortedNotes;
-                final controller = pinned.isNotEmpty && others.isEmpty
-                    ? _pinnedLayoutController
-                    : others.isNotEmpty && pinned.isEmpty
-                    ? _otherLayoutController
-                    : _unsectionedLayoutController;
-                return _buildMasonrySection(
-                  notes: sectionNotes,
-                  controller: controller,
-                  crossAxisCount: crossAxisCount,
-                );
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildSectionHeading(
-                    key: const ValueKey('pinned_notes_heading'),
-                    label: context.l10n.pinnedNotes,
-                  ),
-                  _buildMasonrySection(
-                    notes: pinned,
-                    controller: _pinnedLayoutController,
-                    crossAxisCount: crossAxisCount,
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionHeading(
-                    key: const ValueKey('other_notes_heading'),
-                    label: context.l10n.otherNotes,
-                  ),
-                  _buildMasonrySection(
-                    notes: others,
-                    controller: _otherLayoutController,
-                    crossAxisCount: crossAxisCount,
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
+    double? previousWidth;
+    Widget? sectionLayout;
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        if (previousWidth == constraints.crossAxisExtent &&
+            sectionLayout != null) {
+          return sectionLayout!;
+        }
+        previousWidth = constraints.crossAxisExtent;
+        final maxWidth = listMode ? 600.0 : 1200.0;
+        final margin = ((constraints.crossAxisExtent - maxWidth) / 2).clamp(
+          _gap,
+          double.infinity,
+        );
+        final availableWidth = constraints.crossAxisExtent - margin * 2;
+        final crossAxisCount = listMode
+            ? 1
+            : availableWidth > 900
+            ? 4
+            : availableWidth > 600
+            ? 3
+            : 2;
+        if (_activeReorderController != null &&
+            _lastNoteCrossAxisCount != null &&
+            _lastNoteCrossAxisCount != crossAxisCount) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _activeReorderController != null) {
+              unawaited(_cancelDrag());
+            }
+          });
+        }
+        _lastNoteCrossAxisCount = crossAxisCount;
+        final partition = NoteSectionPartition.from(
+          sortedNotes,
+          isPinned: (note) => note.pinned,
+        );
+        final pinned = _sectionNotes(partition.pinned, true);
+        final others = _sectionNotes(partition.others, false);
+        final separateSections =
+            !widget.searchMode &&
+            AppState.showNotes == NoteType.all &&
+            partition.hasBoth;
+        final sections = <Widget>[];
+        if (separateSections) {
+          sections.addAll([
+            SliverToBoxAdapter(
+              child: _buildSectionHeading(
+                key: const ValueKey('pinned_notes_heading'),
+                label: context.l10n.pinnedNotes,
+              ),
+            ),
+            _buildMasonrySection(
+              notes: pinned,
+              controller: _pinnedLayoutController,
+              crossAxisCount: crossAxisCount,
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            SliverToBoxAdapter(
+              child: _buildSectionHeading(
+                key: const ValueKey('other_notes_heading'),
+                label: context.l10n.otherNotes,
+              ),
+            ),
+            _buildMasonrySection(
+              notes: others,
+              controller: _otherLayoutController,
+              crossAxisCount: crossAxisCount,
+            ),
+          ]);
+        } else {
+          sections.add(
+            _buildMasonrySection(
+              notes: pinned.isEmpty
+                  ? others
+                  : others.isEmpty
+                  ? pinned
+                  : sortedNotes,
+              controller: pinned.isEmpty
+                  ? _otherLayoutController
+                  : others.isEmpty
+                  ? _pinnedLayoutController
+                  : _unsectionedLayoutController,
+              crossAxisCount: crossAxisCount,
+            ),
+          );
+        }
+        return sectionLayout = SliverPadding(
+          padding: EdgeInsets.fromLTRB(margin, 0, margin, 24),
+          sliver: SliverMainAxisGroup(slivers: sections),
+        );
+      },
     );
   }
 
@@ -1272,27 +1324,41 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     required int crossAxisCount,
   }) {
     final activeInSection = identical(_activeLayoutController, controller);
-    return AnimatedMasonryReorderLayout(
-      controller: controller,
-      crossAxisCount: crossAxisCount,
-      mainAxisSpacing: _gap,
-      crossAxisSpacing: _gap,
-      activeId: activeInSection ? _draggingNoteId : null,
-      dragGlobalPosition: activeInSection ? _dragGlobalPosition : null,
-      dragAnchor: activeInSection ? _dragAnchor : Offset.zero,
-      placeholderColor:
-          (activeInSection && _invalidPinnedTarget
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.primary)
-              .withValues(alpha: 0.12),
-      children: [
-        for (final (index, note) in notes.indexed)
-          MasonryReorderItem(
-            key: ValueKey('masonry_note_${note.id}'),
-            id: note.id ?? -identityHashCode(note),
-            child: _buildNoteCard(note, index),
+    final children = [
+      for (final note in notes)
+        MasonryReorderItem.lazy(
+          key: ValueKey('masonry_note_${note.id}'),
+          id: note.id ?? -identityHashCode(note),
+          builder: (_) => _buildNoteCard(note),
+        ),
+    ];
+    Rect? previousBounds;
+    Widget? section;
+    return SliverLayoutBuilder(
+      key: ObjectKey(controller),
+      builder: (context, constraints) {
+        final bounds = masonryCacheBounds(constraints);
+        if (previousBounds == bounds && section != null) return section!;
+        previousBounds = bounds;
+        return section = SliverToBoxAdapter(
+          child: AnimatedMasonryReorderLayout(
+            controller: controller,
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: _gap,
+            crossAxisSpacing: _gap,
+            cacheBounds: bounds,
+            activeId: activeInSection ? _draggingNoteId : null,
+            dragGlobalPosition: activeInSection ? _dragGlobalPosition : null,
+            dragAnchor: activeInSection ? _dragAnchor : Offset.zero,
+            placeholderColor:
+                (activeInSection && _invalidPinnedTarget
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.primary)
+                    .withValues(alpha: 0.12),
+            children: children,
           ),
-      ],
+        );
+      },
     );
   }
 

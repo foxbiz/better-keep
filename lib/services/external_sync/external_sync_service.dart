@@ -95,10 +95,8 @@ class ExternalSyncService extends ChangeNotifier {
       return await refreshExternalSession(
         current,
         isCurrent: () =>
-            identical(session, current) &&
-            current.isCurrent &&
-            !_suspended &&
-            _foreground,
+            identical(session, current) && current.isCurrent && !_suspended,
+        canSync: () => _foreground,
         progress: () => progress,
       );
     } on SyncProviderFailure catch (error) {

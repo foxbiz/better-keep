@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
 import 'package:better_keep/services/external_sync/sync_replica_engine.dart';
@@ -46,6 +47,340 @@ void main() {
     );
   });
   tearDown(() => db.close());
+
+  for (final failRestore in [false, true]) {
+    test(
+      'idle waits for queued mode upgrade after restore failure: $failRestore',
+      () async {
+        await save(revision(1));
+        final started = Completer<void>();
+        final restoreRelease = Completer<void>();
+        final fullStarted = Completer<void>();
+        final fullRelease = Completer<void>();
+        var passes = 0;
+        final adapter = _Adapter('review')
+          ..listChanges = (_) async {
+            passes++;
+            if (passes == 1) {
+              started.complete();
+              await restoreRelease.future;
+              if (failRestore) {
+                throw const SyncProviderFailure(
+                  SyncProviderFailureKind.unavailable,
+                );
+              }
+            } else if (passes == 2) {
+              fullStarted.complete();
+              await fullRelease.future;
+            }
+            return SyncChangePage(revisions: [], cursor: 'end', hasMore: false);
+          };
+        final restore = engine.sync(adapter, downloadOnly: true);
+        final restored = failRestore
+            ? expectLater(restore, throwsA(isA<SyncProviderFailure>()))
+            : restore;
+        await started.future;
+        var idle = false;
+        final drained = engine.waitForIdle().then((_) => idle = true);
+        final requests = List.generate(20, (_) => engine.sync(adapter));
+        restoreRelease.complete();
+        await fullStarted.future;
+        await Future<void>.delayed(Duration.zero);
+        final finishedTooSoon = idle;
+        fullRelease.complete();
+        await Future.wait([restored, ...requests, drained]);
+        expect(finishedTooSoon, isFalse);
+        expect(passes, 2);
+        expect(adapter.published, hasLength(1));
+        expect(idle, isTrue);
+        await engine.waitForIdle();
+      },
+    );
+  }
+
+  test('full sync waits for download-only work and then uploads', () async {
+    await save(revision(1));
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var reads = 0;
+    final adapter = _Adapter('drive')
+      ..listChanges = (_) async {
+        if (++reads == 1) {
+          entered.complete();
+          await release.future;
+        }
+        return SyncChangePage(revisions: [], cursor: 'done', hasMore: false);
+      };
+    final restore = engine.sync(adapter, downloadOnly: true);
+    await entered.future;
+    final full = engine.sync(adapter);
+    expect(adapter.published, isEmpty);
+    release.complete();
+    await Future.wait([restore, full]);
+    expect(reads, 2);
+    expect(adapter.published.single.revisionId, 'revision-1');
+    expect(await store.pending('drive'), isEmpty);
+  });
+
+  test(
+    'prefetch probes existence without reading cached payloads twice',
+    () async {
+      final adapter = _SmallAdapter('small')..incoming = [revision(1)];
+      adapter.smallRead = (_) async => fail('Already cached');
+      await engine.sync(adapter, downloadOnly: true);
+      expect(content.readCalls, 1);
+      expect(adapter.fullReads, 0);
+    },
+  );
+
+  test(
+    'prefetch surfaces cache-write failures before applying revisions',
+    () async {
+      content.objects.clear();
+      final error = StateError('Cache write failed');
+      content.cacheError = error;
+      final adapter = _SmallAdapter('small')..incoming = [revision(1)];
+      adapter.smallRead = (_) async => bytes;
+      await expectLater(
+        engine.sync(adapter, downloadOnly: true),
+        throwsA(same(error)),
+      );
+      expect(adapter.fullReads, 0);
+      expect(await db.query('applied'), isEmpty);
+      expect(await store.inbox('small'), hasLength(1));
+    },
+  );
+
+  test('batch failure retains pending revisions and retry does not echo unchanged notes', () async {
+    await save(revision(1));
+    await save(
+      SyncRevision(
+        kind: SyncEntityKind.note,
+        entityId: 'note-2',
+        revisionId: 'second',
+        modifiedAtMicros: 1,
+        deleted: false,
+        payloadObjectId: objectId,
+      ),
+    );
+    final adapter = _BatchAdapter('batch')..failPublish = true;
+    await expectLater(
+      engine.sync(adapter),
+      throwsA(isA<SyncProviderFailure>()),
+    );
+    expect(await store.pending('batch'), hasLength(2));
+    expect(adapter.events, ['object']); // Shared object uploaded only once.
+    adapter.failPublish = false;
+    await engine.sync(adapter);
+    expect(await store.pending('batch'), isEmpty);
+    expect(adapter.published, hasLength(2));
+    final events = adapter.events.length;
+    await engine.sync(adapter);
+    expect(adapter.events.length, events);
+    expect(await store.pending('other-provider'), hasLength(2));
+  });
+
+  test(
+    'batch rechecks local edits and cancellation before publishing',
+    () async {
+      await save(revision(1));
+      await save(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'note-2',
+          revisionId: 'second',
+          modifiedAtMicros: 1,
+          deleted: true,
+          payloadObjectId: null,
+        ),
+      );
+      final adapter = _BatchAdapter('batch')..onPut = () => save(revision(2));
+      await engine.sync(adapter);
+      expect(adapter.published.map((r) => r.revisionId), ['second']);
+      expect((await store.pending('batch')).single.revisionId, 'revision-2');
+      final cancelled = _BatchAdapter('cancel')
+        ..onPut = () async {
+          active = false;
+        };
+      await expectLater(engine.sync(cancelled), throwsA(anything));
+      expect(cancelled.published, isEmpty);
+      expect(await store.pending('cancel'), hasLength(2));
+    },
+  );
+
+  test(
+    'batch object buffers stay bounded and large attachments use serial writes',
+    () async {
+      final adapter = _BatchAdapter('bounded');
+      for (var i = 0; i < 40; i++) {
+        final data = Uint8List(i == 0 ? 5 * 1024 * 1024 : 200 * 1024)..[0] = i;
+        final id = sha256.convert(data).toString();
+        content.objects[id] = data;
+        await save(
+          SyncRevision(
+            kind: SyncEntityKind.note,
+            entityId: 'n-$i',
+            revisionId: 'r-$i',
+            modifiedAtMicros: i,
+            deleted: false,
+            payloadObjectId: id,
+          ),
+        );
+      }
+      await engine.sync(adapter);
+      expect(adapter.objects, hasLength(40));
+      expect(adapter.published, hasLength(40));
+      expect(adapter.batchSizes.length, greaterThan(1));
+      expect(adapter.batchSizes.reduce((a, b) => a + b), 39);
+      expect(
+        adapter.retainedBatches.map((batch) => batch.length),
+        adapter.batchSizes,
+      );
+      expect(
+        () => adapter.retainedBatches.first.clear(),
+        throwsUnsupportedError,
+      );
+      expect(await store.pending('bounded'), isEmpty);
+    },
+  );
+
+  test('small object prefetch is bounded, drains failures, and avoids unchanged reads', () async {
+    content.objects.clear();
+    final adapter = _SmallAdapter('small');
+    final ids = <String>[];
+    for (var i = 0; i < 10; i++) {
+      final data = Uint8List.fromList([i]);
+      final id = sha256.convert(data).toString();
+      ids.add(id);
+      adapter.objects[id] = data;
+      adapter.incoming.add(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'note-$i',
+          revisionId: 'edit-$i',
+          modifiedAtMicros: i,
+          deleted: false,
+          payloadObjectId: id,
+        ),
+      );
+    }
+    final releases = <Completer<Uint8List?>>[];
+    adapter.smallRead = (id) {
+      final release = Completer<Uint8List?>();
+      releases.add(release);
+      return release.future;
+    };
+    var completed = false;
+    final run = engine
+        .sync(adapter, downloadOnly: true)
+        .whenComplete(() => completed = true);
+    for (var i = 0; releases.length < 8 && i < 100; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(releases, hasLength(8));
+    releases.first.completeError(
+      const SyncProviderFailure(SyncProviderFailureKind.unavailable),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(completed, isFalse);
+    expect(await db.query('applied'), isEmpty);
+    for (var i = 1; i < releases.length; i++) {
+      releases[i].complete(adapter.objects[ids[i]]);
+    }
+    await run;
+    expect(releases, hasLength(8));
+    expect(adapter.fullReads, 3); // Failed prefetch plus two never started.
+    expect(await db.query('applied'), hasLength(10));
+    await engine.sync(adapter, downloadOnly: true);
+    expect(releases, hasLength(8));
+    expect(adapter.fullReads, 3);
+  });
+
+  test('large-object fallback remains serial and newer local winners are not prefetched', () async {
+    content.objects.clear();
+    final adapter = _SmallAdapter('small')
+      ..incoming = [revision(1)]
+      ..objects[objectId] = bytes;
+    var smallCalls = 0;
+    adapter.smallRead = (_) async {
+      smallCalls++;
+      return null;
+    };
+    await save(revision(5));
+    await engine.sync(adapter, downloadOnly: true);
+    expect(smallCalls, 0);
+    expect(adapter.fullReads, 0);
+    adapter.incoming = [revision(6)];
+    await engine.sync(adapter, downloadOnly: true);
+    expect(smallCalls, 1);
+    expect(adapter.fullReads, 1);
+    expect(content.objects[objectId], bytes);
+  });
+
+  test(
+    'shared objects upload once per page, independently per provider and retry',
+    () async {
+      for (var i = 0; i < 2; i++) {
+        await save(
+          SyncRevision(
+            kind: SyncEntityKind.note,
+            entityId: 'shared-$i',
+            revisionId: 'shared-revision-$i',
+            modifiedAtMicros: i + 1,
+            deleted: false,
+            payloadObjectId: objectId,
+          ),
+        );
+      }
+      final first = _Adapter('dropbox');
+      await engine.sync(first);
+      expect(first.events, ['object', 'commit', 'commit']);
+      final second = _Adapter('drive')..failPublish = true;
+      await expectLater(
+        engine.sync(second),
+        throwsA(isA<SyncProviderFailure>()),
+      );
+      expect(second.events, ['object']);
+      second.events.clear();
+      second.failPublish = false;
+      await engine.sync(second);
+      expect(second.events, ['object', 'commit', 'commit']);
+      expect(await store.pending('drive'), isEmpty);
+    },
+  );
+
+  test(
+    'initial download preserves newer local edits without uploading them',
+    () async {
+      await save(revision(5));
+      final adapter = _Adapter('dropbox')..incoming = [revision(1)];
+      await engine.sync(adapter, downloadOnly: true);
+      expect(adapter.published, isEmpty);
+      expect(adapter.events, isEmpty);
+      expect(
+        (await store.current(db, SyncEntityKind.note, 'note-1'))!.revisionId,
+        'revision-5',
+      );
+      expect(await store.pending('dropbox'), hasLength(1));
+      await engine.sync(adapter);
+      expect(adapter.published.single.revisionId, 'revision-5');
+    },
+  );
+
+  test(
+    'initial download applies remote notes without writing provider files',
+    () async {
+      content.objects.clear();
+      final adapter = _Adapter('dropbox')
+        ..incoming = [revision(1)]
+        ..objects[objectId] = bytes;
+      await engine.sync(adapter, downloadOnly: true);
+      expect(await db.query('applied'), hasLength(1));
+      expect(content.objects[objectId], bytes);
+      expect(adapter.published, isEmpty);
+      expect(await store.pending('dropbox'), isEmpty);
+    },
+  );
 
   test('expired continuation restarts listing without reapplying acknowledged revisions', () async {
     final adapter = _Adapter('dav')..incoming = [revision(1)];
@@ -483,10 +818,19 @@ void main() {
 class _Content implements SyncReplicaContent {
   final objects = <String, Uint8List>{};
   bool failApply = false;
+  int readCalls = 0;
+  Object? cacheError;
   @override
-  Future<Uint8List?> read(String objectId) async => objects[objectId];
+  Future<bool> contains(String objectId) async => objects.containsKey(objectId);
+  @override
+  Future<Uint8List?> read(String objectId) async {
+    readCalls++;
+    return objects[objectId];
+  }
+
   @override
   Future<void> cache(String objectId, Uint8List bytes) async {
+    if (cacheError case final error?) throw error;
     objects[objectId] = bytes;
   }
 
@@ -537,5 +881,48 @@ class _Adapter implements SyncProviderAdapter {
     }
     events.add('commit');
     published.add(revision);
+  }
+}
+
+class _SmallAdapter extends _Adapter implements SmallSyncObjectReader {
+  _SmallAdapter(super.connectionId);
+  Future<Uint8List?> Function(String)? smallRead;
+  int fullReads = 0;
+  @override
+  Future<bool> get supportsSmallReads async => true;
+  @override
+  Future<Uint8List?> readSmallObject(String id) => smallRead!(id);
+  @override
+  Future<Uint8List> readObject(String id) {
+    fullReads++;
+    return super.readObject(id);
+  }
+}
+
+class _BatchAdapter extends _Adapter implements BatchSyncWriter {
+  _BatchAdapter(super.connectionId);
+  final batchSizes = <int>[];
+  final retainedBatches = <Map<String, Uint8List>>[];
+  @override
+  Future<bool> get supportsBatchWrites async => true;
+  @override
+  Future<void> putObjects(Map<String, Uint8List> values) async {
+    batchSizes.add(values.length);
+    retainedBatches.add(values);
+    expect(values.length, lessThanOrEqualTo(32));
+    expect(
+      values.values.fold<int>(0, (sum, data) => sum + data.length),
+      lessThanOrEqualTo(4 * 1024 * 1024),
+    );
+    for (final entry in values.entries) {
+      await putObject(entry.key, entry.value);
+    }
+  }
+
+  @override
+  Future<void> publishBatch(List<SyncRevision> revisions) async {
+    for (final revision in revisions) {
+      await publish(revision);
+    }
   }
 }

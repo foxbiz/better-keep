@@ -103,6 +103,40 @@ void main() {
     expect(status().phase, SyncPhase.storageFull);
   });
 
+  test(
+    'backgrounding does not turn a completed refresh into a paused warning',
+    () async {
+      for (final pending in [false, true]) {
+        final session = _Session();
+        session.connections.values['google_drive'] = connection('google_drive');
+        var foreground = true, passes = 0;
+        session.scheduler.run = () async {
+          passes++;
+          foreground = false;
+          session.scheduler.values['google_drive:1'] = SyncConnectionProgress(
+            pendingLocalChanges: pending,
+            lastSuccess: pending ? null : DateTime.utc(2026),
+          );
+        };
+        expect(
+          await refreshExternalSession(
+            session,
+            isCurrent: () => true,
+            canSync: () => foreground,
+            progress: () => SyncProgress(
+              pending ? SyncPhase.preparing : SyncPhase.complete,
+            ),
+          ),
+          pending ? SyncRefreshOutcome.deferred : SyncRefreshOutcome.complete,
+        );
+        expect(
+          passes,
+          1,
+        ); // Never start another capture batch in the background.
+      }
+    },
+  );
+
   test('manual refresh yields when pending work makes no progress', () async {
     final session = _Session();
     session.connections.values['google_drive'] = connection('google_drive');

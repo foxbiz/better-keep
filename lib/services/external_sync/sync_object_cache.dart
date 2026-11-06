@@ -38,6 +38,9 @@ class SyncObjectCache {
     return p.join(root, cipher.libraryId, 'objects', id);
   }
 
+  Future<bool> contains(String id) =>
+      _writes.run(id, () => files.exists(_path(id)));
+
   Future<Uint8List?> read(String id) => _writes.run(id, () => _read(id));
   Future<Uint8List?> _read(String id) async {
     final path = _path(id);

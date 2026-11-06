@@ -16,6 +16,7 @@ import 'sync_mutation_journal.dart';
 import 'sync_replica_engine.dart';
 import 'sync_replica_store.dart';
 import 'sync_scheduler.dart';
+import 'sync_provider_adapter.dart';
 import 'sync_status_store.dart';
 import 'sync_change_signals.dart';
 
@@ -93,23 +94,31 @@ class LibrarySyncSession extends ChangeNotifier {
       onPublished: (id) => signals?.published(id),
     );
     connections = createConnections(_current);
+    Future<void> run(
+      SyncProviderAdapter adapter, {
+      bool downloadOnly = false,
+    }) async {
+      await engine.sync(adapter, downloadOnly: downloadOnly);
+      if (!_current()) throw const SyncReplicaCancelled();
+      final pending = await SyncMutationJournal.pending(
+        database,
+        scope,
+        limit: 1,
+      );
+      if (!_current()) throw const SyncReplicaCancelled();
+      _pendingLocalChanges = pending.isNotEmpty;
+      // Large initial libraries are captured in bounded pages. Continue soon,
+      // but leave unavailable sources for a later retry rather than spin.
+      if (!downloadOnly &&
+          _pendingLocalChanges &&
+          content.captureFailures.isEmpty) {
+        scheduler.localChanged();
+      }
+    }
+
     scheduler = SyncScheduler(
-      sync: (adapter) async {
-        await engine.sync(adapter);
-        if (!_current()) throw const SyncReplicaCancelled();
-        final pending = await SyncMutationJournal.pending(
-          database,
-          scope,
-          limit: 1,
-        );
-        if (!_current()) throw const SyncReplicaCancelled();
-        _pendingLocalChanges = pending.isNotEmpty;
-        // Large initial libraries are captured in bounded pages. Continue soon,
-        // but leave unavailable sources for a later retry rather than spin.
-        if (_pendingLocalChanges && content.captureFailures.isEmpty) {
-          scheduler.localChanged();
-        }
-      },
+      sync: run,
+      restore: (adapter) => run(adapter, downloadOnly: true),
       isCurrent: _current,
       blockedEntities: () => content.captureFailures.length,
       notesRequiringUnlock: () => content.notesRequiringUnlock,

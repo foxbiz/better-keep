@@ -20,7 +20,8 @@ import 'storage_usage.dart';
 
 /// Owns the network client and broker for exactly one connection generation.
 /// Retained adapter references stop working as soon as this session is retired.
-class StorageProviderSession implements SyncProviderAdapter {
+class StorageProviderSession
+    implements SyncProviderAdapter, SmallSyncObjectReader, BatchSyncWriter {
   StorageProviderSession({
     required this.connection,
     this.clearing = false,
@@ -163,6 +164,11 @@ class StorageProviderSession implements SyncProviderAdapter {
   Future<SyncChangePage> changes(String? cursor) =>
       _use((a) => a.changes(cursor));
   @override
+  Future<bool> get supportsSmallReads => _use((a) => a.supportsSmallReads);
+  @override
+  Future<Uint8List?> readSmallObject(String objectId) =>
+      _use((a) => a.readSmallObject(objectId));
+  @override
   Future<Uint8List> readObject(String objectId) =>
       _use((a) => a.readObject(objectId));
   @override
@@ -171,6 +177,15 @@ class StorageProviderSession implements SyncProviderAdapter {
   @override
   Future<void> publish(SyncRevision revision) =>
       _use((a) => a.publish(revision));
+
+  @override
+  Future<bool> get supportsBatchWrites => _use((a) => a.supportsBatchWrites);
+  @override
+  Future<void> putObjects(Map<String, Uint8List> objects) =>
+      _use((a) => a.putObjects(objects));
+  @override
+  Future<void> publishBatch(List<SyncRevision> revisions) =>
+      _use((a) => a.publishBatch(revisions));
 
   Future<StorageUsage?> readStorageUsage() => _use((adapter) async {
     final transport = adapter.transport;

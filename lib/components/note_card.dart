@@ -72,13 +72,13 @@ class NoteCardReorderConfig {
 
 class NoteCard extends StatefulWidget {
   final Note note;
-  final int index;
+  final bool animateEntrance;
   final NoteCardReorderConfig? reorderConfig;
 
   const NoteCard({
     super.key,
     required this.note,
-    required this.index,
+    this.animateEntrance = true,
     this.reorderConfig,
   });
 
@@ -549,6 +549,7 @@ class _NoteCardState extends State<NoteCard>
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 240),
+      value: widget.animateEntrance ? 0 : 1,
     );
     _fade = CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic);
     _slide = Tween(
@@ -556,12 +557,9 @@ class _NoteCardState extends State<NoteCard>
       end: Offset.zero,
     ).animate(_fade);
 
-    final delay = Duration(milliseconds: min(widget.index * 24, 1000));
-    Future.delayed(delay, () {
-      if (mounted) _anim.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animateEntrance) _anim.forward();
     });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => _anim.forward());
 
     super.initState();
     _repairMissingSketchPreviews();

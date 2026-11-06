@@ -898,6 +898,17 @@ void main() {
     },
   );
 
+  test('existence probe never bypasses cache integrity verification', () async {
+    final id = await a.objects.encrypt(Uint8List.fromList([42]));
+    final file = File(
+      p.join(a.objects.root, a.cipher.libraryId, 'objects', id),
+    );
+    await file.writeAsBytes([0]);
+    expect(await a.objects.contains(id), isTrue);
+    expect(await a.objects.read(id), isNull);
+    expect(await a.objects.contains(id), isFalse);
+  });
+
   test('legacy inline sketches become portable source files without uploading previews', () async {
     await a.note(
       attachments: [
@@ -1506,6 +1517,8 @@ class _Device {
 /// encryption and library code run above it without real accounts or network.
 class _DropboxServer {
   final files = <String, Uint8List>{};
+  final sessions = <String, Uint8List>{};
+  int sessionId = 0;
 
   Future<http.Response> handle(http.Request request) async {
     expect(request.headers['authorization'], 'Bearer synthetic-access');
@@ -1532,6 +1545,39 @@ class _DropboxServer {
           }),
           200,
         );
+      case '/2/files/upload_session/start':
+        expect(args['close'], isTrue);
+        final id = 'session-${sessionId++}';
+        sessions[id] = Uint8List.fromList(request.bodyBytes);
+        return http.Response(jsonEncode({'session_id': id}), 200);
+      case '/2/files/upload_session/finish_batch_v2':
+        final results = <Map<String, Object?>>[];
+        for (final entry in args['entries'] as List) {
+          final cursor = entry['cursor'] as Map;
+          final commit = entry['commit'] as Map;
+          final bytes = sessions.remove(cursor['session_id'])!;
+          expect(cursor['offset'], bytes.length);
+          expect(commit['mode'], 'add');
+          expect(commit['strict_conflict'], isTrue);
+          expect(commit['autorename'], isFalse);
+          final path = commit['path'] as String;
+          if (files.containsKey(path)) {
+            results.add({
+              '.tag': 'failure',
+              'failure': {
+                '.tag': 'path',
+                'path': {
+                  '.tag': 'conflict',
+                  'conflict': {'.tag': 'file'},
+                },
+              },
+            });
+          } else {
+            files[path] = bytes;
+            results.add({'.tag': 'success'});
+          }
+        }
+        return http.Response(jsonEncode({'entries': results}), 200);
       case '/2/files/upload':
         expect(args['mode'], 'add');
         expect(args['strict_conflict'], isTrue);

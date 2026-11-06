@@ -6,6 +6,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:better_keep/components/note_card.dart';
+import 'package:better_keep/l10n/app_localizations.dart';
+import 'package:better_keep/pages/home/notes.dart';
+import 'package:better_keep/state.dart';
+import 'package:better_keep/services/external_sync/replica_model_notifier.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:better_keep/models/file_sync_track.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
@@ -14,11 +20,16 @@ import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/models/note_table.dart';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/sketch_preview_generator.dart';
+import 'package:better_keep/services/reminder_coordinator.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:better_keep/services/sketch_strokes_file_service.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/external_sync/dropbox_sync_transport.dart';
 import 'package:better_keep/services/external_sync/file_sync_adapter.dart';
+import 'package:better_keep/services/external_sync/external_sync_refresh.dart';
+import 'package:better_keep/services/external_sync/external_sync_progress.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/external_sync/library_sync_session.dart';
 import 'package:better_keep/services/external_sync/provider_http.dart';
 import 'package:better_keep/services/external_sync/storage_connection_controller.dart';
@@ -26,10 +37,12 @@ import 'package:better_keep/services/external_sync/sync_attachment_store.dart';
 import 'package:better_keep/services/external_sync/sync_cipher.dart';
 import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
 import 'package:better_keep/services/external_sync/sync_replica_store.dart';
+import 'package:better_keep/services/external_sync/sync_revision.dart';
 import 'package:better_keep/services/external_sync/sync_status_store.dart';
 import 'package:better_keep/services/external_sync/storage_connection.dart';
 import 'package:better_keep/services/external_sync/sync_change_signals.dart';
 import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -45,7 +58,161 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (const bool.fromEnvironment('SYNC_STRESS_UI')) {
+    binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  }
+  if (const bool.fromEnvironment('SYNC_STRESS')) {
+    if (kIsWeb) {
+      testWidgets('browser sync skips unsupported reminder library scans', (
+        tester,
+      ) async {
+        var initializations = 0;
+        final coordinator = ReminderCoordinator.forTesting(
+          initialize: () async {
+            initializations++;
+            throw StateError('Browser must not initialize reminder scheduling');
+          },
+        );
+        for (var i = 0; i < 1000; i++) {
+          coordinator.requestReconciliation();
+        }
+        await coordinator.waitForRequestedReconciliation();
+        await coordinator.reconcileAll();
+        expect(initializations, 0);
+      });
+    }
+    testWidgets('1000-note image sync stress and durable retry', (
+      tester,
+    ) async {
+      await _stressMatrix(tester);
+    }, timeout: const Timeout(Duration(minutes: 30)));
+    return;
+  }
+  testWidgets(
+    'free login restores nine notes and image; unchanged refresh completes',
+    (tester) async {
+      initializeDb();
+      final files = await fileSystem();
+      final root = p.join(
+        await files.documentDir,
+        'sync-restore-qa-${DateTime.now().microsecondsSinceEpoch}',
+      );
+      final server = _DropboxBoundary();
+      final replicas = <_Replica>[];
+      addTearDown(() async {
+        for (final replica in replicas) {
+          await replica.session.close();
+          replica.client.close();
+          await replica.db.close();
+          await deleteDatabase(replica.db.path);
+        }
+        await _deleteTestFiles(files, root);
+      });
+      final a = await _Replica.create(files, p.join(root, 'a'), server);
+      replicas.add(a);
+      final image = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+      );
+      final imagePath = p.join(a.root, 'image.png');
+      await files.writeBytes(imagePath, image);
+      for (var i = 0; i < 9; i++) {
+        await a.db.insert('note', {
+          'id': i + 1,
+          'sync_id': 'restore-note-$i',
+          'title': 'QA restore $i',
+          'content': jsonEncode([
+            {'insert': 'QA content $i\n'},
+          ]),
+          'created_at': '2030-01-01T00:00:00.000Z',
+          'updated_at': '2030-01-01T00:00:01.000Z',
+          'attachments': jsonEncode(
+            i == 0
+                ? [
+                    {
+                      'id': 'image',
+                      'type': 'image',
+                      'data': {
+                        'src': imagePath,
+                        'size': image.length,
+                        'index': 0,
+                        'aspectRatio': '1:1',
+                        'lastModified': '',
+                      },
+                    },
+                  ]
+                : [],
+          ),
+        });
+      }
+      await a.sync();
+      // A small visible library can retain many deletions. Restore must process
+      // that history without re-creating notes or downloading obsolete payloads.
+      for (var i = 0; i < 100; i++) {
+        await a.adapter.publish(
+          SyncRevision(
+            kind: SyncEntityKind.note,
+            entityId: 'removed-$i',
+            revisionId: 'deleted-$i',
+            modifiedAtMicros: i,
+            deleted: true,
+            payloadObjectId: null,
+          ),
+        );
+      }
+      final writes = server.uploads;
+      server.delay = const Duration(milliseconds: 100);
+      final clock = Stopwatch()..start();
+      final b = await _Replica.create(
+        files,
+        p.join(root, 'b'),
+        server,
+        restoreOnStart: true,
+      );
+      replicas.add(b);
+      await b.session.scheduler.waitForIdle();
+      expect(await b.db.query('note'), hasLength(9));
+      expect(
+        server.uploads,
+        writes,
+        reason: 'Free initial restore is download-only',
+      );
+      expect(server.maxConcurrentDownloads, 8);
+      final row = (await b.db.query(
+        'note',
+        where: "sync_id = 'restore-note-0'",
+      )).single;
+      final media = jsonDecode(row['attachments'] as String) as List;
+      expect(
+        await b.session.attachments.read(media.single['data']['src'] as String),
+        image,
+      );
+      debugPrint(
+        'RESTORE QA: nine notes, image and 100 deletions in ${clock.elapsedMilliseconds}ms at 100ms/request',
+      );
+      final reads = server.downloads;
+      final requests = server.requests;
+      for (var i = 0; i < 2; i++) {
+        final outcome = await refreshExternalSession(
+          b.session,
+          isCurrent: () => true,
+          progress: () => externalSyncProgress(
+            connections: b.session.connections.connections.values,
+            progress: b.session.scheduler.progress,
+            automatic: false,
+          ),
+        );
+        expect(outcome, SyncRefreshOutcome.complete);
+      }
+      expect(server.uploads, writes);
+      expect(server.downloads, reads);
+      expect(
+        server.requests - requests,
+        2,
+        reason: 'Each unchanged refresh only checks the cursor',
+      );
+    },
+  );
   const automatic = bool.fromEnvironment('AUTOMATIC_SYNC_EMULATOR_TEST');
   if (automatic) {
     testWidgets(
@@ -515,6 +682,10 @@ class _ReadyConnection extends ChangeNotifier
   @override
   final List<SyncProviderAdapter> adapters;
   @override
+  bool isSelected(String provider) => connections.containsKey(provider);
+  @override
+  Future<void> waitForMetadata() async {}
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -540,6 +711,8 @@ class _Replica {
     String uid = 'isolated-platform-qa',
     FirebaseFirestore? firestore,
     String deviceId = 'synthetic-device',
+    bool restoreOnStart = false,
+    bool notifyModels = false,
   }) async {
     await files.createDirectory(root);
     final db = await openDatabase(p.join(root, 'qa.sqlite'));
@@ -565,7 +738,7 @@ class _Replica {
       state: 'ready',
     );
     final adapter = FileSyncAdapter(
-      connectionId: firestore == null ? 'dropbox-qa' : connection.replicaId,
+      connectionId: connection.replicaId,
       cipher: cipher,
       transport: DropboxSyncTransport(
         httpClient: ProviderHttp(client),
@@ -576,11 +749,22 @@ class _Replica {
     final session = LibrarySyncSession(
       uid: uid,
       database: db,
+      onApplied: notifyModels
+          ? ReplicaModelNotifier(
+              database: db,
+              isCurrent: () => true,
+              queueNoteSync: () async {},
+              queueLabelSync: () async {},
+              reconcileReminders: () {},
+              cancelReminder: (_) async {},
+            ).apply
+          : null,
       files: files,
       documentRoot: root,
       cacheRoot: p.join(root, 'cache'),
       cipher: cipher,
-      foreground: firestore != null,
+      foreground: firestore != null || restoreOnStart,
+      automatic: !restoreOnStart,
       isCurrent: () => true,
       createSignals: firestore == null
           ? null
@@ -592,7 +776,7 @@ class _Replica {
               firestore: firestore,
               onRemoteChange: changed,
             ),
-      createConnections: (current) => firestore != null
+      createConnections: (current) => firestore != null || restoreOnStart
           ? _ReadyConnection(connection, adapter)
           : StorageConnectionController(
               cipher: cipher,
@@ -632,9 +816,33 @@ class _Replica {
 
 class _DropboxBoundary {
   final files = <String, Uint8List>{};
-  int requests = 0;
+  final sessions = <String, Uint8List>{};
+  int sessionSequence = 0;
+  int requests = 0, uploads = 0, downloads = 0;
+  int concurrentDownloads = 0, maxConcurrentDownloads = 0;
+  Duration delay = Duration.zero;
+  int pageSize = 100;
+  int? failDownloadAt, loseUploadAckAt;
+  bool offline = false;
   Future<http.Response> handle(http.Request request) async {
     requests++;
+    if (offline) return http.Response('unavailable', 503);
+    final downloading = request.url.path == '/2/files/download';
+    final downloadNumber = downloading ? downloads + 1 : null;
+    if (downloading) {
+      downloads++;
+      concurrentDownloads++;
+      if (concurrentDownloads > maxConcurrentDownloads) {
+        maxConcurrentDownloads = concurrentDownloads;
+      }
+    }
+    if (delay != Duration.zero) await Future<void>.delayed(delay);
+    if (downloading) {
+      concurrentDownloads--;
+      if (downloadNumber == failDownloadAt) {
+        return http.Response('unavailable', 503);
+      }
+    }
     expect(request.headers['authorization'], 'Bearer synthetic');
     final args =
         jsonDecode(request.headers['dropbox-api-arg'] ?? request.body) as Map;
@@ -644,23 +852,59 @@ class _DropboxBoundary {
       case '/2/files/list_folder':
       case '/2/files/list_folder/continue':
         final offset = int.parse(args['cursor'] as String? ?? '0');
+        final end = (offset + pageSize).clamp(0, files.length);
         return http.Response(
           jsonEncode({
             'entries': files.keys
                 .skip(offset)
+                .take(pageSize)
                 .map((path) => {'.tag': 'file', 'name': p.basename(path)})
                 .toList(),
-            'cursor': '${files.length}',
-            'has_more': false,
+            'cursor': '$end',
+            'has_more': end < files.length,
           }),
           200,
         );
+      case '/2/files/upload_session/start':
+        expect(args['close'], isTrue);
+        final id = '${++sessionSequence}';
+        sessions[id] = Uint8List.fromList(request.bodyBytes);
+        return http.Response(jsonEncode({'session_id': id}), 200);
+      case '/2/files/upload_session/finish_batch_v2':
+        final results = <Map<String, Object?>>[];
+        for (final entry in args['entries'] as List) {
+          final cursor = entry['cursor'] as Map;
+          final commit = entry['commit'] as Map;
+          final bytes = sessions.remove(cursor['session_id'])!;
+          expect(cursor['offset'], bytes.length);
+          expect(commit['mode'], 'add');
+          expect(commit['autorename'], isFalse);
+          expect(commit['strict_conflict'], isTrue);
+          final path = commit['path'] as String;
+          uploads++;
+          if (files.containsKey(path)) {
+            results.add({
+              '.tag': 'failure',
+              'failure': {
+                '.tag': 'path',
+                'path': {'.tag': 'conflict'},
+              },
+            });
+          } else {
+            files[path] = bytes;
+            results.add({'.tag': 'success', 'name': p.basename(path)});
+          }
+          if (uploads == loseUploadAckAt) return http.Response('lost ack', 503);
+        }
+        return http.Response(jsonEncode({'entries': results}), 200);
       case '/2/files/upload':
+        uploads++;
         final path = args['path'] as String;
         if (files.containsKey(path)) {
           return http.Response('{"error_summary":"path/conflict/file"}', 409);
         }
         files[path] = Uint8List.fromList(request.bodyBytes);
+        if (uploads == loseUploadAckAt) return http.Response('lost ack', 503);
         return http.Response('{}', 200);
       case '/2/files/download':
         return http.Response.bytes(files[args['path']]!, 200);
@@ -668,4 +912,332 @@ class _DropboxBoundary {
         throw StateError('Unexpected Dropbox route ${request.url.path}');
     }
   }
+}
+
+// Opt-in stress fixtures are supplied from a local defines file; no live
+// credentials, downloaded photos, or generated libraries are committed.
+Future<void> _stressMatrix(WidgetTester tester) async {
+  const showGrid = bool.fromEnvironment('SYNC_STRESS_UI');
+  final response = await http.get(
+    Uri.parse(const String.fromEnvironment('SYNC_STRESS_FIXTURE_URL')),
+  );
+  expect(response.statusCode, 200);
+  Future<void> report(String stage, [int? milliseconds]) async {
+    debugPrint(
+      'STRESS PASS $stage${milliseconds == null ? '' : ': ${milliseconds}ms'}',
+    );
+    const endpoint = String.fromEnvironment('SYNC_STRESS_PROGRESS_URL');
+    if (endpoint.isNotEmpty) {
+      await http.post(
+        Uri.parse(endpoint),
+        body: jsonEncode({'stage': stage, 'milliseconds': milliseconds}),
+      );
+    }
+  }
+
+  await report('fixture-loaded');
+  final fixture = jsonDecode(utf8.decode(response.bodyBytes)) as Map;
+  final data = (fixture['notes'] as List).cast<Map<String, dynamic>>();
+  final photos = (fixture['images'] as List)
+      .map((value) => base64Decode(value as String))
+      .toList();
+  expect(data.length, 1000);
+  expect(photos, isNotEmpty);
+  initializeDb();
+  final files = await fileSystem();
+  final root = p.join(
+    await files.documentDir,
+    'sync-stress-${DateTime.now().microsecondsSinceEpoch}',
+  );
+  final server = _DropboxBoundary();
+  final active = <String, _Replica>{};
+  Future<_Replica> open(String name) async {
+    final replica = await _Replica.create(
+      files,
+      p.join(root, name),
+      server,
+      notifyModels: showGrid && name == 'c',
+    );
+    active[name] = replica;
+    return replica;
+  }
+
+  Future<void> close(String name) async {
+    final replica = active.remove(name)!;
+    await replica.session.close();
+    replica.client.close();
+    await replica.db.close();
+  }
+
+  addTearDown(() async {
+    for (final name in active.keys.toList()) {
+      await close(name);
+    }
+    for (final name in ['a', 'b', 'c']) {
+      await deleteDatabase(p.join(root, name, 'qa.sqlite'));
+    }
+    await _deleteTestFiles(files, root);
+  });
+  final timings = <String, int>{};
+  Future<void> timed(String name, Future<void> Function() operation) async {
+    final clock = Stopwatch()..start();
+    await operation();
+    timings[name] = clock.elapsedMilliseconds;
+    await report(name, clock.elapsedMilliseconds);
+  }
+
+  var a = await open('a');
+  await report('first-replica-open');
+  for (var i = 0; i < photos.length; i++) {
+    await files.writeBytes(p.join(a.root, 'pexels-$i.jpg'), photos[i]);
+  }
+  final expected = <String, Map<String, dynamic>>{};
+  await a.db.transaction((txn) async {
+    for (var i = 0; i < data.length; i++) {
+      final item = data[i];
+      final photo = item['imageIndex'] as int;
+      final id = 'stress-${i.toString().padLeft(4, '0')}';
+      final content = jsonEncode([
+        {'insert': '${item['text']}\n'},
+      ]);
+      expected[id] = {
+        'title': item['title'],
+        'content': content,
+        'imageHash': sha256.convert(photos[photo]).toString(),
+      };
+      await txn.insert('note', {
+        'id': i + 1,
+        'sync_id': id,
+        'title': item['title'],
+        'content': content,
+        'created_at': '2030-01-01T00:00:00.000Z',
+        'updated_at': '2030-01-01T00:00:01.000Z',
+        'attachments': jsonEncode([
+          {
+            'id': 'image-$i',
+            'type': 'image',
+            'data': {
+              'src': p.join(a.root, 'pexels-$photo.jpg'),
+              'size': photos[photo].length,
+              'index': 0,
+              'aspectRatio': '3:2',
+              'lastModified': '',
+            },
+          },
+        ]),
+      });
+    }
+  });
+  await report('1000-notes-created');
+  Future<void> drain(_Replica replica, {bool downloadOnly = false}) async {
+    for (var pass = 0; pass < 30; pass++) {
+      await replica.session.engine.sync(
+        replica.adapter,
+        downloadOnly: downloadOnly,
+      );
+      expect(replica.session.content.captureFailures, isEmpty);
+      if (downloadOnly ||
+          (await SyncMutationJournal.pending(
+            replica.db,
+            replica.session.engine.store.scope,
+            limit: 1,
+          )).isEmpty) {
+        return;
+      }
+    }
+    fail('Capture did not drain in 30 passes');
+  }
+
+  Future<void> verify(_Replica replica) async {
+    final rows = await replica.db.query('note');
+    expect(rows.length, expected.length);
+    expect(rows.map((r) => r['sync_id']).toSet(), expected.keys.toSet());
+    for (final row in rows) {
+      final wanted = expected[row['sync_id']]!;
+      expect(row['title'], wanted['title'], reason: '${row['sync_id']} title');
+      expect(
+        row['content'],
+        wanted['content'],
+        reason: '${row['sync_id']} content',
+      );
+      final media = jsonDecode(row['attachments'] as String) as List;
+      expect(media.length, 1);
+      final bytes = await replica.session.attachments.read(
+        media.single['data']['src'] as String,
+      );
+      expect(bytes, isNotNull);
+      expect(
+        sha256.convert(bytes).toString(),
+        wanted['imageHash'],
+        reason: '${row['sync_id']} image',
+      );
+    }
+  }
+
+  // Persist a write but lose its response: retry must not duplicate the commit.
+  server.loseUploadAckAt = 137;
+  await expectLater(drain(a), throwsA(isA<SyncProviderFailure>()));
+  server.loseUploadAckAt = null;
+  await close('a');
+  a = await open('a');
+  await timed('upload-after-lost-ack-and-reopen', () => drain(a));
+  final committedFiles = server.files.length;
+  final writes = server.uploads;
+  var b = await open('b');
+  server.failDownloadAt = server.downloads + 37;
+  await expectLater(
+    drain(b, downloadOnly: true),
+    throwsA(isA<SyncProviderFailure>()),
+  );
+  server.failDownloadAt = null;
+  await close('b');
+  b = await open('b');
+  await timed(
+    'restore-after-interruption-and-reopen',
+    () => drain(b, downloadOnly: true),
+  );
+  expect(server.uploads, writes);
+  await timed('verify-all-1000-notes-and-images', () => verify(b));
+  await close('b');
+  b = await open('b');
+  await verify(
+    b,
+  ); // Durable local data is usable before contacting the provider.
+  final downloads = server.downloads;
+  await timed('unchanged-refresh', () => drain(b));
+  expect(server.downloads, downloads);
+  expect(server.files.length, committedFiles);
+  expect(server.uploads, writes);
+  server.offline = true;
+  await expectLater(drain(b), throwsA(isA<SyncProviderFailure>()));
+  await verify(b);
+  server.offline = false;
+  // Fifty edits from each device, plus an independently newer local winner.
+  for (var i = 0; i < 100; i++) {
+    final writer = i.isEven ? a : b;
+    final id = 'stress-${i.toString().padLeft(4, '0')}';
+    final title = 'Edited from ${i.isEven ? 'a' : 'b'} $i';
+    expected[id]!['title'] = title;
+    await writer.db.update(
+      'note',
+      {'title': title, 'updated_at': '2030-01-01T00:00:02.000Z'},
+      where: 'sync_id = ?',
+      whereArgs: [id],
+    );
+  }
+  await b.db.update('note', {
+    'title': 'Newest local winner',
+    'updated_at': '2030-01-01T00:00:03.000Z',
+  }, where: "sync_id = 'stress-0000'");
+  expected['stress-0000']!['title'] = 'Newest local winner';
+  // Replace twenty images and remove fifty notes while the other device is offline.
+  for (var i = 100; i < 120; i++) {
+    final id = 'stress-${i.toString().padLeft(4, '0')}';
+    final row = (await a.db.query(
+      'note',
+      where: 'sync_id = ?',
+      whereArgs: [id],
+    )).single;
+    final media = jsonDecode(row['attachments'] as String) as List;
+    final photo = ((data[i]['imageIndex'] as int) + 1) % photos.length;
+    media.single['data']['src'] = p.join(a.root, 'pexels-$photo.jpg');
+    media.single['data']['size'] = photos[photo].length;
+    media.single['data']['lastModified'] = 'replacement';
+    await a.db.update(
+      'note',
+      {
+        'attachments': jsonEncode(media),
+        'updated_at': '2030-01-01T00:00:02.000Z',
+      },
+      where: 'sync_id = ?',
+      whereArgs: [id],
+    );
+    expected[id]!['imageHash'] = sha256.convert(photos[photo]).toString();
+  }
+  for (var i = 900; i < 950; i++) {
+    final id = 'stress-${i.toString().padLeft(4, '0')}';
+    await a.db.delete('note', where: 'sync_id = ?', whereArgs: [id]);
+    expected.remove(id);
+  }
+  await timed('bidirectional-edits-images-deletions', () async {
+    await drain(a);
+    await drain(b);
+    await drain(a);
+    await verify(a);
+    await verify(b);
+  });
+  final c = await open('c');
+  var displayedChanges = 0;
+  void reportGridProgress(NoteEvent event) {
+    displayedChanges++;
+    if (displayedChanges % 100 == 0) {
+      unawaited(report('visible-grid-applied-$displayedChanges'));
+    }
+  }
+
+  if (showGrid) {
+    Note.on('changed', reportGridProgress);
+    await AppState.init();
+    AppState.db = c.db;
+    AppState.showNotes = NoteType.all;
+    AppState.selectedNotes = [];
+    AppState.filterLabels = [];
+    AppState.currentFolder = null;
+    AppState.set('notes_view_mode', NoteViewMode.grid);
+    await NoteSortService().init();
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: [
+          ...AppLocalizations.localizationsDelegates,
+          FlutterQuillLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(body: Notes()),
+      ),
+    );
+    await tester.pump();
+  }
+  try {
+    await timed(
+      'fresh-third-device-restore',
+      () => drain(c, downloadOnly: true),
+    );
+    await verify(c);
+    if (showGrid) {
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 60));
+      final scroll = tester
+          .widget<CustomScrollView>(find.byType(CustomScrollView))
+          .controller!;
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 60));
+      scroll.jumpTo(0);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 60));
+      await report('visible-grid-restored-${expected.length}-notes');
+    }
+  } finally {
+    if (showGrid) {
+      Note.off('changed', reportGridProgress);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await NoteSortService().dispose();
+    }
+  }
+  final finalWrites = server.uploads;
+  // Writers still need to advance their listing cursor past their own commits.
+  // That metadata read is expected; it must not cause uploads or reapplication.
+  await drain(a);
+  await drain(b);
+  await drain(c);
+  expect(server.uploads, finalWrites);
+  final finalDownloads = server.downloads;
+  await drain(a);
+  await drain(b);
+  await drain(c);
+  expect(server.uploads, finalWrites);
+  expect(server.downloads, finalDownloads);
+  debugPrint(
+    'STRESS RESULT ${jsonEncode({'notes': data.length, 'finalNotes': expected.length, 'requests': server.requests, 'uploads': server.uploads, 'downloads': server.downloads, 'maxConcurrentDownloads': server.maxConcurrentDownloads, 'timingsMs': timings})}',
+  );
 }

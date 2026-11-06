@@ -19,6 +19,20 @@ abstract interface class SyncProviderAdapter {
   Future<void> publish(SyncRevision revision);
 }
 
+/// Optional bounded prefetch. Oversized objects remain on the serial read path.
+abstract interface class SmallSyncObjectReader {
+  Future<bool> get supportsSmallReads;
+  Future<Uint8List?> readSmallObject(String objectId);
+}
+
+/// Optional immutable batch writes. A failed batch must not be acknowledged;
+/// retrying any subset must validate existing content rather than overwrite it.
+abstract interface class BatchSyncWriter {
+  Future<bool> get supportsBatchWrites;
+  Future<void> putObjects(Map<String, Uint8List> objects);
+  Future<void> publishBatch(List<SyncRevision> revisions);
+}
+
 class SyncChangePage {
   SyncChangePage({
     required Iterable<SyncRevision> revisions,

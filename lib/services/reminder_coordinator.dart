@@ -285,6 +285,9 @@ class ReminderCoordinator {
     try {
       final override = _reconciliationOverride;
       if (override != null) return await override();
+      // Web has no scheduled notifications or alarms to reconcile. Incoming
+      // sync can request this for every note; avoid decoding the entire library.
+      if (kIsWeb) return;
       await init();
       if (!await ReminderSessionService.isSignedIn()) {
         await LocalNotificationService.instance.cancelAllReminderDeliveries();

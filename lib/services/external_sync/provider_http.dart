@@ -35,6 +35,7 @@ class ProviderHttp {
     int maxResponseBytes = SyncLimits.metadataBytes,
     void Function(List<int>)? onResponseChunk,
     SyncProviderFailureKind sizeFailure = SyncProviderFailureKind.corruptData,
+    Exception? sizeException,
   }) async {
     _guard();
     if (uri.scheme != 'https' || uri.userInfo.isNotEmpty || uri.hasFragment) {
@@ -56,7 +57,7 @@ class ProviderHttp {
           }
           if ((response.contentLength ?? 0) > maxResponseBytes) {
             await response.stream.listen(null).cancel();
-            throw SyncProviderFailure(sizeFailure);
+            throw sizeException ?? SyncProviderFailure(sizeFailure);
           }
           final bytes = BytesBuilder(copy: false);
           var received = 0;
@@ -67,7 +68,7 @@ class ProviderHttp {
             _guard();
             received += chunk.length;
             if (received > maxResponseBytes) {
-              throw SyncProviderFailure(sizeFailure);
+              throw sizeException ?? SyncProviderFailure(sizeFailure);
             }
             if (consume == null) {
               bytes.add(chunk);

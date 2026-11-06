@@ -1,3 +1,7 @@
+import 'package:better_keep/components/note_card.dart';
+import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
+import 'package:better_keep/models/base_model.dart';
+import 'package:better_keep/pages/home/notes.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/label.dart';
@@ -46,6 +50,190 @@ void main() {
     AppState.showNotes = NoteType.all;
     await sortService.dispose();
     await database.close();
+  });
+
+  testWidgets(
+    'incoming notes rebuild only changed cards and keep edits visible',
+    (tester) async {
+      AppState.showNotes = NoteType.archived;
+      await tester.runAsync(() async {
+        for (var i = 1; i <= 100; i++) {
+          await database.insert(
+            Note.model,
+            Note(
+              id: i,
+              title: 'Existing $i',
+              archived: true,
+              content: '[]',
+            ).toJson(),
+          );
+        }
+      });
+      await tester.pumpWidget(_app(const Scaffold(body: Notes())));
+      await _drainDatabaseWork(tester);
+      await _drainDatabaseWork(tester);
+      await tester.pump(const Duration(milliseconds: 1250));
+      await tester.pumpAndSettle();
+      expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 30));
+
+      final items = tester
+          .widgetList<MasonryReorderItem>(find.byType(MasonryReorderItem))
+          .toList();
+      final scroll = tester
+          .widget<CustomScrollView>(find.byType(CustomScrollView))
+          .controller!;
+      scroll.jumpTo(1);
+      await tester.pump();
+      final afterScroll = tester
+          .widgetList<MasonryReorderItem>(find.byType(MasonryReorderItem))
+          .toList();
+      expect(afterScroll.length, items.length);
+      for (var i = 0; i < items.length; i++) {
+        expect(identical(items[i], afterScroll[i]), isTrue);
+      }
+      scroll.jumpTo(0);
+      await tester.pump();
+
+      var cardBuilds = 0;
+      final previousObserver = debugOnRebuildDirtyWidget;
+      debugOnRebuildDirtyWidget = (element, builtOnce) {
+        previousObserver?.call(element, builtOnce);
+        if (element.widget is NoteCard) cardBuilds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = previousObserver);
+      final incoming = Note(
+        id: 101,
+        title: 'Incoming',
+        updatedAt: DateTime.now(),
+        archived: true,
+        content: '[]',
+      );
+      incoming.notify('created', false, ModelChangeOrigin.remoteSync);
+      await tester.pump();
+      expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 30));
+      expect(
+        cardBuilds,
+        lessThanOrEqualTo(2),
+        reason: 'one incoming note must not rebuild the existing library',
+      );
+
+      // Edits can mutate the same model object, so identity alone is not enough.
+      final edited = tester
+          .widget<NoteCard>(find.byKey(const ValueKey('note_card_100')))
+          .note;
+      edited.title = 'Updated in place';
+      edited.notify('updated', false, ModelChangeOrigin.remoteSync);
+      await tester.pump();
+      expect(find.text('Updated in place'), findsOneWidget);
+      expect(find.text('Existing 100'), findsNothing);
+      Note(
+        id: 100,
+        title: 'Updated in place',
+        updatedAt: edited.updatedAt,
+        archived: true,
+        locked: true,
+        content: '[]',
+      ).notify('updated', false, ModelChangeOrigin.remoteSync);
+      await tester.pump();
+      expect(find.byIcon(Icons.lock), findsOneWidget);
+
+      incoming.notify('deleted', false, ModelChangeOrigin.remoteSync);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('note_card_101')), findsNothing);
+      expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 30));
+      await tester.pump(const Duration(milliseconds: 1250));
+      await _drainDatabaseWork(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainDatabaseWork(tester);
+    },
+  );
+
+  testWidgets('covered notes defer bulk updates and reload on return', (
+    tester,
+  ) async {
+    AppState.showNotes = NoteType.archived;
+    await tester.pumpWidget(_app(const Scaffold(body: Notes())));
+    await _drainDatabaseWork(tester);
+    final navigator = Navigator.of(tester.element(find.byType(Notes)));
+    navigator.push<void>(
+      MaterialPageRoute(builder: (_) => const Scaffold(body: Text('Account'))),
+    );
+    await tester.pumpAndSettle();
+    AppState.selectedNotes = [Note(id: 999, title: 'Old selection')];
+
+    await tester.runAsync(() async {
+      for (var i = 0; i < 100; i++) {
+        final note = Note(
+          id: i + 1,
+          title: 'Downloaded $i',
+          archived: true,
+          content: '[]',
+        );
+        await database.insert(Note.model, note.toJson());
+        note.notify('created', false, ModelChangeOrigin.remoteSync);
+      }
+    });
+    await tester.pump();
+    expect(find.byType(NoteCard, skipOffstage: false), findsNothing);
+    expect(AppState.selectedNotes, isEmpty);
+
+    navigator.pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await _drainDatabaseWork(tester);
+    await _drainDatabaseWork(tester);
+    expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 30));
+    expect(find.text('Downloaded 99'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1250));
+    final scroll = tester
+        .widget<CustomScrollView>(find.byType(CustomScrollView))
+        .controller!;
+    scroll.jumpTo(scroll.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.text('Downloaded 0'), findsOneWidget);
+    scroll.jumpTo(0);
+    await tester.pump();
+    final fades = tester.widgetList<FadeTransition>(
+      find.descendant(
+        of: find.byType(NoteCard),
+        matching: find.byType(FadeTransition),
+      ),
+    );
+    expect(fades, isNotEmpty);
+    expect(fades.map((fade) => fade.opacity.value), everyElement(1.0));
+    expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 30));
+    await _drainDatabaseWork(tester);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainDatabaseWork(tester);
+  });
+
+  testWidgets('empty notes remain centered and bounded on a wide screen', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1600, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    AppState.showNotes = NoteType.archived;
+    await tester.pumpWidget(_app(const Scaffold(body: Notes())));
+    await _drainDatabaseWork(tester);
+    await _drainDatabaseWork(tester);
+    await tester.pumpAndSettle();
+    final empty = find.byType(SliverFillRemaining);
+    expect(empty, findsOneWidget);
+    final box = find.descendant(
+      of: empty,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedBox && widget.constraints.maxWidth == 1200,
+      ),
+    );
+    expect(box, findsOneWidget);
+    expect(tester.getSize(box).width, lessThanOrEqualTo(1200));
+    expect(tester.getCenter(box).dx, closeTo(800, 1));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainDatabaseWork(tester);
   });
 
   testWidgets('system tabs end every app bar with their configure button', (

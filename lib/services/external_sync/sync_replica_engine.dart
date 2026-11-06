@@ -1,5 +1,8 @@
 import 'dart:typed_data';
 
+import '../bounded_async.dart';
+import 'sync_limits.dart';
+
 import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -10,6 +13,7 @@ import 'sync_revision.dart';
 /// Implemented by the app's encrypted payload/media codec. Object IDs are the
 /// SHA-256 of encrypted bytes; identical IDs always represent identical bytes.
 abstract interface class SyncReplicaContent {
+  Future<bool> contains(String objectId);
   Future<Uint8List?> read(String objectId);
   Future<void> cache(String objectId, Uint8List bytes);
 
@@ -52,15 +56,38 @@ class SyncReplicaEngine {
   final SyncReplicaContent content;
   final bool Function() isCurrent;
   final Iterable<SyncProviderAdapter> Function()? availableAdapters;
-  final Map<String, Future<void>> _running = {};
+  final Map<
+    String,
+    ({SyncProviderAdapter adapter, bool downloadOnly, Future<void> task})
+  >
+  _running = {};
+  final _tasks = <Future<void>>{};
 
-  Future<void> sync(SyncProviderAdapter adapter) {
+  Future<void> sync(SyncProviderAdapter adapter, {bool downloadOnly = false}) {
     final running = _running[adapter.connectionId];
-    if (running != null) return running;
-    final task = _sync(adapter).whenComplete(() {
-      _running.remove(adapter.connectionId);
-    });
-    _running[adapter.connectionId] = task;
+    if (running != null) {
+      if (identical(running.adapter, adapter) &&
+          running.downloadOnly == downloadOnly) {
+        return running.task;
+      }
+      return _track(
+        running.task.then(
+          (_) => sync(adapter, downloadOnly: downloadOnly),
+          onError: (Object _, StackTrace _) =>
+              sync(adapter, downloadOnly: downloadOnly),
+        ),
+      );
+    }
+    final task = _track(
+      _sync(adapter, downloadOnly: downloadOnly).whenComplete(() {
+        _running.remove(adapter.connectionId);
+      }),
+    );
+    _running[adapter.connectionId] = (
+      adapter: adapter,
+      downloadOnly: downloadOnly,
+      task: task,
+    );
     return task;
   }
 
@@ -81,10 +108,17 @@ class SyncReplicaEngine {
     return failures;
   }
 
+  Future<void> _track(Future<void> operation) {
+    late final Future<void> task;
+    task = operation.whenComplete(() => _tasks.remove(task));
+    _tasks.add(task);
+    return task;
+  }
+
   Future<void> waitForIdle() async {
-    while (_running.isNotEmpty) {
+    while (_tasks.isNotEmpty) {
       await Future.wait(
-        _running.values.toList().map(
+        _tasks.toList().map(
           (task) =>
               task.then<void>((_) {}, onError: (Object _, StackTrace _) {}),
         ),
@@ -92,12 +126,15 @@ class SyncReplicaEngine {
     }
   }
 
-  Future<void> _sync(SyncProviderAdapter adapter) async {
+  Future<void> _sync(
+    SyncProviderAdapter adapter, {
+    required bool downloadOnly,
+  }) async {
     _guard();
     final preparing = content is PreparingSyncReplicaContent
         ? content as PreparingSyncReplicaContent
         : null;
-    if (preparing != null) {
+    if (preparing != null && !downloadOnly) {
       await preparing.captureLocalChanges();
       _guard();
     }
@@ -127,7 +164,7 @@ class SyncReplicaEngine {
       cursor = page.cursor;
       if (!page.hasMore) break;
     }
-    if (preparing != null) {
+    if (preparing != null && !downloadOnly) {
       await preparing.captureLocalChanges();
       _guard();
     }
@@ -135,17 +172,31 @@ class SyncReplicaEngine {
     // newer revision can supersede it. Unresolved conflicts still fail closed.
     // This also resolves local edits materialized during the download.
     await _applyInbox(adapter);
+    if (downloadOnly) return;
     (String, String)? after;
     while (true) {
       final pending = await store.pending(adapter.connectionId, after: after);
       if (pending.isEmpty) break;
+      if (pending.length > 1 &&
+          adapter is BatchSyncWriter &&
+          await (adapter as BatchSyncWriter).supportsBatchWrites) {
+        await _publishBatchPage(adapter, pending, preparing);
+        after = (pending.last.kind.name, pending.last.entityId);
+        continue;
+      }
+      // Keep this bounded by the pending page. Immutable objects shared by
+      // several notes need only one successful upload to this provider per page.
+      // Never retain this across runs: retries must recheck remote durability.
+      final uploadedObjects = <String>{};
       for (final revision in pending) {
         _guard();
         if (!await _isOutgoingCurrent(revision, preparing)) continue;
         for (final id in [...revision.blobIds, ?revision.payloadObjectId]) {
+          if (uploadedObjects.contains(id)) continue;
           final bytes = await _object(id, adapter);
           await adapter.putObject(id, bytes);
           _guard();
+          uploadedObjects.add(id);
         }
         if (!await _isOutgoingCurrent(revision, preparing)) continue;
         await adapter.publish(revision);
@@ -163,6 +214,69 @@ class SyncReplicaEngine {
         onPublished?.call(adapter.connectionId);
       }
       after = (pending.last.kind.name, pending.last.entityId);
+    }
+  }
+
+  Future<void> _publishBatchPage(
+    SyncProviderAdapter adapter,
+    List<SyncRevision> pending,
+    PreparingSyncReplicaContent? preparing,
+  ) async {
+    final writer = adapter as BatchSyncWriter;
+    final objects = <String, Uint8List>{};
+    final uploaded = <String>{};
+    final ready = <SyncRevision>[];
+    var size = 0;
+    Future<void> flush() async {
+      if (objects.isEmpty) return;
+      _guard();
+      await writer.putObjects(Map.unmodifiable(objects));
+      _guard();
+      uploaded.addAll(objects.keys);
+      objects.clear();
+      size = 0;
+    }
+
+    for (final revision in pending) {
+      if (!await _isOutgoingCurrent(revision, preparing)) continue;
+      for (final id in [...revision.blobIds, ?revision.payloadObjectId]) {
+        if (uploaded.contains(id) || objects.containsKey(id)) continue;
+        final bytes = await _object(id, adapter);
+        if (size + bytes.length > SyncLimits.batchBytes ||
+            objects.length >= SyncLimits.batchFiles) {
+          await flush();
+        }
+        if (bytes.length > SyncLimits.batchBytes) {
+          // Preserve the existing serial/chunked path for large attachments.
+          await adapter.putObject(id, bytes);
+          _guard();
+          uploaded.add(id);
+        } else {
+          objects[id] = bytes;
+          size += bytes.length;
+        }
+      }
+      ready.add(revision);
+    }
+    await flush();
+    final current = <SyncRevision>[];
+    for (final revision in ready) {
+      if (await _isOutgoingCurrent(revision, preparing)) current.add(revision);
+    }
+    if (current.isEmpty) return;
+    _guard();
+    await writer.publishBatch(current);
+    _guard();
+    // A partial/lost batch response leaves every revision pending for verified
+    // immutable retry. Never infer remote durability from upload-session start.
+    for (final revision in current) {
+      await store.database.transaction((txn) async {
+        _guard();
+        await store.acknowledge(txn, adapter.connectionId, revision);
+        await store.queueSignal(txn, adapter.connectionId, revision.revisionId);
+        _guard();
+      });
+      onPublished?.call(adapter.connectionId);
     }
   }
 
@@ -192,6 +306,7 @@ class SyncReplicaEngine {
     while (true) {
       final incoming = await store.inbox(adapter.connectionId, after: after);
       if (incoming.isEmpty) break;
+      await _prefetchSmallObjects(adapter, incoming);
       for (final revision in incoming) {
         _guard();
         final before = await store.current(
@@ -259,6 +374,70 @@ class SyncReplicaEngine {
         incoming.last.entityId,
         incoming.last.revisionId,
       );
+    }
+  }
+
+  Future<void> _prefetchSmallObjects(
+    SyncProviderAdapter adapter,
+    List<SyncRevision> incoming,
+  ) async {
+    if (adapter is! SmallSyncObjectReader) return;
+    final reader = adapter as SmallSyncObjectReader;
+    if (!await reader.supportsSmallReads) return;
+    _guard();
+    final preparing = content is PreparingSyncReplicaContent
+        ? content as PreparingSyncReplicaContent
+        : null;
+    final candidates = <String>{};
+    for (final revision in incoming) {
+      final current = await store.current(
+        store.database,
+        revision.kind,
+        revision.entityId,
+      );
+      final local = await preparing?.localVersion(
+        revision.kind,
+        revision.entityId,
+      );
+      _guard();
+      if ((current != null && revision.compareTo(current) <= 0) ||
+          (local != null && local.compareTo(revision) > 0)) {
+        continue;
+      }
+      candidates.addAll([...revision.blobIds, ?revision.payloadObjectId]);
+    }
+    final missing = <String>[];
+    // Existence is only a prefetch hint; _object still verifies cached bytes.
+    for (final id in candidates) {
+      if (!await content.contains(id)) missing.add(id);
+      _guard();
+    }
+    ({Object error, StackTrace stack})? cacheFailure;
+    try {
+      await forEachBounded(missing, (id) async {
+        _guard();
+        final bytes = await reader.readSmallObject(id);
+        _guard();
+        if (bytes == null) return;
+        if (bytes.length > SyncLimits.prefetchBytes) {
+          throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+        }
+        _verify(id, bytes);
+        try {
+          await content.cache(id, bytes);
+        } catch (error, stack) {
+          cacheFailure ??= (error: error, stack: stack);
+          rethrow;
+        }
+        _guard();
+      }, concurrency: 8);
+    } catch (_) {
+      _guard();
+      final failure = cacheFailure;
+      if (failure != null) {
+        Error.throwWithStackTrace(failure.error, failure.stack);
+      }
+      // Network prefetch failures fall back to verified serial reads.
     }
   }
 

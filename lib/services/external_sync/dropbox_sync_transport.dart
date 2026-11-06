@@ -8,10 +8,16 @@ import 'package:http/http.dart' as http;
 
 import 'file_sync_adapter.dart';
 import 'provider_http.dart';
+import '../bounded_async.dart';
 import 'sync_provider_adapter.dart';
 
 class DropboxSyncTransport
-    implements SyncFileTransport, SyncFileCleanup, StorageUsageReader {
+    implements
+        SyncFileTransport,
+        SyncFileCleanup,
+        StorageUsageReader,
+        SmallSyncFileReader,
+        BatchSyncFileWriter {
   DropboxSyncTransport({
     required this.httpClient,
     required this.accessToken,
@@ -125,7 +131,7 @@ class DropboxSyncTransport
         'autorename': false,
       });
       if (result.statusCode != 200 && !_error(result, 'path/conflict/folder')) {
-        ProviderHttp.fail(result);
+        _failWriteResponse(result);
       }
     }
     _initialized = true;
@@ -171,13 +177,27 @@ class DropboxSyncTransport
   }
 
   @override
-  Future<Uint8List> read(String name) async {
+  Future<Uint8List> read(String name) => _read(name);
+
+  @override
+  Future<Uint8List?> readSmall(String name) async {
+    try {
+      return await _read(name, small: true);
+    } on SmallSyncReadLimitExceeded {
+      return null;
+    }
+  }
+
+  Future<Uint8List> _read(String name, {bool small = false}) async {
     final response = await httpClient.send(
       'POST',
       Uri.https('content.dropboxapi.com', '/2/files/download'),
-      maxResponseBytes: name.startsWith('c-')
+      maxResponseBytes: small
+          ? SyncLimits.prefetchBytes
+          : name.startsWith('c-')
           ? SyncLimits.commitBytes
           : SyncLimits.objectBytes,
+      sizeException: small ? const SmallSyncReadLimitExceeded() : null,
       headers: {
         'Authorization': 'Bearer ${await accessToken()}',
         'Dropbox-API-Arg': jsonEncode({'path': _path(name)}),
@@ -226,8 +246,107 @@ class DropboxSyncTransport
     }
     if (response.statusCode == 200) return true;
     if (_error(response, 'path/conflict')) return false;
-    if (_error(response, 'path/insufficient_space')) {
-      throw const SyncProviderFailure(SyncProviderFailureKind.quotaExceeded);
+    _failWriteResponse(response);
+  }
+
+  @override
+  Future<Map<String, bool>> createBatch(Map<String, Uint8List> files) async {
+    if (files.isEmpty) return {};
+    if (files.length > SyncLimits.batchFiles ||
+        files.values.fold<int>(0, (size, bytes) => size + bytes.length) >
+            SyncLimits.batchBytes) {
+      throw const SyncProviderFailure(SyncProviderFailureKind.unsupported);
+    }
+    final names = files.keys.toList();
+    final paths = names.map(_path).toList();
+    await _initialize();
+    final entries = List<Map<String, Object?>?>.filled(names.length, null);
+    // Upload buffers concurrently, then acquire the namespace write lock once.
+    // A failed start drains the pool and never publishes an incomplete batch.
+    await forEachBounded(Iterable.generate(names.length), (index) async {
+      final bytes = files[names[index]]!;
+      final response = await _call('upload_session/start', {
+        'close': true,
+      }, data: bytes);
+      if (response.statusCode != 200) ProviderHttp.fail(response);
+      final session = _json(response)['session_id'];
+      if (session is! String || session.isEmpty || session.length > 4096) {
+        throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+      }
+      entries[index] = {
+        'cursor': {'session_id': session, 'offset': bytes.length},
+        'commit': {
+          'path': paths[index],
+          'mode': 'add',
+          'autorename': false,
+          'strict_conflict': true,
+          'mute': true,
+        },
+      };
+    }, concurrency: 8);
+    final response = await _call('upload_session/finish_batch_v2', {
+      'entries': entries,
+    });
+    if (response.statusCode != 200) ProviderHttp.fail(response);
+    final results = _json(response)['entries'];
+    if (results is! List || results.length != names.length) {
+      throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+    }
+    final created = <String, bool>{};
+    for (var i = 0; i < results.length; i++) {
+      final result = results[i];
+      if (result is! Map) {
+        throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+      }
+      if (result['.tag'] == 'success') {
+        created[names[i]] = true;
+        continue;
+      }
+      final failure = result['failure'];
+      final path = failure is Map && failure['.tag'] == 'path'
+          ? failure['path']
+          : null;
+      if (result['.tag'] == 'failure' && path is Map) {
+        if (path['.tag'] == 'conflict') {
+          created[names[i]] = false;
+          continue;
+        }
+        _failWrite(path['.tag']);
+      }
+      if (result['.tag'] == 'failure' && failure is Map) {
+        _failWrite(failure['.tag']);
+      }
+      throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
+    }
+    return created;
+  }
+
+  static const _writeFailures = {
+    'insufficient_space': SyncProviderFailureKind.quotaExceeded,
+    'team_folder_insufficient_space': SyncProviderFailureKind.quotaExceeded,
+    'member_folder_insufficient_space': SyncProviderFailureKind.quotaExceeded,
+    'too_many_write_operations': SyncProviderFailureKind.rateLimited,
+    'no_write_permission': SyncProviderFailureKind.unsupported,
+    'access_restricted': SyncProviderFailureKind.unsupported,
+    'disallowed_name': SyncProviderFailureKind.unsupported,
+    'malformed_path': SyncProviderFailureKind.unsupported,
+    'team_folder': SyncProviderFailureKind.unsupported,
+    'operation_suppressed': SyncProviderFailureKind.unsupported,
+  };
+
+  static void _failWrite(Object? tag) {
+    final failure = _writeFailures[tag];
+    if (failure != null) throw SyncProviderFailure(failure);
+  }
+
+  static Never _failWriteResponse(http.Response response) {
+    if (response.statusCode == 409) {
+      for (final entry in _writeFailures.entries) {
+        if (_error(response, 'path/${entry.key}') ||
+            _error(response, entry.key)) {
+          throw SyncProviderFailure(entry.value);
+        }
+      }
     }
     ProviderHttp.fail(response);
   }

@@ -367,7 +367,6 @@ void main() {
       _app(
         NoteCard(
           note: _note(10, 'Whole card drag'),
-          index: 0,
           reorderConfig: _reorderConfig(),
         ),
       ),
@@ -660,7 +659,6 @@ void main() {
       _app(
         NoteCard(
           note: note,
-          index: 0,
           reorderConfig: _reorderConfig(onCancel: () => cancelled++),
         ),
       ),
@@ -683,7 +681,6 @@ void main() {
       _app(
         NoteCard(
           note: note,
-          index: 0,
           reorderConfig: _reorderConfig(
             onLift: (_) => lifted++,
             onMove: (_) => moved++,

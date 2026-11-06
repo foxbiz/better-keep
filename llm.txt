@@ -287,6 +287,14 @@ No named routes or router package. All navigation uses `Navigator.push()` / `Nav
 4. `local_id` mapping prevents duplicates on reinstall
 5. Attachments synced to Firebase Storage (encrypted with UMK when E2EE active)
 
+### External Sync and Large Libraries
+
+- Engine idle waits include queued mode changes, including after failed runs. Permanent provider restrictions and expired authorization stop automatic retries; explicit retry or a replacement connection can resume them.
+- External providers keep acknowledgements separate by connection. Download-only restoration and full sync are serialized; a full request cannot be satisfied by an in-flight download-only pass.
+- Free sessions attempt initial restoration at most three times per adapter session. Manual sync remains available after failures; automatic plans retain backoff retries.
+- Small-object prefetch uses existence checks only as hints. Reads still verify ciphertext hashes before use, and cache-write failures stop the pass without acknowledging revisions.
+- The notes grid mounts cards within a quantized viewport cache window. Lazy cards skip entrance animations; every mutable note update must emit a NoteEvent to invalidate the per-note widget cache. Offscreen card heights remain estimates until measured.
+
 ### E2EE Architecture
 
 - **User Master Key (UMK)**: 32-byte symmetric key encrypts all note content

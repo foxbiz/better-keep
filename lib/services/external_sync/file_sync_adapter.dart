@@ -1,4 +1,6 @@
 import 'sync_limits.dart';
+import '../bounded_async.dart';
+import '../async_keyed_serializer.dart';
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -17,6 +19,20 @@ abstract interface class SyncFileTransport {
 
   /// Returns false when a file already exists; never overwrites it.
   Future<bool> create(String name, Uint8List bytes);
+}
+
+/// Must enforce the small-read limit while receiving, before buffering a body.
+abstract interface class SmallSyncFileReader {
+  Future<Uint8List?> readSmall(String name);
+}
+
+abstract interface class BatchSyncFileWriter {
+  /// Values indicate creation (true) or an existing file (false).
+  Future<Map<String, bool>> createBatch(Map<String, Uint8List> files);
+}
+
+class SmallSyncReadLimitExceeded implements Exception {
+  const SmallSyncReadLimitExceeded();
 }
 
 /// Optional capability for stores such as Drive that permit duplicate names.
@@ -42,7 +58,8 @@ class SyncFilePage {
 }
 
 /// Reusable encrypted file protocol for Drive, Dropbox and WebDAV transports.
-class FileSyncAdapter implements SyncProviderAdapter {
+class FileSyncAdapter
+    implements SyncProviderAdapter, SmallSyncObjectReader, BatchSyncWriter {
   FileSyncAdapter({
     required this.connectionId,
     required this.transport,
@@ -54,6 +71,7 @@ class FileSyncAdapter implements SyncProviderAdapter {
   final String connectionId;
   final SyncFileTransport transport;
   final SyncCipher cipher;
+  final _legacyNormalization = AsyncKeyedSerializer<bool>();
   final Future<SyncRevision> Function(
     SyncRevision revision,
     Future<Uint8List> Function(String) readObject,
@@ -73,17 +91,40 @@ class FileSyncAdapter implements SyncProviderAdapter {
   @override
   Future<SyncChangePage> changes(String? cursor) async {
     final page = await transport.list(cursor);
-    final revisions = <SyncRevision>[];
-    for (final name in page.names.toSet()) {
-      if (!RegExp(r'^c-[0-9a-f]{64}\.json$').hasMatch(name)) continue;
-      final revision = await _readCommit(name);
-      revisions.add(revision);
-    }
+    final names = page.names
+        .toSet()
+        .where((name) => RegExp(r'^c-[0-9a-f]{64}\.json$').hasMatch(name))
+        .toList();
+    final revisions = List<SyncRevision?>.filled(names.length, null);
+    // Commits are small, size-bounded metadata. Read them concurrently while
+    // preserving page order and draining all work before a failed page returns.
+    await forEachBounded(Iterable.generate(names.length), (index) async {
+      revisions[index] = await _readCommit(names[index]);
+    }, concurrency: 8);
     return SyncChangePage(
-      revisions: revisions,
+      revisions: revisions.cast<SyncRevision>(),
       cursor: page.cursor,
       hasMore: page.hasMore,
     );
+  }
+
+  @override
+  Future<bool> get supportsSmallReads async => transport is SmallSyncFileReader;
+
+  @override
+  Future<Uint8List?> readSmallObject(String objectId) async {
+    final files = transport;
+    if (files is! SmallSyncFileReader) return null;
+    final bytes = await (files as SmallSyncFileReader).readSmall(
+      objectName(objectId),
+    );
+    if (bytes != null) {
+      if (bytes.length > SyncLimits.prefetchBytes) {
+        throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+      }
+      _verify(objectId, bytes);
+    }
+    return bytes;
   }
 
   @override
@@ -126,6 +167,81 @@ class FileSyncAdapter implements SyncProviderAdapter {
     }
   }
 
+  @override
+  Future<bool> get supportsBatchWrites async =>
+      transport is BatchSyncFileWriter;
+
+  @override
+  Future<void> putObjects(Map<String, Uint8List> objects) async {
+    final files = <String, Uint8List>{};
+    for (final entry in objects.entries) {
+      _verify(entry.key, entry.value);
+      files[objectName(entry.key)] = entry.value;
+    }
+    final created = await _createBatch(files);
+    for (final id in objects.keys) {
+      if (!created[objectName(id)]!) await readObject(id);
+    }
+  }
+
+  @override
+  Future<void> publishBatch(List<SyncRevision> revisions) async {
+    final files = <String, Uint8List>{};
+    final pending = <SyncRevision>[];
+    var size = 0;
+    Future<void> flush() async {
+      if (files.isEmpty) return;
+      final created = await _createBatch(files);
+      for (final revision in pending) {
+        if (!created[commitName(revision)]! &&
+            !(await _readCommit(commitName(revision))).sameContent(revision)) {
+          throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+        }
+      }
+      files.clear();
+      pending.clear();
+      size = 0;
+    }
+
+    for (final revision in revisions) {
+      final bytes = await cipher.encodeCommit(revision);
+      if (bytes.length > SyncLimits.commitBytes) {
+        throw const SyncProviderFailure(SyncProviderFailureKind.unsupported);
+      }
+      if (files.length >= SyncLimits.batchFiles ||
+          size + bytes.length > SyncLimits.batchBytes) {
+        await flush();
+      }
+      final name = commitName(revision);
+      if (files.containsKey(name)) {
+        throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+      }
+      files[name] = bytes;
+      pending.add(revision);
+      size += bytes.length;
+    }
+    await flush();
+  }
+
+  Future<Map<String, bool>> _createBatch(Map<String, Uint8List> files) async {
+    if (files.isEmpty) return {};
+    if (files.length > SyncLimits.batchFiles ||
+        files.values.fold<int>(0, (size, bytes) => size + bytes.length) >
+            SyncLimits.batchBytes) {
+      throw const SyncProviderFailure(SyncProviderFailureKind.unsupported);
+    }
+    final writer = transport;
+    if (writer is! BatchSyncFileWriter) {
+      throw const SyncProviderFailure(SyncProviderFailureKind.unsupported);
+    }
+    final result = await (writer as BatchSyncFileWriter).createBatch(files);
+    if (result.length != files.length ||
+        !files.keys.every(result.containsKey)) {
+      throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+    }
+    return result;
+  }
+
   Future<List<Uint8List>> _copies(String name) async {
     final files = transport;
     final copies = files is SyncFileCopies
@@ -157,7 +273,13 @@ class FileSyncAdapter implements SyncProviderAdapter {
           revision.contentFingerprint != null &&
           revision.legacyContentFingerprints.isEmpty) {
         try {
-          revision = await normalize(revision, readObject);
+          // Legacy normalization can fetch a large payload. Only metadata reads
+          // run concurrently; keep full-payload buffering bounded to one here.
+          final value = revision;
+          revision = await _legacyNormalization.run(
+            true,
+            () => normalize(value, readObject),
+          );
         } on FormatException {
           throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
         }

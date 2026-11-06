@@ -134,10 +134,7 @@ void main() {
             supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: SingleChildScrollView(
-                child: SizedBox(
-                  width: 280,
-                  child: NoteCard(note: note, index: 0),
-                ),
+                child: SizedBox(width: 280, child: NoteCard(note: note)),
               ),
             ),
           ),

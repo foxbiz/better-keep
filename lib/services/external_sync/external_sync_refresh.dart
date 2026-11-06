@@ -10,6 +10,7 @@ Future<SyncRefreshOutcome?> refreshExternalSession(
   LibrarySyncSession session, {
   required bool Function() isCurrent,
   required SyncProgress Function() progress,
+  bool Function()? canSync,
   int maxPasses = 20,
   Duration timeLimit = const Duration(minutes: 2),
 }) async {
@@ -32,6 +33,9 @@ Future<SyncRefreshOutcome?> refreshExternalSession(
   final elapsed = Stopwatch()..start();
   var passes = 0;
   do {
+    // Foreground state gates new work, not the result of work already finished.
+    // Account/session invalidation still rejects that result below.
+    if (canSync != null && !canSync()) return SyncRefreshOutcome.deferred;
     await session.scheduler.syncNow();
     if (!isCurrent() || !setEquals(selected, targets())) {
       return SyncRefreshOutcome.deferred;
