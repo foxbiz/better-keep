@@ -10,6 +10,35 @@ class AppLocalizationsId extends AppLocalizations {
   AppLocalizationsId([String locale = 'id']) : super(locale);
 
   @override
+  String syncCheckingNotes(String count) {
+    return 'Memeriksa perubahan catatan · $count';
+  }
+
+  @override
+  String syncDownloadingNotes(String count) {
+    return 'Mengunduh perubahan catatan · $count';
+  }
+
+  @override
+  String syncUploadingNotes(String count) {
+    return 'Mengunggah perubahan catatan · $count';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Sekitar $minutes menit lagi',
+      zero: 'Kurang dari semenit lagi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncUpdatingNotes => 'Memperbarui catatan Anda';
+
+  @override
   String get sharedImageNamesConflict =>
       'Beberapa gambar yang dibagikan memiliki nama file yang sama. Bagikan satu per satu.';
 

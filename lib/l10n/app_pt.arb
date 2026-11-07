@@ -1,4 +1,9 @@
 {
+  "syncCheckingNotes": "Verificando alterações nas notas · {count}",
+  "syncDownloadingNotes": "Baixando alterações nas notas · {count}",
+  "syncUploadingNotes": "Enviando alterações nas notas · {count}",
+  "syncEstimatedMinutes": "{minutes, plural, =0{Resta menos de um minuto} other{Restam cerca de {minutes} min}}",
+  "syncUpdatingNotes": "Atualizando suas notas",
 	"sharedImageNamesConflict": "Algumas imagens compartilhadas têm o mesmo nome de arquivo. Compartilhe uma de cada vez.",
 	"sharedImageImportFailed": "Não foi possível criar a nota com imagens ({fileName}). Tente compartilhar novamente com imagens de até 50 MB e 24 megapixels.",
   "externalSyncContinue": "Continuar",

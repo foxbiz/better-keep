@@ -126,6 +126,14 @@ void main() {
       await tester.pump();
       expect(find.text('Updated in place'), findsOneWidget);
       expect(find.text('Existing 100'), findsNothing);
+      AppState.selectedNotes = [edited];
+      Note(
+        id: 100,
+        title: 'Older creation event',
+        archived: true,
+      ).notify('created', false, ModelChangeOrigin.remoteSync);
+      await tester.pump();
+      expect(AppState.selectedNotes.single, same(edited));
       Note(
         id: 100,
         title: 'Updated in place',
@@ -175,7 +183,7 @@ void main() {
     });
     await tester.pump();
     expect(find.byType(NoteCard, skipOffstage: false), findsNothing);
-    expect(AppState.selectedNotes, isEmpty);
+    expect(AppState.selectedNotes.single.id, 999);
 
     navigator.pop();
     await tester.pump();
@@ -184,6 +192,7 @@ void main() {
     await _drainDatabaseWork(tester);
     expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 30));
     expect(find.text('Downloaded 99'), findsOneWidget);
+    expect(AppState.selectedNotes, isEmpty);
     await tester.pump(const Duration(milliseconds: 1250));
     final scroll = tester
         .widget<CustomScrollView>(find.byType(CustomScrollView))

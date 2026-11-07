@@ -153,6 +153,9 @@ class _NoteEditorState extends State<NoteEditor>
   int _noteSearchRevision = 0;
   bool _isKeyboardVisible = false;
   String? _initialPlainText;
+  // Compare editor snapshots with each other: opening a stored delta can
+  // normalize it without the user editing anything.
+  String? _savedEditorContent;
   bool _checklistLayoutSyncScheduled = false;
   _ChecklistPopupGeometry? _checklistPopupGeometry;
   Duration _checklistPopupAutoHideRemaining = _checklistPopupAutoHideDuration;
@@ -355,7 +358,7 @@ class _NoteEditorState extends State<NoteEditor>
     _backgroundColor = _note.color;
 
     // Parse content and extract title (H1) from Delta JSON
-    String initialTitle = '';
+    String initialTitle = _note.title ?? '';
     List<dynamic> contentDeltaJson = [];
 
     if (_note.content != null && _note.content!.isNotEmpty) {
@@ -389,7 +392,7 @@ class _NoteEditorState extends State<NoteEditor>
         // Content is everything after the H1 newline operation
         contentDeltaJson = parsed.sublist(h1Index + 1);
       } else {
-        // No H1 found, use entire content as-is (no title)
+        // Older/imported notes may store the title separately.
         contentDeltaJson = parsed;
       }
     }
@@ -423,9 +426,11 @@ class _NoteEditorState extends State<NoteEditor>
     _updateChecklistProgress();
     _refreshChecklistEligibility(rebuild: false);
 
-    // Store initial plain text for deleteIfUnchanged check
-    if (widget.deleteIfUnchanged) {
-      _initialPlainText = _captureSaveSnapshot().plainText;
+    _savedEditorContent = _note.content;
+    if (_note.id != null || widget.deleteIfUnchanged) {
+      final initial = _captureSaveSnapshot();
+      if (_note.id != null) _savedEditorContent = initial.content;
+      if (widget.deleteIfUnchanged) _initialPlainText = initial.plainText;
     }
 
     _embedEditing.rootController = _controller;
@@ -1036,6 +1041,10 @@ class _NoteEditorState extends State<NoteEditor>
       ..title = result.title
       ..content = result.content
       ..plainText = result.plainText;
+    _savedEditorContent = _editorSnapshot(
+      result.title,
+      documentFromJsonSafe(result.bodyDelta),
+    ).content;
     _checkboxService.invalidateCache();
     _updateChecklistProgress();
     _checklistPromptController.updateBlock(null);
@@ -1095,6 +1104,10 @@ class _NoteEditorState extends State<NoteEditor>
       ..title = result.title
       ..content = result.content
       ..plainText = result.plainText;
+    _savedEditorContent = _editorSnapshot(
+      result.title,
+      documentFromJsonSafe(result.bodyDelta),
+    ).content;
     _checkboxService.invalidateCache();
     _updateChecklistProgress();
     _checklistPromptController.updateBlock(null);
@@ -2322,9 +2335,11 @@ class _NoteEditorState extends State<NoteEditor>
     });
   }
 
-  _NoteEditorSaveSnapshot _captureSaveSnapshot() {
-    final title = _titleController.text;
-    final contentDelta = _controller.document.toDelta().toJson();
+  _NoteEditorSaveSnapshot _captureSaveSnapshot() =>
+      _editorSnapshot(_titleController.text, _controller.document);
+
+  _NoteEditorSaveSnapshot _editorSnapshot(String title, Document document) {
+    final contentDelta = document.toDelta().toJson();
     final combinedDeltaJson = <Map<String, dynamic>>[];
 
     if (title.isNotEmpty) {
@@ -2336,14 +2351,7 @@ class _NoteEditorState extends State<NoteEditor>
     }
 
     combinedDeltaJson.addAll(List<Map<String, dynamic>>.from(contentDelta));
-    final combinedDoc = documentFromJsonSafe(combinedDeltaJson);
-
-    return _NoteEditorSaveSnapshot(
-      title: title,
-      content: json.encode(combinedDeltaJson),
-      plainText: noteDeltaPlainText(combinedDoc.toDelta().toJson()).trim(),
-      bodyPlainText: noteDeltaPlainText(contentDelta).trim(),
-    );
+    return _NoteEditorSaveSnapshot(title, json.encode(combinedDeltaJson));
   }
 
   Future<bool> _enqueueSave() {
@@ -2495,18 +2503,20 @@ class _NoteEditorState extends State<NoteEditor>
       return true;
     }
 
-    if (_note.content == snapshot.content &&
-        (_note.title ?? '') == snapshot.title) {
+    if (_savedEditorContent == snapshot.content) {
       return true;
     }
 
     try {
-      return await _note.saveEditorSnapshot(
+      final saved =
+          await _note.saveEditorSnapshot(
             title: snapshot.title,
             content: snapshot.content,
             plainText: snapshot.plainText,
           ) >=
           0;
+      if (saved) _savedEditorContent = snapshot.content;
+      return saved;
     } catch (error, stackTrace) {
       AppLogger.error('Error saving note', error, stackTrace);
       if (mounted) {
@@ -3337,15 +3347,15 @@ class _NoteEditorMetadata extends StatelessWidget {
 class _NoteEditorSaveSnapshot {
   final String title;
   final String content;
-  final String plainText;
-  final String bodyPlainText;
+  _NoteEditorSaveSnapshot(this.title, this.content);
 
-  const _NoteEditorSaveSnapshot({
-    required this.title,
-    required this.content,
-    required this.plainText,
-    required this.bodyPlainText,
-  });
+  // Most snapshots are compared only. Decode the captured value on demand
+  // so deferred saves always derive text from the same immutable revision.
+  late final List<dynamic> _delta = json.decode(content) as List<dynamic>;
+  late final String plainText = noteDeltaPlainText(
+    documentFromJsonSafe(_delta).toDelta().toJson(),
+  ).trim();
 
-  bool get isEmpty => title.isEmpty && bodyPlainText.isEmpty;
+  bool get isEmpty =>
+      title.isEmpty && noteDeltaPlainText(_delta).trim().isEmpty;
 }

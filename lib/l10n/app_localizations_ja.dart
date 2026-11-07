@@ -10,6 +10,35 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String syncCheckingNotes(String count) {
+    return 'ノートの更新を確認中 · $count';
+  }
+
+  @override
+  String syncDownloadingNotes(String count) {
+    return 'ノートの更新をダウンロード中 · $count';
+  }
+
+  @override
+  String syncUploadingNotes(String count) {
+    return 'ノートの更新をアップロード中 · $count';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '残り約$minutes分',
+      zero: '残り1分未満',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncUpdatingNotes => 'ノートを更新中';
+
+  @override
   String get sharedImageNamesConflict =>
       '共有された画像の一部に同じファイル名があります。1枚ずつ共有してください。';
 

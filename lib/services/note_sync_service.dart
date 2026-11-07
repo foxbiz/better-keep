@@ -1,3 +1,5 @@
+import 'note_sync_batch.dart';
+
 import 'package:better_keep/services/bounded_async.dart';
 
 import 'external_sync/firebase_sync_migration.dart';
@@ -270,9 +272,6 @@ class NoteSyncService {
     SyncProgress.idle,
   );
 
-  /// Tracks sync progress: (syncedCount, totalCount)
-  final ValueNotifier<(int, int)> syncProgress = ValueNotifier((0, 0));
-
   /// Tracks note IDs currently being synced (outgoing push)
   final ValueNotifier<Set<int>> syncingOutgoing = ValueNotifier({});
 
@@ -440,6 +439,9 @@ class NoteSyncService {
     );
   }
 
+  final _noteBatch = NoteSyncBatch();
+  Future<bool> _emptyLibrary() => Note.libraryIsEmpty(AppState.db);
+
   void _onCloudStateChange({bool force = false}) {
     if (!force &&
         AuthService.canSyncCloud &&
@@ -447,6 +449,7 @@ class NoteSyncService {
       return;
     }
     _cloudGeneration++;
+    _noteBatch.reset();
     _syncTimer?.cancel();
     _pullRetry.cancel();
     _listenerRetry.cancel();
@@ -1461,24 +1464,33 @@ class NoteSyncService {
               hydrationGeneration,
               isFromCache: snapshot.metadata.isFromCache,
             );
+            final changes = snapshot.docChanges
+                .where(
+                  (change) =>
+                      !change.doc.metadata.hasPendingWrites &&
+                      (change.type == DocumentChangeType.modified ||
+                          change.type == DocumentChangeType.added),
+                )
+                .toList();
+            Future<void> applyBatch(
+              Future<void> Function(NoteTransferMeter) work,
+            ) => _listenerBatchSerializer.run(
+              _listenerBatchKey,
+              () => _noteBatch.run(
+                changes.length,
+                work,
+                isEmptyLibrary: _emptyLibrary,
+                onProgress: _reportNoteProgress,
+              ),
+            );
             unawaited(
-              _listenerBatchSerializer.run<void>(_listenerBatchKey, () async {
+              applyBatch((meter) async {
                 var hydrationFailed = false;
                 try {
                   if (!_initialHydration.isCurrent(hydrationGeneration) ||
                       _initialHydration.isFailed(hydrationGeneration)) {
                     return;
                   }
-                  if (snapshot.docChanges.isEmpty) return;
-
-                  // Filter only modified/added documents (not from local changes)
-                  final changes = snapshot.docChanges.where(
-                    (change) =>
-                        !change.doc.metadata.hasPendingWrites &&
-                        (change.type == DocumentChangeType.modified ||
-                            change.type == DocumentChangeType.added),
-                  );
-
                   if (changes.isEmpty) return;
 
                   AppLogger.log(
@@ -1499,6 +1511,7 @@ class NoteSyncService {
                         "[SYNC] REALTIME: Remote data is null, skipping",
                       );
                       skippedCount++;
+                      meter.exclude();
                       continue;
                     }
 
@@ -1516,6 +1529,7 @@ class NoteSyncService {
                         ),
                       );
                       skippedCount++;
+                      meter.exclude();
                       continue;
                     }
                     latestCursor = latestCursor == null
@@ -1544,6 +1558,7 @@ class NoteSyncService {
                         "[SYNC] REALTIME: Note $localId already processed in this batch, skipping",
                       );
                       skippedCount++;
+                      meter.exclude();
                       continue;
                     }
                     processedIds.add(remoteDocId);
@@ -1559,6 +1574,7 @@ class NoteSyncService {
                         "[SYNC] REALTIME: Note $localId updated in cache, will process later",
                       );
                       skippedCount++;
+                      meter.exclude();
                       // Don't process it now - it will be processed when the cache is processed
                       // But if it's currently in progress, it will be re-synced
                       continue;
@@ -1596,7 +1612,12 @@ class NoteSyncService {
                           remoteDocId,
                           fallbackLocalId: localId,
                         );
-                        if (handled.checkpointSafe) syncedCount++;
+                        if (handled.checkpointSafe) {
+                          syncedCount++;
+                          meter.advance();
+                        } else {
+                          meter.exclude();
+                        }
                       } finally {
                         _removeSyncingIncoming(localId);
                       }
@@ -1615,6 +1636,7 @@ class NoteSyncService {
                           remoteData: remoteData,
                         );
                         syncedCount++;
+                        meter.advance();
                       } finally {
                         _removeSyncingIncoming(localId);
                       }
@@ -1626,6 +1648,7 @@ class NoteSyncService {
                       remoteDocId,
                     )) {
                       skippedCount++;
+                      meter.advance();
                       continue;
                     }
 
@@ -1641,9 +1664,12 @@ class NoteSyncService {
                       );
                       if (handled.checkpointSafe) {
                         syncedCount++;
+                        meter.advance();
                         AppLogger.log(
                           "[SYNC] REALTIME: Note $localId applied or durably queued",
                         );
+                      } else {
+                        meter.exclude();
                       }
                     } finally {
                       _removeSyncingIncoming(localId);
@@ -1769,6 +1795,7 @@ class NoteSyncService {
   /// Call this when the app is shutting down or user logs out.
   Future<void> dispose() async {
     _sessionGeneration++;
+    _noteBatch.reset();
     AuthService.cloudRecovery.state.removeListener(_onCloudStateChange);
     FirebaseSyncPreference.instance.removeListener(_onSyncSelectionChange);
     await _stopRemoteListener();
@@ -2111,12 +2138,22 @@ class NoteSyncService {
     List<NoteSyncTrack> pendingSyncs,
   ) async {
     if (pendingSyncs.isEmpty) return;
-    syncStatus.value = const SyncProgress(SyncPhase.savingChanges);
-
     AppLogger.log(
       "[SYNC] PUSH: Starting push of ${pendingSyncs.length} local changes",
     );
 
+    await _noteBatch.run(
+      pendingSyncs.length,
+      (meter) => _pushPendingNotes(pendingSyncs, meter),
+      stage: NoteTransferStage.uploading,
+      onProgress: _reportNoteProgress,
+    );
+  }
+
+  Future<void> _pushPendingNotes(
+    List<NoteSyncTrack> pendingSyncs,
+    NoteTransferMeter meter,
+  ) async {
     var failedCount = 0;
     var deferredForEncryption = false;
     await forEachBounded(pendingSyncs, (sync) async {
@@ -2163,6 +2200,7 @@ class NoteSyncService {
         if (captured == null) {
           requireCloudOperation();
           await sync.deleteIfUnchanged();
+          meter.advance();
           return;
         }
         final version = captured.version;
@@ -2252,6 +2290,7 @@ class NoteSyncService {
               fallbackLocalId: sync.localId,
             );
           }
+          meter.advance();
           return;
         }
         requireCloudOperation();
@@ -2262,7 +2301,9 @@ class NoteSyncService {
         } else if (!await sync.markSyncedIfUnchanged(syncStartTime)) {
           NoteSyncService().sync();
         }
+        meter.advance();
       } on SyncEncryptionUnavailable {
+        meter.exclude();
         deferredForEncryption = true;
       } catch (error) {
         if (error is CloudOperationCancelled ||
@@ -2271,6 +2312,7 @@ class NoteSyncService {
         }
         AppLogger.error('[SYNC] PUSH: Note ${sync.localId} error', error);
         _markSyncFailed(sync.localId);
+        meter.exclude();
         failedCount++;
       } finally {
         _removeSyncingOutgoing(sync.localId);
@@ -2594,10 +2636,27 @@ class NoteSyncService {
     final pendingSyncs = _syncCache.getPendingSyncs();
     if (pendingSyncs.isEmpty) {
       AppLogger.log("[SYNC] PROCESS: No pending syncs to process");
-      syncProgress.value = (0, 0);
       return;
     }
 
+    await _noteBatch.run(
+      pendingSyncs.length,
+      (meter) => _applyCachedNotes(pendingSyncs, meter),
+      isEmptyLibrary: _emptyLibrary,
+      onProgress: _reportNoteProgress,
+    );
+  }
+
+  void _reportNoteProgress(NoteTransfer progress) {
+    if (cloudOperationIsCurrent()) {
+      syncStatus.value = SyncProgress(SyncPhase.syncing, notes: progress);
+    }
+  }
+
+  Future<void> _applyCachedNotes(
+    List<PendingRemoteSync> pendingSyncs,
+    NoteTransferMeter meter,
+  ) async {
     final totalCount = pendingSyncs.length;
     int syncedCount = 0;
     int skippedCount = 0;
@@ -2610,8 +2669,6 @@ class NoteSyncService {
     );
     final activeNotes = pendingSyncs.length - deletedNotes.length;
 
-    syncProgress.value = (syncedCount, totalCount);
-    syncStatus.value = const SyncProgress(SyncPhase.syncing);
     AppLogger.log(
       "[SYNC] PROCESS START: $totalCount cached syncs ($activeNotes active, ${deletedNotes.length} deleted)",
     );
@@ -2630,6 +2687,7 @@ class NoteSyncService {
       );
       // Skip if already processed in this sync cycle
       if (processedIds.contains(remoteDocId)) {
+        meter.exclude();
         continue;
       }
       processedIds.add(remoteDocId);
@@ -2667,7 +2725,9 @@ class NoteSyncService {
               return;
             }
             syncedCount++;
-            syncProgress.value = (syncedCount, totalCount);
+            meter.advance();
+          } else {
+            meter.exclude();
           }
         } catch (error) {
           if (error is CloudOperationCancelled ||
@@ -2677,6 +2737,7 @@ class NoteSyncService {
           requireCloudOperation();
           await _syncCache.markFailed(remoteDocId, error.toString());
           failedCount++;
+          meter.exclude();
           AppLogger.error(
             '[SYNC] PROCESS: Malformed note $localId could not be delegated',
             error,
@@ -2704,8 +2765,8 @@ class NoteSyncService {
             return;
           }
           syncedCount++;
+          meter.advance();
           deletedCount++; // Track deleted notes separately
-          syncProgress.value = (syncedCount, totalCount);
         } finally {
           _removeSyncingIncoming(localId);
         }
@@ -2721,8 +2782,8 @@ class NoteSyncService {
           return;
         }
         syncedCount++;
+        meter.advance();
         skippedCount++;
-        syncProgress.value = (syncedCount, totalCount);
         continue;
       }
 
@@ -2749,10 +2810,12 @@ class NoteSyncService {
             return;
           }
           syncedCount++;
-          syncProgress.value = (syncedCount, totalCount);
+          meter.advance();
           AppLogger.log(
             "[SYNC] PROCESS: Note $localId applied or durably queued",
           );
+        } else {
+          meter.exclude();
         }
       } catch (e) {
         if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
@@ -2762,12 +2825,14 @@ class NoteSyncService {
         await _syncCache.markFailed(remoteDocId, e.toString());
         _markSyncFailed(localId);
         failedCount++;
+        meter.exclude();
         AppLogger.error('[SYNC] PROCESS: Note $localId error', e);
       } finally {
         _removeSyncingIncoming(localId);
       }
     }
 
+    meter.flush();
     // Report final status
     final failedSyncs = _syncCache.getPendingSyncs();
     if (failedSyncs.isNotEmpty) {
@@ -2788,9 +2853,6 @@ class NoteSyncService {
     AppLogger.log(
       "[SYNC] PROCESS COMPLETE: $activeSynced active synced, $deletedCount deleted processed, $skippedCount skipped, $failedCount failed",
     );
-
-    // Reset progress when done
-    syncProgress.value = (0, 0);
   }
 
   Future<bool> _completeCachedRevision(
@@ -3553,7 +3615,10 @@ class NoteSyncService {
         bytes = await FileEncryption.encryptBytes(bytes, umk);
         AppLogger.log("Encrypted data URI attachment");
 
-        syncStatus.value = const SyncProgress(SyncPhase.uploadingMedia);
+        syncStatus.value = SyncProgress(
+          SyncPhase.uploadingMedia,
+          notes: syncStatus.value.notes,
+        );
         _setNoteStatus(note.id!, const SyncProgress(SyncPhase.uploadingMedia));
         _ensureUMKAvailable(umk);
         await fileRef.putData(bytes).timeout(const Duration(seconds: 120));
@@ -3577,7 +3642,10 @@ class NoteSyncService {
         final fileRef = userStorageRef.child(fileName);
 
         try {
-          syncStatus.value = const SyncProgress(SyncPhase.uploadingMedia);
+          syncStatus.value = SyncProgress(
+            SyncPhase.uploadingMedia,
+            notes: syncStatus.value.notes,
+          );
           _setNoteStatus(
             note.id!,
             const SyncProgress(SyncPhase.uploadingMedia),

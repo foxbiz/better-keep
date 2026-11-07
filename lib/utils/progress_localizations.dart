@@ -118,6 +118,7 @@ extension SyncProgressLocalizations on SyncProgress {
     SyncPhase.complete => l10n.syncComplete,
     SyncPhase.failed when failedCount > 0 => l10n.syncFailedCount(failedCount),
     SyncPhase.failed => l10n.syncFailed,
+    SyncPhase.syncing when notes != null => notes!.localized(l10n),
     SyncPhase.resuming ||
     SyncPhase.checkingForUpdates ||
     SyncPhase.syncing ||
@@ -126,6 +127,20 @@ extension SyncProgressLocalizations on SyncProgress {
     SyncPhase.fetchingUpdates ||
     SyncPhase.uploadingMedia => l10n.syncing,
   };
+}
+
+extension NoteTransferLocalizations on NoteTransfer {
+  String localized(AppLocalizations l10n) {
+    final count = total == null ? '$done' : '$done/$total';
+    final label = switch (stage) {
+      NoteTransferStage.checking => l10n.syncCheckingNotes(count),
+      NoteTransferStage.downloading => l10n.syncDownloadingNotes(count),
+      NoteTransferStage.uploading => l10n.syncUploadingNotes(count),
+    };
+    return minutesLeft == null
+        ? label
+        : '$label\n${l10n.syncEstimatedMinutes(minutesLeft!)}';
+  }
 }
 
 extension ExportPhaseLocalizations on ExportPhase {

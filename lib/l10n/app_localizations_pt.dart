@@ -10,6 +10,35 @@ class AppLocalizationsPt extends AppLocalizations {
   AppLocalizationsPt([String locale = 'pt']) : super(locale);
 
   @override
+  String syncCheckingNotes(String count) {
+    return 'Verificando alterações nas notas · $count';
+  }
+
+  @override
+  String syncDownloadingNotes(String count) {
+    return 'Baixando alterações nas notas · $count';
+  }
+
+  @override
+  String syncUploadingNotes(String count) {
+    return 'Enviando alterações nas notas · $count';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Restam cerca de $minutes min',
+      zero: 'Resta menos de um minuto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncUpdatingNotes => 'Atualizando suas notas';
+
+  @override
   String get sharedImageNamesConflict =>
       'Algumas imagens compartilhadas têm o mesmo nome de arquivo. Compartilhe uma de cada vez.';
 

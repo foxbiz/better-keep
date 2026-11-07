@@ -1,12 +1,16 @@
 import 'dart:async';
 
+import 'package:better_keep/components/sync_progress_widget.dart';
+import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/state.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/firebase_sync_preference.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -61,6 +65,96 @@ void main() {
     presentation.dispose();
   });
 
+  testWidgets('initial restore honors the sync progress display preference', (
+    tester,
+  ) async {
+    final previous = AppState.showSyncProgress;
+    final session = NoteSyncBatch();
+    final done = Completer<void>();
+    final work = session.run(
+      24,
+      (_) => done.future,
+      isEmptyLibrary: () async => true,
+    );
+    try {
+      for (final show in [true, false]) {
+        AppState.set('show_sync_progress', show);
+        await tester.pumpWidget(
+          MaterialApp(
+            key: ValueKey(show),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: BulkSyncProgress()),
+          ),
+        );
+        expect(
+          find.textContaining('0/24'),
+          show ? findsOneWidget : findsNothing,
+        );
+        if (!show) {
+          expect(find.bySemanticsLabel('Updating your notes'), findsOneWidget);
+        }
+        expect(
+          find.byType(CircularProgressIndicator),
+          show ? findsNothing : findsOneWidget,
+        );
+      }
+    } finally {
+      done.complete();
+      await work;
+      AppState.set('show_sync_progress', previous);
+    }
+  });
+
+  test('estimate uses completed work and resets at a phase boundary', () {
+    final samples = <NoteTransfer>[];
+    var elapsed = Duration.zero;
+    final meter = NoteTransferMeter(
+      NoteTransferStage.downloading,
+      60,
+      samples.add,
+      elapsed: () => elapsed,
+    );
+    expect(samples.single.minutesLeft, isNull);
+    meter.advance();
+    meter.advance();
+    expect(samples.length, 1);
+    elapsed = const Duration(seconds: 6);
+    meter.advance();
+    expect(samples.last.done, 3);
+    expect(samples.last.minutesLeft, 2);
+    for (var i = 3; i < 60; i++) {
+      meter.advance();
+    }
+    expect(samples.last.fraction, 1);
+    expect(samples.last.minutesLeft, isNull);
+    NoteTransferMeter(NoteTransferStage.uploading, 3, samples.add);
+    expect(samples.last.done, 0);
+    expect(samples.last.minutesLeft, isNull);
+  });
+
+  test(
+    'deferred notes shrink the expected transfer without counting as writes',
+    () {
+      final samples = <NoteTransfer>[];
+      final meter = NoteTransferMeter(
+        NoteTransferStage.uploading,
+        5,
+        samples.add,
+        elapsed: () => Duration.zero,
+      );
+      meter.advance();
+      meter.exclude(2);
+      meter.flush();
+      expect(samples.last.done, 1);
+      expect(samples.last.total, 3);
+      expect(samples.last.minutesLeft, isNull);
+      meter.advance();
+      meter.advance();
+      expect(samples.last.fraction, 1);
+    },
+  );
+
   test('paused uploads still show incoming activity and failure', () async {
     final preference = FirebaseSyncPreference(
       currentUid: () => 'account-a',
@@ -72,10 +166,19 @@ void main() {
     await pumpEventQueue();
     firebaseEnabled.value = preference.allowsDownload('account-a');
     expect(preference.allowsSync('account-a'), false);
+    const update = (
+      stage: NoteTransferStage.downloading,
+      done: 9,
+      total: 20,
+      minutesLeft: 1,
+    );
+    noteStatus.value = const SyncProgress(SyncPhase.syncing, notes: update);
     recovery.state.value = CloudSessionState.ready;
     notes.value = true;
     expect(presentation.value.phase, SyncPhase.syncing);
-    expect(presentation.showNoteCounts, true);
+    external.value = const SyncProgress(SyncPhase.syncing);
+    expect(presentation.value.notes, update);
+    external.value = SyncProgress.idle;
     notes.value = false;
     noteStatus.value = const SyncProgress(SyncPhase.failed, failedCount: 1);
     expect(presentation.value.phase, SyncPhase.failed);

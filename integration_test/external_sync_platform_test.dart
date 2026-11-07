@@ -1,3 +1,7 @@
+import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/components/sync_progress_widget.dart';
+
 // Real platform SQLite/files/crypto, synthetic Dropbox HTTP boundary.
 // The optional automatic matrix authenticates only with disposable emulators.
 // Neither matrix touches a user's library/provider files.
@@ -9,6 +13,7 @@ import 'dart:ui' as ui;
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/pages/home/notes.dart';
+import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/services/external_sync/replica_model_notifier.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -58,10 +63,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 void main() {
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  if (const bool.fromEnvironment('SYNC_STRESS_UI')) {
-    binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
-  }
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   if (const bool.fromEnvironment('SYNC_STRESS')) {
     if (kIsWeb) {
       testWidgets('browser sync skips unsupported reminder library scans', (
@@ -112,7 +114,7 @@ void main() {
       final a = await _Replica.create(files, p.join(root, 'a'), server);
       replicas.add(a);
       final image = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwWXXmPwAFqgK6oQQFNwAAAABJRU5ErkJggg==',
       );
       final imagePath = p.join(a.root, 'image.png');
       await files.writeBytes(imagePath, image);
@@ -168,6 +170,7 @@ void main() {
         p.join(root, 'b'),
         server,
         restoreOnStart: true,
+        notifyModels: true,
       );
       replicas.add(b);
       await b.session.scheduler.waitForIdle();
@@ -211,6 +214,148 @@ void main() {
         2,
         reason: 'Each unchanged refresh only checks the cursor',
       );
+
+      // Publish a real remote edit while B still has the old image note.
+      await a.db.update(
+        'note',
+        {'title': 'New title from A', 'updated_at': '2031-01-01T00:00:00.000Z'},
+        where: 'sync_id = ?',
+        whereArgs: ['restore-note-0'],
+      );
+      await a.sync();
+      final writesAfterEdit = server.uploads;
+      await AppState.init();
+      AppState.db = b.db;
+      final stale = await Note.fromJsonAsync(row);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: [
+            ...AppLocalizations.localizationsDelegates,
+            FlutterQuillLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => NoteEditor(note: stale),
+                  ),
+                ),
+                child: const Text('Open stale note'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open stale note'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NoteEditor), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Open stale note'), findsOneWidget);
+      Future<Map<String, Object?>> localNote() async => (await b.db.query(
+        'note',
+        where: 'sync_id = ?',
+        whereArgs: ['restore-note-0'],
+      )).single;
+      expect(
+        await localNote(),
+        row,
+        reason: 'An untouched editor must leave the stored revision intact',
+      );
+      await b.sync();
+      expect((await localNote())['title'], 'New title from A');
+      expect(
+        server.uploads,
+        writesAfterEdit,
+        reason: 'A stale editor visit must produce zero upstream writes',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugPrint(
+        'SYNC QA PASS: closing a stale image note preserves its row and fetches the newer title with zero uploads',
+      );
+
+      // Exercise real replica notifications while the user has two cards selected.
+      final sort = NoteSortService();
+      await sort.init();
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: [
+              ...AppLocalizations.localizationsDelegates,
+              FlutterQuillLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: Notes()),
+          ),
+        );
+        final cards = find.byType(NoteCard).hitTestable();
+        final deadline = DateTime.now().add(const Duration(seconds: 15));
+        while (cards.evaluate().length < 2 &&
+            DateTime.now().isBefore(deadline)) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        final selected = tester
+            .widgetList<NoteCard>(cards)
+            .take(2)
+            .map((c) => c.note.syncId!)
+            .toList();
+        expect(selected, hasLength(2));
+        await tester.longPress(cards.first);
+        await tester.pumpAndSettle();
+        final second = find.byWidgetPredicate(
+          (w) => w is NoteCard && w.note.syncId == selected.last,
+        );
+        await tester.ensureVisible(second);
+        await tester.tap(second);
+        await tester.pumpAndSettle();
+        Iterable<String?> selectedIds() =>
+            AppState.selectedNotes.map((note) => note.syncId);
+        expect(selectedIds(), selected);
+        final unrelated = List.generate(
+          9,
+          (i) => 'restore-note-$i',
+        ).firstWhere((id) => !selected.contains(id));
+        Future<void> publishEdit(
+          String id,
+          Map<String, Object?> changes,
+        ) async {
+          await a.db.update(
+            'note',
+            changes,
+            where: 'sync_id = ?',
+            whereArgs: [id],
+          );
+          await a.sync();
+          await b.sync();
+          await tester.pumpAndSettle();
+        }
+
+        await publishEdit(unrelated, {
+          'title': 'Unrelated edit',
+          'updated_at': '2032-01-01T00:00:00.000Z',
+        });
+        expect(selectedIds(), selected);
+        await publishEdit(selected.first, {
+          'title': 'Updated selected note',
+          'updated_at': '2032-01-02T00:00:00.000Z',
+        });
+        expect(selectedIds(), selected);
+        expect(AppState.selectedNotes.first.title, 'Updated selected note');
+        await publishEdit(selected.last, {
+          'archived': 1,
+          'updated_at': '2032-01-03T00:00:00.000Z',
+        });
+        expect(selectedIds(), [selected.first]);
+        debugPrint(
+          'SYNC QA PASS: unrelated edits retain selection, selected cards use the new revision, and archiving removes only the affected card',
+        );
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        AppState.selectedNotes = [];
+        await sort.dispose();
+      }
     },
   );
   const automatic = bool.fromEnvironment('AUTOMATIC_SYNC_EMULATOR_TEST');
@@ -257,7 +402,7 @@ void main() {
               .add(Duration(seconds: revision++))
               .toIso8601String();
       final image = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwWXXmPwAFqgK6oQQFNwAAAABJRU5ErkJggg==',
       );
       final audio = Uint8List.fromList(List.generate(128, (i) => i));
       final sketch = Uint8List.fromList(
@@ -538,7 +683,7 @@ Future<void> _automaticMatrix(WidgetTester tester) async {
   final a = await device('device-a');
   final b = await device('device-b');
   final image = base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwWXXmPwAFqgK6oQQFNwAAAABJRU5ErkJggg==',
   );
   final imagePath = p.join(a.root, 'image.png');
   await files.writeBytes(imagePath, image);
@@ -1080,7 +1225,21 @@ Future<void> _stressMatrix(WidgetTester tester) async {
   server.loseUploadAckAt = null;
   await close('a');
   a = await open('a');
-  await timed('upload-after-lost-ack-and-reopen', () => drain(a));
+  var showedUploadProgress = false;
+  void observeUpload() {
+    final update = a.session.transfers[a.adapter.connectionId];
+    if (update?.stage == NoteTransferStage.uploading && update!.done > 0) {
+      showedUploadProgress = true;
+    }
+  }
+
+  a.session.addListener(observeUpload);
+  try {
+    await timed('upload-after-lost-ack-and-reopen', () => drain(a));
+    expect(showedUploadProgress, isTrue);
+  } finally {
+    a.session.removeListener(observeUpload);
+  }
   final committedFiles = server.files.length;
   final writes = server.uploads;
   var b = await open('b');
@@ -1168,9 +1327,16 @@ Future<void> _stressMatrix(WidgetTester tester) async {
   });
   final c = await open('c');
   var displayedChanges = 0;
+  var sawBulkProgress = false;
+  var renderedDuringBulk = false;
   void reportGridProgress(NoteEvent event) {
     displayedChanges++;
     if (displayedChanges % 100 == 0) {
+      final progress = NoteSyncBatch.progress.value;
+      if (progress != null && progress.done > 0 && NoteSyncBatch.active.value) {
+        sawBulkProgress |= find.byType(BulkSyncProgress).evaluate().isNotEmpty;
+        renderedDuringBulk |= find.byType(NoteCard).evaluate().isNotEmpty;
+      }
       unawaited(report('visible-grid-applied-$displayedChanges'));
     }
   }
@@ -1195,6 +1361,12 @@ Future<void> _stressMatrix(WidgetTester tester) async {
         home: const Scaffold(body: Notes()),
       ),
     );
+    // Mount with the test binding's default policy. On web, fullyLive during
+    // the preceding headless sync stages can leave the first UI pump pending.
+    final binding = IntegrationTestWidgetsFlutterBinding.instance;
+    final previous = binding.framePolicy;
+    binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+    addTearDown(() => binding.framePolicy = previous);
     await tester.pump();
   }
   try {
@@ -1204,6 +1376,8 @@ Future<void> _stressMatrix(WidgetTester tester) async {
     );
     await verify(c);
     if (showGrid) {
+      expect(sawBulkProgress, isTrue);
+      expect(renderedDuringBulk, isFalse);
       await tester.pump(const Duration(seconds: 2));
       expect(find.byType(NoteCard).evaluate().length, inInclusiveRange(1, 60));
       final scroll = tester

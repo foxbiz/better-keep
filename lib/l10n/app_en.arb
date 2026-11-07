@@ -1,4 +1,37 @@
 {
+  "syncCheckingNotes": "Checking note updates · {count}",
+  "@syncCheckingNotes": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "syncDownloadingNotes": "Downloading note updates · {count}",
+  "@syncDownloadingNotes": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "syncUploadingNotes": "Uploading note updates · {count}",
+  "@syncUploadingNotes": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "syncEstimatedMinutes": "{minutes, plural, =0{Less than a minute left} other{About {minutes} min left}}",
+  "@syncEstimatedMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "syncUpdatingNotes": "Updating your notes",
 	"sharedImageNamesConflict": "Some shared images have matching filenames. Please share them one at a time.",
 	"sharedImageImportFailed": "Could not create the image note ({fileName}). Try sharing again with images up to 50 MB and 24 megapixels.",
 	"@sharedImageImportFailed": { "description": "An image share failed; filename identifies the failing image", "placeholders": { "fileName": { "type": "String" } } },

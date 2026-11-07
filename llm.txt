@@ -127,6 +127,7 @@ better-keep/
 │   │   ├── database.dart         # SQLite initialization & migrations (v12)
 │   │   ├── auth_service.dart     # Firebase Auth (1838 lines)
 │   │   ├── note_sync_service.dart
+│   │   ├── note_sync_batch.dart   # Defers the grid and reminders during large initial restores
 │   │   ├── label_sync_service.dart
 │   │   ├── remote_sync_cache_service.dart
 │   │   ├── file_system.dart      # Cross-platform file I/O (conditional imports)

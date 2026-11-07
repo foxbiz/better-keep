@@ -116,6 +116,27 @@ void main() {
         find.text('Saved on this device. Upgrade to Pro to sync changes.'),
         findsOneWidget,
       );
+      AuthService.cloudRecovery.start('synthetic-account');
+      AuthService.cloudRecovery.state.value = CloudSessionState.ready;
+      NoteSyncService().isSyncing.value = true;
+      NoteSyncService().syncStatus.value = const SyncProgress(
+        SyncPhase.syncing,
+        notes: (
+          stage: NoteTransferStage.downloading,
+          done: 123,
+          total: 456,
+          minutesLeft: 3,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.textContaining('123/456\n'), findsOneWidget);
+      final transferPill = tester.getRect(
+        find.byKey(const ValueKey('sync_progress')),
+      );
+      expect(transferPill.bottom, lessThanOrEqualTo(fab.top - 12));
+      expect(transferPill.left, greaterThanOrEqualTo(16));
+      expect(transferPill.right, lessThanOrEqualTo(width - 16));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
@@ -359,12 +380,20 @@ void main() {
   ) async {
     AuthService.cloudRecovery.start('synthetic-account');
     AuthService.cloudRecovery.state.value = CloudSessionState.ready;
-    NoteSyncService().syncProgress.value = (4, 5);
+    NoteSyncService().syncStatus.value = const SyncProgress(
+      SyncPhase.syncing,
+      notes: (
+        stage: NoteTransferStage.downloading,
+        done: 4,
+        total: 5,
+        minutesLeft: 1,
+      ),
+    );
     await mountFeedback(tester);
     LabelSyncService().isSyncing.value = true;
     await tester.pump();
     expect(find.text('Syncing...'), findsOneWidget);
-    expect(find.text('4/5'), findsNothing);
+    expect(find.textContaining('4/5'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     LabelSyncService().isSyncing.value = false;
     LabelSyncService().syncStatus.value = const SyncProgress(
@@ -374,7 +403,7 @@ void main() {
     expect(find.text('Sync complete'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pumpWidget(const SizedBox());
-    NoteSyncService().syncProgress.value = (0, 0);
+    NoteSyncService().syncStatus.value = SyncProgress.idle;
   });
 
   testWidgets(

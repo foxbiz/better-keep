@@ -8,6 +8,7 @@ import 'sync_scheduler.dart';
 SyncProgress externalSyncProgress({
   required Iterable<StorageConnection> connections,
   required Map<String, SyncConnectionProgress> progress,
+  Map<String, NoteTransfer> transfers = const {},
   Map<String, SyncProviderFailureKind> errors = const {},
   Set<String> blockedProviders = const {},
   bool metadataReady = true,
@@ -17,8 +18,10 @@ SyncProgress externalSyncProgress({
   final selected = connections
       .where((c) => c.enabled && c.state != 'disconnected')
       .toList();
-  if (selected.any((c) => progress[c.replicaId]?.running == true)) {
-    return const SyncProgress(SyncPhase.syncing);
+  for (final c in selected) {
+    if (progress[c.replicaId]?.running == true) {
+      return SyncProgress(SyncPhase.syncing, notes: transfers[c.replicaId]);
+    }
   }
   final failures = <SyncProviderFailureKind>[
     ?metadataFailure,

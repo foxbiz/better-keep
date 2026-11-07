@@ -10,6 +10,35 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
+  String syncCheckingNotes(String count) {
+    return '노트 변경 사항 확인 중 · $count';
+  }
+
+  @override
+  String syncDownloadingNotes(String count) {
+    return '노트 변경 사항 다운로드 중 · $count';
+  }
+
+  @override
+  String syncUploadingNotes(String count) {
+    return '노트 변경 사항 업로드 중 · $count';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '약 $minutes분 남음',
+      zero: '1분 미만 남음',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncUpdatingNotes => '노트 업데이트 중';
+
+  @override
   String get sharedImageNamesConflict =>
       '공유한 이미지 중 일부의 파일 이름이 같습니다. 한 번에 하나씩 공유해 주세요.';
 

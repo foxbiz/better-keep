@@ -1,3 +1,6 @@
+import '../../models/app_progress.dart';
+import '../note_sync_batch.dart';
+
 import 'dart:typed_data';
 
 import '../bounded_async.dart';
@@ -49,9 +52,15 @@ class SyncReplicaEngine {
     required this.isCurrent,
     this.availableAdapters,
     this.onPublished,
+    this.isEmptyLibrary,
+    this.onProgress,
   });
 
+  final Future<bool> Function()? isEmptyLibrary;
+  final noteBatch = NoteSyncBatch();
   final void Function(String connectionId)? onPublished;
+  final void Function(SyncProviderAdapter adapter, NoteTransfer? progress)?
+  onProgress;
   final SyncReplicaStore store;
   final SyncReplicaContent content;
   final bool Function() isCurrent;
@@ -81,6 +90,7 @@ class SyncReplicaEngine {
     final task = _track(
       _sync(adapter, downloadOnly: downloadOnly).whenComplete(() {
         _running.remove(adapter.connectionId);
+        onProgress?.call(adapter, null);
       }),
     );
     _running[adapter.connectionId] = (
@@ -141,6 +151,7 @@ class SyncReplicaEngine {
     await _applyInbox(adapter, deferIdentityConflicts: true);
     var cursor = await store.cursor(adapter.connectionId);
     var resetCursor = false;
+    var discovered = 0;
     while (true) {
       _guard();
       late final SyncChangePage page;
@@ -159,11 +170,25 @@ class SyncReplicaEngine {
       if (page.hasMore && page.cursor == cursor) {
         throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
       }
+      // Count the whole incoming phase before applying it. Only the current
+      // page is held in memory. A failed listing leaves its staged pages and
+      // cursor durable for the initial inbox replay on the next attempt.
       await store.stagePage(adapter.connectionId, page, ensureCurrent: _guard);
-      await _applyInbox(adapter, deferIdentityConflicts: true);
+      discovered += page.revisions
+          .where((r) => r.kind == SyncEntityKind.note)
+          .length;
+      if (discovered > 0) {
+        onProgress?.call(adapter, (
+          stage: NoteTransferStage.checking,
+          done: discovered,
+          total: null,
+          minutesLeft: null,
+        ));
+      }
       cursor = page.cursor;
       if (!page.hasMore) break;
     }
+    await _applyInbox(adapter, deferIdentityConflicts: true);
     if (preparing != null && !downloadOnly) {
       await preparing.captureLocalChanges();
       _guard();
@@ -173,6 +198,21 @@ class SyncReplicaEngine {
     // This also resolves local edits materialized during the download.
     await _applyInbox(adapter);
     if (downloadOnly) return;
+    final count = await store.pendingNoteCount(adapter.connectionId);
+    _guard();
+    await noteBatch.run(
+      count,
+      (meter) => _publishPending(adapter, preparing, meter),
+      stage: NoteTransferStage.uploading,
+      onProgress: (value) => onProgress?.call(adapter, value),
+    );
+  }
+
+  Future<void> _publishPending(
+    SyncProviderAdapter adapter,
+    PreparingSyncReplicaContent? preparing,
+    NoteTransferMeter upload,
+  ) async {
     (String, String)? after;
     while (true) {
       final pending = await store.pending(adapter.connectionId, after: after);
@@ -180,7 +220,7 @@ class SyncReplicaEngine {
       if (pending.length > 1 &&
           adapter is BatchSyncWriter &&
           await (adapter as BatchSyncWriter).supportsBatchWrites) {
-        await _publishBatchPage(adapter, pending, preparing);
+        await _publishBatchPage(adapter, pending, preparing, upload);
         after = (pending.last.kind.name, pending.last.entityId);
         continue;
       }
@@ -190,7 +230,10 @@ class SyncReplicaEngine {
       final uploadedObjects = <String>{};
       for (final revision in pending) {
         _guard();
-        if (!await _isOutgoingCurrent(revision, preparing)) continue;
+        if (!await _isOutgoingCurrent(revision, preparing)) {
+          if (revision.kind == SyncEntityKind.note) upload.exclude();
+          continue;
+        }
         for (final id in [...revision.blobIds, ?revision.payloadObjectId]) {
           if (uploadedObjects.contains(id)) continue;
           final bytes = await _object(id, adapter);
@@ -198,7 +241,10 @@ class SyncReplicaEngine {
           _guard();
           uploadedObjects.add(id);
         }
-        if (!await _isOutgoingCurrent(revision, preparing)) continue;
+        if (!await _isOutgoingCurrent(revision, preparing)) {
+          if (revision.kind == SyncEntityKind.note) upload.exclude();
+          continue;
+        }
         await adapter.publish(revision);
         _guard();
         await store.database.transaction((txn) async {
@@ -211,6 +257,7 @@ class SyncReplicaEngine {
           );
           _guard();
         });
+        if (revision.kind == SyncEntityKind.note) upload.advance();
         onPublished?.call(adapter.connectionId);
       }
       after = (pending.last.kind.name, pending.last.entityId);
@@ -221,6 +268,7 @@ class SyncReplicaEngine {
     SyncProviderAdapter adapter,
     List<SyncRevision> pending,
     PreparingSyncReplicaContent? preparing,
+    NoteTransferMeter upload,
   ) async {
     final writer = adapter as BatchSyncWriter;
     final objects = <String, Uint8List>{};
@@ -263,21 +311,32 @@ class SyncReplicaEngine {
     for (final revision in ready) {
       if (await _isOutgoingCurrent(revision, preparing)) current.add(revision);
     }
+    final skipped =
+        pending.where((r) => r.kind == SyncEntityKind.note).length -
+        current.where((r) => r.kind == SyncEntityKind.note).length;
+    if (skipped > 0) upload.exclude(skipped);
     if (current.isEmpty) return;
     _guard();
     await writer.publishBatch(current);
     _guard();
     // A partial/lost batch response leaves every revision pending for verified
     // immutable retry. Never infer remote durability from upload-session start.
-    for (final revision in current) {
-      await store.database.transaction((txn) async {
+    await store.database.transaction((txn) async {
+      for (final revision in current) {
         _guard();
         await store.acknowledge(txn, adapter.connectionId, revision);
-        await store.queueSignal(txn, adapter.connectionId, revision.revisionId);
-        _guard();
-      });
-      onPublished?.call(adapter.connectionId);
+      }
+      await store.queueSignal(
+        txn,
+        adapter.connectionId,
+        current.last.revisionId,
+      );
+      _guard();
+    });
+    for (final revision in current) {
+      if (revision.kind == SyncEntityKind.note) upload.advance();
     }
+    onPublished?.call(adapter.connectionId);
   }
 
   Future<bool> _isOutgoingCurrent(
@@ -302,6 +361,21 @@ class SyncReplicaEngine {
     SyncProviderAdapter adapter, {
     bool deferIdentityConflicts = false,
   }) async {
+    final count = await store.incomingNoteCount(adapter.connectionId);
+    _guard();
+    await noteBatch.run(
+      count,
+      (meter) => _applyIncoming(adapter, deferIdentityConflicts, meter),
+      isEmptyLibrary: isEmptyLibrary,
+      onProgress: (value) => onProgress?.call(adapter, value),
+    );
+  }
+
+  Future<void> _applyIncoming(
+    SyncProviderAdapter adapter,
+    bool deferIdentityConflicts,
+    NoteTransferMeter meter,
+  ) async {
     (String, String, String)? after;
     while (true) {
       final incoming = await store.inbox(adapter.connectionId, after: after);
@@ -327,6 +401,7 @@ class SyncReplicaEngine {
             (before == null || local.compareTo(before) > 0)) {
           // The newer edit is not encrypted yet. Do not download obsolete media
           // (which may no longer exist) or allow it to block the winning upload.
+          if (revision.kind == SyncEntityKind.note) meter.exclude();
           continue;
         }
         if (before == null || revision.compareTo(before) > 0) {
@@ -359,15 +434,18 @@ class SyncReplicaEngine {
           if (!deferIdentityConflicts) rethrow;
           // The transaction rolled back. Keep this entry for the strict final
           // pass; never apply or acknowledge its conflicting content.
+          if (revision.kind == SyncEntityKind.note) meter.exclude();
           continue;
         } on SyncLocalMutationPending {
           // Keep the inbox record: a later pass can compare it to the prepared
           // local winner. Other notes and destinations can continue meanwhile.
+          if (revision.kind == SyncEntityKind.note) meter.exclude();
           continue;
         }
         if (applied && application?.didCommit != null) {
           await application!.didCommit!();
         }
+        if (revision.kind == SyncEntityKind.note) meter.advance();
       }
       after = (
         incoming.last.kind.name,

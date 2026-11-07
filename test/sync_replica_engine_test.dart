@@ -1,3 +1,5 @@
+import 'package:better_keep/models/app_progress.dart';
+
 import 'dart:typed_data';
 import 'dart:async';
 
@@ -47,6 +49,56 @@ void main() {
     );
   });
   tearDown(() => db.close());
+
+  test(
+    'counts only durable note updates and clears progress on retry',
+    () async {
+      final samples = <NoteTransfer?>[];
+      final adapter = _Adapter('progress')..incoming = [revision(1)];
+      engine = SyncReplicaEngine(
+        store: store,
+        content: content,
+        isCurrent: () => active,
+        onProgress: (_, value) => samples.add(value),
+      );
+      content.failApply = true;
+      await expectLater(engine.sync(adapter), throwsStateError);
+      expect(samples.last, isNull);
+      expect(
+        samples
+            .whereType<NoteTransfer>()
+            .where((s) => s.stage == NoteTransferStage.downloading)
+            .every((s) => s.done == 0),
+        true,
+      );
+      content.failApply = false;
+      samples.clear();
+      await engine.sync(adapter);
+      expect(
+        samples.whereType<NoteTransfer>().any(
+          (s) =>
+              s.stage == NoteTransferStage.downloading &&
+              s.done == 1 &&
+              s.total == 1,
+        ),
+        true,
+      );
+      expect(samples.last, isNull);
+      final other = _Adapter('second');
+      samples.clear();
+      await engine.sync(other);
+      expect(
+        samples.whereType<NoteTransfer>().any(
+          (s) =>
+              s.stage == NoteTransferStage.uploading &&
+              s.done == 1 &&
+              s.total == 1,
+        ),
+        true,
+      );
+      expect(samples.last, isNull);
+    },
+  );
 
   for (final failRestore in [false, true]) {
     test(

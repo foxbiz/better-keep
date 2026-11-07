@@ -1,4 +1,9 @@
 {
+  "syncCheckingNotes": "ノートの更新を確認中 · {count}",
+  "syncDownloadingNotes": "ノートの更新をダウンロード中 · {count}",
+  "syncUploadingNotes": "ノートの更新をアップロード中 · {count}",
+  "syncEstimatedMinutes": "{minutes, plural, =0{残り1分未満} other{残り約{minutes}分}}",
+  "syncUpdatingNotes": "ノートを更新中",
 	"sharedImageNamesConflict": "共有された画像の一部に同じファイル名があります。1枚ずつ共有してください。",
 	"sharedImageImportFailed": "画像メモを作成できませんでした（{fileName}）。50 MB 以下、2400万画素以下の画像でもう一度共有してください。",
   "externalSyncContinue": "続行",

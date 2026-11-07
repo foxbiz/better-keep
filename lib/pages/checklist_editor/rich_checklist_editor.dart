@@ -518,6 +518,10 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
 
   Future<void> _enqueueSave() async {
     if (_readOnly || _externalConflict) return;
+    if (widget.note.id != null && !_hasPendingLocalChanges) {
+      await _saveTail;
+      return;
+    }
     _commitActiveRow();
     final snapshotRevision = _localEditRevision;
     late final _ChecklistWorkspaceSnapshot snapshot;

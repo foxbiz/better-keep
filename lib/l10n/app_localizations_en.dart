@@ -10,6 +10,35 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String syncCheckingNotes(String count) {
+    return 'Checking note updates · $count';
+  }
+
+  @override
+  String syncDownloadingNotes(String count) {
+    return 'Downloading note updates · $count';
+  }
+
+  @override
+  String syncUploadingNotes(String count) {
+    return 'Uploading note updates · $count';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'About $minutes min left',
+      zero: 'Less than a minute left',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncUpdatingNotes => 'Updating your notes';
+
+  @override
   String get sharedImageNamesConflict =>
       'Some shared images have matching filenames. Please share them one at a time.';
 

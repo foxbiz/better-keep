@@ -1,3 +1,6 @@
+import '../../models/app_progress.dart';
+import '../../models/note.dart';
+
 import 'package:flutter/foundation.dart';
 
 import 'dart:async';
@@ -91,6 +94,16 @@ class LibrarySyncSession extends ChangeNotifier {
       content: content,
       isCurrent: _current,
       availableAdapters: () => connections.adapters,
+      isEmptyLibrary: () => Note.libraryIsEmpty(database),
+      onProgress: (adapter, value) {
+        if (!_current()) return;
+        if (value == null) {
+          transfers.remove(adapter.connectionId);
+        } else {
+          transfers[adapter.connectionId] = value;
+        }
+        _progressChanged();
+      },
       onPublished: (id) => signals?.published(id),
     );
     connections = createConnections(_current);
@@ -135,6 +148,7 @@ class LibrarySyncSession extends ChangeNotifier {
     unawaited(status.load().catchError((Object _) {}));
   }
 
+  final transfers = <String, NoteTransfer>{};
   SyncChangeSignals? signals;
   bool _foreground, _automatic;
   final SyncCipher cipher;
@@ -215,6 +229,7 @@ class LibrarySyncSession extends ChangeNotifier {
   void retire() {
     if (_retired) return;
     _retired = true;
+    engine.noteBatch.reset();
     connections.removeListener(_connectionsChanged);
     scheduler.removeListener(_progressChanged);
     signals?.dispose();

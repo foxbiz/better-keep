@@ -1,4 +1,9 @@
 {
+  "syncCheckingNotes": "正在检查笔记更新 · {count}",
+  "syncDownloadingNotes": "正在下载笔记更新 · {count}",
+  "syncUploadingNotes": "正在上传笔记更新 · {count}",
+  "syncEstimatedMinutes": "{minutes, plural, =0{剩余不到一分钟} other{约剩 {minutes} 分钟}}",
+  "syncUpdatingNotes": "正在更新笔记",
 	"sharedImageNamesConflict": "部分共享图片的文件名相同。请逐张共享。",
 	"sharedImageImportFailed": "无法创建图片笔记（{fileName}）。请使用不超过 50 MB 和2400万像素的图片重新分享。",
   "externalSyncContinue": "继续",

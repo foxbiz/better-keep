@@ -1,3 +1,4 @@
+import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 
 import 'dart:convert';
@@ -425,7 +426,9 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
               valueListenable: SyncPresentation.instance,
               builder: (context, progress, child) {
                 if (progress.isActive) {
-                  return const LinearProgressIndicator();
+                  return LinearProgressIndicator(
+                    value: progress.notes?.fraction,
+                  );
                 }
                 return const SizedBox(height: 4.0);
               },
@@ -487,8 +490,15 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                   // Keep long status messages above the create button. The
                   // expanded creation menu takes priority over transient status.
                   if (!_isBubbleMenuOpen)
-                    SyncProgressWidget(
-                      bottom: showCreateButton ? fabBottom + _fabSize + 12 : 32,
+                    ValueListenableBuilder<bool>(
+                      valueListenable: NoteSyncBatch.active,
+                      builder: (_, bulk, child) =>
+                          bulk ? const SizedBox.shrink() : child!,
+                      child: SyncProgressWidget(
+                        bottom: showCreateButton
+                            ? fabBottom + _fabSize + 12
+                            : 32,
+                      ),
                     ),
                   // FAB with opacity/scale animation
                   Positioned(

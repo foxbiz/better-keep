@@ -1,4 +1,9 @@
 {
+  "syncCheckingNotes": "Memeriksa perubahan catatan · {count}",
+  "syncDownloadingNotes": "Mengunduh perubahan catatan · {count}",
+  "syncUploadingNotes": "Mengunggah perubahan catatan · {count}",
+  "syncEstimatedMinutes": "{minutes, plural, =0{Kurang dari semenit lagi} other{Sekitar {minutes} menit lagi}}",
+  "syncUpdatingNotes": "Memperbarui catatan Anda",
 	"sharedImageNamesConflict": "Beberapa gambar yang dibagikan memiliki nama file yang sama. Bagikan satu per satu.",
 	"sharedImageImportFailed": "Tidak dapat membuat catatan gambar ({fileName}). Coba bagikan lagi dengan gambar maksimal 50 MB dan 24 megapiksel.",
   "externalSyncContinue": "Lanjutkan",

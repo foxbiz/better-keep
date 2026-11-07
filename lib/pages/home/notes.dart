@@ -1,3 +1,6 @@
+import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
+import 'package:better_keep/components/sync_progress_widget.dart';
 import 'package:better_keep/components/cloud_sync_upgrade_notice.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
 
@@ -8,6 +11,7 @@ import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/components/storage_warning.dart';
 import 'package:better_keep/models/label.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/pages/home/google_keep_import_visibility.dart';
 import 'package:better_keep/components/folder_tile.dart';
@@ -96,6 +100,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   @override
   void initState() {
+    NoteSyncBatch.active.addListener(_bulkChanged);
     _autoScrollTicker = createTicker(_onAutoScrollTick);
     _fetchData();
 
@@ -132,6 +137,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       }
       _activeReorderController?.clear();
     }
+    NoteSyncBatch.active.removeListener(_bulkChanged);
     _autoScrollTicker.dispose();
     _folderUpdateDebounce?.cancel();
     _updateShowLoaderTimeout?.cancel();
@@ -167,8 +173,26 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
   }
 
+  void _bulkChanged() {
+    if (!mounted) return;
+    if (NoteSyncBatch.active.value) {
+      _loadGeneration++;
+      _folderUpdateDebounce?.cancel();
+      _updateShowLoaderTimeout?.cancel();
+      _noteCards.clear();
+      _notes = null;
+      if (_activeReorderController != null) unawaited(_cancelDrag());
+    } else if (ModalRoute.isCurrentOf(context) == false) {
+      _refreshOnReturn = true;
+    } else {
+      unawaited(_fetchData());
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (NoteSyncBatch.active.value) return const BulkSyncProgress();
     if (!AppState.notesViewMode.isFolderMode ||
         widget.searchMode ||
         AppState.showNotes != NoteType.all) {
@@ -369,7 +393,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   Future<void> refresh() async {
     try {
-      _scrollController.jumpTo(0.0);
+      if (_scrollController.hasClients) _scrollController.jumpTo(0.0);
       await runNotesRefreshSequence(
         refreshNotes: () => refreshSyncFromUser(context),
         refreshLabels: () async {},
@@ -381,6 +405,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _fetchData([dynamic _]) async {
+    if (NoteSyncBatch.active.value) return;
     final generation = ++_loadGeneration;
     final noteRevision = _noteRevision;
     final orderContext = _activeOrderContext;
@@ -407,6 +432,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
     _noteCards.clear();
     _notes = notes;
+    if (AppState.selectedNotes.isNotEmpty) {
+      final byId = {for (final note in notes) note.id: note};
+      AppState.selectedNotes = [
+        for (final selected in AppState.selectedNotes) ?byId[selected.id],
+      ];
+    }
     _hasStoredNotes = hasStoredNotes;
     _colors = colors;
     _labels = labels;
@@ -449,10 +480,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   Future<bool> _loadHasStoredNotes() async {
-    final rows = await AppState.db.rawQuery(
-      'SELECT EXISTS(SELECT 1 FROM ${Note.model} LIMIT 1) AS has_notes',
-    );
-    return rows.first['has_notes'] == 1;
+    return !await Note.libraryIsEmpty(AppState.db);
   }
 
   Future<void> _refreshHasStoredNotes() async {
@@ -482,7 +510,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   void _sortStateListener() {
-    if (!mounted) return;
+    if (!mounted || NoteSyncBatch.active.value) return;
     setState(() {});
   }
 
@@ -1002,15 +1030,62 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     return card;
   }
 
+  bool _matchesCurrentFolder(Note note) {
+    if (widget.searchMode ||
+        !AppState.notesViewMode.isFolderMode ||
+        AppState.showNotes != NoteType.all) {
+      return true;
+    }
+    final folder = AppState.currentFolder;
+    if (folder == null) return false;
+    if (folder.isPinned) return note.pinned;
+    final label = folder.labelName;
+    if (label != null) {
+      return label.isEmpty
+          ? (note.labels ?? '').isEmpty
+          : note.matchesLabels([label]);
+    }
+    return note.color == folder.color;
+  }
+
   void _notesListener(NoteEvent event) {
+    if (NoteSyncBatch.active.value) return;
     _noteRevision++;
     // Models are mutable; invalidate on every event, not just identity changes.
     _noteCards.remove(event.note.id);
+    final newNote = event.note;
+    final shouldRemove =
+        event.event == "deleted" ||
+        !_matchesCurrentFolder(newNote) ||
+        !newNote.matchesLabels(
+          AppState.filterLabels,
+          matchAllLabels: AppState.matchAllLabels,
+        ) ||
+        switch (AppState.showNotes) {
+          NoteType.archived => !newNote.archived || newNote.trashed,
+          NoteType.trashed => !newNote.trashed,
+          NoteType.locked => !newNote.locked || newNote.trashed,
+          NoteType.pinned => !newNote.pinned || newNote.trashed,
+          NoteType.reminder =>
+            newNote.trashed ||
+                newNote.reminder == null ||
+                (newNote.completed &&
+                    !(newNote.reminder?.isRepeating ?? false)),
+          _ => newNote.trashed || newNote.archived,
+        };
+
+    final selection = AppState.selectedNotes;
+    if (event.event != 'created' &&
+        selection.any((note) => note.id == newNote.id)) {
+      AppState.selectedNotes = [
+        for (final note in selection)
+          if (note.id != newNote.id) note else if (!shouldRemove) newNote,
+      ];
+    }
     // Bulk downloads must not rebuild the entire grid behind another page.
     // Subscribe to route changes and reload committed state once on return.
     if (ModalRoute.isCurrentOf(context) == false) {
       _refreshOnReturn = true;
-      if (AppState.selectedNotes.isNotEmpty) AppState.selectedNotes = [];
       if (_activeReorderController != null) {
         _pendingRefreshAfterDrag = false;
         unawaited(_cancelDrag());
@@ -1048,10 +1123,6 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       );
     }
 
-    if (AppState.selectedNotes.isNotEmpty) {
-      AppState.selectedNotes = [];
-    }
-
     if (event.event == 'deleted') {
       unawaited(_refreshHasStoredNotes());
     } else {
@@ -1066,26 +1137,6 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     // A database load may already include a committed note before its creation
     // event arrives. Keep that model, which may also contain newer local edits.
     if (event.event == 'created' && index != -1) return;
-    final newNote = event.note;
-
-    final shouldRemove =
-        event.event == "deleted" ||
-        !newNote.matchesLabels(
-          AppState.filterLabels,
-          matchAllLabels: AppState.matchAllLabels,
-        ) ||
-        switch (AppState.showNotes) {
-          NoteType.archived => !newNote.archived || newNote.trashed,
-          NoteType.trashed => !newNote.trashed,
-          NoteType.locked => !newNote.locked || newNote.trashed,
-          NoteType.pinned => !newNote.pinned || newNote.trashed,
-          NoteType.reminder =>
-            newNote.trashed ||
-                newNote.reminder == null ||
-                (newNote.completed &&
-                    !(newNote.reminder?.isRepeating ?? false)),
-          _ => newNote.trashed || newNote.archived,
-        };
 
     if (shouldRemove) {
       _notes = _notes!.where((note) => note.id != event.note.id);
@@ -1192,13 +1243,30 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   Widget _buildNotesSliver() {
     if (_notes == null || _notes!.isEmpty) {
+      Widget content = _buildNotesView();
+      if (!_hasStoredNotes &&
+          !widget.searchMode &&
+          AppState.showNotes == NoteType.all) {
+        final external = ExternalSyncService.instance;
+        content = ListenableBuilder(
+          listenable: external,
+          builder: (context, child) =>
+              external.progress.phase == SyncPhase.syncing
+              ? const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: CircularProgressIndicator(),
+                )
+              : child!,
+          child: content,
+        );
+      }
       return SliverFillRemaining(
         hasScrollBody: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1200),
-            child: _buildNotesView(),
+            child: content,
           ),
         ),
       );

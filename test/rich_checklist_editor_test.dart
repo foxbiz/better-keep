@@ -31,6 +31,20 @@ void main() {
     await AppState.init(prefs: await SharedPreferences.getInstance());
   });
 
+  testWidgets('visiting a saved checklist does not publish a normalized copy', (
+    tester,
+  ) async {
+    final document = RichChecklistDocument([_item('qa', 'Task')]);
+    final raw = const JsonEncoder.withIndent('  ')
+        .convert(ChecklistDeltaCodec().encodeBody(document));
+    final note = _RecordingNote(id: 17, title: 'QA', content: raw);
+    await _pumpEditor(tester, note: note, document: document, title: 'QA');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(note.saveCalls, 0);
+    expect(note.content, raw);
+  });
+
   testWidgets(
     'virtualizes inactive rich rows and rebinds one live Quill editor',
     (tester) async {

@@ -99,6 +99,30 @@ class SyncReplicaStore {
     return true;
   }
 
+  static const _pendingFrom = '''
+      FROM replica_entities e
+      LEFT JOIN replica_acknowledgements a ON a.scope = e.scope
+        AND a.kind = e.kind AND a.entity_id = e.entity_id
+        AND a.connection_id = ?
+      WHERE e.scope = ? AND (a.revision_id IS NULL OR a.revision_id != e.revision_id)
+    ''';
+
+  Future<int> pendingNoteCount(String connectionId) async =>
+      Sqflite.firstIntValue(
+        await database.rawQuery(
+          'SELECT COUNT(*) $_pendingFrom AND e.kind = ?',
+          [connectionId, scope, SyncEntityKind.note.name],
+        ),
+      )!;
+
+  Future<int> incomingNoteCount(String connectionId) async =>
+      Sqflite.firstIntValue(
+        await database.rawQuery(
+          'SELECT COUNT(*) FROM replica_inbox WHERE scope = ? AND connection_id = ? AND kind = ?',
+          [scope, connectionId, SyncEntityKind.note.name],
+        ),
+      )!;
+
   Future<List<SyncRevision>> pending(
     String connectionId, {
     int limit = 100,
@@ -106,11 +130,7 @@ class SyncReplicaStore {
   }) async {
     final rows = await database.rawQuery(
       '''
-      SELECT e.revision FROM replica_entities e
-      LEFT JOIN replica_acknowledgements a ON a.scope = e.scope
-        AND a.kind = e.kind AND a.entity_id = e.entity_id
-        AND a.connection_id = ?
-      WHERE e.scope = ? AND (a.revision_id IS NULL OR a.revision_id != e.revision_id)
+      SELECT e.revision $_pendingFrom
       AND (? IS NULL OR e.kind > ? OR (e.kind = ? AND e.entity_id > ?))
       ORDER BY e.kind, e.entity_id LIMIT ?
     ''',

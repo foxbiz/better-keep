@@ -175,6 +175,9 @@ enum NoteType { all, archived, trashed, pinned, locked, reminder }
 class Note extends BaseModel<Note> {
   static final ModelSchema<Note> _schema = _createSchema();
   static const model = "note";
+
+  static Future<bool> libraryIsEmpty(Database db) async =>
+      (await db.rawQuery('SELECT 1 FROM $model LIMIT 1')).isEmpty;
   static const decryptionFailedContent = '{"decryption_failed": true}';
 
   @visibleForTesting
@@ -3595,7 +3598,16 @@ class _NoteSchema implements ModelSchema<Note> {
   @override
   Future<List<Note>> get(List<dynamic> args) async {
     final rows = await getOrCountRows(false, args);
-    final notes = await Future.wait(rows.map(Note.fromJsonAsync));
+    // Bound in-flight field decryption when reopening a restored library.
+    const batchSize = 16;
+    final notes = <Note>[];
+    for (var start = 0; start < rows.length; start += batchSize) {
+      notes.addAll(
+        await Future.wait(
+          rows.skip(start).take(batchSize).map(Note.fromJsonAsync),
+        ),
+      );
+    }
     return notes;
   }
 

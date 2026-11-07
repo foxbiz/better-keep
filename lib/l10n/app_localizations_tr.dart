@@ -10,6 +10,35 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String syncCheckingNotes(String count) {
+    return 'Not değişiklikleri kontrol ediliyor · $count';
+  }
+
+  @override
+  String syncDownloadingNotes(String count) {
+    return 'Not değişiklikleri indiriliyor · $count';
+  }
+
+  @override
+  String syncUploadingNotes(String count) {
+    return 'Not değişiklikleri yükleniyor · $count';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Yaklaşık $minutes dk. kaldı',
+      zero: 'Bir dakikadan az kaldı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncUpdatingNotes => 'Notlarınız güncelleniyor';
+
+  @override
   String get sharedImageNamesConflict =>
       'Paylaşılan bazı görsellerin dosya adları aynı. Lütfen bunları tek tek paylaşın.';
 

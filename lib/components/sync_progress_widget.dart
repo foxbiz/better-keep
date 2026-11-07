@@ -1,3 +1,4 @@
+import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
@@ -7,7 +8,6 @@ import 'dart:ui';
 
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/sync_presentation.dart';
-import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
@@ -79,7 +79,7 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
     }
     final starting =
         next.isActive &&
-        (!_progress.isActive || SyncPresentation.instance.isManualRefresh);
+        (!_progress.isActive || next.phase == SyncPhase.checkingConnection);
     _hideTimer?.cancel();
     setState(() {
       _progress = next;
@@ -125,20 +125,11 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
               },
               child: ListenableBuilder(
                 listenable: Listenable.merge([
-                  NoteSyncService().syncProgress,
-                  NoteSyncService().isSyncing,
                   PlanService.instance.entitlementsNotifier,
                   FirebaseSyncPreference.instance,
                 ]),
                 builder: (context, _) {
-                  final counts = NoteSyncService().syncProgress.value;
-                  final showCounts =
-                      _progress.phase == SyncPhase.syncing &&
-                      NoteSyncService().isSyncing.value &&
-                      SyncPresentation.instance.showNoteCounts;
                   return _SyncProgressCard(
-                    syncedCount: showCounts ? counts.$1 : 0,
-                    totalCount: showCounts ? counts.$2 : 0,
                     syncStatus: _progress,
                     isSyncing: _progress.isActive,
                     failedCount: _progress.failedCount,
@@ -153,16 +144,49 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
   }
 }
 
+/// Replaces the heavy notes grid for the duration of a bulk note transfer.
+class BulkSyncProgress extends StatelessWidget {
+  const BulkSyncProgress({super.key});
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: ValueListenableBuilder<NoteTransfer?>(
+          valueListenable: NoteSyncBatch.progress,
+          builder: (context, notes, _) {
+            if (!AppState.showSyncProgress) {
+              return CircularProgressIndicator(
+                semanticsLabel: context.l10n.syncUpdatingNotes,
+              );
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  notes?.localized(context.l10n) ??
+                      context.l10n.syncUpdatingNotes,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                LinearProgressIndicator(value: notes?.fraction),
+              ],
+            );
+          },
+        ),
+      ),
+    ),
+  );
+}
+
 class _SyncProgressCard extends StatefulWidget {
-  final int syncedCount;
-  final int totalCount;
   final SyncProgress syncStatus;
   final bool isSyncing;
   final int failedCount;
 
   const _SyncProgressCard({
-    required this.syncedCount,
-    required this.totalCount,
     required this.syncStatus,
     required this.isSyncing,
     required this.failedCount,
@@ -221,8 +245,6 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
     super.dispose();
   }
 
-  int get syncedCount => widget.syncedCount;
-  int get totalCount => widget.totalCount;
   SyncProgress get syncStatus => widget.syncStatus;
   bool get isSyncing => widget.isSyncing;
   int get failedCount => widget.failedCount;
@@ -343,9 +365,6 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
     if (hasFailed && syncStatus.isEmpty) {
       return context.l10n.syncFailedCount(failedCount);
     }
-    if (hasProgress) {
-      return "$syncedCount/$totalCount";
-    }
     if (!syncStatus.isEmpty) {
       return syncStatus.localized(
         context.l10n,
@@ -387,7 +406,6 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
   }
 
   bool get hasFailed => failedCount > 0 && !isSyncing;
-  bool get hasProgress => totalCount > 0;
 }
 
 enum _MessageType { info, success, error }

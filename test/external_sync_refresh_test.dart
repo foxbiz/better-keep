@@ -33,6 +33,28 @@ void main() {
     expect(status().phase, SyncPhase.preparing);
     progress[restored.replicaId] = const SyncConnectionProgress(running: true);
     expect(status().phase, SyncPhase.syncing);
+    const update = (
+      stage: NoteTransferStage.downloading,
+      done: 7,
+      total: 20,
+      minutesLeft: null,
+    );
+    expect(
+      externalSyncProgress(
+        connections: [restored],
+        progress: progress,
+        transfers: {
+          'previous-connection': (
+            stage: NoteTransferStage.uploading,
+            done: 1,
+            total: 9,
+            minutesLeft: null,
+          ),
+          restored.replicaId: update,
+        },
+      ).notes,
+      update,
+    );
     progress[restored.replicaId] = SyncConnectionProgress(
       lastSuccess: DateTime.utc(2026),
     );

@@ -108,6 +108,36 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @syncCheckingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking note updates · {count}'**
+  String syncCheckingNotes(String count);
+
+  /// No description provided for @syncDownloadingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading note updates · {count}'**
+  String syncDownloadingNotes(String count);
+
+  /// No description provided for @syncUploadingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading note updates · {count}'**
+  String syncUploadingNotes(String count);
+
+  /// No description provided for @syncEstimatedMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =0{Less than a minute left} other{About {minutes} min left}}'**
+  String syncEstimatedMinutes(int minutes);
+
+  /// No description provided for @syncUpdatingNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating your notes'**
+  String get syncUpdatingNotes;
+
   /// No description provided for @sharedImageNamesConflict.
   ///
   /// In en, this message translates to:

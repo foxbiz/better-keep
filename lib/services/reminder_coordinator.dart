@@ -1,3 +1,5 @@
+import 'note_sync_batch.dart';
+
 import 'dart:async';
 
 import 'package:alarm/alarm.dart';
@@ -339,6 +341,9 @@ class ReminderCoordinator {
   Future<void> _drainRequestedReconciliations() async {
     try {
       do {
+        while (NoteSyncBatch.active.value) {
+          await NoteSyncBatch.pending;
+        }
         _reconciliationRequested = false;
         await reconcileAll();
       } while (_reconciliationRequested);

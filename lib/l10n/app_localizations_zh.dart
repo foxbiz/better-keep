@@ -10,6 +10,35 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String syncCheckingNotes(String count) {
+    return '正在检查笔记更新 · $count';
+  }
+
+  @override
+  String syncDownloadingNotes(String count) {
+    return '正在下载笔记更新 · $count';
+  }
+
+  @override
+  String syncUploadingNotes(String count) {
+    return '正在上传笔记更新 · $count';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '约剩 $minutes 分钟',
+      zero: '剩余不到一分钟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncUpdatingNotes => '正在更新笔记';
+
+  @override
   String get sharedImageNamesConflict => '部分共享图片的文件名相同。请逐张共享。';
 
   @override

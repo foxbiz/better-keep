@@ -62,6 +62,7 @@ class ExternalSyncService extends ChangeNotifier {
         (c) => connections.isSelected(c.provider),
       ),
       progress: current.scheduler.progress,
+      transfers: current.transfers,
       errors: connections.errors,
       metadataReady: connections.hasMetadata,
       metadataFailure:

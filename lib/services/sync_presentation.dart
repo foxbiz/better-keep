@@ -90,9 +90,6 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
   bool _noteUploadRestricted = false;
   bool _labelUploadRestricted = false;
   bool _orderUploadRestricted = false;
-  bool get showNoteCounts =>
-      (firebaseSelected?.call() ?? true) &&
-      !(externalProgress?.call().isActive ?? false);
   bool get isManualRefresh => _manual != null && _current?.call() == true;
 
   Object beginManual(bool Function() current) {
@@ -152,7 +149,13 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     final external = externalProgress?.call() ?? SyncProgress.idle;
     final states = [cloud, external];
     if (states.any((s) => s.phase == SyncPhase.syncing)) {
-      value = const SyncProgress(SyncPhase.syncing);
+      value =
+          external.phase == SyncPhase.syncing &&
+              (cloud.phase != SyncPhase.syncing ||
+                  external.notes != null ||
+                  cloud.notes == null)
+          ? external
+          : cloud;
     } else if (sessionInvalid.value &&
         (recovery.hasSession || !external.isEmpty)) {
       value = const SyncProgress(SyncPhase.signInRequired);
@@ -227,7 +230,10 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     final activity = recovery.activity.value;
     final cloud = recovery.state.value;
     if (transferring && cloud == CloudSessionState.ready) {
-      return const SyncProgress(SyncPhase.syncing);
+      return SyncProgress(
+        SyncPhase.syncing,
+        notes: noteBusy.value ? noteStatus.value.notes : null,
+      );
     } else if (activity == CloudRecoveryActivity.verifying &&
         (manual || cloud != CloudSessionState.ready)) {
       return const SyncProgress(SyncPhase.checkingConnection);
