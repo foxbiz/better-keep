@@ -369,9 +369,6 @@ class _UserPageState extends State<UserPage> {
       return;
     }
     if (!context.mounted || !accountCurrent()) return;
-    setState(() {
-      _isLoading = true;
-    });
 
     try {
       await AuthService.signOut();
@@ -381,9 +378,6 @@ class _UserPageState extends State<UserPage> {
     } catch (error, stackTrace) {
       AppLogger.error('Failed to sign out', error, stackTrace);
       if (context.mounted) {
-        setState(() {
-          _isLoading = false;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.somethingWentWrongTryAgain),

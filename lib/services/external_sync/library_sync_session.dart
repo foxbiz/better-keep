@@ -238,12 +238,12 @@ class LibrarySyncSession extends ChangeNotifier {
     cipher.dispose();
   }
 
-  Future<void> close() {
+  Future<void> close({bool pruneCache = true}) {
     retire();
-    return _closing ??= _drain();
+    return _closing ??= _drain(pruneCache);
   }
 
-  Future<void> _drain() async {
+  Future<void> _drain(bool pruneCache) async {
     try {
       await Future.wait(_changeChecks.toList());
       await scheduler.waitForIdle();
@@ -253,7 +253,7 @@ class LibrarySyncSession extends ChangeNotifier {
       await objects.waitForIdle();
       await status.waitForIdle();
       try {
-        await objects.pruneUnreferenced();
+        if (pruneCache) await objects.pruneUnreferenced();
       } catch (_) {
         // Optional maintenance must not prevent account replacement or recovery.
         // A malformed reference fails closed, before any cached object is removed.

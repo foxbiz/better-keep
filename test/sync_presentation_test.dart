@@ -77,16 +77,16 @@ void main() {
       isEmptyLibrary: () async => true,
     );
     try {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: BulkSyncProgress()),
+        ),
+      );
       for (final show in [true, false]) {
         AppState.set('show_sync_progress', show);
-        await tester.pumpWidget(
-          MaterialApp(
-            key: ValueKey(show),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: const Scaffold(body: BulkSyncProgress()),
-          ),
-        );
+        await tester.pump();
         expect(
           find.textContaining('0/24'),
           show ? findsOneWidget : findsNothing,
@@ -94,10 +94,14 @@ void main() {
         if (!show) {
           expect(find.bySemanticsLabel('Updating your notes'), findsOneWidget);
         }
-        expect(
-          find.byType(CircularProgressIndicator),
-          show ? findsNothing : findsOneWidget,
-        );
+        final download = find.byIcon(Icons.download_rounded);
+        expect(download, findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        final before = tester.getCenter(download);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 700));
+        expect(tester.getCenter(download).dy, isNot(closeTo(before.dy, .001)));
       }
     } finally {
       done.complete();

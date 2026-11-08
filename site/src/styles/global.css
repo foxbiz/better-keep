@@ -1520,33 +1520,87 @@ tr:last-child td {
   white-space: nowrap;
 }
 
-.document-body .why-card {
-  margin-block: 0;
+.web-pricing button.button { cursor: pointer; font-family: inherit; }
+
+.pricing-currencies {
+  display: flex;
+  gap: 1rem;
+  width: fit-content;
+  margin: 0 0 1rem;
+  border: 0;
+  padding: 0;
 }
 
-.document-body .why-card > svg {
-  color: var(--brand);
-  margin-bottom: 0.75rem;
+.pricing-currencies legend { color: var(--ink-soft); font-size: 0.85rem; }
+.pricing-currencies label { cursor: pointer; padding-block: 0.45rem; }
+.pricing-currencies input { accent-color: var(--brand); }
+.web-pricing [data-currency="INR"],
+.web-pricing:has(input[value="INR"]:checked) [data-currency="USD"] { display: none; }
+.web-pricing:has(input[value="INR"]:checked) [data-currency="INR"] { display: block; }
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
-.document-body .why-card p:last-child {
-  margin-bottom: 0;
-  color: var(--ink-soft);
+.plan-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  background: var(--surface);
 }
 
-.document-body .free-feature,
+.plan-card h3 { margin: 0 0 0.75rem; }
+.plan-card strong { color: var(--ink); font-size: 1.75rem; }
+.plan-card small { display: block; }
+.plan-card p { margin: 0.75rem 0 0; color: var(--ink-soft); }
+
+.document-body .comparison-table {
+  display: table;
+  table-layout: fixed;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.comparison-table :is(th, td) {
+  padding: 0.65rem 0.3rem;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  letter-spacing: normal;
+  text-align: center;
+  text-transform: none;
+  vertical-align: middle;
+}
+
+.comparison-table thead th {
+  padding-block: 0.85rem;
+  border-bottom: 1px solid var(--line-strong);
+  font-weight: 600;
+}
+
+.comparison-table thead th:last-child { color: var(--brand); }
+.comparison-table th:first-child { width: 45%; padding-left: 0.85rem; text-align: left; }
+.comparison-table td { color: var(--ink-soft); }
+.comparison-value { display: inline-flex; vertical-align: middle; }
+.comparison-value[aria-label="No"] { color: var(--ink-muted); }
+.comparison-value[aria-label="Yes"] {
+  border-radius: 50%;
+  padding: 2px;
+  background: var(--brand);
+  color: var(--canvas);
+}
+.comparison-value[aria-label="Yes"] svg { width: 14px; height: 14px; stroke-width: 3; }
+
 .document-body .faq-question {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.document-body .free-feature > svg {
-  flex: 0 0 20px;
-  color: var(--success);
-}
-
-.document-body .faq-question {
   justify-content: space-between;
   cursor: pointer;
   list-style: none;

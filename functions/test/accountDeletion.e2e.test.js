@@ -79,9 +79,11 @@ async function tick(name) {
 	});
 	assert.equal(response.status, 200, await response.text());
 }
-async function fixture() {
+async function fixture(emailLocalPart) {
 	const uid = `e2e-${randomUUID()}`;
-	const email = `${uid}@example.invalid`;
+	const email = emailLocalPart
+		? `${emailLocalPart}@${uid}.example.invalid`
+		: `${uid}@example.invalid`;
 	const password = "Synthetic-only-password-42";
 	await auth.createUser({ uid, email, password, emailVerified: true });
 	const r = await fetch(
@@ -663,9 +665,10 @@ test("sign-in cancellation emails independently of the client and event retry is
 
 test("OTP responses mask one- and two-character email local parts", async () => {
 	for (const local of ["a", "ab"]) {
-		const f = await fixture();
+		// An email change can revoke an existing token. Authenticate with the
+		// address whose masking is under test.
+		const f = await fixture(local);
 		const domain = `${f.uid}.example.invalid`;
-		await auth.updateUser(f.uid, { email: `${local}@${domain}` });
 		const result = await call("sendDeletionOtp", f.token);
 		assert.equal(result.status, 200);
 		assert.equal(

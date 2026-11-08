@@ -107,6 +107,7 @@ test("selects owning components once, including tests and configuration", () => 
 			],
 			["functions"],
 		],
+		[["lib/services/sign_out_lock_web.dart", "test/web_sign_out_lock_test.dart"], ["flutter", "web-sign-out-lock"]],
 		[["admin-site/tsconfig.json", "admin-site/src/a.astro"], ["admin-site"]],
 		[["site/src/content/help.md", "test/site_assets_test.mts"], ["site"]],
 		[["test/site_assets_test.mjs"], ["site"]],

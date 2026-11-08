@@ -3393,6 +3393,32 @@ class AppLocalizationsTr extends AppLocalizations {
   String get requestApprovalFromAnotherDevice => 'Başka Bir Cihazdan Onay İste';
 
   @override
+  String get signOutFinishing => 'Çıkış işlemi tamamlanıyor…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'Çıkış yaptığınızda yalnızca bu cihazda kayıtlı notlar silinir. Eşitlenmiş notları geri yüklemek için onaylı bir cihaza veya kurtarma parolanıza ihtiyacınız olur.';
+
+  @override
+  String get localLibraryUnavailable =>
+      'Yerel not klasörünüz belirlenemedi. Tekrar deneyin veya yeni bir yerel arşiv oluşturmak için çıkış yapın.';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      'Güvenli depolamaya erişilemiyor. Cihazınızın kilidini açıp tekrar deneyin.';
+
+  @override
+  String get signOutOtherWindowRetry =>
+      'Başka bir pencerede oturum kapatılıyor. Tamamlandığında tekrar deneyin.';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'Yerel veritabanı temizlenemedi. Diğer Better Keep pencerelerini kapatıp tekrar deneyin.';
+
+  @override
+  String get signOutCleanupRetry => 'Oturum kapatılamadı. Tekrar deneyin.';
+
+  @override
   String get signingOut => 'Çıkış yapılıyor...';
 
   @override

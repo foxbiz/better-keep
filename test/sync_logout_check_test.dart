@@ -61,6 +61,45 @@ void main() {
     });
   }
 
+  test(
+    'startup labels are reproducible but user changes must be backed up',
+    () async {
+      for (final name in Label.systemLabelNames) {
+        await db.insert('label', {
+          'sync_id': name,
+          'name': name,
+          'is_system': 1,
+          'created_at': '2026-11-07',
+          'updated_at': '2026-11-07',
+        });
+      }
+      expect(await inspect(), SyncLogoutState.complete);
+      expect(await inspect(destinations: []), SyncLogoutState.complete);
+      await db.update(
+        'label',
+        {'updated_at': '2026-11-08'},
+        where: 'sync_id = ?',
+        whereArgs: [Label.sharedTextLabelName],
+      );
+      expect(await inspect(), SyncLogoutState.pending);
+      expect(await inspect(destinations: []), SyncLogoutState.pending);
+      await db.update(
+        'label',
+        {'name': 'My category', 'updated_at': '2026-11-08'},
+        where: 'sync_id = ?',
+        whereArgs: [Label.sharedFileLabelName],
+      );
+      expect(await inspect(), SyncLogoutState.pending);
+      await acknowledge('google_drive:1');
+      await db.delete(
+        'label',
+        where: 'sync_id = ?',
+        whereArgs: [Label.sharedTextLabelName],
+      );
+      expect(await inspect(), SyncLogoutState.pending);
+    },
+  );
+
   test('uncaptured edits and every selected destination require current acknowledgements', () async {
     await db.insert('note', {'id': 1, 'sync_id': 'note-1', 'title': 'Local'});
     expect(await inspect(), SyncLogoutState.pending);

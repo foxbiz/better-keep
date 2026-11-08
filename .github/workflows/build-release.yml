@@ -77,16 +77,21 @@ jobs:
         id: setup-chrome
         uses: browser-actions/setup-chrome@v2
         with:
+          chrome-version: '157.0.8103.38'
           install-chromedriver: true
 
       - name: Install dependencies and run release checks
         env:
+          PUBLIC_ADMIN_APP_CHECK_SITE_KEY: disposable-ci-site-key
           CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
           CHROMEDRIVER_BINARY: ${{ steps.setup-chrome.outputs.chromedriver-path }}
         run: |
           npm ci
           npm run functions ci
           flutter pub get
+          # This job only tests disposable browser data and publishes no bundle.
+          # Keep production settings out of pull request builds.
+          printf 'WEB_STORAGE_KEY=%064x\n' 1 > .env
           npm run release
 
   # ============================================
@@ -192,6 +197,9 @@ jobs:
       - name: Create .env file
         run: |
           echo '${{ secrets.ENV_FILE }}' > .env
+
+      - name: Verify sign-out with a locked Windows database
+        run: flutter test --no-pub test/storage_logout_test.dart --plain-name "Windows logout refuses an exclusively locked account database"
 
       - name: Build Windows
         run: flutter build windows --release --dart-define-from-file=.env

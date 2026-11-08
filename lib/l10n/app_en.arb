@@ -3470,6 +3470,20 @@
 		"description": "Request approval from another device button text"
 	},
 
+	"signOutFinishing": "Finishing sign-out…",
+	"@signOutFinishing": {"description": "Status during a slow sign-out"},
+	"signOutLibraryWarning": "Signing out removes notes saved only on this device. To restore synced notes, you’ll need an approved device or your recovery passphrase.",
+	"@signOutLibraryWarning": {"description": "Confirm sign-out when the local library cannot be identified"},
+	"localLibraryUnavailable": "Better Keep couldn’t identify your local note folder. Retry, or sign out to start a fresh local library.",
+	"@localLibraryUnavailable": {"description": "Recovery options when local library ownership is ambiguous"},
+	"signOutSecureStorageRetry": "Secure storage is unavailable. Unlock your device, then retry.",
+	"@signOutSecureStorageRetry": {"description": "Retry guidance when platform key storage is unavailable"},
+	"signOutOtherWindowRetry": "Another window is signing out. Retry when it finishes.",
+	"@signOutOtherWindowRetry": {"description": "Retry after a different browser window has finished signing out"},
+	"signOutDatabaseRetry": "Better Keep couldn’t clear the local database. Close any other Better Keep windows, then retry.",
+	"@signOutDatabaseRetry": {"description": "Retry guidance when the local database cannot be removed"},
+	"signOutCleanupRetry": "Couldn’t finish signing out. Try again.",
+	"@signOutCleanupRetry": {"description": "Message when local sign-out needs another attempt"},
 	"signingOut": "Signing out...",
 	"@signingOut": { "description": "Signing out status message" },
 

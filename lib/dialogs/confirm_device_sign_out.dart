@@ -6,14 +6,13 @@ import 'package:flutter/material.dart';
 Future<bool> confirmDeviceSignOut(
   BuildContext context, {
   bool warnWithoutRecovery = false,
+  bool unavailableLibrary = false,
 }) async {
   final isCurrent = AuthService.captureSessionIdentity();
   final uid = AuthService.currentUser?.uid;
   bool active() =>
       context.mounted && isCurrent() && AuthService.currentUser?.uid == uid;
   final l10n = context.l10n;
-  final state = await currentSyncLogoutState();
-  if (!context.mounted || !active()) return false;
   Future<bool> confirm(String message, {required bool destructive}) async {
     if (!active()) return false;
     final accepted = await showDialog<bool>(
@@ -45,6 +44,11 @@ Future<bool> confirmDeviceSignOut(
     return accepted == true && active();
   }
 
+  if (unavailableLibrary) {
+    return confirm(l10n.signOutLibraryWarning, destructive: true);
+  }
+  final state = await currentSyncLogoutState();
+  if (!context.mounted || !active()) return false;
   if (state != SyncLogoutState.complete) {
     final proceed = await confirm(
       state == SyncLogoutState.pending

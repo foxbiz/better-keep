@@ -22,7 +22,7 @@ export const publicDocuments: readonly PublicDocument[] = [
       'How Better Keep collects, protects, uses, and retains account and note-related information.',
     introduction:
       'This policy explains the information Better Keep handles, how encrypted note data is protected, and the choices available to you.',
-    updatedLabel: 'December 11, 2024'
+    updatedLabel: 'November 8, 2026'
   },
   {
     slug: 'terms',
@@ -32,16 +32,16 @@ export const publicDocuments: readonly PublicDocument[] = [
       'The terms governing access to Better Keep applications, subscriptions, encrypted synchronization, and related services.',
     introduction:
       'These terms explain the responsibilities, service conditions, subscription rules, and encryption limitations that apply when using Better Keep.',
-    updatedLabel: 'December 11, 2025'
+    updatedLabel: 'November 8, 2026'
   },
   {
     slug: 'pricing',
-    title: 'Free and Pro plans',
-    eyebrow: 'Free local notes',
+    title: 'Compare Free, Lite and Pro',
+    eyebrow: 'Pricing',
     description:
-      'Use Better Keep Free for unlimited local notes after sign-in. Pro adds end-to-end encrypted sync across devices and unlimited locked notes.',
+      'Compare Better Keep plans and prices for manual sync, automatic sync with your own storage, built-in cloud sync, and locked notes.',
     introduction:
-      'An account is required. Core local note-taking is free; optional Pro subscriptions add encrypted cloud synchronization and unlimited locked notes.'
+      'Every plan includes unlimited local notes and free manual sync with your own storage. Choose Lite for automatic sync or Pro for built-in cloud storage and unlimited locked notes.'
   },
   {
     slug: 'contact',
@@ -69,7 +69,7 @@ export const publicDocuments: readonly PublicDocument[] = [
       'How to request Better Keep account deletion, what is removed, the grace period, recovery, and local data handling.',
     introduction:
       'Follow these steps to schedule account deletion, understand what happens during the grace period, and export anything you want to keep first.',
-    updatedLabel: 'December 21, 2025'
+    updatedLabel: 'November 8, 2026'
   }
 ] as const;
 

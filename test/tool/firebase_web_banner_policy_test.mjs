@@ -39,6 +39,10 @@ function assertWorkflowProvisionsMatchedBrowser({
 	);
 
 	assert.notEqual(setupIndex, -1, `${name} must install Chrome and ChromeDriver`);
+	assert.match(
+		source.slice(setupIndex, commandIndex),
+		/^\s+chrome-version:\s*["']?\d+\.\d+\.\d+\.\d+["']?\s*$/m,
+	);
 	assert.match(source, /install-chromedriver:\s*true/);
 	assert.notEqual(commandIndex, -1, `${name} must run ${acceptanceCommand}`);
 	assert.ok(setupIndex < commandIndex, `${name} must install Chrome first`);

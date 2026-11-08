@@ -89,7 +89,7 @@ const requiredHomepageCopy = [
   'Inside Better Keep',
   'Take a look inside the app.',
   'Write in tables, make nested checklists, record voice notes, and choose a theme you like.',
-  'Start with free notes. Add sync with Pro.'
+  'Start with free notes.'
 ];
 const removedMetaMarketingCopy = [
   'A calmer place for everything worth keeping',
@@ -597,9 +597,8 @@ const expectedDocumentStructures = {
   'terms.html': { 'content-section': 18 },
   'pricing.html': {
     'comparison-table': 1,
-    'why-card': 4,
-    'free-feature': 8,
-    'faq-item': 6
+    'plan-card': 3,
+    'faq-item': 3
   },
   'contact.html': { 'contact-card': 3 },
   'cancellation-refund.html': {

@@ -40,14 +40,14 @@ export const pages: MarketingPage[] = [
     updatedAt: '2026-09-30',
     eyebrow: 'Bring your notes to iPhone',
     description:
-      'Looking for a Google Keep alternative on iPhone? Import your notes into Better Keep, write with rich text, and use local notes free. Encrypted sync is optional Pro.',
+      'Looking for a Google Keep alternative on iPhone? Import your notes into Better Keep, write with rich text, and use local notes free. Sync manually with your own storage for free.',
     answer:
-      'Bring your Google Keep notes to Better Keep on iPhone. Keep your cards and checklists, add headings and text formatting, and write offline after signing in. An account is required; local notes are free, and optional end-to-end encrypted cloud sync requires Pro. Better Keep also runs on iPad, Android, Mac, Windows, and Web.',
+      'Bring your Google Keep notes to Better Keep on iPhone. Keep your cards and checklists, add headings and text formatting, and write offline after signing in. Local notes and manual encrypted sync with your own storage are free after sign-in. Better Keep also runs on iPad, Android, Mac, Windows, and Web.',
     sections: [
       {
         heading: 'Cards, lists, and reminders',
         paragraphs: [
-          'Pin important notes, add reminders, and organize with labels and colors. Better Keep also supports rich text, folders, recordings, sketches, and encrypted sync across approved devices with Pro.'
+          'Pin important notes, add reminders, and organize with labels and colors. Better Keep also supports rich text, folders, recordings, sketches, and encrypted sync across approved devices.'
         ]
       },
       {
@@ -64,7 +64,7 @@ export const pages: MarketingPage[] = [
       {
         heading: 'Try a few notes first',
         paragraphs: [
-          'Sign in, create a local note, import a small Takeout archive, and format an imported note with headings and checklists. Check the import report before moving your whole collection. Unlimited local notes are free; Pro adds cloud sync and removes the five-locked-note limit.'
+          'Sign in, create a local note, import a small Takeout archive, and format an imported note with headings and checklists. Check the import report before moving your whole collection. Unlimited local notes and manual sync with your storage are free.'
         ]
       },
       {
@@ -113,7 +113,7 @@ export const pages: MarketingPage[] = [
       {
         question: 'Is an account required to use Better Keep?',
         answer:
-          'Yes. An account is required to use Better Keep. After signing in, local note-taking is free and works offline. Optional encrypted cloud sync requires Pro.'
+          'Yes. An account is required to use Better Keep. After signing in, local note-taking is free and works offline. You can also sync manually with your own storage for free.'
       },
       {
         question: 'Is Better Keep open source?',
@@ -140,7 +140,7 @@ export const pages: MarketingPage[] = [
     description:
       'Move Google Keep notes to Better Keep on iPhone using Google Takeout. Follow the export and import steps, check limitations, and start with free offline notes.',
     answer:
-      'Export your Google Keep notes with Google Takeout, save the ZIP in Files on your iPhone, sign in to Better Keep, and choose “Import from Google Keep.” An account is required; import runs locally and does not require Pro. Review the report, then edit your local notes offline for free. Cloud sync is optional and requires Pro.',
+      'Export your Google Keep notes with Google Takeout, save the ZIP in Files on your iPhone, sign in to Better Keep, and choose “Import from Google Keep.” An account is required; import runs locally and does not require Pro. Review the report, then edit your local notes offline for free. To use them on another approved device, sync manually with your own storage for free.',
     sections: [
       {
         heading: '1. Export only the data you need',
@@ -183,7 +183,7 @@ export const pages: MarketingPage[] = [
       {
         question: 'Do I need an account or Pro to import on iPhone?',
         answer:
-          'An account is required. Import and local note-taking are free and do not require Pro. Pro is required for optional cloud sync; signing in alone does not include sync.'
+          'Sign in to import and edit notes for free. You can also choose your own storage provider and sync manually.'
       },
       {
         question: 'Does Better Keep upload my Takeout ZIP?',
@@ -216,7 +216,7 @@ export const pages: MarketingPage[] = [
     description:
       'Write private local notes and optionally synchronize encrypted note content and attachments across Better Keep devices.',
     answer:
-      'Keep a personal journal, project ideas, or everyday records in Better Keep. An account is required; local note-taking is free and works offline after sign-in. Pro adds end-to-end encrypted sync across approved devices and unlimited PIN-locked notes. Note titles, content, and supported attachments are encrypted before syncing; some operational metadata remains visible.',
+      'Keep a personal journal, project ideas, or everyday records in Better Keep. An account is required; local note-taking is free and works offline after sign-in. Manual encrypted sync with your own storage is free. Pro includes unlimited PIN-locked notes. Note titles, content, and supported attachments are encrypted before syncing; some operational metadata remains visible.',
     sections: [
       {
         heading: 'What end-to-end encryption protects',
@@ -230,7 +230,7 @@ export const pages: MarketingPage[] = [
       {
         heading: 'What is not encrypted',
         paragraphs: [
-          `The following metadata is not encrypted and can be visible to the sync service: ${product.encryption.metadataNotEncrypted.join(', ')}. It is used for filtering, display, and sync.`
+          `With Better Keep cloud, the following metadata can be visible to the sync service: ${product.encryption.metadataNotEncrypted.join(', ')}. When you sync with your own storage, labels, colors, and pin state are part of the encrypted note data.`
         ]
       },
       {
@@ -247,9 +247,9 @@ export const pages: MarketingPage[] = [
     updatedAt: '2026-10-01',
     eyebrow: 'Write without a connection',
     description:
-      'Write journal entries, study notes, lists, and project ideas offline with Better Keep. Local notes are free after sign-in; encrypted cloud sync requires Pro.',
+      'Write journal entries, study notes, lists, and project ideas offline with Better Keep. Local notes work offline after sign-in. Sync manually for free when you reconnect.',
     answer:
-      'Write on a train, keep a shopping list handy, or review study notes when the connection drops. Better Keep saves notes locally, so writing, editing, searching, and organizing continue offline after you have signed in. An account and an initial connection are required. Unlimited local notes are free; optional Pro sync sends changes to your other approved devices when connectivity returns.',
+      'Write on a train, keep a shopping list handy, or review study notes when the connection drops. Better Keep saves notes locally, so writing, editing, searching, and organizing continue offline after you have signed in. An account and an initial connection are required. When you reconnect, sync manually with your own storage for free, or use a paid plan for automatic updates.',
     sections: [
       {
         heading: 'What you can do offline',
@@ -263,7 +263,7 @@ export const pages: MarketingPage[] = [
       {
         heading: 'Prepare your notes before going offline',
         paragraphs: [
-          'Sign in while you have a connection, then open the notes and attachments you will need on that device. A note saved on another device is not available offline until it has reached this one. If you use Pro sync, give pending notes and attachments time to finish syncing before leaving.',
+          'Sign in while you have a connection, then open the notes and attachments you will need on that device. A note saved on another device is not available offline until it has reached this one. If you use manual sync, select Sync now. Let notes and attachments finish syncing before leaving.',
           'Before a trip, turn on airplane mode, create a note, edit it, and reopen it to check offline access on your device. Download a transcription model beforehand if you plan to use supported on-device voice transcription.'
         ]
       },
@@ -277,7 +277,7 @@ export const pages: MarketingPage[] = [
       {
         heading: 'Save on your device, then sync',
         paragraphs: [
-          'Notes are saved on your device first. Free notes stay there. With Pro, note and attachment changes sync to your other approved devices when the connection returns. Wait for sync to finish before opening the latest version on another device.',
+          'Notes are saved on your device first. When you reconnect, select Sync now with your external provider, or let automatic sync run on Lite or Pro. Wait for sync to finish before opening the latest version on another device.',
           'Offline access covers content already available locally. Signing in, downloading a new transcription model, and receiving content from another device need a connection. On-device transcription is not available in the web app.'
         ]
       }
@@ -291,12 +291,12 @@ export const pages: MarketingPage[] = [
       {
         question: 'Do I need Pro to write offline?',
         answer:
-          'No. Unlimited local notes and offline use after sign-in are free. Pro adds encrypted cloud sync across approved devices and unlimited locked notes; Free includes up to five locked notes.'
+          'No. Unlimited local notes and offline use after sign-in are free. Manual external sync and five locked notes are also included on Free.'
       },
       {
         question: 'Will a note from another device be available without a connection?',
         answer:
-          'Only if the note has already reached the device you are using. Cross-device cloud sync requires Pro and a connection. Open the notes and attachments you need before going offline.'
+          'Only if the note has already reached the device you are using. Devices need a connection to exchange changes. Open the notes and attachments you need before going offline.'
       }
     ]
   },
@@ -308,7 +308,7 @@ export const pages: MarketingPage[] = [
     description:
       'Turn quick ideas into useful journal entries, study notes, and project plans with headings, lists, photos, sketches, and voice recordings in Better Keep.',
     answer:
-      'Add headings, lists, links, photos, sketches, and audio to a note in Better Keep. Use it for journal entries, study notes, and project plans. Organize your writing with labels, folders, colors, and pinned notes. Sign in for free local notes that work offline; Pro adds encrypted sync across approved devices.',
+      'Add headings, lists, links, photos, sketches, and audio to a note in Better Keep. Use it for journal entries, study notes, and project plans. Organize your writing with labels, folders, colors, and pinned notes. Sign in to edit offline and sync manually with your own storage for free.',
     sections: [
       {
         heading: 'Text formatting and attachments',
@@ -334,7 +334,7 @@ export const pages: MarketingPage[] = [
           'Everyday lists: keep shopping, packing, or reading lists together and pin the one you need now.'
         ],
         paragraphs: [
-          'Rich-text editing and local note-taking are free after signing in. Local notes work offline. Pro adds encrypted cloud sync across your devices and unlimited locked notes.'
+          'Rich-text editing and local note-taking are free after signing in. Local notes work offline. You can sync manually with your own storage for free.'
         ]
       },
       {
@@ -348,7 +348,7 @@ export const pages: MarketingPage[] = [
         heading: 'A journal entry with room for the details',
         paragraphs: [
           'Use a date and a short title, then try three prompts: What happened? What do I want to remember? What will I try tomorrow? Use whichever prompts help you write.',
-          'Add a photo or sketch, use a label for a recurring topic, and keep the entries in a folder. Local writing is free after sign-in. If you want the journal available on another approved device, Pro adds encrypted cloud sync.'
+          'Add a photo or sketch, use a label for a recurring topic, and keep the entries in a folder. Local writing is free after sign-in. Sync manually with your own storage to read your journal on another approved device.'
         ]
       },
       {
@@ -363,12 +363,12 @@ export const pages: MarketingPage[] = [
       {
         question: 'Is rich-text editing free?',
         answer:
-          'Yes. An account is required, but rich-text editing and unlimited local notes are free after sign-in. Pro adds encrypted cloud sync across devices and unlimited locked notes.'
+          'Yes. An account is required, but rich-text editing and unlimited local notes are free after sign-in. Manual sync with your own storage is also free.'
       },
       {
         question: 'Can I write longer notes offline?',
         answer:
-          'Yes. After signing in, you can create and edit local rich-text notes offline. Notes or attachments from another device must first reach the device you are using; Pro sync needs a connection.'
+          'Yes. After signing in, you can create and edit local rich-text notes offline. Notes or attachments from another device must first reach the device you are using. Sync while connected before going offline.'
       }
     ]
   },
@@ -405,7 +405,7 @@ export const pages: MarketingPage[] = [
     description:
       'Use Better Keep on Android, iOS, macOS, Windows, and the web with optional end-to-end encrypted synchronization.',
     answer:
-      `Better Keep is available on ${product.platforms.join(', ')}. An account is required. Notes are saved on each device. Pro adds encrypted sync of note content and supported attachments between approved devices. Reminders, background sync, file access, and transcription vary by platform.`,
+      `Better Keep is available on ${product.platforms.join(', ')}. An account is required. Notes are saved on each device. You can sync encrypted notes and supported attachments between approved devices using your own storage or Better Keep cloud. Reminders, background sync, file access, and transcription vary by platform.`,
     sections: [
       {
         heading: 'Notes and organization',
@@ -480,7 +480,7 @@ export const pages: MarketingPage[] = [
         bullets: [
           'A random 32-byte user master key encrypts note payloads.',
           `Each device has its own ${product.encryption.deviceKeyExchange} key pair.`,
-          `The master key is wrapped separately for approved devices with ${product.encryption.noteAndAttachmentCipher}.`,
+          `A trusted device approves a new one by scanning its QR code or pairing with an eight-digit code. The master key is wrapped separately for approved devices with ${product.encryption.noteAndAttachmentCipher}.`,
           `Optional recovery uses ${product.encryption.recoveryKeyDerivation} with a random salt.`
         ]
       },
@@ -496,7 +496,7 @@ export const pages: MarketingPage[] = [
       {
         heading: 'Metadata and limitations',
         paragraphs: [
-          `The current encrypted payload excludes ${product.encryption.metadataNotEncrypted.join(', ')}. These values can be visible to the synchronization service. Better Keep has no published independent security audit; source availability and documented algorithms are not substitutes for one.`
+          `With Better Keep cloud, the encrypted note payload excludes ${product.encryption.metadataNotEncrypted.join(', ')}. These values can be visible to the synchronization service. Better Keep has no published independent security audit; source availability and documented algorithms are not substitutes for one.`
         ]
       },
       {
@@ -525,13 +525,22 @@ export const pages: MarketingPage[] = [
   },
   {
     slug: 'changelog',
+    updatedAt: '2026-11-08',
     title: 'Better Keep changelog',
     eyebrow: 'What changed and why',
     description:
       'Follow Better Keep product, privacy, migration, reliability, and platform updates with clear release notes and dates.',
     answer:
-      'Read about changes to Better Keep, including note import, review prompts, the website, and security documentation. The full changelog is available in the repository.',
+      'See what changed in sync, device pairing, and note import. The full changelog is available in the repository.',
     sections: [
+      {
+        heading: '1.5.0: sync with your own storage',
+        bullets: [
+          'Sync encrypted notes and attachments with Google Drive, Dropbox, Nextcloud, or WebDAV. Manual sync is free. Lite and Pro add automatic updates.',
+          'Restore previously synced Better Keep cloud notes after Pro ends.',
+          'Pair a new device by scanning a QR code or using an eight-digit code.'
+        ]
+      },
       {
         heading: 'July 2026: note import and website updates',
         bullets: [
@@ -706,7 +715,7 @@ export const pages: MarketingPage[] = [
         },
         {
           subject: 'Hosting',
-          betterKeep: 'Optional Pro encrypted cloud sync',
+          betterKeep: 'Free manual sync with your storage. Automatic sync with Lite or Pro.',
           alternative: 'Multiple sync targets and Joplin Server'
         },
         {

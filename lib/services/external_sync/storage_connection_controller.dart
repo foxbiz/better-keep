@@ -168,7 +168,21 @@ class StorageConnectionController extends ChangeNotifier {
   final _closed = Completer<void>();
   final _metadataReady = Completer<void>();
   bool get hasMetadata => _metadataReady.isCompleted;
-  bool get hasInvalidMetadata => _invalidMetadata.isNotEmpty;
+  bool hasInvalidMetadataFor(String provider) =>
+      _invalidMetadata.contains(provider);
+  bool get selectedMetadataInvalid => _invalidMetadata.any(isSelected);
+
+  bool canVerifyBackup(String provider) {
+    final selected = _connections[provider];
+    return hasMetadata &&
+        metadataFailure == null &&
+        !hasInvalidMetadataFor(provider) &&
+        selected != null &&
+        selected.enabled &&
+        selected.state != 'disconnected' &&
+        selected.libraryId == cipher.libraryId;
+  }
+
   final _nextcloudLogins = <NextcloudLoginFlow>{};
   bool _disposed = false;
   SyncProviderFailureKind? metadataFailure;

@@ -3220,6 +3220,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get requestApprovalFromAnotherDevice => '从另一设备请求批准';
 
   @override
+  String get signOutFinishing => '正在完成退出登录…';
+
+  @override
+  String get signOutLibraryWarning =>
+      '退出登录将删除仅保存在此设备上的笔记。要恢复已同步的笔记，你需要使用已批准的设备或恢复口令。';
+
+  @override
+  String get localLibraryUnavailable => '无法识别此设备上的笔记文件夹。请重试，或退出登录以创建新的本地笔记库。';
+
+  @override
+  String get signOutSecureStorageRetry => '安全存储不可用。请解锁设备后重试。';
+
+  @override
+  String get signOutOtherWindowRetry => '另一个窗口正在退出登录。请在完成后重试。';
+
+  @override
+  String get signOutDatabaseRetry => '无法清除本地数据库。请关闭其他 Better Keep 窗口后重试。';
+
+  @override
+  String get signOutCleanupRetry => '暂时无法退出登录，请重试。';
+
+  @override
   String get signingOut => '正在退出登录...';
 
   @override

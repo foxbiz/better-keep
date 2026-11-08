@@ -21,8 +21,9 @@ class LibrarySyncLifecycle extends ChangeNotifier {
 
   Future<void> replace(
     Object? identity,
-    Future<LibrarySyncSession> Function(bool Function() current)? create,
-  ) {
+    Future<LibrarySyncSession> Function(bool Function() current)? create, {
+    bool pruneCache = true,
+  }) {
     if (_disposed) return Future.value();
     if (_identity == identity &&
         (_transition != null ||
@@ -47,7 +48,7 @@ class LibrarySyncLifecycle extends ChangeNotifier {
         .run('library', () async {
           try {
             for (final retired in _retiring.toList()) {
-              await retired.close();
+              await retired.close(pruneCache: pruneCache);
               _retiring.remove(retired);
             }
             if (!current()) return;
@@ -79,7 +80,8 @@ class LibrarySyncLifecycle extends ChangeNotifier {
     return transition;
   }
 
-  Future<void> stop() => replace(null, null);
+  Future<void> stop({bool pruneCache = true}) =>
+      replace(null, null, pruneCache: pruneCache);
 
   void _changed() {
     if (!_disposed) notifyListeners();

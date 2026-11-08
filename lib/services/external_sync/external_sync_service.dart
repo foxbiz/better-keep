@@ -67,7 +67,7 @@ class ExternalSyncService extends ChangeNotifier {
       metadataReady: connections.hasMetadata,
       metadataFailure:
           connections.metadataFailure ??
-          (connections.hasInvalidMetadata
+          (connections.selectedMetadataInvalid
               ? SyncProviderFailureKind.corruptData
               : null),
       blockedProviders: {
@@ -281,7 +281,7 @@ class ExternalSyncService extends ChangeNotifier {
   /// Must finish before logout closes the database or removes attachment files.
   Future<void> stop() {
     _suspended = true;
-    return _lifecycle.stop();
+    return _lifecycle.stop(pruneCache: false);
   }
 
   @override

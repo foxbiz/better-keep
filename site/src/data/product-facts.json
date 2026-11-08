@@ -2,9 +2,9 @@
   "name": "Better Keep",
   "storeName": "Better Keep: Private Notes",
   "appleSubtitle": "Rich text, lists & offline",
-  "shortDescription": "Private notes, lists and rich text. Free offline use; encrypted sync with Pro.",
+  "shortDescription": "Private notes, lists and rich text. Write offline and sync manually for free.",
   "appleKeywords": "checklist,journal,reminder,voice,transcription,folder,lock,sketch,organize,sync,writing,encrypted",
-  "positioning": "Private notes for ideas, lists, and longer writing. Free local notes work offline after sign-in; Pro adds end-to-end encrypted sync across devices.",
+  "positioning": "Private notes for ideas, lists, and longer writing. Write offline after sign-in and sync manually with your own storage for free. Lite and Pro include automatic sync.",
   "publisher": "Foxbiz Software Pvt. Ltd.",
   "siteUrl": "https://betterkeep.app",
   "supportEmail": "contact@betterkeep.app",
@@ -20,6 +20,16 @@
   "playStoreUrl": "https://play.google.com/store/apps/details?id=io.foxbiz.better_keep&utm_source=betterkeep.app&utm_medium=website&utm_campaign=organic_search",
   "microsoftStoreUrl": "https://apps.microsoft.com/detail/9PHT5C6WK6Q1",
   "webAppUrl": "/app/",
+  "webPrices": {
+    "lite": {
+      "USD": { "monthly": 149, "yearly": 999 },
+      "INR": { "monthly": 11500, "yearly": 81250 }
+    },
+    "pro": {
+      "USD": { "monthly": 299, "yearly": 1999 },
+      "INR": { "monthly": 23000, "yearly": 162500 }
+    }
+  },
   "publicStatsUrl": "https://us-central1-better-keep-notes.cloudfunctions.net/getPublicStats",
   "githubUrl": "https://github.com/foxbiz/better-keep",
   "license": {

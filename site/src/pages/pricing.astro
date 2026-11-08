@@ -7,3 +7,10 @@ import { getPublicDocument } from '../data/public-documents';
 <PublicDocumentPage document={getPublicDocument('pricing')}>
   <PricingContent />
 </PublicDocumentPage>
+
+<script>
+  import { isDesktopBrowser } from '../lib/native-app-action';
+
+  const pricing = document.querySelector<HTMLElement>('.web-pricing');
+  if (pricing && isDesktopBrowser(navigator)) pricing.hidden = false;
+</script>

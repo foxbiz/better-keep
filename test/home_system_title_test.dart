@@ -1,3 +1,8 @@
+import 'dart:async';
+
+import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/services/sync_presentation.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/models/base_model.dart';
@@ -243,6 +248,43 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainDatabaseWork(tester);
+  });
+
+  testWidgets('a download has one indicator across the complete home screen', (
+    tester,
+  ) async {
+    final batch = NoteSyncBatch();
+    final done = Completer<void>();
+    final sync = SyncPresentation.instance;
+    final previous = sync.value;
+    final transfer = batch.run(
+      100,
+      (_) => done.future,
+      isEmptyLibrary: () async => true,
+      onProgress: (notes) =>
+          sync.value = SyncProgress(SyncPhase.syncing, notes: notes),
+    );
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    try {
+      for (final width in [390.0, 1100.0]) {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(width, 800);
+        await tester.pumpWidget(_app(const Home()));
+        await _drainDatabaseWork(tester);
+        expect(sync.value.isActive, isTrue);
+        expect(find.byIcon(Icons.download_rounded), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.byKey(const ValueKey('sync_progress')), findsNothing);
+      }
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      done.complete();
+      await transfer;
+      sync.value = previous;
+      await _drainDatabaseWork(tester);
+    }
   });
 
   testWidgets('system tabs end every app bar with their configure button', (

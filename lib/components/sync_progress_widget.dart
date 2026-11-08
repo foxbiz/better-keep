@@ -54,16 +54,20 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
     _shouldShow = !_progress.isEmpty;
     if (_shouldShow) _animationController.value = 1;
     if (_shouldShow && !_progress.isActive) _scheduleHide();
+    AppState.showSyncProgressNotifier.addListener(_visibilityChanged);
     SyncPresentation.instance.addListener(_onProgressChanged);
   }
 
   @override
   void dispose() {
+    AppState.showSyncProgressNotifier.removeListener(_visibilityChanged);
     SyncPresentation.instance.removeListener(_onProgressChanged);
     _hideTimer?.cancel();
     _animationController.dispose();
     super.dispose();
   }
+
+  void _visibilityChanged() => setState(() {});
 
   void _onProgressChanged() {
     final next = SyncPresentation.instance.value;
@@ -154,25 +158,34 @@ class BulkSyncProgress extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 300),
-        child: ValueListenableBuilder<NoteTransfer?>(
-          valueListenable: NoteSyncBatch.progress,
-          builder: (context, notes, _) {
-            if (!AppState.showSyncProgress) {
-              return CircularProgressIndicator(
-                semanticsLabel: context.l10n.syncUpdatingNotes,
-              );
-            }
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  notes?.localized(context.l10n) ??
-                      context.l10n.syncUpdatingNotes,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                LinearProgressIndicator(value: notes?.fraction),
-              ],
+        child: ListenableBuilder(
+          listenable: Listenable.merge([
+            NoteSyncBatch.progress,
+            AppState.showSyncProgressNotifier,
+          ]),
+          builder: (context, _) {
+            final notes = NoteSyncBatch.progress.value;
+            final showDetails = AppState.showSyncProgress;
+            return Semantics(
+              label: showDetails ? null : context.l10n.syncUpdatingNotes,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ActivityIcon(
+                    download: true,
+                    size: 40,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  if (showDetails) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      notes?.localized(context.l10n) ??
+                          context.l10n.syncUpdatingNotes,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
+              ),
             );
           },
         ),
@@ -181,7 +194,7 @@ class BulkSyncProgress extends StatelessWidget {
   );
 }
 
-class _SyncProgressCard extends StatefulWidget {
+class _SyncProgressCard extends StatelessWidget {
   final SyncProgress syncStatus;
   final bool isSyncing;
   final int failedCount;
@@ -191,63 +204,6 @@ class _SyncProgressCard extends StatefulWidget {
     required this.isSyncing,
     required this.failedCount,
   });
-
-  @override
-  State<_SyncProgressCard> createState() => _SyncProgressCardState();
-}
-
-class _SyncProgressCardState extends State<_SyncProgressCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _rotationController;
-  bool? _disableAnimations;
-
-  @override
-  void initState() {
-    super.initState();
-    _rotationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final disableAnimations = MediaQuery.disableAnimationsOf(context);
-    if (_disableAnimations == disableAnimations) return;
-
-    _disableAnimations = disableAnimations;
-    _syncRotationAnimation();
-  }
-
-  @override
-  void didUpdateWidget(_SyncProgressCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncRotationAnimation();
-  }
-
-  void _syncRotationAnimation() {
-    final shouldAnimate = widget.isSyncing;
-    if (!shouldAnimate) {
-      _rotationController.stop();
-      _rotationController.reset();
-    } else if (_disableAnimations == true) {
-      _rotationController.stop();
-      _rotationController.value = _rotationController.upperBound;
-    } else if (!_rotationController.isAnimating) {
-      _rotationController.repeat();
-    }
-  }
-
-  @override
-  void dispose() {
-    _rotationController.dispose();
-    super.dispose();
-  }
-
-  SyncProgress get syncStatus => widget.syncStatus;
-  bool get isSyncing => widget.isSyncing;
-  int get failedCount => widget.failedCount;
 
   /// Determines the message type based on current state
   _MessageType get _messageType {
@@ -298,30 +254,14 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Animated icon switcher
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  switchInCurve: Curves.easeInOut,
-                  switchOutCurve: Curves.easeInOut,
-                  child: _buildStateIcon(accentColor, messageType),
-                ),
+                _buildStateIcon(accentColor, messageType),
                 const SizedBox(width: 10),
-                // Animated text switcher
                 Flexible(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    switchInCurve: Curves.easeInOut,
-                    switchOutCurve: Curves.easeInOut,
-                    transitionBuilder: (child, animation) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    child: Text(
-                      statusText,
-                      key: ValueKey(statusText),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: accentColor,
-                      ),
+                  child: Text(
+                    statusText,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: accentColor,
                     ),
                   ),
                 ),
@@ -378,34 +318,97 @@ class _SyncProgressCardState extends State<_SyncProgressCard>
     return "";
   }
 
-  /// Builds the icon for the current sync state with a unique key.
-  /// Uses a single conditional to ensure only one icon is built per state.
-  Widget _buildStateIcon(Color accentColor, _MessageType messageType) {
-    // Determine the current state key - only one can be active at a time
-    final String stateKey;
-    final Widget icon;
-
+  Widget _buildStateIcon(Color color, _MessageType type) {
     if (isSyncing) {
-      stateKey = 'syncing';
-      icon = RotationTransition(
-        turns: _rotationController,
-        child: Icon(Icons.sync, size: 16, color: accentColor),
-      );
-    } else if (hasFailed) {
-      stateKey = 'failed';
-      icon = Icon(Icons.error_outline, size: 16, color: accentColor);
-    } else if (messageType == _MessageType.success) {
-      stateKey = 'success';
-      icon = Icon(Icons.check_circle_outline, size: 16, color: accentColor);
-    } else {
-      stateKey = 'default';
-      icon = Icon(Icons.sync, size: 16, color: accentColor);
+      final download =
+          syncStatus.notes?.stage == NoteTransferStage.downloading ||
+          syncStatus.phase == SyncPhase.fetchingUpdates;
+      return _ActivityIcon(download: download, size: 16, color: color);
     }
-
-    return KeyedSubtree(key: ValueKey(stateKey), child: icon);
+    return Icon(
+      switch (type) {
+        _MessageType.error => Icons.error_outline,
+        _MessageType.success => Icons.check_circle_outline,
+        _MessageType.info => Icons.sync,
+      },
+      size: 16,
+      color: color,
+    );
   }
 
   bool get hasFailed => failedCount > 0 && !isSyncing;
+}
+
+class _ActivityIcon extends StatefulWidget {
+  const _ActivityIcon({
+    required this.download,
+    required this.size,
+    required this.color,
+  });
+
+  final bool download;
+  final double size;
+  final Color color;
+
+  @override
+  State<_ActivityIcon> createState() => _ActivityIconState();
+}
+
+class _ActivityIconState extends State<_ActivityIcon>
+    with SingleTickerProviderStateMixin {
+  late final _motion = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateMotion();
+  }
+
+  @override
+  void didUpdateWidget(_ActivityIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.download != widget.download) {
+      _motion.value = 0;
+      _updateMotion();
+    }
+  }
+
+  void _updateMotion() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _motion.stop();
+      _motion.value = 0;
+    } else if (!_motion.isAnimating) {
+      _motion.repeat(reverse: widget.download);
+    }
+  }
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(
+      widget.download ? Icons.download_rounded : Icons.sync,
+      size: widget.size,
+      color: widget.color,
+    );
+    if (!widget.download) {
+      return RotationTransition(turns: _motion, child: icon);
+    }
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: Offset.zero,
+        end: const Offset(0, .18),
+      ).chain(CurveTween(curve: Curves.easeInOut)).animate(_motion),
+      child: icon,
+    );
+  }
 }
 
 enum _MessageType { info, success, error }
@@ -417,22 +420,34 @@ class SyncRefreshButton extends StatelessWidget {
   final VoidCallback? onRefresh;
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<SyncProgress>(
-    valueListenable: SyncPresentation.instance,
-    builder: (context, progress, _) => IconButton(
-      onPressed: progress.isActive ? null : onRefresh,
-      tooltip: progress.isActive
-          ? progress.localized(context.l10n)
-          : context.l10n.refresh,
-      icon: progress.isActive
-          ? SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                semanticsLabel: progress.localized(context.l10n),
-              ),
-            )
-          : const Icon(Icons.refresh),
-    ),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      SyncPresentation.instance,
+      NoteSyncBatch.active,
+      AppState.showSyncProgressNotifier,
+    ]),
+    builder: (context, _) {
+      final progress = SyncPresentation.instance.value;
+      return IconButton(
+        onPressed: progress.isActive || NoteSyncBatch.active.value
+            ? null
+            : onRefresh,
+        tooltip: progress.isActive
+            ? progress.localized(context.l10n)
+            : context.l10n.refresh,
+        icon:
+            progress.isActive &&
+                !AppState.showSyncProgress &&
+                !NoteSyncBatch.active.value
+            ? SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  semanticsLabel: progress.localized(context.l10n),
+                ),
+              )
+            : const Icon(Icons.refresh),
+      );
+    },
   );
 }

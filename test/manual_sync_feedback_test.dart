@@ -246,7 +246,10 @@ void main() {
           find.text('Preparing sync…'),
           cardEnabled ? findsOneWidget : findsNothing,
         );
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          find.byType(CircularProgressIndicator),
+          cardEnabled ? findsNothing : findsOneWidget,
+        );
         expect(find.text('Sync complete'), findsNothing);
         AuthService.cloudRecovery.state.value = CloudSessionState.ready;
         NoteSyncService().isSyncing.value = true;
@@ -327,14 +330,20 @@ void main() {
         await mountFeedback(tester);
         await tester.tap(find.byType(IconButton));
         await tester.pump();
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          find.byType(CircularProgressIndicator),
+          cardEnabled ? findsNothing : findsOneWidget,
+        );
         expect(
           find.text('Checking connection…'),
           cardEnabled ? findsOneWidget : findsNothing,
         );
         notes.complete();
         await tester.pump();
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          find.byType(CircularProgressIndicator),
+          cardEnabled ? findsNothing : findsOneWidget,
+        );
         expect(find.text('Sync complete'), findsNothing);
         labels.complete();
         await tester.pump();
@@ -394,7 +403,7 @@ void main() {
     await tester.pump();
     expect(find.text('Syncing...'), findsOneWidget);
     expect(find.textContaining('4/5'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     LabelSyncService().isSyncing.value = false;
     LabelSyncService().syncStatus.value = const SyncProgress(
       SyncPhase.complete,

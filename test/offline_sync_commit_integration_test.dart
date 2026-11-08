@@ -85,16 +85,25 @@ void main() {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=',
   );
   late _Attachments attachments;
-  setUpAll(sqfliteFfiInit);
+  late Directory fixtures;
+  setUpAll(() async {
+    sqfliteFfiInit();
+    fixtures = await Directory.systemTemp.createTemp('offline-probe-data-');
+  });
   tearDownAll(() async {
     // Refresh/upload status resets outlive their futures by two seconds. Keep
     // the signed-out fake backend available until all guarded callbacks drain.
     await Future<void>.delayed(const Duration(milliseconds: 2100));
     FirebaseBackend.resetForTesting();
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    await fixtures.delete(recursive: true);
   });
   setUp(() async {
     backend = OfflineFirebase()..configure();
-    dir = await Directory.systemTemp.createTemp('offline-probe-data-');
+    dir = await fixtures.createTemp('case-');
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (_) async => dir.path,
@@ -165,8 +174,8 @@ void main() {
     backend.auth.currentUser = null;
     await AuthService.refreshLinkedProviders();
     await backend.auth.changes.close();
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    await dir.delete(recursive: true);
+    // Detached callbacks can still write diagnostic logs here. Each test gets
+    // a separate directory; remove them after the suite drains those callbacks.
   });
   Future<Note> saved({List<NoteAttachment> items = const []}) async {
     final n = Note(
@@ -572,7 +581,11 @@ void main() {
         await tester.pump();
         expect((backend.auth.currentUser! as OfflineUser).tokenRequests, 1);
         expect(find.text('Checking connection…'), findsOneWidget);
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(
+          tester.widget<IconButton>(find.byType(IconButton)).onPressed,
+          isNull,
+        );
         expect(NoteSyncService().isSyncing.value, isFalse);
         token.completeError(TimeoutException('synthetic offline verification'));
         await tester.pump();

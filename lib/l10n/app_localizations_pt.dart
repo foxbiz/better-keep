@@ -3421,6 +3421,32 @@ class AppLocalizationsPt extends AppLocalizations {
       'Solicitar aprovação de outro dispositivo';
 
   @override
+  String get signOutFinishing => 'Concluindo a saída…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'Sair remove as notas salvas apenas neste dispositivo. Para restaurar as notas sincronizadas, você precisará de um dispositivo aprovado ou da sua frase de recuperação.';
+
+  @override
+  String get localLibraryUnavailable =>
+      'Não foi possível identificar a pasta local das notas. Tente novamente ou saia da conta para criar uma nova biblioteca local.';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      'O armazenamento seguro está indisponível. Desbloqueie o dispositivo e tente novamente.';
+
+  @override
+  String get signOutOtherWindowRetry =>
+      'Outra janela está encerrando a sessão. Tente novamente quando terminar.';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'Não foi possível limpar o banco de dados local. Feche as outras janelas do Better Keep e tente novamente.';
+
+  @override
+  String get signOutCleanupRetry => 'Não foi possível sair. Tente novamente.';
+
+  @override
   String get signingOut => 'Saindo...';
 
   @override

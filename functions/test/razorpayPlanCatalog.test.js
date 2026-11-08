@@ -52,6 +52,7 @@ test("client display amounts match the server catalog for both tiers and currenc
 	const { readFileSync } = require("node:fs");
 	const { join } = require("node:path");
 	const { razorpayPlanConfig } = require("../lib/config");
+	const website = require("../../site/src/data/product-facts.json").webPrices;
 	const client = readFileSync(join(__dirname, "../../lib/services/monetization/subscription_service.dart"), "utf8");
 	for (const [tier, variable] of [["lite", "razorpayLitePricing"], ["pro", "razorpayPricing"]]) {
 		const block = client.split(`${variable} = {`)[1]?.split("};")[0];
@@ -61,6 +62,7 @@ test("client display amounts match the server catalog for both tiers and currenc
 			assert.ok(amounts);
 			for (const period of ["monthly", "yearly"]) {
 				const amount = Number(new RegExp(`'${period}':\\s*(\\d+)`).exec(amounts)?.[1]);
+				assert.equal(website[tier][currency][period], amount, `website ${tier}/${currency}/${period}`);
 				assert.equal(amount, razorpayPlanConfig(tier, currency, period).amount, `${tier}/${currency}/${period}`);
 			}
 		}

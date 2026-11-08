@@ -2,6 +2,12 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:better_keep/services/local_storage_recovery.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
+import 'package:better_keep/services/file_system.dart'
+    show
+        LocalLibraryUnavailable,
+        localLibraryUnavailable,
+        verifyAccountFileDirectory;
 import 'package:better_keep/services/storage_health_service.dart';
 
 import 'package:alarm/alarm.dart';
@@ -14,7 +20,6 @@ import 'package:better_keep/l10n/app_localization_config.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/audio_playback_source_service.dart';
-import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/firebase_app_check_policy.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
@@ -361,6 +366,38 @@ MaterialApp _buildLocalizedStartupApp({
   );
 }
 
+class LocalLibraryGate extends StatelessWidget {
+  const LocalLibraryGate({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: localLibraryUnavailable,
+    builder: (context, unavailable, _) {
+      if (!unavailable) return child;
+      return _buildLocalizedStartupApp(
+        home: AppStartupErrorView(
+          onRetry: () async {
+            try {
+              final prefs = await AppState.prefs;
+              await FirebaseScopedPreferences.reload(prefs);
+              verifyAccountFileDirectory(prefs);
+            } catch (error) {
+              AppLogger.error('Local library still unavailable', error);
+            }
+          },
+          onLibrarySignOut: () async {
+            try {
+              await AuthService.signOutUnavailableLibrary(duringStartup: false);
+            } catch (_) {
+              // SignOutProgressView owns retry after confirmation.
+            }
+          },
+        ),
+      );
+    },
+  );
+}
+
 class BetterKeep extends StatefulWidget {
   const BetterKeep({super.key});
 
@@ -370,7 +407,7 @@ class BetterKeep extends StatefulWidget {
 
 class _BetterKeepState extends State<BetterKeep> {
   Database? db;
-  bool _databaseStartupFailed = false;
+  Object? _databaseStartupError;
   late Future<void> _appServicesReady;
 
   /// App links for deep linking (OAuth callback)
@@ -532,36 +569,70 @@ class _BetterKeepState extends State<BetterKeep> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_databaseStartupFailed) {
-      return _buildLocalizedStartupApp(
-        home: AppStartupErrorView(
-          onRetry: () {
-            setState(() {
-              _databaseStartupFailed = false;
-              db = null;
-            });
-            _startAppServices();
-          },
-        ),
-      );
-    }
+  Widget build(BuildContext context) => ValueListenableBuilder<SignOutStage?>(
+    valueListenable: AuthService.signOutStage,
+    builder: (context, stage, _) {
+      if (stage != null) {
+        return _buildLocalizedStartupApp(
+          home: SignOutProgressView(
+            stage: stage,
+            problem: AuthService.signOutProblem,
+            onRetry: () async {
+              if (_databaseStartupError != null &&
+                  AuthService.signOutProblem != SignOutProblem.otherWindow) {
+                setState(() => _databaseStartupError = null);
+                _startAppServices();
+                return;
+              }
+              try {
+                await AuthService.resumePendingSignOut();
+              } catch (_) {
+                // The failed state keeps Retry available.
+              }
+            },
+          ),
+        );
+      }
+      if (_databaseStartupError != null) {
+        return _buildLocalizedStartupApp(
+          home: AppStartupErrorView(
+            onLibrarySignOut: _databaseStartupError is LocalLibraryUnavailable
+                ? () async {
+                    try {
+                      await AuthService.signOutUnavailableLibrary(
+                        duringStartup: true,
+                      );
+                    } catch (_) {
+                      // SignOutProgressView handles the pending transition.
+                      return;
+                    }
+                    if (!mounted) return;
+                    setState(() => _databaseStartupError = null);
+                    _startAppServices();
+                  }
+                : null,
+            onRetry: () {
+              setState(() {
+                _databaseStartupError = null;
+                db = null;
+              });
+              _startAppServices();
+            },
+          ),
+        );
+      }
 
-    if (db == null) {
-      return _buildLocalizedStartupApp(home: const AppStartupLoadingView());
-    }
+      if (db == null) {
+        return _buildLocalizedStartupApp(home: const AppStartupLoadingView());
+      }
 
-    return App();
-  }
+      return LocalLibraryGate(child: App());
+    },
+  );
 
   Future<void> _initDb() async {
     try {
-      var db = await initDatabase(detectDataLoss: true);
-      final recovery = LocalStorageRecovery(await AppState.prefs);
-      if (recovery.pending) {
-        await AuthService.signOut();
-        db = AppState.db;
-      }
+      final db = await AuthService.openDatabaseForStartup();
       LocalDataEncryption.setDatabaseGetter(() => db);
       await NoteSortService().init();
       // Resolve interrupted local lock transactions before the note UI, sync,
@@ -661,7 +732,7 @@ class _BetterKeepState extends State<BetterKeep> {
       );
       if (mounted) {
         setState(() {
-          _databaseStartupFailed = true;
+          _databaseStartupError = error;
         });
       }
     }

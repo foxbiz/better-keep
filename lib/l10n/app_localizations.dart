@@ -6018,6 +6018,48 @@ abstract class AppLocalizations {
   /// **'Request Approval from Another Device'**
   String get requestApprovalFromAnotherDevice;
 
+  /// Status during a slow sign-out
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing sign-out…'**
+  String get signOutFinishing;
+
+  /// Confirm sign-out when the local library cannot be identified
+  ///
+  /// In en, this message translates to:
+  /// **'Signing out removes notes saved only on this device. To restore synced notes, you’ll need an approved device or your recovery passphrase.'**
+  String get signOutLibraryWarning;
+
+  /// Recovery options when local library ownership is ambiguous
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep couldn’t identify your local note folder. Retry, or sign out to start a fresh local library.'**
+  String get localLibraryUnavailable;
+
+  /// Retry guidance when platform key storage is unavailable
+  ///
+  /// In en, this message translates to:
+  /// **'Secure storage is unavailable. Unlock your device, then retry.'**
+  String get signOutSecureStorageRetry;
+
+  /// Retry after a different browser window has finished signing out
+  ///
+  /// In en, this message translates to:
+  /// **'Another window is signing out. Retry when it finishes.'**
+  String get signOutOtherWindowRetry;
+
+  /// Retry guidance when the local database cannot be removed
+  ///
+  /// In en, this message translates to:
+  /// **'Better Keep couldn’t clear the local database. Close any other Better Keep windows, then retry.'**
+  String get signOutDatabaseRetry;
+
+  /// Message when local sign-out needs another attempt
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t finish signing out. Try again.'**
+  String get signOutCleanupRetry;
+
   /// Signing out status message
   ///
   /// In en, this message translates to:

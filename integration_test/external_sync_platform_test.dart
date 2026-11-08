@@ -1,5 +1,8 @@
+import 'account_file_cleanup_test.dart' as cleanup;
+
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/services/sync_logout_check.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
 
 // Real platform SQLite/files/crypto, synthetic Dropbox HTTP boundary.
@@ -91,6 +94,8 @@ void main() {
     }, timeout: const Timeout(Duration(minutes: 30)));
     return;
   }
+  cleanup.registerFileCleanupTest();
+
   testWidgets(
     'free login restores nine notes and image; unchanged refresh completes',
     (tester) async {
@@ -356,6 +361,37 @@ void main() {
         AppState.selectedNotes = [];
         await sort.dispose();
       }
+      final priorUploads = server.uploads;
+      final fresh = await _Replica.create(
+        files,
+        p.join(root, 'fresh-logout'),
+        server,
+        restoreOnStart: true,
+      );
+      replicas.add(fresh);
+      AppState.db = fresh.db;
+      await Label.fixLabels();
+      await fresh.session.scheduler.waitForIdle();
+      expect(await fresh.db.query('note', columns: ['id']), hasLength(9));
+      expect(server.uploads, priorUploads);
+
+      Future<SyncLogoutState> logoutState() => inspectSyncBeforeLogout(
+        database: fresh.db,
+        firebaseEnabled: false,
+        firebaseAccountId: 'isolated-platform-qa',
+        scope: fresh.session.engine.store.scope,
+        externalReplicaIds: [fresh.adapter.connectionId],
+        metadataReady: true,
+        isCurrent: () => fresh.session.isCurrent,
+      );
+      expect(await logoutState(), SyncLogoutState.complete);
+      await fresh.db.update(
+        'note',
+        {'title': 'Local edit before logout'},
+        where: 'sync_id = ?',
+        whereArgs: ['restore-note-0'],
+      );
+      expect(await logoutState(), SyncLogoutState.pending);
     },
   );
   const automatic = bool.fromEnvironment('AUTOMATIC_SYNC_EMULATOR_TEST');

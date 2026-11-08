@@ -392,6 +392,7 @@ changes. Each affected component runs once:
 | Component | Local commit checks |
 | --- | --- |
 | Flutter | `flutter analyze --no-pub` and the complete local unit/widget suite |
+| Web sign-out coordination | For changes to AuthService, Web Locks, or release-channel scoping, run the stable and beta lock/reload tests in Chrome. Run them independently with `npm test -- web-sign-out-lock`. |
 | Functions | Existing compilation, script type checks, and unit tests |
 | Admin and marketing | Each affected workspace's Astro/TypeScript check and local tests |
 | Tooling | Local Node tests |

@@ -3393,6 +3393,32 @@ class AppLocalizationsId extends AppLocalizations {
       'Minta Persetujuan dari Perangkat Lain';
 
   @override
+  String get signOutFinishing => 'Menyelesaikan proses keluar…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'Keluar akan menghapus catatan yang hanya tersimpan di perangkat ini. Untuk memulihkan catatan yang sudah disinkronkan, Anda memerlukan perangkat yang disetujui atau frasa sandi pemulihan.';
+
+  @override
+  String get localLibraryUnavailable =>
+      'Folder catatan lokal tidak dapat dikenali. Coba lagi, atau keluar untuk memulai koleksi lokal baru.';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      'Penyimpanan aman tidak tersedia. Buka kunci perangkat, lalu coba lagi.';
+
+  @override
+  String get signOutOtherWindowRetry =>
+      'Jendela lain sedang keluar dari akun. Coba lagi setelah selesai.';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'Basis data lokal tidak dapat dihapus. Tutup jendela Better Keep lainnya, lalu coba lagi.';
+
+  @override
+  String get signOutCleanupRetry => 'Belum berhasil keluar. Coba lagi.';
+
+  @override
   String get signingOut => 'Keluar...';
 
   @override

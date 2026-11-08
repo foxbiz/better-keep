@@ -1640,6 +1640,7 @@ class DeviceManager {
     }
 
     final deviceId = await _secureStorage.getDeviceId();
+    requireCloudOperation();
     if (deviceId == null) {
       AppLogger.log('E2EE: No device ID found, skipping device deletion');
       return;

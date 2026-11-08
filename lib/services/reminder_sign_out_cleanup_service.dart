@@ -10,7 +10,13 @@ class ReminderSignOutCleanupService {
   static Future<void> cancelDeliveries() async {
     final noteIds = <int>[];
     try {
-      final rows = await AppState.db.query(Note.model, columns: const ['id']);
+      final rows = LocalNotificationService.instance.supportsScheduling
+          ? await AppState.db.query(
+              Note.model,
+              columns: const ['id'],
+              where: 'reminder IS NOT NULL',
+            )
+          : const <Map<String, Object?>>[];
       for (final row in rows) {
         final id = row['id'];
         if (id is int) noteIds.add(id);

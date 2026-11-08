@@ -3387,6 +3387,32 @@ class AppLocalizationsEn extends AppLocalizations {
       'Request Approval from Another Device';
 
   @override
+  String get signOutFinishing => 'Finishing sign-out…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'Signing out removes notes saved only on this device. To restore synced notes, you’ll need an approved device or your recovery passphrase.';
+
+  @override
+  String get localLibraryUnavailable =>
+      'Better Keep couldn’t identify your local note folder. Retry, or sign out to start a fresh local library.';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      'Secure storage is unavailable. Unlock your device, then retry.';
+
+  @override
+  String get signOutOtherWindowRetry =>
+      'Another window is signing out. Retry when it finishes.';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'Better Keep couldn’t clear the local database. Close any other Better Keep windows, then retry.';
+
+  @override
+  String get signOutCleanupRetry => 'Couldn’t finish signing out. Try again.';
+
+  @override
   String get signingOut => 'Signing out...';
 
   @override

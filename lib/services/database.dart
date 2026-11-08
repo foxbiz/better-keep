@@ -109,6 +109,35 @@ Future<void> upgradeMergedFeatureTables(
   }
 }
 
+/// Desktop sqflite can report success when a locked database survives deletion.
+Future<void> deleteSignedOutDatabase(String path) async {
+  await deleteDatabase(path);
+  await verifySignedOutDatabaseRemoved(path);
+}
+
+Future<void> verifySignedOutDatabaseRemoved(String path) async {
+  if (await databaseExists(path)) {
+    throw StateError('Account database is still in use');
+  }
+  if (kIsWeb || !(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    return;
+  }
+  final absolute = p.isAbsolute(path)
+      ? path
+      : p.join(await getDatabasesPath(), path);
+  for (final suffix in ['', '-wal', '-shm', '-journal']) {
+    // Metadata probes can also report "not found" on access errors. Opening
+    // read-only distinguishes a missing file from an unreadable or locked one.
+    final file = File('$absolute$suffix');
+    try {
+      await (await file.open()).close();
+    } on PathNotFoundException {
+      if (!await FileSystemEntity.isLink(file.path)) continue;
+    }
+    throw StateError('Account database files are still in use');
+  }
+}
+
 Future<String> activeDatabasePath() async {
   final databaseName = FirebaseBackend.isConfigured
       ? activeDatabaseName

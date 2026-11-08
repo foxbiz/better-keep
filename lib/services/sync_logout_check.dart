@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../models/label.dart';
 import '../state.dart';
 import 'auth_service.dart';
 import 'external_sync/external_sync_service.dart';
@@ -21,6 +22,12 @@ Future<SyncLogoutState> inspectSyncBeforeLogout({
   required bool Function() isCurrent,
 }) async {
   final destinations = externalReplicaIds.toSet();
+  // Startup recreates these two labels even on a read-only restore. Only an
+  // untouched seed is disposable; user labels, renames and tombstones count.
+  final seedNames =
+      'WITH seed_names(name) AS (VALUES ${List.filled(Label.systemLabelNames.length, '(?)').join(',')})';
+  final seed =
+      'l.is_system IS 1 AND l.name IN (SELECT name FROM seed_names) AND l.created_at IS NOT NULL AND l.created_at IS l.updated_at';
   try {
     final result = await database.transaction((txn) async {
       if (!isCurrent()) return SyncLogoutState.unknown;
@@ -28,17 +35,20 @@ Future<SyncLogoutState> inspectSyncBeforeLogout({
       // reveal local-only changes that would otherwise disappear on sign-out.
       if (firebaseEnabled != false || destinations.isEmpty) {
         final pending = await txn.rawQuery('''
+          $seedNames
           SELECT 1 FROM sync_track WHERE status IS NOT 'synced'
-          UNION ALL SELECT 1 FROM label_sync_track WHERE status IS NOT 'synced'
+          UNION ALL SELECT 1 FROM label_sync_track t WHERE status IS NOT 'synced'
+            AND NOT EXISTS (SELECT 1 FROM label l WHERE l.id = t.local_id AND $seed
+              AND t.action = 'upload' AND (t.remote_id IS NULL OR t.remote_id = l.sync_id))
           UNION ALL SELECT 1 FROM note_sort_context WHERE dirty != 0
           UNION ALL SELECT 1 FROM note n
             WHERE NOT EXISTS (SELECT 1 FROM sync_track t
               WHERE t.local_id = n.id AND t.status = 'synced' AND t.remote_id IS NOT NULL)
           UNION ALL SELECT 1 FROM label l
-            WHERE NOT EXISTS (SELECT 1 FROM label_sync_track t
+            WHERE NOT ($seed) AND NOT EXISTS (SELECT 1 FROM label_sync_track t
               WHERE t.local_id = l.id AND t.status = 'synced' AND t.remote_id IS NOT NULL)
           LIMIT 1
-        ''');
+        ''', Label.systemLabelNames);
         if (pending.isNotEmpty) return SyncLogoutState.pending;
         if (firebaseAccountId == null) return SyncLogoutState.unknown;
         if ((await FirebaseOrderTombstones.pending(
@@ -55,13 +65,16 @@ Future<SyncLogoutState> inspectSyncBeforeLogout({
       for (final destination in destinations) {
         final pending = await txn.rawQuery(
           '''
+          $seedNames
           SELECT 1 FROM ${SyncMutationJournal.table} v
           WHERE NOT EXISTS (SELECT 1 FROM replica_acknowledgements a
             WHERE a.scope = ? AND a.connection_id = ? AND a.kind = v.kind
               AND a.entity_id = v.entity_id AND a.revision_id = v.revision_id)
+          AND NOT (v.kind = 'label' AND v.deleted = 0 AND EXISTS (
+            SELECT 1 FROM label l WHERE l.sync_id = v.entity_id AND $seed))
           LIMIT 1
         ''',
-          [scope, destination],
+          [...Label.systemLabelNames, scope, destination],
         );
         if (pending.isNotEmpty) return SyncLogoutState.pending;
       }
@@ -83,44 +96,46 @@ Future<SyncLogoutState> currentSyncLogoutState() async {
   final service = ExternalSyncService.instance;
   final session = service.session;
   final connections = session?.connections;
-  final snapshot = {...?connections?.connections};
-  final selected = snapshot.values.where(
-    (connection) =>
-        connection.enabled &&
-        connection.state != 'disconnected' &&
-        connections!.isSelected(connection.provider),
-  );
   final firebase = FirebaseSyncPreference.instance;
   final firebaseEnabled = firebase.enabled;
   final selectedProvider = firebase.selectedProvider;
+  final externalSelected =
+      selectedProvider != null &&
+      selectedProvider != 'none' &&
+      selectedProvider != 'firebase';
+  final selected = connections?.connections[selectedProvider];
   bool metadataReady() =>
-      connections != null &&
-      connections.hasMetadata &&
-      connections.metadataFailure == null &&
-      !connections.hasInvalidMetadata &&
-      selected.every((c) => c.libraryId == session?.cipher.libraryId) &&
+      selectedProvider != null &&
+      (!externalSelected ||
+          connections?.canVerifyBackup(selectedProvider) == true) &&
       !firebase.loading &&
       !firebase.failed &&
       !firebase.busy;
   final ready = metadataReady();
-  bool current() =>
-      accountCurrent() &&
-      identical(database, AppState.get('db')) &&
-      identical(session, service.session) &&
-      (session?.isCurrent ?? true) &&
-      firebase.enabled == firebaseEnabled &&
-      firebase.selectedProvider == selectedProvider &&
-      metadataReady() == ready &&
-      snapshot.length == (connections?.connections.length ?? 0) &&
-      snapshot.entries.every(
-        (entry) => identical(connections?.connections[entry.key], entry.value),
-      );
+  bool current() {
+    final live = connections?.connections[selectedProvider];
+    return accountCurrent() &&
+        identical(database, AppState.get('db')) &&
+        identical(session, service.session) &&
+        (session?.isCurrent ?? true) &&
+        firebase.enabled == firebaseEnabled &&
+        firebase.selectedProvider == selectedProvider &&
+        metadataReady() == ready &&
+        live?.replicaId == selected?.replicaId &&
+        live?.libraryId == selected?.libraryId &&
+        live?.enabled == selected?.enabled &&
+        live?.state == selected?.state;
+  }
+
+  if (externalSelected && !ready) return SyncLogoutState.unknown;
   return inspectSyncBeforeLogout(
     database: database,
     firebaseEnabled: firebaseEnabled,
     firebaseAccountId: AuthService.currentUser?.uid,
     scope: session?.engine.store.scope,
-    externalReplicaIds: selected.map((connection) => connection.replicaId),
+    externalReplicaIds: [
+      if (externalSelected && selected != null) selected.replicaId,
+    ],
     metadataReady: ready,
     isCurrent: current,
   );

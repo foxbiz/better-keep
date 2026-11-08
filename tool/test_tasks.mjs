@@ -356,6 +356,39 @@ const suites = {
 			processStep("node", ["scripts/validate_visibility.mjs", "build/web"]),
 		],
 	),
+	"web-sign-out-lock": defineSuite(
+		"Verify cross-window sign-out and reload in stable and beta browsers.",
+		() => ["false", "true"].map((beta) =>
+			processStep(
+				"flutter",
+				["test", "--no-pub", "--platform", "chrome", `--dart-define=WEB_BETA=${beta}`, "test/web_sign_out_lock_test.dart"],
+				{ CHROME_EXECUTABLE: chromeBinary() },
+			),
+		),
+	),
+	"web-logout": defineSuite(
+		"Verify sign-out cleanup in both browser file stores.",
+		() => [
+			suiteStep("web-sign-out-lock"),
+			processStep(
+				"flutter",
+				["test", "--no-pub", "--platform", "chrome", "test/web_storage_recovery_test.dart"],
+				{ CHROME_EXECUTABLE: chromeBinary() },
+			),
+			...["OPFS", "IndexedDB"].map((backend) =>
+				processStep("node", [
+					"tool/run_flutter_web_integration.mjs",
+					"integration_test/account_file_cleanup_test.dart",
+					`--dart-define=TEST_STORAGE_BACKEND=${backend}`,
+					...(backend === "IndexedDB"
+						? [
+								"--web-browser-flag=--disable-blink-features=FileSystemAccessOriginPrivate",
+							]
+						: []),
+				]),
+			),
+		],
+	),
 	"web-release": defineSuite(
 		"Build and validate the combined Flutter and Astro website.",
 		() => [
@@ -375,6 +408,7 @@ const suites = {
 				),
 			),
 			suiteStep("search"),
+			suiteStep("web-logout"),
 			suiteStep("mobile-web"),
 			suiteStep("hosting"),
 			processStep("node", [

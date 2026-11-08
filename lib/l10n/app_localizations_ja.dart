@@ -3279,6 +3279,31 @@ class AppLocalizationsJa extends AppLocalizations {
   String get requestApprovalFromAnotherDevice => '別のデバイスからの承認をリクエスト';
 
   @override
+  String get signOutFinishing => 'ログアウト処理を完了しています…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'ログアウトすると、この端末にのみ保存されているノートは削除されます。同期済みのノートを復元するには、承認済みの端末または復元用パスフレーズが必要です。';
+
+  @override
+  String get localLibraryUnavailable =>
+      '端末のノートフォルダを特定できませんでした。再試行するか、ログアウトして新しいローカルライブラリを作成してください。';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      '安全なストレージを利用できません。端末のロックを解除して再試行してください。';
+
+  @override
+  String get signOutOtherWindowRetry => '別のウィンドウでサインアウト中です。完了してからもう一度お試しください。';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'ローカルデータベースを消去できませんでした。他の Better Keep ウィンドウを閉じて再試行してください。';
+
+  @override
+  String get signOutCleanupRetry => 'ログアウトできませんでした。もう一度お試しください。';
+
+  @override
   String get signingOut => 'サインアウト中...';
 
   @override

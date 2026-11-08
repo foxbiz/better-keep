@@ -92,6 +92,8 @@ change that alters the worker or SQLite Wasm is rejected pending an explicit sto
 compatibility review. Clients without SharedWorker support still require separate
 multi-tab validation; this does not add cross-tab locking to the dependency’s fallback.
 
+Sign-out is coordinated between tabs in the same channel and Firebase environment. If another tab signs out first, Retry reloads the current tab. If another open tab holds the local database, close that tab and select Retry. Browsers without Web Locks support single-tab sign-out.
+
 A production command requires an unpromoted live beta with its stable companion. It
 changes the release manifest, without rebuilding app source or changing release assets:
 

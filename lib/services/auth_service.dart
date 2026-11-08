@@ -1,6 +1,8 @@
 import 'auth_error_messages.dart';
 import 'remote_sync_cache_service.dart';
 import 'local_storage_recovery.dart';
+import 'sign_out_lock.dart'
+    if (dart.library.js_interop) 'sign_out_lock_web.dart';
 
 import 'google_sign_in_initialization.dart';
 
@@ -54,13 +56,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:better_keep/services/web_oauth_stub.dart'
     if (dart.library.html) 'package:better_keep/services/web_oauth.dart'
     as web_oauth;
+
+enum SignOutStage { working, delayed, retry }
+
+enum SignOutProblem { secureStorage, database, otherWindow }
 
 typedef _NativeAppleAuthorization = ({
   AuthorizationCredentialAppleID appleCredential,
@@ -148,6 +153,7 @@ class AuthService {
       _cachedUserId != null && currentUser?.uid != _cachedUserId;
 
   static bool get canRestoreLocalSession =>
+      signOutStage.value == null &&
       _freshSignInUid == null &&
       currentUser != null &&
       currentUser!.uid == _cachedUserId &&
@@ -1662,6 +1668,12 @@ class AuthService {
     String provider,
   ) async {
     await _signOutFuture;
+    final prefs = await AppState.prefs;
+    if (kIsWeb) await FirebaseScopedPreferences.reload(prefs);
+    if (signOutStage.value != null ||
+        LocalStorageRecovery(prefs).signOutPending) {
+      throw StateError('Local sign-out has not finished');
+    }
     if (currentUser?.uid != user.uid) return;
     _deferLocalRestore = false;
     _freshSignInUid = user.uid;
@@ -1687,6 +1699,12 @@ class AuthService {
   /// Initializes cloud and encryption services for a restored Firebase Auth
   /// session. This uses the same recoverable pipeline as a fresh sign-in.
   static Future<void> initializeCurrentUserServices() async {
+    final prefs = await AppState.prefs;
+    if (kIsWeb) await FirebaseScopedPreferences.reload(prefs);
+    if (signOutStage.value != null ||
+        LocalStorageRecovery(prefs).signOutPending) {
+      return;
+    }
     _deferLocalRestore = false;
     final user = currentUser;
     final current = captureSession();
@@ -2213,6 +2231,9 @@ class AuthService {
   }
 
   static Future<void>? _signOutFuture;
+  static SignOutSnapshot? _webSignOutSource;
+  static String? _webSignOutJournal;
+  static final signOutStage = ValueNotifier<SignOutStage?>(null);
 
   static Future<void> returnToLocalAccount() async {
     if (currentUser != null && hasDifferentLocalAccount) {
@@ -2220,16 +2241,137 @@ class AuthService {
     }
   }
 
-  static Future<void> signOut() {
-    if (currentUser != null && hasDifferentLocalAccount) {
+  static Future<void> signOut({bool duringStartup = false}) {
+    if (!duringStartup &&
+        signOutStage.value == null &&
+        currentUser != null &&
+        hasDifferentLocalAccount) {
       return returnToLocalAccount();
     }
-    return _signOutFuture ??= _performSignOut().whenComplete(() {
-      _signOutFuture = null;
-    });
+    return _finishLocalSignOut(reopenDatabase: !duringStartup);
   }
 
-  static Future<void> _performSignOut() async {
+  // The recovery screen has explicitly confirmed discarding this library,
+  // including when the restored Firebase identity differs from its owner.
+  static Future<void> signOutUnavailableLibrary({
+    required bool duringStartup,
+  }) => _finishLocalSignOut(reopenDatabase: !duringStartup);
+
+  /// Complete interrupted account transitions before exposing a library.
+  static Future<Database> openDatabaseForStartup() async {
+    final recovery = LocalStorageRecovery(await AppState.prefs);
+    if (recovery.signOutPending) {
+      await resumePendingSignOut(duringStartup: true);
+    }
+    verifyAccountFileDirectory(recovery.preferences);
+    unawaited(resumeAccountFileCleanup(recovery.preferences));
+    final db = await initDatabase(detectDataLoss: true);
+    if (!recovery.pending) return db;
+    await signOut();
+    return AppState.db;
+  }
+
+  // Startup calls this before exposing local data when sign-out was interrupted.
+  static Future<void> resumePendingSignOut({bool duringStartup = false}) async {
+    final prefs = await AppState.prefs;
+    if (kIsWeb) await FirebaseScopedPreferences.reload(prefs);
+    if (signOutStage.value != null ||
+        LocalStorageRecovery(prefs).signOutPending) {
+      await _finishLocalSignOut(reopenDatabase: !duringStartup);
+    }
+  }
+
+  static Future<void> _finishLocalSignOut({bool reopenDatabase = true}) {
+    return _signOutFuture ??= _journaledSignOut(reopenDatabase: reopenDatabase)
+        .whenComplete(() => _signOutFuture = null);
+  }
+
+  // A platform key deletion cannot be cancelled. Keep its actual Future until
+  // it settles, even if waiting for it times out. Retry joins that operation.
+  static SignOutProblem? _signOutProblem;
+  static SignOutProblem? get signOutProblem => _signOutProblem;
+  static Future<void>? _keyCleanup;
+  @visibleForTesting
+  static Duration signOutKeyTimeout = const Duration(seconds: 15);
+  static Future<void> _clearSignOutKeys() {
+    final cleanup = _keyCleanup ??= E2EEService.instance.dispose().whenComplete(
+      () {
+        _keyCleanup = null;
+      },
+    );
+    return cleanup.timeout(signOutKeyTimeout);
+  }
+
+  static Future<void> _journaledSignOut({required bool reopenDatabase}) async {
+    signOutStage.value = SignOutStage.working;
+    final slow = Timer(const Duration(seconds: 20), () {
+      signOutStage.value = SignOutStage.delayed;
+    });
+    try {
+      final recovery = LocalStorageRecovery(await AppState.prefs);
+      final scope = FirebaseScopedPreferences.scopeForPreferences(
+        recovery.preferences,
+      ).name;
+      if (kIsWeb) {
+        if (_signOutProblem == SignOutProblem.otherWindow) {
+          await refreshAfterExternalSignOut(scope);
+          return;
+        }
+        _webSignOutSource ??= recovery.signOutSnapshot;
+      }
+      // Serialize retries so a slow session teardown cannot race the next account.
+      for (var attempt = 0; ; attempt++) {
+        try {
+          _signOutProblem = null;
+          var superseded = false;
+          final completed = await withSignOutLock(scope, () async {
+            if (kIsWeb) {
+              await FirebaseScopedPreferences.reload(recovery.preferences);
+              superseded = !recovery.canContinueSignOut(
+                _webSignOutSource!,
+                ownJournal: _webSignOutJournal,
+              );
+              if (superseded) return;
+            }
+            final next = await recovery.beginSignOut();
+            if (kIsWeb) _webSignOutJournal = next;
+            await _performSignOut(next, reopenDatabase: reopenDatabase);
+            await recovery.completeLogout();
+            await recovery.finishSignOut();
+          });
+          if (!completed || superseded) {
+            _signOutProblem = SignOutProblem.otherWindow;
+            // Retry is observation-only from here, including if the other
+            // window restores or creates notes before this tab tries again.
+            await refreshAfterExternalSignOut(scope);
+            return;
+          }
+          _webSignOutSource = null;
+          _webSignOutJournal = null;
+          unawaited(resumeAccountFileCleanup(recovery.preferences));
+          break;
+        } on TimeoutException {
+          rethrow;
+        } catch (_) {
+          if (attempt == 1 || _signOutProblem == SignOutProblem.otherWindow) {
+            rethrow;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+      }
+      signOutStage.value = null;
+    } catch (_) {
+      signOutStage.value = SignOutStage.retry;
+      rethrow;
+    } finally {
+      slow.cancel();
+    }
+  }
+
+  static Future<void> _performSignOut(
+    String nextGeneration, {
+    required bool reopenDatabase,
+  }) async {
     _sessionEpoch++;
     AttachmentRepairCoordinator.instance.reset();
     E2EEService.instance.resetInitialization();
@@ -2309,16 +2451,12 @@ class AuthService {
         AppLogger.error('Error disposing PlanService: $e');
       }
 
-      // Clean up E2EE state (clears secure storage including device keys)
+      // Local key deletion must finish before another account can obtain keys.
       try {
-        await E2EEService.instance.dispose().timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            AppLogger.log('Timeout disposing E2EE service during signout');
-          },
-        );
-      } catch (e) {
-        AppLogger.error('Error disposing E2EE service: $e');
+        await _clearSignOutKeys();
+      } catch (_) {
+        _signOutProblem = SignOutProblem.secureStorage;
+        rethrow;
       }
 
       try {
@@ -2352,39 +2490,21 @@ class AuthService {
         AppLogger.error('Error waiting for Firestore writes: $e');
       }
 
-      // Close database connection before deleting
+      // A later account may only open the namespace after these steps succeed.
       try {
         final database = AppState.get('db');
-        if (database != null) await AppState.db.close();
-      } catch (e) {
-        AppLogger.error('Error closing database during signout', e);
+        if (database is Database && database.isOpen) await database.close();
+        await deleteSignedOutDatabase(await activeDatabasePath());
+      } catch (_) {
+        _signOutProblem = SignOutProblem.database;
+        rethrow;
       }
-      try {
-        await deleteDatabase(await activeDatabasePath());
-      } catch (e) {
-        AppLogger.error('Error closing/deleting database: $e');
-      }
-
-      // Clear only the selected environment's account preferences. Global UI
-      // choices, Firebase chooser details, and the inactive backend stay intact.
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await FirebaseScopedPreferences.clearActiveAccountPreferences(prefs);
-        LocalDataEncryption.resetScopedPreferenceCache();
-        await AlarmIdService.resetForScopeChange(prefs: prefs);
-        await prefs.setBool('has_launched_before', true);
-      } catch (e) {
-        AppLogger.error('Error clearing SharedPreferences: $e');
-      }
-
-      // Clear File System
-      try {
-        final fs = await fileSystem();
-        await _clearFileSystemRecursively(await fs.documentDir);
-        await _clearFileSystemRecursively(await fs.cacheDir);
-      } catch (error) {
-        AppLogger.error('Error accessing files during signout', error);
-      }
+      await AppState.clearSignOutPreferences();
+      final prefs = await AppState.prefs;
+      LocalDataEncryption.resetScopedPreferenceCache();
+      await AlarmIdService.resetForScopeChange(prefs: prefs);
+      await prefs.setBool('has_launched_before', true);
+      await retireAccountFiles(prefs, nextGeneration);
 
       // Invalidate avatar cache so new user gets fresh avatar
       UserAvatar.invalidateCache();
@@ -2399,13 +2519,7 @@ class AuthService {
       sessionInvalid.value = false;
       ReviewAccess.clear();
 
-      // Reset App State
-      try {
-        await Future.microtask(() {});
-        await AppState.reset();
-      } catch (e) {
-        AppLogger.error('Error resetting AppState: $e');
-      }
+      await AppState.reset();
 
       // Re-enable Firestore network after signing out
       // Note: We intentionally do NOT call terminate() or clearPersistence() because:
@@ -2429,19 +2543,25 @@ class AuthService {
       // Sign Out
       if (!kIsWeb &&
           (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
-        await _googleSignIn.signOut();
+        try {
+          await _googleSignIn.signOut();
+        } catch (error) {
+          AppLogger.error(
+            'Could not sign out of the native Google session',
+            error,
+          );
+        }
       }
       await _auth.signOut();
 
-      // Reinitialize database after sign out
-      await Future.microtask(() {});
-      await initDatabase();
-      await NoteSortService().init();
+      if (reopenDatabase) {
+        await initDatabase();
+        await NoteSortService().init();
+      }
     } catch (e) {
       AppLogger.error('Error signing out', e);
       // Ensure we at least sign out from Firebase even if cleanup fails.
-      // Once Firebase auth is cleared, the app can recover through the
-      // normal signed-out flow even if some cleanup steps were best-effort.
+      // The account gate stays closed until unfinished local cleanup succeeds.
       try {
         await _auth.signOut();
         ReviewAccess.clear();
@@ -2454,61 +2574,13 @@ class AuthService {
         rethrow;
       }
 
-      try {
-        await initDatabase();
-        await NoteSortService().init();
-      } catch (dbError) {
-        AppLogger.error(
-          'Error reinitializing database after fallback signout: $dbError',
-        );
-      }
+      // Keep the durable marker and the account gate until a full retry succeeds.
+      rethrow;
     } finally {
       sessionInvalid.value = false;
-      // Authentication is already cleared. Failed local cleanup must not hide
-      // the login screen; fresh sign-in strictly retries reset before syncing.
-      for (final cleanup in <Future<void> Function()>[
-        AppState.clearSyncCheckpoints,
-        () =>
-            RemoteSyncCacheService().clear(strict: true, enforceSession: false),
-        () async {
-          if (currentUser == null) {
-            await LocalStorageRecovery(await AppState.prefs).completeLogout();
-          }
-        },
-      ]) {
-        try {
-          await cleanup();
-        } catch (error, stack) {
-          AppLogger.error('Local sign-out cleanup deferred', error, stack);
-        }
-      }
-    }
-  }
-
-  static Future<void> _clearFileSystemRecursively(String directory) async {
-    final fs = await fileSystem();
-
-    try {
-      AppLogger.log('Clearing file system directory: $directory');
-      final files = await fs.list(directory);
-      for (final file in files) {
-        final filePath = isAbsolute(file) ? file : join(directory, file);
-        try {
-          final isDir = await fs.isDirectory(filePath);
-          AppLogger.log('Deleting ${isDir ? "directory" : "file"}: $filePath');
-          if (isDir) {
-            await _clearFileSystemRecursively(filePath);
-            await fs.delete(filePath);
-          } else {
-            await fs.delete(filePath);
-          }
-          AppLogger.log('Deleted: $filePath');
-        } catch (e) {
-          AppLogger.error('Error deleting file/directory $filePath: $e');
-        }
-      }
-    } catch (e) {
-      AppLogger.error('Error clearing file system: $e');
+      // The preference drain owns checkpoint removal. Waiting on it again here
+      // would swallow its timeout and prevent the sign-out screen from offering Retry.
+      RemoteSyncCacheService().resetAfterSignOut();
     }
   }
 }

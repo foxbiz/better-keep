@@ -146,7 +146,7 @@ class _Session extends ChangeNotifier implements LibrarySyncSession {
   }
 
   @override
-  Future<void> close() async {
+  Future<void> close({bool pruneCache = true}) async {
     retire();
     await drain;
     if (failClose) throw StateError('synthetic drain failure');

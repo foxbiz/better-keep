@@ -3278,6 +3278,31 @@ class AppLocalizationsKo extends AppLocalizations {
   String get requestApprovalFromAnotherDevice => '다른 기기에서 승인 요청';
 
   @override
+  String get signOutFinishing => '로그아웃을 마무리하는 중…';
+
+  @override
+  String get signOutLibraryWarning =>
+      '로그아웃하면 이 기기에만 저장된 노트가 삭제돼요. 동기화된 노트를 복원하려면 승인된 기기나 복구 암호가 필요합니다.';
+
+  @override
+  String get localLibraryUnavailable =>
+      '기기의 노트 폴더를 확인할 수 없어요. 다시 시도하거나 로그아웃하여 새 로컬 보관함을 만드세요.';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      '보안 저장소를 사용할 수 없어요. 기기의 잠금을 해제한 뒤 다시 시도하세요.';
+
+  @override
+  String get signOutOtherWindowRetry => '다른 창에서 로그아웃 중입니다. 완료된 후 다시 시도하세요.';
+
+  @override
+  String get signOutDatabaseRetry =>
+      '로컬 데이터베이스를 지울 수 없어요. 다른 Better Keep 창을 닫고 다시 시도하세요.';
+
+  @override
+  String get signOutCleanupRetry => '로그아웃하지 못했어요. 다시 시도해 주세요.';
+
+  @override
   String get signingOut => '로그아웃 중...';
 
   @override

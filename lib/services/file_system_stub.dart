@@ -31,6 +31,9 @@ class FileSystemStub implements FileSystem {
   Future<String> readString(String path) => _unsupported();
 
   @override
+  Future<void> deleteTrees(List<String> paths) => _unsupported();
+
+  @override
   Future<bool> delete(String path) => _unsupported();
 
   @override

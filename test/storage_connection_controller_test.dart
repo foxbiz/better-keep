@@ -137,6 +137,23 @@ void main() {
     cipher.dispose();
   });
 
+  test('logout verifies only the selected connection and fails closed if it is unavailable', () async {
+    final dropbox = await connection('dropbox');
+    metadata.add({'dropbox': dropbox, 'webdav': {}});
+    expect(controller.canVerifyBackup('dropbox'), isTrue);
+    expect(controller.canVerifyBackup('webdav'), isFalse);
+    metadata.add({
+      'dropbox': {...dropbox, 'enabled': false},
+    });
+    expect(controller.canVerifyBackup('dropbox'), isFalse);
+    metadata.add({
+      'dropbox': {...dropbox, 'state': 'disconnected'},
+    });
+    expect(controller.canVerifyBackup('dropbox'), isFalse);
+    metadata.add({});
+    expect(controller.canVerifyBackup('dropbox'), isFalse);
+  });
+
   test('passes the exchange receipt with encrypted registration', () async {
     authorization.consent = () async => {
       ...grant(),

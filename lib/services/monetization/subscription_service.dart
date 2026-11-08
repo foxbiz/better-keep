@@ -294,8 +294,8 @@ Expected IDs: ${ProductIds.all}
       AppLogger.log(
         'SubscriptionService: Web platform, using external checkout',
       );
-      // Initialize currency for web (always uses Razorpay)
-      await _initializeCurrency();
+      // The pricing page supplies the currency when Home consumes its link.
+      if (pricingLinkCurrency == null) await _initializeCurrency();
       return;
     }
 
@@ -311,6 +311,16 @@ Expected IDs: ${ProductIds.all}
     if (usesRazorpay) {
       await _initializeCurrency();
     }
+  }
+
+  /// Called from Home after authentication, before presenting the usual paywall.
+  bool takePricingUpgrade() {
+    final code = pricingLinkCurrency;
+    if (code == null) return false;
+    clearPricingLink();
+    _currencyInitialized = true;
+    selectedCurrency.value = RazorpayCurrency.values.byName(code.toLowerCase());
+    return true;
   }
 
   /// Initialize currency selection based on detected country

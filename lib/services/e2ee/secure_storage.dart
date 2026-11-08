@@ -476,7 +476,9 @@ class E2EESecureStorage {
       _webMemory.remove(scopedKey);
       final prefs = await SharedPreferences.getInstance();
       requireCloudOperation();
-      await prefs.remove(scopedKey);
+      if (!await prefs.remove(scopedKey)) {
+        throw StateError('Could not clear browser key storage');
+      }
     } else {
       await _secureStorage.delete(key: scopedKey);
     }

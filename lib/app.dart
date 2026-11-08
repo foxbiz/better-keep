@@ -3,6 +3,9 @@ import 'package:better_keep/services/e2ee/device_authorization.dart';
 
 import 'dart:async';
 
+import 'package:better_keep/services/file_system.dart'
+    show resumeAccountFileCleanup;
+
 import 'package:better_keep/services/storage_health_service.dart';
 
 import 'package:better_keep/components/auth_scaffold.dart';
@@ -145,6 +148,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     );
     AuthService.setAppForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
+      unawaited(AppState.prefs.then(resumeAccountFileCleanup));
       // Check for token revocation when app resumes from background
       AuthService.checkTokenRevocationOnResume();
       // Refresh subscription status when app comes to foreground

@@ -6,23 +6,39 @@ import 'file_system_base.dart';
 
 /// Restricts account-owned files to a child of the platform application roots.
 ///
-/// Live uses the platform file system directly for backward compatibility.
-/// Emulator mode uses this wrapper so sign-out and cache cleanup cannot touch
-/// Live attachments or downloaded note content.
+/// Emulator storage is nested below its environment root. After sign-out,
+/// both environments also place each new library in its own generation.
 class ScopedFileSystem implements FileSystem {
   ScopedFileSystem(this._delegate, {required this.directoryName})
-    : assert(directoryName.isNotEmpty);
+    : _resolve = null,
+      assert(directoryName.isNotEmpty);
+
+  ScopedFileSystem.resolving(this._delegate, this._resolve)
+    : directoryName = '';
+  final Future<String> Function()? _resolve;
+  Future<String>? _resolvedName;
+  Future<String> _root(String base) async {
+    final resolve = _resolve;
+    if (resolve == null) return path.join(base, directoryName);
+    // Both roots on this handle belong to the same account, even if sign-out
+    // happens between obtaining the document directory and the cache directory.
+    final pending = _resolvedName ??= resolve();
+    try {
+      return path.join(base, await pending);
+    } catch (_) {
+      if (identical(_resolvedName, pending)) _resolvedName = null;
+      rethrow;
+    }
+  }
 
   final FileSystem _delegate;
   final String directoryName;
 
   @override
-  Future<String> get cacheDir async =>
-      path.join(await _delegate.cacheDir, directoryName);
+  Future<String> get cacheDir async => _root(await _delegate.cacheDir);
 
   @override
-  Future<String> get documentDir async =>
-      path.join(await _delegate.documentDir, directoryName);
+  Future<String> get documentDir async => _root(await _delegate.documentDir);
 
   @override
   Future<void> writeBytes(
@@ -43,6 +59,9 @@ class ScopedFileSystem implements FileSystem {
 
   @override
   Future<String> readString(String filePath) => _delegate.readString(filePath);
+
+  @override
+  Future<void> deleteTrees(List<String> paths) => _delegate.deleteTrees(paths);
 
   @override
   Future<bool> delete(String filePath) => _delegate.delete(filePath);

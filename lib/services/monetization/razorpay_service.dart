@@ -16,6 +16,10 @@ import 'razorpay_web.dart'
     if (dart.library.io) 'razorpay_stub.dart'
     as razorpay_platform;
 
+export 'razorpay_web.dart'
+    if (dart.library.io) 'razorpay_stub.dart'
+    show pricingLinkCurrency, clearPricingLink;
+
 /// Razorpay plan IDs (configured in Razorpay Dashboard)
 class RazorpayPlanIds {
   /// Monthly subscription plan ID

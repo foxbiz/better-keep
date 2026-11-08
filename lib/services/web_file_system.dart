@@ -79,6 +79,9 @@ class WebFileSystem implements FileSystem {
   Future<String> readString(String path) => _backend.readString(path);
 
   @override
+  Future<void> deleteTrees(List<String> paths) => _backend.deleteTrees(paths);
+
+  @override
   Future<bool> delete(String path) => _backend.delete(path);
 
   @override
@@ -318,6 +321,7 @@ class WebFileSystem implements FileSystem {
 Future<FileSystem> createFileSystem() => WebFileSystem.instance();
 
 abstract class _FileSystemBackend {
+  Future<void> deleteTrees(List<String> paths);
   Future<void> init();
   Future<void> writeBytes(String path, Uint8List data, {bool append = false});
   Future<void> writeString(String path, String data, {bool append = false});
@@ -447,6 +451,27 @@ class _OpfsBackend implements _FileSystemBackend {
   Future<String> readString(String path) async {
     final bytes = await readBytes(path);
     return utf8.decode(bytes);
+  }
+
+  @override
+  Future<void> deleteTrees(List<String> paths) async {
+    await Future.wait(
+      paths.map((path) async {
+        final parts = _PathParts.from(path);
+        final dir = await _resolveDirectory(parts.directories, create: false);
+        if (dir == null) return;
+        try {
+          await _promise(
+            js_util.callMethod(dir, 'removeEntry', [
+              parts.fileName,
+              js_util.jsify({'recursive': true}),
+            ]),
+          );
+        } on html.DomException catch (error) {
+          if (error.name != 'NotFoundError') rethrow;
+        }
+      }),
+    );
   }
 
   @override
@@ -654,6 +679,19 @@ class _IndexedDbBackend implements _FileSystemBackend {
   }
 
   @override
+  Future<void> deleteTrees(List<String> paths) async {
+    final txn = _db!.transaction(_storeName, 'readwrite');
+    final store = txn.objectStore(_storeName);
+    await Future.wait([
+      for (final path in paths) ...[
+        store.delete(path),
+        store.delete(idb.KeyRange.bound('$path/', '${path}0', false, true)),
+      ],
+      txn.completed,
+    ]);
+  }
+
+  @override
   Future<bool> delete(String path) async {
     final txn = _db!.transaction(_storeName, 'readwrite');
     final store = txn.objectStore(_storeName);
@@ -704,40 +742,41 @@ class _IndexedDbBackend implements _FileSystemBackend {
   Future<List<String>> list(String directory) async {
     final txn = _db!.transaction(_storeName, 'readonly');
     final store = txn.objectStore(_storeName);
-    final List<String> allKeys = [];
-
-    await store.openCursor(autoAdvance: true).forEach((cursor) {
-      if (cursor != null) {
-        allKeys.add(cursor.key.toString());
+    // Enumerate only keys below this directory. Scanning values here would
+    // deserialize the entire media library before sign-out could remove it.
+    final base = directory == '/' ? '' : directory;
+    final prefix = '$base/';
+    final request = store.openKeyCursor(
+      idb.KeyRange.bound(prefix, '${base}0', false, true),
+    );
+    final entries = <String>{};
+    Object? cursorError;
+    final subscription = request.onSuccess.listen((_) {
+      // IndexedDB completes the read transaction when no continuation is
+      // queued. Propagate callback failures instead of returning half a list.
+      try {
+        final cursor = request.result as idb.Cursor?;
+        if (cursor == null) return;
+        final key = cursor.key;
+        if (key is! String) {
+          cursor.next();
+          return;
+        }
+        final slash = key.indexOf('/', prefix.length);
+        final child = key.substring(prefix.length, slash < 0 ? null : slash);
+        if (child.isNotEmpty) entries.add(child);
+        cursor.next(slash < 0 ? null : '${key.substring(0, slash)}0');
+      } catch (error) {
+        cursorError = error;
       }
     });
-
-    await txn.completed;
-
-    // IndexedDB stores flat key-value pairs with full paths as keys.
-    // We need to filter to entries directly under the given directory
-    // and return only the immediate child name (not full path).
-    final normalizedDir = directory == '/' ? '' : directory;
-    final prefix = normalizedDir.isEmpty ? '/' : '$normalizedDir/';
-
-    final Set<String> entries = {};
-    for (final key in allKeys) {
-      if (!key.startsWith(prefix)) continue;
-
-      // Get the part after the prefix
-      final remainder = key.substring(prefix.length);
-      if (remainder.isEmpty) continue;
-
-      // Get just the first segment (immediate child)
-      final slashIndex = remainder.indexOf('/');
-      final childName = slashIndex == -1
-          ? remainder
-          : remainder.substring(0, slashIndex);
-      if (childName.isNotEmpty) {
-        entries.add(childName);
-      }
+    try {
+      await txn.completed;
+      final error = cursorError;
+      if (error != null) throw error;
+    } finally {
+      await subscription.cancel();
     }
-
     return entries.toList();
   }
 }

@@ -522,8 +522,15 @@ class E2EEService {
   }
 
   /// Cleans up resources.
-  Future<void> dispose() =>
-      runCloudOperation(AuthService.captureSession(), _dispose);
+  Future<void> dispose() {
+    // A restarted cleanup may already have signed out of Firebase.
+    final current = AuthService.captureSessionIdentity();
+    final uid = AuthService.currentUser?.uid;
+    return runCloudOperation(
+      () => current() && AuthService.currentUser?.uid == uid,
+      _dispose,
+    );
+  }
 
   Future<void> _dispose() async {
     _sessionGeneration++;
@@ -568,11 +575,7 @@ class E2EEService {
     requireCloudOperation();
     RecoveryKeyService.instance.clearFirestoreCache();
 
-    try {
-      await _secureStorage.clearAll();
-    } catch (e) {
-      AppLogger.error('E2EE: Error clearing secure storage during dispose', e);
-    }
+    await _secureStorage.clearAll();
 
     requireCloudOperation();
     statusProgress.value = null;

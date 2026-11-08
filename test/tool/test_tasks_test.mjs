@@ -89,7 +89,9 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"search",
 		"subscription-management",
 		"visibility",
+		"web-logout",
 		"web-release",
+		"web-sign-out-lock",
 		"windows-build-policy",
 	]);
 	assert.match(formatTestTaskHelp(), /npm test <suite>/);
@@ -283,6 +285,8 @@ test("release expands suites in the established order and excludes devices", () 
 		"image_share_signing_test.mjs",
 		"build_web.sh",
 		"site_assets_test.mts",
+		"TEST_STORAGE_BACKEND=OPFS",
+		"TEST_STORAGE_BACKEND=IndexedDB",
 		"test_hosting_routes.sh",
 		"google_keep_import_service_test.dart",
 		"google_keep_import_discoverability_test.dart",
@@ -302,7 +306,7 @@ test("release expands suites in the established order and excludes devices", () 
 	];
 	let previousIndex = -1;
 	for (const marker of orderedMarkers) {
-		const index = serializedOperations.indexOf(marker);
+		const index = serializedOperations.indexOf(marker, previousIndex + 1);
 		assert.ok(index > previousIndex, `${marker} must retain release order`);
 		previousIndex = index;
 	}

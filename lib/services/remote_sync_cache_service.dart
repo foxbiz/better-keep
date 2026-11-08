@@ -458,8 +458,16 @@ class RemoteSyncCacheService {
     };
   }
 
+  /// The retired account directory is cleaned in the background. Drop only
+  /// the in-memory pages here, including when sign-out needs another attempt.
+  void resetAfterSignOut() {
+    _pages.clear();
+    _metadata = null;
+    _initialized = false;
+  }
+
   /// Clear the entire cache
-  Future<void> clear({bool strict = false, bool enforceSession = true}) async {
+  Future<void> clear({bool strict = false}) async {
     final fs = await _fileSystemProvider();
     final cacheDir = await _getCacheDir();
 
@@ -469,7 +477,7 @@ class RemoteSyncCacheService {
           : <String>[];
       for (final fileName in files) {
         final filePath = path.join(cacheDir, fileName);
-        if (enforceSession) requireCloudOperation();
+        requireCloudOperation();
         final deleted = await fs.delete(filePath);
         if (strict && !deleted && await fs.exists(filePath)) {
           throw StateError('Could not clear remote sync cache');

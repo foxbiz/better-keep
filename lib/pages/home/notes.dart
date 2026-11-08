@@ -1,5 +1,5 @@
 import 'package:better_keep/services/note_sync_batch.dart';
-import 'package:better_keep/services/external_sync/external_sync_service.dart';
+import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
 import 'package:better_keep/components/cloud_sync_upgrade_notice.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
@@ -100,6 +100,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   @override
   void initState() {
+    AppState.showSyncProgressNotifier.addListener(_progressVisibilityChanged);
     NoteSyncBatch.active.addListener(_bulkChanged);
     _autoScrollTicker = createTicker(_onAutoScrollTick);
     _fetchData();
@@ -137,6 +138,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       }
       _activeReorderController?.clear();
     }
+    AppState.showSyncProgressNotifier.removeListener(
+      _progressVisibilityChanged,
+    );
     NoteSyncBatch.active.removeListener(_bulkChanged);
     _autoScrollTicker.dispose();
     _folderUpdateDebounce?.cancel();
@@ -172,6 +176,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       _fetchData();
     }
   }
+
+  void _progressVisibilityChanged() => setState(() {});
 
   void _bulkChanged() {
     if (!mounted) return;
@@ -210,10 +216,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
           if (!_showLoader) {
             content = SizedBox.shrink();
           } else {
-            content = Center(
-              child: CircularProgressIndicator(
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            content = ValueListenableBuilder<SyncProgress>(
+              valueListenable: SyncPresentation.instance,
+              builder: (_, progress, _) =>
+                  progress.isActive && AppState.showSyncProgress
+                  ? const SizedBox.shrink()
+                  : const Center(child: CircularProgressIndicator()),
             );
           }
         } else if (AppState.currentFolder != null) {
@@ -222,9 +230,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
           content = _buildFoldersGrid();
         }
 
-        return RefreshIndicator(
-          onRefresh: refresh,
-          child: CustomScrollView(
+        return _pullToRefresh(
+          CustomScrollView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -286,15 +293,18 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     );
   }
 
+  Widget _pullToRefresh(Widget child) => AppState.showSyncProgress
+      ? RefreshIndicator.noSpinner(onRefresh: refresh, child: child)
+      : RefreshIndicator(onRefresh: refresh, child: child);
+
   Widget _buildDefaultLayout() {
     final viewMode = AppState.notesViewMode;
 
     return LayoutBuilder(
       key: ValueKey('default_layout_$viewMode'),
       builder: (context, constraints) {
-        return RefreshIndicator(
-          onRefresh: refresh,
-          child: CustomScrollView(
+        return _pullToRefresh(
+          CustomScrollView(
             key: PageStorageKey('notes_scroll_view_$viewMode'),
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -1244,18 +1254,15 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   Widget _buildNotesSliver() {
     if (_notes == null || _notes!.isEmpty) {
       Widget content = _buildNotesView();
-      if (!_hasStoredNotes &&
-          !widget.searchMode &&
-          AppState.showNotes == NoteType.all) {
-        final external = ExternalSyncService.instance;
-        content = ListenableBuilder(
-          listenable: external,
-          builder: (context, child) =>
-              external.progress.phase == SyncPhase.syncing
-              ? const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: CircularProgressIndicator(),
-                )
+      if (_notes == null ||
+          (!_hasStoredNotes &&
+              !widget.searchMode &&
+              AppState.showNotes == NoteType.all)) {
+        content = ValueListenableBuilder<SyncProgress>(
+          valueListenable: SyncPresentation.instance,
+          builder: (_, progress, child) =>
+              progress.isActive && AppState.showSyncProgress
+              ? const SizedBox.shrink()
               : child!,
           child: content,
         );
