@@ -1,3 +1,6 @@
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:better_keep/services/local_notification_service.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
@@ -36,6 +39,14 @@ class _SignOutAuth extends OfflineAuth {
     currentUser = null;
     changes.add(null);
   }
+}
+
+class _SignOutFirestore extends OfflineFirestore {
+  Completer<void>? pendingWrites;
+
+  @override
+  Future<void> waitForPendingWrites() =>
+      pendingWrites?.future ?? Future.value();
 }
 
 class _BlockedKeyStore extends TestFlutterSecureStoragePlatform {
@@ -97,10 +108,13 @@ class _FixtureFiles extends IoFileSystem {
 
 enum _Scenario {
   normal,
+  notificationUnavailable,
+  stalledNotification,
   transientAuth,
   persistentAuth,
   stalledKey,
   stalledCheckpoint,
+  slowFirestore,
   startup,
   damagedDirectory,
 }
@@ -338,6 +352,32 @@ void main() {
       _ => 0,
     };
     test('account isolation on sign-out: ${scenario.name}', () async {
+      AndroidFlutterLocalNotificationsPlugin.registerWith();
+      const notifications = MethodChannel(
+        'dexterous.com/flutter/local_notifications',
+      );
+      final firstReply = Completer<void>();
+      var cancellationAttempts = 0;
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(notifications, (
+        call,
+      ) async {
+        expect(call.method, 'cancelAll');
+        cancellationAttempts++;
+        if (scenario == _Scenario.stalledNotification &&
+            cancellationAttempts == 1) {
+          await firstReply.future;
+        }
+        if (scenario == _Scenario.notificationUnavailable) {
+          throw PlatformException(code: 'unavailable');
+        }
+        return null;
+      });
+      addTearDown(
+        () => binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          notifications,
+          null,
+        ),
+      );
       final fixture = await Directory.systemTemp.createTemp(
         'storage-logout-fixture-',
       );
@@ -354,7 +394,11 @@ void main() {
           return fixture.path;
         },
       );
-      SharedPreferences.setMockInitialValues({'user_uid': 'account-a'});
+      SharedPreferences.setMockInitialValues({
+        'user_uid': 'account-a',
+        'pending_reminder_navigation_note_id': 77,
+        'reminder_navigation_last_activation': 'old-account',
+      });
       final checkpoint = _StalledCheckpointStore();
       if (scenario == _Scenario.stalledCheckpoint) {
         final normal = SharedPreferencesStorePlatform.instance;
@@ -372,6 +416,11 @@ void main() {
       final backend = OfflineFirebase()..configure();
       final previous = FirebaseBackend.active;
       final auth = _SignOutAuth()..failures = failures * 2;
+      final firestore = _SignOutFirestore();
+      addTearDown(firestore.events.close);
+      if (scenario == _Scenario.slowFirestore) {
+        firestore.pendingWrites = Completer<void>();
+      }
       final stalled = _BlockedKeyStore();
       if (scenario == _Scenario.stalledKey) {
         FlutterSecureStoragePlatform.instance = stalled;
@@ -384,7 +433,7 @@ void main() {
           environment: previous.environment,
           app: previous.app,
           auth: auth,
-          firestore: previous.firestore,
+          firestore: firestore,
           functions: previous.functions,
           storage: previous.storage,
           databaseId: previous.databaseId,
@@ -454,10 +503,53 @@ void main() {
         expect(AppState.db.isOpen, isTrue);
       } else {
         if (failures == 0) await db.close();
+        final finishing = Completer<void>();
+        void observe() {
+          if (AuthService.signOutStage.value == SignOutStage.finishing &&
+              !finishing.isCompleted) {
+            finishing.complete();
+          }
+        }
+
+        AuthService.signOutStage.addListener(observe);
+        addTearDown(() => AuthService.signOutStage.removeListener(observe));
         final first = AuthService.signOut();
         final second = AuthService.signOut();
         expect(identical(first, second), true);
-        if (scenario == _Scenario.stalledKey) {
+        if (scenario == _Scenario.slowFirestore) {
+          await finishing.future.timeout(const Duration(seconds: 2));
+          expect(auth.currentUser, isNotNull);
+          expect(db.isOpen, isFalse);
+          expect(prefs.containsKey('user_uid'), isFalse);
+          firestore.pendingWrites!.complete();
+        }
+        if (scenario == _Scenario.stalledNotification) {
+          await first;
+          expect(AuthService.signOutStage.value, isNull);
+          expect(recovery.signOutPending, isFalse);
+          final notifications = LocalNotificationService.instance;
+          expect(await notifications.acceptsReminder({'noteId': 1}), isFalse);
+          var repairs = 0;
+          void repair() => repairs++;
+          notifications.lateCancellation.addListener(repair);
+          addTearDown(
+            () => notifications.lateCancellation.removeListener(repair),
+          );
+          expect(await notifications.acceptsReminder({'noteId': 1}), isFalse);
+          final generation = await notifications.prepareDeliveries();
+          expect(generation, isNotNull);
+          expect(await notifications.acceptsReminder({'noteId': 1}), isFalse);
+          expect(
+            await notifications.acceptsReminder({
+              'deliveryGeneration': generation,
+            }),
+            isTrue,
+          );
+          firstReply.complete();
+          await Future<void>.delayed(Duration.zero);
+          expect(cancellationAttempts, 1);
+          expect(repairs, 1);
+        } else if (scenario == _Scenario.stalledKey) {
           await expectLater(first, throwsA(isA<TimeoutException>()));
           expect(AuthService.signOutStage.value, SignOutStage.retry);
           expect(AuthService.signOutProblem, SignOutProblem.secureStorage);
@@ -509,6 +601,8 @@ void main() {
         expect(auth.signOuts, 2 * failures + 1);
       }
       expect(auth.currentUser, null);
+      expect(prefs.containsKey('pending_reminder_navigation_note_id'), isFalse);
+      expect(prefs.containsKey('reminder_navigation_last_activation'), isFalse);
       expect(AppState.db.isOpen, true);
       expect(AppState.noteCloudSyncCheckpoint, null);
       expect(AppState.labelCloudSyncCheckpoint, null);

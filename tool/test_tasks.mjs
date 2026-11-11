@@ -41,6 +41,36 @@ function flutterTests(files) {
 	return processStep("flutter", ["test", ...files]);
 }
 
+function webReleaseChecks() {
+	return [
+		processStep("./scripts/build_web.sh", []),
+		...["false", "true"].map((beta) =>
+			processStep(
+				"flutter",
+				[
+					"test",
+					"--no-pub",
+					"--platform",
+					"chrome",
+					`--dart-define=WEB_BETA=${beta}`,
+					"test/web_release_test.dart",
+				],
+				{ CHROME_EXECUTABLE: chromeBinary() },
+			),
+		),
+		suiteStep("search"),
+		suiteStep("web-logout"),
+		suiteStep("mobile-web"),
+		suiteStep("hosting"),
+		processStep("node", [
+			"--test",
+			"test/web/beta_launcher_test.mjs",
+			"test/web/firebase_emulator_auth_restart_test.mjs",
+			"test/web/checkout_loading_test.mjs",
+		]),
+	];
+}
+
 const suites = {
 	"device-pairing": defineSuite(
 		"Run pairing protocol, service, and UI regressions.",
@@ -76,6 +106,10 @@ const suites = {
 	"client-sync": defineSuite("Run client synchronization tests.", () => [
 		flutterTests([
 			"test/async_keyed_serializer_test.dart",
+			"test/home_system_title_test.dart",
+			"test/sketch_preview_repair_service_test.dart",
+			"test/storage_logout_test.dart",
+			"test/sync_presentation_test.dart",
 			"test/cloud_sync_cursor_test.dart",
 			"test/e2ee_sync_readiness_test.dart",
 			"test/firestore_sync_resilience_test.dart",
@@ -357,11 +391,11 @@ const suites = {
 		],
 	),
 	"web-sign-out-lock": defineSuite(
-		"Verify cross-window sign-out and reload in stable and beta browsers.",
+		"Verify browser approval, cross-window sign-out, and reload in stable and beta builds.",
 		() => ["false", "true"].map((beta) =>
 			processStep(
 				"flutter",
-				["test", "--no-pub", "--platform", "chrome", `--dart-define=WEB_BETA=${beta}`, "test/web_sign_out_lock_test.dart"],
+				["test", "--no-pub", "--platform", "chrome", `--dart-define=WEB_BETA=${beta}`, "test/web_sign_out_lock_test.dart", "test/e2ee_browser_storage_test.dart"],
 				{ CHROME_EXECUTABLE: chromeBinary() },
 			),
 		),
@@ -389,34 +423,27 @@ const suites = {
 			),
 		],
 	),
+	"offline-browser": defineSuite(
+		"Verify offline startup and revocation in stable and beta browsers.",
+		() => [
+			firebaseStep(
+				[
+					"emulators:exec",
+					"--only",
+					"auth,firestore",
+					"--project",
+					"demo-better-keep-pairing",
+					"--config",
+					"firebase.emulator-tests.json",
+					"node test/emulator/offline_browser.mjs",
+				],
+				{ CHROME_EXECUTABLE: chromeBinary() },
+			),
+		],
+	),
 	"web-release": defineSuite(
 		"Build and validate the combined Flutter and Astro website.",
-		() => [
-			processStep("./scripts/build_web.sh", []),
-			...["false", "true"].map((beta) =>
-				processStep(
-					"flutter",
-					[
-						"test",
-						"--no-pub",
-						"--platform",
-						"chrome",
-						`--dart-define=WEB_BETA=${beta}`,
-						"test/web_release_test.dart",
-					],
-					{ CHROME_EXECUTABLE: chromeBinary() },
-				),
-			),
-			suiteStep("search"),
-			suiteStep("web-logout"),
-			suiteStep("mobile-web"),
-			suiteStep("hosting"),
-			processStep("node", [
-				"--test",
-				"test/web/beta_launcher_test.mjs",
-				"test/web/firebase_emulator_auth_restart_test.mjs",
-			]),
-		],
+		() => [...webReleaseChecks(), suiteStep("offline-browser")],
 	),
 	"image-share": defineSuite("Run image sharing regression tests.", () => [
 		flutterTests([
@@ -441,6 +468,10 @@ const suites = {
 		processStep("node", ["--test", "test/tool/macos_archive_config_test.mjs"]),
 	]),
 	release: defineSuite("Run every non-device release test suite.", () => [
+		suiteStep("release-core"),
+		suiteStep("offline-browser"),
+	]),
+	"release-core": defineSuite("Run release checks covered by the core CI job.", () => [
 		processStep("node", [
 			"--test",
 			"test/tool/android_release_resource_policy_test.mjs",
@@ -469,7 +500,7 @@ const suites = {
 		suiteStep("windows-build-policy"),
 		suiteStep("database-migrations"),
 		suiteStep("image-share"),
-		suiteStep("web-release"),
+		...webReleaseChecks(),
 		suiteStep("keep-import"),
 		suiteStep("review-prompts"),
 		suiteStep("reminders"),

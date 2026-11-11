@@ -249,9 +249,6 @@
 	"cancelSignIn": "Cancel Sign In",
 	"@cancelSignIn": { "description": "Cancel sign in button text" },
 
-	"signInCancelled": "Sign in cancelled",
-	"@signInCancelled": { "description": "Sign in cancelled message" },
-
 	"signInWithFacebook": "Sign in with Facebook",
 	"@signInWithFacebook": { "description": "Facebook sign in tooltip" },
 
@@ -320,12 +317,6 @@
 	"newPassword": "New Password",
 	"@newPassword": { "description": "New password field label" },
 
-	"enterNewPassword": "Enter new password",
-	"@enterNewPassword": { "description": "New password field hint" },
-
-	"reenterNewPassword": "Re-enter new password",
-	"@reenterNewPassword": { "description": "Confirm password field hint" },
-
 	"currentPassphrase": "Current Passphrase",
 	"@currentPassphrase": { "description": "Current passphrase field label" },
 
@@ -376,9 +367,6 @@
 	"addLabel": "Add label",
 	"@addLabel": { "description": "Add label tooltip" },
 
-	"searchLogs": "Search logs...",
-	"@searchLogs": { "description": "Search logs hint text" },
-
 	"audioRecording": "Audio Recording",
 	"@audioRecording": { "description": "Audio recording dialog title" },
 
@@ -393,9 +381,6 @@
 
 	"theme": "Theme",
 	"@theme": { "description": "Theme settings section title" },
-
-	"customizeAppearance": "Customize app appearance",
-	"@customizeAppearance": { "description": "Theme settings subtitle" },
 
 	"followSystemTheme": "Follow System Theme",
 	"@followSystemTheme": { "description": "Follow system theme toggle label" },
@@ -433,14 +418,6 @@
 	"alarmSound": "Alarm Sound",
 	"@alarmSound": { "description": "Alarm sound setting label" },
 
-	"reminderTimeSettings": "Reminder Time Settings",
-	"@reminderTimeSettings": {
-		"description": "Reminder time settings section title"
-	},
-
-	"setDefaultTimes": "Set default times for reminders",
-	"@setDefaultTimes": { "description": "Reminder time settings subtitle" },
-
 	"morning": "Morning",
 	"@morning": { "description": "Morning time label" },
 
@@ -450,31 +427,8 @@
 	"evening": "Evening",
 	"@evening": { "description": "Evening time label" },
 
-	"localDataProtection": "Local Data Protection",
-	"@localDataProtection": {
-		"description": "Local data protection section title"
-	},
-
-	"encryptDeviceData": "Encrypt data stored on this device",
-	"@encryptDeviceData": { "description": "Local data protection subtitle" },
-
-	"encryptNotes": "Encrypt Notes",
-	"@encryptNotes": { "description": "Encrypt notes toggle label" },
-
-	"encryptFiles": "Encrypt Files",
-	"@encryptFiles": { "description": "Encrypt files toggle label" },
-
-	"lockedNotesSecurity": "Locked Notes Security",
-	"@lockedNotesSecurity": { "description": "Locked notes section title" },
-
-	"privacyLockedNotes": "Privacy settings for locked notes",
-	"@privacyLockedNotes": { "description": "Locked notes section subtitle" },
-
 	"forgetPasswordOnClose": "Forget password on close",
 	"@forgetPasswordOnClose": { "description": "Forget password toggle label" },
-
-	"requirePasswordAgain": "Require password each time the app is opened",
-	"@requirePasswordAgain": { "description": "Forget password toggle subtitle" },
 
 	"nerdStats": "Nerd Stats",
 	"@nerdStats": { "description": "Nerd stats page title" },
@@ -601,9 +555,6 @@
 	"insert": "Insert",
 	"@insert": { "description": "Insert tooltip" },
 
-	"importAsNote": "Import as Note",
-	"@importAsNote": { "description": "Import as note tooltip" },
-
 	"removeDevice": "Remove device",
 	"@removeDevice": { "description": "Remove device tooltip" },
 
@@ -612,9 +563,6 @@
 
 	"passwordResetSuccess": "Password reset successfully! Please sign in.",
 	"@passwordResetSuccess": { "description": "Password reset success message" },
-
-	"emailVerifiedSuccess": "Email verified successfully!",
-	"@emailVerifiedSuccess": { "description": "Email verified success message" },
 
 	"useDifferentAccount": "Use a different account",
 	"@useDifferentAccount": {
@@ -635,17 +583,6 @@
 		"description": "Re-approval request sent message"
 	},
 
-	"failedReapproval": "Failed to request re-approval: {error}",
-	"@failedReapproval": {
-		"description": "Failed to request re-approval message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"rememberDevice": "Remember this device",
-	"@rememberDevice": { "description": "Remember device checkbox label" },
-
 	"recoverWithPassphrase": "Recover with Passphrase",
 	"@recoverWithPassphrase": {
 		"description": "Recover with passphrase button label"
@@ -663,24 +600,8 @@
 	"accessApproved": "Access approved",
 	"@accessApproved": { "description": "Access approved message" },
 
-	"failedToApprove": "Failed to approve: {error}",
-	"@failedToApprove": {
-		"description": "Failed to approve message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"accessDenied": "Access denied",
 	"@accessDenied": { "description": "Access denied message" },
-
-	"failedToDeny": "Failed to deny: {error}",
-	"@failedToDeny": {
-		"description": "Failed to deny message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"allUpToDate": "All up to date",
 	"@allUpToDate": { "description": "All up to date message" },
@@ -710,30 +631,6 @@
 		}
 	},
 
-	"unlinkedProvider": "Unlinked {provider}",
-	"@unlinkedProvider": {
-		"description": "Unlinked provider message",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
-	"successfullyLinked": "Successfully linked {provider} account",
-	"@successfullyLinked": {
-		"description": "Successfully linked provider message",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
-	"unknownProvider": "Unknown provider: {provider}",
-	"@unknownProvider": {
-		"description": "Unknown provider error",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
 	"recoveryKey": "Recovery Key",
 	"@recoveryKey": { "description": "Recovery key title" },
 
@@ -742,49 +639,6 @@
 
 	"enableE2EE": "Enable End-to-End Encryption",
 	"@enableE2EE": { "description": "Enable E2EE button label" },
-
-	"failedSaveRecoveryKey": "Failed to save recovery key: {error}",
-	"@failedSaveRecoveryKey": {
-		"description": "Failed to save recovery key error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"recoverySuccessWelcome": "Recovery successful! Welcome back.",
-	"@recoverySuccessWelcome": {
-		"description": "Recovery success welcome message"
-	},
-
-	"confirmConsequences": "Please confirm that you understand the consequences",
-	"@confirmConsequences": { "description": "Confirm consequences message" },
-
-	"accountResetSuccess": "Account reset successfully. Welcome!",
-	"@accountResetSuccess": { "description": "Account reset success message" },
-
-	"failedResetAccount": "Failed to reset account: {error}",
-	"@failedResetAccount": {
-		"description": "Failed to reset account error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"errorSigningOut": "Error signing out: {error}",
-	"@errorSigningOut": {
-		"description": "Error signing out message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"errorPlayingSound": "Error playing sound: {error}",
-	"@errorPlayingSound": {
-		"description": "Error playing sound message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"checkNestedItems": "Check nested items?",
 	"@checkNestedItems": { "description": "Check nested items dialog title" },
@@ -815,104 +669,26 @@
 	"reminderSet": "Reminder set",
 	"@reminderSet": { "description": "Reminder set message" },
 
-	"failedCreateImageNote": "Failed to create image note",
-	"@failedCreateImageNote": {
-		"description": "Failed to create image note message"
-	},
-
-	"errorSavingSketchWithError": "Error saving sketch: {error}",
-	"@errorSavingSketchWithError": {
-		"description": "Error saving sketch with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"failedSaveNote": "Failed to save the note",
 	"@failedSaveNote": { "description": "Failed to save note message" },
-
-	"failedSave": "Failed to save: {error}",
-	"@failedSave": {
-		"description": "Failed to save with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"copiedAs": "Copied as {format}",
-	"@copiedAs": {
-		"description": "Copied as format message",
-		"placeholders": {
-			"format": { "type": "String" }
-		}
-	},
-
-	"failedCopy": "Failed to copy: {error}",
-	"@failedCopy": {
-		"description": "Failed to copy with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"pastedAsPlainText": "Pasted as plain text",
 	"@pastedAsPlainText": { "description": "Pasted as plain text message" },
 
-	"failedPaste": "Failed to paste: {error}",
-	"@failedPaste": {
-		"description": "Failed to paste with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"contentInserted": "Content inserted",
 	"@contentInserted": { "description": "Content inserted message" },
-
-	"failedInsertContent": "Failed to insert content: {error}",
-	"@failedInsertContent": {
-		"description": "Failed to insert content with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"actionCancelled": "Action cancelled",
-	"@actionCancelled": { "description": "Action cancelled message" },
 
 	"noteLocked": "Note locked",
 	"@noteLocked": { "description": "Note locked message" },
 
-	"failedLockNote": "Failed to lock note: {error}",
-	"@failedLockNote": {
-		"description": "Failed to lock note with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"lockRemoved": "Lock removed",
 	"@lockRemoved": { "description": "Lock removed message" },
-
-	"failedRemoveLock": "Failed to remove lock: {error}",
-	"@failedRemoveLock": {
-		"description": "Failed to remove lock with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"noteDuplicated": "Note duplicated",
 	"@noteDuplicated": { "description": "Note duplicated message" },
 
 	"errorSavingNote": "Error saving note",
 	"@errorSavingNote": { "description": "Error saving note message" },
-
-	"contentShared": "Content shared",
-	"@contentShared": { "description": "Content shared message" },
-
-	"failedShare": "Failed to share",
-	"@failedShare": { "description": "Failed to share message" },
 
 	"notes": "Notes",
 	"@notes": { "description": "Notes label" },
@@ -932,43 +708,14 @@
 	"otherNotes": "Others",
 	"@otherNotes": { "description": "Other notes section" },
 
-	"noNotes": "No notes yet",
-	"@noNotes": { "description": "Empty state message" },
-
 	"noArchivedNotes": "No archived notes",
 	"@noArchivedNotes": { "description": "Empty archived state message" },
-
-	"noDeletedNotes": "No deleted notes",
-	"@noDeletedNotes": { "description": "Empty deleted state message" },
-
-	"searchNotes": "Search notes",
-	"@searchNotes": { "description": "Search notes hint" },
-
-	"nSelectedNotes": "{count, plural, =1{1 note selected} other{{count} notes selected}}",
-	"@nSelectedNotes": {
-		"description": "Number of notes selected",
-		"placeholders": {
-			"count": { "type": "int" }
-		}
-	},
 
 	"deleteNote": "Delete Note",
 	"@deleteNote": { "description": "Delete note dialog title" },
 
-	"deleteNotes": "Delete Notes",
-	"@deleteNotes": { "description": "Delete notes dialog title" },
-
 	"moveToTrash": "Move to trash",
 	"@moveToTrash": { "description": "Move to trash action" },
-
-	"deletePermanently": "Delete permanently",
-	"@deletePermanently": { "description": "Delete permanently action" },
-
-	"pinNote": "Pin",
-	"@pinNote": { "description": "Pin note action" },
-
-	"unpinNote": "Unpin",
-	"@unpinNote": { "description": "Unpin note action" },
 
 	"newNote": "New Note",
 	"@newNote": { "description": "New note button" },
@@ -976,29 +723,11 @@
 	"newSketch": "New Sketch",
 	"@newSketch": { "description": "New sketch button" },
 
-	"newFolder": "New Folder",
-	"@newFolder": { "description": "New folder option" },
-
-	"renameFolder": "Rename Folder",
-	"@renameFolder": { "description": "Rename folder option" },
-
-	"deleteFolder": "Delete Folder",
-	"@deleteFolder": { "description": "Delete folder option" },
-
-	"folderName": "Folder name",
-	"@folderName": { "description": "Folder name field hint" },
-
 	"camera": "Camera",
 	"@camera": { "description": "Camera option" },
 
 	"gallery": "Gallery",
 	"@gallery": { "description": "Gallery option" },
-
-	"audioRecorder": "Audio Recorder",
-	"@audioRecorder": { "description": "Audio recorder option" },
-
-	"importFile": "Import File",
-	"@importFile": { "description": "Import file option" },
 
 	"language": "Language",
 	"@language": { "description": "Language setting label" },
@@ -1006,26 +735,8 @@
 	"systemDefault": "System Default",
 	"@systemDefault": { "description": "System default language option" },
 
-	"selectLanguage": "Select Language",
-	"@selectLanguage": { "description": "Select language dialog title" },
-
 	"english": "English",
 	"@english": { "description": "English language name" },
-
-	"japanese": "日本語",
-	"@japanese": { "description": "Japanese language name" },
-
-	"korean": "한국어",
-	"@korean": { "description": "Korean language name" },
-
-	"indonesian": "Bahasa Indonesia",
-	"@indonesian": { "description": "Indonesian language name" },
-
-	"portugueseBrazil": "Português (Brasil)",
-	"@portugueseBrazil": { "description": "Brazilian Portuguese language name" },
-
-	"chinese": "中文",
-	"@chinese": { "description": "Chinese language name" },
 
 	"today": "Today",
 	"@today": { "description": "Today label" },
@@ -1038,9 +749,6 @@
 
 	"nextMonth": "Next month",
 	"@nextMonth": { "description": "Next month label" },
-
-	"pickDateTime": "Pick date & time",
-	"@pickDateTime": { "description": "Pick date and time option" },
 
 	"time": "Time",
 	"@time": { "description": "Time label" },
@@ -1075,29 +783,8 @@
 	"yearly": "Yearly",
 	"@yearly": { "description": "Yearly repeat option" },
 
-	"snooze": "Snooze",
-	"@snooze": { "description": "Snooze button" },
-
-	"fiveMinutes": "5 minutes",
-	"@fiveMinutes": { "description": "5 minutes option" },
-
-	"tenMinutes": "10 minutes",
-	"@tenMinutes": { "description": "10 minutes option" },
-
-	"thirtyMinutes": "30 minutes",
-	"@thirtyMinutes": { "description": "30 minutes option" },
-
 	"oneHour": "1 hour",
 	"@oneHour": { "description": "1 hour option" },
-
-	"gridView": "Grid view",
-	"@gridView": { "description": "Grid view option" },
-
-	"listView": "List view",
-	"@listView": { "description": "List view option" },
-
-	"galleryView": "Gallery view",
-	"@galleryView": { "description": "Gallery view option" },
 
 	"undo": "Undo",
 	"@undo": { "description": "Undo tooltip" },
@@ -1128,12 +815,8 @@
 
 	"openChecklistView": "Open list view",
 	"@openChecklistView": { "description": "Action that opens the focused checklist editor" },
-	"convertToNormalText": "Convert to normal text",
-	"@convertToNormalText": { "description": "Converts a checklist item subtree into rich-text paragraphs" },
 	"convertEntireChecklistToText": "Convert entire checklist to text",
 	"@convertEntireChecklistToText": { "description": "Converts the focused checklist block into rich-text paragraphs" },
-	"focusedChecklistRequiresChecklistOnly": "Focused list view is available only when every line is a checklist item.",
-	"@focusedChecklistRequiresChecklistOnly": { "description": "Explains why a mixed document cannot open in the focused checklist editor" },
 	"focusedChecklistUnsupportedContent": "Attachments and block formatting are available only in the rich-text editor.",
 	"@focusedChecklistUnsupportedContent": { "description": "Explains that focused checklist view does not support embeds or incompatible blocks" },
 	"focusedChecklistInvalidContent": "This checklist can’t be opened in focused view. Continue editing it here.",
@@ -1181,26 +864,11 @@
 	"alignRight": "Align right",
 	"@alignRight": { "description": "Align right option" },
 
-	"alignJustify": "Justify",
-	"@alignJustify": { "description": "Justify option" },
-
 	"increaseIndent": "Increase indent",
 	"@increaseIndent": { "description": "Increase indent option" },
 
 	"decreaseIndent": "Decrease indent",
 	"@decreaseIndent": { "description": "Decrease indent option" },
-
-	"heading1": "Heading 1",
-	"@heading1": { "description": "Heading 1 option" },
-
-	"heading2": "Heading 2",
-	"@heading2": { "description": "Heading 2 option" },
-
-	"heading3": "Heading 3",
-	"@heading3": { "description": "Heading 3 option" },
-
-	"normalText": "Normal text",
-	"@normalText": { "description": "Normal text option" },
 
 	"pen": "Pen",
 	"@pen": { "description": "Pen tool" },
@@ -1217,25 +885,11 @@
 	"eraser": "Eraser",
 	"@eraser": { "description": "Eraser tool" },
 
-	"lasso": "Lasso",
-	"@lasso": { "description": "Lasso tool" },
-
 	"addPage": "Add page",
 	"@addPage": { "description": "Add page button" },
 
-	"deletePage": "Delete page",
-	"@deletePage": { "description": "Delete page button" },
-
 	"page": "Page",
 	"@page": { "description": "Page label" },
-
-	"pageNumber": "Page {number}",
-	"@pageNumber": {
-		"description": "Page number label",
-		"placeholders": {
-			"number": { "type": "int" }
-		}
-	},
 
 	"connectedAccounts": "Connected Accounts",
 	"@connectedAccounts": { "description": "Connected accounts section title" },
@@ -1252,27 +906,11 @@
 	"trial": "Trial",
 	"@trial": { "description": "Trial label" },
 
-	"trialEndsIn": "Trial ends in {days} days",
-	"@trialEndsIn": {
-		"description": "Trial ends message",
-		"placeholders": {
-			"days": { "type": "int" }
-		}
-	},
-
 	"devices": "Devices",
 	"@devices": { "description": "Devices section title" },
 
 	"thisDevice": "This device",
 	"@thisDevice": { "description": "This device label" },
-
-	"lastActive": "Last active: {time}",
-	"@lastActive": {
-		"description": "Last active time",
-		"placeholders": {
-			"time": { "type": "String" }
-		}
-	},
 
 	"pendingApproval": "Pending approval",
 	"@pendingApproval": { "description": "Pending approval label" },
@@ -1280,34 +918,14 @@
 	"security": "Security",
 	"@security": { "description": "Security section title" },
 
-	"endToEndEncryption": "End-to-End Encryption",
-	"@endToEndEncryption": { "description": "E2EE section title" },
-
-	"e2eeEnabled": "Enabled",
-	"@e2eeEnabled": { "description": "E2EE enabled status" },
-
-	"e2eeDisabled": "Not enabled",
-	"@e2eeDisabled": { "description": "E2EE disabled status" },
-
 	"setupRecoveryKey": "Set Up Recovery Key",
 	"@setupRecoveryKey": { "description": "Setup recovery key page title" },
-
-	"changeRecoveryKey": "Change Recovery Key",
-	"@changeRecoveryKey": { "description": "Change recovery key dialog title" },
 
 	"verifyRecoveryKey": "Verify Recovery Key",
 	"@verifyRecoveryKey": { "description": "Verify recovery key dialog title" },
 
 	"error": "Error",
 	"@error": { "description": "Error label" },
-
-	"errorWithMessage": "Error: {message}",
-	"@errorWithMessage": {
-		"description": "Error with message",
-		"placeholders": {
-			"message": { "type": "String" }
-		}
-	},
 
 	"loading": "Loading...",
 	"@loading": { "description": "Loading message" },
@@ -1326,24 +944,6 @@
 
 	"online": "Online",
 	"@online": { "description": "Online status" },
-
-	"getApp": "Get the App",
-	"@getApp": { "description": "Get the app dialog title" },
-
-	"sessionExpired": "Your session has expired. Please sign in again.",
-	"@sessionExpired": { "description": "Session expired message" },
-
-	"confirmSignOut": "Are you sure you want to sign out?",
-	"@confirmSignOut": { "description": "Confirm sign out message" },
-
-	"unsyncedChanges": "You have unsynced changes that will be lost.",
-	"@unsyncedChanges": { "description": "Unsynced changes warning" },
-
-	"deleteConfirmation": "Are you sure you want to delete this?",
-	"@deleteConfirmation": { "description": "Delete confirmation message" },
-
-	"permanentAction": "This action cannot be undone.",
-	"@permanentAction": { "description": "Permanent action warning" },
 
 	"encryptNoteContent": "Encrypt Note Content",
 	"@encryptNoteContent": { "description": "Encrypt note content toggle title" },
@@ -1375,9 +975,6 @@
 
 	"appInfoCredits": "App info and credits",
 	"@appInfoCredits": { "description": "About subtitle" },
-
-	"advancedSettings": "Advanced Settings",
-	"@advancedSettings": { "description": "Advanced settings section title" },
 
 	"speechRecognitionModel": "Speech Recognition Model",
 	"@speechRecognitionModel": {
@@ -1448,17 +1045,6 @@
 		"description": "Note encryption enabled success message without count"
 	},
 
-	"errorEncryptingNotes": "Error encrypting notes: {error}",
-	"@errorEncryptingNotes": {
-		"description": "Error encrypting notes message",
-		"placeholders": {
-			"error": {
-				"type": "String",
-				"example": "Unknown error"
-			}
-		}
-	},
-
 	"noteEncryptionDisabled": "Note encryption disabled.",
 	"@noteEncryptionDisabled": {
 		"description": "Note encryption disabled message"
@@ -1472,11 +1058,6 @@
 	"fileEncryptionDisabled": "File encryption disabled.",
 	"@fileEncryptionDisabled": {
 		"description": "File encryption disabled message"
-	},
-
-	"encryptDataOnDevice": "Encrypt data stored on this device",
-	"@encryptDataOnDevice": {
-		"description": "Local data protection subtitle alternative"
 	},
 
 	"signInCancelledMessage": "Sign in cancelled",
@@ -1648,19 +1229,8 @@
 	"deviceRevoked": "Device Revoked",
 	"@deviceRevoked": { "description": "Device revoked title" },
 
-	"waitingForApprovalTitle": "Waiting for Approval",
-	"@waitingForApprovalTitle": { "description": "Waiting for approval title" },
-
 	"deviceRevokedDescription": "This device has been revoked and can no longer access your notes. Please sign in again from an approved device to re-authorize.",
 	"@deviceRevokedDescription": { "description": "Device revoked description" },
-
-	"pleaseApproveFrom": "Please approve from:",
-	"@pleaseApproveFrom": { "description": "Please approve from text" },
-
-	"waitingForApprovalFromDevice": "Waiting for approval from another device...",
-	"@waitingForApprovalFromDevice": {
-		"description": "Waiting for approval from another device text"
-	},
 
 	"rememberThisDevice": "Remember this device",
 	"@rememberThisDevice": {
@@ -1677,9 +1247,6 @@
 
 	"checkStatus": "Check Status",
 	"@checkStatus": { "description": "Check status button text" },
-
-	"cancelRequest": "Cancel Request",
-	"@cancelRequest": { "description": "Cancel request button text" },
 
 	"pleaseWait": "Please wait...",
 	"@pleaseWait": { "description": "Please wait text" },
@@ -1770,14 +1337,6 @@
 	"insertTooltip": "Insert",
 	"@insertTooltip": { "description": "Insert tooltip" },
 
-	"failedToImport": "Failed to import: {error}",
-	"@failedToImport": {
-		"description": "Failed to import error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"notes_": "Notes",
 	"@notes_": { "description": "Notes stat label" },
 
@@ -1841,9 +1400,6 @@
 	"subscriptionCancelled": "Subscription Cancelled",
 	"@subscriptionCancelled": { "description": "Subscription cancelled title" },
 
-	"upgradeToProDescription": "Upgrade to Pro for unlimited locked notes, cloud sync, and more.",
-	"@upgradeToProDescription": { "description": "Upgrade to pro description" },
-
 	"cancellingSubscription": "Cancelling...",
 	"@cancellingSubscription": {
 		"description": "Cancelling subscription status"
@@ -1905,29 +1461,8 @@
 		"description": "Support guidance when a legacy subscription has no known billing provider"
 	},
 
-	"manageSubscriptionInStore": "Manage your subscription in the {store}.",
-	"@manageSubscriptionInStore": {
-		"description": "Message shown when redirecting to store subscription management",
-		"placeholders": {
-			"store": { "type": "String" }
-		}
-	},
-
-	"loadingFailedTryAgain": "Loading failed — Try again",
-	"@loadingFailedTryAgain": {
-		"description": "Button label when price loading fails"
-	},
-
 	"reloadPrices": "Reload prices",
 	"@reloadPrices": { "description": "Button to reload subscription prices" },
-
-	"subscribeWithPrice": "Subscribe — {price}",
-	"@subscribeWithPrice": {
-		"description": "Subscribe button label with price",
-		"placeholders": {
-			"price": { "type": "String" }
-		}
-	},
 
 	"noAdsDescription": "No ads, no data selling — your subscription funds secure servers & ongoing development.",
 	"@noAdsDescription": { "description": "Trust message on paywall" },
@@ -1945,10 +1480,6 @@
 	"selfHostContact": "Want to self-host? Contact us at contact@betterkeep.app",
 	"@selfHostContact": { "description": "Self-host contact info on paywall" },
 
-	"welcomeToProMessage": "Welcome to Better Keep Pro!",
-	"@welcomeToProMessage": {
-		"description": "Snackbar message shown when user successfully subscribes via subscription listener"
-	},
 	"paymentConfirmedTitle": "Payment confirmed",
 	"paymentConfirmedActivationPending": "Payment was confirmed, but activation is taking longer. Do not purchase again. Recheck your status or manage your subscription.",
 	"recheckStatus": "Recheck Status",
@@ -1981,21 +1512,6 @@
 	"subscriptionCancelledSuccessfully": "Subscription cancelled successfully.",
 	"@subscriptionCancelledSuccessfully": {
 		"description": "Snackbar message after subscription is cancelled via Razorpay"
-	},
-
-	"subscriptionResumedSuccessfully": "Subscription resumed successfully.",
-	"@subscriptionResumedSuccessfully": {
-		"description": "Snackbar message after a cancelled subscription is resumed"
-	},
-
-	"failedToCancelSubscription": "Failed to cancel subscription.",
-	"@failedToCancelSubscription": {
-		"description": "Error message when subscription cancellation fails"
-	},
-
-	"failedToResumeSubscription": "Failed to resume subscription.",
-	"@failedToResumeSubscription": {
-		"description": "Error message when subscription resumption fails"
 	},
 
 	"featureTableHeader": "Feature",
@@ -2105,22 +1621,8 @@
 	"deleteMyAccount": "Delete My Account",
 	"@deleteMyAccount": { "description": "Delete my account button" },
 
-	"unsyncedNotesWarning": "You have notes that haven't been synced to the cloud yet. If you sign out now, these notes will be LOST FOREVER.\n\nConsider waiting for sync to complete or exporting your data first.",
-	"@unsyncedNotesWarning": { "description": "Unsynced notes warning message" },
-
-	"notesNotSynced": "{count, plural, =1{1 note not synced} other{{count} notes not synced}}",
-	"@notesNotSynced": {
-		"description": "Number of notes not synced",
-		"placeholders": {
-			"count": { "type": "int" }
-		}
-	},
-
 	"dataLossWarning": "DATA LOSS WARNING",
 	"@dataLossWarning": { "description": "Data loss warning title" },
-
-	"noRecoveryKeySet": "No recovery key set up",
-	"@noRecoveryKeySet": { "description": "No recovery key set up warning" },
 
 	"signOutNoRecoveryKeyWarning": "If you sign out and lose access to all your approved devices, you will PERMANENTLY lose access to ALL your encrypted notes.\n\nThis action cannot be undone.",
 	"@signOutNoRecoveryKeyWarning": {
@@ -2152,17 +1654,6 @@
 	"someoneWantsToView": "Someone wants to view your shared note",
 	"@someoneWantsToView": { "description": "Share request subtitle" },
 
-	"deviceApproved_": "Device approved",
-	"@deviceApproved_": { "description": "Device approved snackbar message" },
-
-	"failedApproveDevice": "Failed to approve device: {error}",
-	"@failedApproveDevice": {
-		"description": "Failed to approve device error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"deviceRemoved": "Device removed",
 	"@deviceRemoved": { "description": "Device removed message" },
 
@@ -2171,14 +1662,6 @@
 		"description": "Number of devices removed",
 		"placeholders": {
 			"count": { "type": "int" }
-		}
-	},
-
-	"failedRemoveDevice": "Failed to remove device: {error}",
-	"@failedRemoveDevice": {
-		"description": "Failed to remove device error",
-		"placeholders": {
-			"error": { "type": "String" }
 		}
 	},
 
@@ -2200,14 +1683,6 @@
 
 	"enableE2EE_": "Enable E2EE",
 	"@enableE2EE_": { "description": "Enable E2EE button text" },
-
-	"failedEnableE2EE": "Failed to enable E2EE: {error}",
-	"@failedEnableE2EE": {
-		"description": "Failed to enable E2EE error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"recoveryKeySavedSuccessfully": "Recovery key saved successfully!",
 	"@recoveryKeySavedSuccessfully": {
@@ -2280,11 +1755,6 @@
 	"failedUnlinkAccount": "Failed to unlink account",
 	"@failedUnlinkAccount": { "description": "Failed to unlink account error" },
 
-	"cannotUnlinkOnlyMethod": "Cannot unlink the only sign-in method.",
-	"@cannotUnlinkOnlyMethod": {
-		"description": "Cannot unlink only method error"
-	},
-
 	"unknownProviderError": "Unknown provider: {provider}",
 	"@unknownProviderError": {
 		"description": "Unknown provider error",
@@ -2300,9 +1770,6 @@
 	"@failedSendCode": {
 		"description": "Failed to send verification code error"
 	},
-
-	"pleaseTryAgain": "Please try again.",
-	"@pleaseTryAgain": { "description": "Please try again message" },
 
 	"pleaseSignInAgain": "Please sign in again and try.",
 	"@pleaseSignInAgain": { "description": "Please sign in again message" },
@@ -2327,14 +1794,6 @@
 	"failedLinkAccount": "Failed to link account",
 	"@failedLinkAccount": { "description": "Failed to link account error" },
 
-	"providerLinkedToAnother": "This {provider} account is already linked to another user.",
-	"@providerLinkedToAnother": {
-		"description": "Provider linked to another user error",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
 	"useOriginalSignInMethod": "Sign in with the method you used before, then link the new provider in your account settings.",
 	"@useOriginalSignInMethod": { "description": "OAuth collision sign-in guidance" },
 	"localAccountMismatch": "This device has notes from a different account. Sign in with the account that saved them.",
@@ -2345,9 +1804,6 @@
 	"signInToExistingAccount": "An account with this email already exists. Sign in to continue.",
 	"emailAlreadyInUse": "An account with this email already exists. Sign in with that account first, then link from there.",
 	"@emailAlreadyInUse": { "description": "Email already in use error" },
-
-	"linkingCancelled": "Linking was cancelled.",
-	"@linkingCancelled": { "description": "Linking cancelled message" },
 
 	"successfullyLinkedProvider": "Successfully linked {provider} account",
 	"@successfullyLinkedProvider": {
@@ -2452,9 +1908,6 @@
 		}
 	},
 
-	"iphoneIpad": "iPhone/iPad",
-	"@iphoneIpad": { "description": "iPhone/iPad platform name" },
-
 	"webBrowser": "Web Browser",
 	"@webBrowser": { "description": "Web browser platform name" },
 	"unknownDevice": "Unknown device",
@@ -2545,11 +1998,6 @@
 		}
 	},
 
-	"notificationPermissionsRequired": "Notification and alarm permissions are required for reminders",
-	"@notificationPermissionsRequired": {
-		"description": "Notification permissions required message"
-	},
-
 	"checkAll": "Check All",
 	"@checkAll": { "description": "Check all button text" },
 
@@ -2575,16 +2023,6 @@
 	"somethingWentWrongTryAgain": "Something went wrong. Please try again.",
 	"@somethingWentWrongTryAgain": {
 		"description": "Generic error message with try again"
-	},
-
-	"verifyingPassphrase": "Verifying passphrase...",
-	"@verifyingPassphrase": {
-		"description": "Verifying passphrase status message"
-	},
-
-	"settingAsPrimaryDevice": "Setting as primary device...",
-	"@settingAsPrimaryDevice": {
-		"description": "Setting as primary device status message"
 	},
 
 	"finalizing": "Finalizing...",
@@ -2925,9 +2363,6 @@
 	"createNewLink": "Create New Link",
 	"@createNewLink": { "description": "Create new link button text" },
 
-	"revokeLink_": "Revoke link",
-	"@revokeLink_": { "description": "Revoke link tooltip" },
-
 	"copy": "Copy",
 	"@copy": { "description": "Copy button text" },
 
@@ -2945,14 +2380,6 @@
 
 	"linkRevoked": "Link revoked",
 	"@linkRevoked": { "description": "Link revoked snackbar message" },
-
-	"failedToRevoke": "Failed to revoke: {error}",
-	"@failedToRevoke": {
-		"description": "Failed to revoke error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"linkCopied": "Link copied to clipboard",
 	"@linkCopied": { "description": "Link copied snackbar message" },
@@ -3018,11 +2445,6 @@
 	"syncDisabledPleaseSignOut": "Sync is disabled. Please sign out and sign in again.",
 	"@syncDisabledPleaseSignOut": {
 		"description": "Session invalid banner message"
-	},
-
-	"signOutConfirmationWithNote": "Are you sure you want to sign out?\n\nYou will need to sign in again to access your notes.",
-	"@signOutConfirmationWithNote": {
-		"description": "Sign out confirmation message with note access info"
 	},
 
 	"sketchTool": "Tool",
@@ -3105,11 +2527,6 @@
 		"description": "Use app banner message for iOS/other"
 	},
 
-	"noteMarkedAsDone": "Note marked as done",
-	"@noteMarkedAsDone": {
-		"description": "Note marked as done snackbar message"
-	},
-
 	"pickTextColor": "Pick Text Color",
 	"@pickTextColor": { "description": "Text color picker dialog title" },
 
@@ -3173,46 +2590,6 @@
 
 	"pickNoteColor": "Pick Note Color",
 	"@pickNoteColor": { "description": "Note color picker dialog title" },
-
-	"failedToPaste": "Failed to paste: {error}",
-	"@failedToPaste": {
-		"description": "Error when paste fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"failedToInsertContent": "Failed to insert content: {error}",
-	"@failedToInsertContent": {
-		"description": "Error when inserting content fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"failedToLockNote": "Failed to lock note: {error}",
-	"@failedToLockNote": {
-		"description": "Error when locking note fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"failedToRemoveLock": "Failed to remove lock: {error}",
-	"@failedToRemoveLock": {
-		"description": "Error when removing lock fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"noteDuplicatedButFailedToLock": "Note duplicated but failed to lock: {error}",
-	"@noteDuplicatedButFailedToLock": {
-		"description": "Warning when note is duplicated but locking failed",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"pastedContent": "Pasted Content",
 	"@pastedContent": { "description": "Title for pasted content preview page" },
@@ -3470,6 +2847,8 @@
 		"description": "Request approval from another device button text"
 	},
 
+	"signOutClearingDevice": "Clearing local account data…",
+	"@signOutClearingDevice": {"description": "Status while clearing this device during sign-out"},
 	"signOutFinishing": "Finishing sign-out…",
 	"@signOutFinishing": {"description": "Status during a slow sign-out"},
 	"signOutLibraryWarning": "Signing out removes notes saved only on this device. To restore synced notes, you’ll need an approved device or your recovery passphrase.",
@@ -3519,14 +2898,6 @@
 	"failedToResetAccount": "Failed to reset account",
 	"@failedToResetAccount": {
 		"description": "Failed to reset account error message"
-	},
-
-	"failedToResetAccountError": "Failed to reset account: {error}",
-	"@failedToResetAccountError": {
-		"description": "Failed to reset account with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
 	},
 
 	"startFreshQuestion": "Start Fresh?",
@@ -3583,14 +2954,6 @@
 	"failedToSaveSketch": "Failed to save sketch",
 	"@failedToSaveSketch": {
 		"description": "Failed to save sketch error message"
-	},
-
-	"errorSavingSketch": "Error saving sketch: {error}",
-	"@errorSavingSketch": {
-		"description": "Error saving sketch with details",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
 	},
 
 	"planFree": "Free",
@@ -3677,27 +3040,12 @@
 		"description": "Combined description of Pro features"
 	},
 
-	"unlockTheFullExperience": "Unlock the Full Experience",
-	"@unlockTheFullExperience": {
-		"description": "Paywall heading to unlock full experience"
-	},
-
 	"maybeLater": "Maybe later",
 	"@maybeLater": { "description": "Dismiss/skip button text for paywall" },
 
 	"enableNotificationsTitle": "Enable Notifications",
 	"@enableNotificationsTitle": {
 		"description": "Title for the dialog prompting notification permissions after sync restores reminders"
-	},
-
-	"enableNotificationsForReminders": "Your synced notes have reminders. Enable notifications so you don't miss them.",
-	"@enableNotificationsForReminders": {
-		"description": "Body text for the notification permission dialog after sync restores reminders"
-	},
-
-	"enableNotifications": "Enable",
-	"@enableNotifications": {
-		"description": "Button to enable notifications in the reminder permission dialog"
 	},
 
 	"rateOnAppStore": "Rate on App Store",
@@ -3864,7 +3212,6 @@
 	"@couldNotSaveLabel": { "description": "Label save failure shown without discarding the pending name" },
 	"noConnectionAvailable": "No connection available.",
 	"localEncryptionUnavailable": "Your saved encryption keys could not be read. Unlock your device and retry. Your local data has been kept.",
-	"localEncryptionMissing": "The keys needed to open your saved notes are missing or damaged. Reconnect to restore access or use account recovery. Your local data has been kept.",
 	"syncCheckingConnection": "Checking connection…",
 	"syncPreparing": "Preparing sync…",
 	"syncUploadRestricted": "Saved on this device. Enable Better Keep cloud to sync changes.",
@@ -4100,8 +3447,6 @@
   },
   "externalSyncAlreadyConnected": "Authorization finished before cancellation. The provider is connected. Use Disconnect to remove it.",
   "@externalSyncAlreadyConnected": {"description": "OAuth registration won the cancellation race"},
-  "externalSyncNextcloudBrowserHelp": "Sign in on your Nextcloud server to grant access. You can revoke access in Nextcloud settings. Browser sync requires your server to allow cross-origin requests.",
-  "@externalSyncNextcloudBrowserHelp": {"description": "Nextcloud browser authorization and server requirements"},
   "externalSyncLogoutPending": "Some changes are still pending sync. Signing out removes this device’s local notes and media. Changes that haven’t been saved to any provider may be lost.\n\nFinish syncing or export your data before signing out.",
   "@externalSyncLogoutPending": {"description": "Conditional sign-out warning covering notes, labels, ordering and all sync providers"},
   "externalSyncLogoutUnknown": "We couldn’t verify whether all your changes are synced. Signing out removes this device’s local notes and media. Changes that haven’t been saved to any provider may be lost.\n\nCheck your sync providers or export your data before signing out.",
@@ -4116,26 +3461,24 @@
 	"externalSyncOffDescription": "Uploads paused",
 	"externalSyncDetails": "Sync details",
 	"externalSyncNeedsAttention": "Needs attention · See sync details",
-	"externalSyncConnectTitle": "Connect {provider}",
 	"externalSyncConnectHelp": "Sign in to grant access to your storage. Once connected, this provider will be selected for sync.",
-	"@externalSyncConnectTitle": {"placeholders": {"provider": {"type": "String"}}},
 	"verifyNewDevice": "Verify new device",
 	"deviceVerificationInstructions": "On your trusted device, scan the QR shown on the new device.",
 	"deviceVerificationExpired": "This verification code has expired. Generate a new code on the new device.",
 	"newVerificationCode": "Generate new code",
 	"deviceVerificationMismatch": "The devices do not match. Do not approve this request.",
-	"deviceVerificationMatched": "Device verified. You can now approve it.",
 	"scanNewDevice": "Scan new device",
 	"compareSecurityCode": "Compare security code",
-	"completeSecurityCodeMatches": "I compared the entire code on both devices. They match.",
-	"approveVerifiedDevice": "Approve device",
 	"deviceCameraUnavailable": "Camera unavailable. Enable camera access or recover with your passphrase.",
 	"deviceVerificationRetry": "Verification could not be completed. Update both devices and generate a new code on the new device, then try again.",
-	"browserEncryptionSessionOnly": "Encryption keys stay in this browser session only. After a reload, approve this browser again or use your recovery passphrase.",
+	"browserStorageUnavailable": "Allow this site to store data in your browser settings, then retry.",
+	"browserLegacyRecoveryUnavailable": "This version can’t unlock your saved browser keys. Keep this browser’s data. Open your synced notes on an approved device, or use your recovery passphrase in another browser.",
+	"browserSessionOnly": "This session only",
+	"browserDeviceTrust": "Once this browser remembers your approval, you can open downloaded notes offline.",
+	"browserUnlockOnline": "Your notes are on this device. Connect to the internet and tap Retry to unlock them.",
 	"verifyTrustedDevice": "Verify trusted device",
 	"verifyTrustedDeviceInstructions": "Scan the QR on your trusted device to accept your encryption key.",
 	"scanTrustedDevice": "Scan trusted device",
-	"acceptVerifiedKey": "Accept verified key",
 	"confirmOnNewDevice": "Confirm on your new device",
 	"confirmOnNewDeviceInstructions": "Scan this QR with the new device. Keep this screen open until it unlocks.",
 	"storageSecurityUpgrade": "Reconnect securely",
@@ -4161,12 +3504,10 @@
   "externalSyncClearSendCode": "Send code",
   "lite": "Lite",
   "choosePlan": "Choose your plan",
-  "upgradeToLite": "Upgrade to Lite",
   "automaticExternalSync": "Automatic external sync",
   "manualExternalSync": "Manual external sync",
   "liteDescription": "Automatic updates with your own cloud storage.",
   "manualSyncDescription": "Sync manually for free. Lite and Pro add automatic updates.",
-  "automaticSyncEnabled": "Automatic updates enabled",
   "subscriptionActiveTitle": "Subscription active",
   "subscriptionChangePlan": "Manage your current subscription to change plans.",
   "subscribe": "Subscribe",
@@ -4174,7 +3515,6 @@
   "deviceAdded": "Added",
 	"accountDeletionInProgress": "Account deletion has already started. Contact support@betterkeep.app for help.",
 	"deletionCodeRecentlyRequested": "A code was recently requested. Check your email or wait one minute before requesting another.",
-  "deviceCodeApprovalInstruction": "Compare this code with your new device. Approve only if the whole code matches.",
   "providerSignInVerificationFailed": "Could not verify your sign-in. Please try signing in again.",
 	"accountDeletionPaused": "Account deletion is temporarily paused. Contact support@betterkeep.app.",
   "deviceUsePairingCode": "Use a code instead",

@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- An approved browser stays trusted when you reopen it. Sign out of Better Keep before leaving a shared browser.
+- You can keep working on downloaded notes offline. Refresh stays quiet on mobile and web, and sync is available again when you reconnect.
 - Account deletion now requires an atomic OTP-backed request, protects deletion fields
   from client writes, and cancels through verified sign-in paths. Device/E2EE records
   remain intact throughout the grace period.

@@ -98,8 +98,8 @@ local ports 9099, 8080, 5001, and 9199 whenever `EMULATOR_WEB_ORIGIN` is set.
 Leave it empty to disable the development emulator proxy. Native SDKs still use
 the configured host and
 the emulator ports over HTTP. The override never changes Live routing.
-Browser encryption keys are memory-only; no build-time storage encryption key is
-used. See [external sync setup and transition](docs/EXTERNAL_SYNC_IMPLEMENTATION.md#provider-configuration)
+Approved browsers can remember their device identity in IndexedDB. After a
+reload, local notes open offline. Cloud sync resumes after online device verification. See [external sync setup and transition](docs/EXTERNAL_SYNC_IMPLEMENTATION.md#provider-configuration)
 for provider setup and the device-verification flow.
 
 **Using VS Code:**
@@ -368,7 +368,10 @@ npm run release
 ```
 
 The gate runs `npm run check analyze`, then `npm test release`, stopping on
-failure. CI uses this same command for pull requests, tags, and manual runs.
+failure. On GitHub Actions, the core checks and offline browser acceptance tests
+run in parallel. Both must pass for the Release gate to succeed.
+To run the offline acceptance suite locally with Firefox, set `FIREFOX_BIN` to
+the Firefox executable and run `npm test -- offline-browser`.
 Dependency audits are invoked manually with `npm run check audit` (root and
 Functions) or `npm run functions audit` (Functions only); they are not part of
 the release gate. Dependency installation may still print advisory summaries.

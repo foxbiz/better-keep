@@ -16,7 +16,13 @@ import 'package:flutter/material.dart';
 /// A floating widget that shows sync progress at the bottom of the screen.
 /// Shows synced count / total count and current status message.
 class SyncProgressWidget extends StatefulWidget {
-  const SyncProgressWidget({super.key, this.bottom = 32});
+  const SyncProgressWidget({
+    super.key,
+    this.bottom = 32,
+    this.showActivity = true,
+  });
+
+  final bool showActivity;
 
   /// Distance above the bottom safe area, including any floating controls.
   final double bottom;
@@ -107,7 +113,9 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
 
   @override
   Widget build(BuildContext context) {
-    if (!AppState.showSyncProgress || !_shouldShow) {
+    if (!AppState.showSyncProgress ||
+        !_shouldShow ||
+        (!widget.showActivity && _progress.isActive)) {
       return const SizedBox.shrink();
     }
     return Positioned(
@@ -153,41 +161,46 @@ class BulkSyncProgress extends StatelessWidget {
   const BulkSyncProgress({super.key});
 
   @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      NoteSyncBatch.progress,
+      AppState.showSyncProgressNotifier,
+    ]),
+    builder: (context, _) => SyncContentProgress(
+      label:
+          NoteSyncBatch.progress.value?.localized(context.l10n) ??
+          context.l10n.syncUpdatingNotes,
+    ),
+  );
+}
+
+/// Centered progress for an empty library, including the initial bulk restore.
+class SyncContentProgress extends StatelessWidget {
+  const SyncContentProgress({super.key, required this.label});
+
+  final String label;
+
+  @override
   Widget build(BuildContext context) => Center(
     child: Padding(
       padding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 300),
-        child: ListenableBuilder(
-          listenable: Listenable.merge([
-            NoteSyncBatch.progress,
-            AppState.showSyncProgressNotifier,
-          ]),
-          builder: (context, _) {
-            final notes = NoteSyncBatch.progress.value;
-            final showDetails = AppState.showSyncProgress;
-            return Semantics(
-              label: showDetails ? null : context.l10n.syncUpdatingNotes,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _ActivityIcon(
-                    download: true,
-                    size: 40,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  if (showDetails) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      notes?.localized(context.l10n) ??
-                          context.l10n.syncUpdatingNotes,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ],
-              ),
-            );
-          },
+      child: Semantics(
+        label: AppState.showSyncProgress
+            ? null
+            : context.l10n.syncUpdatingNotes,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ActivityIcon(
+              download: true,
+              size: 40,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            if (AppState.showSyncProgress) ...[
+              const SizedBox(height: 12),
+              Text(label, textAlign: TextAlign.center),
+            ],
+          ],
         ),
       ),
     ),
@@ -381,7 +394,7 @@ class _ActivityIconState extends State<_ActivityIcon>
       _motion.stop();
       _motion.value = 0;
     } else if (!_motion.isAnimating) {
-      _motion.repeat(reverse: widget.download);
+      _motion.repeat();
     }
   }
 
@@ -393,22 +406,72 @@ class _ActivityIconState extends State<_ActivityIcon>
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      widget.download ? Icons.download_rounded : Icons.sync,
-      size: widget.size,
-      color: widget.color,
-    );
     if (!widget.download) {
-      return RotationTransition(turns: _motion, child: icon);
+      return RotationTransition(
+        turns: _motion,
+        child: Icon(Icons.sync, size: widget.size, color: widget.color),
+      );
     }
-    return SlideTransition(
-      position: Tween<Offset>(
-        begin: Offset.zero,
-        end: const Offset(0, .18),
-      ).chain(CurveTween(curve: Curves.easeInOut)).animate(_motion),
-      child: icon,
+    return CustomPaint(
+      key: const ValueKey('download_activity'),
+      size: Size.square(widget.size),
+      painter: _DownloadPainter(_motion, widget.color),
     );
   }
+}
+
+// The arrow collapses into a parcel, lands in the tray, then draws in again.
+class _DownloadPainter extends CustomPainter {
+  _DownloadPainter(this.motion, this.color) : super(repaint: motion);
+  final Animation<double> motion;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = motion.value;
+    double phase(double start, double end) =>
+        Interval(start, end, curve: Curves.easeInOut).transform(t);
+    final drop = phase(.12, .54);
+    final draw = phase(.66, .96);
+    final arrow = 1 - drop + draw;
+    final tip = 14 + 4 * (drop - phase(.55, .66));
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.save();
+    canvas.scale(size.width / 24, size.height / 24);
+    final impact = phase(.40, .55) - phase(.55, .82);
+    canvas.drawPath(
+      Path()
+        ..moveTo(3, 15)
+        ..lineTo(3, 17)
+        ..quadraticBezierTo(3, 19, 5, 19)
+        ..quadraticBezierTo(12, 19 + 3 * impact, 19, 19)
+        ..quadraticBezierTo(21, 19, 21, 17)
+        ..lineTo(21, 15),
+      stroke,
+    );
+    // Fade the parcel into the tray before drawing the next arrow.
+    stroke.color = color.withValues(
+      alpha: color.a * (1 - phase(.50, .56) + draw),
+    );
+    canvas.drawLine(Offset(12, tip - 11 * arrow), Offset(12, tip), stroke);
+    canvas.drawPath(
+      Path()
+        ..moveTo(12 - 4.5 * arrow, tip - 4.5 * arrow)
+        ..lineTo(12, tip)
+        ..lineTo(12 + 4.5 * arrow, tip - 4.5 * arrow),
+      stroke,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_DownloadPainter old) =>
+      old.color != color || old.motion != motion;
 }
 
 enum _MessageType { info, success, error }

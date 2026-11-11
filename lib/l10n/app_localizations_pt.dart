@@ -529,9 +529,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get cancelSignIn => 'Cancelar login';
 
   @override
-  String get signInCancelled => 'Login cancelado';
-
-  @override
   String get signInWithFacebook => 'Entrar com Facebook';
 
   @override
@@ -598,12 +595,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get newPassword => 'Nova senha';
 
   @override
-  String get enterNewPassword => 'Digite a nova senha';
-
-  @override
-  String get reenterNewPassword => 'Digite novamente a nova senha';
-
-  @override
   String get currentPassphrase => 'Frase-senha atual';
 
   @override
@@ -652,9 +643,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get addLabel => 'Adicionar etiqueta';
 
   @override
-  String get searchLogs => 'Pesquisar logs...';
-
-  @override
   String get audioRecording => 'Gravação de áudio';
 
   @override
@@ -668,9 +656,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get theme => 'Tema';
-
-  @override
-  String get customizeAppearance => 'Personalizar aparência do app';
 
   @override
   String get followSystemTheme => 'Seguir tema do sistema';
@@ -706,12 +691,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get alarmSound => 'Som do alarme';
 
   @override
-  String get reminderTimeSettings => 'Configurações de horário do lembrete';
-
-  @override
-  String get setDefaultTimes => 'Definir horários padrão para lembretes';
-
-  @override
   String get morning => 'Manhã';
 
   @override
@@ -721,31 +700,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get evening => 'Noite';
 
   @override
-  String get localDataProtection => 'Proteção de dados locais';
-
-  @override
-  String get encryptDeviceData =>
-      'Criptografar dados armazenados neste dispositivo';
-
-  @override
-  String get encryptNotes => 'Criptografar notas';
-
-  @override
-  String get encryptFiles => 'Criptografar arquivos';
-
-  @override
-  String get lockedNotesSecurity => 'Segurança de notas bloqueadas';
-
-  @override
-  String get privacyLockedNotes =>
-      'Configurações de privacidade para notas bloqueadas';
-
-  @override
   String get forgetPasswordOnClose => 'Esquecer senha ao fechar';
-
-  @override
-  String get requirePasswordAgain =>
-      'Exigir senha cada vez que o app for aberto';
 
   @override
   String get nerdStats => 'Estatísticas do desenvolvedor';
@@ -871,9 +826,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get insert => 'Inserir';
 
   @override
-  String get importAsNote => 'Importar como nota';
-
-  @override
   String get removeDevice => 'Remover dispositivo';
 
   @override
@@ -882,9 +834,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get passwordResetSuccess =>
       'Senha redefinida com sucesso! Por favor, faça login.';
-
-  @override
-  String get emailVerifiedSuccess => 'E-mail verificado com sucesso!';
 
   @override
   String get useDifferentAccount => 'Usar uma conta diferente';
@@ -904,14 +853,6 @@ class AppLocalizationsPt extends AppLocalizations {
       'Solicitação de reaprovação enviada. Aguardando aprovação...';
 
   @override
-  String failedReapproval(String error) {
-    return 'Falha ao solicitar reaprovação: $error';
-  }
-
-  @override
-  String get rememberDevice => 'Lembrar este dispositivo';
-
-  @override
   String get recoverWithPassphrase => 'Recuperar com frase-senha';
 
   @override
@@ -927,17 +868,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get accessApproved => 'Acesso aprovado';
 
   @override
-  String failedToApprove(String error) {
-    return 'Falha ao aprovar: $error';
-  }
-
-  @override
   String get accessDenied => 'Acesso negado';
-
-  @override
-  String failedToDeny(String error) {
-    return 'Falha ao negar: $error';
-  }
 
   @override
   String get allUpToDate => 'Tudo atualizado';
@@ -963,21 +894,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String unlinkedProvider(String provider) {
-    return '$provider desvinculado';
-  }
-
-  @override
-  String successfullyLinked(String provider) {
-    return 'Conta $provider vinculada com sucesso';
-  }
-
-  @override
-  String unknownProvider(String provider) {
-    return 'Provedor desconhecido: $provider';
-  }
-
-  @override
   String get recoveryKey => 'Chave de recuperação';
 
   @override
@@ -986,37 +902,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get enableE2EE => 'Ativar criptografia de ponta a ponta';
-
-  @override
-  String failedSaveRecoveryKey(String error) {
-    return 'Falha ao salvar chave de recuperação: $error';
-  }
-
-  @override
-  String get recoverySuccessWelcome =>
-      'Recuperação bem-sucedida! Bem-vindo de volta.';
-
-  @override
-  String get confirmConsequences =>
-      'Por favor, confirme que você entende as consequências';
-
-  @override
-  String get accountResetSuccess => 'Conta redefinida com sucesso. Bem-vindo!';
-
-  @override
-  String failedResetAccount(String error) {
-    return 'Falha ao redefinir conta: $error';
-  }
-
-  @override
-  String errorSigningOut(String error) {
-    return 'Erro ao sair: $error';
-  }
-
-  @override
-  String errorPlayingSound(String error) {
-    return 'Erro ao reproduzir som: $error';
-  }
 
   @override
   String get checkNestedItems => 'Marcar itens aninhados?';
@@ -1046,77 +931,25 @@ class AppLocalizationsPt extends AppLocalizations {
   String get reminderSet => 'Lembrete definido';
 
   @override
-  String get failedCreateImageNote => 'Falha ao criar nota de imagem';
-
-  @override
-  String errorSavingSketchWithError(String error) {
-    return 'Erro ao salvar esboço: $error';
-  }
-
-  @override
   String get failedSaveNote => 'Falha ao salvar a nota';
-
-  @override
-  String failedSave(String error) {
-    return 'Falha ao salvar: $error';
-  }
-
-  @override
-  String copiedAs(String format) {
-    return 'Copiado como $format';
-  }
-
-  @override
-  String failedCopy(String error) {
-    return 'Falha ao copiar: $error';
-  }
 
   @override
   String get pastedAsPlainText => 'Colado como texto simples';
 
   @override
-  String failedPaste(String error) {
-    return 'Falha ao colar: $error';
-  }
-
-  @override
   String get contentInserted => 'Conteúdo inserido';
-
-  @override
-  String failedInsertContent(String error) {
-    return 'Falha ao inserir conteúdo: $error';
-  }
-
-  @override
-  String get actionCancelled => 'Ação cancelada';
 
   @override
   String get noteLocked => 'Nota bloqueada';
 
   @override
-  String failedLockNote(String error) {
-    return 'Falha ao bloquear nota: $error';
-  }
-
-  @override
   String get lockRemoved => 'Bloqueio removido';
-
-  @override
-  String failedRemoveLock(String error) {
-    return 'Falha ao remover bloqueio: $error';
-  }
 
   @override
   String get noteDuplicated => 'Nota duplicada';
 
   @override
   String get errorSavingNote => 'Erro ao salvar nota';
-
-  @override
-  String get contentShared => 'Conteúdo compartilhado';
-
-  @override
-  String get failedShare => 'Falha ao compartilhar';
 
   @override
   String get notes => 'Notas';
@@ -1137,45 +970,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get otherNotes => 'Outras';
 
   @override
-  String get noNotes => 'Nenhuma nota ainda';
-
-  @override
   String get noArchivedNotes => 'Nenhuma nota arquivada';
-
-  @override
-  String get noDeletedNotes => 'Nenhuma nota excluída';
-
-  @override
-  String get searchNotes => 'Pesquisar notas';
-
-  @override
-  String nSelectedNotes(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count notas selecionadas',
-      one: '1 nota selecionada',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get deleteNote => 'Excluir nota';
 
   @override
-  String get deleteNotes => 'Excluir notas';
-
-  @override
   String get moveToTrash => 'Mover para a lixeira';
-
-  @override
-  String get deletePermanently => 'Excluir permanentemente';
-
-  @override
-  String get pinNote => 'Fixar';
-
-  @override
-  String get unpinNote => 'Desafixar';
 
   @override
   String get newNote => 'Nova nota';
@@ -1184,28 +985,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get newSketch => 'Novo esboço';
 
   @override
-  String get newFolder => 'Nova pasta';
-
-  @override
-  String get renameFolder => 'Renomear pasta';
-
-  @override
-  String get deleteFolder => 'Excluir pasta';
-
-  @override
-  String get folderName => 'Nome da pasta';
-
-  @override
   String get camera => 'Câmera';
 
   @override
   String get gallery => 'Galeria';
-
-  @override
-  String get audioRecorder => 'Gravador de áudio';
-
-  @override
-  String get importFile => 'Importar arquivo';
 
   @override
   String get language => 'Idioma';
@@ -1214,25 +997,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get systemDefault => 'Padrão do sistema';
 
   @override
-  String get selectLanguage => 'Selecionar idioma';
-
-  @override
   String get english => 'English';
-
-  @override
-  String get japanese => '日本語';
-
-  @override
-  String get korean => '한국어';
-
-  @override
-  String get indonesian => 'Bahasa Indonesia';
-
-  @override
-  String get portugueseBrazil => 'Português (Brasil)';
-
-  @override
-  String get chinese => '中文';
 
   @override
   String get today => 'Hoje';
@@ -1245,9 +1010,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get nextMonth => 'Próximo mês';
-
-  @override
-  String get pickDateTime => 'Escolher data e hora';
 
   @override
   String get time => 'Hora';
@@ -1283,28 +1045,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get yearly => 'Anualmente';
 
   @override
-  String get snooze => 'Adiar';
-
-  @override
-  String get fiveMinutes => '5 minutos';
-
-  @override
-  String get tenMinutes => '10 minutos';
-
-  @override
-  String get thirtyMinutes => '30 minutos';
-
-  @override
   String get oneHour => '1 hora';
-
-  @override
-  String get gridView => 'Visualização em grade';
-
-  @override
-  String get listView => 'Visualização em lista';
-
-  @override
-  String get galleryView => 'Visualização em galeria';
 
   @override
   String get undo => 'Desfazer';
@@ -1337,15 +1078,8 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openChecklistView => 'Abrir visualização de lista';
 
   @override
-  String get convertToNormalText => 'Converter em texto normal';
-
-  @override
   String get convertEntireChecklistToText =>
       'Converter toda a checklist em texto';
-
-  @override
-  String get focusedChecklistRequiresChecklistOnly =>
-      'A visualização de lista focada só está disponível quando todas as linhas são itens de checklist.';
 
   @override
   String get focusedChecklistUnsupportedContent =>
@@ -1400,25 +1134,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get alignRight => 'Alinhar à direita';
 
   @override
-  String get alignJustify => 'Justificar';
-
-  @override
   String get increaseIndent => 'Aumentar recuo';
 
   @override
   String get decreaseIndent => 'Diminuir recuo';
-
-  @override
-  String get heading1 => 'Título 1';
-
-  @override
-  String get heading2 => 'Título 2';
-
-  @override
-  String get heading3 => 'Título 3';
-
-  @override
-  String get normalText => 'Texto normal';
 
   @override
   String get pen => 'Caneta';
@@ -1436,21 +1155,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get eraser => 'Borracha';
 
   @override
-  String get lasso => 'Laço';
-
-  @override
   String get addPage => 'Adicionar página';
 
   @override
-  String get deletePage => 'Excluir página';
-
-  @override
   String get page => 'Página';
-
-  @override
-  String pageNumber(int number) {
-    return 'Página $number';
-  }
 
   @override
   String get connectedAccounts => 'Contas conectadas';
@@ -1468,20 +1176,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get trial => 'Teste';
 
   @override
-  String trialEndsIn(int days) {
-    return 'O teste termina em $days dias';
-  }
-
-  @override
   String get devices => 'Dispositivos';
 
   @override
   String get thisDevice => 'Este dispositivo';
-
-  @override
-  String lastActive(String time) {
-    return 'Última atividade: $time';
-  }
 
   @override
   String get pendingApproval => 'Aguardando aprovação';
@@ -1490,30 +1188,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get security => 'Segurança';
 
   @override
-  String get endToEndEncryption => 'Criptografia de ponta a ponta';
-
-  @override
-  String get e2eeEnabled => 'Ativada';
-
-  @override
-  String get e2eeDisabled => 'Não ativada';
-
-  @override
   String get setupRecoveryKey => 'Configurar chave de recuperação';
-
-  @override
-  String get changeRecoveryKey => 'Alterar chave de recuperação';
 
   @override
   String get verifyRecoveryKey => 'Verificar chave de recuperação';
 
   @override
   String get error => 'Erro';
-
-  @override
-  String errorWithMessage(String message) {
-    return 'Erro: $message';
-  }
 
   @override
   String get loading => 'Carregando...';
@@ -1532,26 +1213,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get online => 'Online';
-
-  @override
-  String get getApp => 'Obter o app';
-
-  @override
-  String get sessionExpired =>
-      'Sua sessão expirou. Por favor, faça login novamente.';
-
-  @override
-  String get confirmSignOut => 'Tem certeza de que deseja sair?';
-
-  @override
-  String get unsyncedChanges =>
-      'Você tem alterações não sincronizadas que serão perdidas.';
-
-  @override
-  String get deleteConfirmation => 'Tem certeza de que deseja excluir isso?';
-
-  @override
-  String get permanentAction => 'Esta ação não pode ser desfeita.';
 
   @override
   String get encryptNoteContent => 'Criptografar conteúdo da nota';
@@ -1583,9 +1244,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get appInfoCredits => 'Informações do app e créditos';
-
-  @override
-  String get advancedSettings => 'Configurações avançadas';
 
   @override
   String get speechRecognitionModel => 'Modelo de Reconhecimento de Voz';
@@ -1635,11 +1293,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get noteEncryptionEnabledSimple => 'Criptografia de notas ativada.';
 
   @override
-  String errorEncryptingNotes(String error) {
-    return 'Erro ao criptografar notas: $error';
-  }
-
-  @override
   String get noteEncryptionDisabled => 'Criptografia de notas desativada.';
 
   @override
@@ -1648,10 +1301,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get fileEncryptionDisabled => 'Criptografia de arquivos desativada.';
-
-  @override
-  String get encryptDataOnDevice =>
-      'Criptografar dados armazenados neste dispositivo';
 
   @override
   String get signInCancelledMessage => 'Login cancelado';
@@ -1800,18 +1449,8 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceRevoked => 'Dispositivo revogado';
 
   @override
-  String get waitingForApprovalTitle => 'Aguardando aprovação';
-
-  @override
   String get deviceRevokedDescription =>
       'Este dispositivo foi revogado e não pode mais acessar suas notas. Por favor, faça login novamente em um dispositivo aprovado para reautorizar.';
-
-  @override
-  String get pleaseApproveFrom => 'Por favor, aprove de:';
-
-  @override
-  String get waitingForApprovalFromDevice =>
-      'Aguardando aprovação de outro dispositivo...';
 
   @override
   String get rememberThisDevice => 'Lembrar este dispositivo';
@@ -1825,9 +1464,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get checkStatus => 'Verificar status';
-
-  @override
-  String get cancelRequest => 'Cancelar solicitação';
 
   @override
   String get pleaseWait => 'Por favor, aguarde...';
@@ -1918,11 +1554,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get insertTooltip => 'Inserir';
 
   @override
-  String failedToImport(String error) {
-    return 'Falha ao importar: $error';
-  }
-
-  @override
   String get notes_ => 'Notas';
 
   @override
@@ -1976,10 +1607,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get subscriptionCancelled => 'Assinatura cancelada';
 
   @override
-  String get upgradeToProDescription =>
-      'Faça upgrade para Pro para notas bloqueadas ilimitadas, sincronização na nuvem e muito mais.';
-
-  @override
   String get cancellingSubscription => 'Cancelando...';
 
   @override
@@ -2024,20 +1651,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Não foi possível identificar seu provedor de cobrança. Entre em contato com contact@betterkeep.app para obter ajuda.';
 
   @override
-  String manageSubscriptionInStore(String store) {
-    return 'Gerencie sua assinatura na $store.';
-  }
-
-  @override
-  String get loadingFailedTryAgain => 'Falha ao carregar — Tente novamente';
-
-  @override
   String get reloadPrices => 'Recarregar preços';
-
-  @override
-  String subscribeWithPrice(String price) {
-    return 'Assinar — $price';
-  }
 
   @override
   String get noAdsDescription =>
@@ -2053,9 +1667,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get selfHostContact =>
       'Quer hospedar você mesmo? Entre em contato em contact@betterkeep.app';
-
-  @override
-  String get welcomeToProMessage => 'Bem-vindo ao Better Keep Pro!';
 
   @override
   String get paymentConfirmedTitle => 'Pagamento confirmado';
@@ -2093,16 +1704,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get subscriptionCancelledSuccessfully =>
       'Assinatura cancelada com sucesso.';
-
-  @override
-  String get subscriptionResumedSuccessfully =>
-      'Assinatura retomada com sucesso.';
-
-  @override
-  String get failedToCancelSubscription => 'Falha ao cancelar assinatura.';
-
-  @override
-  String get failedToResumeSubscription => 'Falha ao retomar assinatura.';
 
   @override
   String get featureTableHeader => 'Recurso';
@@ -2203,25 +1804,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deleteMyAccount => 'Excluir minha conta';
 
   @override
-  String get unsyncedNotesWarning =>
-      'Você tem notas que ainda não foram sincronizadas com a nuvem. Se você sair agora, essas notas serão PERDIDAS PARA SEMPRE.\n\nConsidere aguardar a sincronização ser concluída ou exportar seus dados primeiro.';
-
-  @override
-  String notesNotSynced(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count notas não sincronizadas',
-      one: '1 nota não sincronizada',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get dataLossWarning => 'AVISO DE PERDA DE DADOS';
-
-  @override
-  String get noRecoveryKeySet => 'Nenhuma chave de recuperação configurada';
 
   @override
   String get signOutNoRecoveryKeyWarning =>
@@ -2260,24 +1843,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get someoneWantsToView => 'Alguém quer ver sua nota compartilhada';
 
   @override
-  String get deviceApproved_ => 'Dispositivo aprovado';
-
-  @override
-  String failedApproveDevice(String error) {
-    return 'Falha ao aprovar dispositivo: $error';
-  }
-
-  @override
   String get deviceRemoved => 'Dispositivo removido';
 
   @override
   String nDevicesRemoved(int count) {
     return '$count dispositivos removidos';
-  }
-
-  @override
-  String failedRemoveDevice(String error) {
-    return 'Falha ao remover dispositivo: $error';
   }
 
   @override
@@ -2294,11 +1864,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get enableE2EE_ => 'Ativar E2EE';
-
-  @override
-  String failedEnableE2EE(String error) {
-    return 'Falha ao ativar E2EE: $error';
-  }
 
   @override
   String get recoveryKeySavedSuccessfully =>
@@ -2359,10 +1924,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get failedUnlinkAccount => 'Falha ao desvincular conta';
 
   @override
-  String get cannotUnlinkOnlyMethod =>
-      'Não é possível desvincular o único método de login.';
-
-  @override
   String unknownProviderError(String provider) {
     return 'Provedor desconhecido: $provider';
   }
@@ -2373,9 +1934,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get failedSendCode => 'Falha ao enviar código de verificação';
-
-  @override
-  String get pleaseTryAgain => 'Por favor, tente novamente.';
 
   @override
   String get pleaseSignInAgain => 'Por favor, faça login novamente e tente.';
@@ -2399,11 +1957,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get failedLinkAccount => 'Falha ao vincular conta';
 
   @override
-  String providerLinkedToAnother(String provider) {
-    return 'Esta conta $provider já está vinculada a outro usuário.';
-  }
-
-  @override
   String get useOriginalSignInMethod =>
       'Entre com o método usado anteriormente e vincule o novo provedor nas configurações da conta.';
 
@@ -2422,9 +1975,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get emailAlreadyInUse =>
       'Uma conta com este e-mail já existe. Faça login com essa conta primeiro e depois vincule a partir de lá.';
-
-  @override
-  String get linkingCancelled => 'Vinculação foi cancelada.';
 
   @override
   String successfullyLinkedProvider(String provider) {
@@ -2516,9 +2066,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get iphoneIpad => 'iPhone/iPad';
-
-  @override
   String get webBrowser => 'Navegador web';
 
   @override
@@ -2596,10 +2143,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get notificationPermissionsRequired =>
-      'Permissões de notificação e alarme são necessárias para lembretes';
-
-  @override
   String get checkAll => 'Marcar todos';
 
   @override
@@ -2630,13 +2173,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get somethingWentWrongTryAgain =>
       'Algo deu errado. Por favor, tente novamente.';
-
-  @override
-  String get verifyingPassphrase => 'Verificando frase-senha...';
-
-  @override
-  String get settingAsPrimaryDevice =>
-      'Definindo como dispositivo principal...';
 
   @override
   String get finalizing => 'Finalizando...';
@@ -2924,9 +2460,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get createNewLink => 'Criar novo link';
 
   @override
-  String get revokeLink_ => 'Revogar link';
-
-  @override
   String get copy => 'Copiar';
 
   @override
@@ -2945,11 +2478,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get linkRevoked => 'Link revogado';
-
-  @override
-  String failedToRevoke(String error) {
-    return 'Falha ao revogar: $error';
-  }
 
   @override
   String get linkCopied => 'Link copiado para a área de transferência';
@@ -3005,10 +2533,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get syncDisabledPleaseSignOut =>
       'A sincronização está desativada. Por favor, saia e entre novamente.';
-
-  @override
-  String get signOutConfirmationWithNote =>
-      'Tem certeza de que deseja sair?\n\nVocê precisará fazer login novamente para acessar suas notas.';
 
   @override
   String get sketchTool => 'Ferramenta';
@@ -3090,9 +2614,6 @@ class AppLocalizationsPt extends AppLocalizations {
       'Use o app para uma experiência melhor';
 
   @override
-  String get noteMarkedAsDone => 'Nota marcada como concluída';
-
-  @override
   String get pickTextColor => 'Escolher cor do texto';
 
   @override
@@ -3150,31 +2671,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get pickNoteColor => 'Escolher cor da nota';
-
-  @override
-  String failedToPaste(String error) {
-    return 'Falha ao colar: $error';
-  }
-
-  @override
-  String failedToInsertContent(String error) {
-    return 'Falha ao inserir conteúdo: $error';
-  }
-
-  @override
-  String failedToLockNote(String error) {
-    return 'Falha ao bloquear nota: $error';
-  }
-
-  @override
-  String failedToRemoveLock(String error) {
-    return 'Falha ao remover bloqueio: $error';
-  }
-
-  @override
-  String noteDuplicatedButFailedToLock(String error) {
-    return 'Nota duplicada, mas falha ao bloquear: $error';
-  }
 
   @override
   String get pastedContent => 'Conteúdo colado';
@@ -3421,6 +2917,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Solicitar aprovação de outro dispositivo';
 
   @override
+  String get signOutClearingDevice => 'Limpando os dados locais da conta…';
+
+  @override
   String get signOutFinishing => 'Concluindo a saída…';
 
   @override
@@ -3479,11 +2978,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get failedToResetAccount => 'Falha ao redefinir conta';
 
   @override
-  String failedToResetAccountError(String error) {
-    return 'Falha ao redefinir conta: $error';
-  }
-
-  @override
   String get startFreshQuestion => 'Começar do zero?';
 
   @override
@@ -3527,11 +3021,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get failedToSaveSketch => 'Falha ao salvar esboço';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'Erro ao salvar esboço: $error';
-  }
 
   @override
   String get planFree => 'Grátis';
@@ -3595,20 +3084,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Notas bloqueadas ilimitadas e sincronização em tempo real na nuvem';
 
   @override
-  String get unlockTheFullExperience => 'Desbloqueie a experiência completa';
-
-  @override
   String get maybeLater => 'Talvez depois';
 
   @override
   String get enableNotificationsTitle => 'Ativar Notificações';
-
-  @override
-  String get enableNotificationsForReminders =>
-      'Suas notas sincronizadas têm lembretes. Ative as notificações para não perdê-los.';
-
-  @override
-  String get enableNotifications => 'Ativar';
 
   @override
   String get rateOnAppStore => 'Avaliar na App Store';
@@ -3859,10 +3338,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get localEncryptionUnavailable =>
       'Não foi possível ler as chaves de criptografia salvas. Desbloqueie o dispositivo e tente novamente. Seus dados locais foram mantidos.';
-
-  @override
-  String get localEncryptionMissing =>
-      'As chaves necessárias para abrir suas notas salvas estão ausentes ou danificadas. Reconecte-se para restaurar o acesso ou use a recuperação de conta. Seus dados locais foram mantidos.';
 
   @override
   String get syncCheckingConnection => 'Verificando conexão…';
@@ -4196,10 +3671,6 @@ class AppLocalizationsPt extends AppLocalizations {
       'A autorização foi concluída antes do cancelamento. O provedor está conectado. Use Desconectar para removê-lo.';
 
   @override
-  String get externalSyncNextcloudBrowserHelp =>
-      'Entre no seu servidor Nextcloud para conceder acesso. Você pode revogar o acesso nas configurações do Nextcloud. Para sincronizar pelo navegador, seu servidor precisa permitir solicitações de outras origens.';
-
-  @override
   String get externalSyncLogoutPending =>
       'Algumas alterações ainda aguardam sincronização. Sair da conta remove as notas e mídias locais deste dispositivo. Alterações que não foram salvas em nenhum provedor podem ser perdidas.\n\nConclua a sincronização ou exporte seus dados antes de sair.';
 
@@ -4238,11 +3709,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get externalSyncNeedsAttention => 'Requer atenção · Veja os detalhes';
 
   @override
-  String externalSyncConnectTitle(String provider) {
-    return 'Conectar $provider';
-  }
-
-  @override
   String get externalSyncConnectHelp =>
       'Entre para permitir acesso ao armazenamento. Após conectar, este provedor será selecionado para sincronização.';
 
@@ -4265,21 +3731,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Os dispositivos não correspondem. Não aprove esta solicitação.';
 
   @override
-  String get deviceVerificationMatched =>
-      'Dispositivo verificado. Você pode continuar.';
-
-  @override
   String get scanNewDevice => 'Ler QR do novo dispositivo';
 
   @override
   String get compareSecurityCode => 'Comparar código de segurança';
-
-  @override
-  String get completeSecurityCodeMatches =>
-      'Comparei o código completo nos dois dispositivos. Eles correspondem.';
-
-  @override
-  String get approveVerifiedDevice => 'Aprovar dispositivo';
 
   @override
   String get deviceCameraUnavailable =>
@@ -4290,8 +3745,23 @@ class AppLocalizationsPt extends AppLocalizations {
       'Não foi possível verificar. Atualize os dois dispositivos, gere um novo código no novo dispositivo e tente novamente.';
 
   @override
-  String get browserEncryptionSessionOnly =>
-      'As chaves de criptografia ficam apenas nesta sessão do navegador. Após recarregar, aprove o navegador novamente ou use sua frase de recuperação.';
+  String get browserStorageUnavailable =>
+      'Permita que este site salve dados nas configurações do navegador e tente novamente.';
+
+  @override
+  String get browserLegacyRecoveryUnavailable =>
+      'Esta versão não consegue desbloquear as chaves salvas no navegador. Mantenha os dados deste navegador. Abra suas notas sincronizadas em um dispositivo aprovado ou use sua frase de recuperação em outro navegador.';
+
+  @override
+  String get browserSessionOnly => 'Somente nesta sessão';
+
+  @override
+  String get browserDeviceTrust =>
+      'Depois que este navegador salvar sua aprovação, você poderá abrir as notas baixadas offline.';
+
+  @override
+  String get browserUnlockOnline =>
+      'Suas notas estão neste dispositivo. Conecte-se à internet e toque em Tentar novamente para desbloqueá-las.';
 
   @override
   String get verifyTrustedDevice => 'Verificar dispositivo confiável';
@@ -4302,9 +3772,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get scanTrustedDevice => 'Ler QR do dispositivo confiável';
-
-  @override
-  String get acceptVerifiedKey => 'Aceitar chave verificada';
 
   @override
   String get confirmOnNewDevice => 'Confirme no novo dispositivo';
@@ -4394,9 +3861,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get choosePlan => 'Escolha seu plano';
 
   @override
-  String get upgradeToLite => 'Assinar o Lite';
-
-  @override
   String get automaticExternalSync => 'Sincronização externa automática';
 
   @override
@@ -4409,9 +3873,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get manualSyncDescription =>
       'Sincronize manualmente de graça. Lite e Pro incluem atualizações automáticas.';
-
-  @override
-  String get automaticSyncEnabled => 'Atualizações automáticas ativadas';
 
   @override
   String get subscriptionActiveTitle => 'Assinatura ativa';
@@ -4436,10 +3897,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get deletionCodeRecentlyRequested =>
       'Um código foi solicitado recentemente. Verifique seu e-mail ou aguarde um minuto antes de solicitar outro.';
-
-  @override
-  String get deviceCodeApprovalInstruction =>
-      'Compare este código com o do novo dispositivo. Aprove apenas se o código inteiro for igual.';
 
   @override
   String get providerSignInVerificationFailed =>

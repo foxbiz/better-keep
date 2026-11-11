@@ -486,9 +486,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancelSignIn => '取消登录';
 
   @override
-  String get signInCancelled => '登录已取消';
-
-  @override
   String get signInWithFacebook => '使用 Facebook 登录';
 
   @override
@@ -555,12 +552,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newPassword => '新密码';
 
   @override
-  String get enterNewPassword => '输入新密码';
-
-  @override
-  String get reenterNewPassword => '再次输入新密码';
-
-  @override
   String get currentPassphrase => '当前密码短语';
 
   @override
@@ -609,9 +600,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addLabel => '添加标签';
 
   @override
-  String get searchLogs => '搜索日志...';
-
-  @override
   String get audioRecording => '音频录音';
 
   @override
@@ -625,9 +613,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get theme => '主题';
-
-  @override
-  String get customizeAppearance => '自定义应用外观';
 
   @override
   String get followSystemTheme => '跟随系统主题';
@@ -660,12 +645,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get alarmSound => '闹钟铃声';
 
   @override
-  String get reminderTimeSettings => '提醒时间设置';
-
-  @override
-  String get setDefaultTimes => '设置提醒的默认时间';
-
-  @override
   String get morning => '上午';
 
   @override
@@ -675,28 +654,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get evening => '晚上';
 
   @override
-  String get localDataProtection => '本地数据保护';
-
-  @override
-  String get encryptDeviceData => '加密存储在此设备上的数据';
-
-  @override
-  String get encryptNotes => '加密笔记';
-
-  @override
-  String get encryptFiles => '加密文件';
-
-  @override
-  String get lockedNotesSecurity => '锁定笔记安全';
-
-  @override
-  String get privacyLockedNotes => '锁定笔记的隐私设置';
-
-  @override
   String get forgetPasswordOnClose => '关闭时忘记密码';
-
-  @override
-  String get requirePasswordAgain => '每次打开应用时需要密码';
 
   @override
   String get nerdStats => '开发者统计';
@@ -822,9 +780,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insert => '插入';
 
   @override
-  String get importAsNote => '作为笔记导入';
-
-  @override
   String get removeDevice => '移除设备';
 
   @override
@@ -832,9 +787,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get passwordResetSuccess => '密码重置成功！请登录。';
-
-  @override
-  String get emailVerifiedSuccess => '邮箱验证成功！';
 
   @override
   String get useDifferentAccount => '使用其他账户';
@@ -852,14 +804,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reapprovalRequestSent => '重新批准请求已发送。等待批准中...';
 
   @override
-  String failedReapproval(String error) {
-    return '请求重新批准失败：$error';
-  }
-
-  @override
-  String get rememberDevice => '记住此设备';
-
-  @override
   String get recoverWithPassphrase => '使用密码短语恢复';
 
   @override
@@ -875,17 +819,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accessApproved => '访问已批准';
 
   @override
-  String failedToApprove(String error) {
-    return '批准失败：$error';
-  }
-
-  @override
   String get accessDenied => '访问被拒绝';
-
-  @override
-  String failedToDeny(String error) {
-    return '拒绝失败：$error';
-  }
 
   @override
   String get allUpToDate => '全部已是最新';
@@ -911,21 +845,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String unlinkedProvider(String provider) {
-    return '已取消链接 $provider';
-  }
-
-  @override
-  String successfullyLinked(String provider) {
-    return '成功链接 $provider 账户';
-  }
-
-  @override
-  String unknownProvider(String provider) {
-    return '未知的提供商：$provider';
-  }
-
-  @override
   String get recoveryKey => '恢复密钥';
 
   @override
@@ -933,35 +852,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableE2EE => '启用端到端加密';
-
-  @override
-  String failedSaveRecoveryKey(String error) {
-    return '保存恢复密钥失败：$error';
-  }
-
-  @override
-  String get recoverySuccessWelcome => '恢复成功！欢迎回来。';
-
-  @override
-  String get confirmConsequences => '请确认你了解后果';
-
-  @override
-  String get accountResetSuccess => '账户重置成功。欢迎！';
-
-  @override
-  String failedResetAccount(String error) {
-    return '重置账户失败：$error';
-  }
-
-  @override
-  String errorSigningOut(String error) {
-    return '退出登录错误：$error';
-  }
-
-  @override
-  String errorPlayingSound(String error) {
-    return '播放声音错误：$error';
-  }
 
   @override
   String get checkNestedItems => '勾选嵌套项目？';
@@ -991,77 +881,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reminderSet => '提醒已设置';
 
   @override
-  String get failedCreateImageNote => '创建图片笔记失败';
-
-  @override
-  String errorSavingSketchWithError(String error) {
-    return '保存草图错误：$error';
-  }
-
-  @override
   String get failedSaveNote => '保存笔记失败';
-
-  @override
-  String failedSave(String error) {
-    return '保存失败：$error';
-  }
-
-  @override
-  String copiedAs(String format) {
-    return '已复制为 $format';
-  }
-
-  @override
-  String failedCopy(String error) {
-    return '复制失败：$error';
-  }
 
   @override
   String get pastedAsPlainText => '已粘贴为纯文本';
 
   @override
-  String failedPaste(String error) {
-    return '粘贴失败：$error';
-  }
-
-  @override
   String get contentInserted => '内容已插入';
-
-  @override
-  String failedInsertContent(String error) {
-    return '插入内容失败：$error';
-  }
-
-  @override
-  String get actionCancelled => '操作已取消';
 
   @override
   String get noteLocked => '笔记已锁定';
 
   @override
-  String failedLockNote(String error) {
-    return '锁定笔记失败：$error';
-  }
-
-  @override
   String get lockRemoved => '锁定已移除';
-
-  @override
-  String failedRemoveLock(String error) {
-    return '移除锁定失败：$error';
-  }
 
   @override
   String get noteDuplicated => '笔记已复制';
 
   @override
   String get errorSavingNote => '保存笔记错误';
-
-  @override
-  String get contentShared => '内容已分享';
-
-  @override
-  String get failedShare => '分享失败';
 
   @override
   String get notes => '笔记';
@@ -1082,45 +920,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get otherNotes => '其他';
 
   @override
-  String get noNotes => '还没有笔记';
-
-  @override
   String get noArchivedNotes => '没有归档的笔记';
-
-  @override
-  String get noDeletedNotes => '没有删除的笔记';
-
-  @override
-  String get searchNotes => '搜索笔记';
-
-  @override
-  String nSelectedNotes(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已选择 $count 条笔记',
-      one: '已选择 1 条笔记',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get deleteNote => '删除笔记';
 
   @override
-  String get deleteNotes => '删除笔记';
-
-  @override
   String get moveToTrash => '移到回收站';
-
-  @override
-  String get deletePermanently => '永久删除';
-
-  @override
-  String get pinNote => '固定';
-
-  @override
-  String get unpinNote => '取消固定';
 
   @override
   String get newNote => '新建笔记';
@@ -1129,28 +935,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newSketch => '新建草图';
 
   @override
-  String get newFolder => '新建文件夹';
-
-  @override
-  String get renameFolder => '重命名文件夹';
-
-  @override
-  String get deleteFolder => '删除文件夹';
-
-  @override
-  String get folderName => '文件夹名称';
-
-  @override
   String get camera => '相机';
 
   @override
   String get gallery => '图库';
-
-  @override
-  String get audioRecorder => '录音机';
-
-  @override
-  String get importFile => '导入文件';
 
   @override
   String get language => '语言';
@@ -1159,25 +947,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get systemDefault => '系统默认';
 
   @override
-  String get selectLanguage => '选择语言';
-
-  @override
   String get english => 'English';
-
-  @override
-  String get japanese => '日本語';
-
-  @override
-  String get korean => '한국어';
-
-  @override
-  String get indonesian => 'Bahasa Indonesia';
-
-  @override
-  String get portugueseBrazil => 'Português (Brasil)';
-
-  @override
-  String get chinese => '中文';
 
   @override
   String get today => '今天';
@@ -1190,9 +960,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get nextMonth => '下个月';
-
-  @override
-  String get pickDateTime => '选择日期和时间';
 
   @override
   String get time => '时间';
@@ -1228,28 +995,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get yearly => '每年';
 
   @override
-  String get snooze => '稍后提醒';
-
-  @override
-  String get fiveMinutes => '5 分钟';
-
-  @override
-  String get tenMinutes => '10 分钟';
-
-  @override
-  String get thirtyMinutes => '30 分钟';
-
-  @override
   String get oneHour => '1 小时';
-
-  @override
-  String get gridView => '网格视图';
-
-  @override
-  String get listView => '列表视图';
-
-  @override
-  String get galleryView => '画廊视图';
 
   @override
   String get undo => '撤销';
@@ -1282,14 +1028,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openChecklistView => '打开列表视图';
 
   @override
-  String get convertToNormalText => '转换为普通文本';
-
-  @override
   String get convertEntireChecklistToText => '将整个清单转换为文本';
-
-  @override
-  String get focusedChecklistRequiresChecklistOnly =>
-      '仅当每一行都是清单项目时，才可使用专注列表视图。';
 
   @override
   String get focusedChecklistUnsupportedContent => '附件和块格式仅可在富文本编辑器中使用。';
@@ -1340,25 +1079,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get alignRight => '右对齐';
 
   @override
-  String get alignJustify => '两端对齐';
-
-  @override
   String get increaseIndent => '增加缩进';
 
   @override
   String get decreaseIndent => '减少缩进';
-
-  @override
-  String get heading1 => '标题 1';
-
-  @override
-  String get heading2 => '标题 2';
-
-  @override
-  String get heading3 => '标题 3';
-
-  @override
-  String get normalText => '正文';
 
   @override
   String get pen => '钢笔';
@@ -1376,21 +1100,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get eraser => '橡皮擦';
 
   @override
-  String get lasso => '套索';
-
-  @override
   String get addPage => '添加页面';
 
   @override
-  String get deletePage => '删除页面';
-
-  @override
   String get page => '页面';
-
-  @override
-  String pageNumber(int number) {
-    return '第 $number 页';
-  }
 
   @override
   String get connectedAccounts => '已连接的账户';
@@ -1408,20 +1121,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trial => '试用';
 
   @override
-  String trialEndsIn(int days) {
-    return '试用还剩 $days 天';
-  }
-
-  @override
   String get devices => '设备';
 
   @override
   String get thisDevice => '此设备';
-
-  @override
-  String lastActive(String time) {
-    return '上次活动：$time';
-  }
 
   @override
   String get pendingApproval => '等待批准';
@@ -1430,30 +1133,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get security => '安全';
 
   @override
-  String get endToEndEncryption => '端到端加密';
-
-  @override
-  String get e2eeEnabled => '已启用';
-
-  @override
-  String get e2eeDisabled => '未启用';
-
-  @override
   String get setupRecoveryKey => '设置恢复密钥';
-
-  @override
-  String get changeRecoveryKey => '更改恢复密钥';
 
   @override
   String get verifyRecoveryKey => '验证恢复密钥';
 
   @override
   String get error => '错误';
-
-  @override
-  String errorWithMessage(String message) {
-    return '错误：$message';
-  }
 
   @override
   String get loading => '加载中...';
@@ -1472,24 +1158,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get online => '在线';
-
-  @override
-  String get getApp => '获取应用';
-
-  @override
-  String get sessionExpired => '你的会话已过期。请重新登录。';
-
-  @override
-  String get confirmSignOut => '确定要退出登录吗？';
-
-  @override
-  String get unsyncedChanges => '你有未同步的更改将会丢失。';
-
-  @override
-  String get deleteConfirmation => '确定要删除吗？';
-
-  @override
-  String get permanentAction => '此操作无法撤销。';
 
   @override
   String get encryptNoteContent => '加密笔记内容';
@@ -1517,9 +1185,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appInfoCredits => '应用信息和致谢';
-
-  @override
-  String get advancedSettings => '高级设置';
 
   @override
   String get speechRecognitionModel => '语音识别模型';
@@ -1567,11 +1232,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteEncryptionEnabledSimple => '笔记加密已启用。';
 
   @override
-  String errorEncryptingNotes(String error) {
-    return '加密笔记时出错：$error';
-  }
-
-  @override
   String get noteEncryptionDisabled => '笔记加密已禁用。';
 
   @override
@@ -1579,9 +1239,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fileEncryptionDisabled => '文件加密已禁用。';
-
-  @override
-  String get encryptDataOnDevice => '加密存储在此设备上的数据';
 
   @override
   String get signInCancelledMessage => '登录已取消';
@@ -1719,16 +1376,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceRevoked => '设备已撤销';
 
   @override
-  String get waitingForApprovalTitle => '等待批准';
-
-  @override
   String get deviceRevokedDescription => '此设备已被撤销，无法再访问您的笔记。请从已批准的设备重新登录以重新授权。';
-
-  @override
-  String get pleaseApproveFrom => '请从以下设备批准：';
-
-  @override
-  String get waitingForApprovalFromDevice => '等待另一设备的批准...';
 
   @override
   String get rememberThisDevice => '记住此设备';
@@ -1741,9 +1389,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get checkStatus => '检查状态';
-
-  @override
-  String get cancelRequest => '取消请求';
 
   @override
   String get pleaseWait => '请稍候...';
@@ -1825,11 +1470,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insertTooltip => '插入';
 
   @override
-  String failedToImport(String error) {
-    return '导入失败：$error';
-  }
-
-  @override
   String get notes_ => '笔记';
 
   @override
@@ -1881,9 +1521,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get subscriptionCancelled => '订阅已取消';
 
   @override
-  String get upgradeToProDescription => '升级到专业版以获得无限锁定笔记、云同步等功能。';
-
-  @override
   String get cancellingSubscription => '正在取消...';
 
   @override
@@ -1925,20 +1562,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '我们无法识别您的计费服务商。请联系 contact@betterkeep.app 获取帮助。';
 
   @override
-  String manageSubscriptionInStore(String store) {
-    return '在$store中管理您的订阅。';
-  }
-
-  @override
-  String get loadingFailedTryAgain => '加载失败 — 重试';
-
-  @override
   String get reloadPrices => '重新加载价格';
-
-  @override
-  String subscribeWithPrice(String price) {
-    return '订阅 — $price';
-  }
 
   @override
   String get noAdsDescription => '无广告、不出售数据 — 您的订阅用于资助安全服务器和持续开发。';
@@ -1951,9 +1575,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get selfHostContact => '想要自托管？请联系 contact@betterkeep.app';
-
-  @override
-  String get welcomeToProMessage => '欢迎使用 Better Keep Pro！';
 
   @override
   String get paymentConfirmedTitle => '付款已确认';
@@ -1989,15 +1610,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get subscriptionCancelledSuccessfully => '订阅已成功取消。';
-
-  @override
-  String get subscriptionResumedSuccessfully => '订阅已成功恢复。';
-
-  @override
-  String get failedToCancelSubscription => '取消订阅失败。';
-
-  @override
-  String get failedToResumeSubscription => '恢复订阅失败。';
 
   @override
   String get featureTableHeader => '功能';
@@ -2092,25 +1704,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteMyAccount => '删除我的账户';
 
   @override
-  String get unsyncedNotesWarning =>
-      '您有尚未同步到云端的笔记。如果您现在退出登录，这些笔记将永久丢失。\n\n建议等待同步完成或先导出您的数据。';
-
-  @override
-  String notesNotSynced(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条笔记未同步',
-      one: '1 条笔记未同步',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get dataLossWarning => '数据丢失警告';
-
-  @override
-  String get noRecoveryKeySet => '未设置恢复密钥';
 
   @override
   String get signOutNoRecoveryKeyWarning =>
@@ -2148,24 +1742,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get someoneWantsToView => '有人想查看您的共享笔记';
 
   @override
-  String get deviceApproved_ => '设备已批准';
-
-  @override
-  String failedApproveDevice(String error) {
-    return '批准设备失败：$error';
-  }
-
-  @override
   String get deviceRemoved => '设备已移除';
 
   @override
   String nDevicesRemoved(int count) {
     return '已移除 $count 个设备';
-  }
-
-  @override
-  String failedRemoveDevice(String error) {
-    return '移除设备失败：$error';
   }
 
   @override
@@ -2182,11 +1763,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableE2EE_ => '启用端到端加密';
-
-  @override
-  String failedEnableE2EE(String error) {
-    return '启用端到端加密失败：$error';
-  }
 
   @override
   String get recoveryKeySavedSuccessfully => '恢复密钥保存成功！';
@@ -2242,9 +1818,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedUnlinkAccount => '取消链接账户失败';
 
   @override
-  String get cannotUnlinkOnlyMethod => '无法取消链接唯一的登录方式。';
-
-  @override
   String unknownProviderError(String provider) {
     return '未知的提供商：$provider';
   }
@@ -2254,9 +1827,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get failedSendCode => '发送验证码失败';
-
-  @override
-  String get pleaseTryAgain => '请重试。';
 
   @override
   String get pleaseSignInAgain => '请重新登录并重试。';
@@ -2279,11 +1849,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedLinkAccount => '链接账户失败';
 
   @override
-  String providerLinkedToAnother(String provider) {
-    return '此 $provider 账户已链接到另一个用户。';
-  }
-
-  @override
   String get useOriginalSignInMethod => '请使用之前的方式登录，然后在账户设置中关联新的登录方式。';
 
   @override
@@ -2297,9 +1862,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get emailAlreadyInUse => '使用此邮箱的账户已存在。请先登录该账户，然后从那里链接。';
-
-  @override
-  String get linkingCancelled => '链接已取消。';
 
   @override
   String successfullyLinkedProvider(String provider) {
@@ -2386,9 +1948,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get iphoneIpad => 'iPhone/iPad';
-
-  @override
   String get webBrowser => '网页浏览器';
 
   @override
@@ -2462,9 +2021,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get notificationPermissionsRequired => '提醒需要通知和闹钟权限';
-
-  @override
   String get checkAll => '全部勾选';
 
   @override
@@ -2482,12 +2038,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get somethingWentWrongTryAgain => '出现问题。请重试。';
-
-  @override
-  String get verifyingPassphrase => '正在验证密码短语...';
-
-  @override
-  String get settingAsPrimaryDevice => '正在设置为主设备...';
 
   @override
   String get finalizing => '正在完成...';
@@ -2754,9 +2304,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createNewLink => '创建新链接';
 
   @override
-  String get revokeLink_ => '撤销链接';
-
-  @override
   String get copy => '复制';
 
   @override
@@ -2773,11 +2320,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get linkRevoked => '链接已撤销';
-
-  @override
-  String failedToRevoke(String error) {
-    return '撤销失败：$error';
-  }
 
   @override
   String get linkCopied => '链接已复制到剪贴板';
@@ -2829,9 +2371,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncDisabledPleaseSignOut => '同步已禁用。请退出登录并重新登录。';
-
-  @override
-  String get signOutConfirmationWithNote => '确定要退出登录吗？\n\n您需要重新登录才能访问您的笔记。';
 
   @override
   String get sketchTool => '工具';
@@ -2903,9 +2442,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get useAppForBetterExperience => '使用应用以获得更好的体验';
 
   @override
-  String get noteMarkedAsDone => '笔记已标记为完成';
-
-  @override
   String get pickTextColor => '选择文字颜色';
 
   @override
@@ -2963,31 +2499,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pickNoteColor => '选择笔记颜色';
-
-  @override
-  String failedToPaste(String error) {
-    return '粘贴失败：$error';
-  }
-
-  @override
-  String failedToInsertContent(String error) {
-    return '插入内容失败：$error';
-  }
-
-  @override
-  String failedToLockNote(String error) {
-    return '锁定笔记失败：$error';
-  }
-
-  @override
-  String failedToRemoveLock(String error) {
-    return '移除锁定失败：$error';
-  }
-
-  @override
-  String noteDuplicatedButFailedToLock(String error) {
-    return '笔记已复制但锁定失败：$error';
-  }
 
   @override
   String get pastedContent => '粘贴的内容';
@@ -3220,6 +2731,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get requestApprovalFromAnotherDevice => '从另一设备请求批准';
 
   @override
+  String get signOutClearingDevice => '正在清除此设备上的账号数据…';
+
+  @override
   String get signOutFinishing => '正在完成退出登录…';
 
   @override
@@ -3269,11 +2783,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToResetAccount => '重置账户失败';
 
   @override
-  String failedToResetAccountError(String error) {
-    return '重置账户失败：$error';
-  }
-
-  @override
   String get startFreshQuestion => '重新开始？';
 
   @override
@@ -3314,11 +2823,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get failedToSaveSketch => '保存草图失败';
-
-  @override
-  String errorSavingSketch(String error) {
-    return '保存草图错误：$error';
-  }
 
   @override
   String get planFree => '免费版';
@@ -3377,19 +2881,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unlimitedLockedNotesAndSync => '无限锁定笔记和实时云同步';
 
   @override
-  String get unlockTheFullExperience => '解锁完整体验';
-
-  @override
   String get maybeLater => '以后再说';
 
   @override
   String get enableNotificationsTitle => '启用通知';
-
-  @override
-  String get enableNotificationsForReminders => '您同步的笔记包含提醒。启用通知以免错过。';
-
-  @override
-  String get enableNotifications => '启用';
 
   @override
   String get rateOnAppStore => '在 App Store 上评分';
@@ -3620,10 +3115,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localEncryptionUnavailable => '无法读取已保存的加密密钥。请解锁设备后重试。本地数据已保留。';
-
-  @override
-  String get localEncryptionMissing =>
-      '打开已保存笔记所需的密钥丢失或损坏。请重新连接以恢复访问，或使用账户恢复。本地数据已保留。';
 
   @override
   String get syncCheckingConnection => '正在检查连接…';
@@ -3916,10 +3407,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalSyncAlreadyConnected => '授权在取消之前已完成。服务商已连接。请使用“断开连接”将其移除。';
 
   @override
-  String get externalSyncNextcloudBrowserHelp =>
-      '请登录您的 Nextcloud 服务器以授予访问权限。您可以在 Nextcloud 设置中撤销访问权限。通过浏览器同步需要您的服务器允许跨源请求。';
-
-  @override
   String get externalSyncLogoutPending =>
       '部分更改仍在等待同步。退出登录会移除此设备上的本地笔记和媒体文件。尚未保存到任何服务商的更改可能会丢失。\n\n请在退出登录前完成同步或导出数据。';
 
@@ -3956,11 +3443,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get externalSyncNeedsAttention => '需要处理 · 查看同步详情';
 
   @override
-  String externalSyncConnectTitle(String provider) {
-    return '连接 $provider';
-  }
-
-  @override
   String get externalSyncConnectHelp => '登录以授权访问存储空间。连接后，此提供商将被选为同步目标。';
 
   @override
@@ -3979,19 +3461,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceVerificationMismatch => '设备不匹配。请勿批准此请求。';
 
   @override
-  String get deviceVerificationMatched => '设备已验证，可以继续。';
-
-  @override
   String get scanNewDevice => '扫描新设备';
 
   @override
   String get compareSecurityCode => '比较安全码';
-
-  @override
-  String get completeSecurityCodeMatches => '我已比较两台设备上的完整安全码，确认完全一致。';
-
-  @override
-  String get approveVerifiedDevice => '批准设备';
 
   @override
   String get deviceCameraUnavailable => '摄像头不可用。请允许摄像头访问，或使用恢复口令恢复。';
@@ -4000,8 +3473,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceVerificationRetry => '无法完成验证。请更新两台设备，在新设备上生成新码，然后重试。';
 
   @override
-  String get browserEncryptionSessionOnly =>
-      '加密密钥仅保留在当前浏览器会话中。刷新后，请重新批准此浏览器或使用恢复口令。';
+  String get browserStorageUnavailable => '请在浏览器设置中允许此网站存储数据，然后重试。';
+
+  @override
+  String get browserLegacyRecoveryUnavailable =>
+      '此版本无法解锁保存在浏览器中的密钥。请保留此浏览器的数据。你可以在已批准的设备上打开已同步的笔记，或在其他浏览器中使用恢复口令。';
+
+  @override
+  String get browserSessionOnly => '仅限本次会话';
+
+  @override
+  String get browserDeviceTrust => '此浏览器保存设备授权后，你就可以离线打开已下载的笔记。';
+
+  @override
+  String get browserUnlockOnline => '笔记已保存在此设备上。请连接互联网并点按“重试”以解锁笔记。';
 
   @override
   String get verifyTrustedDevice => '验证可信设备';
@@ -4011,9 +3496,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get scanTrustedDevice => '扫描可信设备';
-
-  @override
-  String get acceptVerifiedKey => '接受已验证的密钥';
 
   @override
   String get confirmOnNewDevice => '在新设备上确认';
@@ -4096,9 +3578,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get choosePlan => '选择方案';
 
   @override
-  String get upgradeToLite => '升级到 Lite';
-
-  @override
   String get automaticExternalSync => '外部存储自动同步';
 
   @override
@@ -4109,9 +3588,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get manualSyncDescription => '手动同步免费。Lite 和 Pro 支持自动更新。';
-
-  @override
-  String get automaticSyncEnabled => '已启用自动更新';
 
   @override
   String get subscriptionActiveTitle => '订阅已生效';
@@ -4134,9 +3610,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deletionCodeRecentlyRequested => '刚刚已请求验证码。请检查电子邮件，或等待一分钟后再请求。';
-
-  @override
-  String get deviceCodeApprovalInstruction => '与新设备上的代码进行比较。仅在完整代码一致时批准。';
 
   @override
   String get providerSignInVerificationFailed => '无法验证您的登录。请重新登录。';

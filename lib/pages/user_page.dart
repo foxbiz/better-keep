@@ -2027,7 +2027,14 @@ class _UserPageState extends State<UserPage> {
       platformIcon: platformIcon,
       isPending: isPending,
       isCurrentDevice: isCurrentDevice,
-      currentDeviceLabel: context.l10n.thisDevice,
+      currentDeviceLabel:
+          kIsWeb &&
+              isCurrentDevice &&
+              !isPending &&
+              E2EEService.instance.isCryptoReady &&
+              !E2EESecureStorage.instance.hasRememberedBrowserIdentity
+          ? context.l10n.browserSessionOnly
+          : context.l10n.thisDevice,
       trailing: trailing,
     );
   }

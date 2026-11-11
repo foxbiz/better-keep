@@ -3,6 +3,7 @@ import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
 import 'package:better_keep/components/cloud_sync_upgrade_notice.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
+import 'package:better_keep/utils/progress_localizations.dart';
 
 import 'dart:async';
 
@@ -11,7 +12,7 @@ import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/components/storage_warning.dart';
 import 'package:better_keep/models/label.dart';
-import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/pages/home/google_keep_import_visibility.dart';
 import 'package:better_keep/components/folder_tile.dart';
@@ -43,11 +44,28 @@ Future<void> runNotesRefreshSequence({
   }
 }
 
+bool showsEmptyLibrarySync({
+  required bool hasNotes,
+  required bool searchMode,
+}) =>
+    !hasNotes &&
+    !searchMode &&
+    AppState.showNotes == NoteType.all &&
+    AppState.filterLabels.isEmpty &&
+    AppState.currentFolder == null;
+
 class Notes extends StatefulWidget {
   final String? searchQuery;
   final bool searchMode;
 
-  const Notes({super.key, this.searchQuery, this.searchMode = false});
+  final ValueChanged<bool>? onLibraryPresenceChanged;
+
+  const Notes({
+    super.key,
+    this.searchQuery,
+    this.searchMode = false,
+    this.onLibraryPresenceChanged,
+  });
 
   @override
   State<Notes> createState() => NotesState();
@@ -69,10 +87,19 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   bool _refreshOnReturn = false;
   final Map<int, NoteCard> _noteCards = {};
   bool _hasStoredNotes = true;
+  void _setLibraryPresence(bool hasNotes) {
+    if (_hasStoredNotes == hasNotes) return;
+    _hasStoredNotes = hasNotes;
+    widget.onLibraryPresenceChanged?.call(hasNotes);
+  }
+
   double _pendingOffset = 0.0;
   bool _showLoader = false;
   Timer? _updateShowLoaderTimeout;
   Timer? _folderUpdateDebounce;
+  Timer? _bulkRefresh;
+  bool _bulkRefreshRunning = false;
+  int _changesSinceBulkRefresh = 0;
   final MasonryLayoutController _pinnedLayoutController =
       MasonryLayoutController();
   final MasonryLayoutController _otherLayoutController =
@@ -101,7 +128,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     AppState.showSyncProgressNotifier.addListener(_progressVisibilityChanged);
-    NoteSyncBatch.active.addListener(_bulkChanged);
+    NoteSyncBatch.active.addListener(_onBatchChanged);
     _autoScrollTicker = createTicker(_onAutoScrollTick);
     _fetchData();
 
@@ -141,8 +168,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     AppState.showSyncProgressNotifier.removeListener(
       _progressVisibilityChanged,
     );
-    NoteSyncBatch.active.removeListener(_bulkChanged);
+    NoteSyncBatch.active.removeListener(_onBatchChanged);
     _autoScrollTicker.dispose();
+    _bulkRefresh?.cancel();
     _folderUpdateDebounce?.cancel();
     _updateShowLoaderTimeout?.cancel();
     _scrollController.dispose();
@@ -179,26 +207,43 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   void _progressVisibilityChanged() => setState(() {});
 
-  void _bulkChanged() {
-    if (!mounted) return;
-    if (NoteSyncBatch.active.value) {
-      _loadGeneration++;
-      _folderUpdateDebounce?.cancel();
-      _updateShowLoaderTimeout?.cancel();
-      _noteCards.clear();
-      _notes = null;
-      if (_activeReorderController != null) unawaited(_cancelDrag());
-    } else if (ModalRoute.isCurrentOf(context) == false) {
+  void _onBatchChanged() {
+    if (NoteSyncBatch.active.value) return;
+    _changesSinceBulkRefresh = 0;
+    _bulkRefresh?.cancel();
+    _bulkRefresh = null;
+    unawaited(_refreshAfterRestore());
+  }
+
+  Future<void> _refreshAfterRestore() async {
+    if (ModalRoute.isCurrentOf(context) == false) {
       _refreshOnReturn = true;
+    } else if (_activeReorderController != null) {
+      _pendingRefreshAfterDrag = true;
     } else {
-      unawaited(_fetchData());
+      await _fetchData();
     }
-    setState(() {});
+  }
+
+  void _scheduleBulkRefresh() {
+    _bulkRefresh ??= Timer(const Duration(milliseconds: 400), () async {
+      _bulkRefresh = null;
+      if (_bulkRefreshRunning) {
+        _scheduleBulkRefresh();
+        return;
+      }
+      _bulkRefreshRunning = true;
+      _changesSinceBulkRefresh = 0;
+      try {
+        await _refreshAfterRestore();
+      } finally {
+        _bulkRefreshRunning = false;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (NoteSyncBatch.active.value) return const BulkSyncProgress();
     if (!AppState.notesViewMode.isFolderMode ||
         widget.searchMode ||
         AppState.showNotes != NoteType.all) {
@@ -213,17 +258,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       builder: (context, constraints) {
         Widget content;
         if (_notes == null) {
-          if (!_showLoader) {
-            content = SizedBox.shrink();
-          } else {
-            content = ValueListenableBuilder<SyncProgress>(
-              valueListenable: SyncPresentation.instance,
-              builder: (_, progress, _) =>
-                  progress.isActive && AppState.showSyncProgress
-                  ? const SizedBox.shrink()
-                  : const Center(child: CircularProgressIndicator()),
-            );
-          }
+          content = _showLoader
+              ? const Center(child: CircularProgressIndicator())
+              : const SizedBox.shrink();
         } else if (AppState.currentFolder != null) {
           content = const SizedBox.shrink();
         } else {
@@ -269,23 +306,24 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                       AppState.showNotes == NoteType.all,
                 ),
               ),
-              if (AppState.currentFolder != null)
-                _buildNotesSliver()
-              else
-                SliverToBoxAdapter(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: 1200),
-                        child: content,
+              _withEmptySyncActivity(
+                AppState.currentFolder != null
+                    ? _buildNotesSliver()
+                    : SliverToBoxAdapter(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
+                          ),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1200),
+                              child: content,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
+              ),
             ],
           ),
         );
@@ -364,7 +402,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                       AppState.showNotes == NoteType.all,
                 ),
               ),
-              _buildNotesSliver(),
+              _withEmptySyncActivity(_buildNotesSliver()),
             ],
           ),
         );
@@ -414,8 +452,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
   }
 
-  Future<void> _fetchData([dynamic _]) async {
-    if (NoteSyncBatch.active.value) return;
+  Future<void> _fetchData([dynamic event]) async {
+    if (NoteSyncBatch.active.value &&
+        event is ModelEvent &&
+        event.origin == ModelChangeOrigin.remoteSync) {
+      return;
+    }
     final generation = ++_loadGeneration;
     final noteRevision = _noteRevision;
     final orderContext = _activeOrderContext;
@@ -448,7 +490,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
         for (final selected in AppState.selectedNotes) ?byId[selected.id],
       ];
     }
-    _hasStoredNotes = hasStoredNotes;
+    _setLibraryPresence(hasStoredNotes);
     _colors = colors;
     _labels = labels;
     _notesCountWithoutLabels = notesCountWithoutLabels;
@@ -494,9 +536,10 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _refreshHasStoredNotes() async {
+    final revision = _noteRevision;
     final hasStoredNotes = await _loadHasStoredNotes();
-    if (!mounted) return;
-    setState(() => _hasStoredNotes = hasStoredNotes);
+    if (!mounted || revision != _noteRevision) return;
+    setState(() => _setLibraryPresence(hasStoredNotes));
   }
 
   void _startLoading() {
@@ -520,7 +563,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   void _sortStateListener() {
-    if (!mounted || NoteSyncBatch.active.value) return;
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -1059,7 +1102,21 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   void _notesListener(NoteEvent event) {
-    if (NoteSyncBatch.active.value) return;
+    // The first committed note replaces the empty view immediately. The batch
+    // refresh loads subsequent inserts together from the database.
+    if (NoteSyncBatch.active.value &&
+        event.origin == ModelChangeOrigin.remoteSync &&
+        (event.event == 'created' || event.event == 'updated') &&
+        _hasStoredNotes) {
+      _changesSinceBulkRefresh++;
+      // Reproject roughly when the visible library doubles; always flush
+      // the final partial batch when the transfer ends.
+      if (_changesSinceBulkRefresh >= NoteSyncBatch.threshold &&
+          _changesSinceBulkRefresh >= (_notes?.length ?? 0)) {
+        _scheduleBulkRefresh();
+      }
+      return;
+    }
     _noteRevision++;
     // Models are mutable; invalidate on every event, not just identity changes.
     _noteCards.remove(event.note.id);
@@ -1136,7 +1193,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     if (event.event == 'deleted') {
       unawaited(_refreshHasStoredNotes());
     } else {
-      _hasStoredNotes = true;
+      _setLibraryPresence(true);
     }
 
     if (_notes == null) {
@@ -1251,29 +1308,45 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     return const SizedBox.shrink();
   }
 
+  Widget _withEmptySyncActivity(Widget content) {
+    if (!showsEmptyLibrarySync(
+      hasNotes: _hasStoredNotes,
+      searchMode: widget.searchMode,
+    )) {
+      return content;
+    }
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        NoteSyncBatch.active,
+        SyncPresentation.instance,
+      ]),
+      child: content,
+      builder: (context, child) {
+        if (NoteSyncBatch.active.value) {
+          return const SliverFillRemaining(
+            hasScrollBody: false,
+            child: BulkSyncProgress(),
+          );
+        }
+        final progress = SyncPresentation.instance.value;
+        if (!progress.isActive || !AppState.showSyncProgress) return child!;
+        return SliverFillRemaining(
+          hasScrollBody: false,
+          child: SyncContentProgress(label: progress.localized(context.l10n)),
+        );
+      },
+    );
+  }
+
   Widget _buildNotesSliver() {
     if (_notes == null || _notes!.isEmpty) {
-      Widget content = _buildNotesView();
-      if (_notes == null ||
-          (!_hasStoredNotes &&
-              !widget.searchMode &&
-              AppState.showNotes == NoteType.all)) {
-        content = ValueListenableBuilder<SyncProgress>(
-          valueListenable: SyncPresentation.instance,
-          builder: (_, progress, child) =>
-              progress.isActive && AppState.showSyncProgress
-              ? const SizedBox.shrink()
-              : child!,
-          child: content,
-        );
-      }
       return SliverFillRemaining(
         hasScrollBody: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1200),
-            child: content,
+            child: _buildNotesView(),
           ),
         ),
       );

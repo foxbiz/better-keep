@@ -1,4 +1,3 @@
-import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 
 import 'dart:convert';
@@ -67,6 +66,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   late bool _selectionMode;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final _libraryHasNotes = ValueNotifier(true);
   final GlobalKey<NotesState> _notesKey = GlobalKey<NotesState>();
 
   bool _shouldAnimateIcon = false;
@@ -119,6 +119,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     });
 
     AppState.subscribe("show_notes", _showNotesListener);
+    AppState.subscribe("filter_labels", _showNotesListener);
+    AppState.subscribe("current_folder", _showNotesListener);
     AppState.subscribe("selected_notes", _selectedNotesListener);
     NoteSortService().snapshots.addListener(_sortStateListener);
 
@@ -354,9 +356,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   @override
   void dispose() {
     ReminderNavigationService.instance.unregisterReadyHost(this);
+    _libraryHasNotes.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     AppState.unsubscribe("show_notes", _showNotesListener);
+    AppState.unsubscribe("filter_labels", _showNotesListener);
+    AppState.unsubscribe("current_folder", _showNotesListener);
     AppState.unsubscribe("selected_notes", _selectedNotesListener);
     NoteSortService().snapshots.removeListener(_sortStateListener);
     E2EEService.instance.deviceManager.pendingApprovals.removeListener(
@@ -449,6 +454,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                       Expanded(
                         child: Notes(
                           key: _notesKey,
+                          onLibraryPresenceChanged: (hasNotes) =>
+                              _libraryHasNotes.value = hasNotes,
                           searchMode: _searchMode,
                           searchQuery: _searchController.text,
                         ),
@@ -472,10 +479,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                   // expanded creation menu takes priority over transient status.
                   if (!_isBubbleMenuOpen)
                     ValueListenableBuilder<bool>(
-                      valueListenable: NoteSyncBatch.active,
-                      builder: (_, bulk, child) =>
-                          bulk ? const SizedBox.shrink() : child!,
-                      child: SyncProgressWidget(
+                      valueListenable: _libraryHasNotes,
+                      builder: (_, hasNotes, _) => SyncProgressWidget(
+                        showActivity: !showsEmptyLibrarySync(
+                          hasNotes: hasNotes,
+                          searchMode: _searchMode,
+                        ),
                         bottom: showCreateButton
                             ? fabBottom + _fabSize + 12
                             : 32,

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { prepareOfflineAssets } from "./prepare_offline_assets.mjs";
 import { readFile, writeFile, mkdir, cp, access, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -63,19 +64,12 @@ export async function finalizeBetaBuild(
 	const base = releaseBase(version) + (stable ? "stable/" : "");
 	const bootstrapFile = path.join(directory, "flutter_bootstrap.js");
 	const source = await readFile(bootstrapFile, "utf8");
-	const marker = "\n_flutter.loader.load(";
-	const start = source.lastIndexOf(marker);
-	if (start < 0 || source.indexOf(marker) !== start)
-		throw new Error("Unrecognized Flutter bootstrap; refusing to patch");
-	// Every runtime asset comes from the same immutable release. No beta service worker.
-	// package_info_plus resolves version.json from assetBase and requires an origin.
-	// Resolve at load time so the same artifact works on a preview or custom domain.
-	const loader = `const base = new URL(${JSON.stringify(base)}, document.baseURI).href;
-_flutter.loader.load({config: {entrypointBaseUrl: base, assetBase: base, canvasKitBaseUrl: base + "canvaskit/"}});`;
-	await writeFile(
-		bootstrapFile,
-		`${source.slice(0, start)}\n{\n${loader}\n}\n`,
-	);
+	if (
+		!source.includes('new URL("./", document.currentScript.src)') ||
+		!source.includes('new URL("offline_worker.js", runtime)')
+	) {
+		throw new Error("Unrecognized Flutter bootstrap; cannot verify offline release paths");
+	}
 	const manifestFile = path.join(directory, "manifest.json");
 	const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
 	Object.assign(manifest, {
@@ -300,6 +294,7 @@ export async function buildBetaRelease(
 			"--pwa-strategy=none",
 		]);
 		await compileWorker(output);
+		await prepareOfflineAssets(output);
 		await finalizeBetaBuild(output, version, { stable });
 	}
 	await writeFile(

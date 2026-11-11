@@ -15,6 +15,7 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
 enum SketchPreviewRepairStatus {
   notNeeded,
@@ -124,7 +125,8 @@ class SketchPreviewRepairService {
       FirebaseScopedPreferences.key(
         'sketch_preview_renderer_v2_unlocked_note_ids',
       );
-  static bool _running = false;
+  static Future<void>? _startupRepair;
+  static int _startupGeneration = 0;
   static final Set<int> _startupAttemptedNoteIds = {};
 
   @visibleForTesting
@@ -133,21 +135,39 @@ class SketchPreviewRepairService {
   @visibleForTesting
   static int get currentVersion => _currentVersion;
 
-  static Future<void> runIfNeeded() async {
-    if (_running) return;
-    final prefs = await AppState.prefs;
-    if ((prefs.getInt(_preferenceKey) ?? 0) >= _currentVersion) return;
+  static Future<void> runIfNeeded() =>
+      _startupRepair ??= _runStartupRepair(_startupGeneration)
+          .whenComplete(() => _startupRepair = null);
 
-    _running = true;
+  /// Let the current item release its files before retiring the local library.
+  static Future<void> stopStartupRepair() async {
+    _startupGeneration++;
+    _startupAttemptedNoteIds.clear();
+    await _startupRepair;
+  }
+
+  static Future<void> _runStartupRepair(int generation) async {
+    final database = AppState.get('db');
+    if (database is! Database) return;
+    bool current() =>
+        generation == _startupGeneration &&
+        database.isOpen &&
+        identical(database, AppState.get('db'));
     try {
+      final prefs = await AppState.prefs;
+      if (!current() ||
+          (prefs.getInt(_preferenceKey) ?? 0) >= _currentVersion) {
+        return;
+      }
       // Keep only stable identifiers. Each row is loaded immediately before
       // rendering so startup never retains stale full-note snapshots.
-      final candidates = await AppState.db.query('note', columns: ['id']);
+      final candidates = await database.query('note', columns: ['id']);
       final progress = _loadProgress(prefs);
       final activeIds = <int>{};
       var allComplete = true;
 
       for (final candidate in candidates) {
+        if (!current()) return;
         final id = candidate['id'] as int?;
         if (id == null) continue;
         activeIds.add(id);
@@ -166,6 +186,7 @@ class SketchPreviewRepairService {
           result = await repairNoteById(
             id,
             scope: SketchPreviewRepairScope.imageSketchesOnly,
+            isCurrent: current,
             expectedSourceSignature: previous?.sourceSignature,
             completedSketchKeys: previous?.completedSketchKeys ?? const {},
             suppressMatchingSource:
@@ -173,6 +194,7 @@ class SketchPreviewRepairService {
                 SketchPreviewLocalProgressState.resolvedWithPlaceholder,
           );
         } catch (e, stackTrace) {
+          if (!current()) return;
           AppLogger.error(
             'Unexpected startup preview repair failure for note $id',
             e,
@@ -185,6 +207,7 @@ class SketchPreviewRepairService {
           );
         }
 
+        if (!current()) return;
         final next = advanceLocalProgress(previous: previous, result: result);
         progress[id] = next;
         await _saveProgress(prefs, progress);
@@ -211,9 +234,11 @@ class SketchPreviewRepairService {
         }
       }
 
+      if (!current()) return;
       progress.removeWhere((id, _) => !activeIds.contains(id));
       await _saveProgress(prefs, progress);
 
+      if (!current()) return;
       if (allComplete) {
         await prefs.setInt(_preferenceKey, _currentVersion);
       } else {
@@ -222,9 +247,9 @@ class SketchPreviewRepairService {
         );
       }
     } catch (e, stackTrace) {
-      AppLogger.error('Sketch preview repair failed', e, stackTrace);
-    } finally {
-      _running = false;
+      if (current()) {
+        AppLogger.error('Sketch preview repair failed', e, stackTrace);
+      }
     }
   }
 

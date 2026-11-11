@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/components/note_card.dart';
+import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/pages/home/notes.dart';
@@ -19,6 +21,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'support/offline_firebase.dart';
 
 void main() {
   late Database database;
@@ -250,7 +254,101 @@ void main() {
     await _drainDatabaseWork(tester);
   });
 
-  testWidgets('a download has one indicator across the complete home screen', (
+  testWidgets(
+    'empty sync switches to the floating pill when the first note arrives',
+    (tester) async {
+      final backend = OfflineFirebase()..configure();
+      addTearDown(() async {
+        FirebaseBackend.resetForTesting();
+        await backend.auth.changes.close();
+        await backend.firestore.events.close();
+      });
+      final sync = SyncPresentation.instance;
+      final previous = sync.value;
+      final previousVisibility = AppState.showSyncProgress;
+      AppState.set('show_sync_progress', true);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      try {
+        const checking = SyncProgress(
+          SyncPhase.syncing,
+          notes: (
+            stage: NoteTransferStage.checking,
+            done: 1,
+            total: 4,
+            minutesLeft: null,
+          ),
+        );
+        final glyph = find.byKey(const ValueKey('download_activity'));
+        final pill = find.byKey(const ValueKey('sync_progress'));
+        for (final width in [390.0, 1100.0]) {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = Size(width, 800);
+          await tester.pumpWidget(_app(const Home()));
+          await _drainDatabaseWork(tester);
+          sync.value = checking;
+          await tester.pump(const Duration(milliseconds: 250));
+          expect(glyph, findsOneWidget);
+          expect(find.text('Checking note updates · 1/4'), findsOneWidget);
+          expect(pill, findsNothing);
+          AppState.filterLabels = ['QA'];
+          await _drainDatabaseWork(tester);
+          expect(glyph, findsNothing);
+          expect(pill, findsOneWidget);
+          AppState.filterLabels = [];
+          await _drainDatabaseWork(tester);
+          expect(glyph, findsOneWidget);
+          expect(pill, findsNothing);
+          AppState.set('show_sync_progress', false);
+          await tester.pump();
+          expect(find.text('Checking note updates · 1/4'), findsNothing);
+          AppState.set('show_sync_progress', true);
+          await tester.pump();
+          expect(find.text('Checking note updates · 1/4'), findsOneWidget);
+
+          expect(find.text('No notes yet'), findsNothing);
+          final area = tester.getRect(find.byType(Notes));
+          expect(tester.getCenter(glyph).dx, closeTo(area.center.dx, 1));
+          expect(tester.getCenter(glyph).dy, closeTo(area.center.dy, 30));
+        }
+        final note = Note(
+          id: 8001,
+          title: 'Arrived during sync',
+          content: '[]',
+        );
+        await tester.runAsync(() => database.insert(Note.model, note.toJson()));
+        note.notify('created', false, ModelChangeOrigin.remoteSync);
+        await _drainDatabaseWork(tester);
+        expect(find.text('Arrived during sync'), findsOneWidget);
+        expect(glyph, findsNothing);
+        expect(pill, findsOneWidget);
+        expect(
+          find.descendant(
+            of: pill,
+            matching: find.text('Checking note updates · 1/4'),
+          ),
+          findsOneWidget,
+        );
+        AppState.showNotes = NoteType.archived;
+        await _drainDatabaseWork(tester);
+        expect(find.text('Arrived during sync'), findsNothing);
+        expect(pill, findsOneWidget);
+        expect(glyph, findsNothing);
+        sync.value = SyncProgress.idle;
+        await tester.pump();
+        expect(glyph, findsNothing);
+        expect(pill, findsNothing);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        sync.value = previous;
+        AppState.set('show_sync_progress', previousVisibility);
+        UserAvatar.invalidateCache();
+        await _drainDatabaseWork(tester);
+      }
+    },
+  );
+
+  testWidgets('bulk restore shows the floating pill as soon as a note exists', (
     tester,
   ) async {
     final batch = NoteSyncBatch();
@@ -273,11 +371,63 @@ void main() {
         await tester.pumpWidget(_app(const Home()));
         await _drainDatabaseWork(tester);
         expect(sync.value.isActive, isTrue);
-        expect(find.byIcon(Icons.download_rounded), findsOneWidget);
+        expect(find.byKey(const ValueKey('download_activity')), findsOneWidget);
         expect(find.byType(CircularProgressIndicator), findsNothing);
         expect(find.byType(LinearProgressIndicator), findsNothing);
         expect(find.byKey(const ValueKey('sync_progress')), findsNothing);
       }
+      final first = Note(id: 9876, title: 'First restored note', content: '[]');
+      await tester.runAsync(() => database.insert(Note.model, first.toJson()));
+      first.notify('created', false, ModelChangeOrigin.remoteSync);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(NoteSyncBatch.active.value, isTrue);
+      expect(find.text('First restored note'), findsOneWidget);
+      final pill = find.byKey(const ValueKey('sync_progress'));
+      expect(pill, findsOneWidget);
+      final glyph = find.byKey(const ValueKey('download_activity'));
+      expect(glyph, findsOneWidget);
+      expect(find.descendant(of: pill, matching: glyph), findsOneWidget);
+      final restored = List.generate(
+        5000,
+        (i) => Note(id: 20000 + i, title: 'Bulk $i', content: '[]'),
+      );
+      await tester.runAsync(() async {
+        final writes = database.batch();
+        for (final note in restored) {
+          writes.insert(Note.model, note.toJson());
+        }
+        await writes.commit(noResult: true);
+      });
+      var gridBuilds = 0;
+      final observer = debugOnRebuildDirtyWidget;
+      debugOnRebuildDirtyWidget = (element, builtOnce) {
+        observer?.call(element, builtOnce);
+        if (element.widget is Notes) gridBuilds++;
+      };
+      try {
+        for (final (index, note) in restored.indexed) {
+          note.notify('created', false, ModelChangeOrigin.remoteSync);
+          if (index % 100 == 99) await tester.pump();
+        }
+        expect(gridBuilds, lessThanOrEqualTo(2));
+      } finally {
+        debugOnRebuildDirtyWidget = observer;
+      }
+      expect(find.text('First restored note'), findsOneWidget);
+      expect(find.text('Bulk 1999'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 450));
+      await _drainDatabaseWork(tester);
+      final bulkCards = find.byWidgetPredicate(
+        (widget) =>
+            widget is NoteCard &&
+            widget.note.title?.startsWith('Bulk ') == true,
+      );
+      for (var i = 0; i < 15 && bulkCards.evaluate().isEmpty; i++) {
+        await _drainDatabaseWork(tester);
+      }
+      expect(bulkCards, findsWidgets);
+      expect(find.byType(NoteCard).evaluate().length, lessThan(40));
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       done.complete();

@@ -197,13 +197,27 @@
 	}
 
 	async function launch() {
-		let release;
+		let release, offline;
 		try {
-			const response = await fetch("/app/beta-release.json", {
-				cache: "no-store",
-				signal: AbortSignal.timeout(5000),
-			});
-			if (!response.ok) throw new Error("No beta release");
+			const manifest = "/app/beta-release.json";
+			let response;
+			if (navigator.onLine !== false) {
+				try {
+					response = await fetch(manifest, {
+						cache: "no-store",
+						signal: AbortSignal.timeout(5000),
+					});
+				} catch {
+					// The browser may abort the request before its worker can respond.
+				}
+			}
+			if (!response) {
+				response = await caches.match(manifest, {cacheName: "better-keep-offline-app-v1"});
+				offline = true;
+			} else {
+				offline = response.headers.get("X-Better-Keep-Offline") === "1";
+			}
+			if (!response?.ok) throw new Error("No beta release");
 			release = await response.json();
 			if (
 				!/^[a-z0-9-]{1,80}$/.test(release.version) ||
@@ -230,10 +244,11 @@
 		}
 		promoted = release.status === "promoted";
 		if (selected) {
-			await chooseBeta(release);
+			rememberRelease(release);
+			start(release.base, !promoted);
 			return;
 		}
-		if (promoted) {
+		if (promoted || offline) {
 			startStable(release);
 			return;
 		}

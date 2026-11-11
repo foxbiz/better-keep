@@ -129,14 +129,16 @@ class SignOutProgressView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (stage != SignOutStage.retry) ...[
-                const CircularProgressIndicator(),
+                const SizedBox(width: 180, child: LinearProgressIndicator()),
                 const SizedBox(height: 16),
               ],
               Semantics(
                 liveRegion: true,
                 child: Text(switch (stage) {
                   SignOutStage.working => context.l10n.signingOut,
-                  SignOutStage.delayed => context.l10n.signOutFinishing,
+                  SignOutStage.clearingDevice =>
+                    context.l10n.signOutClearingDevice,
+                  SignOutStage.finishing => context.l10n.signOutFinishing,
                   SignOutStage.retry => switch (problem) {
                     SignOutProblem.secureStorage =>
                       context.l10n.signOutSecureStorageRetry,

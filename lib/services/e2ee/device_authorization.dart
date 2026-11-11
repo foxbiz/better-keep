@@ -21,13 +21,19 @@ enum LocalEncryptionState {
   needsRecovery,
   missing,
   approvedKeyMissing,
+  awaitingOnlineUnlock,
+  legacyRecoveryUnavailable,
   corrupt,
   unavailable,
   stale,
 }
 
 class SecureStorageUnavailable implements Exception {
-  const SecureStorageUnavailable(this.cause);
+  const SecureStorageUnavailable(
+    this.cause, {
+    this.state = LocalEncryptionState.unavailable,
+  });
+  final LocalEncryptionState state;
   final Object cause;
 }
 
@@ -59,10 +65,8 @@ Future<LocalEncryptionState> readLocalEncryption({
     return loaded
         ? LocalEncryptionState.ready
         : LocalEncryptionState.approvedKeyMissing;
-  } on SecureStorageUnavailable {
-    return isCurrent()
-        ? LocalEncryptionState.unavailable
-        : LocalEncryptionState.stale;
+  } on SecureStorageUnavailable catch (error) {
+    return isCurrent() ? error.state : LocalEncryptionState.stale;
   } on FormatException {
     return isCurrent()
         ? LocalEncryptionState.corrupt

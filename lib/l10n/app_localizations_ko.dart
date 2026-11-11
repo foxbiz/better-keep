@@ -498,9 +498,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cancelSignIn => '로그인 취소';
 
   @override
-  String get signInCancelled => '로그인이 취소되었습니다';
-
-  @override
   String get signInWithFacebook => 'Facebook으로 로그인';
 
   @override
@@ -567,12 +564,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get newPassword => '새 비밀번호';
 
   @override
-  String get enterNewPassword => '새 비밀번호를 입력하세요';
-
-  @override
-  String get reenterNewPassword => '새 비밀번호를 다시 입력하세요';
-
-  @override
   String get currentPassphrase => '현재 암호 문구';
 
   @override
@@ -621,9 +612,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get addLabel => '라벨 추가';
 
   @override
-  String get searchLogs => '로그 검색...';
-
-  @override
   String get audioRecording => '오디오 녹음';
 
   @override
@@ -637,9 +625,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get theme => '테마';
-
-  @override
-  String get customizeAppearance => '앱 모양 사용자 지정';
 
   @override
   String get followSystemTheme => '시스템 테마 따르기';
@@ -672,12 +657,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get alarmSound => '알람 소리';
 
   @override
-  String get reminderTimeSettings => '알림 시간 설정';
-
-  @override
-  String get setDefaultTimes => '알림의 기본 시간 설정';
-
-  @override
   String get morning => '아침';
 
   @override
@@ -687,28 +666,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get evening => '저녁';
 
   @override
-  String get localDataProtection => '로컬 데이터 보호';
-
-  @override
-  String get encryptDeviceData => '이 기기에 저장된 데이터 암호화';
-
-  @override
-  String get encryptNotes => '노트 암호화';
-
-  @override
-  String get encryptFiles => '파일 암호화';
-
-  @override
-  String get lockedNotesSecurity => '잠긴 노트 보안';
-
-  @override
-  String get privacyLockedNotes => '잠긴 노트의 개인정보 설정';
-
-  @override
   String get forgetPasswordOnClose => '닫을 때 비밀번호 잊기';
-
-  @override
-  String get requirePasswordAgain => '앱을 열 때마다 비밀번호 요구';
 
   @override
   String get nerdStats => '개발자 통계';
@@ -834,9 +792,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get insert => '삽입';
 
   @override
-  String get importAsNote => '노트로 가져오기';
-
-  @override
   String get removeDevice => '기기 제거';
 
   @override
@@ -844,9 +799,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get passwordResetSuccess => '비밀번호가 재설정되었습니다! 로그인하세요.';
-
-  @override
-  String get emailVerifiedSuccess => '이메일이 확인되었습니다!';
 
   @override
   String get useDifferentAccount => '다른 계정 사용';
@@ -864,14 +816,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reapprovalRequestSent => '재승인 요청이 전송되었습니다. 승인을 기다리는 중...';
 
   @override
-  String failedReapproval(String error) {
-    return '재승인 요청 실패: $error';
-  }
-
-  @override
-  String get rememberDevice => '이 기기 기억하기';
-
-  @override
   String get recoverWithPassphrase => '암호 문구로 복구';
 
   @override
@@ -887,17 +831,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get accessApproved => '접근이 승인되었습니다';
 
   @override
-  String failedToApprove(String error) {
-    return '승인 실패: $error';
-  }
-
-  @override
   String get accessDenied => '접근이 거부되었습니다';
-
-  @override
-  String failedToDeny(String error) {
-    return '거부 실패: $error';
-  }
 
   @override
   String get allUpToDate => '모두 최신 상태입니다';
@@ -923,21 +857,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String unlinkedProvider(String provider) {
-    return '$provider 연결이 해제되었습니다';
-  }
-
-  @override
-  String successfullyLinked(String provider) {
-    return '$provider 계정이 연결되었습니다';
-  }
-
-  @override
-  String unknownProvider(String provider) {
-    return '알 수 없는 제공자: $provider';
-  }
-
-  @override
   String get recoveryKey => '복구 키';
 
   @override
@@ -945,35 +864,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get enableE2EE => '종단간 암호화 활성화';
-
-  @override
-  String failedSaveRecoveryKey(String error) {
-    return '복구 키 저장 실패: $error';
-  }
-
-  @override
-  String get recoverySuccessWelcome => '복구 성공! 다시 오신 것을 환영합니다.';
-
-  @override
-  String get confirmConsequences => '결과를 이해했음을 확인하세요';
-
-  @override
-  String get accountResetSuccess => '계정이 재설정되었습니다. 환영합니다!';
-
-  @override
-  String failedResetAccount(String error) {
-    return '계정 재설정 실패: $error';
-  }
-
-  @override
-  String errorSigningOut(String error) {
-    return '로그아웃 오류: $error';
-  }
-
-  @override
-  String errorPlayingSound(String error) {
-    return '소리 재생 오류: $error';
-  }
 
   @override
   String get checkNestedItems => '중첩된 항목을 체크하시겠습니까?';
@@ -1003,77 +893,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reminderSet => '알림이 설정되었습니다';
 
   @override
-  String get failedCreateImageNote => '이미지 노트 생성 실패';
-
-  @override
-  String errorSavingSketchWithError(String error) {
-    return '스케치 저장 오류: $error';
-  }
-
-  @override
   String get failedSaveNote => '노트 저장 실패';
-
-  @override
-  String failedSave(String error) {
-    return '저장 실패: $error';
-  }
-
-  @override
-  String copiedAs(String format) {
-    return '$format(으)로 복사됨';
-  }
-
-  @override
-  String failedCopy(String error) {
-    return '복사 실패: $error';
-  }
 
   @override
   String get pastedAsPlainText => '일반 텍스트로 붙여넣기됨';
 
   @override
-  String failedPaste(String error) {
-    return '붙여넣기 실패: $error';
-  }
-
-  @override
   String get contentInserted => '콘텐츠가 삽입되었습니다';
-
-  @override
-  String failedInsertContent(String error) {
-    return '콘텐츠 삽입 실패: $error';
-  }
-
-  @override
-  String get actionCancelled => '작업이 취소되었습니다';
 
   @override
   String get noteLocked => '노트가 잠겼습니다';
 
   @override
-  String failedLockNote(String error) {
-    return '노트 잠금 실패: $error';
-  }
-
-  @override
   String get lockRemoved => '잠금이 해제되었습니다';
-
-  @override
-  String failedRemoveLock(String error) {
-    return '잠금 해제 실패: $error';
-  }
 
   @override
   String get noteDuplicated => '노트가 복제되었습니다';
 
   @override
   String get errorSavingNote => '노트 저장 오류';
-
-  @override
-  String get contentShared => '콘텐츠가 공유되었습니다';
-
-  @override
-  String get failedShare => '공유 실패';
 
   @override
   String get notes => '노트';
@@ -1094,45 +932,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get otherNotes => '기타';
 
   @override
-  String get noNotes => '노트가 없습니다';
-
-  @override
   String get noArchivedNotes => '보관된 노트가 없습니다';
-
-  @override
-  String get noDeletedNotes => '삭제된 노트가 없습니다';
-
-  @override
-  String get searchNotes => '노트 검색';
-
-  @override
-  String nSelectedNotes(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count개 노트 선택됨',
-      one: '1개 노트 선택됨',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get deleteNote => '노트 삭제';
 
   @override
-  String get deleteNotes => '노트 삭제';
-
-  @override
   String get moveToTrash => '휴지통으로 이동';
-
-  @override
-  String get deletePermanently => '영구 삭제';
-
-  @override
-  String get pinNote => '고정';
-
-  @override
-  String get unpinNote => '고정 해제';
 
   @override
   String get newNote => '새 노트';
@@ -1141,28 +947,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get newSketch => '새 스케치';
 
   @override
-  String get newFolder => '새 폴더';
-
-  @override
-  String get renameFolder => '폴더 이름 변경';
-
-  @override
-  String get deleteFolder => '폴더 삭제';
-
-  @override
-  String get folderName => '폴더 이름';
-
-  @override
   String get camera => '카메라';
 
   @override
   String get gallery => '갤러리';
-
-  @override
-  String get audioRecorder => '오디오 녹음기';
-
-  @override
-  String get importFile => '파일 가져오기';
 
   @override
   String get language => '언어';
@@ -1171,25 +959,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get systemDefault => '시스템 기본값';
 
   @override
-  String get selectLanguage => '언어 선택';
-
-  @override
   String get english => 'English';
-
-  @override
-  String get japanese => '日本語';
-
-  @override
-  String get korean => '한국어';
-
-  @override
-  String get indonesian => 'Bahasa Indonesia';
-
-  @override
-  String get portugueseBrazil => 'Português (Brasil)';
-
-  @override
-  String get chinese => '中文';
 
   @override
   String get today => '오늘';
@@ -1202,9 +972,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get nextMonth => '다음 달';
-
-  @override
-  String get pickDateTime => '날짜 및 시간 선택';
 
   @override
   String get time => '시간';
@@ -1240,28 +1007,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yearly => '매년';
 
   @override
-  String get snooze => '다시 알림';
-
-  @override
-  String get fiveMinutes => '5분';
-
-  @override
-  String get tenMinutes => '10분';
-
-  @override
-  String get thirtyMinutes => '30분';
-
-  @override
   String get oneHour => '1시간';
-
-  @override
-  String get gridView => '그리드 보기';
-
-  @override
-  String get listView => '목록 보기';
-
-  @override
-  String get galleryView => '갤러리 보기';
 
   @override
   String get undo => '실행 취소';
@@ -1294,14 +1040,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openChecklistView => '목록 보기 열기';
 
   @override
-  String get convertToNormalText => '일반 텍스트로 변환';
-
-  @override
   String get convertEntireChecklistToText => '전체 체크리스트를 텍스트로 변환';
-
-  @override
-  String get focusedChecklistRequiresChecklistOnly =>
-      '포커스 목록 보기는 모든 줄이 체크리스트 항목인 경우에만 사용할 수 있습니다.';
 
   @override
   String get focusedChecklistUnsupportedContent =>
@@ -1356,25 +1095,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get alignRight => '오른쪽 정렬';
 
   @override
-  String get alignJustify => '양쪽 정렬';
-
-  @override
   String get increaseIndent => '들여쓰기 증가';
 
   @override
   String get decreaseIndent => '들여쓰기 감소';
-
-  @override
-  String get heading1 => '제목 1';
-
-  @override
-  String get heading2 => '제목 2';
-
-  @override
-  String get heading3 => '제목 3';
-
-  @override
-  String get normalText => '일반 텍스트';
 
   @override
   String get pen => '펜';
@@ -1392,21 +1116,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get eraser => '지우개';
 
   @override
-  String get lasso => '올가미';
-
-  @override
   String get addPage => '페이지 추가';
 
   @override
-  String get deletePage => '페이지 삭제';
-
-  @override
   String get page => '페이지';
-
-  @override
-  String pageNumber(int number) {
-    return '페이지 $number';
-  }
 
   @override
   String get connectedAccounts => '연결된 계정';
@@ -1424,20 +1137,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get trial => '체험';
 
   @override
-  String trialEndsIn(int days) {
-    return '체험 종료까지 $days일';
-  }
-
-  @override
   String get devices => '기기';
 
   @override
   String get thisDevice => '이 기기';
-
-  @override
-  String lastActive(String time) {
-    return '마지막 활성: $time';
-  }
 
   @override
   String get pendingApproval => '승인 대기 중';
@@ -1446,30 +1149,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get security => '보안';
 
   @override
-  String get endToEndEncryption => '종단간 암호화';
-
-  @override
-  String get e2eeEnabled => '활성화됨';
-
-  @override
-  String get e2eeDisabled => '비활성화됨';
-
-  @override
   String get setupRecoveryKey => '복구 키 설정';
-
-  @override
-  String get changeRecoveryKey => '복구 키 변경';
 
   @override
   String get verifyRecoveryKey => '복구 키 확인';
 
   @override
   String get error => '오류';
-
-  @override
-  String errorWithMessage(String message) {
-    return '오류: $message';
-  }
 
   @override
   String get loading => '로딩 중...';
@@ -1488,24 +1174,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get online => '온라인';
-
-  @override
-  String get getApp => '앱 다운로드';
-
-  @override
-  String get sessionExpired => '세션이 만료되었습니다. 다시 로그인하세요.';
-
-  @override
-  String get confirmSignOut => '로그아웃하시겠습니까?';
-
-  @override
-  String get unsyncedChanges => '동기화되지 않은 변경 사항이 손실됩니다.';
-
-  @override
-  String get deleteConfirmation => '정말 삭제하시겠습니까?';
-
-  @override
-  String get permanentAction => '이 작업은 취소할 수 없습니다.';
 
   @override
   String get encryptNoteContent => '노트 내용 암호화';
@@ -1534,9 +1202,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get appInfoCredits => '앱 정보 및 크레딧';
-
-  @override
-  String get advancedSettings => '고급 설정';
 
   @override
   String get speechRecognitionModel => '음성 인식 모델';
@@ -1585,11 +1250,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noteEncryptionEnabledSimple => '노트 암호화 활성화됨.';
 
   @override
-  String errorEncryptingNotes(String error) {
-    return '노트 암호화 오류: $error';
-  }
-
-  @override
   String get noteEncryptionDisabled => '노트 암호화 비활성화됨.';
 
   @override
@@ -1597,9 +1257,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get fileEncryptionDisabled => '파일 암호화 비활성화됨.';
-
-  @override
-  String get encryptDataOnDevice => '이 기기에 저장된 데이터 암호화';
 
   @override
   String get signInCancelledMessage => '로그인이 취소되었습니다';
@@ -1740,17 +1397,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceRevoked => '기기 해제됨';
 
   @override
-  String get waitingForApprovalTitle => '승인 대기 중';
-
-  @override
   String get deviceRevokedDescription =>
       '이 기기가 해제되어 더 이상 노트에 접근할 수 없습니다. 승인된 기기에서 다시 로그인하여 재인증하세요.';
-
-  @override
-  String get pleaseApproveFrom => '승인해 주세요:';
-
-  @override
-  String get waitingForApprovalFromDevice => '다른 기기의 승인을 기다리는 중...';
 
   @override
   String get rememberThisDevice => '이 기기 기억하기';
@@ -1763,9 +1411,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get checkStatus => '상태 확인';
-
-  @override
-  String get cancelRequest => '요청 취소';
 
   @override
   String get pleaseWait => '잠시 기다려 주세요...';
@@ -1849,11 +1494,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get insertTooltip => '삽입';
 
   @override
-  String failedToImport(String error) {
-    return '가져오기 실패: $error';
-  }
-
-  @override
   String get notes_ => '노트';
 
   @override
@@ -1905,10 +1545,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get subscriptionCancelled => '구독 취소됨';
 
   @override
-  String get upgradeToProDescription =>
-      '무제한 잠금 노트, 클라우드 동기화 등을 위해 Pro로 업그레이드하세요.';
-
-  @override
   String get cancellingSubscription => '취소 중...';
 
   @override
@@ -1951,20 +1587,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '결제 제공업체를 확인할 수 없습니다. 도움이 필요하면 contact@betterkeep.app으로 문의하세요.';
 
   @override
-  String manageSubscriptionInStore(String store) {
-    return '$store에서 구독을 관리하세요.';
-  }
-
-  @override
-  String get loadingFailedTryAgain => '로딩 실패 — 다시 시도';
-
-  @override
   String get reloadPrices => '가격 다시 불러오기';
-
-  @override
-  String subscribeWithPrice(String price) {
-    return '구독하기 — $price';
-  }
 
   @override
   String get noAdsDescription =>
@@ -1978,9 +1601,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get selfHostContact => '셀프 호스팅을 원하시나요? contact@betterkeep.app으로 연락하세요';
-
-  @override
-  String get welcomeToProMessage => 'Better Keep Pro에 오신 것을 환영합니다!';
 
   @override
   String get paymentConfirmedTitle => '결제가 확인되었습니다';
@@ -2016,15 +1636,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get subscriptionCancelledSuccessfully => '구독이 성공적으로 취소되었습니다.';
-
-  @override
-  String get subscriptionResumedSuccessfully => '구독이 성공적으로 재개되었습니다.';
-
-  @override
-  String get failedToCancelSubscription => '구독 취소에 실패했습니다.';
-
-  @override
-  String get failedToResumeSubscription => '구독 재개에 실패했습니다.';
 
   @override
   String get featureTableHeader => '기능';
@@ -2120,25 +1731,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteMyAccount => '내 계정 삭제';
 
   @override
-  String get unsyncedNotesWarning =>
-      '아직 클라우드에 동기화되지 않은 노트가 있습니다. 지금 로그아웃하면 이 노트들이 영구적으로 손실됩니다.\n\n동기화가 완료될 때까지 기다리거나 먼저 데이터를 내보내는 것을 고려하세요.';
-
-  @override
-  String notesNotSynced(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count개 노트 미동기화',
-      one: '1개 노트 미동기화',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get dataLossWarning => '데이터 손실 경고';
-
-  @override
-  String get noRecoveryKeySet => '복구 키가 설정되지 않음';
 
   @override
   String get signOutNoRecoveryKeyWarning =>
@@ -2176,24 +1769,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get someoneWantsToView => '누군가 공유 노트를 보려고 합니다';
 
   @override
-  String get deviceApproved_ => '기기 승인됨';
-
-  @override
-  String failedApproveDevice(String error) {
-    return '기기 승인 실패: $error';
-  }
-
-  @override
   String get deviceRemoved => '기기 제거됨';
 
   @override
   String nDevicesRemoved(int count) {
     return '$count개 기기 제거됨';
-  }
-
-  @override
-  String failedRemoveDevice(String error) {
-    return '기기 제거 실패: $error';
   }
 
   @override
@@ -2210,11 +1790,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get enableE2EE_ => 'E2EE 활성화';
-
-  @override
-  String failedEnableE2EE(String error) {
-    return 'E2EE 활성화 실패: $error';
-  }
 
   @override
   String get recoveryKeySavedSuccessfully => '복구 키가 저장되었습니다!';
@@ -2272,9 +1847,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedUnlinkAccount => '계정 연결 해제 실패';
 
   @override
-  String get cannotUnlinkOnlyMethod => '유일한 로그인 방법은 연결 해제할 수 없습니다.';
-
-  @override
   String unknownProviderError(String provider) {
     return '알 수 없는 제공자: $provider';
   }
@@ -2284,9 +1856,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get failedSendCode => '인증 코드 전송 실패';
-
-  @override
-  String get pleaseTryAgain => '다시 시도하세요.';
 
   @override
   String get pleaseSignInAgain => '다시 로그인하고 시도하세요.';
@@ -2309,11 +1878,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedLinkAccount => '계정 연결 실패';
 
   @override
-  String providerLinkedToAnother(String provider) {
-    return '이 $provider 계정은 이미 다른 사용자에게 연결되어 있습니다.';
-  }
-
-  @override
   String get useOriginalSignInMethod =>
       '이전에 사용한 방법으로 로그인한 다음 계정 설정에서 새 로그인 방법을 연결하세요.';
 
@@ -2331,9 +1895,6 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get emailAlreadyInUse =>
       '이 이메일로 계정이 이미 존재합니다. 해당 계정으로 먼저 로그인한 후 연결하세요.';
-
-  @override
-  String get linkingCancelled => '연결이 취소되었습니다.';
 
   @override
   String successfullyLinkedProvider(String provider) {
@@ -2420,9 +1981,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get iphoneIpad => 'iPhone/iPad';
-
-  @override
   String get webBrowser => '웹 브라우저';
 
   @override
@@ -2496,10 +2054,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get notificationPermissionsRequired =>
-      '알림 기능을 사용하려면 알림 및 알람 권한이 필요합니다';
-
-  @override
   String get checkAll => '모두 선택';
 
   @override
@@ -2529,12 +2083,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get somethingWentWrongTryAgain => '문제가 발생했습니다. 다시 시도하세요.';
-
-  @override
-  String get verifyingPassphrase => '암호 문구 확인 중...';
-
-  @override
-  String get settingAsPrimaryDevice => '기본 기기로 설정 중...';
 
   @override
   String get finalizing => '마무리 중...';
@@ -2804,9 +2352,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createNewLink => '새 링크 만들기';
 
   @override
-  String get revokeLink_ => '링크 취소';
-
-  @override
   String get copy => '복사';
 
   @override
@@ -2824,11 +2369,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get linkRevoked => '링크가 취소되었습니다';
-
-  @override
-  String failedToRevoke(String error) {
-    return '취소 실패: $error';
-  }
 
   @override
   String get linkCopied => '링크가 클립보드에 복사되었습니다';
@@ -2880,10 +2420,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncDisabledPleaseSignOut => '동기화가 비활성화되었습니다. 로그아웃하고 다시 로그인하세요.';
-
-  @override
-  String get signOutConfirmationWithNote =>
-      '정말 로그아웃하시겠습니까?\n\n노트에 접근하려면 다시 로그인해야 합니다.';
 
   @override
   String get sketchTool => '도구';
@@ -2955,9 +2491,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get useAppForBetterExperience => '더 나은 경험을 위해 앱 사용';
 
   @override
-  String get noteMarkedAsDone => '노트가 완료로 표시되었습니다';
-
-  @override
   String get pickTextColor => '텍스트 색상 선택';
 
   @override
@@ -3015,31 +2548,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pickNoteColor => '노트 색상 선택';
-
-  @override
-  String failedToPaste(String error) {
-    return '붙여넣기 실패: $error';
-  }
-
-  @override
-  String failedToInsertContent(String error) {
-    return '콘텐츠 삽입 실패: $error';
-  }
-
-  @override
-  String failedToLockNote(String error) {
-    return '노트 잠금 실패: $error';
-  }
-
-  @override
-  String failedToRemoveLock(String error) {
-    return '잠금 해제 실패: $error';
-  }
-
-  @override
-  String noteDuplicatedButFailedToLock(String error) {
-    return '노트가 복제되었지만 잠금 실패: $error';
-  }
 
   @override
   String get pastedContent => '붙여넣은 콘텐츠';
@@ -3278,6 +2786,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get requestApprovalFromAnotherDevice => '다른 기기에서 승인 요청';
 
   @override
+  String get signOutClearingDevice => '이 기기의 계정 데이터를 지우는 중…';
+
+  @override
   String get signOutFinishing => '로그아웃을 마무리하는 중…';
 
   @override
@@ -3330,11 +2841,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedToResetAccount => '계정 재설정 실패';
 
   @override
-  String failedToResetAccountError(String error) {
-    return '계정 재설정 실패: $error';
-  }
-
-  @override
   String get startFreshQuestion => '새로 시작하시겠습니까?';
 
   @override
@@ -3376,11 +2882,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get failedToSaveSketch => '스케치 저장 실패';
-
-  @override
-  String errorSavingSketch(String error) {
-    return '스케치 저장 오류: $error';
-  }
 
   @override
   String get planFree => '무료';
@@ -3439,20 +2940,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unlimitedLockedNotesAndSync => '무제한 잠긴 노트 및 실시간 클라우드 동기화';
 
   @override
-  String get unlockTheFullExperience => '전체 경험 잠금 해제';
-
-  @override
   String get maybeLater => '나중에';
 
   @override
   String get enableNotificationsTitle => '알림 활성화';
-
-  @override
-  String get enableNotificationsForReminders =>
-      '동기화된 노트에 리마인더가 있습니다. 알림을 활성화하여 놓치지 마세요.';
-
-  @override
-  String get enableNotifications => '활성화';
 
   @override
   String get rateOnAppStore => 'App Store에서 평가하기';
@@ -3687,10 +3178,6 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get localEncryptionUnavailable =>
       '저장된 암호화 키를 읽을 수 없습니다. 기기 잠금을 해제하고 다시 시도하세요. 로컬 데이터는 보존되었습니다.';
-
-  @override
-  String get localEncryptionMissing =>
-      '저장된 노트를 여는 데 필요한 키가 없거나 손상되었습니다. 다시 연결하여 접근을 복원하거나 계정 복구를 사용하세요. 로컬 데이터는 보존되었습니다.';
 
   @override
   String get syncCheckingConnection => '연결 확인 중…';
@@ -3991,10 +3478,6 @@ class AppLocalizationsKo extends AppLocalizations {
       '취소하기 전에 인증이 완료되었습니다. 제공업체가 연결되어 있습니다. 제거하려면 연결 해제를 선택하세요.';
 
   @override
-  String get externalSyncNextcloudBrowserHelp =>
-      'Nextcloud 서버에 로그인하여 접근을 허용하세요. Nextcloud 설정에서 접근 권한을 철회할 수 있습니다. 브라우저에서 동기화하려면 서버에서 교차 출처 요청을 허용해야 합니다.';
-
-  @override
   String get externalSyncLogoutPending =>
       '일부 변경 사항이 아직 동기화를 기다리고 있습니다. 로그아웃하면 이 기기의 로컬 노트와 미디어가 삭제됩니다. 어떤 제공업체에도 저장되지 않은 변경 사항은 손실될 수 있습니다.\n\n로그아웃하기 전에 동기화를 완료하거나 데이터를 내보내세요.';
 
@@ -4033,11 +3516,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get externalSyncNeedsAttention => '확인 필요 · 세부 정보 보기';
 
   @override
-  String externalSyncConnectTitle(String provider) {
-    return '$provider 연결';
-  }
-
-  @override
   String get externalSyncConnectHelp =>
       '로그인하여 저장소 접근을 허용하세요. 연결되면 이 제공업체가 동기화 대상으로 선택됩니다.';
 
@@ -4058,19 +3536,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceVerificationMismatch => '기기가 일치하지 않습니다. 이 요청을 승인하지 마세요.';
 
   @override
-  String get deviceVerificationMatched => '기기를 확인했습니다. 계속할 수 있습니다.';
-
-  @override
   String get scanNewDevice => '새 기기 스캔';
 
   @override
   String get compareSecurityCode => '보안 코드 비교';
-
-  @override
-  String get completeSecurityCodeMatches => '두 기기에서 코드 전체를 비교했으며 서로 일치합니다.';
-
-  @override
-  String get approveVerifiedDevice => '기기 승인';
 
   @override
   String get deviceCameraUnavailable =>
@@ -4081,8 +3550,23 @@ class AppLocalizationsKo extends AppLocalizations {
       '확인하지 못했습니다. 두 기기를 업데이트하고 새 기기에서 코드를 다시 생성한 뒤 재시도하세요.';
 
   @override
-  String get browserEncryptionSessionOnly =>
-      '암호화 키는 이 브라우저 세션에만 유지됩니다. 새로고침 후 브라우저를 다시 승인하거나 복구 암호문을 사용하세요.';
+  String get browserStorageUnavailable =>
+      '브라우저 설정에서 이 사이트의 데이터 저장을 허용한 후 다시 시도하세요.';
+
+  @override
+  String get browserLegacyRecoveryUnavailable =>
+      '이 버전에서는 브라우저에 저장된 암호화 키를 열 수 없습니다. 이 브라우저의 데이터를 지우지 마세요. 승인된 기기에서 동기화된 노트를 열거나 다른 브라우저에서 복구 암호문구를 사용하세요.';
+
+  @override
+  String get browserSessionOnly => '이번 세션만';
+
+  @override
+  String get browserDeviceTrust =>
+      '이 브라우저에 기기 승인이 저장되면 다운로드한 노트를 오프라인으로 열 수 있습니다.';
+
+  @override
+  String get browserUnlockOnline =>
+      '노트는 이 기기에 저장되어 있습니다. 인터넷에 연결한 후 다시 시도를 눌러 잠금을 해제하세요.';
 
   @override
   String get verifyTrustedDevice => '신뢰하는 기기 확인';
@@ -4093,9 +3577,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get scanTrustedDevice => '신뢰하는 기기 스캔';
-
-  @override
-  String get acceptVerifiedKey => '확인된 키 수락';
 
   @override
   String get confirmOnNewDevice => '새 기기에서 확인';
@@ -4180,9 +3661,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get choosePlan => '요금제 선택';
 
   @override
-  String get upgradeToLite => 'Lite로 업그레이드';
-
-  @override
   String get automaticExternalSync => '외부 저장소 자동 동기화';
 
   @override
@@ -4194,9 +3672,6 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get manualSyncDescription =>
       '수동 동기화는 무료입니다. Lite와 Pro는 자동 업데이트를 제공합니다.';
-
-  @override
-  String get automaticSyncEnabled => '자동 업데이트 사용 중';
 
   @override
   String get subscriptionActiveTitle => '구독 활성화됨';
@@ -4220,10 +3695,6 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get deletionCodeRecentlyRequested =>
       '최근에 코드를 요청했습니다. 이메일을 확인하거나 1분 후에 새 코드를 요청하세요.';
-
-  @override
-  String get deviceCodeApprovalInstruction =>
-      '새 기기의 코드와 비교하세요. 전체 코드가 일치할 때만 승인하세요.';
 
   @override
   String get providerSignInVerificationFailed =>

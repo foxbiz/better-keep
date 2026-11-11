@@ -13,55 +13,78 @@ Future<bool> confirmDeviceSignOut(
   bool active() =>
       context.mounted && isCurrent() && AuthService.currentUser?.uid == uid;
   final l10n = context.l10n;
-  Future<bool> confirm(String message, {required bool destructive}) async {
-    if (!active()) return false;
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: Icon(
-          destructive ? Icons.warning_amber_rounded : Icons.logout,
-          color: destructive ? Theme.of(dialogContext).colorScheme.error : null,
-        ),
-        title: Text(destructive ? l10n.dataLossWarning : l10n.signOut),
-        content: Text(message),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: destructive
-                ? FilledButton.styleFrom(
-                    backgroundColor: Theme.of(dialogContext).colorScheme.error,
-                  )
-                : null,
-            child: Text(destructive ? l10n.signOutAnyway : l10n.signOut),
-          ),
-        ],
+  final inspection = unavailableLibrary
+      ? null
+      : currentSyncLogoutState().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => SyncLogoutState.unknown,
+        );
+  var recoveryWarning = false;
+  final accepted = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, update) => FutureBuilder<SyncLogoutState>(
+        future: inspection,
+        builder: (context, snapshot) {
+          final checking =
+              inspection != null &&
+              snapshot.connectionState != ConnectionState.done;
+          final state = snapshot.data ?? SyncLogoutState.unknown;
+          final needsSyncWarning = state != SyncLogoutState.complete;
+          final warnRecoveryNow =
+              recoveryWarning || (warnWithoutRecovery && !needsSyncWarning);
+          final destructive =
+              !checking &&
+              (unavailableLibrary || needsSyncWarning || warnRecoveryNow);
+          final message = unavailableLibrary
+              ? l10n.signOutLibraryWarning
+              : warnRecoveryNow
+              ? l10n.signOutNoRecoveryKeyWarning
+              : switch (state) {
+                  SyncLogoutState.pending => l10n.externalSyncLogoutPending,
+                  SyncLogoutState.unknown => l10n.externalSyncLogoutUnknown,
+                  SyncLogoutState.complete => l10n.signOutConfirmation,
+                };
+          return AlertDialog(
+            icon: Icon(
+              destructive ? Icons.warning_amber_rounded : Icons.logout,
+              color: destructive ? Theme.of(context).colorScheme.error : null,
+            ),
+            title: Text(destructive ? l10n.dataLossWarning : l10n.signOut),
+            content: checking
+                ? LinearProgressIndicator(semanticsLabel: l10n.checkingStatus)
+                : Text(message),
+            actions: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: checking
+                    ? null
+                    : () {
+                        if (!active()) {
+                          Navigator.pop(dialogContext, false);
+                        } else if (!unavailableLibrary &&
+                            warnWithoutRecovery &&
+                            !warnRecoveryNow) {
+                          update(() => recoveryWarning = true);
+                        } else {
+                          Navigator.pop(dialogContext, true);
+                        }
+                      },
+                style: destructive
+                    ? FilledButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      )
+                    : null,
+                child: Text(destructive ? l10n.signOutAnyway : l10n.signOut),
+              ),
+            ],
+          );
+        },
       ),
-    );
-    return accepted == true && active();
-  }
-
-  if (unavailableLibrary) {
-    return confirm(l10n.signOutLibraryWarning, destructive: true);
-  }
-  final state = await currentSyncLogoutState();
-  if (!context.mounted || !active()) return false;
-  if (state != SyncLogoutState.complete) {
-    final proceed = await confirm(
-      state == SyncLogoutState.pending
-          ? l10n.externalSyncLogoutPending
-          : l10n.externalSyncLogoutUnknown,
-      destructive: true,
-    );
-    if (!proceed) return false;
-  }
-  if (warnWithoutRecovery) {
-    return confirm(l10n.signOutNoRecoveryKeyWarning, destructive: true);
-  }
-  return state == SyncLogoutState.complete
-      ? confirm(l10n.signOutConfirmation, destructive: false)
-      : active();
+    ),
+  );
+  return accepted == true && active();
 }

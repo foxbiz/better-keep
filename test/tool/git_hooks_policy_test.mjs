@@ -47,18 +47,18 @@ test("pull requests to main run portable and native gates without release builds
 		buildReleaseWorkflow,
 		/pull_request:\s*\n\s+branches:\s*\n\s+- main/,
 	);
-	assert.doesNotMatch(
-		buildReleaseWorkflow.slice(
-			buildReleaseWorkflow.indexOf("  release-gate:"),
-			buildReleaseWorkflow.indexOf("  build-android:"),
-		),
-		/^\s+if:/m,
-	);
+	const checks = extractWorkflowJob(buildReleaseWorkflow, "release-checks");
+	assert.doesNotMatch(checks, /^\s+if:/m);
+	assert.match(checks, /needs: image-share-native/);
+	assert.match(checks, /suite: \[release-core, offline-browser\]/);
 	const native = extractWorkflowJob(buildReleaseWorkflow, "image-share-native");
 	assert.match(native, /runs-on: macos-latest/);
 	assert.doesNotMatch(native, /^\s+if:/m);
 	assert.match(native, /node --test test\/tool\/image_share_native_test\.mjs/);
-	assert.match(extractWorkflowJob(buildReleaseWorkflow, "release-gate"), /needs: image-share-native/);
+	const gate = extractWorkflowJob(buildReleaseWorkflow, "release-gate");
+	assert.match(gate, /if: always\(\)/);
+	assert.match(gate, /needs: release-checks/);
+	assert.ok(gate.includes('test "${{ needs.release-checks.result }}" = success'));
 	for (const job of ["build-android", "build-windows", "build-macos"]) {
 		const definition = extractWorkflowJob(buildReleaseWorkflow, job);
 		assert.match(definition, /if: github\.event_name == 'workflow_dispatch'/);

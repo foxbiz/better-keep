@@ -1633,26 +1633,27 @@ class DeviceManager {
 
   /// Deletes the current device from Firestore.
   /// This should be called during logout to remove the device from the user's devices collection.
-  Future<void> deleteCurrentDevice() async {
+  Future<String?> deleteCurrentDevice() async {
     if (_currentUser == null) {
       AppLogger.log('E2EE: No user logged in, skipping device deletion');
-      return;
+      return null;
     }
 
     final deviceId = await _secureStorage.getDeviceId();
     requireCloudOperation();
     if (deviceId == null) {
       AppLogger.log('E2EE: No device ID found, skipping device deletion');
-      return;
+      return null;
     }
 
     try {
       AppLogger.log('E2EE: Deleting current device $deviceId from Firestore');
       await _devicesCollection.doc(deviceId).delete();
       AppLogger.log('E2EE: Device $deviceId deleted successfully');
+      return deviceId;
     } catch (e) {
       AppLogger.error('E2EE: Error deleting device $deviceId', e);
-      // Don't rethrow - we still want logout to proceed even if device deletion fails
+      return null;
     }
   }
 

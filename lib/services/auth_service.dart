@@ -1,3 +1,6 @@
+import 'browser_connection.dart'
+    if (dart.library.js_interop) 'browser_connection_web.dart';
+
 import 'auth_error_messages.dart';
 import 'remote_sync_cache_service.dart';
 import 'local_storage_recovery.dart';
@@ -15,6 +18,8 @@ import 'package:better_keep/services/e2ee/device_authorization.dart';
 
 import 'dart:io';
 import 'dart:async';
+
+import 'sketch_preview_repair_service.dart';
 
 import 'package:better_keep/services/external_sync/external_sync_service.dart';
 
@@ -63,7 +68,7 @@ import 'package:better_keep/services/web_oauth_stub.dart'
     if (dart.library.html) 'package:better_keep/services/web_oauth.dart'
     as web_oauth;
 
-enum SignOutStage { working, delayed, retry }
+enum SignOutStage { working, clearingDevice, finishing, retry }
 
 enum SignOutProblem { secureStorage, database, otherWindow }
 
@@ -226,6 +231,14 @@ class AuthService {
           await start();
         }),
       );
+      if (isCurrent() &&
+          canRestoreLocalSession &&
+          E2EEService.instance.isCryptoReady &&
+          postSignInState.value.hasRecoverableFailure &&
+          postSignInState.value.stage ==
+              PostSignInStage.encryptionInitialization) {
+        postSignInState.value = PostSignInState.ready;
+      }
     },
     onFailure: (error, stack) {
       AppLogger.error('[CLOUD_RECOVERY] Verification deferred', error, stack);
@@ -237,8 +250,14 @@ class AuthService {
       !sessionInvalid.value &&
       cloudRecovery.state.value == CloudSessionState.ready;
 
+  static bool _appForeground = true;
+  static bool _observingConnection = false;
+
   static void setAppForeground(bool foreground) {
-    ExternalSyncService.instance.setForeground(foreground);
+    _appForeground = foreground;
+    ExternalSyncService.instance.setForeground(
+      foreground && cloudRecovery.networkAvailable,
+    );
     cloudRecovery.setForeground(foreground);
     if (foreground && canSyncCloud && AppState.get('db') != null) {
       final current = captureSession();
@@ -521,6 +540,13 @@ class AuthService {
     bool deferLocalRestore = false,
   }) async {
     _deferLocalRestore = deferLocalRestore;
+    if (kIsWeb && !_observingConnection) {
+      _observingConnection = true;
+      observeBrowserConnection((available) {
+        cloudRecovery.setNetworkAvailable(available);
+        ExternalSyncService.instance.setForeground(_appForeground && available);
+      });
+    }
     FirebaseSyncPreference.instance.init();
     try {
       await purgeExpiredOAuthTransactions();
@@ -1728,17 +1754,19 @@ class AuthService {
     if (!current()) return;
     if (canRestoreLocalSession) {
       final local = E2EEService.instance.localState;
-      if (local == LocalEncryptionState.pending ||
-          local == LocalEncryptionState.revoked ||
-          local == LocalEncryptionState.needsRecovery ||
+      final requiresLocalRepair =
           local == LocalEncryptionState.unavailable ||
-          local == LocalEncryptionState.corrupt) {
+          local == LocalEncryptionState.legacyRecoveryUnavailable ||
+          local == LocalEncryptionState.corrupt;
+      if (requiresLocalRepair ||
+          local == LocalEncryptionState.pending ||
+          local == LocalEncryptionState.revoked ||
+          local == LocalEncryptionState.needsRecovery) {
         postSignInState.value = PostSignInState.recoverableFailure(
           PostSignInStage.encryptionInitialization,
           operation: 'restore-local-encryption',
         );
-        if (local != LocalEncryptionState.unavailable &&
-            local != LocalEncryptionState.corrupt) {
+        if (!requiresLocalRepair) {
           cloudRecovery.start(user.uid);
           unawaited(cloudRecovery.check());
         }
@@ -1764,6 +1792,13 @@ class AuthService {
       return;
     }
     if (!current()) return;
+    if (canRestoreLocalSession &&
+        E2EEService.instance.localState ==
+            LocalEncryptionState.legacyRecoveryUnavailable) {
+      // Preload already retried the legacy key locally. A network request
+      // cannot unlock it and could hide the recovery guidance when offline.
+      return;
+    }
     final inFlight = _postSignInFuture;
     if (inFlight != null) {
       await inFlight;
@@ -2304,9 +2339,6 @@ class AuthService {
 
   static Future<void> _journaledSignOut({required bool reopenDatabase}) async {
     signOutStage.value = SignOutStage.working;
-    final slow = Timer(const Duration(seconds: 20), () {
-      signOutStage.value = SignOutStage.delayed;
-    });
     try {
       final recovery = LocalStorageRecovery(await AppState.prefs);
       final scope = FirebaseScopedPreferences.scopeForPreferences(
@@ -2363,8 +2395,18 @@ class AuthService {
     } catch (_) {
       signOutStage.value = SignOutStage.retry;
       rethrow;
-    } finally {
-      slow.cancel();
+    }
+  }
+
+  static Future<void> _finishPendingSignOutWrites() async {
+    try {
+      await FirebaseBackend.firestore.waitForPendingWrites().timeout(
+        const Duration(seconds: 3),
+      );
+    } catch (error) {
+      AppLogger.log(
+        'Firestore write flush unavailable during sign-out (${error.runtimeType})',
+      );
     }
   }
 
@@ -2372,6 +2414,7 @@ class AuthService {
     String nextGeneration, {
     required bool reopenDatabase,
   }) async {
+    signOutStage.value = SignOutStage.working;
     _sessionEpoch++;
     AttachmentRepairCoordinator.instance.reset();
     E2EEService.instance.resetInitialization();
@@ -2384,7 +2427,12 @@ class AuthService {
     _postSignInFuture = null;
     postSignInState.value = PostSignInState.idle;
     try {
-      await ExternalSyncService.instance.stop();
+      await Future.wait([
+        SketchPreviewRepairService.stopStartupRepair().timeout(
+          signOutKeyTimeout,
+        ),
+        ExternalSyncService.instance.stop(),
+      ]);
       try {
         await ReminderSessionService.setSignedIn(false);
       } catch (error) {
@@ -2394,14 +2442,18 @@ class AuthService {
       // Stop token revocation listener
       _stopTokenRevocationListener();
 
-      // Cancel only note reminder deliveries before the note database is
-      // deleted. Device-approval notifications use a separate payload and ID
-      // namespace and remain independently managed below.
       try {
-        await ReminderSignOutCleanupService.cancelDeliveries();
-      } catch (e) {
-        AppLogger.error('Error cancelling reminders during signout: $e');
+        DeviceApprovalNotificationService().dispose();
+      } catch (error, stack) {
+        unawaited(
+          AppLogger.error(
+            'Could not dispose device approval notifications',
+            error,
+            stack,
+          ),
+        );
       }
+      await ReminderSignOutCleanupService.cancelDeliveries();
 
       // Cancel all alarms
       try {
@@ -2410,14 +2462,6 @@ class AuthService {
         }
       } catch (e) {
         AppLogger.error('Error stopping alarms during signout: $e');
-      }
-
-      // Dispose device approval notifications
-      try {
-        DeviceApprovalNotificationService().dispose();
-        await DeviceApprovalNotificationService().cancelAllNotifications();
-      } catch (e) {
-        AppLogger.error('Error disposing device approval notifications: $e');
       }
 
       // Stop sync service listeners BEFORE signing out to prevent permission errors
@@ -2468,28 +2512,10 @@ class AuthService {
         );
       }
 
-      // Wait for pending Firestore writes and disable network before signing out
-      // This prevents permission-denied errors from in-flight operations after auth is cleared
-      try {
-        final firestore = FirebaseBackend.firestore;
-        // Wait for any pending writes to complete (with timeout)
-        await firestore.waitForPendingWrites().timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            AppLogger.log('Timeout waiting for pending Firestore writes');
-          },
-        );
-        // Disable network to prevent any new operations
-        await firestore.disableNetwork().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () {
-            AppLogger.log('Timeout disabling Firestore network during signout');
-          },
-        );
-      } catch (e) {
-        AppLogger.error('Error waiting for Firestore writes: $e');
-      }
-
+      // Sync listeners are stopped. Give queued writes a bounded chance to
+      // finish while clearing local data, before releasing the Firebase user.
+      final pendingWrites = _finishPendingSignOutWrites();
+      signOutStage.value = SignOutStage.clearingDevice;
       // A later account may only open the namespace after these steps succeed.
       try {
         final database = AppState.get('db');
@@ -2521,24 +2547,8 @@ class AuthService {
 
       await AppState.reset();
 
-      // Re-enable Firestore network after signing out
-      // Note: We intentionally do NOT call terminate() or clearPersistence() because:
-      // 1. terminate() makes the Firestore instance permanently unusable until app restart
-      // 2. clearPersistence() requires terminate() first, which breaks re-login
-      // Security rules will prevent access to old cached data from other users
-      try {
-        final firestore = FirebaseBackend.firestore;
-        await firestore.enableNetwork().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () {
-            AppLogger.log(
-              'Timeout re-enabling Firestore network after signout',
-            );
-          },
-        );
-      } catch (e) {
-        AppLogger.error('Error re-enabling Firestore network: $e');
-      }
+      signOutStage.value = SignOutStage.finishing;
+      await pendingWrites;
 
       // Sign Out
       if (!kIsWeb &&

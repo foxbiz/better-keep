@@ -12,12 +12,33 @@ import {
 	buildBetaRelease,
 } from "../../tool/beta_web.mjs";
 
-function assertLoaderPaths(bootstrap, basePath) {
+import { prepareOfflineAssets } from "../../tool/prepare_offline_assets.mjs";
+
+const bootstrapTemplate = (
+	await readFile(
+		new URL("../../web/flutter_bootstrap.js", import.meta.url),
+		"utf8",
+	)
+)
+	.replace("{{flutter_js}}", "")
+	.replace("{{flutter_build_config}}", "");
+async function assertLoaderPaths(bootstrap, basePath) {
 	let configAtLoad;
 	const context = {
 		URL,
-		document: { baseURI: "https://preview.example/app/" },
+		document: {
+			currentScript: {
+				src: new URL(
+					"flutter_bootstrap.js",
+					"https://preview.example" + basePath,
+				).href,
+			},
+			baseURI: "https://preview.example/app/",
+		},
+		navigator: {},
+		setTimeout: () => {},
 		_flutter: {
+			buildConfig: { builds: [{ compileTarget: "dart2js" }] },
 			loader: {
 				load({ config }) {
 					configAtLoad = config;
@@ -26,7 +47,8 @@ function assertLoaderPaths(bootstrap, basePath) {
 		},
 	};
 	context.window = context;
-	runInNewContext(bootstrap, context);
+	await runInNewContext(bootstrap, context);
+	await new Promise((resolve) => setImmediate(resolve));
 	const expected = new URL(basePath, context.document.baseURI).href;
 	assert.equal(configAtLoad.assetBase, expected);
 	assert.equal(configAtLoad.entrypointBaseUrl, expected);
@@ -64,17 +86,14 @@ test("staging preserves deployed bytes and refuses modified baselines or unsafe 
 				})),
 			}),
 		);
-		await writeFile(
-			path.join(beta, "flutter_bootstrap.js"),
-			"window._flutter = window._flutter || {};\n_flutter.loader.load({serviceWorkerSettings:{}});",
-		);
+		await writeFile(path.join(beta, "flutter_bootstrap.js"), bootstrapTemplate);
 		await writeFile(path.join(beta, "manifest.json"), "{}");
 		await finalizeBetaBuild(beta, "beta-test");
 		const bootstrap = await readFile(
 			path.join(beta, "flutter_bootstrap.js"),
 			"utf8",
 		);
-		assertLoaderPaths(bootstrap, "/app/releases/beta-test/");
+		await assertLoaderPaths(bootstrap, "/app/releases/beta-test/");
 		assert.ok(!bootstrap.includes("serviceWorkerSettings"));
 		const output = path.join(root, "output");
 		const report = await stageBeta({ snapshot, beta, output });
@@ -142,10 +161,15 @@ test("paired build uses distinct compile-time storage modes and compiles both wo
 				builds.push({ command, args });
 				if (command !== "flutter") return;
 				const output = args.find((a) => a.startsWith("--output=")).slice(9);
-				await mkdir(output, { recursive: true });
+				await mkdir(path.join(output, "assets"), { recursive: true });
+				await writeFile(path.join(output, "assets/icon.png"), "fixture");
+				await writeFile(
+					path.join(output, "offline_worker.js"),
+					"const bundledAssets = [];",
+				);
 				await writeFile(
 					path.join(output, "flutter_bootstrap.js"),
-					"window._flutter=window._flutter || {};\n_flutter.loader.load({});",
+					bootstrapTemplate,
 				);
 				await writeFile(path.join(output, "manifest.json"), "{}");
 			},
@@ -167,7 +191,17 @@ test("paired build uses distinct compile-time storage modes and compiles both wo
 				path.join(directory, "flutter_bootstrap.js"),
 				"utf8",
 			);
-			assertLoaderPaths(bootstrap, basePath);
+			assert.match(
+				await readFile(path.join(directory, "offline_worker.js"), "utf8"),
+				/assets\/icon\.png/,
+			);
+			await writeFile(path.join(directory, "assets/added.txt"), "new");
+			await prepareOfflineAssets(directory);
+			assert.match(
+				await readFile(path.join(directory, "offline_worker.js"), "utf8"),
+				/assets\/added\.txt/,
+			);
+			await assertLoaderPaths(bootstrap, basePath);
 		}
 		assert.equal(beta.storage, "isolated-v1");
 		assert.equal(stable.storage, "stable-v1");
@@ -176,4 +210,95 @@ test("paired build uses distinct compile-time storage modes and compiles both wo
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
+});
+
+test("first frame during a channel switch warms the matching controller", async () => {
+	const base = "https://preview.example/app/releases/qa/";
+	const workers = new EventTarget();
+	const window = new EventTarget();
+	const sent = [];
+	const worker = (path) => ({
+		scriptURL: new URL(path, base).href,
+		postMessage: (message) => sent.push([path, message.base]),
+	});
+	workers.controller = worker("/app/offline_worker.js");
+	workers.register = async () => ({active: workers.controller});
+	workers.ready = workers.register();
+	runInNewContext(bootstrapTemplate, {
+		window, document: {currentScript: {src: base + "flutter_bootstrap.js"}},
+		navigator: {serviceWorker: workers}, URL,
+		performance: {getEntriesByType: () => []}, setTimeout: () => {},
+		_flutter: {buildConfig: {builds: [{compileTarget: "dart2js"}]}, loader: {load() {}}},
+	});
+	window.dispatchEvent(new Event("flutter-first-frame"));
+	await Promise.resolve();
+	assert.deepEqual(sent, []);
+	workers.controller = worker("offline_worker.js");
+	workers.dispatchEvent(new Event("controllerchange"));
+	workers.dispatchEvent(new Event("controllerchange"));
+	assert.deepEqual(sent, [["offline_worker.js", base]]);
+});
+
+test("offline worker only handles public resources and normalizes version cache busting", async () => {
+	const listeners = new Map();
+	const origin = "https://preview.example";
+	const lookups = [];
+	const context = {
+		URL,
+		self: {
+			registration: { scope: origin + "/app" },
+			location: { href: origin + "/app/offline_worker.js" },
+			navigator: { onLine: false },
+			addEventListener: (name, handler) => listeners.set(name, handler),
+		},
+		caches: {
+			open: async () => ({
+				match: async (key) => {
+					lookups.push(key);
+					return new Response("cached");
+				},
+			}),
+		},
+	};
+	runInNewContext(
+		await readFile(
+			new URL("../../web/offline_worker.js", import.meta.url),
+			"utf8",
+		),
+		context,
+	);
+	const handle = (url, options) => {
+		let response;
+		listeners.get("fetch")({
+			request: new Request(url, options),
+			respondWith: (value) => {
+				response = value;
+			},
+		});
+		return response;
+	};
+	for (const url of [
+		"/oauth/storage/callback",
+		"/app/storage-auth.html",
+		"/__emulator/auth",
+		"/app/main.dart.js?code=secret",
+	]) {
+		assert.equal(handle(origin + url), undefined);
+	}
+	assert.equal(
+		handle(origin + "/app/main.dart.js", {
+			headers: { Authorization: "Bearer synthetic" },
+		}),
+		undefined,
+	);
+	assert.equal(
+		handle(origin + "/app/main.dart.js", { method: "POST" }),
+		undefined,
+	);
+	assert.equal(handle("https://example.org/app/main.dart.js"), undefined);
+	assert.equal(
+		await (await handle(origin + "/app/version.json?cachebuster=123")).text(),
+		"cached",
+	);
+	assert.deepEqual(lookups, [origin + "/app/version.json"]);
 });

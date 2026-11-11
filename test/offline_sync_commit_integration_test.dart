@@ -590,10 +590,10 @@ void main() {
         token.completeError(TimeoutException('synthetic offline verification'));
         await tester.pump();
         expect(find.byType(CircularProgressIndicator), findsNothing);
-        expect(SyncPresentation.instance.value.phase, SyncPhase.unavailable);
+        expect(SyncPresentation.instance.value.phase, SyncPhase.idle);
         await tester.pumpAndSettle();
-        expect(find.text('No connection available.'), findsOneWidget);
-        expect(find.byKey(const ValueKey('sync_progress')), findsOneWidget);
+        expect(find.text('No connection available.'), findsNothing);
+        expect(find.byKey(const ValueKey('sync_progress')), findsNothing);
         expect(find.byType(SnackBar), findsNothing);
         await tester.pumpWidget(const SizedBox());
         debugDefaultTargetPlatformOverride = null;

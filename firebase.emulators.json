@@ -20,6 +20,10 @@
     ],
     "headers": [
       {
+        "source": "/app{,/**}/offline_worker.js",
+        "headers": [{ "key": "Service-Worker-Allowed", "value": "/app" }]
+      },
+      {
         "source": "**",
         "headers": [
           {

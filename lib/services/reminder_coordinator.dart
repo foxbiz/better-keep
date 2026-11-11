@@ -1,3 +1,4 @@
+import 'auth_service.dart';
 import 'note_sync_batch.dart';
 
 import 'dart:async';
@@ -90,6 +91,12 @@ class ReminderCoordinator {
     );
     await ReminderNavigationService.instance.restorePending();
     AlarmLifecycleService.instance.init(_completeFromAlarm);
+    LocalNotificationService.instance.lateCancellation.addListener(() {
+      if (AuthService.currentUser != null &&
+          AuthService.signOutStage.value == null) {
+        requestReconciliation();
+      }
+    });
   }
 
   void attachUiActionListener() {
@@ -290,7 +297,11 @@ class ReminderCoordinator {
       // Web has no scheduled notifications or alarms to reconcile. Incoming
       // sync can request this for every note; avoid decoding the entire library.
       if (kIsWeb) return;
+      final sameAccount = AuthService.captureSessionIdentity();
+      bool current() => sameAccount() && AuthService.signOutStage.value == null;
+      if (!current()) return;
       await init();
+      if (!current()) return;
       if (!await ReminderSessionService.isSignedIn()) {
         await LocalNotificationService.instance.cancelAllReminderDeliveries();
         return;
@@ -299,23 +310,29 @@ class ReminderCoordinator {
           .refreshTimeZone();
       final notes = await Note.get(NoteType.all);
       for (final note in notes) {
+        // A large restore may still be reconciling when the user signs out.
+        // Leave the remaining deliveries to the account-wide cleanup.
+        if (!current()) return;
         if (note.id == null) continue;
         if (note.reminder == null || note.completed || note.trashed) {
           _schedulingGeneration++;
-          await _noteOperations.run(note.id!, () => _cancelUnlocked(note.id!));
+          await _noteOperations.run(note.id!, () async {
+            if (current()) await _cancelUnlocked(note.id!);
+          });
           continue;
         }
         if (note.reminder!.type == ReminderType.notification) {
           _schedulingGeneration++;
-          await _noteOperations.run(
-            note.id!,
-            () => _stopAlarmUnlocked(note.id!),
-          );
+          await _noteOperations.run(note.id!, () async {
+            if (current()) await _stopAlarmUnlocked(note.id!);
+          });
         } else {
           await schedule(note);
         }
       }
+      if (!current()) return;
       await _reconcileNotificationPlan(forceRecreate: timeZoneChanged);
+      if (!current()) return;
       if (timeZoneChanged) {
         AppLogger.log('Rescheduled reminders after timezone change');
       }
@@ -373,7 +390,11 @@ class ReminderCoordinator {
       );
     }
 
+    final sameAccount = AuthService.captureSessionIdentity();
     final plan = await _reconcileNotificationPlan();
+    if (!sameAccount() || AuthService.signOutStage.value != null) {
+      return const ReminderScheduleResult(ReminderDeliveryState.superseded);
+    }
     final noteId = note.id!;
     if (plan == null) {
       return const ReminderScheduleResult(ReminderDeliveryState.unsupported);
@@ -417,6 +438,7 @@ class ReminderCoordinator {
         )) {
           return null;
         }
+        final deliveryGeneration = await notifications.prepareDeliveries();
         final notes = await Note.get(NoteType.all);
         final candidates = <ReminderNotificationCandidate>[];
         for (final current in notes) {
@@ -446,6 +468,7 @@ class ReminderCoordinator {
         }
         await notifications.applyReminderPlan(
           result.notifications,
+          deliveryGeneration: deliveryGeneration,
           forceRecreate: recreate,
         );
         recreate = false;
@@ -564,6 +587,19 @@ class ReminderCoordinator {
     );
     if (payload == null || payload['kind'] != 'reminder') {
       await AppLogger.log('Reminder notification response rejected: payload');
+      return;
+    }
+    if (!await LocalNotificationService.instance.acceptsReminder(
+      payload,
+      background: fromBackground,
+    )) {
+      if (response.id != null) {
+        await _initializeBackgroundNotificationsIfNeeded(fromBackground);
+        await LocalNotificationService.instance.dismissRetiredReminder(
+          response.id,
+          payload,
+        );
+      }
       return;
     }
     if (noteId is! int) {

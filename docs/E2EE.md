@@ -54,7 +54,7 @@ Each device has its own X25519 keypair:
   - iOS/macOS: Keychain
   - Android: EncryptedSharedPreferences / Keystore
   - Windows: Windows Credential Store
-  - Web: memory only for new keypairs and master keys; reload requires approval or recovery. The original `WEB_STORAGE_KEY` is retained only for read-only legacy recovery, not new key persistence.
+  - Web: approved device keys and completed pairing proofs are encrypted in local IndexedDB using a browser-generated, non-extractable AES-GCM key. After reload, a matching signed-in account and approved identity can open the local library offline. Cloud transfers wait for online device verification and master-key unwrapping. A device learns of remote revocation when it reconnects. Offline reopening also requires a non-secret grant in Web Storage. Revocation retires that grant independently of the IndexedDB write. The master key and pending pairing secrets remain in memory. The wrapping key lives in the same browser profile. Scripts running on the app origin can use it, and anyone with a compromised browser profile may recover device material. When the identity cannot be saved, approval lasts for this session. If the browser cannot read its device history, first-device setup waits until storage is accessible to avoid replacing an existing encryption key. Sign-out retires the local library and clears browser trust. If the trust record cannot be erased or verified as revoked, sign-out retires its local library using the persisted sign-out journal. Cleanup verifies the new library generation before completing, including while offline. A surviving identity bound to the retired library cannot unlock the new library. If retirement cannot be verified, the app offers Retry. Clearing site data or revoking the device requires approval or recovery again. The original `WEB_STORAGE_KEY` is retained only for read-only legacy recovery, not new key persistence.
 
 - **Public Key**: Stored on Firestore for other devices to use
 
@@ -314,7 +314,7 @@ Use the device-verification UI to scan the new device or enter its eight-digit p
 
 `SyncCipher` derives a separate credential purpose from the existing user master key. Authenticated envelopes bind user, provider, library, connection generation and OAuth client identity. Firebase stores these envelopes, not plaintext credentials. Approved devices decrypt compatible grants locally.
 
-For providers requiring a confidential OAuth client, the reusable exchange function sees authorization codes and tokens transiently during exchange/refresh. It does not persist or log them and never receives the user master key. This is a credential trust boundary; it does not change note/media end-to-end encryption. The exchange validates the approved session, connection capability, generation/revision, refresh lease and configured client before and after exchange. It does not cryptographically attest that a caller-supplied token belongs to the encrypted connection.
+For providers requiring a confidential OAuth client, the reusable exchange function sees authorization codes and tokens transiently during exchange/refresh. It does not persist or log them and never receives the user master key. This is a credential trust boundary; it does not change note/media end-to-end encryption. The exchange validates the approved session, connection capability, generation/revision, refresh lease and configured client before and after exchange. For brokered grants, an HMAC binds the refresh token to the user, provider, connection, OAuth client and connection generation. The exchange checks this binding before refresh and updates it on token rotation.
 
 Built-in note/media remote formats remain unchanged. External sync stores its encrypted manifests, revisions and media in a separate account/library namespace, with independent per-provider cursors and acknowledgements.
 
@@ -371,7 +371,7 @@ regenerates the request and invalidates the abandoned handoff. A delayed, correc
 approval may still finish before regeneration.
 
 Request publication journals only locally generated candidates and the previous accepted
-fingerprint in native secure storage (browser memory only). After an uncertain write, a
+fingerprint in native secure storage (encrypted IndexedDB for approved browsers). After an uncertain write, a
 server read selects only a matching local candidate; an unknown request is never adopted.
 Explicit regeneration can abandon a conflicting journal. Account/session fences remain
 in force, including during rollback and cancellation.

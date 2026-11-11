@@ -720,7 +720,9 @@ class _BetterKeepState extends State<BetterKeep> {
           );
         }),
       );
-      unawaited(SketchPreviewRepairService.runIfNeeded());
+      if (AuthService.signOutStage.value == null) {
+        unawaited(SketchPreviewRepairService.runIfNeeded());
+      }
       setState(() {
         this.db = db;
       });

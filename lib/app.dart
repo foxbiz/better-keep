@@ -344,10 +344,26 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                 message:
                                     postSignInState.accountDeletionInProgress
                                     ? context.l10n.accountDeletionInProgress
-                                    : E2EEService.instance.localState ==
-                                          LocalEncryptionState.unavailable
-                                    ? context.l10n.localEncryptionUnavailable
-                                    : null,
+                                    : switch (E2EEService.instance.localState) {
+                                        LocalEncryptionState
+                                            .awaitingOnlineUnlock =>
+                                          context.l10n.browserUnlockOnline,
+                                        LocalEncryptionState
+                                            .legacyRecoveryUnavailable =>
+                                          context
+                                              .l10n
+                                              .browserLegacyRecoveryUnavailable,
+                                        LocalEncryptionState.unavailable
+                                            when kIsWeb =>
+                                          context
+                                              .l10n
+                                              .browserStorageUnavailable,
+                                        LocalEncryptionState.unavailable =>
+                                          context
+                                              .l10n
+                                              .localEncryptionUnavailable,
+                                        _ => null,
+                                      },
                                 onRetry: () => _retryPostSignInSafely(
                                   'authenticated startup screen',
                                 ),

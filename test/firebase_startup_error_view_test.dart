@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:better_keep/components/app_startup_view.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/l10n/app_localization_config.dart';
@@ -12,6 +16,19 @@ import 'package:better_keep/state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/offline_firebase.dart';
+
+class _BusyDatabase extends Fake implements Database {
+  final release = Completer<void>();
+
+  @override
+  Future<T> transaction<T>(
+    Future<T> Function(Transaction) action, {
+    bool? exclusive,
+  }) async {
+    await release.future;
+    throw StateError('Busy QA database');
+  }
+}
 
 void main() {
   Widget host(Widget home, {Locale locale = const Locale('en')}) => MaterialApp(
@@ -76,6 +93,55 @@ void main() {
     await tester.tap(find.text(strings.signOutAnyway));
     await tester.pumpAndSettle();
     expect(signOuts, 1);
+  });
+
+  testWidgets('a busy sync check can be canceled and times out to a warning', (
+    tester,
+  ) async {
+    final backend = OfflineFirebase()..configure();
+    final db = _BusyDatabase();
+    AppState.db = db;
+    addTearDown(() async {
+      db.release.complete();
+      AppState.set('db', null);
+      FirebaseBackend.resetForTesting();
+      await backend.auth.changes.close();
+      await backend.firestore.events.close();
+    });
+    final strings = lookupAppLocalizations(const Locale('en'));
+    bool? accepted;
+    await tester.pumpWidget(
+      host(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              accepted = await confirmDeviceSignOut(context);
+            },
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    );
+    for (final cancel in [true, false]) {
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+      if (cancel) {
+        await tester.tap(find.text(strings.cancel));
+      } else {
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pump();
+        expect(find.text(strings.externalSyncLogoutUnknown), findsOneWidget);
+        await tester.tap(find.text(strings.signOutAnyway));
+      }
+      await tester.pumpAndSettle();
+      expect(accepted, !cancel);
+    }
   });
 
   testWidgets('sign-out retry identifies the blocked resource', (tester) async {

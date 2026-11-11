@@ -21,6 +21,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_web/firebase_core_web.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 void main() {
@@ -79,7 +80,9 @@ void main() {
       ),
     );
     final manager = DeviceManager.instance;
+    SharedPreferences.setMockInitialValues({});
     final storage = E2EESecureStorage.instance;
+    await storage.init(uid: user.uid);
     final trusted = await KeyExchange.generateKeyPair();
     final recipient = await KeyExchange.generateKeyPair();
     final master = Uint8List.fromList(List.generate(32, (i) => i + 1));

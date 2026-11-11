@@ -195,7 +195,7 @@ void main() {
     );
 
     testWidgets(
-      'offline refresh shows one message with progress card $cardEnabled',
+      'offline refresh stays silent with progress card $cardEnabled',
       (tester) async {
         final response = Completer<void>();
         var calls = 0;
@@ -213,15 +213,9 @@ void main() {
         response.completeError(TimeoutException('offline'));
         await tester.pumpAndSettle();
 
-        expect(find.text('No connection available.'), findsOneWidget);
-        expect(
-          find.byKey(const ValueKey('sync_progress')),
-          cardEnabled ? findsOneWidget : findsNothing,
-        );
-        expect(
-          find.byType(SnackBar),
-          cardEnabled ? findsNothing : findsOneWidget,
-        );
+        expect(find.text('No connection available.'), findsNothing);
+        expect(find.byKey(const ValueKey('sync_progress')), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
         await tester.pumpWidget(const SizedBox());
       },
     );
@@ -357,32 +351,6 @@ void main() {
       },
     );
   }
-
-  testWidgets('offline refresh shows the pill again after dismissal', (
-    tester,
-  ) async {
-    NoteSyncService.refreshOperationOverride = () async {
-      throw TimeoutException('offline');
-    };
-    LabelSyncService.refreshOperationOverride = () async {};
-    await mountFeedback(tester);
-    await tester.tap(find.byType(IconButton));
-    await tester.pumpAndSettle();
-    final pill = find.byKey(const ValueKey('sync_progress'));
-    expect(pill, findsOneWidget);
-    expect(find.byType(SnackBar), findsNothing);
-
-    await tester.drag(pill, const Offset(0, 100));
-    await tester.pumpAndSettle();
-    expect(pill, findsNothing);
-    await tester.tap(find.byType(IconButton));
-    await tester.pumpAndSettle();
-
-    expect(pill, findsOneWidget);
-    expect(find.text('No connection available.'), findsOneWidget);
-    expect(find.byType(SnackBar), findsNothing);
-    await tester.pumpWidget(const SizedBox());
-  });
 
   testWidgets('label-only activity is visible without old note counts', (
     tester,
@@ -584,42 +552,43 @@ void main() {
     }
   });
 
-  testWidgets('overlapping refresh taps share work and show one snackbar', (
-    tester,
-  ) async {
-    AppState.set('show_sync_progress', false);
-    final response = Completer<void>();
-    var calls = 0;
-    NoteSyncService.refreshOperationOverride = () {
-      calls++;
-      return response.future;
-    };
-    LabelSyncService.refreshOperationOverride = () async {};
-    await tester.pumpWidget(
-      MaterialApp(
-        scaffoldMessengerKey: AppState.scaffoldMessengerKey,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () => refreshSyncFromUser(context),
-              child: const Text('Refresh'),
+  testWidgets(
+    'overlapping refresh taps share work and stay silent when offline',
+    (tester) async {
+      AppState.set('show_sync_progress', false);
+      final response = Completer<void>();
+      var calls = 0;
+      NoteSyncService.refreshOperationOverride = () {
+        calls++;
+        return response.future;
+      };
+      LabelSyncService.refreshOperationOverride = () async {};
+      await tester.pumpWidget(
+        MaterialApp(
+          scaffoldMessengerKey: AppState.scaffoldMessengerKey,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => refreshSyncFromUser(context),
+                child: const Text('Refresh'),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.text('Refresh'));
-    await tester.tap(find.text('Refresh'));
-    expect(calls, 1);
-    response.completeError(TimeoutException('remote transport timeout'));
-    await tester.pumpAndSettle();
-    expect(find.text('No connection available.'), findsOneWidget);
-    expect(find.byType(SnackBar), findsOneWidget);
-  });
+      );
+      await tester.tap(find.text('Refresh'));
+      await tester.tap(find.text('Refresh'));
+      expect(calls, 1);
+      response.completeError(TimeoutException('remote transport timeout'));
+      await tester.pumpAndSettle();
+      expect(find.text('No connection available.'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+    },
+  );
 
-  testWidgets('explicit unavailable refresh shows one localized snackbar', (
+  testWidgets('explicit unavailable refresh keeps the editor clear', (
     tester,
   ) async {
     AppState.set('show_sync_progress', false);
@@ -644,7 +613,7 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
     await tester.tap(find.text('Refresh'));
     await tester.pumpAndSettle();
-    expect(find.text('No connection available.'), findsOneWidget);
-    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.text('No connection available.'), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
   });
 }

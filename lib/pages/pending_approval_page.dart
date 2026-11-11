@@ -55,7 +55,6 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
       _silentRefreshStatus();
     });
     // Also listen to device manager
-    _deviceManager.hasUMK.addListener(_onUMKChanged);
     _deviceManager.wasRevoked.addListener(_onRevokedChanged);
   }
 
@@ -63,7 +62,6 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
   void dispose() {
     _codePairing?.dispose();
     _refreshTimer?.cancel();
-    _deviceManager.hasUMK.removeListener(_onUMKChanged);
     _deviceManager.wasRevoked.removeListener(_onRevokedChanged);
     super.dispose();
   }
@@ -181,12 +179,6 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
       _rememberDevice = value;
     });
     await E2EESecureStorage.instance.setRememberDevice(value);
-  }
-
-  void _onUMKChanged() {
-    if (_deviceManager.hasUMK.value) {
-      _e2eeService.status.value = E2EEStatus.ready;
-    }
   }
 
   void _onRevokedChanged() {
@@ -374,7 +366,7 @@ class _PendingApprovalPageState extends State<PendingApprovalPage> {
                 ListTile(
                   leading: const Icon(Icons.lock_outline),
                   title: Text(context.l10n.encryption),
-                  subtitle: Text(context.l10n.browserEncryptionSessionOnly),
+                  subtitle: Text(context.l10n.browserDeviceTrust),
                 )
               else
                 SwitchListTile(

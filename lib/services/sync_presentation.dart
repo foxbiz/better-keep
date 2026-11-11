@@ -147,6 +147,28 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
         ? _firebaseProgress(completion: completion)
         : SyncProgress.idle;
     final external = externalProgress?.call() ?? SyncProgress.idle;
+    final localAccess = e2eeStatusCanAccessLocalNotes(encryptionStatus.value);
+    final backgroundCheck =
+        recovery.state.value == CloudSessionState.pending &&
+        !isManualRefresh &&
+        postSignInState.value == PostSignInState.ready;
+    if (localAccess &&
+        !sessionInvalid.value &&
+        ((recovery.state.value == CloudSessionState.unavailable &&
+                (!isManualRefresh || !recovery.networkAvailable)) ||
+            backgroundCheck) &&
+        (completion == null ||
+            completion.phase == SyncPhase.unavailable ||
+            completion.phase == SyncPhase.deferred)) {
+      // An external provider can still be reachable during a Firebase outage.
+      value =
+          recovery.networkAvailable &&
+              (external.phase == SyncPhase.syncing ||
+                  (!firebase && external.isSuccess))
+          ? external
+          : SyncProgress.idle;
+      return;
+    }
     final states = [cloud, external];
     if (states.any((s) => s.phase == SyncPhase.syncing)) {
       value =
@@ -167,7 +189,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
         failedCount: cloud.failedCount + external.failedCount,
       );
     } else if (states.any((s) => s.phase == SyncPhase.unavailable)) {
-      value = const SyncProgress(SyncPhase.unavailable);
+      value = SyncProgress.idle;
     } else if (states.any((s) => s.isActive)) {
       value = states.firstWhere((s) => s.isActive);
     } else if (states.any(
@@ -187,7 +209,9 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
         }.contains(s.phase),
       );
     } else if (completion != null && !completion.isSuccess) {
-      value = completion;
+      value = completion.phase == SyncPhase.unavailable
+          ? SyncProgress.idle
+          : completion;
     } else if (cloud.phase == SyncPhase.uploadRestricted) {
       value = cloud;
     } else if (isManualRefresh) {

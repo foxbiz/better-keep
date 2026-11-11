@@ -502,7 +502,8 @@ export const pages: MarketingPage[] = [
       {
         heading: 'Recovery responsibility',
         paragraphs: [
-          'A recovery passphrase is not sent to the backend. If all approved devices and the recovery passphrase are lost, Better Keep cannot reconstruct the encryption key. Keep the passphrase in a reputable password manager or another secure offline location.'
+          'A recovery passphrase is not sent to the backend. If all approved devices and the recovery passphrase are lost, Better Keep cannot reconstruct the encryption key. Keep the passphrase in a reputable password manager or another secure offline location.',
+          "If an updated browser can’t unlock your notes, keep its site data. Open synced notes on an approved device or use your recovery passphrase in another browser. Clearing site data can remove notes that have only been saved in that browser."
         ]
       },
       {

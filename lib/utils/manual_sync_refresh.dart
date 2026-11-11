@@ -80,6 +80,7 @@ Future<SyncRefreshOutcome> runManualSyncRefresh({
 
 /// Feedback belongs only to user actions, never to automatic sync retries.
 Future<void> refreshSyncFromUser(BuildContext context) {
+  if (!AuthService.cloudRecovery.networkAvailable) return Future.value();
   final running = _manualRefresh;
   if (running != null && _manualRefreshCurrent?.call() == true) return running;
   final accountCurrent = AuthService.captureSessionIdentity();
@@ -130,10 +131,12 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
   if (!context.mounted) return;
   switch (outcome) {
     case SyncRefreshOutcome.unavailable:
-      if (!AppState.showSyncProgress) {
-        snackbar(context.l10n.noConnectionAvailable);
-      }
+      return;
     case SyncRefreshOutcome.deferred:
+      if (AuthService.cloudRecovery.state.value ==
+          CloudSessionState.unavailable) {
+        return;
+      }
       final chooseProvider =
           !AuthService.sessionInvalid.value &&
           E2EEService.instance.status.value != E2EEStatus.pendingApproval &&

@@ -68,6 +68,8 @@ void main() {
   testWidgets('initial restore honors the sync progress display preference', (
     tester,
   ) async {
+    final reduceMotion = ValueNotifier(false);
+    addTearDown(reduceMotion.dispose);
     final previous = AppState.showSyncProgress;
     final session = NoteSyncBatch();
     final done = Completer<void>();
@@ -81,6 +83,13 @@ void main() {
         MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => ValueListenableBuilder<bool>(
+            valueListenable: reduceMotion,
+            builder: (context, reduce, _) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: reduce),
+              child: child!,
+            ),
+          ),
           home: const Scaffold(body: BulkSyncProgress()),
         ),
       );
@@ -94,14 +103,37 @@ void main() {
         if (!show) {
           expect(find.bySemanticsLabel('Updating your notes'), findsOneWidget);
         }
-        final download = find.byIcon(Icons.download_rounded);
+        final download = find.byKey(const ValueKey('download_activity'));
         expect(download, findsOneWidget);
         expect(find.byType(LinearProgressIndicator), findsNothing);
         expect(find.byType(CircularProgressIndicator), findsNothing);
-        final before = tester.getCenter(download);
+        double shaftLength() {
+          final canvas = TestRecordingCanvas();
+          tester
+              .widget<CustomPaint>(download)
+              .painter!
+              .paint(canvas, tester.getSize(download));
+          final shaft = canvas.invocations
+              .map((call) => call.invocation)
+              .singleWhere((call) => call.memberName == #drawLine)
+              .positionalArguments;
+          return ((shaft[1] as Offset) - (shaft[0] as Offset)).distance;
+        }
+
+        final center = tester.getCenter(download);
+        final before = shaftLength();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 700));
-        expect(tester.getCenter(download).dy, isNot(closeTo(before.dy, .001)));
+        expect(tester.getCenter(download), center);
+        expect(shaftLength(), isNot(closeTo(before, 1)));
+        reduceMotion.value = true;
+        await tester.pump();
+        final still = shaftLength();
+        expect(still, greaterThan(0));
+        await tester.pump(const Duration(milliseconds: 700));
+        expect(shaftLength(), still);
+        reduceMotion.value = false;
+        await tester.pump();
       }
     } finally {
       done.complete();
@@ -197,7 +229,7 @@ void main() {
       external.value = const SyncProgress(SyncPhase.syncing);
       expect(presentation.value.phase, SyncPhase.syncing);
       external.value = const SyncProgress(SyncPhase.complete);
-      expect(presentation.value.phase, SyncPhase.unavailable);
+      expect(presentation.value.phase, SyncPhase.idle);
       firebaseEnabled.value = false;
       expect(presentation.value.phase, SyncPhase.complete);
       noteStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
@@ -295,7 +327,7 @@ void main() {
     );
     expect(presentation.value.phase, SyncPhase.preparing);
     recovery.connectionLost();
-    expect(presentation.value.phase, SyncPhase.unavailable);
+    expect(presentation.value.phase, SyncPhase.idle);
     expect(presentation.value.isActive, isFalse);
   });
 
@@ -378,18 +410,18 @@ void main() {
       expect(presentation.value.phase, SyncPhase.uploadRestricted);
       expect(presentation.value.isActive, isFalse);
       recovery.connectionLost();
-      expect(presentation.value.phase, SyncPhase.unavailable);
+      expect(presentation.value.phase, SyncPhase.idle);
     },
   );
 
   test(
-    'offline and approval backoff show a reason without a spinner',
+    'offline retries stay silent while an approval request remains visible',
     () async {
       final check = recovery.check();
       verification.complete(CloudSessionState.unavailable);
       await check;
       expect(recovery.activity.value, CloudRecoveryActivity.idle);
-      expect(presentation.value.phase, SyncPhase.unavailable);
+      expect(presentation.value.phase, SyncPhase.idle);
       expect(presentation.value.isActive, isFalse);
       encryption.value = E2EEStatus.pendingApproval;
       recovery.state.value = CloudSessionState.pending;
@@ -442,6 +474,6 @@ void main() {
     expect(recovery.activity.value, CloudRecoveryActivity.idle);
     verification.complete(CloudSessionState.ready);
     await tester.pump();
-    expect(presentation.value.phase, SyncPhase.unavailable);
+    expect(presentation.value.phase, SyncPhase.idle);
   });
 }

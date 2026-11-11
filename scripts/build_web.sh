@@ -23,6 +23,8 @@ rm -rf "$APP_OUTPUT"
   --output="$APP_OUTPUT" \
   "$@"
 
+node "$PROJECT_DIR/tool/prepare_offline_assets.mjs" "$APP_OUTPUT"
+
 npm --prefix "$PROJECT_DIR/site" run build
 npm --prefix "$PROJECT_DIR/admin-site" run build
 

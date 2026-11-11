@@ -280,7 +280,7 @@ No named routes or router package. All navigation uses `Navigator.push()` / `Nav
 - Android/iOS background **Mark as Done** actions use `ReminderActionProcessor`, which initializes only preferences, SQLite, and notification delivery. It atomically validates the occurrence, advances/completes the reminder, records an idempotency receipt, and queues note sync.
 - The main isolate consumes unhandled action receipts on startup/resume, emits note-model updates, and merges only reminder metadata into an open editor so unsaved title/content remain intact.
 - Notification taps are persisted until authentication, database, Home, and root navigation are ready. Occurrence-level activation receipts suppress replayed Android launch intents.
-- `ReminderSessionService` fails closed while signed out. Sign-out cancels reminder notifications by payload/known note ID without using plugin-wide `cancelAll`, preserving unrelated device-approval notifications.
+- `ReminderSessionService` fails closed while signed out. Sign-out cancels reminder and device-approval deliveries in one native call. The device-wide notification_delivery_generation fences reminder taps and background actions across accounts. A pending marker is finalized on restart. A failed OS cancellation allows new deliveries; a late successful cancellation triggers reconciliation of current reminders and approval alerts.
 
 ### Sync: Local-First, Newest-Wins
 
@@ -465,7 +465,7 @@ pending_remote_sync: id, item_id, item_type, operation, ...
 - Free supports manual external sync. Lite/Pro add automatic external updates. Pro is required for built-in uploads, not downloads. Paused built-in sync still downloads notes, media, labels and ordering on every plan. `firebaseDownloads` in the confirmed sync preference prevents an external-provider pause/clear from silently attaching Firebase; legacy missing values retain built-in recovery. Deploy its rules and the Functions clear-selection writer before the client. Local unsynced edits remain queued.
 - Device-list rendering uses `UserDevicesSection` for the compact three-row profile list and full device route. Main-device authorization remains in the existing device manager.
 - Credentials are encrypted on the client with purpose-derived user keys. The OAuth exchange function sees tokens transiently, but does not persist or log them. Notes, media and master keys remain end-to-end encrypted.
-- New browser keys exist only in memory. A read-only legacy WEB_STORAGE_KEY decoder preserves existing users until a recovery passphrase is saved; never rotate/remove that compatibility value prematurely.
+- Approved browser device identity can survive reload in IndexedDB. The unwrapped master key and pending pairing secrets live in memory. Approved browsers can open the matching local library offline after a cold start. Cloud transfers require online approval verification. A read-only legacy WEB_STORAGE_KEY decoder preserves existing users until a recovery passphrase is saved; never rotate/remove that compatibility value prematurely.
 - New device approvals require QR pairing or full security-code verification. Legacy self-declared device status is not proof of credential access; capabilities remain required.
 - See docs/EXTERNAL_SYNC_IMPLEMENTATION.md and docs/EXTERNAL_SYNC_QA.md for compatibility and outstanding release gates.
 

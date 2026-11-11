@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -63,6 +64,33 @@ void main() {
       )
     ''');
     AppState.db = database;
+  });
+
+  test('sign-out drains a blocked startup scan without writing retired checkpoints', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final transaction = database.transaction((txn) async {
+      await txn.insert('note', {'id': 1, 'title': 'QA'});
+      entered.complete();
+      await release.future;
+    });
+    await entered.future;
+    final scan = SketchPreviewRepairService.runIfNeeded();
+    expect(identical(scan, SketchPreviewRepairService.runIfNeeded()), true);
+    await Future<void>.delayed(Duration.zero);
+    final stop = SketchPreviewRepairService.stopStartupRepair();
+    release.complete();
+    await Future.wait([stop, scan, transaction]);
+    final prefs = await AppState.prefs;
+    expect(
+      prefs.getKeys().where((k) => k.contains('sketch_preview_renderer')),
+      isEmpty,
+    );
+    await SketchPreviewRepairService.runIfNeeded();
+    expect(
+      prefs.getInt('sketch_preview_renderer_version'),
+      SketchPreviewRepairService.currentVersion,
+    );
   });
 
   tearDown(() async {

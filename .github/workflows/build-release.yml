@@ -29,8 +29,12 @@ jobs:
       - name: Run Swift inbox and signing-policy tests
         run: node --test test/tool/image_share_native_test.mjs test/tool/image_share_signing_test.mjs
 
-  release-gate:
-    name: Release gate
+  release-checks:
+    name: Release checks (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [release-core, offline-browser]
     needs: image-share-native
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -92,7 +96,20 @@ jobs:
           # This job only tests disposable browser data and publishes no bundle.
           # Keep production settings out of pull request builds.
           printf 'WEB_STORAGE_KEY=%064x\n' 1 > .env
-          npm run release
+          if [ "${{ matrix.suite }}" = "release-core" ]; then
+            npm run check analyze
+          fi
+          npm test -- "${{ matrix.suite }}"
+
+  # Preserve the required check name and require both independently timed jobs.
+  release-gate:
+    name: Release gate
+    needs: release-checks
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all release checks to pass
+        run: test "${{ needs.release-checks.result }}" = success
 
   # ============================================
   # Android APK Build

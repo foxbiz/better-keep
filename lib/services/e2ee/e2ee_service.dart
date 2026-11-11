@@ -161,19 +161,32 @@ class E2EEService {
         case LocalEncryptionState.needsRecovery:
           status.value = E2EEStatus.needsRecovery;
         case LocalEncryptionState.corrupt:
+        case LocalEncryptionState.awaitingOnlineUnlock:
+        case LocalEncryptionState.legacyRecoveryUnavailable:
         case LocalEncryptionState.unavailable:
           status.value = E2EEStatus.error;
         case LocalEncryptionState.approvedKeyMissing:
+          // Local notes have their own storage and lock policy. Only cloud
+          // transfers need the master key that the server wraps for this device.
+          if (AuthService.canRestoreLocalSession &&
+              _secureStorage.hasRememberedBrowserIdentity) {
+            status.value = E2EEStatus.verifyingInBackground;
+            return true;
+          }
         case LocalEncryptionState.missing:
         case LocalEncryptionState.stale:
           break;
       }
       return false;
+    } on CloudOperationCancelled {
+      rethrow;
     } catch (e) {
       if (!isCurrent()) return false;
-      localState = e is FormatException
-          ? LocalEncryptionState.corrupt
-          : LocalEncryptionState.unavailable;
+      localState = switch (e) {
+        SecureStorageUnavailable(:final state) => state,
+        FormatException() => LocalEncryptionState.corrupt,
+        _ => LocalEncryptionState.unavailable,
+      };
       status.value = E2EEStatus.error;
       AppLogger.error('E2EE: Error preloading cached status', e);
       return false;
@@ -221,10 +234,12 @@ class E2EEService {
       if (AuthService.hasDifferentLocalAccount) {
         throw StateError('Local account mismatch');
       }
-      if (await checked(preloadCachedStatus)) return;
-      if (localState == LocalEncryptionState.unavailable) {
-        throw const SecureStorageUnavailable(
+      if (await checked(preloadCachedStatus) && isCryptoReady) return;
+      if (localState == LocalEncryptionState.unavailable ||
+          localState == LocalEncryptionState.legacyRecoveryUnavailable) {
+        throw SecureStorageUnavailable(
           'Local encryption storage unavailable',
+          state: localState,
         );
       }
       if (localState == LocalEncryptionState.corrupt) {
@@ -260,10 +275,8 @@ class E2EEService {
       final isFirst = await checked(_deviceManager.isFirstDevice);
       if (isFirst) {
         final hasRecovery = await checked(_recoveryKeyService.hasRecoveryKey);
-        final initializedBefore = await checked(
-          () => _secureStorage.wasAccountInitialized(uid!),
-        );
-        if (!hasRecovery && !initializedBefore) {
+        if (!hasRecovery &&
+            !await checked(() => _secureStorage.wasAccountInitialized(uid!))) {
           await checked(_setupE2EE);
           return;
         }
@@ -282,8 +295,20 @@ class E2EEService {
       await checked(() => _secureStorage.cacheDeviceStatus('needs_recovery'));
     } catch (error, stack) {
       if (!current() || error is CloudOperationCancelled) return;
+      if (error is SecureStorageUnavailable) {
+        localState = error.state;
+      } else if (localState == LocalEncryptionState.approvedKeyMissing &&
+          isCloudConnectionFailure(error)) {
+        // A remembered identity still needs an online check to unwrap the key.
+        // Keep a network failure on the retry screen.
+        localState = kIsWeb
+            ? LocalEncryptionState.awaitingOnlineUnlock
+            : LocalEncryptionState.unavailable;
+      }
       AppLogger.error('E2EE: Initialization error', error, stack);
-      if (!isCryptoReady &&
+      if (!(status.value == E2EEStatus.verifyingInBackground &&
+              isCloudConnectionFailure(error)) &&
+          !isCryptoReady &&
           status.value != E2EEStatus.pendingApproval &&
           status.value != E2EEStatus.revoked &&
           status.value != E2EEStatus.needsRecovery) {
@@ -351,13 +376,14 @@ class E2EEService {
     AppLogger.log('E2EE: Setting up E2EE for first device...');
 
     // Generate and store device keys, create UMK
+    await _secureStorage.init(uid: AuthService.currentUser?.uid);
     await _deviceManager.registerFirstDevice();
 
-    status.value = E2EEStatus.ready;
     await _secureStorage.rememberInitializedAccount(
       AuthService.currentUser!.uid,
     );
     await _secureStorage.cacheDeviceStatus('approved');
+    status.value = E2EEStatus.ready;
 
     // Flag that recovery key setup is needed
     needsRecoveryKeySetup.value = true;
@@ -404,7 +430,17 @@ class E2EEService {
                 );
               }
               await _secureStorage.rememberInitializedAccount(uid!);
-              await _secureStorage.cacheDeviceStatus('approved');
+              try {
+                await _secureStorage.cacheDeviceStatus('approved');
+              } on BrowserApprovalNotReady {
+                if (!current()) return DeviceAuthorization.unavailable;
+                status.value = E2EEStatus.pendingApproval;
+                listenForStatusChanges();
+                await _deviceManager.startListeningForApproval(
+                  isCurrent: current,
+                );
+                return DeviceAuthorization.pending;
+              }
               if (!current()) return DeviceAuthorization.unavailable;
               localState = LocalEncryptionState.ready;
               if (_secureStorage.needsLegacyRecoverySetup) {
@@ -420,12 +456,16 @@ class E2EEService {
               status.value = authorization == DeviceAuthorization.revoked
                   ? E2EEStatus.revoked
                   : E2EEStatus.needsRecovery;
-              await _secureStorage.cacheDeviceStatus(
-                authorization == DeviceAuthorization.revoked
-                    ? 'revoked'
-                    : 'needs_recovery',
-              );
-              if (current()) await _deviceManager.clearUMK();
+              try {
+                await _secureStorage.cacheDeviceStatus(
+                  authorization == DeviceAuthorization.revoked
+                      ? 'revoked'
+                      : 'needs_recovery',
+                  deviceDeleted: authorization == DeviceAuthorization.deleted,
+                );
+              } finally {
+                if (current()) await _deviceManager.clearUMK();
+              }
             case DeviceAuthorization.pending:
               status.value = E2EEStatus.pendingApproval;
               await _secureStorage.cacheDeviceStatus('pending');
@@ -494,19 +534,52 @@ class E2EEService {
     _deviceManager.wasRevoked.addListener(_onRevokedChanged);
   }
 
-  void _onUMKChanged() {
-    if (_deviceManager.hasUMK.value &&
-        status.value == E2EEStatus.pendingApproval) {
-      status.value = E2EEStatus.ready;
-      _secureStorage.cacheDeviceStatus('approved');
-      unawaited(recheckCloudReadinessAfterDeviceChange());
+  Future<void> _onUMKChanged() async {
+    if (!_deviceManager.hasUMK.value ||
+        status.value != E2EEStatus.pendingApproval) {
+      return;
     }
+    final account = AuthService.captureSession();
+    final generation = _sessionGeneration;
+    bool pending() =>
+        account() &&
+        generation == _sessionGeneration &&
+        _deviceManager.hasUMK.value &&
+        status.value == E2EEStatus.pendingApproval;
+    try {
+      await _secureStorage.cacheDeviceStatus('approved');
+      if (!pending()) return;
+      status.value = E2EEStatus.ready;
+    } on BrowserApprovalNotReady {
+      // The key notification can arrive during verification. Queue one fresh
+      // authorization check once that operation finishes. Unfinished proof
+      // keeps the device pending and never triggers another key notification.
+      if (!pending()) return;
+    } catch (error, stack) {
+      if (!pending()) return;
+      status.value = E2EEStatus.error;
+      AppLogger.error('E2EE: Could not remember approved device', error, stack);
+      return;
+    }
+    unawaited(recheckCloudReadinessAfterDeviceChange());
   }
 
   void _onRevokedChanged() {
     if (_deviceManager.wasRevoked.value) {
       status.value = E2EEStatus.revoked;
-      _secureStorage.cacheDeviceStatus('revoked');
+      unawaited(
+        bindBackgroundCloudOperation(
+          AuthService.captureSessionIdentity(),
+          () => _secureStorage.cacheDeviceStatus('revoked'),
+          onError: (error, stack) {
+            AppLogger.error(
+              'Could not persist device revocation',
+              error,
+              stack,
+            );
+          },
+        )(),
+      );
       _deviceManager.clearRevokedFlag();
     }
   }
@@ -540,14 +613,16 @@ class E2EEService {
       _listenersRegistered = false;
     }
 
+    String? revokedDeviceId;
     if (!ReviewAccess.isAuthorizedSessionFor(AuthService.currentUser)) {
       try {
-        await _deviceManager.deleteCurrentDevice().timeout(
+        revokedDeviceId = await _deviceManager.deleteCurrentDevice().timeout(
           const Duration(seconds: 2),
           onTimeout: () {
             AppLogger.log(
               'E2EE: Timeout deleting current device during dispose',
             );
+            return null;
           },
         );
       } catch (e) {
@@ -575,7 +650,10 @@ class E2EEService {
     requireCloudOperation();
     RecoveryKeyService.instance.clearFirestoreCache();
 
-    await _secureStorage.clearAll();
+    await _secureStorage.clearAll(
+      signingOut: true,
+      revokedDeviceId: revokedDeviceId,
+    );
 
     requireCloudOperation();
     statusProgress.value = null;

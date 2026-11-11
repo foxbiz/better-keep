@@ -83,7 +83,9 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"macos-build-policy",
 		"mobile-web",
 		"oauth-recovery",
+		"offline-browser",
 		"release",
+		"release-core",
 		"reminders",
 		"review-prompts",
 		"search",
@@ -215,7 +217,10 @@ test("focused PR suites pin every required Flutter test path", () => {
 });
 
 test("web release builds the combined site before deterministic validation", () => {
-	const operations = resolveTestTask(["web-release"]).operations;
+	const all = resolveTestTask(["web-release"]).operations;
+	const offline = resolveTestTask(["offline-browser"]).operations;
+	assert.deepEqual(all.slice(-offline.length), offline);
+	const operations = all.slice(0, -offline.length);
 	assert.deepEqual(operations[0], {
 		args: [],
 		command: "./scripts/build_web.sh",
@@ -244,6 +249,7 @@ test("web release builds the combined site before deterministic validation", () 
 		"--test",
 		"test/web/beta_launcher_test.mjs",
 		"test/web/firebase_emulator_auth_restart_test.mjs",
+		"test/web/checkout_loading_test.mjs",
 	]);
 });
 
@@ -255,6 +261,10 @@ test("hosting assertions avoid optional local-only search tools", () => {
 
 test("release expands suites in the established order and excludes devices", () => {
 	const release = resolveTestTask(["release"]);
+	const core = resolveTestTask(["release-core"]).operations;
+	const offline = resolveTestTask(["offline-browser"]).operations;
+	assert.deepEqual(release.operations, [...core, ...offline]);
+	assert.ok(!core.some((op) => op.args.includes("node test/emulator/offline_browser.mjs")));
 	const serializedOperations = JSON.stringify(release.operations);
 	const orderedMarkers = [
 		"build_tasks_test.mjs",
@@ -398,6 +408,15 @@ test("passes merged environments to Firebase without changing the parent", async
 
 test("release gates pairing and both compiled web storage modes", () => {
 	const operations = resolveTestTask(["release"]).operations;
+	assert.ok(operations.some((op) =>
+		op.args?.includes("test/e2ee_browser_storage_test.dart") &&
+		op.args.includes("chrome") && op.environment.CHROME_EXECUTABLE,
+	));
+	assert.ok(operations.some((op) =>
+		op.type === "firebase" &&
+		op.args?.at(-1) === "node test/emulator/offline_browser.mjs" &&
+		op.args.includes("demo-better-keep-pairing"),
+	));
 	const pairing = operations.find((op) =>
 		op.args?.includes("test/device_pairing_code_test.dart"),
 	);

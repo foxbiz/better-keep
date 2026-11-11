@@ -17,14 +17,15 @@ const types = {
 	".woff2": "font/woff2",
 	".ttf": "font/ttf",
 };
-export function previewServer(directory) {
+export function previewServer(directory, { emulators = false } = {}) {
 	const root = path.resolve(directory);
 	return http.createServer(async (request, response) => {
 		try {
 			// Local acceptance tests must not read/write production accounts by accident.
 			response.setHeader(
 				"Content-Security-Policy",
-				"connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com",
+				"connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com" +
+					(emulators ? " http://127.0.0.1:19099 http://127.0.0.1:18080" : ""),
 			);
 			const url = new URL(request.url, "http://localhost");
 			let pathname = decodeURIComponent(url.pathname);
@@ -37,6 +38,8 @@ export function previewServer(directory) {
 				);
 				return;
 			}
+			if (pathname.endsWith("/offline_worker.js"))
+				response.setHeader("Service-Worker-Allowed", "/app");
 			if (pathname.endsWith("/")) pathname += "index.html";
 			const file = path.resolve(root, `.${pathname}`);
 			if (

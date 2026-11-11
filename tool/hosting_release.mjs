@@ -308,6 +308,7 @@ export async function stageHostingRelease({
 		setHeader(config, "/app/{index.html,beta-release.json,beta-launcher.js}", {
 			"Cache-Control": "no-store",
 		});
+		setHeader(config, "/app{,/**}/offline_worker.js", {"Service-Worker-Allowed": "/app"});
 		setHeader(config, "/app/beta-runtime/**", {
 			"Cache-Control": "public, max-age=31536000, immutable",
 		});

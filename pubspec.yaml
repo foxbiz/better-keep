@@ -1,7 +1,7 @@
 name: better_keep
 description: 'Notes app with enhanced features'
 publish_to: 'none'
-version: 1.5.0+102
+version: 1.5.0+103
 
 environment:
   sdk: ^3.13.0
@@ -104,6 +104,7 @@ dependency_overrides:
     path: third_party/quill_native_bridge_android
 
 dev_dependencies:
+  plugin_platform_interface: ^2.1.8
   flutter_secure_storage_platform_interface: ^2.1.1
   msix: ^3.16.7
   flutter_test:

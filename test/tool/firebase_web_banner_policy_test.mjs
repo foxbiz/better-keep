@@ -115,6 +115,6 @@ test("the release gate provisions a matched browser before web acceptance", () =
 	assertWorkflowProvisionsMatchedBrowser({
 		name: "release gate",
 		source: buildReleaseWorkflow,
-		acceptanceCommand: "npm run release",
+		acceptanceCommand: 'npm test -- "${{ matrix.suite }}"',
 	});
 });

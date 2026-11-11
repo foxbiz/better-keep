@@ -475,9 +475,9 @@ fresh consent; no claim is made that provider refresh and Firestore form one
 atomic transaction. Revocation cannot erase keys or grants already copied by a
 previously authorized device.
 
-Browser encryption keys and decrypted credentials are memory-only. Reloading
-requires approval or recovery, then restores the encrypted shared provider grant
-without another provider sign-in. Migration removes only old E2EE key preferences;
+Approved browsers retain their encrypted device identity locally. On reload, the
+local library opens offline. Cloud transfers and access to the shared provider grant
+resume after an online device check. Migration removes only old E2EE key preferences;
 notes/files are retained. A non-secret per-account history marker prevents a
 previously initialized browser account from silently creating a replacement key
 when no device record is found. Native secure storage remains enabled.
@@ -533,8 +533,7 @@ HTTPS development origin. Mobile callbacks never use localhost.
 
 Once a provider has a reusable grant, device approval unlocks both notes and
 provider credentials. A newly approved device needs no Google login and does not
-need the original device online. Browser keys remain memory-only: reload still
-requires Better Keep approval or recovery.
+need the original device online. Reloading an approved browser reuses its device identity.
 
 New Google grants use `oauth_exchange`. Set `GOOGLE_DRIVE_CLIENT_ID` in Functions
 configuration and `GOOGLE_DRIVE_CLIENT_SECRET` in Secret Manager (or emulator
@@ -600,7 +599,7 @@ separate permission:
 
 1. Release updated clients with mutual device verification, and update every
    approving device before claiming protection against backend key substitution.
-   Warn browser users that reload now needs approval/recovery.
+   Verify that an approved browser resumes after reload and that sign-out clears its trust.
 2. Deploy the ciphertext callables: `registerEncryptedStorageConnection`,
    `getEncryptedStorageCredentials`, `acquireStorageRefreshLease`,
    `finishStorageRefresh`, `releaseStorageRefreshLease`,
@@ -741,7 +740,7 @@ Before release, the user will run these on their devices and report results:
 - Verify note edits, deletions, labels, order, reminders, locked notes and source
   media converge across two devices. Confirm local and remote files survive the
   security transition.
-- Reload the browser and verify approval/recovery is required and restores the
+- Reload an approved browser and verify it restores the
   existing reusable provider grants without another provider sign-in. Legacy Android/web
   device-local grants need one new connection to create a shared grant. Check real provider
   CORS, popup behavior and quota errors. Do not use production notes for acceptance.
