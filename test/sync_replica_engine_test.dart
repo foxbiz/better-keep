@@ -668,6 +668,11 @@ void main() {
       await engine.sync(destination);
       expect(destination.published.single.encode(), revision(3).encode());
       expect(await store.pendingSignal('dropbox'), 'revision-3');
+      destination.events.clear();
+      await engine.sync(source);
+      await engine.sync(destination);
+      expect(source.events, isEmpty);
+      expect(destination.events, isEmpty);
       expect((await db.query('applied')).length, 1);
     },
   );

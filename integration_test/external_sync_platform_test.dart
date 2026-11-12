@@ -188,8 +188,27 @@ void main() {
         },
       );
       replicas.add(partial);
+      final checked = <int>{};
+      void observeChecking() {
+        final notes = externalSyncProgress(
+          connections: partial.session.connections.connections.values,
+          progress: partial.session.scheduler.progress,
+          transfers: partial.session.transfers,
+          automatic: false,
+        ).notes;
+        if (notes != null && notes.stage == NoteTransferStage.checking) {
+          checked.add(notes.done);
+        }
+      }
+
+      partial.session.addListener(observeChecking);
       try {
         await interrupted.future.timeout(const Duration(seconds: 30));
+        expect(
+          checked,
+          containsAll([1, 8, 109]),
+          reason: 'Report checked revisions while listing, before downloading',
+        );
         expect(await partial.db.query('note'), hasLength(1));
         final progress =
             partial.session.transfers[partial.adapter.connectionId]!;
@@ -201,6 +220,7 @@ void main() {
         );
         partial.session.retire();
       } finally {
+        partial.session.removeListener(observeChecking);
         closing.complete();
       }
       await partial.session.close(pruneCache: false);
