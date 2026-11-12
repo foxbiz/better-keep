@@ -188,7 +188,7 @@ void main() {
         },
       );
       replicas.add(partial);
-      final checked = <int>{};
+      final checked = <int>[];
       void observeChecking() {
         final notes = externalSyncProgress(
           connections: partial.session.connections.connections.values,
@@ -197,17 +197,22 @@ void main() {
           automatic: false,
         ).notes;
         if (notes != null && notes.stage == NoteTransferStage.checking) {
-          checked.add(notes.done);
+          if (notes.done == 0) checked.clear();
+          if (checked.isEmpty || checked.last != notes.done) {
+            checked.add(notes.done);
+          }
         }
       }
 
       partial.session.addListener(observeChecking);
       try {
         await interrupted.future.timeout(const Duration(seconds: 30));
+        expect(checked.last, 109);
+        expect(checked, orderedEquals(checked.toSet().toList()..sort()));
         expect(
-          checked,
-          containsAll([1, 8, 109]),
-          reason: 'Report checked revisions while listing, before downloading',
+          checked.any((done) => done > 0 && done < 109),
+          isTrue,
+          reason: 'Show progress during listing, before downloading',
         );
         expect(await partial.db.query('note'), hasLength(1));
         final progress =

@@ -143,6 +143,33 @@ void main() {
     }
   });
 
+  test(
+    'checking accumulates cached batches and new pages at a bounded rate',
+    () {
+      var elapsed = Duration.zero;
+      final samples = <NoteTransfer>[];
+      final meter = NoteTransferMeter(
+        NoteTransferStage.checking,
+        null,
+        samples.add,
+        elapsed: () => elapsed,
+      );
+      for (var batch = 0; batch < 80; batch++) {
+        meter.advance(10);
+      }
+      elapsed = const Duration(milliseconds: 500);
+      meter.advance(20);
+      meter.advance(3);
+      meter.flush();
+      meter.flush();
+      expect(samples.map((p) => p.done), [0, 10, 820, 823]);
+      expect(
+        samples.every((p) => p.total == null && p.minutesLeft == null),
+        isTrue,
+      );
+    },
+  );
+
   test('estimate uses completed work and resets at a phase boundary', () {
     final samples = <NoteTransfer>[];
     var elapsed = Duration.zero;

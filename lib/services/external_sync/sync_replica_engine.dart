@@ -153,33 +153,34 @@ class SyncReplicaEngine {
     }
     var cursor = await store.cursor(adapter.connectionId);
     var resetCursor = false;
-    var discovered = 0;
-    void reportChecked(int count) {
-      if (isCurrent()) {
-        onProgress?.call(adapter, (
-          stage: NoteTransferStage.checking,
-          done: count,
-          total: null,
-          minutesLeft: null,
-        ));
-      }
+    final meter = NoteTransferMeter(NoteTransferStage.checking, null, (
+      progress,
+    ) {
+      if (isCurrent()) onProgress?.call(adapter, progress);
+    });
+    var checkedBeforePage = 0;
+    var reported = 0;
+    void reportChecked(int onPage) {
+      final checked = checkedBeforePage + onPage;
+      if (checked <= reported) return;
+      meter.advance(checked - reported);
+      reported = checked;
     }
 
-    reportChecked(0);
     while (true) {
       _guard();
       late final SyncChangePage page;
       try {
-        page = await adapter.changes(
-          cursor,
-          onCheckedNotes: (count) => reportChecked(discovered + count),
-        );
+        page = await adapter.changes(cursor, onCheckedNotes: reportChecked);
       } on SyncProviderFailure catch (error) {
         if (error.kind != SyncProviderFailureKind.invalidCursor ||
             resetCursor) {
           rethrow;
         }
         cursor = null;
+        // The full listing replays earlier pages. Resume reporting once it
+        // passes the previous count.
+        checkedBeforePage = 0;
         resetCursor = true;
         continue;
       }
@@ -191,13 +192,15 @@ class SyncReplicaEngine {
       // page is held in memory. A failed listing leaves its staged pages and
       // cursor durable for the initial inbox replay on the next attempt.
       await store.stagePage(adapter.connectionId, page, ensureCurrent: _guard);
-      discovered += page.revisions
+      final pageNotes = page.revisions
           .where((r) => r.kind == SyncEntityKind.note)
           .length;
-      if (discovered > 0) reportChecked(discovered);
+      reportChecked(pageNotes);
+      checkedBeforePage += pageNotes;
       cursor = page.cursor;
       if (!page.hasMore) break;
     }
+    meter.flush();
     await _applyInbox(adapter, deferIdentityConflicts: true);
     if (preparing != null && !downloadOnly) {
       await preparing.captureLocalChanges();

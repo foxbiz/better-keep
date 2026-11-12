@@ -84,6 +84,12 @@ void main() {
     },
   );
 
+  test('checked update counts use the locale’s singular and plural', () {
+    final pt = lookupAppLocalizations(const Locale('pt'));
+    expect(pt.syncCheckedUpdates(1), '1 atualização de nota verificada');
+    expect(pt.syncCheckedUpdates(2), '2 atualizações de notas verificadas');
+  });
+
   test('upload guidance distinguishes Free/Lite from paused Pro uploads', () {
     for (final locale in AppLocalizations.supportedLocales) {
       final l10n = lookupAppLocalizations(locale);

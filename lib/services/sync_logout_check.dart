@@ -118,7 +118,9 @@ Future<SyncLogoutState> currentSyncLogoutState() async {
         live?.state == selected?.state;
   }
 
-  if (externalSelected && !ready) return SyncLogoutState.unknown;
+  if (externalSelected && (!ready || selected == null)) {
+    return SyncLogoutState.unknown;
+  }
   return inspectSyncBeforeLogout(
     database: database,
     firebaseAccountId: AuthService.currentUser?.uid,

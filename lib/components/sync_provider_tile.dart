@@ -11,6 +11,22 @@ const syncProviderOptions = {
   'nextcloud': (name: 'Nextcloud', icon: CustomIcons.nextcloud),
 };
 
+String syncProviderDisplayName(
+  BuildContext context,
+  FirebaseSyncPreference preference,
+) =>
+    syncProviderOptions[preference.selectedProvider]?.name ??
+    switch (preference.selectedProvider) {
+      'firebase' => context.l10n.externalSyncCloud,
+      'none' => context.l10n.externalSyncOff,
+      _ =>
+        preference.failed
+            ? context.l10n.externalSyncNeedsAttention
+            : preference.accountId == null
+            ? context.l10n.externalSyncState('notConnected')
+            : context.l10n.loading,
+    };
+
 /// Shared account/settings entry; follows provider changes across devices.
 class SyncProviderTile extends StatelessWidget {
   const SyncProviderTile({super.key, required this.onTap, this.preference});
@@ -25,18 +41,6 @@ class SyncProviderTile extends StatelessWidget {
       builder: (context, _) {
         final provider = selection.selectedProvider;
         final option = syncProviderOptions[provider];
-        final name =
-            option?.name ??
-            switch (provider) {
-              'firebase' => context.l10n.externalSyncCloud,
-              'none' => context.l10n.externalSyncOff,
-              _ =>
-                selection.failed
-                    ? context.l10n.externalSyncNeedsAttention
-                    : selection.accountId == null
-                    ? context.l10n.externalSyncState('notConnected')
-                    : context.l10n.loading,
-            };
         return ListTile(
           leading: Icon(
             option?.icon ??
@@ -45,7 +49,7 @@ class SyncProviderTile extends StatelessWidget {
                     : Icons.cloud_outlined),
           ),
           title: Text(context.l10n.externalSyncTitle),
-          subtitle: Text(name),
+          subtitle: Text(syncProviderDisplayName(context, selection)),
           trailing: const Icon(Icons.chevron_right),
           onTap: onTap,
         );

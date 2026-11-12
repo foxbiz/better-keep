@@ -471,6 +471,13 @@ void main() {
     final cursors = <String?>[];
     adapter.listChanges = (cursor) async {
       cursors.add(cursor);
+      if (cursor == 'expired-scan') {
+        return SyncChangePage(
+          revisions: [revision(1)],
+          cursor: 'bad-continuation',
+          hasMore: true,
+        );
+      }
       if (cursor != null) {
         throw const SyncProviderFailure(SyncProviderFailureKind.invalidCursor);
       }
@@ -480,13 +487,21 @@ void main() {
         hasMore: false,
       );
     };
+    final checked = <int>[];
     final restarted = SyncReplicaEngine(
       store: store,
       content: content,
       isCurrent: () => true,
+      onProgress: (_, progress) {
+        if (progress?.stage == NoteTransferStage.checking) {
+          checked.add(progress!.done);
+        }
+      },
     );
     await restarted.sync(adapter);
-    expect(cursors, ['expired-scan', null]);
+    expect(cursors, ['expired-scan', 'bad-continuation', null]);
+    expect(checked.last, 2);
+    expect(checked, orderedEquals([...checked]..sort()));
     expect(await store.cursor('dav'), 'complete');
     expect(await db.query('applied'), hasLength(2));
   });

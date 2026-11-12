@@ -291,6 +291,14 @@ void main() {
           tester.view.physicalSize = Size(width, 800);
           await tester.pumpWidget(_app(const Home()));
           await _drainDatabaseWork(tester);
+          sync.value = const SyncProgress(SyncPhase.checkingForUpdates);
+          await tester.pump(const Duration(milliseconds: 250));
+          expect(
+            find.text(
+              'Looking for changes. Large libraries can take a few minutes.',
+            ),
+            findsOneWidget,
+          );
           sync.value = checking;
           await tester.pump(const Duration(milliseconds: 250));
           expect(glyph, findsOneWidget);

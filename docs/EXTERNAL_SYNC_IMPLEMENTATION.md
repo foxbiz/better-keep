@@ -327,11 +327,11 @@ is best effort. Storage credentials never pass through the backend callback.
   including cleanup isolation, retry, callback and registration races. Provider
   HTTP was mocked; no account deletion was run against live data.
 
-- Sign-out now checks durable current-revision acknowledgements for every enabled
+- Sign-out checks durable current-revision acknowledgements for the selected
   external destination, including notes, labels, ordering and tombstones. Firebase
   checks include missing queue records, pending/failed/in-flight uploads, label
   deletions and dirty ordering. Paused Firebase does not warn about its queue when
-  all selected external destinations have acknowledged the library; with no
+  the selected external destination has acknowledged the library; with no
   selected external destination, local-only changes still trigger a warning.
   Missing metadata/database access or a changing account/connection gives an
   explicit unverified result rather than assuming sync succeeded. Conditional
@@ -351,8 +351,8 @@ is best effort. Storage credentials never pass through the backend callback.
   dragging. Conflict recovery uses the shared comparator; newer live ordering
   can replace a pending delete. Pauses and restricted uploads leave deletion
   pending, while manual refresh and progress include it. Blocked/dragged contexts
-  do not prevent other deletions from uploading. The sign-out check recognizes
-  durable Firebase acknowledgements. Verification: 198 focused Flutter tests and
+  do not prevent other deletions from uploading. With built-in sync or Sync off, the sign-out check
+  recognizes durable Firebase acknowledgements. Verification: 198 focused Flutter tests and
   17 replica integration tests passed with clean static analysis, including a
   fake Drive-to-Firebase-to-Dropbox deletion through a fresh local library. Ten
   isolated rules-emulator tests passed for the unchanged tombstone wire rules.

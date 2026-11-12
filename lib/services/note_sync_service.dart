@@ -796,7 +796,11 @@ class NoteSyncService {
     AppLogger.log(
       "[SYNC] REFRESH START: Checking ${pendingSyncs.length} cached notes for updates from Firebase",
     );
-    syncStatus.value = const SyncProgress(SyncPhase.checkingForUpdates);
+    final meter = NoteTransferMeter(
+      NoteTransferStage.checking,
+      null,
+      _reportNoteProgress,
+    );
 
     int updatedCount = 0;
 
@@ -848,12 +852,7 @@ class NoteSyncService {
           }
         }
 
-        _reportNoteProgress((
-          stage: NoteTransferStage.checking,
-          done: i + batch.length,
-          total: remoteDocIds.length,
-          minutesLeft: null,
-        ));
+        meter.advance(batch.length);
         // Absence is not a deletion event. Only a versioned tombstone may
         // remove local content; retain cached work if a document disappears.
       } catch (e) {
@@ -862,7 +861,8 @@ class NoteSyncService {
       }
     }
 
-    if (extendCache) await _fetchSinceCachedCursor(uid);
+    if (extendCache) await _fetchSinceCachedCursor(uid, meter: meter);
+    meter.flush();
     AppLogger.log("[SYNC] REFRESH COMPLETE: $updatedCount updated");
     return extendCache;
   }
@@ -2478,15 +2478,17 @@ class NoteSyncService {
         cache.cursorSchemaVersion == CloudSyncCheckpoint.schemaVersion;
   }
 
-  Future<int> _fetchSinceCachedCursor(String uid) => _fetchAndCacheRemoteNotes(
-    uid: uid,
-    checkpoint: CloudSyncCheckpoint(
-      bootstrapped: true,
-      cursor: _syncCache.lastCursor,
-    ),
-    isBootstrap: false,
-    append: true,
-  );
+  Future<int> _fetchSinceCachedCursor(String uid, {NoteTransferMeter? meter}) =>
+      _fetchAndCacheRemoteNotes(
+        uid: uid,
+        checkpoint: CloudSyncCheckpoint(
+          bootstrapped: true,
+          cursor: _syncCache.lastCursor,
+        ),
+        isBootstrap: false,
+        append: true,
+        checkingMeter: meter,
+      );
 
   Future<void> _applyCachedPull() async {
     final checkpointCommit = StagedCheckpoint<CloudSyncCheckpoint>(
@@ -2578,8 +2580,15 @@ class NoteSyncService {
     required bool isBootstrap,
     required String uid,
     bool append = false,
+    NoteTransferMeter? checkingMeter,
   }) async {
-    syncStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
+    final meter =
+        checkingMeter ??
+        NoteTransferMeter(
+          NoteTransferStage.checking,
+          null,
+          _reportNoteProgress,
+        );
 
     DocumentSnapshot<Map<String, dynamic>>? lastDocument;
     int pageIndex = append ? _syncCache.metadata!.totalPages : 0;
@@ -2682,12 +2691,7 @@ class NoteSyncService {
       );
       await _syncCache.addPage(page, maxCursor: maxCursor);
 
-      _reportNoteProgress((
-        stage: NoteTransferStage.checking,
-        done: totalDocsFetched,
-        total: null,
-        minutesLeft: null,
-      ));
+      meter.advance(querySnapshot.docs.length);
       // Update cursor for next page
       if (querySnapshot.docs.isNotEmpty) {
         lastDocument = querySnapshot.docs.last;
@@ -2700,6 +2704,7 @@ class NoteSyncService {
       );
     }
 
+    meter.flush();
     await _syncCache.markAllPagesFetched();
 
     // Log fetch complete with deduplication info

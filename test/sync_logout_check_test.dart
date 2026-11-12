@@ -114,6 +114,30 @@ void main() {
     },
   );
 
+  test(
+    'provider counts track uncaptured notes, edits and deletes independently',
+    () async {
+      Future<int> count(String provider) =>
+          SyncMutationJournal.pendingNotesForProvider(
+            db,
+            'account:library',
+            provider,
+          );
+      await db.insert('label', {'id': 1, 'sync_id': 'label-1', 'name': 'Work'});
+      expect(await count('drive'), 0);
+      await db.insert('note', {'id': 1, 'sync_id': 'note-1'});
+      expect(await count('drive'), 1);
+      await acknowledge('drive');
+      expect(await count('drive'), 0);
+      expect(await count('dropbox'), 1);
+      await db.update('note', {'title': 'New edit'}, where: 'id = 1');
+      expect(await count('drive'), 1);
+      await acknowledge('drive');
+      await db.delete('note', where: 'id = 1');
+      expect(await count('drive'), 1);
+    },
+  );
+
   test('old account, encryption library and connection generation acknowledgements cannot hide pending work', () async {
     await db.insert('note', {'id': 1, 'sync_id': 'note-1'});
     await acknowledge('google_drive:1');
@@ -221,6 +245,8 @@ void main() {
   });
 
   test('unknown metadata, account changes and database errors never imply successful sync', () async {
+    expect(await inspect(metadata: false), SyncLogoutState.unknown);
+    await db.insert('note', {'id': 1, 'sync_id': 'pending'});
     expect(await inspect(metadata: false), SyncLogoutState.unknown);
     var calls = 0;
     expect(await inspect(current: () => ++calls == 1), SyncLogoutState.unknown);

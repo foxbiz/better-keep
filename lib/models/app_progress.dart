@@ -82,7 +82,8 @@ extension NoteTransferFraction on NoteTransfer {
 }
 
 /// Measures one transfer phase. Provider listing and later upload work have
-/// independent costs. Publish at most twice a second, plus phase boundaries.
+/// independent costs. Publish at most twice a second, plus phase boundaries
+/// and the first observed checking result.
 class NoteTransferMeter {
   NoteTransferMeter(
     this.stage,
@@ -96,7 +97,7 @@ class NoteTransferMeter {
   }
 
   final NoteTransferStage stage;
-  final int total;
+  final int? total;
   final void Function(NoteTransfer) publish;
   late final Duration Function() _elapsed;
   Duration _last = Duration.zero;
@@ -114,13 +115,17 @@ class NoteTransferMeter {
     if (_publishedItems != _done + _excluded) _emit();
   }
 
-  void advance() {
-    _done++;
+  void advance([int count = 1]) {
+    if (count <= 0) return;
+    _done += count;
     _publishIfDue();
   }
 
   void _publishIfDue() {
-    if (_done + _excluded == total ||
+    if ((stage == NoteTransferStage.checking &&
+            _done > 0 &&
+            _publishedItems == 0) ||
+        _done + _excluded == total ||
         _elapsed() - _last >= const Duration(milliseconds: 500)) {
       _emit();
     }
@@ -130,7 +135,12 @@ class NoteTransferMeter {
     _last = _elapsed();
     // A concurrent local change can expand a previously counted upload queue.
     _publishedItems = _done + _excluded;
-    final eligible = total - _excluded;
+    final expected = total;
+    if (expected == null) {
+      publish((stage: stage, done: _done, total: null, minutesLeft: null));
+      return;
+    }
+    final eligible = expected - _excluded;
     final knownTotal = eligible > 0 && _done <= eligible ? eligible : null;
     final remaining = eligible - _done;
     int? minutes;
@@ -138,7 +148,7 @@ class NoteTransferMeter {
       final seconds = _last.inMilliseconds * remaining / _done / 1000;
       minutes = seconds < 60 ? 0 : (seconds / 60).round();
     }
-    if (total <= 0) return;
+    if (expected <= 0) return;
     publish((
       stage: stage,
       done: stage == NoteTransferStage.downloading ? _publishedItems : _done,

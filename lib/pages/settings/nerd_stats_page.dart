@@ -10,6 +10,7 @@ import 'package:better_keep/services/external_sync/external_sync_service.dart';
 import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
 import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/models/note.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
@@ -34,8 +35,15 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   Map<String, dynamic> _stats = {};
   List<NoteSyncTrack> _pendingItems = [];
   bool _loading = true;
-  int _refreshId = 0;
+  Timer? _refreshTimer;
+  bool _refreshing = false;
+  bool _refreshAgain = false;
+  static const _pageSize = 50;
+  int _pendingLimit = _pageSize;
+  int _pendingTotal = 0;
+  Future<int>? _databaseSize;
   String? _listedProvider;
+  String? _listedAccount;
   bool _externalRunning = false;
 
   // Web-specific state
@@ -62,14 +70,17 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    Note.on('changed', _onNoteChanged);
     FirebaseSyncPreference.instance.addListener(_onSyncStatusChange);
     ExternalSyncService.instance.addListener(_onExternalSync);
     NoteSyncService().isSyncing.addListener(_onSyncStatusChange);
+    unawaited(_refresh());
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    Note.off('changed', _onNoteChanged);
     FirebaseSyncPreference.instance.removeListener(_onSyncStatusChange);
     ExternalSyncService.instance.removeListener(_onExternalSync);
     NoteSyncService().isSyncing.removeListener(_onSyncStatusChange);
@@ -78,36 +89,51 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
 
   void _onExternalSync() {
     final active = ExternalSyncService.instance.progress.isActive;
-    if (_externalRunning == active) return;
+    // Idle notifications can also change the selected connection's metadata.
+    if (_externalRunning && active) return;
     _externalRunning = active;
     _onSyncStatusChange();
   }
 
-  void _onSyncStatusChange() => unawaited(_refresh());
+  void _onNoteChanged(NoteEvent _) =>
+      _scheduleRefresh(const Duration(seconds: 1));
+
+  void _onSyncStatusChange() =>
+      _scheduleRefresh(const Duration(milliseconds: 250));
+
+  void _scheduleRefresh(Duration delay) {
+    _refreshTimer ??= Timer(delay, () {
+      _refreshTimer = null;
+      _refresh();
+    });
+  }
 
   Future<void> _refresh() async {
-    final request = ++_refreshId;
+    if (!mounted) return;
+    if (_refreshing) {
+      _refreshAgain = true;
+      return;
+    }
+    _refreshing = true;
     final preference = FirebaseSyncPreference.instance;
     final provider = preference.selectedProvider;
     final session = ExternalSyncService.instance.session;
     final connection = session?.connections.connections[provider];
-    setState(() => _loading = true);
+    final account = preference.accountId;
     try {
-      final stats = <String, dynamic>{
-        'Sync provider':
-            syncProviderOptions[provider]?.name ??
-            switch (provider) {
-              'firebase' => 'Better Keep cloud',
-              'none' => 'Sync off',
-              _ => 'Checking…',
-            },
-      };
+      if (provider != _listedProvider || account != _listedAccount) {
+        _pendingLimit = _pageSize;
+      }
+      if (account != _listedAccount) _databaseSize = null;
+      final stats = <String, dynamic>{};
+      var pendingTotal = 0;
       var items = <NoteSyncTrack>[];
       if (provider == 'firebase') {
-        items = await NoteSyncTrack.get(pending: true);
+        items = await NoteSyncTrack.get(pending: true, limit: _pendingLimit);
+        pendingTotal = await NoteSyncTrack.count(pending: true);
         stats.addAll({
           'Synced Notes': await NoteSyncTrack.count(status: SyncStatus.synced),
-          'Pending Notes': items.length,
+          'Pending Notes': pendingTotal,
           'Failed Notes': await NoteSyncTrack.count(status: SyncStatus.failed),
           'Is Syncing': NoteSyncService().isSyncing.value,
           'Cache Has Pending': RemoteSyncCacheService().hasPendingSyncs,
@@ -117,35 +143,54 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
           connection != null &&
           session.connections.canVerifyBackup(connection.provider)) {
         final store = session.engine.store;
-        stats['Pending Notes'] =
+        stats['Unacknowledged Notes'] =
             await SyncMutationJournal.pendingNotesForProvider(
               store.database,
               store.scope,
               connection.replicaId,
             );
       } else if (syncProviderOptions.containsKey(provider)) {
-        stats['Pending Notes'] = 'Unavailable';
+        stats['Unacknowledged Notes'] = 'Unavailable';
       }
+      final dbSize = await (_databaseSize ??= _getDbSize());
       stats.addAll({
-        'DB Size': '${((await _getDbSize()) / 1024).toStringAsFixed(2)} KB',
+        'DB Size': '${(dbSize / 1024).toStringAsFixed(2)} KB',
         'E2EE Status': E2EEService.instance.status.value.name,
         'E2EE UMK Available': E2EEService.instance.isAvailable,
       });
-      if (!mounted || request != _refreshId) return;
+      if (!mounted ||
+          provider != preference.selectedProvider ||
+          account != preference.accountId) {
+        return;
+      }
       setState(() {
         _listedProvider = provider;
+        _listedAccount = account;
         _stats = stats;
         _pendingItems = items;
+        _pendingTotal = pendingTotal;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted || request != _refreshId) return;
+      if (!mounted ||
+          provider != preference.selectedProvider ||
+          account != preference.accountId) {
+        return;
+      }
       setState(() {
         _listedProvider = null;
+        _pendingLimit = _pageSize;
+        _pendingTotal = 0;
         _pendingItems = [];
         _stats = {'Error': e.toString()};
         _loading = false;
       });
+    } finally {
+      _refreshing = false;
+      if (mounted && _refreshAgain) {
+        _refreshAgain = false;
+        _onSyncStatusChange();
+      }
     }
   }
 
@@ -348,7 +393,13 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
       appBar: AppBar(
         title: const Text("Nerd Stats"),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              _databaseSize = null;
+              _refresh();
+            },
+          ),
         ],
       ),
       body: _loading
@@ -382,7 +433,7 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Text(
-                      "Pending Sync Items (${_pendingItems.length})",
+                      "Pending Sync Items ($_pendingTotal)",
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
@@ -395,16 +446,25 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                       trailing: IconButton(
                         icon: const Icon(Icons.delete),
                         onPressed: () async {
-                          await AppState.db.delete(
-                            'sync_track',
-                            where: 'id = ?',
-                            whereArgs: [item.id],
-                          );
+                          final preference = FirebaseSyncPreference.instance;
+                          if (preference.selectedProvider != 'firebase' ||
+                              preference.accountId != _listedAccount) {
+                            return;
+                          }
+                          await item.discardPendingIfUnchanged();
                           _refresh();
                         },
                       ),
                     ),
                   ),
+                  if (_pendingItems.length < _pendingTotal)
+                    TextButton(
+                      onPressed: () {
+                        _pendingLimit += _pageSize;
+                        _refresh();
+                      },
+                      child: const Text('Show more'),
+                    ),
                   const Divider(),
                 ],
                 // OPFS section (Web only)
@@ -435,6 +495,8 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                       color: Colors.red,
                     ),
                     onTap: () async {
+                      final database = AppState.db;
+                      final account = _listedAccount;
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
@@ -458,10 +520,14 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                           ],
                         ),
                       );
-                      if (confirm == true &&
+                      if (mounted &&
+                          confirm == true &&
+                          identical(database, AppState.get('db')) &&
+                          account ==
+                              FirebaseSyncPreference.instance.accountId &&
                           FirebaseSyncPreference.instance.selectedProvider ==
                               'firebase') {
-                        await AppState.db.delete('sync_track');
+                        await NoteSyncTrack.clearPending();
                         _refresh();
                       }
                     },
@@ -1175,12 +1241,19 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   }
 
   Widget _buildStatCard() {
+    final preference = FirebaseSyncPreference.instance;
+    final stats = {
+      if (preference.selectedProvider == _listedProvider &&
+          preference.accountId == _listedAccount)
+        'Sync provider': syncProviderDisplayName(context, preference),
+      ..._stats,
+    };
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          children: _stats.entries.map((e) {
+          children: stats.entries.map((e) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
