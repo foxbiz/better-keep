@@ -1,6 +1,7 @@
 {
-  "syncCheckingNotes": "Memeriksa perubahan catatan · {count}",
-  "syncDownloadingNotes": "Mengunduh perubahan catatan · {count}",
+  "syncCheckingNotes": "Memeriksa catatan",
+  "syncDownloadingNotes": "Mengunduh catatan",
+  "syncTotalNotes": "{count} catatan",
   "syncUploadingNotes": "Mengunggah perubahan catatan · {count}",
   "syncEstimatedMinutes": "{minutes, plural, =0{Kurang dari semenit lagi} other{Sekitar {minutes} menit lagi}}",
   "syncUpdatingNotes": "Memperbarui catatan Anda",

@@ -10,13 +10,24 @@ class AppLocalizationsPt extends AppLocalizations {
   AppLocalizationsPt([String locale = 'pt']) : super(locale);
 
   @override
-  String syncCheckingNotes(String count) {
-    return 'Verificando alterações nas notas · $count';
-  }
+  String get syncCheckingNotes => 'Verificando notas';
 
   @override
-  String syncDownloadingNotes(String count) {
-    return 'Baixando alterações nas notas · $count';
+  String get syncDownloadingNotes => 'Baixando notas';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString notas',
+      one: '1 nota',
+    );
+    return '$_temp0';
   }
 
   @override

@@ -1,6 +1,7 @@
 {
-  "syncCheckingNotes": "正在检查笔记更新 · {count}",
-  "syncDownloadingNotes": "正在下载笔记更新 · {count}",
+  "syncCheckingNotes": "正在检查笔记",
+  "syncDownloadingNotes": "正在下载笔记",
+  "syncTotalNotes": "共 {count} 条笔记",
   "syncUploadingNotes": "正在上传笔记更新 · {count}",
   "syncEstimatedMinutes": "{minutes, plural, =0{剩余不到一分钟} other{约剩 {minutes} 分钟}}",
   "syncUpdatingNotes": "正在更新笔记",

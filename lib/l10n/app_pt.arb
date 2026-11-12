@@ -1,6 +1,7 @@
 {
-  "syncCheckingNotes": "Verificando alterações nas notas · {count}",
-  "syncDownloadingNotes": "Baixando alterações nas notas · {count}",
+  "syncCheckingNotes": "Verificando notas",
+  "syncDownloadingNotes": "Baixando notas",
+  "syncTotalNotes": "{count, plural, =1{1 nota} other{{count} notas}}",
   "syncUploadingNotes": "Enviando alterações nas notas · {count}",
   "syncEstimatedMinutes": "{minutes, plural, =0{Resta menos de um minuto} other{Restam cerca de {minutes} min}}",
   "syncUpdatingNotes": "Atualizando suas notas",

@@ -57,7 +57,7 @@ try {
 			() => (window.betaFirstFrame = true),
 		),
 	);
-	await page.goto(`${origin}/app/`);
+	await page.goto(`${origin}/app/?channel=beta`);
 	await page.waitForSelector("#beta-prompt");
 	await page.screenshot({ path: "build/beta-prompt.png" });
 	await page.evaluate(async (fallback) => {
@@ -89,7 +89,7 @@ try {
 			await writable.close();
 		}
 	}, fallback);
-	await page.click("#beta-prompt button");
+	await page.click("aria/Try beta");
 	await page.waitForFunction(() => window.betaFirstFrame === true, {
 		timeout: 60000,
 	});

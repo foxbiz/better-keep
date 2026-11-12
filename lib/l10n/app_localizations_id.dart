@@ -10,13 +10,18 @@ class AppLocalizationsId extends AppLocalizations {
   AppLocalizationsId([String locale = 'id']) : super(locale);
 
   @override
-  String syncCheckingNotes(String count) {
-    return 'Memeriksa perubahan catatan · $count';
-  }
+  String get syncCheckingNotes => 'Memeriksa catatan';
 
   @override
-  String syncDownloadingNotes(String count) {
-    return 'Mengunduh perubahan catatan · $count';
+  String get syncDownloadingNotes => 'Mengunduh catatan';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString catatan';
   }
 
   @override

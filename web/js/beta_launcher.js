@@ -2,7 +2,6 @@
 (() => {
 	"use strict";
 	const choiceKey = "betterkeep.web.channel.v1";
-	const dismissedKey = "betterkeep.web.beta-dismissed.v1";
 	let selected = false;
 	let promoted = false;
 	const sequenceKey = "betterkeep.web.release-sequence.v1";
@@ -39,6 +38,8 @@
 			font: 500 14px/1.4 Roboto, system-ui, sans-serif; cursor: pointer;
 		}
 		#beta-prompt button + button { background: transparent; color: #d0bcff; }
+		#beta-prompt button.beta-warning { color: #ffb4ab; border-color: #db8b83; }
+		#beta-prompt button.beta-warning:hover { background: #493034; }
 		#beta-prompt button:hover { filter: brightness(1.1); }
 		#beta-prompt button:focus-visible { outline: 2px solid #eee6f4; outline-offset: 3px; }
 		#beta-prompt .beta-progress { display: flex; align-items: center; gap: 12px; margin-top: 24px; color: #d0bcff; }
@@ -48,9 +49,11 @@
 			border-radius: 50%; animation: beta-spin 1s linear infinite;
 		}
 		#beta-channel-tag {
-			position: fixed; bottom: max(12px, env(safe-area-inset-bottom));
-			right: max(12px, env(safe-area-inset-right)); z-index: 10000;
-			pointer-events: none; border: 1px solid #67517e;
+			position: fixed; top: 50%; right: env(safe-area-inset-right, 0px);
+			transform: translateY(-50%); z-index: 10000;
+			writing-mode: vertical-rl; justify-content: center;
+			padding: 8px 4px; min-width: 24px; min-height: 44px; border-radius: 10px 0 0 10px;
+			cursor: pointer; border: 1px solid #67517e;
 		}
 		@keyframes beta-spin { to { transform: rotate(360deg); } }
 		@media (prefers-reduced-motion: reduce) { #beta-prompt .beta-progress::before { animation: none; } }
@@ -58,7 +61,7 @@
 	`;
 	document.head.append(style);
 
-	function show(title, message, actions = [], note = "") {
+	function show(title, message, actions = [], note = "", cancelLabel) {
 		document.getElementById("beta-prompt")?.remove();
 		const dialog = document.createElement("dialog");
 		dialog.id = "beta-prompt";
@@ -89,10 +92,11 @@
 		}
 		const buttons = document.createElement("div");
 		buttons.className = "beta-actions";
-		for (const [label, action] of actions) {
+		for (const [label, action, className] of actions) {
 			const button = document.createElement("button");
 			button.type = "button";
 			button.textContent = label;
+			if (className) button.className = className;
 			button.onclick = () => {
 				dialog.close();
 				dialog.remove();
@@ -108,10 +112,10 @@
 			progress.textContent = promoted ? "Loading app…" : "Loading beta…";
 			dialog.append(progress);
 		}
-		// Escape means Not now only when an explicit stable option is offered.
+		// Escape chooses the non-destructive action when the dialog offers one.
 		dialog.addEventListener("cancel", (event) => {
 			event.preventDefault();
-			const decline = actions.find(([label]) => label === "Not now");
+			const decline = actions.find(([label]) => label === cancelLabel);
 			if (decline) {
 				dialog.close();
 				dialog.remove();
@@ -122,11 +126,46 @@
 		dialog.showModal();
 	}
 
+	let canReturnToStable = false;
+	function clearChannelRequest() {
+		const url = new URL(location.href);
+		if (!["beta", "stable"].includes(url.searchParams.get("channel"))) return;
+		url.searchParams.delete("channel");
+		history.replaceState(history.state, "", url);
+	}
+	function returnToStable() {
+		try {
+			localStorage.removeItem(choiceKey);
+			clearChannelRequest();
+			location.reload();
+		} catch (_) {
+			failed();
+		}
+	}
+
+	function confirmReturnToStable(stay) {
+		show(
+			"Return to the stable version?",
+			"Stable opens your original browser library. Sync or export any notes you created in beta before switching.",
+			[
+				["Stay in beta", stay],
+				["Return to stable", returnToStable],
+			],
+			"",
+			"Stay in beta",
+		);
+	}
+
 	function failed() {
 		show(
 			"Unable to start the selected version",
-			"Your saved browser data has not been cleared. Retry when your connection is available. We will not switch you to an older version automatically.",
-			[["Retry", () => location.reload()]],
+			canReturnToStable
+				? "Retry or return to your original browser library. Your beta notes stay on this device."
+				: "Your saved browser data has not been cleared. Retry when your connection is available.",
+			[
+				["Retry", () => location.reload()],
+				...(canReturnToStable ? [["Return to stable", returnToStable]] : []),
+			],
 		);
 	}
 
@@ -134,10 +173,15 @@
 		// Keep /app/ as the document base for the deployed stable database worker.
 		// Versioned bootstrap config supplies explicit URLs for all Flutter assets.
 		document.title = beta ? "Better Keep Beta" : "Better Keep";
+		canReturnToStable = beta;
 		if (beta) {
-			const badge = document.createElement("div");
+			const badge = document.createElement("button");
+			badge.type = "button";
 			badge.id = "beta-channel-tag";
 			badge.textContent = "Beta";
+			badge.title = "Return to stable";
+			badge.setAttribute("aria-label", "Beta. Return to stable");
+			badge.onclick = () => confirmReturnToStable(() => badge.focus());
 			document.body.append(badge);
 		}
 		const script = document.createElement("script");
@@ -173,9 +217,11 @@
 			}
 			localStorage.setItem(choiceKey, "beta");
 			selected = true;
+			clearChannelRequest();
 			rememberRelease(release);
 			start(release.base, !promoted);
 		} catch (_) {
+			canReturnToStable = true;
 			failed();
 		}
 	}
@@ -243,37 +289,38 @@
 			return;
 		}
 		promoted = release.status === "promoted";
+		const url = new URL(location.href);
+		const invited = url.searchParams.get("channel") === "beta";
+		const wantsStable = url.searchParams.get("channel") === "stable";
 		if (selected) {
+			clearChannelRequest();
 			rememberRelease(release);
-			start(release.base, !promoted);
+			const openSelected = () => start(release.base, !promoted);
+			if (wantsStable) {
+				canReturnToStable = true;
+				confirmReturnToStable(openSelected);
+			} else {
+				openSelected();
+			}
 			return;
 		}
-		if (promoted || offline) {
+		if (wantsStable) clearChannelRequest();
+		if (promoted || offline || !invited) {
 			startStable(release);
 			return;
 		}
-		try {
-			if (sessionStorage.getItem(dismissedKey) === release.version) {
-				startStable(release);
-				return;
-			}
-		} catch (_) {}
 		show(
 			"Try the next Better Keep",
-			"Get an early look at what’s new. Beta may have bugs, and changes to synced notes affect your live account.",
+			"Beta may have bugs. Edits and deletions you sync here also affect the notes in your regular app.",
 			[
-				["Try beta", () => void chooseBeta(release)],
-				[
-					"Not now",
-					() => {
-						try {
-							sessionStorage.setItem(dismissedKey, release.version);
-						} catch (_) {}
-						startStable(release);
-					},
-				],
+				["Not now", () => {
+					clearChannelRequest();
+					startStable(release);
+				}],
+				["Try beta", () => void chooseBeta(release), "beta-warning"],
 			],
-			"Export local-only notes first. You’ll sign in again to see synced notes. This browser will stay on beta; it won’t switch back automatically.",
+			"Export local-only notes first. Beta has a separate sign-in. To open your original library again, select the Beta badge and return to stable.",
+			"Not now",
 		);
 	}
 	void launch();

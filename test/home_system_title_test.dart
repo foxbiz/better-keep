@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:better_keep/components/sync_progress_widget.dart';
+
 import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/sync_presentation.dart';
@@ -279,7 +281,10 @@ void main() {
             minutesLeft: null,
           ),
         );
-        final glyph = find.byKey(const ValueKey('download_activity'));
+        final glyph = find.descendant(
+          of: find.byType(SyncContentProgress),
+          matching: find.byIcon(Icons.sync),
+        );
         final pill = find.byKey(const ValueKey('sync_progress'));
         for (final width in [390.0, 1100.0]) {
           tester.view.devicePixelRatio = 1;
@@ -289,7 +294,8 @@ void main() {
           sync.value = checking;
           await tester.pump(const Duration(milliseconds: 250));
           expect(glyph, findsOneWidget);
-          expect(find.text('Checking note updates · 1/4'), findsOneWidget);
+          expect(find.text('Checking Notes'), findsOneWidget);
+          expect(find.byKey(const ValueKey('download_activity')), findsNothing);
           expect(pill, findsNothing);
           AppState.filterLabels = ['QA'];
           await _drainDatabaseWork(tester);
@@ -301,10 +307,10 @@ void main() {
           expect(pill, findsNothing);
           AppState.set('show_sync_progress', false);
           await tester.pump();
-          expect(find.text('Checking note updates · 1/4'), findsNothing);
+          expect(find.text('Checking Notes'), findsNothing);
           AppState.set('show_sync_progress', true);
           await tester.pump();
-          expect(find.text('Checking note updates · 1/4'), findsOneWidget);
+          expect(find.text('Checking Notes'), findsOneWidget);
 
           expect(find.text('No notes yet'), findsNothing);
           final area = tester.getRect(find.byType(Notes));
@@ -323,10 +329,7 @@ void main() {
         expect(glyph, findsNothing);
         expect(pill, findsOneWidget);
         expect(
-          find.descendant(
-            of: pill,
-            matching: find.text('Checking note updates · 1/4'),
-          ),
+          find.descendant(of: pill, matching: find.text('Checking Notes')),
           findsOneWidget,
         );
         AppState.showNotes = NoteType.archived;
@@ -373,7 +376,7 @@ void main() {
         expect(sync.value.isActive, isTrue);
         expect(find.byKey(const ValueKey('download_activity')), findsOneWidget);
         expect(find.byType(CircularProgressIndicator), findsNothing);
-        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
         expect(find.byKey(const ValueKey('sync_progress')), findsNothing);
       }
       final first = Note(id: 9876, title: 'First restored note', content: '[]');

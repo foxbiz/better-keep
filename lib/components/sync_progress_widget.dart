@@ -12,9 +12,10 @@ import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 /// A floating widget that shows sync progress at the bottom of the screen.
-/// Shows synced count / total count and current status message.
+/// Displays the current phase and progress for a known download total.
 class SyncProgressWidget extends StatefulWidget {
   const SyncProgressWidget({
     super.key,
@@ -167,18 +168,19 @@ class BulkSyncProgress extends StatelessWidget {
       AppState.showSyncProgressNotifier,
     ]),
     builder: (context, _) => SyncContentProgress(
-      label:
-          NoteSyncBatch.progress.value?.localized(context.l10n) ??
-          context.l10n.syncUpdatingNotes,
+      progress: SyncProgress(
+        SyncPhase.syncing,
+        notes: NoteSyncBatch.progress.value,
+      ),
     ),
   );
 }
 
 /// Centered progress for an empty library, including the initial bulk restore.
 class SyncContentProgress extends StatelessWidget {
-  const SyncContentProgress({super.key, required this.label});
+  const SyncContentProgress({super.key, required this.progress});
 
-  final String label;
+  final SyncProgress progress;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -192,19 +194,74 @@ class SyncContentProgress extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _ActivityIcon(
-              download: true,
+              download: progress.notes?.stage == NoteTransferStage.downloading,
               size: 40,
               color: Theme.of(context).colorScheme.primary,
             ),
             if (AppState.showSyncProgress) ...[
               const SizedBox(height: 12),
-              Text(label, textAlign: TextAlign.center),
+              Text(
+                progress.localized(context.l10n),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              if (progress.notes case final transfer?
+                  when transfer.stage == NoteTransferStage.downloading &&
+                      transfer.fraction != null)
+                _DownloadProgress(transfer),
             ],
           ],
         ),
       ),
     ),
   );
+}
+
+class _DownloadProgress extends StatelessWidget {
+  const _DownloadProgress(this.transfer);
+  static final _percentFormats = <String, NumberFormat>{};
+  final NoteTransfer transfer;
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context).toString();
+    final percent = (100 * transfer.done ~/ transfer.total!).clamp(0, 100);
+    final percentage = _percentFormats
+        .putIfAbsent(locale, () => NumberFormat.percentPattern(locale))
+        .format(percent / 100);
+    final total = context.l10n.syncTotalNotes(transfer.total!);
+    return SizedBox(
+      width: 192,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LinearProgressIndicator(
+              value: transfer.fraction,
+              semanticsLabel: total,
+              semanticsValue: percentage,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 4),
+            ExcludeSemantics(
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                spacing: 8,
+                children: [
+                  Text(total, style: Theme.of(context).textTheme.labelSmall),
+                  Text(
+                    percentage,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SyncProgressCard extends StatelessWidget {
@@ -270,12 +327,23 @@ class _SyncProgressCard extends StatelessWidget {
                 _buildStateIcon(accentColor, messageType),
                 const SizedBox(width: 10),
                 Flexible(
-                  child: Text(
-                    statusText,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: accentColor,
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        statusText,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: accentColor,
+                        ),
+                      ),
+                      if (syncStatus.notes case final transfer?
+                          when transfer.stage ==
+                                  NoteTransferStage.downloading &&
+                              transfer.fraction != null)
+                        _DownloadProgress(transfer),
+                    ],
                   ),
                 ),
                 // Animated refresh button (fades in/out)
@@ -333,9 +401,7 @@ class _SyncProgressCard extends StatelessWidget {
 
   Widget _buildStateIcon(Color color, _MessageType type) {
     if (isSyncing) {
-      final download =
-          syncStatus.notes?.stage == NoteTransferStage.downloading ||
-          syncStatus.phase == SyncPhase.fetchingUpdates;
+      final download = syncStatus.notes?.stage == NoteTransferStage.downloading;
       return _ActivityIcon(download: download, size: 16, color: color);
     }
     return Icon(

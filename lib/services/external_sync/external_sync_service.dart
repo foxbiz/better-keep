@@ -19,6 +19,7 @@ import '../e2ee/e2ee_service.dart';
 import '../e2ee/secure_storage.dart';
 import '../file_system.dart';
 import '../firebase_backend.dart';
+import '../firebase_sync_preference.dart';
 import '../note_sort_service.dart';
 import 'library_sync_lifecycle.dart';
 import 'library_sync_session.dart';
@@ -50,7 +51,14 @@ class ExternalSyncService extends ChangeNotifier {
     final current = session;
     if (current == null) {
       if (failure != null) return const SyncProgress(SyncPhase.unavailable);
-      return initializing
+      final restoringProvider =
+          AuthService.postSignInState.value.isRunning &&
+          !AuthService.sessionInvalid.value &&
+          E2EEService.instance.isCryptoReady &&
+          StorageConnectionController.providers.contains(
+            FirebaseSyncPreference.instance.selectedProvider,
+          );
+      return initializing || restoringProvider
           ? const SyncProgress(SyncPhase.preparing)
           : SyncProgress.idle;
     }

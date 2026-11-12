@@ -1,0 +1,39 @@
+---
+import PublicDocumentPage from '../components/PublicDocumentPage.astro';
+import { getPublicDocument } from '../data/public-documents';
+---
+
+<PublicDocumentPage document={getPublicDocument('help')}>
+  <section>
+    <h2>Notes and attachments</h2>
+    <ul>
+      <li><a href="/import/google-keep">Import notes from Google Keep</a></li>
+      <li><a href="/rich-text-notes">Format notes with lists and tables</a></li>
+      <li><a href="/voice-notes-transcription">Record and transcribe voice notes</a></li>
+    </ul>
+  </section>
+  <section>
+    <h2>Sync and devices</h2>
+    <ul>
+      <li><a href="/cross-platform-notes">Use Better Keep across devices</a></li>
+      <li><a href="/offline-notes-app">Work with notes offline</a></li>
+      <li><a href="/security">Understand encryption and device approval</a></li>
+    </ul>
+  </section>
+  <section>
+    <h2>Web app</h2>
+    <ul>
+      <li><a href="/web-beta">Join the web beta or return to stable</a></li>
+      <li><a href="/changelog">See what changed in recent releases</a></li>
+    </ul>
+  </section>
+  <section>
+    <h2>Account and billing</h2>
+    <ul>
+      <li><a href="/pricing">Compare subscription plans</a></li>
+      <li><a href="/cancellation-refund">Cancellations and refunds</a></li>
+      <li><a href="/delete-user">Delete an account</a></li>
+      <li><a href="/contact">Contact support</a></li>
+    </ul>
+  </section>
+</PublicDocumentPage>

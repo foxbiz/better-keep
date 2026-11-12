@@ -10,13 +10,18 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
-  String syncCheckingNotes(String count) {
-    return 'ノートの更新を確認中 · $count';
-  }
+  String get syncCheckingNotes => 'ノートを確認中';
 
   @override
-  String syncDownloadingNotes(String count) {
-    return 'ノートの更新をダウンロード中 · $count';
+  String get syncDownloadingNotes => 'ノートをダウンロード中';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString 件のノート';
   }
 
   @override

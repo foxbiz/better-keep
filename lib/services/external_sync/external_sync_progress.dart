@@ -78,9 +78,7 @@ SyncProgress externalSyncProgress({
   // Restoring a connection precedes creating its adapter and starting its first
   // pass. No successful pass yet is normal startup, not a request to retry.
   if (selected.any((c) => progress[c.replicaId]?.lastSuccess == null)) {
-    return automatic
-        ? const SyncProgress(SyncPhase.preparing)
-        : SyncProgress.idle;
+    return const SyncProgress(SyncPhase.preparing);
   }
   return const SyncProgress(SyncPhase.complete);
 }

@@ -10,13 +10,24 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String syncCheckingNotes(String count) {
-    return 'Checking note updates · $count';
-  }
+  String get syncCheckingNotes => 'Checking Notes';
 
   @override
-  String syncDownloadingNotes(String count) {
-    return 'Downloading note updates · $count';
+  String get syncDownloadingNotes => 'Downloading Notes';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString notes',
+      one: '1 note',
+    );
+    return '$_temp0';
   }
 
   @override

@@ -1,7 +1,7 @@
 # Website and web app releases
 
-All clients use `https://betterkeep.app/app/`. The Hosting launcher offers beta before
-it downloads beta code. “Not now” loads stable and dismisses the offer for that tab.
+Normal visits to `https://betterkeep.app/app/` open the current browser channel, stable by default.
+Share `https://betterkeep.app/app/?channel=beta` directly with testers. The link offers a choice before downloading beta code.
 Accepting remembers the beta channel in that browser profile. The backend is shared:
 changes to synced notes and account actions affect the live account.
 
@@ -118,14 +118,20 @@ new paired beta first.
 
 First sync or export any unsynced beta notes, and close other app tabs. Beta and stable use
 separate local databases, so unsynced beta changes will not appear in stable automatically.
-For a deliberate opt-out, open the app origin's browser console and run:
+While a beta is active, select the **Beta** badge and confirm **Return to stable**.
+After promotion the badge disappears. The web beta guide links to
+`/app/?channel=stable`, which offers the same confirmation after validating the
+release manifest. If the launcher shows only **Retry**, reconnect and retry. The link
+cannot bypass a missing, invalid or older manifest.
+
+On an older launcher that still opens, the last-resort opt-out on the app origin is:
 
 ```js
 localStorage.removeItem("betterkeep.web.channel.v1");
 location.reload();
 ```
 
-Choose “Not now” if the beta offer appears after reloading. This keeps beta notes/keys and the anti-downgrade sequence; it does not clear site data or
+On older launchers choose “Not now” if prompted. This keeps beta notes/keys and the anti-downgrade sequence; it does not clear site data or
 migrate notes. A later beta opt-in can reopen the isolated beta storage. Do not use this as a
 promotion step or to bypass a rejected/missing release manifest.
 
@@ -136,6 +142,10 @@ storage (`better_keep_beta` OPFS directory or `beta_better_keep_fs` IndexedDB), 
 app identity (`better-keep-beta`) and OAuth transaction session keys. Stable/native defaults
 remain unchanged. Same-origin storage separation is not a security boundary.
 
+Upgrade QA: an older built-in sync cache can be missing page files. On the first launch
+after updating, the app may refetch notes from its last durable checkpoint. This can
+look like a fresh restore; existing local notes are kept.
+
 Before publication, review both build variants, real provider OAuth redirects, existing
 sessions, unsynced notes, multiple open tabs and installed-PWA upgrade/offline behavior.
 Previously installed service workers may continue serving an older launcher until updated;
@@ -145,8 +155,22 @@ Safari, device, real OAuth or production sync behavior.
 The local preview server blocks production backend connections with CSP. It supports
 synthetic OAuth popup handoff, not a completed provider login. The normal dev website
 proxies `/app` to Flutter on port 63630, bypassing the launcher. To review a prepared
-bundle through an existing dev tunnel, keep the preview server running, stop the existing
-website dev process and restart it with:
+bundle with the current checkout’s invitation, start the preview from the repository root:
+
+```sh
+node tool/serve_beta_preview.mjs build/beta-preview 5102 --working-launcher
+```
+
+Use a directory containing a staged beta if your preview is elsewhere (for example a
+prepared release’s `prepared/public` directory). The flag serves the working launcher
+with the staged app assets. Omit it when verifying the exact prepared release.
+
+In a fresh browser profile, open `http://127.0.0.1:5102/app/` to check stable launch,
+then `http://127.0.0.1:5102/app/?channel=beta` to see the invitation. Choose **Try beta**,
+then select **Beta → Return to stable** to test the return path.
+
+To test through your dev hostname, leave the preview running, stop only the website
+dev process, and restart it with:
 
 ```sh
 BETTER_KEEP_FLUTTER_DEV_ORIGIN=http://127.0.0.1:5102 npm run dev hosting

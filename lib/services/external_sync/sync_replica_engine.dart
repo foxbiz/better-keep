@@ -144,14 +144,22 @@ class SyncReplicaEngine {
     final preparing = content is PreparingSyncReplicaContent
         ? content as PreparingSyncReplicaContent
         : null;
+    // Replay durable downloads first on restart. The journal comparison in
+    // _applyIncoming defers newer local edits until capture finishes below.
+    await _applyInbox(adapter, deferIdentityConflicts: true);
     if (preparing != null && !downloadOnly) {
       await preparing.captureLocalChanges();
       _guard();
     }
-    await _applyInbox(adapter, deferIdentityConflicts: true);
     var cursor = await store.cursor(adapter.connectionId);
     var resetCursor = false;
     var discovered = 0;
+    onProgress?.call(adapter, (
+      stage: NoteTransferStage.checking,
+      done: 0,
+      total: null,
+      minutesLeft: null,
+    ));
     while (true) {
       _guard();
       late final SyncChangePage page;
@@ -378,11 +386,19 @@ class SyncReplicaEngine {
   ) async {
     (String, String, String)? after;
     while (true) {
-      final incoming = await store.inbox(adapter.connectionId, after: after);
+      // Commit the first network batch promptly, including after a restart.
+      // Later pages retain the normal bulk prefetch throughput.
+      final incoming = await store.inbox(
+        adapter.connectionId,
+        after: after,
+        limit: after == null ? 16 : 100,
+      );
       if (incoming.isEmpty) break;
       await _prefetchSmallObjects(adapter, incoming);
       for (final revision in incoming) {
         _guard();
+        final countsAsDownload =
+            revision.kind == SyncEntityKind.note && !revision.deleted;
         final before = await store.current(
           store.database,
           revision.kind,
@@ -401,7 +417,7 @@ class SyncReplicaEngine {
             (before == null || local.compareTo(before) > 0)) {
           // The newer edit is not encrypted yet. Do not download obsolete media
           // (which may no longer exist) or allow it to block the winning upload.
-          if (revision.kind == SyncEntityKind.note) meter.exclude();
+          if (countsAsDownload) meter.exclude();
           continue;
         }
         if (before == null || revision.compareTo(before) > 0) {
@@ -434,18 +450,24 @@ class SyncReplicaEngine {
           if (!deferIdentityConflicts) rethrow;
           // The transaction rolled back. Keep this entry for the strict final
           // pass; never apply or acknowledge its conflicting content.
-          if (revision.kind == SyncEntityKind.note) meter.exclude();
+          if (countsAsDownload) meter.exclude();
           continue;
         } on SyncLocalMutationPending {
           // Keep the inbox record: a later pass can compare it to the prepared
           // local winner. Other notes and destinations can continue meanwhile.
-          if (revision.kind == SyncEntityKind.note) meter.exclude();
+          if (countsAsDownload) meter.exclude();
           continue;
         }
         if (applied && application?.didCommit != null) {
           await application!.didCommit!();
         }
-        if (revision.kind == SyncEntityKind.note) meter.advance();
+        if (countsAsDownload) {
+          if (applied) {
+            meter.advance();
+          } else {
+            meter.exclude();
+          }
+        }
       }
       after = (
         incoming.last.kind.name,

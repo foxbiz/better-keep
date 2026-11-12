@@ -39,6 +39,7 @@ import 'package:better_keep/services/external_sync/external_sync_refresh.dart';
 import 'package:better_keep/services/external_sync/external_sync_progress.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/external_sync/library_sync_session.dart';
+import 'package:better_keep/services/external_sync/library_replica_content.dart';
 import 'package:better_keep/services/external_sync/provider_http.dart';
 import 'package:better_keep/services/external_sync/storage_connection_controller.dart';
 import 'package:better_keep/services/external_sync/sync_attachment_store.dart';
@@ -170,6 +171,42 @@ void main() {
       final writes = server.uploads;
       server.delay = const Duration(milliseconds: 100);
       final clock = Stopwatch()..start();
+      final interrupted = Completer<void>();
+      final closing = Completer<void>();
+      final partial = await _Replica.create(
+        files,
+        p.join(root, 'b'),
+        server,
+        restoreOnStart: true,
+        onApplied: (change) async {
+          if (change.revision.kind == SyncEntityKind.note &&
+              !change.revision.deleted &&
+              !interrupted.isCompleted) {
+            interrupted.complete();
+            await closing.future;
+          }
+        },
+      );
+      replicas.add(partial);
+      try {
+        await interrupted.future.timeout(const Duration(seconds: 30));
+        expect(await partial.db.query('note'), hasLength(1));
+        final progress =
+            partial.session.transfers[partial.adapter.connectionId]!;
+        expect(progress.stage, NoteTransferStage.downloading);
+        expect(
+          progress.total,
+          9,
+          reason: 'Deleted notes have no content to download',
+        );
+        partial.session.retire();
+      } finally {
+        closing.complete();
+      }
+      await partial.session.close(pruneCache: false);
+      partial.client.close();
+      await partial.db.close();
+      replicas.remove(partial);
       final b = await _Replica.create(
         files,
         p.join(root, 'b'),
@@ -178,7 +215,16 @@ void main() {
         notifyModels: true,
       );
       replicas.add(b);
-      await b.session.scheduler.waitForIdle();
+      final resumedRefresh = await refreshExternalSession(
+        b.session,
+        isCurrent: () => true,
+        progress: () => externalSyncProgress(
+          connections: b.session.connections.connections.values,
+          progress: b.session.scheduler.progress,
+          automatic: false,
+        ),
+      );
+      expect(resumedRefresh, SyncRefreshOutcome.complete);
       expect(await b.db.query('note'), hasLength(9));
       expect(
         server.uploads,
@@ -894,6 +940,7 @@ class _Replica {
     String deviceId = 'synthetic-device',
     bool restoreOnStart = false,
     bool notifyModels = false,
+    Future<void> Function(SyncAppliedChange)? onApplied,
   }) async {
     await files.createDirectory(root);
     final db = await openDatabase(p.join(root, 'qa.sqlite'));
@@ -939,7 +986,7 @@ class _Replica {
               reconcileReminders: () {},
               cancelReminder: (_) async {},
             ).apply
-          : null,
+          : onApplied,
       files: files,
       documentRoot: root,
       cacheRoot: p.join(root, 'cache'),

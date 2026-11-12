@@ -96,16 +96,17 @@ void main() {
       for (final show in [true, false]) {
         AppState.set('show_sync_progress', show);
         await tester.pump();
-        expect(
-          find.textContaining('0/24'),
-          show ? findsOneWidget : findsNothing,
-        );
+        expect(find.text('24 notes'), show ? findsOneWidget : findsNothing);
         if (!show) {
           expect(find.bySemanticsLabel('Updating your notes'), findsOneWidget);
         }
         final download = find.byKey(const ValueKey('download_activity'));
         expect(download, findsOneWidget);
-        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.text('0%'), show ? findsOneWidget : findsNothing);
+        expect(
+          find.byType(LinearProgressIndicator),
+          show ? findsOneWidget : findsNothing,
+        );
         expect(find.byType(CircularProgressIndicator), findsNothing);
         double shaftLength() {
           final canvas = TestRecordingCanvas();
@@ -167,6 +168,22 @@ void main() {
     NoteTransferMeter(NoteTransferStage.uploading, 3, samples.add);
     expect(samples.last.done, 0);
     expect(samples.last.minutesLeft, isNull);
+  });
+
+  test('download progress keeps its total when a revision is skipped', () {
+    final samples = <NoteTransfer>[];
+    final meter = NoteTransferMeter(
+      NoteTransferStage.downloading,
+      3,
+      samples.add,
+    );
+    meter.advance();
+    meter.exclude();
+    meter.flush();
+    expect(samples.last.total, 3);
+    expect(samples.last.done, 2);
+    meter.advance();
+    expect(samples.last.fraction, 1);
   });
 
   test(
@@ -382,6 +399,23 @@ void main() {
       labels.value = false;
       labelStatus.value = const SyncProgress(SyncPhase.complete);
       expect(presentation.value.isSuccess, isTrue);
+    },
+  );
+
+  test(
+    'refresh during startup keeps preparing until note checking starts',
+    () async {
+      final request = presentation.beginManual(() => true);
+      final check = recovery.check();
+      verification.complete(CloudSessionState.ready);
+      await check;
+      presentation.finishManual(request, SyncRefreshOutcome.deferred);
+      expect(presentation.value.phase, SyncPhase.preparing);
+      notes.value = true;
+      noteStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
+      expect(presentation.value.phase, SyncPhase.fetchingUpdates);
+      initialization.complete();
+      await pumpEventQueue();
     },
   );
 

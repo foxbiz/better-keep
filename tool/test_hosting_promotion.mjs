@@ -105,9 +105,9 @@ try {
 	}
 	const betaContext = await browser.createBrowserContext();
 	const client = await pageFor(betaContext);
-	await client.page.goto(`${origin}/app/`);
+	await client.page.goto(`${origin}/app/?channel=beta`);
 	await client.page.waitForSelector("#beta-prompt button");
-	await client.page.click("#beta-prompt button");
+	await client.page.click("aria/Try beta");
 	await ready(client, true);
 	console.log("Beta client ready");
 	await client.page.evaluate(async () => {

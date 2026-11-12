@@ -3,6 +3,7 @@ import 'package:better_keep/services/external_sync/firebase_sync_migration.dart'
 import 'package:better_keep/services/external_sync/portable_sync_codec.dart';
 import 'package:better_keep/services/external_sync/sync_cipher.dart';
 import 'package:better_keep/services/external_sync/sync_object_cache.dart';
+import 'package:better_keep/services/file_system.dart' show fileSystem;
 import 'package:better_keep/services/file_system_io.dart';
 import 'package:better_keep/services/external_sync/firebase_sync_version.dart';
 import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
@@ -23,6 +24,7 @@ import 'package:better_keep/pages/home/notes.dart';
 import 'package:better_keep/pages/home/home.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/models/cloud_sync_cursor.dart';
+import 'package:better_keep/models/pending_remote_sync.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/services/remote_note_apply_result.dart';
 import 'package:better_keep/services/remote_document_revision.dart';
@@ -2164,6 +2166,171 @@ void main() {
       );
     },
   );
+
+  for (final stale in [false, true]) {
+    test(
+      'a retained bootstrap failure cannot block a later cloud commit (stale: $stale)',
+      () async {
+        final cache = RemoteSyncCacheService();
+        await cache.init();
+        addTearDown(cache.clear);
+        AppState.noteCloudSyncCheckpoint = null;
+        await cache.startNewSync(null, ownerUid: 'account-a');
+        const blocked = 'blocked-note';
+        await cache.addPage(
+          PendingRemoteSyncPage(
+            pageIndex: 0,
+            syncs: {
+              blocked: PendingRemoteSync(
+                remoteDocId: blocked,
+                localId: 101,
+                remoteData: {
+                  ...payload(),
+                  'created_at': 'invalid',
+                  cloudSyncCommittedAtField: Timestamp(2000000000, 0),
+                },
+                fetchedAt: DateTime.now(),
+              ),
+            },
+          ),
+        );
+        await cache.markAllPagesFetched();
+        if (stale) {
+          cache.metadata!.updatedAt = DateTime.now().subtract(
+            const Duration(minutes: 6),
+          );
+        }
+        await db.execute("""
+      CREATE TEMP TRIGGER block_retry BEFORE INSERT ON remote_content_retry
+      WHEN NEW.remote_document_id = 'blocked-note'
+      BEGIN SELECT RAISE(ABORT, 'simulated retry write failure'); END
+    """);
+        backend.firestore.queryResponse = (_, _) async => OfflineQuerySnapshot({
+          'later-note': {
+            ...payload(),
+            'local_id': 202,
+            cloudSyncCommittedAtField: Timestamp(2000000001, 0),
+          },
+        });
+        expect(
+          await NoteSyncService().refreshWithOutcome(),
+          SyncRefreshOutcome.failed,
+        );
+        expect((await Note.findById(202))?.title, 'Remote');
+        expect(cache.getSync(blocked), isNotNull);
+        expect(AppState.noteCloudSyncCheckpoint, isNull);
+        await db.execute('DROP TRIGGER block_retry');
+        backend.firestore.queryResponse = (_, _) async =>
+            OfflineQuerySnapshot({});
+        await NoteSyncService().refreshWithOutcome();
+        expect(cache.hasPendingSyncs, isFalse);
+        expect(
+          AppState.noteCloudSyncCheckpoint?.cursor?.documentId,
+          'later-note',
+        );
+      },
+    );
+  }
+
+  test(
+    'startup refetches an evicted page before committing its cursor',
+    () async {
+      final cache = RemoteSyncCacheService();
+      await cache.init();
+      addTearDown(cache.clear);
+      const prior = CloudSyncCursor(
+        seconds: 1,
+        nanoseconds: 0,
+        documentId: 'prior',
+      );
+      const lost = CloudSyncCursor(
+        seconds: 2,
+        nanoseconds: 0,
+        documentId: 'evicted',
+      );
+      AppState.noteCloudSyncCheckpoint = const CloudSyncCheckpoint(
+        bootstrapped: true,
+        cursor: prior,
+      );
+      await cache.startNewSync(prior, ownerUid: 'account-a');
+      final remoteNote = {
+        ...payload(),
+        'local_id': 101,
+        cloudSyncCommittedAtField: Timestamp(2, 0),
+      };
+      await cache.addPage(
+        PendingRemoteSyncPage(
+          pageIndex: 0,
+          syncs: {
+            lost.documentId: PendingRemoteSync(
+              localId: 101,
+              remoteDocId: lost.documentId,
+              remoteData: remoteNote,
+              fetchedAt: DateTime.now(),
+            ),
+          },
+        ),
+        maxCursor: lost,
+      );
+      await cache.markAllPagesFetched();
+      final fs = await fileSystem();
+      expect(
+        await fs.delete('${await fs.cacheDir}/remote_sync_cache/page_0.json'),
+        isTrue,
+      );
+      cache.resetAfterSignOut();
+
+      CloudSyncCursor? checkpointAtRead;
+      backend.firestore.queryResponse = (_, _) async {
+        checkpointAtRead ??= AppState.noteCloudSyncCheckpoint?.cursor;
+        return OfflineQuerySnapshot({lost.documentId: remoteNote});
+      };
+      await NoteSyncService().init();
+      await waitUntil(() => AppState.noteCloudSyncCheckpoint?.cursor == lost);
+      expect(checkpointAtRead, prior);
+      expect((await Note.findById(101))?.title, 'Remote');
+    },
+  );
+
+  for (final owner in ['account-a', 'other-account']) {
+    test(
+      'refresh after partial restore uses only its own cache ($owner)',
+      () async {
+        final cache = RemoteSyncCacheService();
+        await cache.init();
+        addTearDown(cache.clear);
+        const id = 'cached-on-first-launch';
+        await cache.startNewSync(null, ownerUid: owner);
+        await cache.addPage(
+          PendingRemoteSyncPage(
+            pageIndex: 0,
+            syncs: {
+              id: PendingRemoteSync(
+                remoteDocId: id,
+                localId: 101,
+                remoteData: payload(),
+                fetchedAt: DateTime.now(),
+              ),
+            },
+          ),
+        );
+        await cache.markAllPagesFetched();
+        int? localCountAtFirstQuery;
+        backend.firestore.queryResponse = (_, _) async {
+          localCountAtFirstQuery ??= await Note.count(NoteType.all);
+          return OfflineQuerySnapshot({});
+        };
+        expect(
+          await NoteSyncService().refreshWithOutcome(),
+          SyncRefreshOutcome.complete,
+        );
+        final expected = owner == 'account-a' ? 1 : 0;
+        expect(localCountAtFirstQuery, expected);
+        expect(await Note.count(NoteType.all), expected);
+        expect(cache.hasPendingSyncs, isFalse);
+      },
+    );
+  }
 
   test(
     'note pull backoff survives successful pages before a later fetch failure',

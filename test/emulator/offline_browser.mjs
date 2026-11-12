@@ -168,11 +168,6 @@ async function exercise(profile, proxy, origin, beta, stableUser) {
 		await launch(false);
 		await page.evaluateOnNewDocument((beta) => {
 			if (beta) localStorage.setItem("betterkeep.web.channel.v1", "beta");
-			else
-				sessionStorage.setItem(
-					"betterkeep.web.beta-dismissed.v1",
-					"qa-offline",
-				);
 		}, beta);
 		await page.goto(origin + "/");
 		await wait("seeded");

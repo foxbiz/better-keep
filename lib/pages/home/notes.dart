@@ -3,7 +3,6 @@ import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
 import 'package:better_keep/components/cloud_sync_upgrade_notice.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
-import 'package:better_keep/utils/progress_localizations.dart';
 
 import 'dart:async';
 
@@ -1332,7 +1331,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
         if (!progress.isActive || !AppState.showSyncProgress) return child!;
         return SliverFillRemaining(
           hasScrollBody: false,
-          child: SyncContentProgress(label: progress.localized(context.l10n)),
+          child: SyncContentProgress(progress: progress),
         );
       },
     );

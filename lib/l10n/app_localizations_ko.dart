@@ -10,13 +10,18 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
-  String syncCheckingNotes(String count) {
-    return '노트 변경 사항 확인 중 · $count';
-  }
+  String get syncCheckingNotes => '노트 확인 중';
 
   @override
-  String syncDownloadingNotes(String count) {
-    return '노트 변경 사항 다운로드 중 · $count';
+  String get syncDownloadingNotes => '노트 다운로드 중';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '노트 $countString개';
   }
 
   @override

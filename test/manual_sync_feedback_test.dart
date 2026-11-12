@@ -59,6 +59,35 @@ void main() {
     ),
   );
 
+  testWidgets(
+    'an online settings timeout gives feedback after a manual refresh',
+    (tester) async {
+      final preference = FirebaseSyncPreference(
+        currentUid: () => 'test-account',
+        watch: (_) => const Stream.empty(),
+        write: (_, _) => throw UnimplementedError(),
+      )..bind('test-account');
+      FirebaseSyncPreference.instanceOverride = preference;
+      addTearDown(() {
+        FirebaseSyncPreference.instanceOverride = null;
+        preference.dispose();
+      });
+      await mountFeedback(tester);
+      final context = tester.element(find.byType(SyncProgressWidget));
+      final refresh = refreshSyncFromUser(context);
+      await tester.pump(const Duration(seconds: 11));
+      await refresh;
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.text(AppLocalizations.of(context)!.syncFailed),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
   for (final width in [320.0, 390.0, 800.0]) {
     testWidgets('long status stays above FAB at width $width and large text', (
       tester,
@@ -130,7 +159,12 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.textContaining('123/456\n'), findsOneWidget);
+      expect(find.text('456 notes'), findsOneWidget);
+      expect(find.text('26%'), findsOneWidget);
+      final bar = tester.widget<LinearProgressIndicator>(
+        find.byType(LinearProgressIndicator),
+      );
+      expect(bar.value, closeTo(123 / 456, 0.0001));
       final transferPill = tester.getRect(
         find.byKey(const ValueKey('sync_progress')),
       );

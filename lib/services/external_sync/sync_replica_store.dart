@@ -12,6 +12,7 @@ class SyncReplicaStore {
 
   final Database database;
   final String scope;
+  static final _missingJsonExtract = Expando<bool>();
 
   static Future<void> createTables(DatabaseExecutor db) async {
     await SyncObjectCache.createTable(db);
@@ -115,13 +116,40 @@ class SyncReplicaStore {
         ),
       )!;
 
-  Future<int> incomingNoteCount(String connectionId) async =>
-      Sqflite.firstIntValue(
-        await database.rawQuery(
-          'SELECT COUNT(*) FROM replica_inbox WHERE scope = ? AND connection_id = ? AND kind = ?',
-          [scope, connectionId, SyncEntityKind.note.name],
-        ),
-      )!;
+  Future<int> incomingNoteCount(String connectionId) async {
+    if (_missingJsonExtract[database] != true) {
+      try {
+        return Sqflite.firstIntValue(
+          await database.rawQuery(
+            "SELECT COUNT(*) FROM replica_inbox WHERE scope = ? AND connection_id = ? "
+            "AND kind = ? AND json_extract(revision, '\$.deleted') = 0",
+            [scope, connectionId, SyncEntityKind.note.name],
+          ),
+        )!;
+      } on DatabaseException catch (error) {
+        if (!error.toString().contains('no such function: json_extract')) {
+          rethrow;
+        }
+        _missingJsonExtract[database] = true;
+      }
+    }
+    final rows = await database.rawQueryCursor(
+      'SELECT revision FROM replica_inbox WHERE scope = ? AND connection_id = ? AND kind = ?',
+      [scope, connectionId, SyncEntityKind.note.name],
+      bufferSize: 256,
+    );
+    var count = 0;
+    try {
+      while (await rows.moveNext()) {
+        if (!SyncRevision.decode(rows.current['revision'] as String).deleted) {
+          count++;
+        }
+      }
+    } finally {
+      await rows.close();
+    }
+    return count;
+  }
 
   Future<List<SyncRevision>> pending(
     String connectionId, {

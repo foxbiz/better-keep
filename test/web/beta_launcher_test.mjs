@@ -64,11 +64,14 @@ async function button(page, label) {
 	);
 }
 
-test("declining downloads only stable and remembers dismissal", async () => {
+test("stable starts without an invitation and declining an invite keeps it stable", async () => {
 	const { context, page } = await fresh();
 	const requests = [];
 	page.on("request", (r) => requests.push(r.url()));
 	await page.goto(`${origin}/app/`);
+	await page.waitForFunction(() => window.loadedVersion === "stable");
+	assert.equal(await page.$("#beta-prompt"), null);
+	await page.goto(`${origin}/app/?channel=beta`);
 	await page.waitForSelector("#beta-prompt");
 	assert.equal(await page.evaluate(() => window.loadedVersion), undefined);
 	assert.ok(!requests.some((url) => url.includes("/releases/")));
@@ -79,11 +82,11 @@ test("declining downloads only stable and remembers dismissal", async () => {
 	assert.ok(!requests.some((url) => url.includes("/releases/")));
 	await context.close();
 });
-test("acceptance persists across tabs and never starts stable", async () => {
+test("beta opt-in persists across tabs until the tester chooses to return to stable", async () => {
 	const { context, page } = await fresh();
 	const requests = [];
 	page.on("request", (r) => requests.push(r.url()));
-	await page.goto(`${origin}/app/`);
+	await page.goto(`${origin}/app/?channel=beta`);
 	await page.waitForSelector("#beta-prompt");
 	await button(page, "Try beta");
 	await page.waitForFunction(() => window.loadedVersion === "beta");
@@ -94,15 +97,35 @@ test("acceptance persists across tabs and never starts stable", async () => {
 	assert.equal(await page.$("#beta-prompt"), null);
 	assert.equal(await page.evaluate(() => location.pathname), "/app/");
 	assert.ok(!requests.some((url) => url.endsWith("/app/flutter_bootstrap.js")));
+	for (const [width, height] of [[320, 568], [568, 320], [1280, 800]]) {
+		await page.setViewport({ width, height });
+		const badge = await page.$eval("#beta-channel-tag", el => el.getBoundingClientRect().toJSON());
+		assert.ok(badge.width >= 24 && badge.height >= 44, "beta tab tap target");
+		assert.ok(badge.bottom <= height - 112, "badge must clear the snackbar and create button");
+		assert.ok(badge.top >= 0 && badge.right <= width && badge.left >= 0);
+	}
 	const other = await context.newPage();
 	await other.goto(`${origin}/app/`);
 	await other.waitForFunction(() => window.loadedVersion === "beta");
+	await other.close();
+	await page.goto(`${origin}/app/?channel=beta&qa=keep#notes`);
+	await page.waitForFunction(() => window.loadedVersion === "beta");
+	assert.equal(await page.evaluate(() => location.search + location.hash), "?qa=keep#notes");
+	await page.evaluate(() => localStorage.setItem("qa.beta-note", "keep"));
+	await page.click("#beta-channel-tag");
+	await button(page, "Stay in beta");
+	assert.equal(await page.evaluate(() => window.loadedVersion), "beta");
+	await page.click("#beta-channel-tag");
+	await button(page, "Return to stable");
+	await page.waitForFunction(() => window.loadedVersion === "stable");
+	assert.equal(await page.$("#beta-prompt"), null);
+	assert.equal(await page.evaluate(() => localStorage.getItem("qa.beta-note")), "keep");
 	await context.close();
 });
 test("mobile prompt fits, Escape declines, and accepting shows progress until ready", async () => {
 	const { context, page } = await fresh();
 	await page.setViewport({ width: 320, height: 568 });
-	await page.goto(`${origin}/app?`);
+	await page.goto(`${origin}/app?channel=beta`);
 	await page.waitForSelector("#beta-prompt");
 	const bounds = await page.$eval("#beta-prompt", (dialog) => {
 		const rect = dialog.getBoundingClientRect();
@@ -125,7 +148,6 @@ test("mobile prompt fits, Escape declines, and accepting shows progress until re
 	assert.equal(bounds.described, "beta-prompt-description beta-prompt-note");
 	await page.keyboard.press("Escape");
 	await page.waitForFunction(() => window.loadedVersion === "stable");
-	await page.evaluate(() => sessionStorage.clear());
 	let resume;
 	await page.setRequestInterception(true);
 	page.on("request", (request) => {
@@ -136,7 +158,7 @@ test("mobile prompt fits, Escape declines, and accepting shows progress until re
 			resume = () => request.continue();
 		} else void request.continue();
 	});
-	await page.reload();
+	await page.goto(`${origin}/app/?channel=beta`);
 	await page.waitForSelector("#beta-prompt");
 	await button(page, "Try beta");
 	await page.waitForSelector('#beta-prompt [role="status"]');
@@ -155,9 +177,28 @@ test("mobile prompt fits, Escape declines, and accepting shows progress until re
 	assert.equal(await page.$("#beta-prompt"), null);
 	await context.close();
 });
+test("a verified beta with a failed bootstrap offers an explicit return to stable", async () => {
+	const { context, page } = await fresh();
+	await page.setRequestInterception(true);
+	page.on("request", request => {
+		if (request.resourceType() === "script" && request.url().includes(release.base)) {
+			void request.abort();
+		} else void request.continue();
+	});
+	await page.goto(`${origin}/app/?channel=beta`);
+	await page.waitForSelector("#beta-prompt");
+	await button(page, "Try beta");
+	await page.waitForFunction(() => document.querySelector("#beta-prompt-title")?.textContent.includes("Unable"));
+	assert.equal(await page.evaluate(() => localStorage.getItem("betterkeep.web.channel.v1")), "beta");
+	await button(page, "Return to stable");
+	await page.waitForFunction(() => window.loadedVersion === "stable");
+	assert.equal(await page.evaluate(() => localStorage.getItem("betterkeep.web.channel.v1")), null);
+	await context.close();
+});
+
 test("missing beta release fails closed for opted-in browsers but stable still starts for others", async () => {
 	const { context, page } = await fresh();
-	await page.goto(`${origin}/app/`);
+	await page.goto(`${origin}/app/?channel=beta`);
 	await page.waitForSelector("#beta-prompt");
 	await button(page, "Try beta");
 	await page.waitForFunction(() => window.loadedVersion === "beta");
@@ -171,6 +212,7 @@ test("missing beta release fails closed for opted-in browsers but stable still s
 				"Unable to start",
 			),
 		);
+		assert.doesNotMatch(await page.$eval("#beta-prompt", e => e.innerText), /Return to stable/);
 		const freshContext = await browser.createBrowserContext();
 		const freshPage = await freshContext.newPage();
 		await freshPage.goto(`${origin}/app/`);
@@ -192,7 +234,7 @@ test("unavailable beta bootstrap cannot commit an upgrade or fall back silently"
 			? r.respond({ status: 404, body: "missing" })
 			: r.continue(),
 	);
-	await page.goto(`${origin}/app/`);
+	await page.goto(`${origin}/app/?channel=beta`);
 	await page.waitForSelector("#beta-prompt");
 	await button(page, "Try beta");
 	await page.waitForFunction(() =>
@@ -207,13 +249,20 @@ test("unavailable beta bootstrap cannot commit an upgrade or fall back silently"
 		),
 		null,
 	);
+	await Promise.all([page.waitForNavigation(), button(page, "Retry")]);
+	await page.waitForSelector("#beta-prompt .beta-warning");
+	await button(page, "Try beta");
+	await page.waitForFunction(() => document.querySelector("#beta-prompt")?.textContent.includes("Unable to start"));
+	await button(page, "Return to stable");
+	await page.waitForFunction(() => window.loadedVersion === "stable");
+	assert.equal(new URL(page.url()).searchParams.has("channel"), false);
 	await context.close();
 });
 
 test("storage OAuth callback returns only to its same-origin opener", async () => {
 	const { context, page } = await fresh();
 	await page.goto(`${origin}/app/`);
-	await page.waitForSelector("#beta-prompt");
+	await page.waitForFunction(() => window.loadedVersion === "stable");
 	const result = await page.evaluate(
 		() =>
 			new Promise((resolve, reject) => {
@@ -253,7 +302,7 @@ test("promotion keeps each storage variant, removes beta UI, and refuses older o
 		'window.loadedVersion="promoted-stable";window.dispatchEvent(new Event("flutter-first-frame"));',
 	);
 	try {
-		await page.goto(`${origin}/app/`);
+		await page.goto(`${origin}/app/?channel=beta`);
 		await page.waitForSelector("#beta-prompt");
 		await button(page, "Try beta");
 		await page.waitForFunction(() => window.loadedVersion === "beta");
@@ -279,6 +328,21 @@ test("promotion keeps each storage variant, removes beta UI, and refuses older o
 			),
 			"beta",
 		);
+		await page.evaluate(() => localStorage.setItem("qa.beta-note", "preserve"));
+		await page.goto(`${origin}/app/?channel=stable`);
+		await page.waitForSelector("#beta-prompt");
+		await page.keyboard.press("Escape");
+		await page.waitForFunction(() => window.loadedVersion === "beta");
+		await page.goto(`${origin}/app/?channel=stable&qa=keep#notes`);
+		await page.waitForSelector("#beta-prompt");
+		await button(page, "Return to stable");
+		await page.waitForFunction(() => window.loadedVersion === "promoted-stable");
+		assert.deepEqual(await page.evaluate(() => [
+			localStorage.getItem("betterkeep.web.channel.v1"),
+			localStorage.getItem("betterkeep.web.release-sequence.v1"),
+			localStorage.getItem("qa.beta-note"),
+			location.search + location.hash,
+		]), [null, "2", "preserve", "?qa=keep#notes"]);
 		const stableContext = await browser.createBrowserContext();
 		try {
 			const stablePage = await stableContext.newPage();
@@ -303,7 +367,7 @@ test("promotion keeps each storage variant, removes beta UI, and refuses older o
 				path.join(root, "app/beta-release.json"),
 				JSON.stringify({ ...promoted, status: "beta", sequence: 3 }),
 			);
-			await stablePage.reload();
+			await stablePage.goto(`${origin}/app/?channel=beta`);
 			await stablePage.waitForSelector("#beta-prompt");
 			await button(stablePage, "Not now");
 			await stablePage.waitForFunction(

@@ -256,6 +256,33 @@ class FirebaseSyncPreference extends ChangeNotifier {
   bool get busy => _busy;
   bool get failed => _failed;
   bool get loading => accountId != null && _selection?.confirmed != true;
+
+  /// A refresh during startup must use the confirmed provider for this session.
+  Future<bool> waitForSelection() async {
+    final generation = _generation;
+    final ready = Completer<void>();
+    void changed() {
+      if (!ready.isCompleted &&
+          (_disposed || generation != _generation || !loading || failed)) {
+        ready.complete();
+      }
+    }
+
+    addListener(changed);
+    try {
+      changed();
+      await ready.future.timeout(const Duration(seconds: 10));
+      return !_disposed &&
+          generation == _generation &&
+          selectedProvider != null &&
+          !failed;
+    } on TimeoutException {
+      return false;
+    } finally {
+      removeListener(changed);
+    }
+  }
+
   bool get stoppedLocally => _localStop;
   bool get allowsCurrentAccount => allowsSync(accountId);
 

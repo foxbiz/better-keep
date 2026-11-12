@@ -523,9 +523,11 @@ class NoteSyncService {
           unawaited(_background(_resumePendingSyncs)());
         } else {
           final checkpoint = AppState.noteCloudSyncCheckpoint;
-          if (checkpoint == null || checkpoint.requiresBootstrap) {
+          if (checkpoint == null ||
+              checkpoint.requiresBootstrap ||
+              _syncCache.metadata?.allPagesFetched == false) {
             AppLogger.log(
-              "[SYNC] No durable note checkpoint, reconciling remote notes",
+              "[SYNC] Reconciling notes from the last durable checkpoint",
             );
             unawaited(_background(refresh)());
           } else {
@@ -630,6 +632,11 @@ class NoteSyncService {
     if (currentUser == null) return;
     if (!_canReceiveSync) return;
 
+    final cacheOwner = _syncCache.metadata?.ownerUid ?? _lastKnownUserId;
+    if (cacheOwner != currentUser!.uid) {
+      await _pullRemoteChanges();
+      return;
+    }
     _resumingCachedSyncs = true;
 
     // Yield to ensure we don't update state during a build phase
@@ -740,15 +747,17 @@ class NoteSyncService {
         } else {
           if (restoreListener) await _startRemoteListener();
           if (scheduleCachedResume && _canReceiveSync) {
-            if (_canReceiveSync) {
-              _pullRetry.schedule(
-                _background(() async {
-                  if (_initialized && currentUser != null && _canReceiveSync) {
-                    await _resumePendingSyncs();
-                  }
-                }),
-              );
-            }
+            _pullRetry.schedule(
+              _background(() async {
+                final uid = currentUser?.uid;
+                if (!_initialized || uid == null || !_canReceiveSync) return;
+                if (_canExtendCache(uid)) {
+                  await refresh();
+                } else {
+                  await _resumePendingSyncs();
+                }
+              }),
+            );
           }
         }
         Future.delayed(const Duration(seconds: 2), () {
@@ -763,17 +772,26 @@ class NoteSyncService {
     }
   }
 
-  /// Refresh stale cached data from Firebase
-  /// Fetches only updated_at for cached notes to check if they've been updated
-  Future<void> _refreshStaleCacheData() async {
+  Future<bool> _refreshStaleCacheData() async {
     // Skip if cache is fresh (updated within last 5 minutes)
     if (!_syncCache.isCacheStale()) {
       AppLogger.log("[SYNC] REFRESH: Cache is fresh, skipping refresh");
-      return;
+      return false;
     }
 
-    final pendingSyncs = _syncCache.getPendingSyncs();
-    if (pendingSyncs.isEmpty) return;
+    final uid = currentUser?.uid;
+    requireCloudOperation();
+    if (uid == null) throw const CloudOperationCancelled();
+    var pendingSyncs = _syncCache.getPendingSyncs();
+    if (pendingSyncs.isEmpty) return false;
+    final extendCache = _canExtendCache(uid);
+    if (extendCache) {
+      // Stamped revisions can be checked with one incremental scan. Legacy
+      // revisions still need the per-document freshness check below.
+      pendingSyncs = pendingSyncs
+          .where((sync) => sync.remoteData[cloudSyncCommittedAtField] == null)
+          .toList();
+    }
 
     AppLogger.log(
       "[SYNC] REFRESH START: Checking ${pendingSyncs.length} cached notes for updates from Firebase",
@@ -798,7 +816,9 @@ class NoteSyncService {
 
       try {
         // Use FieldPath.documentId() to query by document IDs
-        final querySnapshot = await _notesCollection
+        requireCloudOperation();
+        final querySnapshot = await _cloudRepository
+            .notes(uid)
             .where(FieldPath.documentId, whereIn: batch)
             .get(const GetOptions(source: Source.server))
             .timeout(const Duration(seconds: 10));
@@ -836,7 +856,9 @@ class NoteSyncService {
       }
     }
 
+    if (extendCache) await _fetchSinceCachedCursor(uid);
     AppLogger.log("[SYNC] REFRESH COMPLETE: $updatedCount updated");
+    return extendCache;
   }
 
   void _onE2EEReadinessChange() {
@@ -2399,15 +2421,29 @@ class NoteSyncService {
   }
 
   Future<void> _performRemotePull() async {
-    syncStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
-    final checkpointCommit = StagedCheckpoint<CloudSyncCheckpoint>(
-      commit: (value) => AppState.noteCloudSyncCheckpoint = value,
-    );
+    requireCloudOperation();
+    final uid = currentUser?.uid;
+    if (uid == null) throw const CloudOperationCancelled();
+    if (_canExtendCache(uid)) {
+      syncStatus.value = const SyncProgress(SyncPhase.resuming);
+      final scanned = await _refreshStaleCacheData();
+      await _applyCachedPull();
+      requireCloudOperation();
+      if (scanned) return;
+      if (_syncCache.hasPendingSyncs) {
+        // Keep the library checkpoint pinned until every cached revision is safe.
+        // The cache cursor can still discover subsequent commits.
+        final fetched = await _fetchSinceCachedCursor(uid);
+        if (fetched > 0) await _applyCachedPull();
+        return;
+      }
+    }
 
+    syncStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
     final checkpoint = AppState.noteCloudSyncCheckpoint;
     final isBootstrap = checkpoint == null || checkpoint.requiresBootstrap;
     final safeCursor = isBootstrap
-        ? await _captureBootstrapBoundary()
+        ? await _captureBootstrapBoundary(uid)
         : checkpoint.cursor;
 
     AppLogger.log(
@@ -2418,13 +2454,39 @@ class NoteSyncService {
     // scan. Concurrent writes after it are intentionally left for the next
     // incremental query/listener.
     requireCloudOperation();
-    await _syncCache.startNewSync(safeCursor);
+    await _syncCache.startNewSync(safeCursor, ownerUid: uid);
     await _fetchAndCacheRemoteNotes(
+      uid: uid,
       checkpoint: checkpoint,
       isBootstrap: isBootstrap,
     );
 
-    // Process all cached syncs
+    await _applyCachedPull();
+  }
+
+  bool _canExtendCache(String uid) {
+    final cache = _syncCache.metadata;
+    return cache != null &&
+        cache.ownerUid == uid &&
+        cache.allPagesFetched &&
+        cache.cursorSchemaVersion == CloudSyncCheckpoint.schemaVersion;
+  }
+
+  Future<int> _fetchSinceCachedCursor(String uid) => _fetchAndCacheRemoteNotes(
+    uid: uid,
+    checkpoint: CloudSyncCheckpoint(
+      bootstrapped: true,
+      cursor: _syncCache.lastCursor,
+    ),
+    isBootstrap: false,
+    append: true,
+  );
+
+  Future<void> _applyCachedPull() async {
+    final checkpointCommit = StagedCheckpoint<CloudSyncCheckpoint>(
+      commit: (value) => AppState.noteCloudSyncCheckpoint = value,
+    );
+
     await _processCachedSyncs();
 
     if (_syncCache.metadata?.syncComplete == true) {
@@ -2453,10 +2515,10 @@ class NoteSyncService {
     }
   }
 
-  Future<CloudSyncCursor?> _captureBootstrapBoundary() async {
+  Future<CloudSyncCursor?> _captureBootstrapBoundary(String uid) async {
     final snapshot = await _getServerDocuments(
       () => _cloudRepository.captureBootstrapBoundary(
-        currentUser!.uid,
+        uid,
         onRetry: _logFirestoreQueryRetry('capturing the bootstrap boundary'),
       ),
       operation: 'capturing the bootstrap boundary',
@@ -2505,17 +2567,22 @@ class NoteSyncService {
 
   /// Fetches either the one-time legacy reconciliation or exact committed
   /// changes after the durable cursor, then persists them before application.
-  Future<void> _fetchAndCacheRemoteNotes({
+  Future<int> _fetchAndCacheRemoteNotes({
     required CloudSyncCheckpoint? checkpoint,
     required bool isBootstrap,
+    required String uid,
+    bool append = false,
   }) async {
     syncStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
 
     DocumentSnapshot<Map<String, dynamic>>? lastDocument;
-    int pageIndex = 0;
+    int pageIndex = append ? _syncCache.metadata!.totalPages : 0;
     bool hasMore = true;
     int totalDocsFetched = 0;
     final Set<String> uniqueRemoteIds = {};
+    final retainedIds = append
+        ? {for (final page in _syncCache.pages.values) ...page.syncs.keys}
+        : const <String>{};
 
     AppLogger.log(
       "[SYNC] FETCH START: ${isBootstrap ? 'all legacy and current notes' : 'commits after durable cursor'}",
@@ -2524,7 +2591,7 @@ class NoteSyncService {
     while (hasMore) {
       final querySnapshot = await _getServerDocuments(
         () => _cloudRepository.fetchPage(
-          uid: currentUser!.uid,
+          uid: uid,
           checkpoint: checkpoint,
           isBootstrap: isBootstrap,
           pageSize: RemoteSyncCacheService.pageSize,
@@ -2558,6 +2625,7 @@ class NoteSyncService {
           );
         }
         final localId = await _resolveIncomingLocalId(doc.id, suggestedLocalId);
+        requireCloudOperation();
         final updatedAtValue = remoteData['updated_at'];
         final updatedAtStr = updatedAtValue is String ? updatedAtValue : null;
 
@@ -2581,6 +2649,10 @@ class NoteSyncService {
               : maxCursor.max(documentCursor);
         }
 
+        if (retainedIds.contains(doc.id) &&
+            await _syncCache.updateRemoteData(doc.id, remoteData)) {
+          continue;
+        }
         syncs[doc.id] = PendingRemoteSync(
           localId: localId,
           remoteDocId: doc.id,
@@ -2629,6 +2701,7 @@ class NoteSyncService {
         "[SYNC] FETCH COMPLETE: ${uniqueRemoteIds.length} unique notes in ${_syncCache.metadata?.totalPages ?? 0} pages",
       );
     }
+    return totalDocsFetched;
   }
 
   /// Process all cached pending syncs
@@ -2640,7 +2713,7 @@ class NoteSyncService {
     }
 
     await _noteBatch.run(
-      pendingSyncs.length,
+      pendingSyncs.where((sync) => !sync.isDeleted).length,
       (meter) => _applyCachedNotes(pendingSyncs, meter),
       isEmptyLibrary: _emptyLibrary,
       onProgress: _reportNoteProgress,
@@ -2664,9 +2737,7 @@ class NoteSyncService {
     int deletedCount = 0; // Track deleted notes separately
 
     // Count deleted vs active notes for better logging
-    final deletedNotes = pendingSyncs.where(
-      (s) => s.remoteData['deleted'] == true || s.remoteData['deleted'] == 1,
-    );
+    final deletedNotes = pendingSyncs.where((s) => s.isDeleted);
     final activeNotes = pendingSyncs.length - deletedNotes.length;
 
     AppLogger.log(
@@ -2687,14 +2758,13 @@ class NoteSyncService {
       );
       // Skip if already processed in this sync cycle
       if (processedIds.contains(remoteDocId)) {
-        meter.exclude();
+        if (!pendingSync.isDeleted) meter.exclude();
         continue;
       }
       processedIds.add(remoteDocId);
 
       // Check if this is a deleted note FIRST
-      final isDeleted =
-          remoteData['deleted'] == true || remoteData['deleted'] == 1;
+      final isDeleted = pendingSync.isDeleted;
       final payloadLocalId = remoteData['local_id'];
       final hasValidCorePayload =
           payloadLocalId is int &&
@@ -2725,9 +2795,9 @@ class NoteSyncService {
               return;
             }
             syncedCount++;
-            meter.advance();
+            if (!isDeleted) meter.advance();
           } else {
-            meter.exclude();
+            if (!isDeleted) meter.exclude();
           }
         } catch (error) {
           if (error is CloudOperationCancelled ||
@@ -2737,7 +2807,7 @@ class NoteSyncService {
           requireCloudOperation();
           await _syncCache.markFailed(remoteDocId, error.toString());
           failedCount++;
-          meter.exclude();
+          if (!isDeleted) meter.exclude();
           AppLogger.error(
             '[SYNC] PROCESS: Malformed note $localId could not be delegated',
             error,
@@ -2765,7 +2835,6 @@ class NoteSyncService {
             return;
           }
           syncedCount++;
-          meter.advance();
           deletedCount++; // Track deleted notes separately
         } finally {
           _removeSyncingIncoming(localId);
@@ -2782,7 +2851,7 @@ class NoteSyncService {
           return;
         }
         syncedCount++;
-        meter.advance();
+        meter.exclude();
         skippedCount++;
         continue;
       }

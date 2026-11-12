@@ -1,6 +1,7 @@
 {
-  "syncCheckingNotes": "ノートの更新を確認中 · {count}",
-  "syncDownloadingNotes": "ノートの更新をダウンロード中 · {count}",
+  "syncCheckingNotes": "ノートを確認中",
+  "syncDownloadingNotes": "ノートをダウンロード中",
+  "syncTotalNotes": "{count} 件のノート",
   "syncUploadingNotes": "ノートの更新をアップロード中 · {count}",
   "syncEstimatedMinutes": "{minutes, plural, =0{残り1分未満} other{残り約{minutes}分}}",
   "syncUpdatingNotes": "ノートを更新中",

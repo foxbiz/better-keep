@@ -4,6 +4,8 @@ export type PublicDocument = {
     | 'terms'
     | 'pricing'
     | 'contact'
+    | 'help'
+    | 'web-beta'
     | 'cancellation-refund'
     | 'delete-user';
   title: string;
@@ -42,6 +44,20 @@ export const publicDocuments: readonly PublicDocument[] = [
       'Compare Better Keep plans and prices for manual sync, automatic sync with your own storage, built-in cloud sync, and locked notes.',
     introduction:
       'Every plan includes unlimited local notes and free manual sync with your own storage. Choose Lite for automatic sync or Pro for built-in cloud storage and unlimited locked notes.'
+  },
+  {
+    slug: 'help',
+    title: 'Help & guides',
+    eyebrow: 'Better Keep support',
+    description: 'Find Better Keep guides for writing, importing notes, syncing devices, and joining or leaving the web beta.',
+    introduction: 'Choose a topic below or contact support for help with your account.'
+  },
+  {
+    slug: 'web-beta',
+    title: 'Using the Better Keep web beta',
+    eyebrow: 'Browser help',
+    description: 'How to try the web beta, open your synced notes, and return to the stable version in the same browser.',
+    introduction: 'The beta lets you try upcoming changes in your browser. It has a separate sign-in and local library. Edits and deletions you sync still affect your live account.'
   },
   {
     slug: 'contact',

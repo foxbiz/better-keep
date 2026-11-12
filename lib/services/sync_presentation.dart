@@ -97,6 +97,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     _manual = request;
     _current = current;
     // Acknowledge the gesture synchronously, before verification or init awaits.
+    if (value.notes != null && value.isActive) return request;
     final alreadyChecking = value.phase == SyncPhase.checkingConnection;
     value = const SyncProgress(SyncPhase.checkingConnection);
     if (alreadyChecking) notifyListeners();
@@ -164,7 +165,9 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
       value =
           recovery.networkAvailable &&
               (external.phase == SyncPhase.syncing ||
-                  (!firebase && external.isSuccess))
+                  (!firebase &&
+                      (external.isSuccess ||
+                          (backgroundCheck && external.isActive))))
           ? external
           : SyncProgress.idle;
       return;
@@ -254,6 +257,11 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     final activity = recovery.activity.value;
     final cloud = recovery.state.value;
     if (transferring && cloud == CloudSessionState.ready) {
+      if (noteBusy.value &&
+          (noteStatus.value.phase == SyncPhase.fetchingUpdates ||
+              noteStatus.value.phase == SyncPhase.checkingForUpdates)) {
+        return noteStatus.value;
+      }
       return SyncProgress(
         SyncPhase.syncing,
         notes: noteBusy.value ? noteStatus.value.notes : null,
@@ -274,7 +282,9 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
         }.contains(encryptionStatus.value) ||
         postSignInState.value.hasRecoverableFailure) {
       return SyncProgress(_waitingPhase);
-    } else if (completion != null && !completion.isSuccess) {
+    } else if (completion != null &&
+        !completion.isSuccess &&
+        completion.phase != SyncPhase.deferred) {
       return completion;
     } else if (postSignInState.value.isRunning ||
         activity == CloudRecoveryActivity.resuming ||

@@ -1,20 +1,8 @@
 {
-  "syncCheckingNotes": "Checking note updates · {count}",
-  "@syncCheckingNotes": {
-    "placeholders": {
-      "count": {
-        "type": "String"
-      }
-    }
-  },
-  "syncDownloadingNotes": "Downloading note updates · {count}",
-  "@syncDownloadingNotes": {
-    "placeholders": {
-      "count": {
-        "type": "String"
-      }
-    }
-  },
+  "syncCheckingNotes": "Checking Notes",
+  "syncDownloadingNotes": "Downloading Notes",
+  "syncTotalNotes": "{count, plural, =1{1 note} other{{count} notes}}",
+  "@syncTotalNotes": { "placeholders": { "count": { "type": "int", "format": "decimalPattern" } } },
   "syncUploadingNotes": "Uploading note updates · {count}",
   "@syncUploadingNotes": {
     "placeholders": {

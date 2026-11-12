@@ -10,13 +10,18 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String syncCheckingNotes(String count) {
-    return '正在检查笔记更新 · $count';
-  }
+  String get syncCheckingNotes => '正在检查笔记';
 
   @override
-  String syncDownloadingNotes(String count) {
-    return '正在下载笔记更新 · $count';
+  String get syncDownloadingNotes => '正在下载笔记';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '共 $countString 条笔记';
   }
 
   @override

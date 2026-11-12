@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:better_keep/models/app_progress.dart';
 
 import 'dart:typed_data';
@@ -49,6 +51,30 @@ void main() {
     );
   });
   tearDown(() => db.close());
+
+  test(
+    'legacy SQLite counts only scoped live notes and probes once per database',
+    () async {
+      final page = SyncChangePage(
+        revisions: [revision(1), revision(2, deleted: true)],
+        cursor: 'cursor',
+        hasMore: false,
+      );
+      await store.stagePage('first', page);
+      final legacy = _LegacyJsonDatabase(db);
+      final scoped = SyncReplicaStore(legacy, scope: store.scope);
+      expect(await scoped.incomingNoteCount('first'), 1);
+      expect(await scoped.incomingNoteCount('second'), 0);
+      expect(
+        await SyncReplicaStore(
+          legacy,
+          scope: 'other',
+        ).incomingNoteCount('first'),
+        0,
+      );
+      expect(legacy.probes, 1);
+    },
+  );
 
   test(
     'counts only durable note updates and clears progress on retry',
@@ -647,6 +673,75 @@ void main() {
   );
 
   test(
+    'restart applies the remaining notes before checking for new changes',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('restore-test-');
+      final path = '${directory.path}/restore.db';
+      var disk = await databaseFactoryFfi.openDatabase(path);
+      addTearDown(() async {
+        await disk.close();
+        await directory.delete(recursive: true);
+      });
+      await SyncReplicaStore.createTables(disk);
+      await disk.execute('CREATE TABLE applied (revision TEXT NOT NULL)');
+      final data = List.generate(24, (i) => Uint8List.fromList([i]));
+      final revisions = [
+        for (final (i, bytes) in data.indexed)
+          SyncRevision(
+            kind: SyncEntityKind.note,
+            entityId: 'n${i.toString().padLeft(2, '0')}',
+            revisionId: 'r$i',
+            modifiedAtMicros: i + 1,
+            deleted: false,
+            payloadObjectId: sha256.convert(bytes).toString(),
+          ),
+      ];
+      final source = _Adapter('dropbox')
+        ..incoming = revisions
+        ..objects[revisions.first.payloadObjectId!] = data.first;
+      SyncReplicaEngine open(List<NoteTransfer?> samples) => SyncReplicaEngine(
+        store: SyncReplicaStore(disk, scope: store.scope),
+        content: _Content(),
+        isCurrent: () => true,
+        onProgress: (_, value) => samples.add(value),
+      );
+      await expectLater(
+        open([]).sync(source, downloadOnly: true),
+        throwsA(isA<SyncProviderFailure>()),
+      );
+      expect(await disk.query('applied'), hasLength(1));
+      await disk.close();
+      disk = await databaseFactoryFfi.openDatabase(path);
+      // The second client has no memory cache or access to the first payload.
+      source.objects.clear();
+      for (var i = 1; i < data.length; i++) {
+        source.objects[revisions[i].payloadObjectId!] = data[i];
+      }
+      source.listChanges = (cursor) async {
+        expect(cursor, 'cursor-1');
+        expect(await disk.query('applied'), hasLength(24));
+        return SyncChangePage(
+          revisions: [],
+          cursor: 'cursor-2',
+          hasMore: false,
+        );
+      };
+      final samples = <NoteTransfer?>[];
+      final restored = open(samples);
+      await restored.sync(source, downloadOnly: true);
+      final first = samples.whereType<NoteTransfer>().first;
+      expect(first.stage, NoteTransferStage.downloading);
+      expect(first.total, 23);
+      expect(await restored.store.inbox(source.connectionId), isEmpty);
+      expect(source.published, isEmpty);
+      expect(
+        (await disk.query('applied')).map((r) => r['revision']).toSet(),
+        revisions.map((r) => r.encode()).toSet(),
+      );
+    },
+  );
+
+  test(
     'missing incoming content survives cursor advance and engine restart',
     () async {
       content.objects.clear();
@@ -977,4 +1072,32 @@ class _BatchAdapter extends _Adapter implements BatchSyncWriter {
       await publish(revision);
     }
   }
+}
+
+// Delegate the fallback to SQLite so its filtering and cursor behavior are exercised.
+class _LegacyJsonDatabase extends Fake implements Database {
+  _LegacyJsonDatabase(this.delegate);
+  final Database delegate;
+  int probes = 0;
+
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(
+    String sql, [
+    List<Object?>? arguments,
+  ]) {
+    probes++;
+    throw _MissingJsonExtract();
+  }
+
+  @override
+  Future<QueryCursor> rawQueryCursor(
+    String sql,
+    List<Object?>? arguments, {
+    int? bufferSize,
+  }) => delegate.rawQueryCursor(sql, arguments, bufferSize: bufferSize);
+}
+
+class _MissingJsonExtract extends Fake implements DatabaseException {
+  @override
+  String toString() => 'no such function: json_extract';
 }

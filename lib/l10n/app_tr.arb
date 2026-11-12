@@ -1,6 +1,7 @@
 {
-  "syncCheckingNotes": "Not değişiklikleri kontrol ediliyor · {count}",
-  "syncDownloadingNotes": "Not değişiklikleri indiriliyor · {count}",
+  "syncCheckingNotes": "Notlar kontrol ediliyor",
+  "syncDownloadingNotes": "Notlar indiriliyor",
+  "syncTotalNotes": "{count} not",
   "syncUploadingNotes": "Not değişiklikleri yükleniyor · {count}",
   "syncEstimatedMinutes": "{minutes, plural, =0{Bir dakikadan az kaldı} other{Yaklaşık {minutes} dk. kaldı}}",
   "syncUpdatingNotes": "Notlarınız güncelleniyor",

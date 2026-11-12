@@ -58,6 +58,28 @@ void main() {
         ),
       );
 
+  test('refresh waits for confirmed provider after restart and retires on account change', () async {
+    var settled = false;
+    final ready = preference.waitForSelection().then((result) {
+      settled = true;
+      return result;
+    });
+    selection(false, confirmed: false);
+    await Future<void>.delayed(Duration.zero);
+    expect(settled, false);
+    snapshots.add(
+      const FirebaseSyncSelection(false, provider: 'dropbox', confirmed: true),
+    );
+    expect(await ready, true);
+    expect(preference.allowsProvider('dropbox'), true);
+    preference.bind(uid, force: true);
+    final retired = preference.waitForSelection();
+    uid = 'other';
+    preference.bind(uid);
+    selection(true);
+    expect(await retired, false);
+  });
+
   test('provider guidance requires a confirmed pause of every source', () {
     expect(preference.allTransfersPaused, false);
     for (final confirmed in [false, true]) {

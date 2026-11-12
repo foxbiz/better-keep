@@ -42,6 +42,15 @@ export default defineConfig({
   site: 'https://betterkeep.app',
   output: 'static',
   trailingSlash: 'never',
+  integrations: [{
+    name: 'app-dev-proxy',
+    hooks: {
+      'astro:config:setup': ({ command, updateConfig }) => {
+        // Astro checks trailing slashes before Vite can proxy Flutter's /app/ entry.
+        if (command === 'dev') updateConfig({ trailingSlash: 'ignore' });
+      },
+    },
+  }],
   server: {
     allowedHosts: developmentOrigin ? [developmentOrigin.hostname] : []
   },

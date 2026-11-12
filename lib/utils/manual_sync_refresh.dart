@@ -95,9 +95,21 @@ Future<void> refreshSyncFromUser(BuildContext context) {
   operation =
       (() async {
         final preference = FirebaseSyncPreference.instance;
+        if (preference.loading && !await preference.waitForSelection()) {
+          if (!current()) return;
+          final outcome =
+              AuthService.cloudRecovery.networkAvailable &&
+                  AuthService.cloudRecovery.state.value !=
+                      CloudSessionState.unavailable
+              ? SyncRefreshOutcome.failed
+              : SyncRefreshOutcome.unavailable;
+          presentation.finishManual(request, outcome);
+          if (context.mounted) showSyncRefreshFeedback(context, outcome);
+          return;
+        }
+        if (!current()) return;
+        final selected = preference.selectedProvider;
         final outcome = await runManualSyncRefresh(
-          // While selection loads, the services report their readiness without
-          // transferring data. Once confirmed, Sync off still permits downloads.
           firebaseEnabled:
               !preference.stoppedLocally &&
               (preference.selectedProvider == null ||
@@ -105,9 +117,12 @@ Future<void> refreshSyncFromUser(BuildContext context) {
           ordering: () => current()
               ? NoteSortService().refreshWithOutcome(dataHydrated: true)
               : Future.value(SyncRefreshOutcome.deferred),
-          external: () => current()
-              ? ExternalSyncService.instance.refreshWithOutcome()
-              : Future.value(SyncRefreshOutcome.deferred),
+          external:
+              selected == null || selected == 'firebase' || selected == 'none'
+              ? null
+              : () => current()
+                    ? ExternalSyncService.instance.refreshWithOutcome()
+                    : Future.value(SyncRefreshOutcome.deferred),
           notes: () => NoteSyncService().refreshWithOutcome(manual: true),
           labels: () => current()
               ? LabelSyncService().refreshWithOutcome()
@@ -133,8 +148,9 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
     case SyncRefreshOutcome.unavailable:
       return;
     case SyncRefreshOutcome.deferred:
-      if (AuthService.cloudRecovery.state.value ==
-          CloudSessionState.unavailable) {
+      if (SyncPresentation.instance.value.isActive ||
+          AuthService.cloudRecovery.state.value ==
+              CloudSessionState.unavailable) {
         return;
       }
       final chooseProvider =

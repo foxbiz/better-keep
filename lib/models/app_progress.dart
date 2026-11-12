@@ -141,8 +141,8 @@ class NoteTransferMeter {
     if (total <= 0) return;
     publish((
       stage: stage,
-      done: _done,
-      total: knownTotal,
+      done: stage == NoteTransferStage.downloading ? _publishedItems : _done,
+      total: stage == NoteTransferStage.downloading ? total : knownTotal,
       minutesLeft: minutes,
     ));
   }

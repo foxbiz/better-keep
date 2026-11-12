@@ -10,13 +10,18 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
-  String syncCheckingNotes(String count) {
-    return 'Not değişiklikleri kontrol ediliyor · $count';
-  }
+  String get syncCheckingNotes => 'Notlar kontrol ediliyor';
 
   @override
-  String syncDownloadingNotes(String count) {
-    return 'Not değişiklikleri indiriliyor · $count';
+  String get syncDownloadingNotes => 'Notlar indiriliyor';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString not';
   }
 
   @override

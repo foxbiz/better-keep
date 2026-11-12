@@ -17,7 +17,7 @@ const types = {
 	".woff2": "font/woff2",
 	".ttf": "font/ttf",
 };
-export function previewServer(directory, { emulators = false } = {}) {
+export function previewServer(directory, { emulators = false, workingLauncher = false } = {}) {
 	const root = path.resolve(directory);
 	return http.createServer(async (request, response) => {
 		try {
@@ -52,7 +52,10 @@ export function previewServer(directory, { emulators = false } = {}) {
 				types[path.extname(file)] || "application/octet-stream",
 			);
 			response.setHeader("Cache-Control", "no-store");
-			response.end(await readFile(file));
+			const source = workingLauncher && pathname === "/app/beta-launcher.js"
+				? new URL("../web/js/beta_launcher.js", import.meta.url)
+				: file;
+			response.end(await readFile(source));
 		} catch (_) {
 			response.writeHead(404);
 			response.end("Not found");
@@ -60,10 +63,15 @@ export function previewServer(directory, { emulators = false } = {}) {
 	});
 }
 if (path.resolve(process.argv[1] || "") === fileURLToPath(import.meta.url)) {
-	const server = previewServer(process.argv[2] || "build/beta-preview");
-	server.listen(Number(process.argv[3] || 5099), "127.0.0.1", () => {
+	const args = process.argv.slice(2);
+	const [directory = "build/beta-preview", port = "5099"] =
+		args.filter((arg) => arg !== "--working-launcher");
+	const server = previewServer(directory, {
+		workingLauncher: args.includes("--working-launcher"),
+	});
+	server.listen(Number(port), "127.0.0.1", () => {
 		console.log(
-			`Local preview: http://127.0.0.1:${server.address().port}/app/`,
+			`Local preview: http://127.0.0.1:${server.address().port}/app/?channel=beta`,
 		);
 	});
 }

@@ -111,14 +111,20 @@ abstract class AppLocalizations {
   /// No description provided for @syncCheckingNotes.
   ///
   /// In en, this message translates to:
-  /// **'Checking note updates · {count}'**
-  String syncCheckingNotes(String count);
+  /// **'Checking Notes'**
+  String get syncCheckingNotes;
 
   /// No description provided for @syncDownloadingNotes.
   ///
   /// In en, this message translates to:
-  /// **'Downloading note updates · {count}'**
-  String syncDownloadingNotes(String count);
+  /// **'Downloading Notes'**
+  String get syncDownloadingNotes;
+
+  /// No description provided for @syncTotalNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 note} other{{count} notes}}'**
+  String syncTotalNotes(int count);
 
   /// No description provided for @syncUploadingNotes.
   ///
