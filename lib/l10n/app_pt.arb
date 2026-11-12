@@ -1,4 +1,6 @@
 {
+  "syncCheckingLibraryHint": "Procurando alterações. Bibliotecas grandes podem levar alguns minutos.",
+  "syncCheckedUpdates": "{count, plural, =1{1 atualização de nota verificada} other{{count} atualizações de notas verificadas}}",
   "syncCheckingNotes": "Verificando notas",
   "syncDownloadingNotes": "Baixando notas",
   "syncTotalNotes": "{count, plural, =1{1 nota} other{{count} notas}}",

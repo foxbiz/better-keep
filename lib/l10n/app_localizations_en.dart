@@ -10,6 +10,25 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint =>
+      'Looking for changes. Large libraries can take a few minutes.';
+
+  @override
+  String syncCheckedUpdates(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString note updates checked',
+      one: '1 note update checked',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get syncCheckingNotes => 'Checking Notes';
 
   @override

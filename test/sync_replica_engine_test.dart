@@ -1001,7 +1001,10 @@ class _Adapter implements SyncProviderAdapter {
   Future<void> Function()? onPublish;
   Future<void> Function()? onPut;
   @override
-  Future<SyncChangePage> changes(String? cursor) async => listChanges != null
+  Future<SyncChangePage> changes(
+    String? cursor, {
+    void Function(int count)? onCheckedNotes,
+  }) async => listChanges != null
       ? listChanges!(cursor)
       : SyncChangePage(revisions: incoming, cursor: 'cursor-1', hasMore: false);
   @override

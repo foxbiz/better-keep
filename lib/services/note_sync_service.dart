@@ -848,6 +848,12 @@ class NoteSyncService {
           }
         }
 
+        _reportNoteProgress((
+          stage: NoteTransferStage.checking,
+          done: i + batch.length,
+          total: remoteDocIds.length,
+          minutesLeft: null,
+        ));
         // Absence is not a deletion event. Only a versioned tombstone may
         // remove local content; retain cached work if a document disappears.
       } catch (e) {
@@ -2676,6 +2682,12 @@ class NoteSyncService {
       );
       await _syncCache.addPage(page, maxCursor: maxCursor);
 
+      _reportNoteProgress((
+        stage: NoteTransferStage.checking,
+        done: totalDocsFetched,
+        total: null,
+        minutesLeft: null,
+      ));
       // Update cursor for next page
       if (querySnapshot.docs.isNotEmpty) {
         lastDocument = querySnapshot.docs.last;

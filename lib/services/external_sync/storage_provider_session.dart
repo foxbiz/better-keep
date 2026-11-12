@@ -161,8 +161,10 @@ class StorageProviderSession
   }
 
   @override
-  Future<SyncChangePage> changes(String? cursor) =>
-      _use((a) => a.changes(cursor));
+  Future<SyncChangePage> changes(
+    String? cursor, {
+    void Function(int count)? onCheckedNotes,
+  }) => _use((a) => a.changes(cursor, onCheckedNotes: onCheckedNotes));
   @override
   Future<bool> get supportsSmallReads => _use((a) => a.supportsSmallReads);
   @override

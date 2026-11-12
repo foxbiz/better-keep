@@ -1,4 +1,6 @@
 {
+  "syncCheckingLibraryHint": "Değişiklikler kontrol ediliyor. Büyük arşivlerde bu birkaç dakika sürebilir.",
+  "syncCheckedUpdates": "Kontrol edilen not güncellemesi: {count}",
   "syncCheckingNotes": "Notlar kontrol ediliyor",
   "syncDownloadingNotes": "Notlar indiriliyor",
   "syncTotalNotes": "{count} not",

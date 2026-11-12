@@ -10,6 +10,19 @@ class AppLocalizationsId extends AppLocalizations {
   AppLocalizationsId([String locale = 'id']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint =>
+      'Memeriksa perubahan. Koleksi besar mungkin memerlukan beberapa menit.';
+
+  @override
+  String syncCheckedUpdates(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Pembaruan catatan yang diperiksa: $countString';
+  }
+
+  @override
   String get syncCheckingNotes => 'Memeriksa catatan';
 
   @override

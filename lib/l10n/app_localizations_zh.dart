@@ -10,6 +10,18 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint => '正在检查更改。笔记较多时可能需要几分钟。';
+
+  @override
+  String syncCheckedUpdates(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '已检查 $countString 条笔记更新';
+  }
+
+  @override
   String get syncCheckingNotes => '正在检查笔记';
 
   @override

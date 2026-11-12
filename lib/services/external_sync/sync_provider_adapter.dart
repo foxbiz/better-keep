@@ -7,7 +7,10 @@ import 'sync_revision.dart';
 abstract interface class SyncProviderAdapter {
   String get connectionId;
 
-  Future<SyncChangePage> changes(String? cursor);
+  Future<SyncChangePage> changes(
+    String? cursor, {
+    void Function(int count)? onCheckedNotes,
+  });
 
   Future<Uint8List> readObject(String objectId);
 

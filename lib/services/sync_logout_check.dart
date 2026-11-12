@@ -14,14 +14,13 @@ enum SyncLogoutState { complete, pending, unknown }
 /// This only assesses the local library; it never starts a sync or removes data.
 Future<SyncLogoutState> inspectSyncBeforeLogout({
   required Database database,
-  required bool? firebaseEnabled,
   required String? firebaseAccountId,
   required String? scope,
-  required Iterable<String> externalReplicaIds,
+  required String? externalReplicaId,
   required bool metadataReady,
   required bool Function() isCurrent,
 }) async {
-  final destinations = externalReplicaIds.toSet();
+  if (!metadataReady) return SyncLogoutState.unknown;
   // Startup recreates these two labels even on a read-only restore. Only an
   // untouched seed is disposable; user labels, renames and tombstones count.
   final seedNames =
@@ -33,7 +32,7 @@ Future<SyncLogoutState> inspectSyncBeforeLogout({
       if (!isCurrent()) return SyncLogoutState.unknown;
       // With no selected external destination, paused Firebase queues still
       // reveal local-only changes that would otherwise disappear on sign-out.
-      if (firebaseEnabled != false || destinations.isEmpty) {
+      if (externalReplicaId == null) {
         final pending = await txn.rawQuery('''
           $seedNames
           SELECT 1 FROM sync_track WHERE status IS NOT 'synced'
@@ -58,29 +57,21 @@ Future<SyncLogoutState> inspectSyncBeforeLogout({
         )).isNotEmpty) {
           return SyncLogoutState.pending;
         }
-      }
-      if (destinations.isNotEmpty && scope == null) {
-        return SyncLogoutState.unknown;
-      }
-      for (final destination in destinations) {
+      } else {
+        if (scope == null) return SyncLogoutState.unknown;
         final pending = await txn.rawQuery(
           '''
           $seedNames
-          SELECT 1 FROM ${SyncMutationJournal.table} v
-          WHERE NOT EXISTS (SELECT 1 FROM replica_acknowledgements a
-            WHERE a.scope = ? AND a.connection_id = ? AND a.kind = v.kind
-              AND a.entity_id = v.entity_id AND a.revision_id = v.revision_id)
+          SELECT 1 ${SyncMutationJournal.unacknowledgedFrom}
           AND NOT (v.kind = 'label' AND v.deleted = 0 AND EXISTS (
             SELECT 1 FROM label l WHERE l.sync_id = v.entity_id AND $seed))
           LIMIT 1
         ''',
-          [...Label.systemLabelNames, scope, destination],
+          [...Label.systemLabelNames, scope, externalReplicaId],
         );
         if (pending.isNotEmpty) return SyncLogoutState.pending;
       }
-      return metadataReady && firebaseEnabled != null
-          ? SyncLogoutState.complete
-          : SyncLogoutState.unknown;
+      return SyncLogoutState.complete;
     });
     return isCurrent() ? result : SyncLogoutState.unknown;
   } catch (_) {
@@ -130,12 +121,9 @@ Future<SyncLogoutState> currentSyncLogoutState() async {
   if (externalSelected && !ready) return SyncLogoutState.unknown;
   return inspectSyncBeforeLogout(
     database: database,
-    firebaseEnabled: firebaseEnabled,
     firebaseAccountId: AuthService.currentUser?.uid,
     scope: session?.engine.store.scope,
-    externalReplicaIds: [
-      if (externalSelected && selected != null) selected.replicaId,
-    ],
+    externalReplicaId: externalSelected ? selected?.replicaId : null,
     metadataReady: ready,
     isCurrent: current,
   );

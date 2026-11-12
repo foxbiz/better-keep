@@ -1,4 +1,7 @@
 {
+  "syncCheckingLibraryHint": "Looking for changes. Large libraries can take a few minutes.",
+  "syncCheckedUpdates": "{count, plural, =1{1 note update checked} other{{count} note updates checked}}",
+  "@syncCheckedUpdates": { "placeholders": { "count": { "type": "int", "format": "decimalPattern" } } },
   "syncCheckingNotes": "Checking Notes",
   "syncDownloadingNotes": "Downloading Notes",
   "syncTotalNotes": "{count, plural, =1{1 note} other{{count} notes}}",

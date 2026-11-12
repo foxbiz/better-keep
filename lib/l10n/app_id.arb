@@ -1,4 +1,6 @@
 {
+  "syncCheckingLibraryHint": "Memeriksa perubahan. Koleksi besar mungkin memerlukan beberapa menit.",
+  "syncCheckedUpdates": "Pembaruan catatan yang diperiksa: {count}",
   "syncCheckingNotes": "Memeriksa catatan",
   "syncDownloadingNotes": "Mengunduh catatan",
   "syncTotalNotes": "{count} catatan",

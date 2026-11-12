@@ -10,6 +10,19 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint =>
+      '변경 사항을 확인하고 있습니다. 노트가 많으면 몇 분 정도 걸릴 수 있습니다.';
+
+  @override
+  String syncCheckedUpdates(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '확인한 노트 업데이트: $countString개';
+  }
+
+  @override
   String get syncCheckingNotes => '노트 확인 중';
 
   @override

@@ -89,17 +89,28 @@ class FileSyncAdapter
   }
 
   @override
-  Future<SyncChangePage> changes(String? cursor) async {
+  Future<SyncChangePage> changes(
+    String? cursor, {
+    void Function(int count)? onCheckedNotes,
+  }) async {
     final page = await transport.list(cursor);
     final names = page.names
         .toSet()
         .where((name) => RegExp(r'^c-[0-9a-f]{64}\.json$').hasMatch(name))
         .toList();
+    var checkedNotes = 0;
     final revisions = List<SyncRevision?>.filled(names.length, null);
     // Commits are small, size-bounded metadata. Read them concurrently while
     // preserving page order and draining all work before a failed page returns.
     await forEachBounded(Iterable.generate(names.length), (index) async {
-      revisions[index] = await _readCommit(names[index]);
+      final revision = await _readCommit(names[index]);
+      revisions[index] = revision;
+      if (revision.kind == SyncEntityKind.note) {
+        checkedNotes++;
+        if (checkedNotes == 1 || checkedNotes % 8 == 0) {
+          onCheckedNotes?.call(checkedNotes);
+        }
+      }
     }, concurrency: 8);
     return SyncChangePage(
       revisions: revisions.cast<SyncRevision>(),

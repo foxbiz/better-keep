@@ -1,4 +1,6 @@
 {
+  "syncCheckingLibraryHint": "正在检查更改。笔记较多时可能需要几分钟。",
+  "syncCheckedUpdates": "已检查 {count} 条笔记更新",
   "syncCheckingNotes": "正在检查笔记",
   "syncDownloadingNotes": "正在下载笔记",
   "syncTotalNotes": "共 {count} 条笔记",

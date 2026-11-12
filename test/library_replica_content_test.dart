@@ -1609,7 +1609,10 @@ class _Remote implements SyncProviderAdapter {
   int objectWrites = 0;
   Future<void> Function()? beforeRead;
   @override
-  Future<SyncChangePage> changes(String? cursor) async => SyncChangePage(
+  Future<SyncChangePage> changes(
+    String? cursor, {
+    void Function(int count)? onCheckedNotes,
+  }) async => SyncChangePage(
     revisions: revisions.skip(int.parse(cursor ?? '0')).toList(),
     cursor: '${revisions.length}',
     hasMore: false,

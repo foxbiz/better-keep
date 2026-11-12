@@ -1,4 +1,6 @@
 {
+  "syncCheckingLibraryHint": "変更を確認しています。ノートが多い場合は数分かかることがあります。",
+  "syncCheckedUpdates": "ノートの更新を{count}件確認しました",
   "syncCheckingNotes": "ノートを確認中",
   "syncDownloadingNotes": "ノートをダウンロード中",
   "syncTotalNotes": "{count} 件のノート",

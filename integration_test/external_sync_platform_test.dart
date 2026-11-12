@@ -423,13 +423,21 @@ void main() {
 
       Future<SyncLogoutState> logoutState() => inspectSyncBeforeLogout(
         database: fresh.db,
-        firebaseEnabled: false,
         firebaseAccountId: 'isolated-platform-qa',
         scope: fresh.session.engine.store.scope,
-        externalReplicaIds: [fresh.adapter.connectionId],
+        externalReplicaId: fresh.adapter.connectionId,
         metadataReady: true,
         isCurrent: () => fresh.session.isCurrent,
       );
+      Future<int> pendingNotes(String replicaId) =>
+          SyncMutationJournal.pendingNotesForProvider(
+            fresh.db,
+            fresh.session.engine.store.scope,
+            replicaId,
+          );
+      expect(await pendingNotes(fresh.adapter.connectionId), 0);
+      // A new provider must receive the nine notes and 100 deletion records.
+      expect(await pendingNotes('another-provider'), 109);
       expect(await logoutState(), SyncLogoutState.complete);
       await fresh.db.update(
         'note',
@@ -437,6 +445,7 @@ void main() {
         where: 'sync_id = ?',
         whereArgs: ['restore-note-0'],
       );
+      expect(await pendingNotes(fresh.adapter.connectionId), 1);
       expect(await logoutState(), SyncLogoutState.pending);
     },
   );

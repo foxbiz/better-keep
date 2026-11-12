@@ -205,6 +205,19 @@ class SyncContentProgress extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
+              if (progress.notes?.stage == NoteTransferStage.checking ||
+                  progress.phase == SyncPhase.fetchingUpdates ||
+                  progress.phase == SyncPhase.checkingForUpdates)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    (progress.notes?.done ?? 0) > 0
+                        ? context.l10n.syncCheckedUpdates(progress.notes!.done)
+                        : context.l10n.syncCheckingLibraryHint,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               if (progress.notes case final transfer?
                   when transfer.stage == NoteTransferStage.downloading &&
                       transfer.fraction != null)

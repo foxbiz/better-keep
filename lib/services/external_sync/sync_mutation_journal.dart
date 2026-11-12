@@ -8,6 +8,25 @@ import 'sync_revision.dart';
 /// Content encryption happens later; the local version guards that preparation.
 class SyncMutationJournal {
   static const table = 'replica_local_versions';
+  static const unacknowledgedFrom =
+      '''
+    FROM $table v WHERE NOT EXISTS (
+      SELECT 1 FROM replica_acknowledgements a
+      WHERE a.scope = ? AND a.connection_id = ? AND a.kind = v.kind
+        AND a.entity_id = v.entity_id AND a.revision_id = v.revision_id
+    )''';
+
+  static Future<int> pendingNotesForProvider(
+    DatabaseExecutor db,
+    String scope,
+    String replicaId,
+  ) async => Sqflite.firstIntValue(
+    await db.rawQuery(
+      "SELECT COUNT(*) $unacknowledgedFrom AND v.kind = 'note'",
+      [scope, replicaId],
+    ),
+  )!;
+
   static const guardTable = 'replica_write_guard';
   // Content/attachment byte changes without updated_at are local encryption,
   // hydration or derived-preview maintenance. User edits, locks and protected

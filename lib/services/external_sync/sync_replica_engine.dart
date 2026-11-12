@@ -154,17 +154,26 @@ class SyncReplicaEngine {
     var cursor = await store.cursor(adapter.connectionId);
     var resetCursor = false;
     var discovered = 0;
-    onProgress?.call(adapter, (
-      stage: NoteTransferStage.checking,
-      done: 0,
-      total: null,
-      minutesLeft: null,
-    ));
+    void reportChecked(int count) {
+      if (isCurrent()) {
+        onProgress?.call(adapter, (
+          stage: NoteTransferStage.checking,
+          done: count,
+          total: null,
+          minutesLeft: null,
+        ));
+      }
+    }
+
+    reportChecked(0);
     while (true) {
       _guard();
       late final SyncChangePage page;
       try {
-        page = await adapter.changes(cursor);
+        page = await adapter.changes(
+          cursor,
+          onCheckedNotes: (count) => reportChecked(discovered + count),
+        );
       } on SyncProviderFailure catch (error) {
         if (error.kind != SyncProviderFailureKind.invalidCursor ||
             resetCursor) {
@@ -185,14 +194,7 @@ class SyncReplicaEngine {
       discovered += page.revisions
           .where((r) => r.kind == SyncEntityKind.note)
           .length;
-      if (discovered > 0) {
-        onProgress?.call(adapter, (
-          stage: NoteTransferStage.checking,
-          done: discovered,
-          total: null,
-          minutesLeft: null,
-        ));
-      }
+      if (discovered > 0) reportChecked(discovered);
       cursor = page.cursor;
       if (!page.hasMore) break;
     }

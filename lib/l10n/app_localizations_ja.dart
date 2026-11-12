@@ -10,6 +10,18 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint => '変更を確認しています。ノートが多い場合は数分かかることがあります。';
+
+  @override
+  String syncCheckedUpdates(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'ノートの更新を$countString件確認しました';
+  }
+
+  @override
   String get syncCheckingNotes => 'ノートを確認中';
 
   @override

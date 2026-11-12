@@ -108,6 +108,18 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @syncCheckingLibraryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for changes. Large libraries can take a few minutes.'**
+  String get syncCheckingLibraryHint;
+
+  /// No description provided for @syncCheckedUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 note update checked} other{{count} note updates checked}}'**
+  String syncCheckedUpdates(int count);
+
   /// No description provided for @syncCheckingNotes.
   ///
   /// In en, this message translates to:

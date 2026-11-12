@@ -295,6 +295,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 250));
           expect(glyph, findsOneWidget);
           expect(find.text('Checking Notes'), findsOneWidget);
+          expect(find.text('1 note update checked'), findsOneWidget);
           expect(find.byKey(const ValueKey('download_activity')), findsNothing);
           expect(pill, findsNothing);
           AppState.filterLabels = ['QA'];

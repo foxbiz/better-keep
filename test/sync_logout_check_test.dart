@@ -29,17 +29,15 @@ void main() {
   });
 
   Future<SyncLogoutState> inspect({
-    bool? firebase = false,
-    List<String> destinations = const ['google_drive:1'],
+    String? destination = 'google_drive:1',
     bool metadata = true,
     String scope = 'account:library',
     bool Function()? current,
   }) => inspectSyncBeforeLogout(
     database: db,
-    firebaseEnabled: firebase,
     firebaseAccountId: 'account',
     scope: scope,
-    externalReplicaIds: destinations,
+    externalReplicaId: destination,
     metadataReady: metadata,
     isCurrent: current ?? () => true,
   );
@@ -74,7 +72,7 @@ void main() {
         });
       }
       expect(await inspect(), SyncLogoutState.complete);
-      expect(await inspect(destinations: []), SyncLogoutState.complete);
+      expect(await inspect(destination: null), SyncLogoutState.complete);
       await db.update(
         'label',
         {'updated_at': '2026-11-08'},
@@ -82,7 +80,7 @@ void main() {
         whereArgs: [Label.sharedTextLabelName],
       );
       expect(await inspect(), SyncLogoutState.pending);
-      expect(await inspect(destinations: []), SyncLogoutState.pending);
+      expect(await inspect(destination: null), SyncLogoutState.pending);
       await db.update(
         'label',
         {'name': 'My category', 'updated_at': '2026-11-08'},
@@ -100,23 +98,21 @@ void main() {
     },
   );
 
-  test('uncaptured edits and every selected destination require current acknowledgements', () async {
-    await db.insert('note', {'id': 1, 'sync_id': 'note-1', 'title': 'Local'});
-    expect(await inspect(), SyncLogoutState.pending);
-    await acknowledge('google_drive:1');
-    expect(await inspect(), SyncLogoutState.complete);
-    expect(
-      await inspect(destinations: ['google_drive:1', 'dropbox:1']),
-      SyncLogoutState.pending,
-    );
-    await acknowledge('dropbox:1');
-    expect(
-      await inspect(destinations: ['google_drive:1', 'dropbox:1']),
-      SyncLogoutState.complete,
-    );
-    await db.update('note', {'title': 'Newer edit'}, where: 'id = 1');
-    expect(await inspect(), SyncLogoutState.pending);
-  });
+  test(
+    'switching back remembers acknowledgements until a local edit',
+    () async {
+      await db.insert('note', {'id': 1, 'sync_id': 'note-1', 'title': 'Local'});
+      expect(await inspect(), SyncLogoutState.pending);
+      await acknowledge('google_drive:1');
+      expect(await inspect(), SyncLogoutState.complete);
+      expect(await inspect(destination: 'dropbox:1'), SyncLogoutState.pending);
+      expect(await inspect(), SyncLogoutState.complete);
+      await acknowledge('dropbox:1');
+      expect(await inspect(destination: 'dropbox:1'), SyncLogoutState.complete);
+      await db.update('note', {'title': 'Newer edit'}, where: 'id = 1');
+      expect(await inspect(), SyncLogoutState.pending);
+    },
+  );
 
   test('old account, encryption library and connection generation acknowledgements cannot hide pending work', () async {
     await db.insert('note', {'id': 1, 'sync_id': 'note-1'});
@@ -124,7 +120,7 @@ void main() {
     expect(await inspect(scope: 'other:library'), SyncLogoutState.pending);
     expect(await inspect(scope: 'account:rotated'), SyncLogoutState.pending);
     expect(
-      await inspect(destinations: ['google_drive:2']),
+      await inspect(destination: 'google_drive:2'),
       SyncLogoutState.pending,
     );
   });
@@ -164,39 +160,27 @@ void main() {
         'status': 'pending',
       });
       await acknowledge('google_drive:1');
-      expect(await inspect(firebase: false), SyncLogoutState.complete);
-      expect(await inspect(firebase: true), SyncLogoutState.pending);
+      expect(await inspect(), SyncLogoutState.complete);
+      expect(await inspect(destination: null), SyncLogoutState.pending);
     },
   );
 
   test('Firebase failure, active upload and missing queue rows all warn before logout', () async {
     await db.insert('note', {'id': 1, 'sync_id': 'note-1'});
-    expect(
-      await inspect(firebase: true, destinations: []),
-      SyncLogoutState.pending,
-    );
+    expect(await inspect(destination: null), SyncLogoutState.pending);
     await db.insert('sync_track', {
       'local_id': 1,
       'action': 'create',
       'remote_id': 'note-1',
       'status': 'synced',
     });
-    expect(
-      await inspect(firebase: true, destinations: []),
-      SyncLogoutState.complete,
-    );
+    expect(await inspect(destination: null), SyncLogoutState.complete);
     for (final status in ['pending', 'failed', 'syncing']) {
       await db.update('sync_track', {'status': status});
-      expect(
-        await inspect(firebase: true, destinations: []),
-        SyncLogoutState.pending,
-      );
+      expect(await inspect(destination: null), SyncLogoutState.pending);
     }
     await db.delete('note');
-    expect(
-      await inspect(firebase: true, destinations: []),
-      SyncLogoutState.pending,
-    );
+    expect(await inspect(destination: null), SyncLogoutState.pending);
   });
 
   test(
@@ -207,10 +191,7 @@ void main() {
         'action': 'delete',
         'status': 'failed',
       });
-      expect(
-        await inspect(firebase: true, destinations: []),
-        SyncLogoutState.pending,
-      );
+      expect(await inspect(destination: null), SyncLogoutState.pending);
       await db.delete('label_sync_track');
       await db.insert('note_sort_context', {
         'context_key': 'main:grid',
@@ -219,15 +200,9 @@ void main() {
         'updated_at': '2026-01-01T00:00:00Z',
         'dirty': 1,
       });
-      expect(
-        await inspect(firebase: true, destinations: []),
-        SyncLogoutState.pending,
-      );
+      expect(await inspect(destination: null), SyncLogoutState.pending);
       await db.delete('note_sort_context');
-      expect(
-        await inspect(firebase: true, destinations: []),
-        SyncLogoutState.pending,
-      );
+      expect(await inspect(destination: null), SyncLogoutState.pending);
       final deleted = (await FirebaseOrderTombstones.pending(
         db,
         'account',
@@ -236,24 +211,17 @@ void main() {
         (txn) =>
             FirebaseOrderTombstones.acknowledge(db, txn, 'account', deleted),
       );
-      expect(
-        await inspect(firebase: true, destinations: []),
-        SyncLogoutState.complete,
-      );
+      expect(await inspect(destination: null), SyncLogoutState.complete);
     },
   );
 
   test('no enabled destination still warns about local-only changes', () async {
     await db.insert('note', {'id': 1, 'sync_id': 'note-1'});
-    expect(
-      await inspect(firebase: false, destinations: []),
-      SyncLogoutState.pending,
-    );
+    expect(await inspect(destination: null), SyncLogoutState.pending);
   });
 
   test('unknown metadata, account changes and database errors never imply successful sync', () async {
     expect(await inspect(metadata: false), SyncLogoutState.unknown);
-    expect(await inspect(firebase: null), SyncLogoutState.unknown);
     var calls = 0;
     expect(await inspect(current: () => ++calls == 1), SyncLogoutState.unknown);
     await db.close();

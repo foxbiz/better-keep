@@ -10,6 +10,19 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint =>
+      'Değişiklikler kontrol ediliyor. Büyük arşivlerde bu birkaç dakika sürebilir.';
+
+  @override
+  String syncCheckedUpdates(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Kontrol edilen not güncellemesi: $countString';
+  }
+
+  @override
   String get syncCheckingNotes => 'Notlar kontrol ediliyor';
 
   @override
