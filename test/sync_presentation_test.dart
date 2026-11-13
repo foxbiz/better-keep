@@ -98,7 +98,7 @@ void main() {
         await tester.pump();
         expect(find.text('24 notes'), show ? findsOneWidget : findsNothing);
         if (!show) {
-          expect(find.bySemanticsLabel('Updating your notes'), findsOneWidget);
+          expect(find.bySemanticsLabel('Downloading Notes'), findsOneWidget);
         }
         final download = find.byKey(const ValueKey('download_activity'));
         expect(download, findsOneWidget);
@@ -144,7 +144,7 @@ void main() {
   });
 
   test(
-    'checking accumulates cached batches and new pages at a bounded rate',
+    'checking publishes the first result and flushes the full count once',
     () {
       var elapsed = Duration.zero;
       final samples = <NoteTransfer>[];
@@ -162,7 +162,7 @@ void main() {
       meter.advance(3);
       meter.flush();
       meter.flush();
-      expect(samples.map((p) => p.done), [0, 10, 820, 823]);
+      expect(samples.map((p) => p.done), [0, 10, 823]);
       expect(
         samples.every((p) => p.total == null && p.minutesLeft == null),
         isTrue,

@@ -2,6 +2,7 @@ import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/services/note_sort_service.dart';
+import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/external_sync/external_sync_service.dart';
 import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
@@ -83,6 +84,7 @@ Future<void> refreshSyncFromUser(BuildContext context) {
   if (!AuthService.cloudRecovery.networkAvailable) return Future.value();
   final running = _manualRefresh;
   if (running != null && _manualRefreshCurrent?.call() == true) return running;
+  if (NoteSyncBatch.active.value) return Future.value();
   final accountCurrent = AuthService.captureSessionIdentity();
   final revision = AuthService.cloudRecovery.sessionRevision.value;
   bool current() =>
@@ -171,7 +173,19 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
             : context.l10n.e2eeNotReady,
       );
     case SyncRefreshOutcome.failed:
-      snackbar(context.l10n.syncFailed);
+      if (AppState.showSyncProgress &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          SyncPresentation.instance.value.isFailure) {
+        return;
+      }
+      final accountCurrent = AuthService.captureSessionIdentity();
+      snackbarWithAction(
+        context.l10n.syncFailed,
+        actionLabel: context.l10n.retry,
+        onAction: () {
+          if (context.mounted && accountCurrent()) refreshSyncFromUser(context);
+        },
+      );
     case SyncRefreshOutcome.complete:
       if (!AppState.showSyncProgress) snackbar(context.l10n.syncComplete);
     case SyncRefreshOutcome.uploadRestricted:

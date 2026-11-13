@@ -11,25 +11,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncCheckingLibraryHint =>
-      'Looking for changes. Large libraries can take a few minutes.';
+      'Large libraries can take a few minutes.';
 
   @override
-  String syncCheckedUpdates(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String countString = countNumberFormat.format(count);
-
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$countString note updates checked',
-      one: '1 note update checked',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get syncCheckingNotes => 'Checking Notes';
+  String get syncCheckingNotes => 'Check Notes';
 
   @override
   String get syncDownloadingNotes => 'Downloading Notes';
@@ -50,8 +35,25 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String syncUploadingNotes(String count) {
-    return 'Uploading note updates · $count';
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Uploading notes · $countString';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'Uploading notes · $doneString of $totalString';
   }
 
   @override
@@ -64,9 +66,6 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get syncUpdatingNotes => 'Updating your notes';
 
   @override
   String get sharedImageNamesConflict =>
@@ -3351,7 +3350,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncUpgradeForUploads =>
-      'Saved on this device. Upgrade to Pro to sync changes.';
+      'Saved on this device. Upgrade to Pro to upload to Better Keep cloud.';
 
   @override
   String get syncPaused => 'Sync paused. Please retry.';

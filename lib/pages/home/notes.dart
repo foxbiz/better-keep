@@ -10,6 +10,7 @@ import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/components/storage_warning.dart';
+import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
@@ -439,6 +440,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   );
 
   Future<void> refresh() async {
+    final restore = NoteSyncBatch.pending;
+    if (restore != null) {
+      snackbar(context.l10n.syncDownloadingNotes);
+      await restore;
+      return;
+    }
     try {
       if (_scrollController.hasClients) _scrollController.jumpTo(0.0);
       await runNotesRefreshSequence(

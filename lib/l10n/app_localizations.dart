@@ -111,19 +111,13 @@ abstract class AppLocalizations {
   /// No description provided for @syncCheckingLibraryHint.
   ///
   /// In en, this message translates to:
-  /// **'Looking for changes. Large libraries can take a few minutes.'**
+  /// **'Large libraries can take a few minutes.'**
   String get syncCheckingLibraryHint;
-
-  /// No description provided for @syncCheckedUpdates.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 note update checked} other{{count} note updates checked}}'**
-  String syncCheckedUpdates(int count);
 
   /// No description provided for @syncCheckingNotes.
   ///
   /// In en, this message translates to:
-  /// **'Checking Notes'**
+  /// **'Check Notes'**
   String get syncCheckingNotes;
 
   /// No description provided for @syncDownloadingNotes.
@@ -141,20 +135,20 @@ abstract class AppLocalizations {
   /// No description provided for @syncUploadingNotes.
   ///
   /// In en, this message translates to:
-  /// **'Uploading note updates · {count}'**
-  String syncUploadingNotes(String count);
+  /// **'Uploading notes · {count}'**
+  String syncUploadingNotes(int count);
+
+  /// No description provided for @syncUploadingNotesOfTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading notes · {done} of {total}'**
+  String syncUploadingNotesOfTotal(int done, int total);
 
   /// No description provided for @syncEstimatedMinutes.
   ///
   /// In en, this message translates to:
   /// **'{minutes, plural, =0{Less than a minute left} other{About {minutes} min left}}'**
   String syncEstimatedMinutes(int minutes);
-
-  /// No description provided for @syncUpdatingNotes.
-  ///
-  /// In en, this message translates to:
-  /// **'Updating your notes'**
-  String get syncUpdatingNotes;
 
   /// No description provided for @sharedImageNamesConflict.
   ///
@@ -5997,7 +5991,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncUpgradeForUploads.
   ///
   /// In en, this message translates to:
-  /// **'Saved on this device. Upgrade to Pro to sync changes.'**
+  /// **'Saved on this device. Upgrade to Pro to upload to Better Keep cloud.'**
   String get syncUpgradeForUploads;
 
   /// No description provided for @syncPaused.

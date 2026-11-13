@@ -10,16 +10,7 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get syncCheckingLibraryHint => '正在检查更改。笔记较多时可能需要几分钟。';
-
-  @override
-  String syncCheckedUpdates(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String countString = countNumberFormat.format(count);
-
-    return '已检查 $countString 条笔记更新';
-  }
+  String get syncCheckingLibraryHint => '笔记较多时可能需要几分钟。';
 
   @override
   String get syncCheckingNotes => '正在检查笔记';
@@ -37,8 +28,25 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String syncUploadingNotes(String count) {
-    return '正在上传笔记更新 · $count';
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '正在上传笔记 · $countString 条';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return '正在上传笔记 · 已完成 $doneString 条，共 $totalString 条';
   }
 
   @override
@@ -51,9 +59,6 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get syncUpdatingNotes => '正在更新笔记';
 
   @override
   String get sharedImageNamesConflict => '部分共享图片的文件名相同。请逐张共享。';
@@ -3146,7 +3151,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncUpgradeReminder => '您的更改已保存在此处。使用 Pro 同步。';
 
   @override
-  String get syncUpgradeForUploads => '已保存在此设备上。升级到 Pro 以同步更改。';
+  String get syncUpgradeForUploads => '已保存在此设备上。升级到 Pro 即可上传到 Better Keep 云端。';
 
   @override
   String get syncPaused => '同步已暂停。请重试。';

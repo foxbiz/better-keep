@@ -10,17 +10,7 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
-  String get syncCheckingLibraryHint =>
-      '변경 사항을 확인하고 있습니다. 노트가 많으면 몇 분 정도 걸릴 수 있습니다.';
-
-  @override
-  String syncCheckedUpdates(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String countString = countNumberFormat.format(count);
-
-    return '확인한 노트 업데이트: $countString개';
-  }
+  String get syncCheckingLibraryHint => '노트가 많으면 몇 분 정도 걸릴 수 있습니다.';
 
   @override
   String get syncCheckingNotes => '노트 확인 중';
@@ -38,8 +28,25 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String syncUploadingNotes(String count) {
-    return '노트 변경 사항 업로드 중 · $count';
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '노트 업로드 중 · $countString개';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return '노트 업로드 중 · $totalString개 중 $doneString개';
   }
 
   @override
@@ -52,9 +59,6 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get syncUpdatingNotes => '노트 업데이트 중';
 
   @override
   String get sharedImageNamesConflict =>
@@ -3212,7 +3216,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncUpgradeForUploads =>
-      '이 기기에 저장되었습니다. 변경 사항을 동기화하려면 Pro로 업그레이드하세요.';
+      '이 기기에 저장했어요. Better Keep 클라우드에 업로드하려면 Pro로 업그레이드하세요.';
 
   @override
   String get syncPaused => '동기화가 일시 중지되었습니다. 다시 시도해 주세요.';

@@ -11,6 +11,7 @@ import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/note_sync_service.dart';
+import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/label_sync_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
@@ -57,35 +58,6 @@ void main() {
         ),
       ),
     ),
-  );
-
-  testWidgets(
-    'an online settings timeout gives feedback after a manual refresh',
-    (tester) async {
-      final preference = FirebaseSyncPreference(
-        currentUid: () => 'test-account',
-        watch: (_) => const Stream.empty(),
-        write: (_, _) => throw UnimplementedError(),
-      )..bind('test-account');
-      FirebaseSyncPreference.instanceOverride = preference;
-      addTearDown(() {
-        FirebaseSyncPreference.instanceOverride = null;
-        preference.dispose();
-      });
-      await mountFeedback(tester);
-      final context = tester.element(find.byType(SyncProgressWidget));
-      final refresh = refreshSyncFromUser(context);
-      await tester.pump(const Duration(seconds: 11));
-      await refresh;
-      await tester.pump();
-      expect(
-        find.descendant(
-          of: find.byType(SnackBar),
-          matching: find.text(AppLocalizations.of(context)!.syncFailed),
-        ),
-        findsOneWidget,
-      );
-    },
   );
 
   for (final width in [320.0, 390.0, 800.0]) {
@@ -142,9 +114,45 @@ void main() {
       expect(pill.left, greaterThanOrEqualTo(16));
       expect(pill.right, lessThanOrEqualTo(width - 16));
       expect(
-        find.text('Saved on this device. Upgrade to Pro to sync changes.'),
+        find.text(
+          'Saved on this device. Upgrade to Pro to upload to Better Keep cloud.',
+        ),
         findsOneWidget,
       );
+      expect(find.byTooltip('Retry'), findsNothing);
+      final retryRequest = SyncPresentation.instance.beginManual(() => true);
+      SyncPresentation.instance.finishManual(
+        retryRequest,
+        SyncRefreshOutcome.failed,
+      );
+      await tester.pumpAndSettle();
+      final failure = tester.getRect(
+        find.byKey(const ValueKey('sync_progress')),
+      );
+      expect(failure.bottom, lessThanOrEqualTo(fab.top - 12));
+      final labelHeight = tester.getSize(find.text('Sync failed')).height;
+      expect(
+        failure.height,
+        lessThanOrEqualTo(labelHeight.clamp(48, double.infinity) + 16),
+      );
+      expect(
+        tester.getSize(find.widgetWithIcon(IconButton, Icons.refresh)),
+        const Size(48, 48),
+      );
+      SyncPresentation.instance.value = const SyncProgress(
+        SyncPhase.storageFull,
+      );
+      await tester.pumpAndSettle();
+      final card = tester.getRect(
+        find
+            .descendant(of: find.byType(Card), matching: find.byType(Material))
+            .first,
+      );
+      final label = tester.getRect(find.textContaining('Storage full'));
+      if (width == 320) expect(label.height, greaterThan(48));
+      expect(label.top - card.top, greaterThanOrEqualTo(4));
+      expect(card.bottom - label.bottom, greaterThanOrEqualTo(4));
+      expect(card.bottom, lessThanOrEqualTo(fab.top - 12));
       AuthService.cloudRecovery.start('synthetic-account');
       AuthService.cloudRecovery.state.value = CloudSessionState.ready;
       NoteSyncService().isSyncing.value = true;
@@ -176,7 +184,132 @@ void main() {
     });
   }
 
+  testWidgets('a swipe during checking cannot hide a subsequent failure', (
+    tester,
+  ) async {
+    await mountFeedback(tester);
+    final request = SyncPresentation.instance.beginManual(() => true);
+    await tester.pump(const Duration(milliseconds: 300));
+    final pill = find.byKey(const ValueKey('sync_progress'));
+    await tester.drag(pill, const Offset(0, 100));
+    await tester.pumpAndSettle();
+    expect(pill, findsNothing);
+    SyncPresentation.instance.finishManual(request, SyncRefreshOutcome.failed);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Retry'), findsOneWidget);
+    await tester.drag(pill, const Offset(0, 100));
+    await tester.pumpAndSettle();
+    expect(pill, findsNothing);
+    SyncPresentation.instance.value = const SyncProgress(
+      SyncPhase.failed,
+      failedCount: 3,
+    );
+    await tester.pumpAndSettle();
+    expect(pill, findsNothing);
+
+    final next = SyncPresentation.instance.beginManual(() => true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.drag(pill, const Offset(0, 100));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(pill, findsOneWidget);
+    SyncPresentation.instance.finishManual(next, SyncRefreshOutcome.failed);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Retry'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'a covered Home route reports a manual failure on the current screen',
+    (tester) async {
+      await mountFeedback(tester);
+      final home = tester.element(find.byType(SyncProgressWidget));
+      final request = SyncPresentation.instance.beginManual(() => true);
+      Navigator.of(home)
+          .push(MaterialPageRoute<void>(builder: (_) => const Scaffold()));
+      await tester.pumpAndSettle();
+      SyncPresentation.instance.finishManual(
+        request,
+        SyncRefreshOutcome.failed,
+      );
+      showSyncRefreshFeedback(home, SyncRefreshOutcome.failed);
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('Retry waits for an active bulk restore', (tester) async {
+    await mountFeedback(tester);
+    final request = SyncPresentation.instance.beginManual(() => true);
+    SyncPresentation.instance.finishManual(request, SyncRefreshOutcome.failed);
+    await tester.pumpAndSettle();
+    final done = Completer<void>();
+    final batch = NoteSyncBatch();
+    addTearDown(batch.reset);
+    final restore = batch.run(
+      NoteSyncBatch.threshold,
+      (_) => done.future,
+      isEmptyLibrary: () async => true,
+    );
+    await tester.pumpAndSettle();
+    final retry = find.byWidgetPredicate(
+      (w) => w is IconButton && w.tooltip == 'Retry',
+    );
+    expect(tester.widget<IconButton>(retry).onPressed, isNull);
+    await refreshSyncFromUser(tester.element(find.byType(SyncProgressWidget)));
+    expect(SyncPresentation.instance.isManualRefresh, isFalse);
+    done.complete();
+    await restore;
+    await tester.pump();
+    expect(tester.widget<IconButton>(retry).onPressed, isNotNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final cardEnabled in [true, false]) {
+    testWidgets(
+      'an online settings timeout offers one working retry, pill $cardEnabled',
+      (tester) async {
+        final preference = FirebaseSyncPreference(
+          currentUid: () => 'test-account',
+          watch: (_) => const Stream.empty(),
+          write: (_, _) => throw UnimplementedError(),
+        )..bind('test-account');
+        FirebaseSyncPreference.instanceOverride = preference;
+        addTearDown(() {
+          FirebaseSyncPreference.instanceOverride = null;
+          preference.dispose();
+        });
+        AppState.set('show_sync_progress', cardEnabled);
+        await mountFeedback(tester);
+        final context = tester.element(find.byType(SyncProgressWidget));
+        final refresh = refreshSyncFromUser(context);
+        await tester.pump(const Duration(seconds: 11));
+        await refresh;
+        await tester.pumpAndSettle();
+        expect(find.text('Sync failed'), findsOneWidget);
+        expect(
+          find.byType(SnackBar),
+          cardEnabled ? findsNothing : findsOneWidget,
+        );
+        final retry = cardEnabled
+            ? find.byTooltip('Retry')
+            : find.text('Retry');
+        expect(retry, findsOneWidget);
+        await tester.tap(retry);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(SyncPresentation.instance.isManualRefresh, isTrue);
+        expect(find.text('Sync failed'), findsNothing);
+        await tester.pump(const Duration(seconds: 11));
+        await tester.pumpAndSettle();
+        expect(find.text('Sync failed'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
     testWidgets(
       'all-source pause shows provider guidance once, pill $cardEnabled',
       (tester) async {
@@ -333,7 +466,7 @@ void main() {
             find.text(
               access.realtimeCloudSync
                   ? 'Saved on this device. Enable Better Keep cloud to sync changes.'
-                  : 'Saved on this device. Upgrade to Pro to sync changes.',
+                  : 'Saved on this device. Upgrade to Pro to upload to Better Keep cloud.',
             ),
             findsOneWidget,
           );

@@ -21,9 +21,11 @@ class SyncProgressWidget extends StatefulWidget {
     super.key,
     this.bottom = 32,
     this.showActivity = true,
+    this.visible = true,
   });
 
   final bool showActivity;
+  final bool visible;
 
   /// Distance above the bottom safe area, including any floating controls.
   final double bottom;
@@ -38,6 +40,12 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
   bool _dismissed = false;
   bool _shouldShow = false;
   Timer? _hideTimer;
+  late final _cardSettings = Listenable.merge([
+    PlanService.instance.entitlementsNotifier,
+    FirebaseSyncPreference.instance,
+    NoteSyncBatch.active,
+  ]);
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -74,6 +82,8 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
     super.dispose();
   }
 
+  void _retry() => refreshSyncFromUser(context);
+
   void _visibilityChanged() => setState(() {});
 
   void _onProgressChanged() {
@@ -93,8 +103,10 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
         (!_progress.isActive || next.phase == SyncPhase.checkingConnection);
     _hideTimer?.cancel();
     setState(() {
+      if (starting || (next.isFailure && next.phase != _progress.phase)) {
+        _dismissed = false;
+      }
       _progress = next;
-      if (starting) _dismissed = false;
       if (!_dismissed) _shouldShow = true;
     });
     if (!_dismissed) _animationController.forward();
@@ -103,7 +115,7 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    if (_progress.phase == SyncPhase.storageFull) return;
+    if (_progress.isFailure) return;
     _hideTimer = Timer(const Duration(seconds: 3), () async {
       await _animationController.reverse();
       if (mounted && !_progress.isActive) {
@@ -114,7 +126,8 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
 
   @override
   Widget build(BuildContext context) {
-    if (!AppState.showSyncProgress ||
+    if (!widget.visible ||
+        !AppState.showSyncProgress ||
         !_shouldShow ||
         (!widget.showActivity && _progress.isActive)) {
       return const SizedBox.shrink();
@@ -128,6 +141,8 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: Center(
+            // A swipe already in flight belongs to the previous message.
+            key: ValueKey(_progress.isFailure ? _progress.phase : null),
             child: Dismissible(
               key: const ValueKey('sync_progress'),
               direction: DismissDirection.down,
@@ -137,15 +152,13 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
                 setState(() => _shouldShow = false);
               },
               child: ListenableBuilder(
-                listenable: Listenable.merge([
-                  PlanService.instance.entitlementsNotifier,
-                  FirebaseSyncPreference.instance,
-                ]),
+                listenable: _cardSettings,
                 builder: (context, _) {
                   return _SyncProgressCard(
                     syncStatus: _progress,
                     isSyncing: _progress.isActive,
                     failedCount: _progress.failedCount,
+                    onRetry: NoteSyncBatch.active.value ? null : _retry,
                   );
                 },
               ),
@@ -189,7 +202,7 @@ class SyncContentProgress extends StatelessWidget {
       child: Semantics(
         label: AppState.showSyncProgress
             ? null
-            : context.l10n.syncUpdatingNotes,
+            : progress.localized(context.l10n),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -211,9 +224,7 @@ class SyncContentProgress extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    (progress.notes?.done ?? 0) > 0
-                        ? context.l10n.syncCheckedUpdates(progress.notes!.done)
-                        : context.l10n.syncCheckingLibraryHint,
+                    context.l10n.syncCheckingLibraryHint,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -281,11 +292,13 @@ class _SyncProgressCard extends StatelessWidget {
   final SyncProgress syncStatus;
   final bool isSyncing;
   final int failedCount;
+  final VoidCallback? onRetry;
 
   const _SyncProgressCard({
     required this.syncStatus,
     required this.isSyncing,
     required this.failedCount,
+    required this.onRetry,
   });
 
   /// Determines the message type based on current state
@@ -333,7 +346,10 @@ class _SyncProgressCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: syncStatus.isFailure ? 4 : 8,
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -363,27 +379,16 @@ class _SyncProgressCard extends StatelessWidget {
                 AnimatedSize(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
-                  child: hasFailed
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(width: 6),
-                            Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16),
-                                onTap: () => refreshSyncFromUser(context),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Icon(
-                                    Icons.refresh,
-                                    size: 16,
-                                    color: accentColor,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                  child: syncStatus.isFailure
+                      ? IconButton(
+                          tooltip: context.l10n.retry,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          color: accentColor,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 48,
+                            height: 48,
+                          ),
+                          onPressed: onRetry,
                         )
                       : const SizedBox.shrink(),
                 ),

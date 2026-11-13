@@ -11,16 +11,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncCheckingLibraryHint =>
-      'Değişiklikler kontrol ediliyor. Büyük arşivlerde bu birkaç dakika sürebilir.';
-
-  @override
-  String syncCheckedUpdates(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String countString = countNumberFormat.format(count);
-
-    return 'Kontrol edilen not güncellemesi: $countString';
-  }
+      'Büyük arşivlerde bu birkaç dakika sürebilir.';
 
   @override
   String get syncCheckingNotes => 'Notlar kontrol ediliyor';
@@ -38,8 +29,25 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String syncUploadingNotes(String count) {
-    return 'Not değişiklikleri yükleniyor · $count';
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Notlar yükleniyor · $countString';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'Notlar yükleniyor · $totalString nottan $doneString tanesi';
   }
 
   @override
@@ -52,9 +60,6 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get syncUpdatingNotes => 'Notlarınız güncelleniyor';
 
   @override
   String get sharedImageNamesConflict =>
@@ -3348,7 +3353,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncUpgradeForUploads =>
-      'Bu cihaza kaydedildi. Değişiklikleri eşitlemek için Pro’ya yükseltin.';
+      'Bu cihaza kaydedildi. Better Keep bulutuna yüklemek için Pro’ya yükseltin.';
 
   @override
   String get syncPaused =>

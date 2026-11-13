@@ -52,6 +52,17 @@ void main() {
     },
   );
 
+  test('upload counts use locale grouping and argument order', () {
+    const transfer = (
+      stage: NoteTransferStage.uploading,
+      done: 1234,
+      total: 5678,
+      minutesLeft: null,
+    );
+    expect(transfer.localized(en), 'Uploading notes · 1,234 of 5,678');
+    expect(transfer.localized(ja), 'ノートをアップロード中 · 5,678 件中 1,234 件');
+  });
+
   test('sync failures use localized plurals and generic fallback', () {
     expect(const SyncProgress(SyncPhase.failed).localized(en), en.syncFailed);
     expect(
@@ -83,12 +94,6 @@ void main() {
       }
     },
   );
-
-  test('checked update counts use the locale’s singular and plural', () {
-    final pt = lookupAppLocalizations(const Locale('pt'));
-    expect(pt.syncCheckedUpdates(1), '1 atualização de nota verificada');
-    expect(pt.syncCheckedUpdates(2), '2 atualizações de notas verificadas');
-  });
 
   test('upload guidance distinguishes Free/Lite from paused Pro uploads', () {
     for (final locale in AppLocalizations.supportedLocales) {

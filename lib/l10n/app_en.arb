@@ -1,19 +1,13 @@
 {
-  "syncCheckingLibraryHint": "Looking for changes. Large libraries can take a few minutes.",
-  "syncCheckedUpdates": "{count, plural, =1{1 note update checked} other{{count} note updates checked}}",
-  "@syncCheckedUpdates": { "placeholders": { "count": { "type": "int", "format": "decimalPattern" } } },
-  "syncCheckingNotes": "Checking Notes",
+  "syncCheckingLibraryHint": "Large libraries can take a few minutes.",
+  "syncCheckingNotes": "Check Notes",
   "syncDownloadingNotes": "Downloading Notes",
   "syncTotalNotes": "{count, plural, =1{1 note} other{{count} notes}}",
   "@syncTotalNotes": { "placeholders": { "count": { "type": "int", "format": "decimalPattern" } } },
-  "syncUploadingNotes": "Uploading note updates · {count}",
-  "@syncUploadingNotes": {
-    "placeholders": {
-      "count": {
-        "type": "String"
-      }
-    }
-  },
+  "syncUploadingNotes": "Uploading notes · {count}",
+  "syncUploadingNotesOfTotal": "Uploading notes · {done} of {total}",
+  "@syncUploadingNotes": { "placeholders": { "count": { "type": "int", "format": "decimalPattern" } } },
+  "@syncUploadingNotesOfTotal": { "placeholders": { "done": { "type": "int", "format": "decimalPattern" }, "total": { "type": "int", "format": "decimalPattern" } } },
   "syncEstimatedMinutes": "{minutes, plural, =0{Less than a minute left} other{About {minutes} min left}}",
   "@syncEstimatedMinutes": {
     "placeholders": {
@@ -22,7 +16,6 @@
       }
     }
   },
-  "syncUpdatingNotes": "Updating your notes",
 	"sharedImageNamesConflict": "Some shared images have matching filenames. Please share them one at a time.",
 	"sharedImageImportFailed": "Could not create the image note ({fileName}). Try sharing again with images up to 50 MB and 24 megapixels.",
 	"@sharedImageImportFailed": { "description": "An image share failed; filename identifies the failing image", "placeholders": { "fileName": { "type": "String" } } },
@@ -3207,7 +3200,7 @@
 	"syncPreparing": "Preparing sync…",
 	"syncUploadRestricted": "Saved on this device. Enable Better Keep cloud to sync changes.",
 	"syncUpgradeReminder": "Your changes are saved here. Sync them with Pro.",
-	"syncUpgradeForUploads": "Saved on this device. Upgrade to Pro to sync changes.",
+	"syncUpgradeForUploads": "Saved on this device. Upgrade to Pro to upload to Better Keep cloud.",
 	"syncPaused": "Sync paused. Please retry.",
   "insertTable": "Insert table",
   "tablePickerHint": "Tap a cell to insert, or choose a custom size.",

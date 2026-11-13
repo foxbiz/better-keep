@@ -11,16 +11,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncCheckingLibraryHint =>
-      'Memeriksa perubahan. Koleksi besar mungkin memerlukan beberapa menit.';
-
-  @override
-  String syncCheckedUpdates(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String countString = countNumberFormat.format(count);
-
-    return 'Pembaruan catatan yang diperiksa: $countString';
-  }
+      'Koleksi besar mungkin memerlukan beberapa menit.';
 
   @override
   String get syncCheckingNotes => 'Memeriksa catatan';
@@ -38,8 +29,25 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String syncUploadingNotes(String count) {
-    return 'Mengunggah perubahan catatan · $count';
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Mengunggah catatan · $countString';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'Mengunggah catatan · $doneString dari $totalString';
   }
 
   @override
@@ -52,9 +60,6 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get syncUpdatingNotes => 'Memperbarui catatan Anda';
 
   @override
   String get sharedImageNamesConflict =>
@@ -3342,7 +3347,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncUpgradeForUploads =>
-      'Tersimpan di perangkat ini. Upgrade ke Pro untuk menyinkronkan perubahan.';
+      'Tersimpan di perangkat ini. Upgrade ke Pro untuk mengunggah ke cloud Better Keep.';
 
   @override
   String get syncPaused => 'Sinkronisasi dijeda. Silakan coba lagi.';

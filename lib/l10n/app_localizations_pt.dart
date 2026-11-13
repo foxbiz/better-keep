@@ -11,22 +11,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncCheckingLibraryHint =>
-      'Procurando alterações. Bibliotecas grandes podem levar alguns minutos.';
-
-  @override
-  String syncCheckedUpdates(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String countString = countNumberFormat.format(count);
-
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$countString atualizações de notas verificadas',
-      one: '1 atualização de nota verificada',
-    );
-    return '$_temp0';
-  }
+      'Bibliotecas grandes podem levar alguns minutos.';
 
   @override
   String get syncCheckingNotes => 'Verificando notas';
@@ -50,8 +35,25 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String syncUploadingNotes(String count) {
-    return 'Enviando alterações nas notas · $count';
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Enviando notas · $countString';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'Enviando notas · $doneString de $totalString';
   }
 
   @override
@@ -64,9 +66,6 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get syncUpdatingNotes => 'Atualizando suas notas';
 
   @override
   String get sharedImageNamesConflict =>
@@ -3385,7 +3384,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncUpgradeForUploads =>
-      'Salvo neste dispositivo. Faça upgrade para Pro para sincronizar as alterações.';
+      'Salvo neste dispositivo. O plano Pro permite enviar notas para a nuvem do Better Keep.';
 
   @override
   String get syncPaused => 'Sincronização pausada. Tente novamente.';

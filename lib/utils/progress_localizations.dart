@@ -135,8 +135,10 @@ extension NoteTransferLocalizations on NoteTransfer {
     if (stage == NoteTransferStage.downloading) {
       return l10n.syncDownloadingNotes;
     }
-    final count = total == null ? '$done' : '$done/$total';
-    final label = l10n.syncUploadingNotes(count);
+    final expected = total;
+    final label = expected == null
+        ? l10n.syncUploadingNotes(done)
+        : l10n.syncUploadingNotesOfTotal(done, expected);
     return minutesLeft == null
         ? label
         : '$label\n${l10n.syncEstimatedMinutes(minutesLeft!)}';

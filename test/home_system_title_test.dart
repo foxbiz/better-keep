@@ -294,16 +294,17 @@ void main() {
           sync.value = const SyncProgress(SyncPhase.checkingForUpdates);
           await tester.pump(const Duration(milliseconds: 250));
           expect(
-            find.text(
-              'Looking for changes. Large libraries can take a few minutes.',
-            ),
+            find.text('Large libraries can take a few minutes.'),
             findsOneWidget,
           );
           sync.value = checking;
           await tester.pump(const Duration(milliseconds: 250));
           expect(glyph, findsOneWidget);
-          expect(find.text('Checking Notes'), findsOneWidget);
-          expect(find.text('1 note update checked'), findsOneWidget);
+          expect(find.text('Check Notes'), findsOneWidget);
+          expect(
+            find.text('Large libraries can take a few minutes.'),
+            findsOneWidget,
+          );
           expect(find.byKey(const ValueKey('download_activity')), findsNothing);
           expect(pill, findsNothing);
           AppState.filterLabels = ['QA'];
@@ -316,10 +317,10 @@ void main() {
           expect(pill, findsNothing);
           AppState.set('show_sync_progress', false);
           await tester.pump();
-          expect(find.text('Checking Notes'), findsNothing);
+          expect(find.text('Check Notes'), findsNothing);
           AppState.set('show_sync_progress', true);
           await tester.pump();
-          expect(find.text('Checking Notes'), findsOneWidget);
+          expect(find.text('Check Notes'), findsOneWidget);
 
           expect(find.text('No notes yet'), findsNothing);
           final area = tester.getRect(find.byType(Notes));
@@ -338,7 +339,7 @@ void main() {
         expect(glyph, findsNothing);
         expect(pill, findsOneWidget);
         expect(
-          find.descendant(of: pill, matching: find.text('Checking Notes')),
+          find.descendant(of: pill, matching: find.text('Check Notes')),
           findsOneWidget,
         );
         AppState.showNotes = NoteType.archived;
@@ -359,6 +360,46 @@ void main() {
       }
     },
   );
+
+  testWidgets('opening the create menu preserves a dismissed sync failure', (
+    tester,
+  ) async {
+    final sync = SyncPresentation.instance;
+    final previous = sync.value;
+    final pill = find.byKey(const ValueKey('sync_progress'));
+    try {
+      await tester.pumpWidget(_app(const Home()));
+      await _drainDatabaseWork(tester);
+      sync.value = const SyncProgress(SyncPhase.failed);
+      await tester.pumpAndSettle();
+      await tester.drag(pill, const Offset(0, 100));
+      await tester.pumpAndSettle();
+      expect(pill, findsNothing);
+
+      final fab = find.byIcon(Icons.add);
+      final gesture = await tester.startGesture(tester.getCenter(fab));
+      await gesture.moveBy(const Offset(0, -24));
+      await tester.pump(const Duration(milliseconds: 250));
+      final rotation = find.ancestor(
+        of: fab,
+        matching: find.byType(AnimatedRotation),
+      );
+      expect(tester.widget<AnimatedRotation>(rotation).turns, isNot(0));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedRotation>(rotation).turns, 0);
+      expect(pill, findsNothing);
+
+      sync.value = const SyncProgress(SyncPhase.storageFull);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Retry'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      sync.value = previous;
+      UserAvatar.invalidateCache();
+      await _drainDatabaseWork(tester);
+    }
+  });
 
   testWidgets('bulk restore shows the floating pill as soon as a note exists', (
     tester,
@@ -388,6 +429,27 @@ void main() {
         expect(find.byType(LinearProgressIndicator), findsOneWidget);
         expect(find.byKey(const ValueKey('sync_progress')), findsNothing);
       }
+      await tester.drag(
+        find.byType(CustomScrollView).first,
+        const Offset(0, 500),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.text('Downloading Notes'),
+        ),
+        findsOneWidget,
+      );
+      expect(sync.isManualRefresh, isFalse);
+      // show() returns the pending future for the gesture already in progress.
+      var refreshCompleted = false;
+      final indicator = tester.state<RefreshIndicatorState>(
+        find.byType(RefreshIndicator),
+      );
+      unawaited(indicator.show().then((_) => refreshCompleted = true));
       final first = Note(id: 9876, title: 'First restored note', content: '[]');
       await tester.runAsync(() => database.insert(Note.model, first.toJson()));
       first.notify('created', false, ModelChangeOrigin.remoteSync);
@@ -440,9 +502,14 @@ void main() {
       }
       expect(bulkCards, findsWidgets);
       expect(find.byType(NoteCard).evaluate().length, lessThan(40));
+      expect(refreshCompleted, isFalse, reason: 'The restore is still running');
+      done.complete();
+      await transfer;
+      await tester.pump();
+      expect(refreshCompleted, isTrue, reason: 'The restore has finished');
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      done.complete();
+      if (!done.isCompleted) done.complete();
       await transfer;
       sync.value = previous;
       await _drainDatabaseWork(tester);
@@ -561,6 +628,7 @@ Future<void> _drainDatabaseWork(WidgetTester tester) async {
 }
 
 Widget _app(Widget home) => MaterialApp(
+  scaffoldMessengerKey: AppState.scaffoldMessengerKey,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   locale: const Locale('en'),

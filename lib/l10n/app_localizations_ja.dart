@@ -10,16 +10,7 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
-  String get syncCheckingLibraryHint => '変更を確認しています。ノートが多い場合は数分かかることがあります。';
-
-  @override
-  String syncCheckedUpdates(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String countString = countNumberFormat.format(count);
-
-    return 'ノートの更新を$countString件確認しました';
-  }
+  String get syncCheckingLibraryHint => 'ノートが多い場合は数分かかることがあります。';
 
   @override
   String get syncCheckingNotes => 'ノートを確認中';
@@ -37,8 +28,25 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String syncUploadingNotes(String count) {
-    return 'ノートの更新をアップロード中 · $count';
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'ノートをアップロード中 · $countString 件';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'ノートをアップロード中 · $totalString 件中 $doneString 件';
   }
 
   @override
@@ -51,9 +59,6 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
-
-  @override
-  String get syncUpdatingNotes => 'ノートを更新中';
 
   @override
   String get sharedImageNamesConflict =>
@@ -3212,7 +3217,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncUpgradeForUploads =>
-      'このデバイスに保存済みです。変更を同期するにはProにアップグレードしてください。';
+      'このデバイスに保存しました。Better Keep クラウドへのアップロードには Pro が必要です。';
 
   @override
   String get syncPaused => '同期を一時停止しました。再試行してください。';

@@ -82,8 +82,8 @@ extension NoteTransferFraction on NoteTransfer {
 }
 
 /// Measures one transfer phase. Provider listing and later upload work have
-/// independent costs. Publish at most twice a second, plus phase boundaries
-/// and the first observed checking result.
+/// independent costs. Transfers update at most twice a second between phase
+/// boundaries. Checking reports its first result and final count.
 class NoteTransferMeter {
   NoteTransferMeter(
     this.stage,
@@ -122,10 +122,11 @@ class NoteTransferMeter {
   }
 
   void _publishIfDue() {
-    if ((stage == NoteTransferStage.checking &&
-            _done > 0 &&
-            _publishedItems == 0) ||
-        _done + _excluded == total ||
+    if (stage == NoteTransferStage.checking) {
+      if (_done > 0 && _publishedItems == 0) _emit();
+      return;
+    }
+    if (_done + _excluded == total ||
         _elapsed() - _last >= const Duration(milliseconds: 500)) {
       _emit();
     }

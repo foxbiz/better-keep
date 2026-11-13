@@ -477,19 +477,17 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                     ),
                   // Keep long status messages above the create button. The
                   // expanded creation menu takes priority over transient status.
-                  if (!_isBubbleMenuOpen)
-                    ValueListenableBuilder<bool>(
-                      valueListenable: _libraryHasNotes,
-                      builder: (_, hasNotes, _) => SyncProgressWidget(
-                        showActivity: !showsEmptyLibrarySync(
-                          hasNotes: hasNotes,
-                          searchMode: _searchMode,
-                        ),
-                        bottom: showCreateButton
-                            ? fabBottom + _fabSize + 12
-                            : 32,
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _libraryHasNotes,
+                    builder: (_, hasNotes, _) => SyncProgressWidget(
+                      visible: !_isBubbleMenuOpen,
+                      showActivity: !showsEmptyLibrarySync(
+                        hasNotes: hasNotes,
+                        searchMode: _searchMode,
                       ),
+                      bottom: showCreateButton ? fabBottom + _fabSize + 12 : 32,
                     ),
+                  ),
                   // FAB with opacity/scale animation
                   Positioned(
                     right: 24,
