@@ -60,7 +60,12 @@ Reminder? _parseReminder(Object? raw) {
 
 enum _AttachmentSerializationPolicy { standard, lockedPinBoundary }
 
-enum RemoteNoteCommitResult { applied, localChanged, staleSession }
+enum RemoteNoteCommitResult {
+  applied,
+  identityConflict,
+  localChanged,
+  staleSession,
+}
 
 class NoteColor {
   final Color value;
@@ -173,6 +178,27 @@ extension NoteEventData on NoteEvent {
 enum NoteType { all, archived, trashed, pinned, locked, reminder }
 
 class Note extends BaseModel<Note> {
+  static int _lastAllocatedId = 0;
+
+  /// Allocates an opaque local ID, not a creation timestamp. Call within the
+  /// insertion/reservation transaction; any supplied maximum must come from it.
+  static Future<int> allocateLocalId(
+    Transaction transaction, {
+    int? highestStoredId,
+  }) async {
+    final highest =
+        highestStoredId ??
+        Sqflite.firstIntValue(
+          await transaction.rawQuery('SELECT MAX(id) FROM note'),
+        ) ??
+        0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final floor = highest > _lastAllocatedId ? highest : _lastAllocatedId;
+    // Reserve IDs while a new note stages its protected files outside SQLite.
+    _lastAllocatedId = floor >= now ? floor + 1 : now;
+    return _lastAllocatedId;
+  }
+
   static final ModelSchema<Note> _schema = _createSchema();
   static const model = "note";
 
@@ -803,6 +829,23 @@ class Note extends BaseModel<Note> {
     return this;
   }
 
+  /// A numeric local ID is only a placement hint, never proof of ownership.
+  /// Legacy rows without a sync ID need an established matching sync track.
+  static bool matchesRemoteIdentity(
+    String remoteId,
+    Map<String, Object?>? row,
+    Map<String, Object?>? track,
+  ) {
+    final noteIdentity = row?['sync_id'];
+    final trackedIdentity = track?['remote_id'];
+    if (trackedIdentity != null && trackedIdentity != remoteId) return false;
+    if (row == null) return true;
+    if (noteIdentity == null || noteIdentity == '') {
+      return trackedIdentity == remoteId;
+    }
+    return noteIdentity == remoteId;
+  }
+
   /// Preparation is detached from the stored row. A local write during file
   /// preparation invalidates the snapshot; a retry compares logical versions.
   Future<RemoteNoteCommitResult> applyRemoteIfUnchanged({
@@ -820,6 +863,13 @@ class Note extends BaseModel<Note> {
         'Incoming note does not match its sync version',
       );
     }
+    if (!matchesRemoteIdentity(
+      incomingVersion.entityId,
+      expectedRow,
+      expectedSyncRow,
+    )) {
+      return RemoteNoteCommitResult.identityConflict;
+    }
     _assignRemoteJson(incoming);
     await _migrateSketchesToStrokesFiles();
     final row = await toJsonAsync();
@@ -835,6 +885,13 @@ class Note extends BaseModel<Note> {
       );
       final currentRow = notes.isEmpty ? null : notes.single;
       final currentTrack = tracks.isEmpty ? null : tracks.single;
+      if (!matchesRemoteIdentity(
+        incomingVersion.entityId,
+        currentRow,
+        currentTrack,
+      )) {
+        return RemoteNoteCommitResult.identityConflict;
+      }
       final currentVersion = await SyncMutationJournal.current(
         txn,
         SyncEntityKind.note,
@@ -1047,12 +1104,13 @@ class Note extends BaseModel<Note> {
       );
     }
 
-    final noteId = originalId ?? DateTime.now().millisecondsSinceEpoch;
     final transactionService = NoteLockTransactionService(operations);
     NoteLockJournalRecord? activeRecord;
     var databaseCommitted = false;
 
     try {
+      final noteId =
+          originalId ?? await AppState.db.transaction<int>(allocateLocalId);
       final encryptedContent = await encrypt(authenticatedContent, password);
       final workingAttachments = _deepCopyAttachments(attachments);
 
@@ -2913,11 +2971,8 @@ class Note extends BaseModel<Note> {
         }
       }
       // If not exists, fall through to insert with the existing ID
-    } else {
-      id = DateTime.now().millisecondsSinceEpoch;
     }
 
-    jsonObj['id'] = id;
     jsonObj['sync_id'] = syncId;
     if (jsonObj['created_at'] == null) {
       jsonObj['created_at'] = DateTime.now().toIso8601String();
@@ -2925,7 +2980,11 @@ class Note extends BaseModel<Note> {
 
     try {
       await _persistLocalChange(
-        (transaction) => transaction.insert(model, jsonObj),
+        (transaction) async {
+          id ??= await allocateLocalId(transaction);
+          jsonObj['id'] = id;
+          return transaction.insert(model, jsonObj);
+        },
         trackSync: trackSync,
         action: SyncAction.upload,
       );

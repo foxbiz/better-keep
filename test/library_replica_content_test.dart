@@ -1,3 +1,6 @@
+import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'support/storage_authorization.dart';
 
 import 'dart:async';
@@ -56,6 +59,77 @@ void main() {
     await a.dispose();
     await b.dispose();
   });
+
+  for (final pendingDeletion in [false, true]) {
+    test(
+      'restore respects a pending lock reservation and deletion floor ($pendingDeletion)',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        await AppState.init(prefs: prefs);
+        AppState.db = b.db;
+        const files = IoFileSystem();
+        Note.lockFileOperationsOverride = NoteLockFileOperations(
+          exists: files.exists,
+          read: files.readBytes,
+          write: files.writeBytes,
+          delete: files.delete,
+          documentDirectory: () async => b.root.path,
+          encryptWithPassword: pin.encryptBytesWithPassword,
+          decryptWithPassword: pin.decryptBytesWithPassword,
+          newId: () => 'lock-reservation-test',
+        );
+        Note.lockCommittedNotifierOverride = (_, _) {};
+        addTearDown(() {
+          Note.lockBeforeCommitOverride = null;
+          Note.lockFileOperationsOverride = null;
+          Note.lockCommittedNotifierOverride = null;
+        });
+        final futureId = DateTime.now().millisecondsSinceEpoch + 10000000;
+        await b.db.insert('note', {
+          'id': futureId,
+          'sync_id': 'existing',
+          'content': '[]',
+          'attachments': '[]',
+        });
+        await a.note();
+        final remote = _Remote('dropbox');
+        await a.engine.sync(remote);
+        final locking = Note(
+          title: 'New draft',
+          content: jsonEncode([
+            {'insert': 'secret\n'},
+          ]),
+          plainText: 'secret',
+        );
+        late int reserved;
+        Note.lockBeforeCommitOverride = (_) async {
+          reserved = (await NoteLockJournal(prefs).load()).single.noteId;
+          if (pendingDeletion) {
+            await b.db.insert('sync_track', {
+              'local_id': reserved + 1000,
+              'action': 'delete',
+            });
+          }
+          await b.engine.sync(remote, downloadOnly: true);
+        };
+        await locking.lock('1234');
+        final restored = (await b.db.query(
+          'note',
+          where: 'sync_id = ?',
+          whereArgs: ['note-id'],
+        )).single;
+        expect(
+          restored['id'],
+          greaterThan(reserved + (pendingDeletion ? 1000 : 0)),
+        );
+        expect(locking.id, reserved);
+        expect(locking.locked, true);
+        expect(await b.db.query('note'), hasLength(3));
+        expect(await NoteLockJournal(prefs).load(), isEmpty);
+      },
+    );
+  }
 
   test(
     'local edit during incoming download wins and drains the inbox in one pass',

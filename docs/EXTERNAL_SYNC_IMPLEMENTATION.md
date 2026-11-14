@@ -76,6 +76,14 @@ is best effort. Storage credentials never pass through the backend callback.
   share the domain transaction. Retrieved immutable objects are hash-verified
   before caching or publication. Only the selected provider supplies an active adapter.
   Library/session composition and app account/key/foreground wiring are implemented.
+- Schema v13 adds `replica_cursors.checked_notes`: non-null counts mean an
+  incomplete listing; null means discovery completed. Upgraded cursors default
+  to zero conservatively. Page staging and cursor updates are atomic and the
+  upgrade tolerates an already-present column. Completed scans resume downloads
+  first; partial scans finish listing for a stable download total. A failed scan
+  applies valid staged revisions before reporting its original error, while
+  cancelled sessions never start fallback work. Slow partial scans may delay
+  first-note availability until discovery completes.
 - Schema v12 adds replica state and a SQLite-triggered local version journal.
   Imports, reminder actions, permanent deletes, locks and protected repairs are
   captured with their domain transaction. Local encryption/preview/path-only

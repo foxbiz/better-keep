@@ -692,6 +692,154 @@ void main() {
     },
   );
 
+  for (final listingError in <Object>[
+    const SyncProviderFailure(SyncProviderFailureKind.corruptData),
+    const FormatException('truncated commit'),
+    const SyncProviderFailure(SyncProviderFailureKind.unavailable),
+  ]) {
+    test(
+      'partial scan applies staged notes before reporting $listingError',
+      () async {
+        await store.stagePage(
+          'dropbox',
+          SyncChangePage(
+            revisions: [revision(1)],
+            cursor: 'next',
+            hasMore: true,
+          ),
+        );
+        final source = _Adapter('dropbox')
+          ..listChanges = (cursor) async {
+            expect(cursor, 'next');
+            throw listingError;
+          };
+        for (var attempt = 0; attempt < 2; attempt++) {
+          await expectLater(
+            engine.sync(source, downloadOnly: true),
+            throwsA(same(listingError)),
+          );
+          expect(await db.query('applied'), hasLength(1));
+          expect((await store.checkpoint('dropbox'))!.checkedNotes, 1);
+          expect(source.published, isEmpty);
+        }
+      },
+    );
+  }
+
+  test(
+    'failed fallback retains inbox and original scan failure for retry',
+    () async {
+      await store.stagePage(
+        'dropbox',
+        SyncChangePage(revisions: [revision(1)], cursor: 'next', hasMore: true),
+      );
+      const failure = FormatException('bad scan');
+      final source = _Adapter('dropbox')
+        ..listChanges = (_) async => throw failure;
+      content.failApply = true;
+      await expectLater(engine.sync(source), throwsA(same(failure)));
+      expect(await db.query('applied'), isEmpty);
+      expect(await store.incomingNoteCount('dropbox'), 1);
+      content.failApply = false;
+      await expectLater(engine.sync(source), throwsA(same(failure)));
+      expect(await db.query('applied'), hasLength(1));
+    },
+  );
+
+  test(
+    'legacy zero checkpoint completes its listing before applying notes',
+    () async {
+      await store.stagePage(
+        'dropbox',
+        SyncChangePage(revisions: [revision(1)], cursor: 'next', hasMore: true),
+      );
+      await db.update('replica_cursors', {'checked_notes': 0});
+      final source = _Adapter('dropbox')
+        ..listChanges = (cursor) async {
+          expect(cursor, 'next');
+          expect(await db.query('applied'), isEmpty);
+          return SyncChangePage(revisions: [], cursor: 'end', hasMore: false);
+        };
+      await engine.sync(source, downloadOnly: true);
+      expect(await db.query('applied'), hasLength(1));
+      expect((await store.checkpoint('dropbox'))!.checkedNotes, isNull);
+    },
+  );
+
+  test(
+    'partial listing resumes before downloading and preserves a queued note',
+    () async {
+      final pageOne = SyncRevision(
+        kind: SyncEntityKind.note,
+        entityId: 'first',
+        revisionId: 'first-version',
+        modifiedAtMicros: 1,
+        deleted: false,
+        payloadObjectId: objectId,
+      );
+      final source = _Adapter('dropbox');
+      var restarted = false;
+      source.listChanges = (cursor) async {
+        if (cursor == null) {
+          return SyncChangePage(
+            revisions: [pageOne],
+            cursor: 'next',
+            hasMore: true,
+          );
+        }
+        if (cursor == 'next') {
+          if (!restarted) throw const SyncReplicaCancelled();
+          expect(await db.query('applied'), isEmpty);
+          return SyncChangePage(
+            revisions: [revision(2)],
+            cursor: 'end',
+            hasMore: false,
+          );
+        }
+        return SyncChangePage(revisions: [], cursor: 'end', hasMore: false);
+      };
+      await expectLater(
+        engine.sync(source),
+        throwsA(isA<SyncReplicaCancelled>()),
+      );
+      final local = SyncRevision(
+        kind: SyncEntityKind.note,
+        entityId: 'local',
+        revisionId: 'local-version',
+        modifiedAtMicros: 3,
+        deleted: false,
+        payloadObjectId: objectId,
+      );
+      await save(local);
+      restarted = true;
+      final samples = <NoteTransfer>[];
+      final fresh = SyncReplicaEngine(
+        store: SyncReplicaStore(db, scope: store.scope),
+        content: content,
+        isCurrent: () => true,
+        onProgress: (_, value) {
+          if (value != null) samples.add(value);
+        },
+      );
+      await fresh.sync(source, downloadOnly: true);
+      final beforeDownload = samples.takeWhile(
+        (p) => p.stage != NoteTransferStage.downloading,
+      );
+      expect(beforeDownload.last.done, 2);
+      expect(
+        samples
+            .firstWhere((p) => p.stage == NoteTransferStage.downloading)
+            .total,
+        2,
+      );
+      expect(await db.query('applied'), hasLength(2));
+      expect(source.published, isEmpty);
+      expect((await store.pending('dropbox')).single.entityId, 'local');
+      await fresh.sync(source);
+      expect(source.published.single.entityId, 'local');
+    },
+  );
+
   test(
     'restart applies the remaining notes before checking for new changes',
     () async {

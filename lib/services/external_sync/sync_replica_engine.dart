@@ -144,22 +144,27 @@ class SyncReplicaEngine {
     final preparing = content is PreparingSyncReplicaContent
         ? content as PreparingSyncReplicaContent
         : null;
-    // Replay durable downloads first on restart. The journal comparison in
-    // _applyIncoming defers newer local edits until capture finishes below.
-    await _applyInbox(adapter, deferIdentityConflicts: true);
+    final checkpoint = await store.checkpoint(adapter.connectionId);
+    _guard();
+    // Resume a completed listing's downloads immediately. A partial listing
+    // must finish first so its inbox and download total cover the whole scan.
+    if (checkpoint != null && checkpoint.checkedNotes == null) {
+      await _applyInbox(adapter, deferIdentityConflicts: true);
+    }
     if (preparing != null && !downloadOnly) {
       await preparing.captureLocalChanges();
       _guard();
     }
-    var cursor = await store.cursor(adapter.connectionId);
+    var cursor = checkpoint?.cursor;
     var resetCursor = false;
     final meter = NoteTransferMeter(NoteTransferStage.checking, null, (
       progress,
     ) {
       if (isCurrent()) onProgress?.call(adapter, progress);
     });
-    var checkedBeforePage = 0;
-    var reported = 0;
+    var checkedBeforePage = checkpoint?.checkedNotes ?? 0;
+    var reported = checkedBeforePage;
+    if (reported > 0) meter.advance(reported);
     void reportChecked(int onPage) {
       final checked = checkedBeforePage + onPage;
       if (checked <= reported) return;
@@ -167,38 +172,60 @@ class SyncReplicaEngine {
       reported = checked;
     }
 
-    while (true) {
-      _guard();
-      late final SyncChangePage page;
-      try {
-        page = await adapter.changes(cursor, onCheckedNotes: reportChecked);
-      } on SyncProviderFailure catch (error) {
-        if (error.kind != SyncProviderFailureKind.invalidCursor ||
-            resetCursor) {
-          rethrow;
+    try {
+      while (true) {
+        _guard();
+        late final SyncChangePage page;
+        try {
+          page = await adapter.changes(cursor, onCheckedNotes: reportChecked);
+        } on SyncProviderFailure catch (error) {
+          if (error.kind != SyncProviderFailureKind.invalidCursor ||
+              resetCursor) {
+            rethrow;
+          }
+          cursor = null;
+          // The full listing replays earlier pages. Resume reporting once it
+          // passes the previous count.
+          checkedBeforePage = 0;
+          resetCursor = true;
+          continue;
         }
-        cursor = null;
-        // The full listing replays earlier pages. Resume reporting once it
-        // passes the previous count.
-        checkedBeforePage = 0;
-        resetCursor = true;
-        continue;
+        _guard();
+        if (page.hasMore && page.cursor == cursor) {
+          throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
+        }
+        // Count the whole incoming phase before applying it. Only the current
+        // page is held in memory. Persist the page, cursor and phase together.
+        await store.stagePage(
+          adapter.connectionId,
+          page,
+          checkedBeforePage: checkedBeforePage,
+          ensureCurrent: _guard,
+        );
+        final pageNotes = page.revisions
+            .where((r) => r.kind == SyncEntityKind.note)
+            .length;
+        reportChecked(pageNotes);
+        checkedBeforePage += pageNotes;
+        cursor = page.cursor;
+        if (!page.hasMore) break;
+      }
+    } on SyncReplicaCancelled {
+      rethrow;
+    } catch (error, stack) {
+      // Restore valid staged notes even when discovery fails, then report the
+      // original failure. Cancellation must never start this fallback.
+      meter.flush();
+      _guard();
+      try {
+        await _applyInbox(adapter, deferIdentityConflicts: true);
+      } on SyncReplicaCancelled {
+        rethrow;
+      } catch (_) {
+        // Keep the listing failure and durable inbox for the next attempt.
       }
       _guard();
-      if (page.hasMore && page.cursor == cursor) {
-        throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
-      }
-      // Count the whole incoming phase before applying it. Only the current
-      // page is held in memory. A failed listing leaves its staged pages and
-      // cursor durable for the initial inbox replay on the next attempt.
-      await store.stagePage(adapter.connectionId, page, ensureCurrent: _guard);
-      final pageNotes = page.revisions
-          .where((r) => r.kind == SyncEntityKind.note)
-          .length;
-      reportChecked(pageNotes);
-      checkedBeforePage += pageNotes;
-      cursor = page.cursor;
-      if (!page.hasMore) break;
+      Error.throwWithStackTrace(error, stack);
     }
     meter.flush();
     await _applyInbox(adapter, deferIdentityConflicts: true);

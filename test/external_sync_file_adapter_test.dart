@@ -544,6 +544,39 @@ void main() {
     },
   );
 
+  test(
+    'Dropbox initializes a missing library and retries its first listing once',
+    () async {
+      final calls = <String>[];
+      final client = MockClient((request) async {
+        final route = request.url.pathSegments.last;
+        calls.add(route);
+        if (calls.length == 1) {
+          return http.Response('{"error_summary":"path/not_found/"}', 409);
+        }
+        return http.Response(
+          route == 'list_folder'
+              ? '{"entries":[],"cursor":"next","has_more":false}'
+              : '{}',
+          200,
+        );
+      });
+      addTearDown(client.close);
+      final transport = DropboxSyncTransport(
+        httpClient: ProviderHttp(client),
+        accessToken: () async => 'synthetic',
+        libraryId: cipher.libraryId,
+      );
+      expect((await transport.list(null)).cursor, 'next');
+      expect(calls, [
+        'list_folder',
+        'create_folder_v2',
+        'create_folder_v2',
+        'list_folder',
+      ]);
+    },
+  );
+
   test('Dropbox paginates with opaque cursor and never treats physical deletion as a tombstone', () async {
     final calls = <http.Request>[];
     final client = MockClient((request) async {
@@ -577,8 +610,8 @@ void main() {
     expect(calls.last.url.path, '/2/files/list_folder/continue');
     expect(jsonDecode(calls.last.body), {'cursor': 'next'});
     expect(
-      calls.where((c) => c.url.path.endsWith('create_folder_v2')).length,
-      2,
+      calls.where((c) => c.url.path.endsWith('create_folder_v2')),
+      isEmpty,
     );
     client.close();
   });

@@ -1325,6 +1325,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       listenable: Listenable.merge([
         NoteSyncBatch.active,
         SyncPresentation.instance,
+        SyncPresentation.instance.recovery.activity,
+        SyncPresentation.instance.recovery.state,
       ]),
       child: content,
       builder: (context, child) {
@@ -1334,8 +1336,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
             child: BulkSyncProgress(),
           );
         }
-        final progress = SyncPresentation.instance.value;
-        if (!progress.isActive || !AppState.showSyncProgress) return child!;
+        final progress = SyncPresentation.instance.emptyLibraryProgress;
+        if (!progress.isActive) return child!;
         return SliverFillRemaining(
           hasScrollBody: false,
           child: SyncContentProgress(progress: progress),

@@ -32,7 +32,7 @@ class SyncReplicaStore {
       entity_id TEXT NOT NULL, revision_id TEXT NOT NULL, revision TEXT NOT NULL,
       PRIMARY KEY(scope, connection_id, kind, entity_id, revision_id))''');
     await db.execute('''CREATE TABLE IF NOT EXISTS replica_cursors (
-      scope TEXT NOT NULL, connection_id TEXT NOT NULL, cursor TEXT,
+      scope TEXT NOT NULL, connection_id TEXT NOT NULL, cursor TEXT, checked_notes INTEGER,
       PRIMARY KEY(scope, connection_id))''');
   }
 
@@ -196,26 +196,58 @@ class SyncReplicaStore {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<String?> cursor(String connectionId) async {
+  Future<String?> cursor(String connectionId) async =>
+      (await checkpoint(connectionId))?.cursor;
+
+  Future<({String? cursor, int? checkedNotes})?> checkpoint(
+    String connectionId,
+  ) async {
     final rows = await database.query(
       'replica_cursors',
       where: 'scope = ? AND connection_id = ?',
       whereArgs: [scope, connectionId],
     );
-    return rows.isEmpty ? null : rows.single['cursor'] as String?;
+    if (rows.isEmpty) return null;
+    return (
+      cursor: rows.single['cursor'] as String?,
+      checkedNotes: rows.single['checked_notes'] as int?,
+    );
   }
 
   /// The cursor and every discovered record commit together. A restart after
-  /// this point resumes from the inbox, even if content has not downloaded yet.
+  /// this point can distinguish unfinished discovery from pending downloads.
   Future<void> stagePage(
     String connectionId,
     SyncChangePage page, {
+    int checkedBeforePage = 0,
     void Function()? ensureCurrent,
   }) => database.transaction((txn) async {
     ensureCurrent?.call();
+    final batch = txn.batch();
     for (final revision in page.revisions) {
+      // rawInsert returns the last row ID even for some ignored inserts.
+      // Use SQLite's affected-row count to identify duplicates for validation.
+      batch.rawUpdate(
+        '''INSERT OR IGNORE INTO replica_inbox
+          (scope, connection_id, kind, entity_id, revision_id, revision)
+          VALUES (?, ?, ?, ?, ?, ?)''',
+        [
+          scope,
+          connectionId,
+          revision.kind.name,
+          revision.entityId,
+          revision.revisionId,
+          revision.encode(),
+        ],
+      );
+    }
+    final inserted = page.revisions.isEmpty ? const [] : await batch.commit();
+    for (var i = 0; i < inserted.length; i++) {
+      if (inserted[i] == 1) continue;
+      final revision = page.revisions[i];
       final rows = await txn.query(
         'replica_inbox',
+        columns: ['revision'],
         where: 'scope = ? AND connection_id = ? AND kind = ? AND entity_id = ? AND revision_id = ?',
         whereArgs: [
           scope,
@@ -225,26 +257,24 @@ class SyncReplicaStore {
           revision.revisionId,
         ],
       );
-      if (rows.isNotEmpty) {
-        _checkIdentity(
-          SyncRevision.decode(rows.single['revision'] as String),
-          revision,
-        );
-      } else {
-        await txn.insert('replica_inbox', {
-          'scope': scope,
-          'connection_id': connectionId,
-          'kind': revision.kind.name,
-          'entity_id': revision.entityId,
-          'revision_id': revision.revisionId,
-          'revision': revision.encode(),
-        });
+      if (rows.length != 1) {
+        throw const FormatException('Could not stage a sync revision');
       }
+      _checkIdentity(
+        SyncRevision.decode(rows.single['revision'] as String),
+        revision,
+      );
     }
     await txn.insert('replica_cursors', {
       'scope': scope,
       'connection_id': connectionId,
       'cursor': page.cursor,
+      'checked_notes': page.hasMore
+          ? checkedBeforePage +
+                page.revisions
+                    .where((r) => r.kind == SyncEntityKind.note)
+                    .length
+          : null,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
     ensureCurrent?.call();
   });

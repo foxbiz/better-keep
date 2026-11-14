@@ -320,6 +320,37 @@ void main() {
     },
   );
 
+  test(
+    'empty restored library acknowledges startup verification until offline',
+    () async {
+      postSignIn.value = PostSignInState.ready;
+      final check = recovery.check();
+      expect(presentation.value.phase, SyncPhase.idle);
+      expect(presentation.emptyLibraryProgress.phase, SyncPhase.preparing);
+      verification.complete(CloudSessionState.unavailable);
+      await check;
+      expect(presentation.emptyLibraryProgress.phase, SyncPhase.idle);
+    },
+  );
+
+  test('empty library does not add a restore placeholder when encryption blocks access', () async {
+    postSignIn.value = PostSignInState.ready;
+    final check = recovery.check();
+    for (final status in [
+      E2EEStatus.pendingApproval,
+      E2EEStatus.needsRecovery,
+      E2EEStatus.revoked,
+    ]) {
+      encryption.value = status;
+      expect(
+        presentation.emptyLibraryProgress.phase,
+        SyncPhase.checkingConnection,
+      );
+    }
+    verification.complete(CloudSessionState.unavailable);
+    await check;
+  });
+
   test('new session immediately prepares before any verification event', () {
     expect(recovery.state.value, CloudSessionState.pending);
     expect(recovery.activity.value, CloudRecoveryActivity.idle);

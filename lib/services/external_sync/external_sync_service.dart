@@ -64,7 +64,11 @@ class ExternalSyncService extends ChangeNotifier {
     }
     if (!current.isCurrent) return SyncProgress.idle;
     final connections = current.connections;
+    final preference = connections.preference;
     return externalSyncProgress(
+      selectionReady:
+          preference == null ||
+          StorageConnectionController.providers.any(preference.allowsProvider),
       automatic: PlanService.instance.entitlements.automaticExternalSync,
       connections: connections.connections.values.where(
         (c) => connections.isSelected(c.provider),

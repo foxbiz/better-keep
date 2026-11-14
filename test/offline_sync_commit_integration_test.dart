@@ -229,6 +229,116 @@ void main() {
     ),
   );
 
+  for (final phase in ['preparation', 'commit']) {
+    test(
+      'Firebase ID collision at $phase preserves both notes on retry',
+      () async {
+        const remotePath = 'users/account-a/notes/remote-note';
+        final remoteData = payload();
+        backend.firestore.documents[remotePath] = remoteData;
+        final proxy = _TransactionBarrierDatabase(db);
+        late Map<String, Object?> originalRow;
+        late Map<String, Object?> originalTrack;
+        Future<void> claimId() async {
+          AppState.db = db;
+          await Note(
+            id: 101,
+            syncId: 'different-local-note',
+            title: 'Local draft',
+            content: '[{"insert":"Local draft\\n"}]',
+            plainText: 'Local draft',
+          ).save(false);
+          await NoteSyncTrack(
+            localId: 101,
+            remoteId: 'different-local-note',
+            action: SyncAction.upload,
+            status: SyncStatus.pending,
+          ).save();
+          originalRow = (await db.query(Note.model)).single;
+          originalTrack = (await db.query(NoteSyncTrack.model)).single;
+          AppState.db = proxy;
+        }
+
+        if (phase == 'preparation') {
+          // Migration runs after ID resolution but before the preparation snapshot.
+          remoteData['updated_at'] = '2026-09-11T00:00:00';
+          FirebaseSyncMigration.stampOverride = (_, _) async {
+            await claimId();
+            remoteData['sync_committed_at'] = Timestamp.fromDate(
+              DateTime.utc(2026, 9, 11),
+            );
+          };
+        } else {
+          proxy.beforeTransaction = claimId;
+        }
+        AppState.db = proxy;
+        expect(
+          await NoteSyncService().retryFailedRemoteNote('remote-note'),
+          isFalse,
+        );
+        expect((await db.query(Note.model)).single, originalRow);
+        expect((await db.query(NoteSyncTrack.model)).single, originalTrack);
+        final failure = await RemoteContentRetryLedger().get(
+          'account-a',
+          'remote-note',
+        );
+        expect(failure?.errorCode, 'local-note-identity-conflict');
+        expect(failure?.state, isNot(RemoteContentRetryState.deferred));
+
+        expect(
+          await NoteSyncService().retryFailedRemoteNote('remote-note'),
+          isTrue,
+        );
+        final restored = await Note.findBySyncId('remote-note');
+        expect(restored?.id, isNot(101));
+        expect(restored?.title, 'Remote');
+        expect(
+          (await db.query(
+            Note.model,
+            where: 'id = ?',
+            whereArgs: [101],
+          )).single,
+          originalRow,
+        );
+        expect(
+          (await db.query(
+            NoteSyncTrack.model,
+            where: 'local_id = ?',
+            whereArgs: [101],
+          )).single,
+          originalTrack,
+        );
+        expect(await db.query(Note.model), hasLength(2));
+        expect(
+          await RemoteContentRetryLedger().get('account-a', 'remote-note'),
+          isNull,
+        );
+      },
+    );
+  }
+
+  test(
+    'legacy Firebase row with matching track retains its local ID',
+    () async {
+      await saved();
+      await db.update(
+        Note.model,
+        {'sync_id': null},
+        where: 'id = ?',
+        whereArgs: [101],
+      );
+      backend.firestore.response = (_, _) async =>
+          OfflineSnapshot(value: payload());
+      expect(
+        await NoteSyncService().retryFailedRemoteNote('remote-note'),
+        isTrue,
+      );
+      expect(await db.query(Note.model), hasLength(1));
+      expect((await Note.findById(101))?.syncId, 'remote-note');
+      expect((await Note.findById(101))?.title, 'Remote');
+    },
+  );
+
   test('unstamped legacy note no longer blocks a newer local upload', () async {
     allowPaid();
     final note = await saved();

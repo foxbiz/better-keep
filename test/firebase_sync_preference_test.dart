@@ -1,3 +1,7 @@
+import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/external_sync/external_sync_progress.dart';
+import 'package:better_keep/services/external_sync/storage_connection_controller.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -57,6 +61,38 @@ void main() {
           revision: revision,
         ),
       );
+
+  test(
+    'external progress stays idle until an external selection is authorized',
+    () {
+      SyncPhase phase() => externalSyncProgress(
+        selectionReady: StorageConnectionController.providers.any(
+          preference.allowsProvider,
+        ),
+        connections: [],
+        progress: {},
+        metadataReady: false,
+      ).phase;
+      expect(preference.loading, true);
+      expect(phase(), SyncPhase.idle);
+      for (final provider in ['none', 'firebase', 'dropbox']) {
+        snapshots.add(
+          FirebaseSyncSelection(
+            provider == 'firebase',
+            provider: provider,
+            confirmed: true,
+          ),
+        );
+        expect(
+          phase(),
+          provider == 'dropbox' ? SyncPhase.preparing : SyncPhase.idle,
+        );
+      }
+      snapshots.addError(StateError('listener unavailable'));
+      expect(preference.failed, true);
+      expect(phase(), SyncPhase.idle);
+    },
+  );
 
   test('refresh waits for confirmed provider after restart and retires on account change', () async {
     var settled = false;

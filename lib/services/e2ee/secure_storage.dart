@@ -709,6 +709,17 @@ class E2EESecureStorage {
     return value == 'true';
   }
 
+  /// Both local namespaces belong to the removed iOS installation. Clear only
+  /// its Better Keep identities, before authenticated writers or key restores
+  /// start. The caller must corroborate that no previous local library exists.
+  Future<void> clearIosInstallIdentities() async {
+    for (final scope in FirebaseLocalDataScope.values) {
+      for (final key in _keys) {
+        await _secureStorage.delete(key: scope.secureStorageKey(key));
+      }
+    }
+  }
+
   /// Clears all E2EE data (for logout or key rotation).
   Future<void> clearAll({
     bool signingOut = false,

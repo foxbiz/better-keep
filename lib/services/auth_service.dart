@@ -63,6 +63,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:better_keep/services/web_oauth_stub.dart'
     if (dart.library.html) 'package:better_keep/services/web_oauth.dart'
@@ -535,6 +537,81 @@ class AuthService {
   /// Token validation is deferred to background to not block app startup.
   static bool _deferLocalRestore = false;
 
+  static Future<void> resetFreshIosInstall(
+    SharedPreferences prefs, {
+    required File installMarker,
+    required Future<bool> Function() hasLocalLibrary,
+    required Future<void> Function() clearIdentity,
+    required Future<void> Function() signOut,
+  }) async {
+    var markerUncertain = false;
+    try {
+      if (await installMarker.readAsString() == 'complete') return;
+      markerUncertain = true;
+    } on PathNotFoundException {
+      // A new install has no durable marker. Check upgrade evidence first.
+    } on Exception {
+      markerUncertain = true;
+    }
+    final existingAccount = FirebaseLocalDataScope.values.any(
+      (scope) => ['user_uid', 'user_email'].any(
+        (key) => prefs.getString(scope.preferenceKey(key))?.isNotEmpty == true,
+      ),
+    );
+    if (prefs.getBool('has_launched_before') != true && !existingAccount) {
+      bool? libraryPresent;
+      try {
+        libraryPresent = await hasLocalLibrary();
+      } on Exception {
+        // Failed filesystem/plugin probes cannot justify deleting an identity.
+      }
+      if (!markerUncertain && libraryPresent == false) await clearIdentity();
+      if (libraryPresent != true) await signOut();
+    }
+    // This lives outside account cleanup. Commit it before allowing sign-in,
+    // so a failed preferences write cannot wipe a newly approved identity.
+    await installMarker.parent.create(recursive: true);
+    final pending = File('${installMarker.path}.pending');
+    await pending.writeAsString('complete', flush: true);
+    await pending.rename(installMarker.path);
+    try {
+      await prefs.setBool('has_launched_before', true);
+    } catch (error, stack) {
+      AppLogger.error(
+        'Could not update the legacy install preference',
+        error,
+        stack,
+      );
+    }
+  }
+
+  static Future<bool> _hasIosLocalLibrary() async {
+    final databases = await getDatabasesPath();
+    final support = await getApplicationSupportDirectory();
+    for (final scope in FirebaseLocalDataScope.values) {
+      final database = File(path.join(databases, scope.databaseName));
+      try {
+        // exists() can collapse access failures into absence; opening cannot.
+        final handle = await database.open();
+        await handle.close();
+        return true;
+      } on PathNotFoundException {
+        // Continue checking the other scope and account media.
+      }
+      final directory = Directory(
+        path.join(support.path, scope.fileDirectoryName),
+      );
+      try {
+        await for (final entry in directory.list(followLinks: false)) {
+          if (path.basename(entry.path).startsWith('bk-library-')) return true;
+        }
+      } on PathNotFoundException {
+        // An absent scope directory is expected on first install.
+      }
+    }
+    return false;
+  }
+
   static Future<void> init({
     SharedPreferences? prefs,
     bool deferLocalRestore = false,
@@ -547,7 +624,6 @@ class AuthService {
         ExternalSyncService.instance.setForeground(_appForeground && available);
       });
     }
-    FirebaseSyncPreference.instance.init();
     try {
       await purgeExpiredOAuthTransactions();
     } catch (error, stackTrace) {
@@ -582,18 +658,21 @@ class AuthService {
     // SharedPreferences is cleared on uninstall, so we use it to detect a
     // fresh install and sign out to clear the stale Keychain token.
     if (!kIsWeb && Platform.isIOS) {
-      final hasLaunchedBefore =
-          prefsInstance.getBool('has_launched_before') ?? false;
-      if (!hasLaunchedBefore) {
-        await prefsInstance.setBool('has_launched_before', true);
-        if (_auth.currentUser != null) {
-          AppLogger.log(
-            '[AuthService] Fresh install detected on iOS — clearing stale Keychain session.',
-          );
-          await _auth.signOut();
-        }
-      }
+      await resetFreshIosInstall(
+        prefsInstance,
+        installMarker: File(
+          path.join(
+            (await getLibraryDirectory()).path,
+            'BetterKeepInstallation',
+            'identity-reset',
+          ),
+        ),
+        hasLocalLibrary: _hasIosLocalLibrary,
+        clearIdentity: E2EESecureStorage.instance.clearIosInstallIdentities,
+        signOut: _auth.signOut,
+      );
     }
+    FirebaseSyncPreference.instance.init();
     final email = prefsInstance.getString(
       FirebaseScopedPreferences.key('user_email'),
     );

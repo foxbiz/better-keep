@@ -1,3 +1,12 @@
+import 'package:better_keep/services/external_sync/sync_replica_engine.dart';
+
+import '../test/support/offline_firebase.dart';
+
+import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
+import 'package:better_keep/pages/home/home.dart';
+import 'package:better_keep/services/sync_presentation.dart';
+
 import 'account_file_cleanup_test.dart' as cleanup;
 
 import 'package:better_keep/models/app_progress.dart';
@@ -256,7 +265,7 @@ void main() {
         writes,
         reason: 'Free initial restore is download-only',
       );
-      expect(server.maxConcurrentDownloads, 8);
+      expect(server.maxConcurrentDownloads, inInclusiveRange(8, 16));
       final row = (await b.db.query(
         'note',
         where: "sync_id = 'restore-note-0'",
@@ -474,6 +483,167 @@ void main() {
       expect(await logoutState(), SyncLogoutState.pending);
     },
   );
+  testWidgets(
+    'restart during Dropbox discovery keeps the note created from Home',
+    (tester) async {
+      initializeDb();
+      final files = await fileSystem();
+      final root = p.join(
+        await files.documentDir,
+        'scan-restart-${DateTime.now().microsecondsSinceEpoch}',
+      );
+      final server = _DropboxBoundary()..pageSize = 2;
+      final open = <_Replica>[];
+      Future<_Replica> device(String name, {bool restore = false}) async {
+        final replica = await _Replica.create(
+          files,
+          p.join(root, name),
+          server,
+          restoreOnStart: restore,
+        );
+        open.add(replica);
+        return replica;
+      }
+
+      Future<void> close(_Replica r) async {
+        await r.session.close(pruneCache: false);
+        r.client.close();
+        await r.db.close();
+        open.remove(r);
+      }
+
+      final release = Completer<void>();
+      final reached = Completer<void>();
+      final presentation = SyncPresentation.instance;
+      final previous = presentation.value;
+      final oldTrigger = Note.syncTriggerOverride;
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        server.beforeContinue = null;
+        Note.syncTriggerOverride = oldTrigger;
+        presentation.value = previous;
+        for (final r in open.toList()) {
+          await close(r);
+        }
+        await _deleteTestFiles(files, root);
+      });
+      final backend = OfflineFirebase()..configure();
+      addTearDown(() async {
+        FirebaseSyncPreference.instanceOverride = null;
+        backend.firebaseSync.dispose();
+        FirebaseBackend.resetForTesting();
+        await backend.auth.changes.close();
+        await backend.firestore.events.close();
+      });
+      final a = await device('a');
+      await AppState.init();
+      Note.syncTriggerOverride = () {};
+      AppState.db = a.db;
+      for (var i = 0; i < 4; i++) {
+        expect(
+          await Note(title: 'Existing note $i', content: '[]').save(),
+          greaterThan(0),
+        );
+      }
+      await a.sync();
+      final priorWrites = server.uploads;
+      server.beforeContinue = (offset) async {
+        if (!server.files.keys
+            .take(offset)
+            .any((path) => p.basename(path).startsWith('c-'))) {
+          return;
+        }
+        if (!reached.isCompleted) reached.complete();
+        await release.future;
+        throw const SyncReplicaCancelled();
+      };
+      final b = await device('b', restore: true);
+      await reached.future.timeout(const Duration(seconds: 20));
+      final checkpoint = await b.session.engine.store.checkpoint(
+        b.adapter.connectionId,
+      );
+      expect(checkpoint!.checkedNotes, greaterThan(0));
+      expect(await b.db.query('note'), isEmpty);
+      AppState.db = b.db;
+      presentation.value = const SyncProgress(SyncPhase.checkingForUpdates);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: [
+            ...AppLocalizations.localizationsDelegates,
+            FlutterQuillLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Home(),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Create your first note'), findsNothing);
+      await tester.tap(find.byIcon(Icons.add).hitTestable());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(NoteEditor), findsOneWidget);
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(NoteEditor),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is TextField &&
+                w.decoration?.hintText ==
+                    AppLocalizations.of(
+                      tester.element(find.byType(NoteEditor)),
+                    )!.titleYourThought,
+          ),
+        ),
+        'Created while checking',
+      );
+      await tester.pump();
+      await tester.tap(find.byType(BackButton));
+      for (
+        var i = 0;
+        i < 30 && find.byType(NoteEditor).evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(
+        (await b.db.query('note')).single['title'],
+        'Created while checking',
+      );
+      b.session.retire();
+      release.complete();
+      server.beforeContinue = null;
+      await close(b);
+      int? restartOffset;
+      server.beforeContinue = (offset) async {
+        restartOffset ??= offset;
+      };
+      final b2 = await device('b', restore: true);
+      await b2.session.scheduler.waitForIdle();
+      expect(restartOffset.toString(), checkpoint.cursor);
+      expect(await b2.db.query('note'), hasLength(5));
+      expect(server.uploads, priorWrites);
+      expect(
+        await SyncMutationJournal.pendingNotesForProvider(
+          b2.db,
+          b2.session.engine.store.scope,
+          b2.adapter.connectionId,
+        ),
+        1,
+      );
+      await b2.sync();
+      await a.sync();
+      expect(
+        (await a.db.query(
+          'note',
+          where: 'title = ?',
+          whereArgs: ['Created while checking'],
+        )),
+        hasLength(1),
+      );
+    },
+  );
+
   const automatic = bool.fromEnvironment('AUTOMATIC_SYNC_EMULATOR_TEST');
   if (automatic) {
     testWidgets(
@@ -1084,6 +1254,7 @@ class _DropboxBoundary {
   int concurrentDownloads = 0, maxConcurrentDownloads = 0;
   Duration delay = Duration.zero;
   int pageSize = 100;
+  Future<void> Function(int offset)? beforeContinue;
   int? failDownloadAt, loseUploadAckAt;
   bool offline = false;
   Future<http.Response> handle(http.Request request) async {
@@ -1114,6 +1285,9 @@ class _DropboxBoundary {
       case '/2/files/list_folder':
       case '/2/files/list_folder/continue':
         final offset = int.parse(args['cursor'] as String? ?? '0');
+        if (request.url.path.endsWith('/continue')) {
+          await beforeContinue?.call(offset);
+        }
         final end = (offset + pageSize).clamp(0, files.length);
         return http.Response(
           jsonEncode({

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/async_keyed_serializer.dart';
 import 'package:better_keep/services/sync_track_store.dart';
 import 'package:sqflite/sqflite.dart';
@@ -350,6 +351,12 @@ class LibraryReplicaContent
       SELECT MAX(id) AS value FROM $table UNION ALL SELECT MAX(local_id) AS value FROM $track)''',
     );
     final maximum = result.single['highest'] as int? ?? 0;
+    if (table == Note.model) {
+      return (await Note.allocateLocalId(
+        txn,
+        highestStoredId: maximum,
+      )).toString();
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     return (maximum >= now ? maximum + 1 : now).toString();
   }

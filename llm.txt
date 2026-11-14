@@ -13,7 +13,7 @@
 
 Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app inspired by Google Keep. Built with **Flutter** (Dart), backed by **Firebase** (Auth, Firestore, Storage, Cloud Functions). Features rich-text editing, E2E encryption, AI audio transcription (Whisper), reminders, sketches, labels, folders, and subscription monetization.
 
-- **Version**: 1.5.0+106
+- **Version**: 1.5.0+108
 - **License**: PolyForm Noncommercial 1.0.0
 - **Publisher**: Foxbiz Software Pvt. Ltd.
 - **Firebase Project**: `better-keep-notes`
@@ -132,7 +132,7 @@ better-keep/
 │   ├── services/                 # Business logic & platform services
 │   │   ├── external_sync/        # Replica engine, provider adapters, OAuth, encrypted credentials
 │   │   ├── attachment_startup_cleanup.dart # Native reference-aware source maintenance
-│   │   ├── database.dart         # SQLite initialization & migrations (v12)
+│   │   ├── database.dart         # SQLite initialization & migrations (v13)
 │   │   ├── auth_service.dart     # Firebase Auth (1838 lines)
 │   │   ├── note_sync_service.dart
 │   │   ├── note_sync_batch.dart   # Defers the grid and reminders during large initial restores
@@ -273,7 +273,7 @@ No named routes or router package. All navigation uses `Navigator.push()` / `Nav
 
 ### Database: SQLite with Manual Migrations
 
-- **Version**: 12 (handled in `database.dart`)
+- **Version**: 13 (handled in `database.dart`)
 - **Tables**: `note`, `label`, `note_image`, `note_recording`, `sketch`, `reminder`, `note_sync_track`, `file_sync_track`, `label_sync_track`, `pending_remote_sync`
 - **External replica tables**: `replica_entities`, `replica_acknowledgements`, `replica_inbox`, `replica_cursors`, `replica_signal_outbox`, `replica_connection_status`, `replica_attachment_cache`, `replica_object_sources`, `replica_local_versions`, `replica_write_guard`
 - **Base Model**: `base_model.dart` — all models extend this, get pub/sub events, `toMap()`/`fromMap()`
@@ -418,7 +418,7 @@ npm run release
 
 ---
 
-## Database Schema (SQLite v12)
+## Database Schema (SQLite v13)
 
 ```sql
 note: id, local_id, title, content (Quill Delta JSON), labels (comma-separated),
@@ -462,15 +462,18 @@ pending_remote_sync: id, item_id, item_type, operation, ...
 
 ---
 
-*External-sync context updated: 2026-11-01; unrelated module counts are historical.*
+*External-sync context updated: 2026-11-14; unrelated module counts are historical.*
 
 ## External sync and release boundaries
 
 - Drive, Dropbox, Nextcloud and WebDAV use a shared replica engine with independent provider acknowledgements, cursors and retry state. Switching providers must not reuse another provider's acknowledgement.
-- SQLite v12 adds a local mutation journal and replica tables. Built-in Firebase sync keeps its existing remote format, with transactional version checks; concurrent pushes are bounded and drain before teardown.
+- SQLite v13 retains the v12 local mutation journal and replica tables and adds `replica_cursors.checked_notes`. A non-null count (including the migration default 0) means discovery is incomplete; null means discovery finished and pending downloads can resume first. Each page and checkpoint commit together. On a listing failure, valid staged notes are applied before the original failure is reported; cancellation never starts fallback work. Slow partial scans still finish discovery before normal downloads so their totals remain stable. Built-in Firebase sync keeps its existing remote format, with transactional version checks; concurrent pushes are bounded and drain before teardown.
 - Free supports manual external sync. Lite/Pro add automatic external updates. Pro is required for built-in uploads, not downloads. Paused built-in sync still downloads notes, media, labels and ordering on every plan. `firebaseDownloads` in the confirmed sync preference prevents an external-provider pause/clear from silently attaching Firebase; legacy missing values retain built-in recovery. Deploy its rules and the Functions clear-selection writer before the client. Local unsynced edits remain queued.
+- New local note IDs are reserved through the shared Note allocator by save, lock, and external restore. The restore path retains its sync-tracking maximum and existing-identity reuse rules. IDs are opaque, not timestamps; the process reservation can advance beyond the clock across rollbacks/account switches. Use created_at for creation time. Firebase incoming IDs remain hints: row and sync-track ownership are checked before attachment preparation and again inside the commit. Identity collisions retry through ID resolution instead of replacing a different local note.
 - Device-list rendering uses `UserDevicesSection` for the compact three-row profile list and full device route. Main-device authorization remains in the existing device manager.
 - Credentials are encrypted on the client with purpose-derived user keys. The OAuth exchange function sees tokens transiently, but does not persist or log them. Notes, media and master keys remain end-to-end encrypted.
+- On iOS, a durable install marker in Library/BetterKeepInstallation survives account sign-out but not uninstall. Missing legacy launch preferences alone never justify clearing Keychain identities: scoped account preferences or existing local databases/library directories preserve them. An unreadable/corrupt install marker or a failed filesystem/plugin library probe is uncertain evidence: it never authorizes deleting keys. Without existing account/library evidence, the app signs out only and repairs the marker. Key deletion, sign-out, and durable-marker persistence failures still require Retry. Confirmed fresh installs clear both local key scopes and sign out before authenticated writers start. The durable marker is committed before new sign-in; failure of the secondary legacy preference write does not block startup or cause repeated resets.
+- Empty restored libraries show startup verification progress while their keys are usable; populated libraries keep the status pill. Disabling progress hides placeholder text while retaining the loading animation. Unconfirmed/off/built-in provider selection does not manufacture external-provider progress.
 - Approved browser device identity can survive reload in IndexedDB. The unwrapped master key and pending pairing secrets live in memory. Approved browsers can open the matching local library offline after a cold start. Cloud transfers require online approval verification. A read-only legacy WEB_STORAGE_KEY decoder preserves existing users until a recovery passphrase is saved; never rotate/remove that compatibility value prematurely.
 - New device approvals require QR pairing or full security-code verification. Legacy self-declared device status is not proof of credential access; capabilities remain required.
 - See docs/EXTERNAL_SYNC_IMPLEMENTATION.md and docs/EXTERNAL_SYNC_QA.md for compatibility and outstanding release gates.

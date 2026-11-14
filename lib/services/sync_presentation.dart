@@ -92,6 +92,22 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
   bool _orderUploadRestricted = false;
   bool get isManualRefresh => _manual != null && _current?.call() == true;
 
+  /// A restored account can use Home while its first server check runs.
+  /// Keep that check quiet in a populated library, but avoid offering to
+  /// create a first note while the empty library is still being verified.
+  SyncProgress get emptyLibraryProgress {
+    if (value.isEmpty &&
+        recovery.hasSession &&
+        recovery.networkAvailable &&
+        recovery.state.value == CloudSessionState.pending &&
+        recovery.activity.value == CloudRecoveryActivity.verifying &&
+        !sessionInvalid.value &&
+        e2eeStatusCanAccessLocalNotes(encryptionStatus.value)) {
+      return const SyncProgress(SyncPhase.preparing);
+    }
+    return value;
+  }
+
   Object beginManual(bool Function() current) {
     final request = Object();
     _manual = request;

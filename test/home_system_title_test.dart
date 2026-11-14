@@ -318,6 +318,9 @@ void main() {
           AppState.set('show_sync_progress', false);
           await tester.pump();
           expect(find.text('Check Notes'), findsNothing);
+          expect(find.text('Create your first note'), findsNothing);
+          expect(glyph, findsOneWidget);
+          expect(find.byIcon(Icons.add).hitTestable(), findsOneWidget);
           AppState.set('show_sync_progress', true);
           await tester.pump();
           expect(find.text('Check Notes'), findsOneWidget);

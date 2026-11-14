@@ -51,10 +51,14 @@ class SyncFilePage {
     required this.names,
     required this.cursor,
     required this.hasMore,
-  });
+    this.maxParallelCommitReads = 8,
+  }) : assert(maxParallelCommitReads > 0);
   final List<String> names;
   final String? cursor;
   final bool hasMore;
+
+  /// Bounds metadata buffers independently of note and media downloads.
+  final int maxParallelCommitReads;
 }
 
 /// Reusable encrypted file protocol for Drive, Dropbox and WebDAV transports.
@@ -111,7 +115,7 @@ class FileSyncAdapter
           onCheckedNotes?.call(checkedNotes);
         }
       }
-    }, concurrency: 8);
+    }, concurrency: page.maxParallelCommitReads);
     return SyncChangePage(
       revisions: revisions.cast<SyncRevision>(),
       cursor: page.cursor,

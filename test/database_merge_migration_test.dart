@@ -149,6 +149,30 @@ void main() {
     );
   }
 
+  for (final oldVersion in [11, 12]) {
+    test(
+      'version $oldVersion cursors upgrade to v13 repeatedly without data loss',
+      () async {
+        final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+        addTearDown(db.close);
+        await Note.createTable(db);
+        await db.execute(
+          'CREATE TABLE replica_cursors (scope TEXT, connection_id TEXT, cursor TEXT)',
+        );
+        await db.insert('replica_cursors', {
+          'scope': 'library',
+          'connection_id': 'dropbox',
+          'cursor': 'page-2',
+        });
+        await upgradeReplicaTables(db, oldVersion, 13);
+        await upgradeReplicaTables(db, oldVersion, 13);
+        final row = (await db.query('replica_cursors')).single;
+        expect(row['cursor'], 'page-2');
+        expect(row['checked_notes'], 0);
+      },
+    );
+  }
+
   test(
     'version 12 adds replica state without changing existing data',
     () async {

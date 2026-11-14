@@ -90,6 +90,15 @@ Future<void> upgradeReplicaTables(
     await SyncStatusStore.createTable(db);
     await SyncMutationJournal.install(db);
   }
+  if (oldVersion < 13 && newVersion >= 13) {
+    final columns = await db.rawQuery('PRAGMA table_info(replica_cursors)');
+    if (!columns.any((column) => column['name'] == 'checked_notes')) {
+      // Zero conservatively treats legacy cursors as an unfinished listing.
+      await db.execute(
+        'ALTER TABLE replica_cursors ADD COLUMN checked_notes INTEGER DEFAULT 0',
+      );
+    }
+  }
 }
 
 /// Reconciles the two different schemas that existed at database version 10.

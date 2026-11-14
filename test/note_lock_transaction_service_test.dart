@@ -10,7 +10,9 @@ import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/models/sketch.dart';
+import 'package:better_keep/services/external_sync/sync_revision.dart';
 import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:better_keep/services/remote_local_id_resolver.dart';
 import 'package:better_keep/services/sketch_strokes_file_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/encryption.dart';
@@ -47,6 +49,109 @@ void main() {
     Note.lockBeforeCommitOverride = null;
     Note.protectedAttachmentRepairSyncTriggerOverride = null;
     await database.close();
+  });
+
+  test(
+    'Firebase apply rejects a lock that claimed its ID before snapshot',
+    () async {
+      Note.lockFileOperationsOverride = _FakeLockFiles(files: {}).operations;
+      final locking = Note(
+        title: 'Local secret',
+        content: _content('private local'),
+        plainText: 'private local',
+      );
+      late int resolved;
+      Note.lockBeforeCommitOverride = (_) async {
+        final reserved = (await NoteLockJournal(
+          preferences,
+        ).load()).single.noteId;
+        resolved = await resolveRemoteLocalId(
+          trackedLocalId: null,
+          stableNoteLocalId: null,
+          reservedLocalId: null,
+          suggestedLocalId: reserved,
+          isAvailable: (id) async =>
+              (await database.query(
+                'note',
+                where: 'id = ?',
+                whereArgs: [id],
+              )).isEmpty &&
+              (await database.query(
+                'sync_track',
+                where: 'local_id = ?',
+                whereArgs: [id],
+              )).isEmpty,
+          allocateCandidate: () => DateTime.now().millisecondsSinceEpoch,
+        );
+        expect(resolved, reserved);
+      };
+      await locking.lock('1234');
+
+      final expectedRow = (await database.query(
+        'note',
+        where: 'id = ?',
+        whereArgs: [resolved],
+      )).single;
+      final expectedTrack = (await database.query(
+        'sync_track',
+        where: 'local_id = ?',
+        whereArgs: [resolved],
+      )).single;
+      final target = await Note.fromJsonAsync(expectedRow);
+      final result = await target.applyRemoteIfUnchanged(
+        database: database,
+        expectedRow: expectedRow,
+        expectedSyncRow: expectedTrack,
+        incoming: {
+          'sync_id': 'different-remote-note',
+          'title': 'Remote content',
+          'content': _content('remote'),
+          'locked': 0,
+          'attachments': '[]',
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        commitAttachments: (_) async {
+          fail('Must not commit conflicting attachments');
+        },
+        incomingVersion: SyncVersion(
+          kind: SyncEntityKind.note,
+          entityId: 'different-remote-note',
+          revisionId: 'remote-version',
+          modifiedAtMicros: 1,
+          deleted: false,
+        ),
+      );
+      expect(result, RemoteNoteCommitResult.identityConflict);
+      final stored = (await database.query('note')).single;
+      expect(stored, expectedRow);
+      expect((await database.query('sync_track')).single, expectedTrack);
+      expect(target.syncId, locking.syncId);
+      expect(target.locked, isTrue);
+    },
+  );
+
+  test('new lock reserves an ID while another draft is saved', () async {
+    final futureId = DateTime.now().millisecondsSinceEpoch + 1000000;
+    await _insertNote(
+      database,
+      Note(id: futureId, content: _content('existing')),
+    );
+    Note.lockFileOperationsOverride = _FakeLockFiles(files: {}).operations;
+    final locking = Note(content: _content('secret'));
+    final saving = Note(
+      title: 'Draft',
+      content: _content('draft'),
+      plainText: 'draft',
+    );
+    Note.lockBeforeCommitOverride = (_) async {
+      await saving.save(false);
+    };
+    await locking.lock('1234');
+    expect(locking.id, greaterThan(futureId));
+    expect(saving.id, greaterThan(locking.id!));
+    expect(locking.locked, true);
+    expect(await database.query('note'), hasLength(3));
+    expect(await NoteLockJournal(preferences).load(), isEmpty);
   });
 
   test('failed strokes staging preserves newer in-memory drawing', () async {

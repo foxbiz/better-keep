@@ -11,10 +11,12 @@ SyncProgress externalSyncProgress({
   Map<String, NoteTransfer> transfers = const {},
   Map<String, SyncProviderFailureKind> errors = const {},
   Set<String> blockedProviders = const {},
+  bool selectionReady = true,
   bool metadataReady = true,
   bool automatic = true,
   SyncProviderFailureKind? metadataFailure,
 }) {
+  if (!selectionReady) return SyncProgress.idle;
   final selected = connections
       .where((c) => c.enabled && c.state != 'disconnected')
       .toList();

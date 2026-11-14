@@ -139,13 +139,16 @@ class DropboxSyncTransport
 
   @override
   Future<SyncFilePage> list(String? cursor) async {
-    await _initialize();
-    final result = await _call(
-      cursor == null ? 'list_folder' : 'list_folder/continue',
-      cursor == null
-          ? {'path': root, 'recursive': false, 'limit': 100}
-          : {'cursor': cursor},
-    );
+    final route = cursor == null ? 'list_folder' : 'list_folder/continue';
+    final args = cursor == null
+        ? {'path': root, 'recursive': false, 'limit': 100}
+        : {'cursor': cursor};
+    var result = await _call(route, args);
+    if (cursor == null && _error(result, 'path/not_found')) {
+      _initialized = false;
+      await _initialize();
+      result = await _call(route, args);
+    }
     if (result.statusCode != 200) {
       if (_error(result, 'reset')) {
         throw const SyncProviderFailure(SyncProviderFailureKind.invalidCursor);
@@ -169,7 +172,9 @@ class DropboxSyncTransport
       if (name is! String) throw const FormatException('Invalid Dropbox file');
       names.add(name);
     }
+    _initialized = true;
     return SyncFilePage(
+      maxParallelCommitReads: 16,
       names: names,
       cursor: json['cursor'] as String,
       hasMore: json['has_more'] as bool,

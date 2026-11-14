@@ -3206,6 +3206,18 @@ class NoteSyncService {
       whereArgs: [noteId],
     );
     final expectedSyncRow = tracks.isEmpty ? null : tracks.single;
+    if (!Note.matchesRemoteIdentity(
+      remoteDocId,
+      expectedRow,
+      expectedSyncRow,
+    )) {
+      // The hint may have been claimed while the payload was being decrypted.
+      // Retry through the resolver, which will choose an unoccupied local ID.
+      return const RemoteNoteApplyResult.retryable(
+        RemoteNoteFailureCategory.localApply,
+        'local-note-identity-conflict',
+      );
+    }
     final note = expectedRow == null
         ? Note(id: noteId, syncId: remoteDocId)
         : await Note.fromJsonAsync(expectedRow);
@@ -3270,6 +3282,12 @@ class NoteSyncService {
     downloads.committed = committed == RemoteNoteCommitResult.applied;
     if (committed == RemoteNoteCommitResult.staleSession) {
       throw const CloudOperationCancelled();
+    }
+    if (committed == RemoteNoteCommitResult.identityConflict) {
+      return const RemoteNoteApplyResult.retryable(
+        RemoteNoteFailureCategory.localApply,
+        'local-note-identity-conflict',
+      );
     }
     if (committed == RemoteNoteCommitResult.localChanged) {
       return const RemoteNoteApplyResult.deferred(
