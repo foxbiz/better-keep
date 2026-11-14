@@ -2,6 +2,19 @@ import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('account deletion failure retains a stable support reason', () async {
+    final harness = _Harness(
+      failingStage: PostSignInStage.accountInitialization,
+      deletionFailure: true,
+    );
+    expect(
+      await harness.coordinator.run(),
+      PostSignInResult.recoverableFailure,
+    );
+    expect(harness.states.last.accountDeletionInProgress, true);
+    expect(harness.events.contains('encryption'), false);
+  });
+
   test('runs required stages and auxiliary services in order', () async {
     final harness = _Harness();
 
@@ -120,6 +133,7 @@ class _Harness {
     this.failingStage,
     this.failure = const _TestFailure(),
     this.fatalIdentityFailure = false,
+    this.deletionFailure = false,
     this.failingAuxiliary,
     this.failAllAuxiliaries = false,
   });
@@ -127,6 +141,7 @@ class _Harness {
   PostSignInStage? failingStage;
   final Object failure;
   final bool fatalIdentityFailure;
+  final bool deletionFailure;
   final String? failingAuxiliary;
   final bool failAllAuxiliaries;
   bool sessionCurrent = true;
@@ -172,6 +187,7 @@ class _Harness {
       ),
     ],
     isFatalIdentityFailure: (_) => fatalIdentityFailure,
+    isAccountDeletionInProgress: (_) => deletionFailure,
     isSessionCurrent: () => sessionCurrent,
     signOut: () async {
       signOutCount++;

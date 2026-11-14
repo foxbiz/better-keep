@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/services/firebase_emulator_host.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -15,19 +16,35 @@ class OfflineFirebase {
   final auth = OfflineAuth();
   final storage = OfflineStorage();
   final firestore = OfflineFirestore();
-  void configure() => FirebaseBackend.configureForTesting(
-    FirebaseBackendConfiguration(
-      environment: FirebaseEnvironment.live,
-      app: _App(),
-      auth: auth,
-      firestore: firestore,
-      functions: _Functions(),
-      storage: storage,
-      databaseId: 'offline-test',
-      localDataScope: FirebaseLocalDataScope.live,
-      googleAuthMode: GoogleEmulatorAuthMode.mock,
-    ),
-  );
+  late FirebaseSyncPreference firebaseSync;
+  void configure() {
+    FirebaseBackend.configureForTesting(
+      FirebaseBackendConfiguration(
+        environment: FirebaseEnvironment.live,
+        app: _App(),
+        auth: auth,
+        firestore: firestore,
+        functions: _Functions(),
+        storage: storage,
+        databaseId: 'offline-test',
+        localDataScope: FirebaseLocalDataScope.live,
+        googleAuthMode: GoogleEmulatorAuthMode.mock,
+      ),
+    );
+    FirebaseSyncPreference.instanceOverride?.dispose();
+    firebaseSync = FirebaseSyncPreference(
+      currentUid: () => auth.currentUser?.uid,
+      watch: (_) =>
+          Stream.value(const FirebaseSyncSelection(true, confirmed: true)),
+      write: (_, enabled) async => FirebaseSyncSelection(
+        enabled,
+        confirmed: true,
+        revision: DateTime.now().microsecondsSinceEpoch,
+      ),
+    );
+    FirebaseSyncPreference.instanceOverride = firebaseSync;
+    firebaseSync.bind(auth.currentUser?.uid);
+  }
 }
 
 class OfflineUser implements User {
@@ -110,6 +127,84 @@ class OfflineFirestore implements FirebaseFirestore {
       _Collection(this, path);
   @override
   WriteBatch batch() => _Batch(this);
+  @override
+  Future<T> runTransaction<T>(
+    TransactionHandler<T> handler, {
+    Duration timeout = const Duration(seconds: 30),
+    int maxAttempts = 5,
+  }) async {
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      final transaction = _Transaction(this);
+      final result = await handler(transaction);
+      if (transaction.pending.isNotEmpty) await commit?.call();
+      if (transaction.observed.entries.any(
+        (entry) => documents[entry.key].toString() != entry.value,
+      )) {
+        continue;
+      }
+      for (final path in transaction.removed) {
+        documents.remove(path);
+      }
+      documents.addAll(transaction.pending);
+      return result;
+    }
+    throw FirebaseException(plugin: 'cloud_firestore', code: 'aborted');
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Transaction implements Transaction {
+  _Transaction(this.owner);
+  final removed = <String>{};
+  final OfflineFirestore owner;
+  final observed = <String, String>{};
+  final pending = <String, Map<String, dynamic>>{};
+  @override
+  Future<DocumentSnapshot<T>> get<T extends Object?>(
+    DocumentReference<T> reference,
+  ) async {
+    owner.reads.add((reference.path, Source.server));
+    observed[reference.path] = owner.documents[reference.path].toString();
+    return (await owner.response?.call(
+              reference.path,
+              const GetOptions(source: Source.server),
+            ) ??
+            OfflineSnapshot(value: owner.documents[reference.path]))
+        as DocumentSnapshot<T>;
+  }
+
+  @override
+  Transaction set<T>(
+    DocumentReference<T> reference,
+    T data, [
+    SetOptions? options,
+  ]) {
+    pending[reference.path] = data as Map<String, dynamic>;
+    return this;
+  }
+
+  @override
+  Transaction update(DocumentReference reference, Map<Object, Object?> data) {
+    final next = {...?owner.documents[reference.path]};
+    for (final entry in data.entries) {
+      if (entry.value is FieldValue) {
+        next.remove(entry.key);
+      } else {
+        next[entry.key as String] = entry.value;
+      }
+    }
+    pending[reference.path] = next;
+    return this;
+  }
+
+  @override
+  Transaction delete(DocumentReference reference) {
+    removed.add(reference.path);
+    return this;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -300,6 +395,13 @@ class _Batch implements WriteBatch {
 }
 
 class _App implements FirebaseApp {
+  @override
+  FirebaseOptions get options => const FirebaseOptions(
+    apiKey: 'synthetic',
+    appId: 'synthetic',
+    messagingSenderId: 'synthetic',
+    projectId: 'demo-offline-test',
+  );
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

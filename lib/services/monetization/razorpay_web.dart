@@ -1,9 +1,31 @@
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
 
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:flutter/material.dart';
+import 'package:web/web.dart' as web;
+
+/// Leave the request in the URL through sign-in and device verification.
+String? get pricingLinkCurrency {
+  final codes = web
+      .URL(web.window.location.href)
+      .searchParams
+      .getAll('upgrade')
+      .toDart;
+  if (codes.length != 1) return null;
+  final code = codes.single.toDart;
+  return switch (code) {
+    'INR' || 'USD' => code,
+    _ => null,
+  };
+}
+
+void clearPricingLink() {
+  final url = web.URL(web.window.location.href);
+  url.searchParams.delete('upgrade');
+  final history = web.window.history;
+  history.replaceState(history.state, '', url.href);
+}
 
 /// Set navigator key - not needed on web, stub for interface compatibility
 void setNavigatorKey(GlobalKey<NavigatorState> key) {
@@ -17,16 +39,8 @@ external JSPromise<JSObject> _openRazorpaySubscription(JSObject options);
 @JS('openRazorpayOrder')
 external JSPromise<JSObject> _openRazorpayOrder(JSObject options);
 
-/// Check if Razorpay SDK is loaded by checking window.Razorpay
-bool isRazorpayLoaded() {
-  try {
-    // Check if window.Razorpay exists
-    final razorpay = globalContext['Razorpay'];
-    return razorpay != null && !razorpay.isUndefinedOrNull;
-  } catch (_) {
-    return false;
-  }
-}
+@JS('loadRazorpayCheckout')
+external JSPromise<JSBoolean> _loadCheckout();
 
 /// Open Razorpay checkout for subscription (Web)
 Future<RazorpayPaymentResult> openSubscriptionCheckout({
@@ -40,11 +54,12 @@ Future<RazorpayPaymentResult> openSubscriptionCheckout({
 }) async {
   // ignore: avoid_print
   print('razorpay_web: openSubscriptionCheckout called with theme: $theme');
-  if (!isRazorpayLoaded()) {
-    return RazorpayPaymentResult.failed('Razorpay SDK not loaded');
-  }
-
   try {
+    if (!(await _loadCheckout().toDart).toDart) {
+      return RazorpayPaymentResult.failed(
+        'Could not load checkout. Please try again.',
+      );
+    }
     // ignore: avoid_print
     print('razorpay_web: Creating options with theme: $theme');
     final options =
@@ -113,11 +128,12 @@ Future<RazorpayPaymentResult> openOrderCheckout({
   String? contact,
   String theme = '#FFA726',
 }) async {
-  if (!isRazorpayLoaded()) {
-    return RazorpayPaymentResult.failed('Razorpay SDK not loaded');
-  }
-
   try {
+    if (!(await _loadCheckout().toDart).toDart) {
+      return RazorpayPaymentResult.failed(
+        'Could not load checkout. Please try again.',
+      );
+    }
     final options =
         <String, dynamic>{
               'keyId': keyId,

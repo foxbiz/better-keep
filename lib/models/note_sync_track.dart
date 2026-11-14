@@ -58,6 +58,20 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
     return _schema.upgradeTable(db, oldVersion, newVersion);
   }
 
+  static const _pendingFilter = "status IN ('pending', 'failed')";
+
+  /// Diagnostics may discard queued work, including failed attempts, but never
+  /// acknowledgements or work already claimed by an upload.
+  static Future<int> clearPending() =>
+      AppState.db.delete(model, where: _pendingFilter);
+
+  Future<bool> discardPendingIfUnchanged() async {
+    if (status != SyncStatus.pending && status != SyncStatus.failed) {
+      return false;
+    }
+    return deleteIfUnchanged();
+  }
+
   static Future<int> count({
     bool? pending,
     SyncAction? action,
@@ -72,9 +86,7 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
     }
 
     if (pending == true) {
-      clauses.add("(status = ? OR status = ?)");
-      args.add('pending');
-      args.add('failed');
+      clauses.add(_pendingFilter);
     } else if (status != null) {
       clauses.add("status = ?");
       args.add(status.name);
@@ -117,9 +129,7 @@ class NoteSyncTrack extends BaseModel<NoteSyncTrack> {
     }
 
     if (pending == true) {
-      clauses.add("(status = ? OR status = ?)");
-      args.add('pending');
-      args.add('failed');
+      clauses.add(_pendingFilter);
     } else if (status != null) {
       clauses.add("status = ?");
       args.add(status.name);

@@ -115,6 +115,7 @@ async function finishEvent(
 
 async function subscriptionOwner(subscriptionId: string): Promise<{
 	plan: string | null;
+	tier: string | null;
 	userId: string;
 } | null> {
 	const snapshot = await db
@@ -129,6 +130,7 @@ async function subscriptionOwner(subscriptionId: string): Promise<{
 		? {
 				userId: data.userId,
 				plan: typeof data.plan === "string" ? data.plan : null,
+				tier: typeof data.tier === "string" ? data.tier : null,
 			}
 		: null;
 }
@@ -150,6 +152,7 @@ async function processSubscriptionEvent(
 		return;
 	}
 	const normalized = normalizeRazorpaySubscription({
+		verifiedTier: owner.tier,
 		billingPeriod: owner.plan,
 		entity: subscription,
 		userId: owner.userId,

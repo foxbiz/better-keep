@@ -15,10 +15,15 @@ extension AuthProgressLocalizations on AuthProgress {
 
 extension AuthFailureLocalizations on AuthFailureKind {
   String localized(AppLocalizations l10n) => switch (this) {
-    AuthFailureKind.accountExists => l10n.emailAlreadyInUse,
+    AuthFailureKind.accountExists => l10n.signInToExistingAccount,
+    AuthFailureKind.differentSignInMethod => l10n.useOriginalSignInMethod,
+    AuthFailureKind.invalidEmail => l10n.pleaseEnterAValidEmail,
     AuthFailureKind.accountNotFound => l10n.accountNotFound,
     AuthFailureKind.invalidCredentials => l10n.invalidCredentials,
+    AuthFailureKind.providerVerification =>
+      l10n.providerSignInVerificationFailed,
     AuthFailureKind.accountDisabled => l10n.accountDisabled,
+    AuthFailureKind.deletionInProgress => l10n.accountDeletionInProgress,
     AuthFailureKind.tooManyRequests => l10n.pleaseWaitBeforeRequesting,
     AuthFailureKind.network => l10n.noInternetConnection,
     AuthFailureKind.cancelled ||
@@ -89,26 +94,55 @@ extension RecoveryProgressLocalizations on RecoveryProgress {
 }
 
 extension SyncProgressLocalizations on SyncProgress {
-  String localized(AppLocalizations l10n) => switch (phase) {
+  String localized(
+    AppLocalizations l10n, {
+    bool cloudUploadsRequirePro = false,
+    bool providerSelectionRequired = false,
+  }) => switch (phase) {
     SyncPhase.idle => '',
     SyncPhase.checkingConnection => l10n.syncCheckingConnection,
     SyncPhase.preparing => l10n.syncPreparing,
     SyncPhase.unavailable => l10n.noConnectionAvailable,
     SyncPhase.waitingForApproval => l10n.waitingForDeviceApproval,
     SyncPhase.signInRequired => l10n.pleaseSignInAgain,
-    SyncPhase.deferred => l10n.syncPaused,
-    SyncPhase.uploadRestricted => l10n.syncUploadRestricted,
+    SyncPhase.storageFull => l10n.externalSyncStorageFull,
+    SyncPhase.providerSetupRequired => l10n.externalSyncSharedSetup,
+    SyncPhase.deferred =>
+      providerSelectionRequired
+          ? l10n.externalSyncDescription
+          : l10n.syncPaused,
+    SyncPhase.uploadRestricted =>
+      cloudUploadsRequirePro
+          ? l10n.syncUpgradeForUploads
+          : l10n.syncUploadRestricted,
     SyncPhase.complete => l10n.syncComplete,
     SyncPhase.failed when failedCount > 0 => l10n.syncFailedCount(failedCount),
     SyncPhase.failed => l10n.syncFailed,
-    SyncPhase.resuming ||
+    SyncPhase.syncing when notes != null => notes!.localized(l10n),
     SyncPhase.checkingForUpdates ||
+    SyncPhase.fetchingUpdates => l10n.syncCheckingNotes,
+    SyncPhase.resuming ||
     SyncPhase.syncing ||
     SyncPhase.restarting ||
     SyncPhase.savingChanges ||
-    SyncPhase.fetchingUpdates ||
     SyncPhase.uploadingMedia => l10n.syncing,
   };
+}
+
+extension NoteTransferLocalizations on NoteTransfer {
+  String localized(AppLocalizations l10n) {
+    if (stage == NoteTransferStage.checking) return l10n.syncCheckingNotes;
+    if (stage == NoteTransferStage.downloading) {
+      return l10n.syncDownloadingNotes;
+    }
+    final expected = total;
+    final label = expected == null
+        ? l10n.syncUploadingNotes(done)
+        : l10n.syncUploadingNotesOfTotal(done, expected);
+    return minutesLeft == null
+        ? label
+        : '$label\n${l10n.syncEstimatedMinutes(minutesLeft!)}';
+  }
 }
 
 extension ExportPhaseLocalizations on ExportPhase {

@@ -2,7 +2,7 @@
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { product } from '../data/product';
-import { pageBootstrap } from '../lib/page-bootstrap.ts';
+import { createHomeRedirectBootstrap, pageBootstrap } from '../lib/page-bootstrap.ts';
 import { createStorePlatformBootstrap } from '../lib/store-platform.ts';
 import '../styles/global.css';
 
@@ -34,6 +34,11 @@ const fullTitle = title.includes('Better Keep')
   ? title
   : `${title} | Better Keep`;
 const storePlatformBootstrap = createStorePlatformBootstrap();
+const homeRedirectBootstrap = createHomeRedirectBootstrap({
+  apple: product.appStoreUrl,
+  google: product.playStoreUrl,
+  microsoft: product.microsoftStoreUrl
+});
 ---
 
 <!doctype html>
@@ -102,7 +107,7 @@ const storePlatformBootstrap = createStorePlatformBootstrap();
         <script is:inline set:html={pageBootstrap.analytics}></script>
       )
     }
-    <script is:inline set:html={pageBootstrap.legacy}></script>
+    <script is:inline set:html={homeRedirectBootstrap}></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>

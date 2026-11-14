@@ -15,6 +15,9 @@ class PendingRemoteSync {
   /// The remote note data as fetched from Firebase
   final Map<String, dynamic> remoteData;
 
+  bool get isDeleted =>
+      remoteData['deleted'] == true || remoteData['deleted'] == 1;
+
   /// When this data was fetched from Firebase
   final DateTime fetchedAt;
 
@@ -187,6 +190,8 @@ class PendingRemoteSyncPage {
 
 /// Cache metadata for tracking pagination state
 class RemoteSyncCacheMetadata {
+  final String? ownerUid;
+
   /// Total pages fetched
   int totalPages;
 
@@ -212,6 +217,7 @@ class RemoteSyncCacheMetadata {
   DateTime updatedAt;
 
   RemoteSyncCacheMetadata({
+    this.ownerUid,
     this.totalPages = 0,
     this.currentSyncPage = 0,
     this.lastCursor,
@@ -229,6 +235,7 @@ class RemoteSyncCacheMetadata {
 
   factory RemoteSyncCacheMetadata.fromJson(Map<String, dynamic> json) {
     return RemoteSyncCacheMetadata(
+      ownerUid: json['owner_uid'] as String?,
       totalPages: json['total_pages'] as int? ?? 0,
       currentSyncPage: json['current_sync_page'] as int? ?? 0,
       lastCursor: json['last_cursor'] is Map
@@ -246,6 +253,7 @@ class RemoteSyncCacheMetadata {
 
   Map<String, dynamic> toJson() {
     return {
+      if (ownerUid != null) 'owner_uid': ownerUid,
       'total_pages': totalPages,
       'current_sync_page': currentSyncPage,
       'last_cursor': lastCursor?.toJson(),

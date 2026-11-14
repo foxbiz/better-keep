@@ -1,6 +1,7 @@
 import type * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { cancelDeletion } from "../accountDeletionLifecycle";
 import { consumeAccountLinkSession } from "../accountLinkSession";
 import {
 	auth,
@@ -17,17 +18,17 @@ import {
 } from "../config";
 import { createOAuthCompletion } from "../oauthCompletion";
 import {
+	type RenderedOAuthHtml,
+	renderOAuthMobileRedirect,
+	renderOAuthPopup,
+} from "../oauthResponse";
+import {
 	clearOAuthCookieHeader,
+	type OAuthState,
 	openOAuthState,
 	readOAuthBrowserNonce,
 	timingSafeStringEqual,
-	type OAuthState,
 } from "../oauthSession";
-import {
-	renderOAuthMobileRedirect,
-	renderOAuthPopup,
-	type RenderedOAuthHtml,
-} from "../oauthResponse";
 import {
 	isProtectedReviewUserRecord,
 	isReviewAccountEmail,
@@ -124,10 +125,7 @@ export default onRequest(
 		} else {
 			let opened: OAuthState | undefined;
 			try {
-				opened = await openOAuthState(
-					sealedState,
-					oauthStateSecret.value(),
-				);
+				opened = await openOAuthState(sealedState, oauthStateSecret.value());
 			} catch {
 				console.warn(
 					JSON.stringify({
@@ -660,6 +658,8 @@ export default onRequest(
 					),
 				);
 			}
+
+			await cancelDeletion(db, firebaseUser.uid, "oauthCallback");
 
 			let popupPayload: Record<string, unknown>;
 			let mobileQuery: URLSearchParams;

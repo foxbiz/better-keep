@@ -10,6 +10,90 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint => 'ノートが多い場合は数分かかることがあります。';
+
+  @override
+  String get syncCheckingNotes => 'ノートを確認中';
+
+  @override
+  String get syncDownloadingNotes => 'ノートをダウンロード中';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString 件のノート';
+  }
+
+  @override
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'ノートをアップロード中 · $countString 件';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'ノートをアップロード中 · $totalString 件中 $doneString 件';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '残り約$minutes分',
+      zero: '残り1分未満',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sharedImageNamesConflict =>
+      '共有された画像の一部に同じファイル名があります。1枚ずつ共有してください。';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return '画像メモを作成できませんでした（$fileName）。50 MB 以下、2400万画素以下の画像でもう一度共有してください。';
+  }
+
+  @override
+  String get externalSyncContinue => '続行';
+
+  @override
+  String get externalSyncConnectionInfo => '接続情報';
+
+  @override
+  String get externalSyncConnectPrompt => 'ログインしてノートの同期を開始します。';
+
+  @override
+  String get externalSyncNativeSetupPrompt => 'このデバイスでGoogle Driveにログインしてください。';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'WebDAVフォルダーの完全なURLとアプリパスワードを入力してください。ブラウザーで同期するには、サーバーでクロスオリジンリクエストを許可する必要があります。';
+
+  @override
+  String showMoreDevices(int count) {
+    return 'もっと見る（$count+）';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly => '他のデバイスを削除できるのはメインデバイスのみです。';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -435,9 +519,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cancelSignIn => 'サインインをキャンセル';
 
   @override
-  String get signInCancelled => 'サインインがキャンセルされました';
-
-  @override
   String get signInWithFacebook => 'Facebookでサインイン';
 
   @override
@@ -504,12 +585,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get newPassword => '新しいパスワード';
 
   @override
-  String get enterNewPassword => '新しいパスワードを入力';
-
-  @override
-  String get reenterNewPassword => '新しいパスワードを再入力';
-
-  @override
   String get currentPassphrase => '現在のパスフレーズ';
 
   @override
@@ -558,9 +633,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addLabel => 'ラベルを追加';
 
   @override
-  String get searchLogs => 'ログを検索...';
-
-  @override
   String get audioRecording => '音声録音';
 
   @override
@@ -574,9 +646,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get theme => 'テーマ';
-
-  @override
-  String get customizeAppearance => '外観をカスタマイズ';
 
   @override
   String get followSystemTheme => 'システムテーマに従う';
@@ -609,12 +678,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get alarmSound => 'アラーム音';
 
   @override
-  String get reminderTimeSettings => 'リマインダー時間設定';
-
-  @override
-  String get setDefaultTimes => 'リマインダーのデフォルト時間を設定';
-
-  @override
   String get morning => '朝';
 
   @override
@@ -624,28 +687,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get evening => '夕方';
 
   @override
-  String get localDataProtection => 'ローカルデータ保護';
-
-  @override
-  String get encryptDeviceData => 'このデバイスのデータを暗号化';
-
-  @override
-  String get encryptNotes => 'ノートを暗号化';
-
-  @override
-  String get encryptFiles => 'ファイルを暗号化';
-
-  @override
-  String get lockedNotesSecurity => 'ロックされたノートのセキュリティ';
-
-  @override
-  String get privacyLockedNotes => 'ロックされたノートのプライバシー設定';
-
-  @override
   String get forgetPasswordOnClose => '閉じたらパスワードを忘れる';
-
-  @override
-  String get requirePasswordAgain => 'アプリを開くたびにパスワードを要求';
 
   @override
   String get nerdStats => '開発者統計';
@@ -771,9 +813,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get insert => '挿入';
 
   @override
-  String get importAsNote => 'ノートとしてインポート';
-
-  @override
   String get removeDevice => 'デバイスを削除';
 
   @override
@@ -781,9 +820,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get passwordResetSuccess => 'パスワードがリセットされました！サインインしてください。';
-
-  @override
-  String get emailVerifiedSuccess => 'メールが確認されました！';
 
   @override
   String get useDifferentAccount => '別のアカウントを使用';
@@ -801,14 +837,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reapprovalRequestSent => '再承認リクエストを送信しました。承認を待っています...';
 
   @override
-  String failedReapproval(String error) {
-    return '再承認リクエストに失敗しました: $error';
-  }
-
-  @override
-  String get rememberDevice => 'このデバイスを記憶';
-
-  @override
   String get recoverWithPassphrase => 'パスフレーズで復元';
 
   @override
@@ -824,17 +852,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accessApproved => 'アクセスが承認されました';
 
   @override
-  String failedToApprove(String error) {
-    return '承認に失敗しました: $error';
-  }
-
-  @override
   String get accessDenied => 'アクセスが拒否されました';
-
-  @override
-  String failedToDeny(String error) {
-    return '拒否に失敗しました: $error';
-  }
 
   @override
   String get allUpToDate => 'すべて最新です';
@@ -860,21 +878,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String unlinkedProvider(String provider) {
-    return '$providerのリンクを解除しました';
-  }
-
-  @override
-  String successfullyLinked(String provider) {
-    return '$providerアカウントをリンクしました';
-  }
-
-  @override
-  String unknownProvider(String provider) {
-    return '不明なプロバイダー: $provider';
-  }
-
-  @override
   String get recoveryKey => 'リカバリーキー';
 
   @override
@@ -882,35 +885,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get enableE2EE => 'エンドツーエンド暗号化を有効化';
-
-  @override
-  String failedSaveRecoveryKey(String error) {
-    return 'リカバリーキーの保存に失敗しました: $error';
-  }
-
-  @override
-  String get recoverySuccessWelcome => 'リカバリー成功！おかえりなさい。';
-
-  @override
-  String get confirmConsequences => '結果を理解していることを確認してください';
-
-  @override
-  String get accountResetSuccess => 'アカウントがリセットされました。ようこそ！';
-
-  @override
-  String failedResetAccount(String error) {
-    return 'アカウントのリセットに失敗しました: $error';
-  }
-
-  @override
-  String errorSigningOut(String error) {
-    return 'サインアウトエラー: $error';
-  }
-
-  @override
-  String errorPlayingSound(String error) {
-    return 'サウンド再生エラー: $error';
-  }
 
   @override
   String get checkNestedItems => 'ネストされたアイテムをチェックしますか？';
@@ -940,77 +914,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reminderSet => 'リマインダーを設定しました';
 
   @override
-  String get failedCreateImageNote => '画像ノートの作成に失敗しました';
-
-  @override
-  String errorSavingSketchWithError(String error) {
-    return 'スケッチの保存エラー: $error';
-  }
-
-  @override
   String get failedSaveNote => 'ノートの保存に失敗しました';
-
-  @override
-  String failedSave(String error) {
-    return '保存に失敗しました: $error';
-  }
-
-  @override
-  String copiedAs(String format) {
-    return '$formatとしてコピーしました';
-  }
-
-  @override
-  String failedCopy(String error) {
-    return 'コピーに失敗しました: $error';
-  }
 
   @override
   String get pastedAsPlainText => 'プレーンテキストとして貼り付けました';
 
   @override
-  String failedPaste(String error) {
-    return '貼り付けに失敗しました: $error';
-  }
-
-  @override
   String get contentInserted => 'コンテンツを挿入しました';
-
-  @override
-  String failedInsertContent(String error) {
-    return 'コンテンツの挿入に失敗しました: $error';
-  }
-
-  @override
-  String get actionCancelled => 'アクションがキャンセルされました';
 
   @override
   String get noteLocked => 'ノートをロックしました';
 
   @override
-  String failedLockNote(String error) {
-    return 'ノートのロックに失敗しました: $error';
-  }
-
-  @override
   String get lockRemoved => 'ロックを解除しました';
-
-  @override
-  String failedRemoveLock(String error) {
-    return 'ロックの解除に失敗しました: $error';
-  }
 
   @override
   String get noteDuplicated => 'ノートを複製しました';
 
   @override
   String get errorSavingNote => 'ノートの保存エラー';
-
-  @override
-  String get contentShared => 'コンテンツを共有しました';
-
-  @override
-  String get failedShare => '共有に失敗しました';
 
   @override
   String get notes => 'ノート';
@@ -1031,45 +953,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get otherNotes => 'その他';
 
   @override
-  String get noNotes => 'ノートがありません';
-
-  @override
   String get noArchivedNotes => 'アーカイブされたノートがありません';
-
-  @override
-  String get noDeletedNotes => '削除されたノートがありません';
-
-  @override
-  String get searchNotes => 'ノートを検索';
-
-  @override
-  String nSelectedNotes(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件のノートを選択',
-      one: '1件のノートを選択',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get deleteNote => 'ノートを削除';
 
   @override
-  String get deleteNotes => 'ノートを削除';
-
-  @override
   String get moveToTrash => 'ゴミ箱に移動';
-
-  @override
-  String get deletePermanently => '完全に削除';
-
-  @override
-  String get pinNote => '固定';
-
-  @override
-  String get unpinNote => '固定解除';
 
   @override
   String get newNote => '新規ノート';
@@ -1078,28 +968,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get newSketch => '新規スケッチ';
 
   @override
-  String get newFolder => '新規フォルダ';
-
-  @override
-  String get renameFolder => 'フォルダ名を変更';
-
-  @override
-  String get deleteFolder => 'フォルダを削除';
-
-  @override
-  String get folderName => 'フォルダ名';
-
-  @override
   String get camera => 'カメラ';
 
   @override
   String get gallery => 'ギャラリー';
-
-  @override
-  String get audioRecorder => '音声レコーダー';
-
-  @override
-  String get importFile => 'ファイルをインポート';
 
   @override
   String get language => '言語';
@@ -1108,25 +980,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get systemDefault => 'システムデフォルト';
 
   @override
-  String get selectLanguage => '言語を選択';
-
-  @override
   String get english => 'English';
-
-  @override
-  String get japanese => '日本語';
-
-  @override
-  String get korean => '한국어';
-
-  @override
-  String get indonesian => 'Bahasa Indonesia';
-
-  @override
-  String get portugueseBrazil => 'Português (Brasil)';
-
-  @override
-  String get chinese => '中文';
 
   @override
   String get today => '今日';
@@ -1139,9 +993,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get nextMonth => '来月';
-
-  @override
-  String get pickDateTime => '日時を選択';
 
   @override
   String get time => '時間';
@@ -1177,28 +1028,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get yearly => '毎年';
 
   @override
-  String get snooze => 'スヌーズ';
-
-  @override
-  String get fiveMinutes => '5分';
-
-  @override
-  String get tenMinutes => '10分';
-
-  @override
-  String get thirtyMinutes => '30分';
-
-  @override
   String get oneHour => '1時間';
-
-  @override
-  String get gridView => 'グリッド表示';
-
-  @override
-  String get listView => 'リスト表示';
-
-  @override
-  String get galleryView => 'ギャラリー表示';
 
   @override
   String get undo => '元に戻す';
@@ -1231,14 +1061,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openChecklistView => 'リスト表示を開く';
 
   @override
-  String get convertToNormalText => '通常のテキストに変換';
-
-  @override
   String get convertEntireChecklistToText => 'チェックリスト全体をテキストに変換';
-
-  @override
-  String get focusedChecklistRequiresChecklistOnly =>
-      'フォーカスリスト表示は、すべての行がチェックリスト項目の場合にのみ利用できます。';
 
   @override
   String get focusedChecklistUnsupportedContent =>
@@ -1292,25 +1115,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get alignRight => '右揃え';
 
   @override
-  String get alignJustify => '両端揃え';
-
-  @override
   String get increaseIndent => 'インデントを増やす';
 
   @override
   String get decreaseIndent => 'インデントを減らす';
-
-  @override
-  String get heading1 => '見出し1';
-
-  @override
-  String get heading2 => '見出し2';
-
-  @override
-  String get heading3 => '見出し3';
-
-  @override
-  String get normalText => '標準テキスト';
 
   @override
   String get pen => 'ペン';
@@ -1328,21 +1136,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get eraser => '消しゴム';
 
   @override
-  String get lasso => '投げ縄';
-
-  @override
   String get addPage => 'ページを追加';
 
   @override
-  String get deletePage => 'ページを削除';
-
-  @override
   String get page => 'ページ';
-
-  @override
-  String pageNumber(int number) {
-    return 'ページ $number';
-  }
 
   @override
   String get connectedAccounts => '接続されたアカウント';
@@ -1360,20 +1157,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trial => 'トライアル';
 
   @override
-  String trialEndsIn(int days) {
-    return 'トライアル終了まであと$days日';
-  }
-
-  @override
   String get devices => 'デバイス';
 
   @override
   String get thisDevice => 'このデバイス';
-
-  @override
-  String lastActive(String time) {
-    return '最終アクティブ: $time';
-  }
 
   @override
   String get pendingApproval => '承認待ち';
@@ -1382,30 +1169,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get security => 'セキュリティ';
 
   @override
-  String get endToEndEncryption => 'エンドツーエンド暗号化';
-
-  @override
-  String get e2eeEnabled => '有効';
-
-  @override
-  String get e2eeDisabled => '無効';
-
-  @override
   String get setupRecoveryKey => 'リカバリーキーを設定';
-
-  @override
-  String get changeRecoveryKey => 'リカバリーキーを変更';
 
   @override
   String get verifyRecoveryKey => 'リカバリーキーを確認';
 
   @override
   String get error => 'エラー';
-
-  @override
-  String errorWithMessage(String message) {
-    return 'エラー: $message';
-  }
 
   @override
   String get loading => '読み込み中...';
@@ -1424,24 +1194,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get online => 'オンライン';
-
-  @override
-  String get getApp => 'アプリを入手';
-
-  @override
-  String get sessionExpired => 'セッションが期限切れです。再度サインインしてください。';
-
-  @override
-  String get confirmSignOut => 'サインアウトしますか？';
-
-  @override
-  String get unsyncedChanges => '同期されていない変更が失われます。';
-
-  @override
-  String get deleteConfirmation => '本当に削除しますか？';
-
-  @override
-  String get permanentAction => 'この操作は元に戻せません。';
 
   @override
   String get encryptNoteContent => 'ノートのコンテンツを暗号化';
@@ -1470,9 +1222,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appInfoCredits => 'アプリ情報とクレジット';
-
-  @override
-  String get advancedSettings => '詳細設定';
 
   @override
   String get speechRecognitionModel => '音声認識モデル';
@@ -1520,11 +1269,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noteEncryptionEnabledSimple => 'ノート暗号化が有効になりました。';
 
   @override
-  String errorEncryptingNotes(String error) {
-    return 'ノートの暗号化エラー: $error';
-  }
-
-  @override
   String get noteEncryptionDisabled => 'ノート暗号化が無効になりました。';
 
   @override
@@ -1532,9 +1276,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fileEncryptionDisabled => 'ファイル暗号化が無効になりました。';
-
-  @override
-  String get encryptDataOnDevice => 'このデバイスに保存されたデータを暗号化';
 
   @override
   String get signInCancelledMessage => 'サインインがキャンセルされました';
@@ -1675,17 +1416,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceRevoked => 'デバイスが取り消されました';
 
   @override
-  String get waitingForApprovalTitle => '承認待ち';
-
-  @override
   String get deviceRevokedDescription =>
       'このデバイスは取り消され、ノートにアクセスできなくなりました。承認済みデバイスから再度サインインして再認証してください。';
-
-  @override
-  String get pleaseApproveFrom => '以下から承認してください:';
-
-  @override
-  String get waitingForApprovalFromDevice => '別のデバイスからの承認を待っています...';
 
   @override
   String get rememberThisDevice => 'このデバイスを記憶する';
@@ -1698,9 +1430,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get checkStatus => 'ステータスを確認';
-
-  @override
-  String get cancelRequest => 'リクエストをキャンセル';
 
   @override
   String get pleaseWait => 'お待ちください...';
@@ -1784,11 +1513,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get insertTooltip => '挿入';
 
   @override
-  String failedToImport(String error) {
-    return 'インポートに失敗しました: $error';
-  }
-
-  @override
   String get notes_ => 'ノート';
 
   @override
@@ -1840,10 +1564,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get subscriptionCancelled => 'サブスクリプションがキャンセルされました';
 
   @override
-  String get upgradeToProDescription =>
-      '無制限のロックノート、クラウド同期などをご利用いただくにはProにアップグレードしてください。';
-
-  @override
   String get cancellingSubscription => 'キャンセル中...';
 
   @override
@@ -1887,20 +1607,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '請求プロバイダを特定できませんでした。contact@betterkeep.app までお問い合わせください。';
 
   @override
-  String manageSubscriptionInStore(String store) {
-    return '$storeでサブスクリプションを管理してください。';
-  }
-
-  @override
-  String get loadingFailedTryAgain => '読み込みに失敗しました — もう一度お試しください';
-
-  @override
   String get reloadPrices => '価格を再読み込み';
-
-  @override
-  String subscribeWithPrice(String price) {
-    return '購読する — $price';
-  }
 
   @override
   String get noAdsDescription =>
@@ -1917,14 +1624,11 @@ class AppLocalizationsJa extends AppLocalizations {
       'セルフホストをご希望ですか？ contact@betterkeep.app までご連絡ください';
 
   @override
-  String get welcomeToProMessage => 'Better Keep Proへようこそ！';
-
-  @override
   String get paymentConfirmedTitle => 'お支払いを確認しました';
 
   @override
   String get paymentConfirmedActivationPending =>
-      'お支払いは確認されましたが、Pro の有効化に時間がかかっています。再度購入しないでください。ステータスを再確認するか、Google Play でサブスクリプションを管理してください。';
+      'お支払いは確認されましたが、有効化に時間がかかっています。再度購入しないでください。ステータスを再確認するか、サブスクリプションを管理してください。';
 
   @override
   String get recheckStatus => 'ステータスを再確認';
@@ -1953,15 +1657,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get subscriptionCancelledSuccessfully => 'サブスクリプションが正常にキャンセルされました。';
-
-  @override
-  String get subscriptionResumedSuccessfully => 'サブスクリプションが正常に再開されました。';
-
-  @override
-  String get failedToCancelSubscription => 'サブスクリプションのキャンセルに失敗しました。';
-
-  @override
-  String get failedToResumeSubscription => 'サブスクリプションの再開に失敗しました。';
 
   @override
   String get featureTableHeader => '機能';
@@ -2058,25 +1753,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteMyAccount => 'アカウントを削除';
 
   @override
-  String get unsyncedNotesWarning =>
-      'まだクラウドに同期されていないノートがあります。今サインアウトすると、これらのノートは永久に失われます。\n\n同期が完了するのを待つか、先にデータをエクスポートすることを検討してください。';
-
-  @override
-  String notesNotSynced(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件のノートが未同期',
-      one: '1件のノートが未同期',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get dataLossWarning => 'データ損失の警告';
-
-  @override
-  String get noRecoveryKeySet => 'リカバリーキーが設定されていません';
 
   @override
   String get signOutNoRecoveryKeyWarning =>
@@ -2115,24 +1792,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get someoneWantsToView => '誰かがあなたの共有ノートを見たいとリクエストしています';
 
   @override
-  String get deviceApproved_ => 'デバイスが承認されました';
-
-  @override
-  String failedApproveDevice(String error) {
-    return 'デバイスの承認に失敗しました: $error';
-  }
-
-  @override
   String get deviceRemoved => 'デバイスが削除されました';
 
   @override
   String nDevicesRemoved(int count) {
     return '$count台のデバイスが削除されました';
-  }
-
-  @override
-  String failedRemoveDevice(String error) {
-    return 'デバイスの削除に失敗しました: $error';
   }
 
   @override
@@ -2149,11 +1813,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get enableE2EE_ => 'E2EEを有効化';
-
-  @override
-  String failedEnableE2EE(String error) {
-    return 'E2EEの有効化に失敗しました: $error';
-  }
 
   @override
   String get recoveryKeySavedSuccessfully => 'リカバリーキーが正常に保存されました！';
@@ -2212,9 +1871,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedUnlinkAccount => 'アカウントのリンク解除に失敗しました';
 
   @override
-  String get cannotUnlinkOnlyMethod => '唯一のサインイン方法はリンク解除できません。';
-
-  @override
   String unknownProviderError(String provider) {
     return '不明なプロバイダー: $provider';
   }
@@ -2224,9 +1880,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedSendCode => '確認コードの送信に失敗しました';
-
-  @override
-  String get pleaseTryAgain => 'もう一度お試しください。';
 
   @override
   String get pleaseSignInAgain => '再度サインインしてお試しください。';
@@ -2249,16 +1902,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedLinkAccount => 'アカウントのリンクに失敗しました';
 
   @override
-  String providerLinkedToAnother(String provider) {
-    return 'この$providerアカウントはすでに別のユーザーにリンクされています。';
-  }
+  String get useOriginalSignInMethod =>
+      '以前使った方法でサインインし、アカウント設定で新しいプロバイダーをリンクしてください。';
+
+  @override
+  String get localAccountMismatch =>
+      'このデバイスには別のアカウントのノートがあります。保存に使用したアカウントでサインインしてください。';
+
+  @override
+  String get recoveryCheckUnavailable => '復元方法を確認できませんでした。接続を確認して、もう一度お試しください。';
+
+  @override
+  String get signInToExistingAccount =>
+      'このメールアドレスのアカウントはすでにあります。サインインして続けてください。';
 
   @override
   String get emailAlreadyInUse =>
       'このメールアドレスのアカウントはすでに存在します。そのアカウントで先にサインインし、そこからリンクしてください。';
-
-  @override
-  String get linkingCancelled => 'リンクがキャンセルされました。';
 
   @override
   String successfullyLinkedProvider(String provider) {
@@ -2278,7 +1938,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get allAttachmentsRemoved => 'すべての添付ファイルとメディアが削除されます';
 
   @override
-  String get loggedOutAllDevices => 'すべてのデバイスからログアウトされます';
+  String get loggedOutAllDevices =>
+      '他の端末からのログアウトには時間がかかる場合があります。端末の承認は削除まで有効です。紛失した端末は先に削除してください。';
 
   @override
   String get accountCannotBeRecovered => 'アカウントは復元できません';
@@ -2309,7 +1970,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'アカウントは$dateに削除されます。';
+    return 'アカウントは$date以降に削除されます。';
   }
 
   @override
@@ -2340,11 +2001,8 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'アカウント削除が$dateにスケジュールされました。再度サインインするとキャンセルできます。';
+    return '削除は$date以降に予定されています。再度サインインするとキャンセルできます。';
   }
-
-  @override
-  String get iphoneIpad => 'iPhone/iPad';
 
   @override
   String get webBrowser => 'ウェブブラウザ';
@@ -2420,9 +2078,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get notificationPermissionsRequired => 'リマインダーには通知とアラームの権限が必要です';
-
-  @override
   String get checkAll => 'すべてチェック';
 
   @override
@@ -2452,12 +2107,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get somethingWentWrongTryAgain => '問題が発生しました。もう一度お試しください。';
-
-  @override
-  String get verifyingPassphrase => 'パスフレーズを確認中...';
-
-  @override
-  String get settingAsPrimaryDevice => 'プライマリデバイスとして設定中...';
 
   @override
   String get finalizing => '完了処理中...';
@@ -2727,9 +2376,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createNewLink => '新しいリンクを作成';
 
   @override
-  String get revokeLink_ => 'リンクを取り消す';
-
-  @override
   String get copy => 'コピー';
 
   @override
@@ -2747,11 +2393,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get linkRevoked => 'リンクが取り消されました';
-
-  @override
-  String failedToRevoke(String error) {
-    return '取り消しに失敗しました: $error';
-  }
 
   @override
   String get linkCopied => 'リンクがクリップボードにコピーされました';
@@ -2803,10 +2444,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncDisabledPleaseSignOut => '同期が無効になっています。サインアウトして再度サインインしてください。';
-
-  @override
-  String get signOutConfirmationWithNote =>
-      'サインアウトしてもよろしいですか？\n\nノートにアクセスするには再度サインインする必要があります。';
 
   @override
   String get sketchTool => 'ツール';
@@ -2878,9 +2515,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get useAppForBetterExperience => 'より良いエクスペリエンスのためにアプリを使用';
 
   @override
-  String get noteMarkedAsDone => 'ノートを完了としてマークしました';
-
-  @override
   String get pickTextColor => 'テキストの色を選択';
 
   @override
@@ -2938,31 +2572,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pickNoteColor => 'ノートの色を選択';
-
-  @override
-  String failedToPaste(String error) {
-    return '貼り付けに失敗しました: $error';
-  }
-
-  @override
-  String failedToInsertContent(String error) {
-    return 'コンテンツの挿入に失敗しました: $error';
-  }
-
-  @override
-  String failedToLockNote(String error) {
-    return 'ノートのロックに失敗しました: $error';
-  }
-
-  @override
-  String failedToRemoveLock(String error) {
-    return 'ロックの解除に失敗しました: $error';
-  }
-
-  @override
-  String noteDuplicatedButFailedToLock(String error) {
-    return 'ノートは複製されましたがロックに失敗しました: $error';
-  }
 
   @override
   String get pastedContent => '貼り付けられたコンテンツ';
@@ -3177,15 +2786,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'アクティブなデバイスが見つかりません。リカバリーパスフレーズを使用して暗号化されたノートへのアクセスを復元してください。';
+      'リカバリーパスフレーズを使って、このデバイスで暗号化されたノートを開いてください。';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'アクティブなデバイスが見つからず、リカバリーキーも設定されていません。新しいアカウントで最初から始めることができますが、以前のノートは復元できません。';
+      'このアカウントには復元用パスフレーズがありません。信頼できるデバイスに承認をリクエストできます。';
 
   @override
   String get previousNotesEncryptedWarning =>
-      '以前のノートは暗号化されており、リカバリーキーなしでは復元できません。';
+      '最初からやり直すと、以前の暗号化されたノートにアクセスできなくなります。';
 
   @override
   String get notYourMainDevice => 'メインのデバイスではありませんか？';
@@ -3199,6 +2808,34 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get requestApprovalFromAnotherDevice => '別のデバイスからの承認をリクエスト';
+
+  @override
+  String get signOutClearingDevice => 'この端末のアカウントデータを消去しています…';
+
+  @override
+  String get signOutFinishing => 'ログアウト処理を完了しています…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'ログアウトすると、この端末にのみ保存されているノートは削除されます。同期済みのノートを復元するには、承認済みの端末または復元用パスフレーズが必要です。';
+
+  @override
+  String get localLibraryUnavailable =>
+      '端末のノートフォルダを特定できませんでした。再試行するか、ログアウトして新しいローカルライブラリを作成してください。';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      '安全なストレージを利用できません。端末のロックを解除して再試行してください。';
+
+  @override
+  String get signOutOtherWindowRetry => '別のウィンドウでサインアウト中です。完了してからもう一度お試しください。';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'ローカルデータベースを消去できませんでした。他の Better Keep ウィンドウを閉じて再試行してください。';
+
+  @override
+  String get signOutCleanupRetry => 'ログアウトできませんでした。もう一度お試しください。';
 
   @override
   String get signingOut => 'サインアウト中...';
@@ -3226,11 +2863,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedToResetAccount => 'アカウントのリセットに失敗しました';
-
-  @override
-  String failedToResetAccountError(String error) {
-    return 'アカウントのリセットに失敗しました: $error';
-  }
 
   @override
   String get startFreshQuestion => '最初から始めますか？';
@@ -3273,11 +2905,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedToSaveSketch => 'スケッチの保存に失敗しました';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'スケッチの保存エラー: $error';
-  }
 
   @override
   String get planFree => '無料';
@@ -3336,20 +2963,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unlimitedLockedNotesAndSync => '無制限のロックされたノートとリアルタイムクラウド同期';
 
   @override
-  String get unlockTheFullExperience => 'フルエクスペリエンスをアンロック';
-
-  @override
   String get maybeLater => '後で';
 
   @override
   String get enableNotificationsTitle => '通知を有効にする';
-
-  @override
-  String get enableNotificationsForReminders =>
-      '同期されたノートにリマインダーがあります。通知を有効にして見逃さないようにしましょう。';
-
-  @override
-  String get enableNotifications => '有効にする';
 
   @override
   String get rateOnAppStore => 'App Storeで評価する';
@@ -3586,17 +3203,21 @@ class AppLocalizationsJa extends AppLocalizations {
       '保存された暗号化キーを読み取れませんでした。端末のロックを解除して再試行してください。ローカルデータは保持されています。';
 
   @override
-  String get localEncryptionMissing =>
-      '保存されたノートを開くためのキーが見つからないか破損しています。再接続してアクセスを復元するか、アカウント復元を使用してください。ローカルデータは保持されています。';
-
-  @override
   String get syncCheckingConnection => '接続を確認中…';
 
   @override
   String get syncPreparing => '同期を準備中…';
 
   @override
-  String get syncUploadRestricted => '変更はこのデバイスに保存されました。アップロードにはProが必要です。';
+  String get syncUploadRestricted =>
+      'このデバイスに保存済みです。変更を同期するにはBetter Keepクラウドを有効にしてください。';
+
+  @override
+  String get syncUpgradeReminder => '変更はここに保存されています。Proで同期できます。';
+
+  @override
+  String get syncUpgradeForUploads =>
+      'このデバイスに保存しました。Better Keep クラウドへのアップロードには Pro が必要です。';
 
   @override
   String get syncPaused => '同期を一時停止しました。再試行してください。';
@@ -3758,4 +3379,378 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get storageCleared =>
       'ローカルデータが削除されたため、ログアウトしました。再度ログインして同期済みのノートを復元してください。同期前に削除されたノートはクラウドから復元できません。';
+
+  @override
+  String get externalSyncTitle => '同期プロバイダー';
+
+  @override
+  String get externalSyncDescription => 'ノートをデバイス間で同期するプロバイダーを1つ選択してください。';
+
+  @override
+  String get externalSyncUnavailable =>
+      'ストレージに接続するには、ログインしてこのデバイスを承認するか、復旧してください。';
+
+  @override
+  String get externalSyncAccount => 'アカウントと暗号化';
+
+  @override
+  String get externalSyncCloud => 'Better Keepクラウド';
+
+  @override
+  String get externalSyncCloudDescription => '標準同期 · アップロードにはProが必要';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': '接続',
+      'browser': 'ブラウザーでログイン',
+      'manual': 'アプリパスワードを使用',
+      'reconnect': '再接続',
+      'continue': 'ブラウザーで続行',
+      'pause': '一時停止',
+      'resume': '再開',
+      'disconnect': '接続を解除',
+      'sync': '今すぐ同期',
+      'other': '再試行',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': '認証の準備中…',
+      'awaitingConsent': 'ブラウザーで認証できます',
+      'authorizing': '接続中…',
+      'cancelling': '認証をキャンセル中…',
+      'cancelPending': 'キャンセルを確認できませんでした。もう一度キャンセルしてください。',
+      'connecting': '接続中…',
+      'pausing': '一時停止中…',
+      'enabling': '再開中…',
+      'disconnecting': '接続を解除中…',
+      'paused': '一時停止中',
+      'notConnected': '未接続',
+      'keyRecovery': 'この接続を使用するには暗号化キーを復旧してください。',
+      'pending': '一部の変更が同期待ちです。',
+      'other': '接続済み',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired':
+          'このデバイスで接続済みのGoogle Driveアカウントにログインしてください。ノートは暗号化されたままです。',
+      'reconnectRequired': '同期を続けるには、このアカウントに再接続してください。',
+      'quotaExceeded': 'ストレージがいっぱいです。このプロバイダーの空き容量を増やしてから再試行してください。',
+      'rateLimited': 'プロバイダーから待機を求められました。同期は自動的に再試行されます。',
+      'corruptData': '一部の同期データを検証できませんでした。ローカルのノートは保持されます。',
+      'unsupported': 'このプロバイダーまたはブラウザーでは接続を完了できません。',
+      'other': 'このプロバイダーに接続できませんでした。通信状況を確認して再試行してください。',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return '前回の同期成功日時：$time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => 'まだ同期が成功していません';
+
+  @override
+  String get externalSyncBlocked => '一部のノートまたは添付ファイルをまだアップロードできません。同期は再試行されます。';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return '$providerの接続を解除しますか？';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      'このアカウントとの同期を停止します。このデバイスのノートと、プロバイダーに保存済みのファイルは保持されます。';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Better Keepとの接続を解除しました。アクセス権の取り消しを確認できませんでした。プロバイダーのアカウント設定でBetter Keepのアクセス権を削除してください。';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Nextcloudのセキュリティ設定で発行したアプリパスワードを使用してください。ブラウザーで同期するには、サーバーでクロスオリジンリクエストを許可する必要があります。';
+
+  @override
+  String get externalSyncServer => 'サーバーURL';
+
+  @override
+  String get externalSyncUsername => 'ユーザー名';
+
+  @override
+  String get externalSyncAppPassword => 'アプリパスワード';
+
+  @override
+  String get externalSyncInvalidServer =>
+      'ユーザー名、パスワード、クエリ、フラグメントを含まないHTTPSのサーバーURLを入力してください。';
+
+  @override
+  String get externalSyncRequired => 'この項目は必須です。';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      'キャンセル前に認証が完了しました。プロバイダーは接続済みです。削除するには「接続を解除」を選択してください。';
+
+  @override
+  String get externalSyncLogoutPending =>
+      '一部の変更がまだ同期待ちです。ログアウトすると、このデバイスのローカルのノートとメディアが削除されます。どのプロバイダーにも保存されていない変更は失われる可能性があります。\n\nログアウトする前に同期を完了するか、データをエクスポートしてください。';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      'すべての変更が同期済みかどうか確認できませんでした。ログアウトすると、このデバイスのローカルのノートとメディアが削除されます。どのプロバイダーにも保存されていない変更は失われる可能性があります。\n\nログアウトする前に同期先のプロバイダーを確認するか、データをエクスポートしてください。';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      '一部のロックされたノートに、更新が必要な古いスケッチが含まれています。スケッチを作成したデバイスでそのノートを開き、PINでロックを解除してから同期を再試行してください。';
+
+  @override
+  String get externalSyncOff => '同期オフ';
+
+  @override
+  String get externalSyncCloudDownloadDescription =>
+      '保存済みノートをダウンロード · アップロードには Pro が必要';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Better Keep cloud からノートをダウンロードします。アップロードは一時停止したままです。';
+
+  @override
+  String get externalSyncDownloadsOn => 'アップロード停止中 · ダウンロード有効';
+
+  @override
+  String get externalSyncAllPaused => 'アップロードとダウンロードを一時停止中';
+
+  @override
+  String get externalSyncOffDescription => 'アップロードは一時停止中';
+
+  @override
+  String get externalSyncDetails => '同期の詳細';
+
+  @override
+  String get externalSyncNeedsAttention => '確認が必要 · 同期の詳細を表示';
+
+  @override
+  String get externalSyncConnectHelp =>
+      'ログインしてストレージへのアクセスを許可してください。接続後、このプロバイダーが同期先に選択されます。';
+
+  @override
+  String get verifyNewDevice => '新しい端末を確認';
+
+  @override
+  String get deviceVerificationInstructions =>
+      '信頼済みのデバイスで、新しいデバイスのQRコードをスキャンしてください。';
+
+  @override
+  String get deviceVerificationExpired =>
+      '確認コードの有効期限が切れました。新しい端末でコードを再生成してください。';
+
+  @override
+  String get newVerificationCode => 'コードを再生成';
+
+  @override
+  String get deviceVerificationMismatch => '端末が一致しません。このリクエストを承認しないでください。';
+
+  @override
+  String get scanNewDevice => '新しい端末をスキャン';
+
+  @override
+  String get compareSecurityCode => 'セキュリティコードを比較';
+
+  @override
+  String get deviceCameraUnavailable =>
+      'カメラを使用できません。カメラへのアクセスを許可するか、パスフレーズで復元してください。';
+
+  @override
+  String get deviceVerificationRetry =>
+      '確認できませんでした。両端末を更新し、新しい端末でコードを再生成してから再試行してください。';
+
+  @override
+  String get browserStorageUnavailable =>
+      'ブラウザの設定でこのサイトのデータ保存を許可してから、もう一度お試しください。';
+
+  @override
+  String get browserLegacyRecoveryUnavailable =>
+      'このバージョンでは、ブラウザに保存された暗号鍵を読み込めません。このブラウザのデータは消去しないでください。同期済みのメモは承認済みの端末で開くか、別のブラウザで復旧用パスフレーズを使ってください。';
+
+  @override
+  String get browserSessionOnly => 'このセッションのみ';
+
+  @override
+  String get browserDeviceTrust =>
+      'このブラウザに端末の承認情報が保存されると、ダウンロード済みのノートをオフラインで開けます。';
+
+  @override
+  String get browserUnlockOnline =>
+      'ノートはこの端末に保存されています。インターネットに接続して「再試行」をタップすると開けます。';
+
+  @override
+  String get verifyTrustedDevice => '信頼済み端末を確認';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      '信頼済みのデバイスのQRコードをスキャンして暗号化キーを受け取ってください。';
+
+  @override
+  String get scanTrustedDevice => '信頼済み端末をスキャン';
+
+  @override
+  String get confirmOnNewDevice => '新しい端末で確認';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      '新しいデバイスでこのQRコードをスキャンしてください。ロックが解除されるまでこの画面を開いておいてください。';
+
+  @override
+  String get storageSecurityUpgrade => '安全に再接続';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      'この接続では以前のサーバー管理の認証情報ストレージを使用していました。プロバイダーの連携アプリ設定でBetter Keepのアクセスを取り消すか、Nextcloudのアプリパスワードを削除してから、ここで再接続してください。ノートとリモートファイルは保持されます。新しい認証情報はノートの暗号化キーを使って端末上で暗号化されます。';
+
+  @override
+  String get devicePairingScanInstruction =>
+      '信頼できるデバイスで承認リクエストを開き、このコードをスキャンしてください。';
+
+  @override
+  String get showQrCode => 'QRコードを表示';
+
+  @override
+  String get externalSyncSharedSetup => 'このデバイスでGoogle Driveにログインしてください。';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      'このデバイスで接続済みのGoogle Driveアカウントにログインしてください。ノートは暗号化されたままです。';
+
+  @override
+  String get externalSyncStorageFull =>
+      'ストレージがいっぱいです。同期は一時停止していますが、端末内のノートは安全です。空き容量を増やしてから「今すぐ同期」をタップしてください。';
+
+  @override
+  String get externalSyncClear => '同期済みデータを削除';
+
+  @override
+  String get externalSyncClearMessage =>
+      '同期済みのコピーを削除して同期をオフにします。端末内のノートは保持されますが、プロバイダーにしかないデータは失われます。';
+
+  @override
+  String get externalSyncClearing => '同期済みデータを削除中…';
+
+  @override
+  String get externalSyncClearPending => '削除が未完了です · タップして再試行';
+
+  @override
+  String get externalSyncClearDone =>
+      '同期済みデータを削除しました。同期はオフです。端末内のノートは保持されています。削除したファイルがプロバイダーのゴミ箱に残る場合があります。';
+
+  @override
+  String get externalSyncClearCodeSent => 'メールで届いたコードを入力してください。';
+
+  @override
+  String get externalSyncClearCodeError =>
+      '同期済みデータを削除できませんでした。コードと接続を確認するか、新しいコードをリクエストしてください。削除が開始されている場合、完了するまで同期はオフのままです。';
+
+  @override
+  String get externalSyncClearSendError =>
+      'コードを送信できませんでした。アカウントのメールアドレスが確認済みであることを確認し、1分待ってから再試行してください。';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$total 中 $used 使用済み';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => 'ストレージを確認中…';
+
+  @override
+  String get externalSyncCapacityUnavailable => 'ストレージ情報を取得できません';
+
+  @override
+  String get externalSyncClearVerifyTitle => '削除の確認';
+
+  @override
+  String get externalSyncClearSendCode => 'コードを送信';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => 'プランを選択';
+
+  @override
+  String get automaticExternalSync => '外部ストレージの自動同期';
+
+  @override
+  String get manualExternalSync => '外部ストレージの手動同期';
+
+  @override
+  String get liteDescription => 'お使いのクラウドストレージで自動更新。';
+
+  @override
+  String get manualSyncDescription => '手動同期は無料です。Lite と Pro では自動更新も利用できます。';
+
+  @override
+  String get subscriptionActiveTitle => 'サブスクリプションは有効です';
+
+  @override
+  String get subscriptionChangePlan => 'プランを変更するには、現在のサブスクリプションを管理してください。';
+
+  @override
+  String get subscribe => '登録する';
+
+  @override
+  String get builtInCloudSync => '標準のクラウド同期';
+
+  @override
+  String get deviceAdded => '追加日時';
+
+  @override
+  String get accountDeletionInProgress =>
+      'アカウントの削除はすでに開始されています。support@betterkeep.app にお問い合わせください。';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      '確認コードはすでにリクエストされています。メールを確認するか、1分待ってから再度リクエストしてください。';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'サインインを確認できませんでした。もう一度サインインしてください。';
+
+  @override
+  String get accountDeletionPaused =>
+      'アカウントの削除は一時停止中です。support@betterkeep.app にお問い合わせください。';
+
+  @override
+  String get deviceUsePairingCode => 'コードを使う';
+
+  @override
+  String get deviceEnterPairingCode => 'ペアリングコードを入力';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      '信頼済みのデバイスで「ペアリングコードを入力」を選び、この8桁を入力してください。';
+
+  @override
+  String get devicePairingCodeEntryInstruction => '新しいデバイスに表示されている8桁を入力してください。';
+
+  @override
+  String get devicePairingCodeLabel => 'ペアリングコード';
+
+  @override
+  String get devicePairingCodeExpired => 'このコードは使用できません。新しいコードを生成してください。';
+
+  @override
+  String get devicePairingCodeFailed =>
+      '新しいデバイスのコードを確認して再試行してください。期限切れの場合は新しいコードを生成してください。';
+
+  @override
+  String get devicePairingConnecting => '接続中…';
 }

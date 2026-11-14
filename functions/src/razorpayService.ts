@@ -71,7 +71,13 @@ export async function persistVerifiedRazorpaySubscriptionRecord({
 	reconcile?: boolean;
 	userId: string;
 }): Promise<Record<string, unknown>> {
+	const existing = await db
+		.collection("subscriptions")
+		.doc(`razorpay_${entity.id}`)
+		.get();
+	const existingTier = existing.data()?.plan;
 	const normalized = normalizeRazorpaySubscription({
+		verifiedTier: typeof existingTier === "string" ? existingTier : null,
 		billingPeriod,
 		entity,
 		userId,

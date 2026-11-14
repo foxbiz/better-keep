@@ -1,6 +1,23 @@
 {
+  "syncCheckingLibraryHint": "Büyük arşivlerde bu birkaç dakika sürebilir.",
+  "syncCheckingNotes": "Notlar kontrol ediliyor",
+  "syncDownloadingNotes": "Notlar indiriliyor",
+  "syncTotalNotes": "{count} not",
+  "syncUploadingNotes": "Notlar yükleniyor · {count}",
+  "syncUploadingNotesOfTotal": "Notlar yükleniyor · {total} nottan {done} tanesi",
+  "syncEstimatedMinutes": "{minutes, plural, =0{Bir dakikadan az kaldı} other{Yaklaşık {minutes} dk. kaldı}}",
+	"sharedImageNamesConflict": "Paylaşılan bazı görsellerin dosya adları aynı. Lütfen bunları tek tek paylaşın.",
+	"sharedImageImportFailed": "Görsel notu oluşturulamadı ({fileName}). En fazla 50 MB ve 24 megapiksel olan görsellerle tekrar paylaşmayı deneyin.",
+  "externalSyncContinue": "Devam et",
+  "externalSyncConnectionInfo": "Bağlantı bilgileri",
+  "externalSyncConnectPrompt": "Notlarınızı eşitlemeye başlamak için oturum açın.",
+  "externalSyncNativeSetupPrompt": "Bu cihazda Google Drive’a giriş yapın.",
+  "externalSyncWebDavHelp": "WebDAV klasörünüzün tam URL adresini ve bir uygulama parolasını girin. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.",
+
 	"@@locale": "tr",
-	"@@last_modified": "2026-05-19",
+	"showMoreDevices": "Daha fazla göster ({count}+)",
+	"deviceRemovalMainDeviceOnly": "Diğer cihazları yalnızca ana cihazınız kaldırabilir.",
+	"@@last_modified": "2026-11-01",
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Better Keep başlatılamadı",
@@ -177,9 +194,6 @@
 	"cancelSignIn": "Girişi İptal Et",
 	"@cancelSignIn": { "description": "Cancel sign in button text" },
 
-	"signInCancelled": "Giriş iptal edildi",
-	"@signInCancelled": { "description": "Sign in cancelled message" },
-
 	"signInWithFacebook": "Facebook ile Giriş Yap",
 	"@signInWithFacebook": { "description": "Facebook sign in tooltip" },
 
@@ -248,12 +262,6 @@
 	"newPassword": "Yeni Parola",
 	"@newPassword": { "description": "New password field label" },
 
-	"enterNewPassword": "Yeni parola girin",
-	"@enterNewPassword": { "description": "New password field hint" },
-
-	"reenterNewPassword": "Yeni parolayı tekrar girin",
-	"@reenterNewPassword": { "description": "Confirm password field hint" },
-
 	"currentPassphrase": "Mevcut İfade",
 	"@currentPassphrase": { "description": "Current passphrase field label" },
 
@@ -304,9 +312,6 @@
 	"addLabel": "Etiket ekle",
 	"@addLabel": { "description": "Add label tooltip" },
 
-	"searchLogs": "Günlüklerde ara...",
-	"@searchLogs": { "description": "Search logs hint text" },
-
 	"audioRecording": "Ses Kaydı",
 	"@audioRecording": { "description": "Audio recording dialog title" },
 
@@ -321,9 +326,6 @@
 
 	"theme": "Tema",
 	"@theme": { "description": "Theme settings section title" },
-
-	"customizeAppearance": "Uygulama görünümünü özelleştir",
-	"@customizeAppearance": { "description": "Theme settings subtitle" },
 
 	"followSystemTheme": "Sistem Temasına Göre",
 	"@followSystemTheme": { "description": "Follow system theme toggle label" },
@@ -361,14 +363,6 @@
 	"alarmSound": "Alarm Sesi",
 	"@alarmSound": { "description": "Alarm sound setting label" },
 
-	"reminderTimeSettings": "Hatırlatıcı Zaman Ayarları",
-	"@reminderTimeSettings": {
-		"description": "Reminder time settings section title"
-	},
-
-	"setDefaultTimes": "Hatırlatıcılar için varsayılan zamanları ayarla",
-	"@setDefaultTimes": { "description": "Reminder time settings subtitle" },
-
 	"morning": "Sabah",
 	"@morning": { "description": "Morning time label" },
 
@@ -378,31 +372,8 @@
 	"evening": "Akşam",
 	"@evening": { "description": "Evening time label" },
 
-	"localDataProtection": "Yerel Veri Koruması",
-	"@localDataProtection": {
-		"description": "Local data protection section title"
-	},
-
-	"encryptDeviceData": "Bu cihazda depolanan verileri şifrele",
-	"@encryptDeviceData": { "description": "Local data protection subtitle" },
-
-	"encryptNotes": "Notları şifrele",
-	"@encryptNotes": { "description": "Encrypt notes toggle label" },
-
-	"encryptFiles": "Dosyaları şifrele",
-	"@encryptFiles": { "description": "Encrypt files toggle label" },
-
-	"lockedNotesSecurity": "Kilitli Notlar Güvenliği",
-	"@lockedNotesSecurity": { "description": "Locked notes section title" },
-
-	"privacyLockedNotes": "Kilitli notlar için gizlilik ayarları",
-	"@privacyLockedNotes": { "description": "Locked notes section subtitle" },
-
 	"forgetPasswordOnClose": "Kapatıldığında parolayı unut",
 	"@forgetPasswordOnClose": { "description": "Forget password toggle label" },
-
-	"requirePasswordAgain": "Uygulama her açıldığında parola iste",
-	"@requirePasswordAgain": { "description": "Forget password toggle subtitle" },
 
 	"nerdStats": "Detaylı İstatistikler",
 	"@nerdStats": { "description": "Nerd stats page title" },
@@ -529,9 +500,6 @@
 	"insert": "Ekle",
 	"@insert": { "description": "Insert tooltip" },
 
-	"importAsNote": "Not Olarak İçe Aktar",
-	"@importAsNote": { "description": "Import as note tooltip" },
-
 	"removeDevice": "Cihazı kaldır",
 	"@removeDevice": { "description": "Remove device tooltip" },
 
@@ -540,9 +508,6 @@
 
 	"passwordResetSuccess": "Parola başarıyla sıfırlandı! Lütfen giriş yapın.",
 	"@passwordResetSuccess": { "description": "Password reset success message" },
-
-	"emailVerifiedSuccess": "E-posta başarıyla doğrulandı!",
-	"@emailVerifiedSuccess": { "description": "Email verified success message" },
 
 	"useDifferentAccount": "Farklı bir hesap kullan",
 	"@useDifferentAccount": {
@@ -563,17 +528,6 @@
 		"description": "Re-approval request sent message"
 	},
 
-	"failedReapproval": "Yeniden onay istenemedi: {error}",
-	"@failedReapproval": {
-		"description": "Failed to request re-approval message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"rememberDevice": "Bu cihazı hatırla",
-	"@rememberDevice": { "description": "Remember device checkbox label" },
-
 	"recoverWithPassphrase": "İfade ile Kurtar",
 	"@recoverWithPassphrase": {
 		"description": "Recover with passphrase button label"
@@ -591,24 +545,8 @@
 	"accessApproved": "Erişim onaylandı",
 	"@accessApproved": { "description": "Access approved message" },
 
-	"failedToApprove": "Onaylanamadı: {error}",
-	"@failedToApprove": {
-		"description": "Failed to approve message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"accessDenied": "Erişim reddedildi",
 	"@accessDenied": { "description": "Access denied message" },
-
-	"failedToDeny": "Reddedilemedi: {error}",
-	"@failedToDeny": {
-		"description": "Failed to deny message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"allUpToDate": "Her şey güncel",
 	"@allUpToDate": { "description": "All up to date message" },
@@ -638,30 +576,6 @@
 		}
 	},
 
-	"unlinkedProvider": "{provider} bağlantısı kaldırıldı",
-	"@unlinkedProvider": {
-		"description": "Unlinked provider message",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
-	"successfullyLinked": "{provider} hesabı başarıyla bağlandı",
-	"@successfullyLinked": {
-		"description": "Successfully linked provider message",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
-	"unknownProvider": "Bilinmeyen sağlayıcı: {provider}",
-	"@unknownProvider": {
-		"description": "Unknown provider error",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
 	"recoveryKey": "Kurtarma Anahtarı",
 	"@recoveryKey": { "description": "Recovery key title" },
 
@@ -670,49 +584,6 @@
 
 	"enableE2EE": "Uçtan Uca Şifrelemeyi Etkinleştir",
 	"@enableE2EE": { "description": "Enable E2EE button label" },
-
-	"failedSaveRecoveryKey": "Kurtarma Anahtarı kaydedilemedi: {error}",
-	"@failedSaveRecoveryKey": {
-		"description": "Failed to save recovery key error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"recoverySuccessWelcome": "Kurtarma başarılı! Tekrar hoş geldiniz.",
-	"@recoverySuccessWelcome": {
-		"description": "Recovery success welcome message"
-	},
-
-	"confirmConsequences": "Lütfen sonuçları anladığınızı onaylayın",
-	"@confirmConsequences": { "description": "Confirm consequences message" },
-
-	"accountResetSuccess": "Hesap başarıyla sıfırlandı. Hoş geldiniz!",
-	"@accountResetSuccess": { "description": "Account reset success message" },
-
-	"failedResetAccount": "Hesap sıfırlanamadı: {error}",
-	"@failedResetAccount": {
-		"description": "Failed to reset account error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"errorSigningOut": "Çıkış yapılırken hata oluştu: {error}",
-	"@errorSigningOut": {
-		"description": "Error signing out message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"errorPlayingSound": "Ses çalınırken hata oluştu: {error}",
-	"@errorPlayingSound": {
-		"description": "Error playing sound message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"checkNestedItems": "İç içe geçmiş öğeler işaretlensin mi?",
 	"@checkNestedItems": { "description": "Check nested items dialog title" },
@@ -743,104 +614,26 @@
 	"reminderSet": "Hatırlatıcı ayarlandı",
 	"@reminderSet": { "description": "Reminder set message" },
 
-	"failedCreateImageNote": "Resim notu oluşturulamadı",
-	"@failedCreateImageNote": {
-		"description": "Failed to create image note message"
-	},
-
-	"errorSavingSketchWithError": "Çizim kaydedilirken hata oluştu: {error}",
-	"@errorSavingSketchWithError": {
-		"description": "Error saving sketch with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"failedSaveNote": "Not kaydedilemedi",
 	"@failedSaveNote": { "description": "Failed to save note message" },
-
-	"failedSave": "Kaydedilemedi: {error}",
-	"@failedSave": {
-		"description": "Failed to save with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"copiedAs": "{format} olarak kopyalandı",
-	"@copiedAs": {
-		"description": "Copied as format message",
-		"placeholders": {
-			"format": { "type": "String" }
-		}
-	},
-
-	"failedCopy": "Kopyalanamadı: {error}",
-	"@failedCopy": {
-		"description": "Failed to copy with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"pastedAsPlainText": "Düz metin olarak yapıştırıldı",
 	"@pastedAsPlainText": { "description": "Pasted as plain text message" },
 
-	"failedPaste": "Yapıştırılamadı: {error}",
-	"@failedPaste": {
-		"description": "Failed to paste with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"contentInserted": "İçerik eklendi",
 	"@contentInserted": { "description": "Content inserted message" },
-
-	"failedInsertContent": "İçerik eklenemedi: {error}",
-	"@failedInsertContent": {
-		"description": "Failed to insert content with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"actionCancelled": "İşlem iptal edildi",
-	"@actionCancelled": { "description": "Action cancelled message" },
 
 	"noteLocked": "Not kilitlendi",
 	"@noteLocked": { "description": "Note locked message" },
 
-	"failedLockNote": "Not kilitlenemedi: {error}",
-	"@failedLockNote": {
-		"description": "Failed to lock note with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"lockRemoved": "Kilit kaldırıldı",
 	"@lockRemoved": { "description": "Lock removed message" },
-
-	"failedRemoveLock": "Kilit kaldırılamadı: {error}",
-	"@failedRemoveLock": {
-		"description": "Failed to remove lock with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"noteDuplicated": "Not çoğaltıldı",
 	"@noteDuplicated": { "description": "Note duplicated message" },
 
 	"errorSavingNote": "Not kaydedilirken hata oluştu",
 	"@errorSavingNote": { "description": "Error saving note message" },
-
-	"contentShared": "İçerik paylaşıldı",
-	"@contentShared": { "description": "Content shared message" },
-
-	"failedShare": "Paylaşılamadı",
-	"@failedShare": { "description": "Failed to share message" },
 
 	"notes": "Notlar",
 	"@notes": { "description": "Notes label" },
@@ -860,43 +653,14 @@
 	"otherNotes": "Diğerleri",
 	"@otherNotes": { "description": "Other notes section" },
 
-	"noNotes": "Henüz not yok",
-	"@noNotes": { "description": "Empty state message" },
-
 	"noArchivedNotes": "Arşivlenmiş not yok",
 	"@noArchivedNotes": { "description": "Empty archived state message" },
-
-	"noDeletedNotes": "Silinmiş not yok",
-	"@noDeletedNotes": { "description": "Empty deleted state message" },
-
-	"searchNotes": "Notlarda ara",
-	"@searchNotes": { "description": "Search notes hint" },
-
-	"nSelectedNotes": "{count, plural, =1{1 not seçildi} other{{count} not seçildi}}",
-	"@nSelectedNotes": {
-		"description": "Number of notes selected",
-		"placeholders": {
-			"count": { "type": "int" }
-		}
-	},
 
 	"deleteNote": "Notu Sil",
 	"@deleteNote": { "description": "Delete note dialog title" },
 
-	"deleteNotes": "Notları Sil",
-	"@deleteNotes": { "description": "Delete notes dialog title" },
-
 	"moveToTrash": "Çöp kutusuna taşı",
 	"@moveToTrash": { "description": "Move to trash action" },
-
-	"deletePermanently": "Kalıcı olarak sil",
-	"@deletePermanently": { "description": "Delete permanently action" },
-
-	"pinNote": "Sabitle",
-	"@pinNote": { "description": "Pin note action" },
-
-	"unpinNote": "Sabitlemeyi kaldır",
-	"@unpinNote": { "description": "Unpin note action" },
 
 	"newNote": "Yeni Not",
 	"@newNote": { "description": "New note button" },
@@ -904,29 +668,11 @@
 	"newSketch": "Yeni Çizim",
 	"@newSketch": { "description": "New sketch button" },
 
-	"newFolder": "Yeni Klasör",
-	"@newFolder": { "description": "New folder option" },
-
-	"renameFolder": "Klasörü Yeniden Adlandır",
-	"@renameFolder": { "description": "Rename folder option" },
-
-	"deleteFolder": "Klasörü Sil",
-	"@deleteFolder": { "description": "Delete folder option" },
-
-	"folderName": "Klasör adı",
-	"@folderName": { "description": "Folder name field hint" },
-
 	"camera": "Kamera",
 	"@camera": { "description": "Camera option" },
 
 	"gallery": "Galeri",
 	"@gallery": { "description": "Gallery option" },
-
-	"audioRecorder": "Ses Kaydedici",
-	"@audioRecorder": { "description": "Audio recorder option" },
-
-	"importFile": "Dosya İçe Aktar",
-	"@importFile": { "description": "Import file option" },
 
 	"language": "Dil",
 	"@language": { "description": "Language setting label" },
@@ -934,26 +680,8 @@
 	"systemDefault": "Sistem Varsayılanı",
 	"@systemDefault": { "description": "System default language option" },
 
-	"selectLanguage": "Dil Seç",
-	"@selectLanguage": { "description": "Select language dialog title" },
-
 	"english": "İngilizce",
 	"@english": { "description": "English language name" },
-
-	"japanese": "日本語",
-	"@japanese": { "description": "Japanese language name" },
-
-	"korean": "한국어",
-	"@korean": { "description": "Korean language name" },
-
-	"indonesian": "Bahasa Indonesia",
-	"@indonesian": { "description": "Indonesian language name" },
-
-	"portugueseBrazil": "Português (Brasil)",
-	"@portugueseBrazil": { "description": "Brazilian Portuguese language name" },
-
-	"chinese": "中文",
-	"@chinese": { "description": "Chinese language name" },
 
 	"today": "Bugün",
 	"@today": { "description": "Today label" },
@@ -966,9 +694,6 @@
 
 	"nextMonth": "Gelecek ay",
 	"@nextMonth": { "description": "Next month label" },
-
-	"pickDateTime": "Tarih ve saat seç",
-	"@pickDateTime": { "description": "Pick date and time option" },
 
 	"time": "Saat",
 	"@time": { "description": "Time label" },
@@ -1003,29 +728,8 @@
 	"yearly": "Yıllık",
 	"@yearly": { "description": "Yearly repeat option" },
 
-	"snooze": "Ertele",
-	"@snooze": { "description": "Snooze button" },
-
-	"fiveMinutes": "5 dakika",
-	"@fiveMinutes": { "description": "5 minutes option" },
-
-	"tenMinutes": "10 dakika",
-	"@tenMinutes": { "description": "10 minutes option" },
-
-	"thirtyMinutes": "30 dakika",
-	"@thirtyMinutes": { "description": "30 minutes option" },
-
 	"oneHour": "1 saat",
 	"@oneHour": { "description": "1 hour option" },
-
-	"gridView": "Izgara görünümü",
-	"@gridView": { "description": "Grid view option" },
-
-	"listView": "Liste görünümü",
-	"@listView": { "description": "List view option" },
-
-	"galleryView": "Galeri görünümü",
-	"@galleryView": { "description": "Gallery view option" },
 
 	"undo": "Geri al",
 	"@undo": { "description": "Undo tooltip" },
@@ -1054,9 +758,7 @@
 	"checklist": "Kontrol listesi",
 	"@checklist": { "description": "Checklist tooltip" },
 	"openChecklistView": "Liste görünümünü aç",
-	"convertToNormalText": "Normal metne dönüştür",
 	"convertEntireChecklistToText": "Tüm kontrol listesini metne dönüştür",
-	"focusedChecklistRequiresChecklistOnly": "Odaklanmış liste görünümü yalnızca her satır bir kontrol listesi öğesi olduğunda kullanılabilir.",
 	"focusedChecklistUnsupportedContent": "Ekler ve blok biçimlendirme yalnızca zengin metin düzenleyicide kullanılabilir.",
 	"focusedChecklistInvalidContent": "Bu kontrol listesi odaklanmış görünümde açılamıyor. Burada düzenlemeye devam edin.",
 	"completedTasks": "Tamamlananlar",
@@ -1088,26 +790,11 @@
 	"alignRight": "Sağa hizala",
 	"@alignRight": { "description": "Align right option" },
 
-	"alignJustify": "İki yana yasla",
-	"@alignJustify": { "description": "Justify option" },
-
 	"increaseIndent": "Girintiyi artır",
 	"@increaseIndent": { "description": "Increase indent option" },
 
 	"decreaseIndent": "Girintiyi azalt",
 	"@decreaseIndent": { "description": "Decrease indent option" },
-
-	"heading1": "Başlık 1",
-	"@heading1": { "description": "Heading 1 option" },
-
-	"heading2": "Başlık 2",
-	"@heading2": { "description": "Heading 2 option" },
-
-	"heading3": "Başlık 3",
-	"@heading3": { "description": "Heading 3 option" },
-
-	"normalText": "Normal metin",
-	"@normalText": { "description": "Normal text option" },
 
 	"pen": "Tükenmez Kalem",
 	"@pen": { "description": "Pen tool" },
@@ -1124,25 +811,11 @@
 	"eraser": "Silgi",
 	"@eraser": { "description": "Eraser tool" },
 
-	"lasso": "Kement",
-	"@lasso": { "description": "Lasso tool" },
-
 	"addPage": "Sayfa ekle",
 	"@addPage": { "description": "Add page button" },
 
-	"deletePage": "Sayfayı sil",
-	"@deletePage": { "description": "Delete page button" },
-
 	"page": "Sayfa",
 	"@page": { "description": "Page label" },
-
-	"pageNumber": "Sayfa {number}",
-	"@pageNumber": {
-		"description": "Page number label",
-		"placeholders": {
-			"number": { "type": "int" }
-		}
-	},
 
 	"connectedAccounts": "Bağlı Hesaplar",
 	"@connectedAccounts": { "description": "Connected accounts section title" },
@@ -1159,27 +832,11 @@
 	"trial": "Deneme",
 	"@trial": { "description": "Trial label" },
 
-	"trialEndsIn": "Deneme süresinin bitmesine {days} gün kaldı",
-	"@trialEndsIn": {
-		"description": "Trial ends message",
-		"placeholders": {
-			"days": { "type": "int" }
-		}
-	},
-
 	"devices": "Cihazlar",
 	"@devices": { "description": "Devices section title" },
 
 	"thisDevice": "Bu cihaz",
 	"@thisDevice": { "description": "This device label" },
-
-	"lastActive": "Son etkinlik: {time}",
-	"@lastActive": {
-		"description": "Last active time",
-		"placeholders": {
-			"time": { "type": "String" }
-		}
-	},
 
 	"pendingApproval": "Onay bekliyor",
 	"@pendingApproval": { "description": "Pending approval label" },
@@ -1187,34 +844,14 @@
 	"security": "Güvenlik",
 	"@security": { "description": "Security section title" },
 
-	"endToEndEncryption": "Uçtan Uca Şifreleme",
-	"@endToEndEncryption": { "description": "E2EE section title" },
-
-	"e2eeEnabled": "Etkin",
-	"@e2eeEnabled": { "description": "E2EE enabled status" },
-
-	"e2eeDisabled": "Etkin değil",
-	"@e2eeDisabled": { "description": "E2EE disabled status" },
-
 	"setupRecoveryKey": "Kurtarma Anahtarını Ayarla",
 	"@setupRecoveryKey": { "description": "Setup recovery key page title" },
-
-	"changeRecoveryKey": "Kurtarma Anahtarını Değiştir",
-	"@changeRecoveryKey": { "description": "Change recovery key dialog title" },
 
 	"verifyRecoveryKey": "Kurtarma Anahtarını Doğrula",
 	"@verifyRecoveryKey": { "description": "Verify recovery key dialog title" },
 
 	"error": "Hata",
 	"@error": { "description": "Error label" },
-
-	"errorWithMessage": "Hata: {message}",
-	"@errorWithMessage": {
-		"description": "Error with message",
-		"placeholders": {
-			"message": { "type": "String" }
-		}
-	},
 
 	"loading": "Yükleniyor...",
 	"@loading": { "description": "Loading message" },
@@ -1233,24 +870,6 @@
 
 	"online": "Çevrimiçi",
 	"@online": { "description": "Online status" },
-
-	"getApp": "Uygulamayı Edin",
-	"@getApp": { "description": "Get the app dialog title" },
-
-	"sessionExpired": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
-	"@sessionExpired": { "description": "Session expired message" },
-
-	"confirmSignOut": "Çıkış yapmak istediğinizden emin misiniz?",
-	"@confirmSignOut": { "description": "Confirm sign out message" },
-
-	"unsyncedChanges": "Eşitlenmemiş değişiklikleriniz var, bunlar kaybolacak.",
-	"@unsyncedChanges": { "description": "Unsynced changes warning" },
-
-	"deleteConfirmation": "Bunu silmek istediğinizden emin misiniz?",
-	"@deleteConfirmation": { "description": "Delete confirmation message" },
-
-	"permanentAction": "Bu işlem geri alınamaz.",
-	"@permanentAction": { "description": "Permanent action warning" },
 
 	"encryptNoteContent": "Not İçeriğini Şifrele",
 	"@encryptNoteContent": { "description": "Encrypt note content toggle title" },
@@ -1282,9 +901,6 @@
 
 	"appInfoCredits": "Uygulama bilgileri ve katkıda bulunanlar",
 	"@appInfoCredits": { "description": "About subtitle" },
-
-	"advancedSettings": "Gelişmiş Ayarlar",
-	"@advancedSettings": { "description": "Advanced settings section title" },
 
 	"speechRecognitionModel": "Ses Tanıma Modeli",
 	"@speechRecognitionModel": {
@@ -1355,17 +971,6 @@
 		"description": "Note encryption enabled success message without count"
 	},
 
-	"errorEncryptingNotes": "Notlar şifrelenirken hata oluştu: {error}",
-	"@errorEncryptingNotes": {
-		"description": "Error encrypting notes message",
-		"placeholders": {
-			"error": {
-				"type": "String",
-				"example": "Unknown error"
-			}
-		}
-	},
-
 	"noteEncryptionDisabled": "Not şifreleme devre dışı bırakıldı.",
 	"@noteEncryptionDisabled": {
 		"description": "Note encryption disabled message"
@@ -1379,11 +984,6 @@
 	"fileEncryptionDisabled": "Dosya şifreleme devre dışı bırakıldı.",
 	"@fileEncryptionDisabled": {
 		"description": "File encryption disabled message"
-	},
-
-	"encryptDataOnDevice": "Bu cihazda depolanan verileri şifrele",
-	"@encryptDataOnDevice": {
-		"description": "Local data protection subtitle alternative"
 	},
 
 	"signInCancelledMessage": "Giriş iptal edildi",
@@ -1555,19 +1155,8 @@
 	"deviceRevoked": "Cihaz İptal Edildi",
 	"@deviceRevoked": { "description": "Device revoked title" },
 
-	"waitingForApprovalTitle": "Onay Bekleniyor",
-	"@waitingForApprovalTitle": { "description": "Waiting for approval title" },
-
 	"deviceRevokedDescription": "Bu cihaz iptal edildi ve artık notlarınıza erişemiyor. Yeniden yetkilendirmek için lütfen onaylı bir cihazdan tekrar giriş yapın.",
 	"@deviceRevokedDescription": { "description": "Device revoked description" },
-
-	"pleaseApproveFrom": "Lütfen şuradan onaylayın:",
-	"@pleaseApproveFrom": { "description": "Please approve from text" },
-
-	"waitingForApprovalFromDevice": "Başka bir cihazdan onay bekleniyor...",
-	"@waitingForApprovalFromDevice": {
-		"description": "Waiting for approval from another device text"
-	},
 
 	"rememberThisDevice": "Bu cihazı hatırla",
 	"@rememberThisDevice": {
@@ -1584,9 +1173,6 @@
 
 	"checkStatus": "Durumu Kontrol Et",
 	"@checkStatus": { "description": "Check status button text" },
-
-	"cancelRequest": "İsteği İptal Et",
-	"@cancelRequest": { "description": "Cancel request button text" },
 
 	"pleaseWait": "Lütfen bekleyin...",
 	"@pleaseWait": { "description": "Please wait text" },
@@ -1677,14 +1263,6 @@
 	"insertTooltip": "Ekle",
 	"@insertTooltip": { "description": "Insert tooltip" },
 
-	"failedToImport": "İçe aktarılamadı: {error}",
-	"@failedToImport": {
-		"description": "Failed to import error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"notes_": "Notlar",
 	"@notes_": { "description": "Notes stat label" },
 
@@ -1748,9 +1326,6 @@
 	"subscriptionCancelled": "Abonelik İptal Edildi",
 	"@subscriptionCancelled": { "description": "Subscription cancelled title" },
 
-	"upgradeToProDescription": "Sınırsız kilitli notlar, bulut eşitleme ve daha fazlası için Pro'ya yükseltin.",
-	"@upgradeToProDescription": { "description": "Upgrade to pro description" },
-
 	"cancellingSubscription": "İptal ediliyor...",
 	"@cancellingSubscription": {
 		"description": "Cancelling subscription status"
@@ -1809,29 +1384,8 @@
 
 	"subscriptionProviderUnknownContactSupport": "Faturalandırma sağlayıcınızı belirleyemedik. Yardım için contact@betterkeep.app adresiyle iletişime geçin.",
 
-	"manageSubscriptionInStore": "{store}'da aboneliğinizi yönetin.",
-	"@manageSubscriptionInStore": {
-		"description": "Message shown when redirecting to store subscription management",
-		"placeholders": {
-			"store": { "type": "String" }
-		}
-	},
-
-	"loadingFailedTryAgain": "Yükleme başarısız — Tekrar deneyin",
-	"@loadingFailedTryAgain": {
-		"description": "Button label when price loading fails"
-	},
-
 	"reloadPrices": "Fiyatları yeniden yükle",
 	"@reloadPrices": { "description": "Button to reload subscription prices" },
-
-	"subscribeWithPrice": "Abone ol — {price}",
-	"@subscribeWithPrice": {
-		"description": "Subscribe button label with price",
-		"placeholders": {
-			"price": { "type": "String" }
-		}
-	},
 
 	"noAdsDescription": "Reklam yok, veri satışı yok — aboneliğiniz güvenli sunucuları ve sürekli geliştirmeyi finanse eder.",
 	"@noAdsDescription": { "description": "Trust message on paywall" },
@@ -1849,12 +1403,8 @@
 	"selfHostContact": "Kendi sunucunuzu mu kurmak istiyorsunuz? contact@betterkeep.app adresinden bize ulaşın",
 	"@selfHostContact": { "description": "Self-host contact info on paywall" },
 
-	"welcomeToProMessage": "Better Keep Pro'ya Hoş Geldiniz!",
-	"@welcomeToProMessage": {
-		"description": "Snackbar message shown when user successfully subscribes via subscription listener"
-	},
 	"paymentConfirmedTitle": "Ödeme onaylandı",
-	"paymentConfirmedActivationPending": "Ödeme onaylandı ancak Pro etkinleştirmesi daha uzun sürüyor. Tekrar satın almayın. Durumu yeniden kontrol edin veya aboneliği Google Play'de yönetin.",
+	"paymentConfirmedActivationPending": "Ödemeniz onaylandı ancak etkinleştirme biraz daha uzun sürüyor. Tekrar satın almayın. Durumunuzu yeniden kontrol edin veya aboneliğinizi yönetin.",
 	"recheckStatus": "Durumu Yeniden Kontrol Et",
 	"subscriptionAccountMismatchTitle": "Abonelik başka bir hesaba bağlı",
 	"subscriptionAccountMismatchMessage": "Bu Google Play aboneliği başka bir Better Keep hesabına bağlı. O hesapta oturum açın veya destek ile iletişime geçin; bu hesaba erişim verilmedi.",
@@ -1885,21 +1435,6 @@
 	"subscriptionCancelledSuccessfully": "Abonelik başarıyla iptal edildi.",
 	"@subscriptionCancelledSuccessfully": {
 		"description": "Snackbar message after subscription is cancelled via Razorpay"
-	},
-
-	"subscriptionResumedSuccessfully": "Abonelik başarıyla devam ettirildi.",
-	"@subscriptionResumedSuccessfully": {
-		"description": "Snackbar message after a cancelled subscription is resumed"
-	},
-
-	"failedToCancelSubscription": "Abonelik iptal edilemedi.",
-	"@failedToCancelSubscription": {
-		"description": "Error message when subscription cancellation fails"
-	},
-
-	"failedToResumeSubscription": "Abonelik devam ettirilemedi.",
-	"@failedToResumeSubscription": {
-		"description": "Error message when subscription resumption fails"
 	},
 
 	"featureTableHeader": "Özellik",
@@ -2009,22 +1544,8 @@
 	"deleteMyAccount": "Hesabımı Sil",
 	"@deleteMyAccount": { "description": "Delete my account button" },
 
-	"unsyncedNotesWarning": "Henüz buluta eşitlenmemiş notlarınız var. Şimdi çıkış yaparsanız, bu notlar SONSUZA KADAR KAYBOLACAKTIR.\n\nEşitlemenin tamamlanmasını beklemeyi veya önce verilerinizi dışa aktarmayı düşünün.",
-	"@unsyncedNotesWarning": { "description": "Unsynced notes warning message" },
-
-	"notesNotSynced": "{count, plural, =1{1 not eşitlenmedi} other{{count} not eşitlenmedi}}",
-	"@notesNotSynced": {
-		"description": "Number of notes not synced",
-		"placeholders": {
-			"count": { "type": "int" }
-		}
-	},
-
 	"dataLossWarning": "VERİ KAYBI UYARISI",
 	"@dataLossWarning": { "description": "Data loss warning title" },
-
-	"noRecoveryKeySet": "Kurtarma Anahtarı ayarlanmamış",
-	"@noRecoveryKeySet": { "description": "No recovery key set up warning" },
 
 	"signOutNoRecoveryKeyWarning": "Eğer çıkış yaparsanız ve onaylı tüm cihazlarınıza erişimi kaybederseniz, tüm şifrelenmiş notlarınıza erişimi KALICI olarak kaybedersiniz.\n\nBu işlem geri alınamaz.",
 	"@signOutNoRecoveryKeyWarning": {
@@ -2056,17 +1577,6 @@
 	"someoneWantsToView": "Birisi paylaştığınız notu görüntülemek istiyor",
 	"@someoneWantsToView": { "description": "Share request subtitle" },
 
-	"deviceApproved_": "Cihaz onaylandı",
-	"@deviceApproved_": { "description": "Device approved snackbar message" },
-
-	"failedApproveDevice": "Cihaz onaylanamadı: {error}",
-	"@failedApproveDevice": {
-		"description": "Failed to approve device error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
 	"deviceRemoved": "Cihaz kaldırıldı",
 	"@deviceRemoved": { "description": "Device removed message" },
 
@@ -2075,14 +1585,6 @@
 		"description": "Number of devices removed",
 		"placeholders": {
 			"count": { "type": "int" }
-		}
-	},
-
-	"failedRemoveDevice": "Cihaz kaldırılamadı: {error}",
-	"@failedRemoveDevice": {
-		"description": "Failed to remove device error",
-		"placeholders": {
-			"error": { "type": "String" }
 		}
 	},
 
@@ -2104,14 +1606,6 @@
 
 	"enableE2EE_": "E2EE'yi Etkinleştir",
 	"@enableE2EE_": { "description": "Enable E2EE button text" },
-
-	"failedEnableE2EE": "E2EE etkinleştirilemedi: {error}",
-	"@failedEnableE2EE": {
-		"description": "Failed to enable E2EE error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"recoveryKeySavedSuccessfully": "Kurtarma Anahtarı başarıyla kaydedildi!",
 	"@recoveryKeySavedSuccessfully": {
@@ -2184,11 +1678,6 @@
 	"failedUnlinkAccount": "Hesap bağlantısı kaldırılamadı",
 	"@failedUnlinkAccount": { "description": "Failed to unlink account error" },
 
-	"cannotUnlinkOnlyMethod": "Tek giriş yönteminin bağlantısı kaldırılamaz.",
-	"@cannotUnlinkOnlyMethod": {
-		"description": "Cannot unlink only method error"
-	},
-
 	"unknownProviderError": "Bilinmeyen sağlayıcı: {provider}",
 	"@unknownProviderError": {
 		"description": "Unknown provider error",
@@ -2204,9 +1693,6 @@
 	"@failedSendCode": {
 		"description": "Failed to send verification code error"
 	},
-
-	"pleaseTryAgain": "Lütfen tekrar deneyin.",
-	"@pleaseTryAgain": { "description": "Please try again message" },
 
 	"pleaseSignInAgain": "Lütfen tekrar giriş yapıp deneyin.",
 	"@pleaseSignInAgain": { "description": "Please sign in again message" },
@@ -2231,19 +1717,12 @@
 	"failedLinkAccount": "Hesap bağlanamadı",
 	"@failedLinkAccount": { "description": "Failed to link account error" },
 
-	"providerLinkedToAnother": "Bu {provider} hesabı zaten başka bir kullanıcıya bağlı.",
-	"@providerLinkedToAnother": {
-		"description": "Provider linked to another user error",
-		"placeholders": {
-			"provider": { "type": "String" }
-		}
-	},
-
+	"useOriginalSignInMethod": "Daha önce kullandığınız yöntemle giriş yapın, ardından hesap ayarlarından yeni sağlayıcıyı bağlayın.",
+	"localAccountMismatch": "Bu cihazda başka bir hesaba ait notlar var. Notları kaydeden hesapla giriş yapın.",
+	"recoveryCheckUnavailable": "Kurtarma seçenekleri kontrol edilemedi. Bağlantınızı kontrol edip tekrar deneyin.",
+	"signInToExistingAccount": "Bu e-postaya sahip bir hesap zaten var. Devam etmek için giriş yapın.",
 	"emailAlreadyInUse": "Bu e-postaya sahip bir hesap zaten var. Önce o hesapla giriş yapın, ardından oradan bağlantı kurun.",
 	"@emailAlreadyInUse": { "description": "Email already in use error" },
-
-	"linkingCancelled": "Bağlantı işlemi iptal edildi.",
-	"@linkingCancelled": { "description": "Linking cancelled message" },
 
 	"successfullyLinkedProvider": "{provider} hesabı başarıyla bağlandı",
 	"@successfullyLinkedProvider": {
@@ -2267,7 +1746,7 @@
 		"description": "All attachments removed warning"
 	},
 
-	"loggedOutAllDevices": "Tüm cihazlardan çıkış yapacaksınız",
+	"loggedOutAllDevices": "Diğer cihazların çıkış yapması zaman alabilir. Cihaz onayı silinene kadar geçerlidir; kayıp cihazları önce kaldırın.",
 	"@loggedOutAllDevices": { "description": "Logged out all devices warning" },
 
 	"accountCannotBeRecovered": "Hesabınız kurtarılamaz",
@@ -2303,7 +1782,7 @@
 	"deletionScheduled": "Silme İşlemi Planlandı",
 	"@deletionScheduled": { "description": "Deletion scheduled dialog title" },
 
-	"accountWillBeDeletedOn": "Hesabınız {date} tarihinde silinecek.",
+	"accountWillBeDeletedOn": "Hesabınız {date} tarihinden itibaren silinebilir.",
 	"@accountWillBeDeletedOn": {
 		"description": "Account deletion date message",
 		"placeholders": {
@@ -2340,16 +1819,13 @@
 		}
 	},
 
-	"deletionScheduledMessage": "Hesap silme işlemi {date} için planlandı. İptal etmek için tekrar giriş yapın.",
+	"deletionScheduledMessage": "Silme işlemi {date} tarihinden itibaren planlandı. İptal etmek için tekrar giriş yapın.",
 	"@deletionScheduledMessage": {
 		"description": "Deletion scheduled snackbar message",
 		"placeholders": {
 			"date": { "type": "String" }
 		}
 	},
-
-	"iphoneIpad": "iPhone/iPad",
-	"@iphoneIpad": { "description": "iPhone/iPad platform name" },
 
 	"webBrowser": "Web Tarayıcısı",
 	"@webBrowser": { "description": "Web browser platform name" },
@@ -2441,11 +1917,6 @@
 		}
 	},
 
-	"notificationPermissionsRequired": "Hatırlatıcılar için bildirim ve alarm izinleri gereklidir",
-	"@notificationPermissionsRequired": {
-		"description": "Notification permissions required message"
-	},
-
 	"checkAll": "Tümünü İşaretle",
 	"@checkAll": { "description": "Check all button text" },
 
@@ -2471,16 +1942,6 @@
 	"somethingWentWrongTryAgain": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
 	"@somethingWentWrongTryAgain": {
 		"description": "Generic error message with try again"
-	},
-
-	"verifyingPassphrase": "İfade doğrulanıyor...",
-	"@verifyingPassphrase": {
-		"description": "Verifying passphrase status message"
-	},
-
-	"settingAsPrimaryDevice": "Birincil cihaz olarak ayarlanıyor...",
-	"@settingAsPrimaryDevice": {
-		"description": "Setting as primary device status message"
 	},
 
 	"finalizing": "Sonuçlandırılıyor...",
@@ -2821,9 +2282,6 @@
 	"createNewLink": "Yeni Bağlantı Oluştur",
 	"@createNewLink": { "description": "Create new link button text" },
 
-	"revokeLink_": "Bağlantıyı iptal et",
-	"@revokeLink_": { "description": "Revoke link tooltip" },
-
 	"copy": "Kopyala",
 	"@copy": { "description": "Copy button text" },
 
@@ -2841,14 +2299,6 @@
 
 	"linkRevoked": "Bağlantı iptal edildi",
 	"@linkRevoked": { "description": "Link revoked snackbar message" },
-
-	"failedToRevoke": "İptal edilemedi: {error}",
-	"@failedToRevoke": {
-		"description": "Failed to revoke error",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"linkCopied": "Bağlantı panoya kopyalandı",
 	"@linkCopied": { "description": "Link copied snackbar message" },
@@ -2914,11 +2364,6 @@
 	"syncDisabledPleaseSignOut": "Eşitleme devre dışı. Lütfen çıkış yapıp tekrar giriş yapın.",
 	"@syncDisabledPleaseSignOut": {
 		"description": "Session invalid banner message"
-	},
-
-	"signOutConfirmationWithNote": "Çıkış yapmak istediğinizden emin misiniz?\n\nNotlarınıza erişmek için tekrar giriş yapmanız gerekecek.",
-	"@signOutConfirmationWithNote": {
-		"description": "Sign out confirmation message with note access info"
 	},
 
 	"sketchTool": "Araç",
@@ -2997,11 +2442,6 @@
 		"description": "Use app banner message for iOS/other"
 	},
 
-	"noteMarkedAsDone": "Not tamamlandı olarak işaretlendi",
-	"@noteMarkedAsDone": {
-		"description": "Note marked as done snackbar message"
-	},
-
 	"pickTextColor": "Metin Rengi Seç",
 	"@pickTextColor": { "description": "Text color picker dialog title" },
 
@@ -3065,46 +2505,6 @@
 
 	"pickNoteColor": "Not Rengi Seç",
 	"@pickNoteColor": { "description": "Note color picker dialog title" },
-
-	"failedToPaste": "Yapıştırılamadı: {error}",
-	"@failedToPaste": {
-		"description": "Error when paste fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"failedToInsertContent": "İçerik eklenemedi: {error}",
-	"@failedToInsertContent": {
-		"description": "Error when inserting content fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"failedToLockNote": "Not kilitlenemedi: {error}",
-	"@failedToLockNote": {
-		"description": "Error when locking note fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"failedToRemoveLock": "Kilit kaldırılamadı: {error}",
-	"@failedToRemoveLock": {
-		"description": "Error when removing lock fails",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
-
-	"noteDuplicatedButFailedToLock": "Not çoğaltıldı ancak kilitlenemedi: {error}",
-	"@noteDuplicatedButFailedToLock": {
-		"description": "Warning when note is duplicated but locking failed",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
-	},
 
 	"pastedContent": "Yapıştırılan İçerik",
 	"@pastedContent": { "description": "Title for pasted content preview page" },
@@ -3331,17 +2731,17 @@
 		"description": "Account recovery required heading"
 	},
 
-	"noActiveDevicesRecoveryKey": "Aktif cihaz bulunamadı. Şifrelenmiş notlarınıza erişimi geri yüklemek için kurtarma ifadenizi kullanın.",
+	"noActiveDevicesRecoveryKey": "Bu cihazda şifrelenmiş notlarınızı açmak için kurtarma ifadenizi kullanın.",
 	"@noActiveDevicesRecoveryKey": {
 		"description": "No active devices with recovery key message"
 	},
 
-	"noActiveDevicesNoRecoveryKey": "Aktif cihaz bulunamadı ve Kurtarma Anahtarı ayarlanmamış. Yeni bir hesapla baştan başlayabilirsiniz, ancak önceki notlarınız kurtarılamaz.",
+	"noActiveDevicesNoRecoveryKey": "Bu hesapta kurtarma ifadesi yok. Güvenilir bir cihazdan onay isteyebilirsiniz.",
 	"@noActiveDevicesNoRecoveryKey": {
 		"description": "No active devices without recovery key message"
 	},
 
-	"previousNotesEncryptedWarning": "Önceki notlarınız şifrelenmiştir ve Kurtarma Anahtarı olmadan kurtarılamaz.",
+	"previousNotesEncryptedWarning": "Baştan başlarsanız önceki şifrelenmiş notlarınıza erişemezsiniz.",
 	"@previousNotesEncryptedWarning": {
 		"description": "Previous notes encrypted warning message"
 	},
@@ -3362,6 +2762,14 @@
 		"description": "Request approval from another device button text"
 	},
 
+	"signOutClearingDevice": "Yerel hesap verileri temizleniyor…",
+	"signOutFinishing": "Çıkış işlemi tamamlanıyor…",
+	"signOutLibraryWarning": "Çıkış yaptığınızda yalnızca bu cihazda kayıtlı notlar silinir. Eşitlenmiş notları geri yüklemek için onaylı bir cihaza veya kurtarma parolanıza ihtiyacınız olur.",
+	"localLibraryUnavailable": "Yerel not klasörünüz belirlenemedi. Tekrar deneyin veya yeni bir yerel arşiv oluşturmak için çıkış yapın.",
+	"signOutSecureStorageRetry": "Güvenli depolamaya erişilemiyor. Cihazınızın kilidini açıp tekrar deneyin.",
+	"signOutOtherWindowRetry": "Başka bir pencerede oturum kapatılıyor. Tamamlandığında tekrar deneyin.",
+	"signOutDatabaseRetry": "Yerel veritabanı temizlenemedi. Diğer Better Keep pencerelerini kapatıp tekrar deneyin.",
+	"signOutCleanupRetry": "Oturum kapatılamadı. Tekrar deneyin.",
 	"signingOut": "Çıkış yapılıyor...",
 	"@signingOut": { "description": "Signing out status message" },
 
@@ -3397,14 +2805,6 @@
 	"failedToResetAccount": "Hesap sıfırlanamadı",
 	"@failedToResetAccount": {
 		"description": "Failed to reset account error message"
-	},
-
-	"failedToResetAccountError": "Hesap sıfırlanamadı: {error}",
-	"@failedToResetAccountError": {
-		"description": "Failed to reset account with error message",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
 	},
 
 	"startFreshQuestion": "Temiz Bir Başlangıç Yapılsın mı?",
@@ -3461,14 +2861,6 @@
 	"failedToSaveSketch": "Çizim kaydedilemedi",
 	"@failedToSaveSketch": {
 		"description": "Failed to save sketch error message"
-	},
-
-	"errorSavingSketch": "Çizim kaydedilirken hata oluştu: {error}",
-	"@errorSavingSketch": {
-		"description": "Error saving sketch with details",
-		"placeholders": {
-			"error": { "type": "String" }
-		}
 	},
 
 	"planFree": "Ücretsiz",
@@ -3555,27 +2947,12 @@
 		"description": "Combined description of Pro features"
 	},
 
-	"unlockTheFullExperience": "Tam Deneyimin Kilidini Açın",
-	"@unlockTheFullExperience": {
-		"description": "Paywall heading to unlock full experience"
-	},
-
 	"maybeLater": "Belki daha sonra",
 	"@maybeLater": { "description": "Dismiss/skip button text for paywall" },
 
 	"enableNotificationsTitle": "Bildirimleri Etkinleştir",
 	"@enableNotificationsTitle": {
 		"description": "Title for the dialog prompting notification permissions after sync restores reminders"
-	},
-
-	"enableNotificationsForReminders": "Senkronize edilen notlarınızda hatırlatıcılar var. Kaçırmamak için bildirimleri etkinleştirin.",
-	"@enableNotificationsForReminders": {
-		"description": "Body text for the notification permission dialog after sync restores reminders"
-	},
-
-	"enableNotifications": "Etkinleştir",
-	"@enableNotifications": {
-		"description": "Button to enable notifications in the reminder permission dialog"
 	},
 
 	"rateOnAppStore": "App Store'da Değerlendir",
@@ -3663,10 +3040,11 @@
 	"couldNotSaveLabel": "Etiket kaydedilemedi. Tekrar deneyin.",
 	"noConnectionAvailable": "Bağlantı yok.",
 	"localEncryptionUnavailable": "Kaydedilen şifreleme anahtarları okunamadı. Cihazınızın kilidini açıp tekrar deneyin. Yerel verileriniz korundu.",
-	"localEncryptionMissing": "Kayıtlı notlarınızı açmak için gereken anahtarlar eksik veya hasarlı. Erişimi geri yüklemek için yeniden bağlanın veya hesap kurtarmayı kullanın. Yerel verileriniz korundu.",
 	"syncCheckingConnection": "Bağlantı kontrol ediliyor…",
 	"syncPreparing": "Senkronizasyon hazırlanıyor…",
-	"syncUploadRestricted": "Değişiklikler bu cihaza kaydedildi. Yüklemek için Pro gerekir.",
+	"syncUploadRestricted": "Bu cihaza kaydedildi. Değişiklikleri eşitlemek için Better Keep bulutunu etkinleştirin.",
+	"syncUpgradeReminder": "Değişiklikleriniz burada kayıtlı. Pro ile eşitleyin.",
+	"syncUpgradeForUploads": "Bu cihaza kaydedildi. Better Keep bulutuna yüklemek için Pro’ya yükseltin.",
 	"syncPaused": "Senkronizasyon duraklatıldı. Lütfen tekrar deneyin.",
   "insertTable": "Tablo ekle",
   "tablePickerHint": "Eklemek için bir hücreye dokunun veya özel bir boyut seçin.",
@@ -3713,5 +3091,112 @@
   "deviceStorageLow": "Cihazınızın depolama alanı azalıyor. Eşitlenmemiş notlarınızı korumaya yardımcı olmak için yer açın.",
   "storageLoginAgain": "Tekrar giriş yap",
   "storageClearedAfterPressure": "Depolama alanı azaldığı için yerel veriler silinmiş olabilir. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz.",
-  "storageCleared": "Yerel veriler silindi ve hesabınızdan çıkış yapıldı. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz."
+  "storageCleared": "Yerel veriler silindi ve hesabınızdan çıkış yapıldı. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz.",
+
+  "externalSyncTitle": "Eşitleme sağlayıcısı",
+  "externalSyncDescription": "Notlarınızı cihazlar arasında eşitlemek için bir sağlayıcı seçin.",
+  "externalSyncUnavailable": "Depolamayı bağlamak için oturum açın ve bu cihazı onaylayın veya kurtarın.",
+  "externalSyncAccount": "Hesap ve şifreleme",
+  "externalSyncCloud": "Better Keep bulutu",
+  "externalSyncCloudDescription": "Yerleşik eşitleme · Yükleme için Pro gerekir",
+  "externalSyncAction": "{action, select, connect{Bağlan} browser{Tarayıcıyla oturum aç} manual{Uygulama parolası kullan} reconnect{Yeniden bağlan} continue{Tarayıcıda devam et} pause{Duraklat} resume{Sürdür} disconnect{Bağlantıyı kes} sync{Şimdi eşitle} other{Yeniden dene}}",
+  "externalSyncState": "{state, select, preparing{Yetkilendirme hazırlanıyor…} awaitingConsent{Tarayıcınızda yetkilendirmeye hazır} authorizing{Bağlanıyor…} cancelling{Yetkilendirme iptal ediliyor…} cancelPending{İptal işlemi doğrulanamadı. İptal etmeyi yeniden deneyin.} connecting{Bağlanıyor…} pausing{Duraklatılıyor…} enabling{Sürdürülüyor…} disconnecting{Bağlantı kesiliyor…} paused{Duraklatıldı} notConnected{Bağlı değil} keyRecovery{Bu bağlantıyı kullanmak için şifreleme anahtarınızı kurtarın.} pending{Bazı değişiklikler eşitlenmeyi bekliyor.} other{Bağlı}}",
+  "externalSyncFailure": "{reason, select, sharedSetupRequired{Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.} reconnectRequired{Eşitlemeye devam etmek için bu hesabı yeniden bağlayın.} quotaExceeded{Depolama alanınız dolu. Bu sağlayıcıda yer açıp yeniden deneyin.} rateLimited{Sağlayıcı beklememizi istedi. Eşitleme otomatik olarak yeniden denenecek.} corruptData{Bazı eşitleme verileri doğrulanamadı. Yerel notlarınız korunur.} unsupported{Bu sağlayıcı veya tarayıcı bağlantıyı tamamlayamıyor.} other{Bu sağlayıcıya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.}}",
+  "externalSyncLastSuccess": "Son başarılı eşitleme: {time}",
+  "externalSyncNeverSynced": "Henüz başarılı bir eşitleme yok",
+  "externalSyncBlocked": "Bazı notlar veya ekler henüz yüklenmeye hazır değil. Eşitleme yeniden denenecek.",
+  "externalSyncDisconnectTitle": "{provider} bağlantısı kesilsin mi?",
+  "externalSyncDisconnectMessage": "Bu işlem, bu hesapla eşitlemeyi durdurur. Bu cihazdaki notlar ve sağlayıcıda zaten saklanan dosyalar korunur.",
+  "externalSyncRevocationIncomplete": "Better Keep bağlantısı kesildi. Erişim izninin kaldırıldığı doğrulanamadı. Sağlayıcınızın hesap ayarlarından Better Keep'in erişimini kaldırın.",
+  "externalSyncNextcloudHelp": "Nextcloud güvenlik ayarlarınızdaki bir uygulama parolasını kullanın. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.",
+  "externalSyncServer": "Sunucu URL'si",
+  "externalSyncUsername": "Kullanıcı adı",
+  "externalSyncAppPassword": "Uygulama parolası",
+  "externalSyncInvalidServer": "Kullanıcı adı, parola, sorgu veya parça içermeyen bir HTTPS sunucu URL'si girin.",
+  "externalSyncRequired": "Bu alan zorunludur.",
+  "externalSyncAlreadyConnected": "Yetkilendirme, iptal işleminden önce tamamlandı. Sağlayıcı bağlı. Kaldırmak için Bağlantıyı kes seçeneğini kullanın.",
+  "externalSyncLogoutPending": "Bazı değişiklikler hâlâ eşitlenmeyi bekliyor. Oturumu kapatmak, bu cihazdaki yerel notları ve medyayı kaldırır. Hiçbir sağlayıcıya kaydedilmemiş değişiklikler kaybolabilir.\n\nOturumu kapatmadan önce eşitlemeyi tamamlayın veya verilerinizi dışa aktarın.",
+  "externalSyncLogoutUnknown": "Tüm değişikliklerinizin eşitlenip eşitlenmediğini doğrulayamadık. Oturumu kapatmak, bu cihazdaki yerel notları ve medyayı kaldırır. Hiçbir sağlayıcıya kaydedilmemiş değişiklikler kaybolabilir.\n\nOturumu kapatmadan önce eşitleme sağlayıcılarınızı kontrol edin veya verilerinizi dışa aktarın.",
+  "externalSyncUnlockSketches": "Bazı kilitli notlar, güncellenmesi gereken eski çizimler içeriyor. Çizimleri oluşturduğunuz cihazda bu notları açın ve PIN'inizle kilitlerini kaldırın, ardından eşitlemeyi yeniden deneyin.",
+	"externalSyncOff": "Eşitleme kapalı",
+  "externalSyncCloudDownloadDescription": "Kayıtlı notları indirin · Yükleme için Pro gerekir",
+  "externalSyncDownloadOnly": "Better Keep cloud üzerindeki notları indirin. Yüklemeler duraklatılmış olarak kalacak.",
+  "externalSyncDownloadsOn": "Yüklemeler duraklatıldı · İndirmeler açık",
+  "externalSyncAllPaused": "Yüklemeler ve indirmeler duraklatıldı",
+	"externalSyncOffDescription": "Yüklemeler duraklatıldı",
+	"externalSyncDetails": "Eşitleme ayrıntıları",
+	"externalSyncNeedsAttention": "İlgilenmeniz gerekiyor · Ayrıntılara bakın",
+	"externalSyncConnectHelp": "Depolama erişimine izin vermek için giriş yapın. Bağlandıktan sonra bu sağlayıcı eşitleme için seçilecektir.",
+	"verifyNewDevice": "Yeni cihazı doğrula",
+	"deviceVerificationInstructions": "Güvenilir cihazınızda yeni cihazdaki QR kodunu tarayın.",
+	"deviceVerificationExpired": "Doğrulama kodunun süresi doldu. Yeni cihazda yeni bir kod oluşturun.",
+	"newVerificationCode": "Yeni kod oluştur",
+	"deviceVerificationMismatch": "Cihazlar eşleşmiyor. Bu isteği onaylamayın.",
+	"scanNewDevice": "Yeni cihazı tara",
+	"compareSecurityCode": "Güvenlik kodunu karşılaştır",
+	"deviceCameraUnavailable": "Kamera kullanılamıyor. Kamera erişimine izin verin veya kurtarma parolanızla erişimi geri yükleyin.",
+	"deviceVerificationRetry": "Doğrulama tamamlanamadı. Her iki cihazı güncelleyin, yeni cihazda yeni bir kod oluşturun ve tekrar deneyin.",
+	"browserStorageUnavailable": "Tarayıcı ayarlarında bu sitenin veri kaydetmesine izin verip yeniden deneyin.",
+	"browserLegacyRecoveryUnavailable": "Bu sürüm tarayıcıda kayıtlı anahtarların kilidini açamıyor. Bu tarayıcının verilerini silmeyin. Eşitlenmiş notlarınızı onaylı bir cihazda açın veya başka bir tarayıcıda kurtarma parolanızı kullanın.",
+	"browserSessionOnly": "Yalnızca bu oturum",
+	"browserDeviceTrust": "Bu tarayıcı onayınızı kaydettikten sonra indirilen notları çevrimdışı açabilirsiniz.",
+	"browserUnlockOnline": "Notlarınız bu cihazda. Kilitlerini açmak için internete bağlanıp Tekrar dene seçeneğine dokunun.",
+	"verifyTrustedDevice": "Güvenilir cihazı doğrula",
+	"verifyTrustedDeviceInstructions": "Şifreleme anahtarınızı almak için güvenilir cihazınızdaki QR kodunu tarayın.",
+	"scanTrustedDevice": "Güvenilir cihazı tara",
+	"confirmOnNewDevice": "Yeni cihazınızda onaylayın",
+	"confirmOnNewDeviceInstructions": "Bu QR kodunu yeni cihazla tarayın. Kilit açılana kadar bu ekranı açık tutun.",
+	"storageSecurityUpgrade": "Güvenle yeniden bağlan",
+	"storageSecurityUpgradeInstructions": "Bu bağlantı, sunucunun yönettiği eski kimlik bilgisi deposunu kullanıyordu. Önce sağlayıcınızın bağlı uygulama ayarlarından Better Keep erişimini iptal edin (veya Nextcloud uygulama parolasını kaldırın), sonra buradan yeniden bağlanın. Notlarınız ve uzak dosyalarınız korunur. Yeni kimlik bilgileri, not şifreleme anahtarınızla cihazınızda şifrelenir.",
+  "devicePairingScanInstruction": "Güvendiğiniz cihazda onay isteğini açın ve bu kodu tarayın.",
+  "showQrCode": "QR kodunu göster",
+  "externalSyncSharedSetup": "Bu cihazda Google Drive’a giriş yapın.",
+  "externalSyncSharedSetupHelp": "Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.",
+  "lite": "Lite",
+  "choosePlan": "Planınızı seçin",
+  "automaticExternalSync": "Otomatik harici senkronizasyon",
+  "manualExternalSync": "Manuel harici senkronizasyon",
+  "liteDescription": "Kendi bulut depolamanızla otomatik güncellemeler.",
+  "manualSyncDescription": "Manuel senkronizasyon ücretsizdir. Lite ve Pro otomatik güncellemeler sunar.",
+  "subscriptionActiveTitle": "Abonelik etkin",
+  "subscriptionChangePlan": "Plan değiştirmek için mevcut aboneliğinizi yönetin.",
+  "externalSyncCapacity": "{total} alanın {used} kadarı kullanılıyor",
+  "externalSyncCapacityLoading": "Depolama kontrol ediliyor…",
+  "externalSyncCapacityUnavailable": "Depolama bilgisi kullanılamıyor",
+  "externalSyncClear": "Eşitlenen verileri sil",
+  "externalSyncClearCodeError": "Eşitlenen veriler silinemedi. Kodu ve bağlantınızı kontrol edin veya yeni bir kod isteyin. Silme işlemi başladıysa tamamlanana kadar eşitleme kapalı kalır.",
+  "externalSyncClearCodeSent": "E-posta adresinize gönderilen kodu girin.",
+  "externalSyncClearDone": "Eşitlenen veriler silindi. Eşitleme kapalı. Yerel notlar korundu. Sağlayıcınız silinen dosyaları çöp kutusunda tutabilir.",
+  "externalSyncClearMessage": "Eşitlenen kopyaları silin ve eşitlemeyi kapatın. Yerel notlar kalır; yalnızca sağlayıcıda bulunan veriler kaybolur.",
+  "externalSyncClearPending": "Silme tamamlanmadı · Yeniden denemek için dokunun",
+  "externalSyncClearSendCode": "Kod gönder",
+  "externalSyncClearSendError": "Kod gönderilemedi. Hesabınızın e-posta adresinin doğrulandığından emin olun, bir dakika bekleyip tekrar deneyin.",
+  "externalSyncClearVerifyTitle": "Silmek için doğrulayın",
+  "externalSyncClearing": "Eşitlenen veriler siliniyor…",
+  "externalSyncStorageFull": "Depolama dolu. Eşitleme duraklatıldı; yerel notlarınız güvende. Yer açın, ardından Şimdi eşitle seçeneğine dokunun.",
+  "@externalSyncCapacity": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "subscribe": "Abone ol",
+  "builtInCloudSync": "Yerleşik bulut senkronizasyonu",
+  "deviceAdded": "Eklendi",
+	"accountDeletionInProgress": "Hesap silme işlemi başladı. Yardım için support@betterkeep.app ile iletişime geçin.",
+	"deletionCodeRecentlyRequested": "Kısa süre önce bir kod istendi. E-postanızı kontrol edin veya yeni bir kod istemeden önce bir dakika bekleyin.",
+  "providerSignInVerificationFailed": "Oturum açma işleminiz doğrulanamadı. Lütfen tekrar oturum açmayı deneyin.",
+	"accountDeletionPaused": "Hesap silme geçici olarak duraklatıldı. support@betterkeep.app ile iletişime geçin.",
+  "deviceUsePairingCode": "Kod kullan",
+  "deviceEnterPairingCode": "Eşleştirme kodunu gir",
+  "devicePairingCodeInstruction": "Güvenilir cihazınızda Eşleştirme kodunu gir seçeneğini seçin ve bu sekiz rakamı girin.",
+  "devicePairingCodeEntryInstruction": "Yeni cihazınızda gösterilen sekiz rakamı girin.",
+  "devicePairingCodeLabel": "Eşleştirme kodu",
+  "devicePairingCodeExpired": "Bu kod artık kullanılamıyor. Yeni bir kod oluşturun.",
+  "devicePairingCodeFailed": "Yeni cihazınızdaki kodu kontrol edip tekrar deneyin. Süresi dolduysa yeni bir kod oluşturun.",
+  "devicePairingConnecting": "Bağlanıyor…"
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:better_keep/components/quill_input_semantics.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_embed_builders.dart';
@@ -50,8 +51,9 @@ class NoteTableEmbedBuilder extends EmbedBuilder {
       ),
     );
     final focus = context
-        .findAncestorWidgetOfExactType<QuillEditor>()
-        ?.focusNode;
+        .findAncestorStateOfType<QuillEditorState>()
+        ?.widget
+        .focusNode;
     if (embedContext.readOnly || editing == null || focus == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1025,7 +1027,7 @@ class _TableCellState extends State<_TableCell> {
                 mediaMaxHeight: _imageHeight ?? math.max(1, widget.height - 16),
               ),
             ),
-          ),
+          ).withWebInputSemantics(),
         ),
       ),
     ),

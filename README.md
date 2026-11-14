@@ -73,15 +73,34 @@ The app requires environment variables defined in a `.env` file. Create one at t
 # WEB_AUTH_DOMAIN=betterkeep.app
 # WINDOWS_AUTH_DOMAIN=betterkeep.app
 #
-# Web storage encryption key (64-char hex string, 256 bits)
-# Generate with: openssl rand -hex 32
-# WEB_STORAGE_KEY=<your-64-char-hex-key>
-#
 # Required for physical Android/iOS devices in emulator mode.
 # Optional remote/LAN override for desktop clients; same-machine desktop
 # clients default to 127.0.0.1.
 # EMULATOR_HOST=192.168.1.25
 ```
+
+Storage provider public client IDs are documented in [.env.example](.env.example).
+For HTTPS development, run `npm run dev web` and `npm run dev hosting`, then
+open `/app` on your configured development origin. The site proxies `/app` to Flutter
+and serves its browser callback at `/oauth/storage/callback`, preserving the
+registered provider URL. For an isolated Flutter port, start hosting with
+`BETTER_KEEP_FLUTTER_DEV_ORIGIN=http://127.0.0.1:PORT`. This is only the local
+upstream; browser authorization still uses the public HTTPS hostname.
+`EMULATOR_HOST` configures the emulator hostname/IP, including web and simulators.
+On physical devices, the debug screen's LAN host field takes precedence.
+For a browser served over HTTPS, also set
+`EMULATOR_WEB_ORIGIN` to your HTTPS development origin in `.env` and rebuild.
+Astro reads the same value for its allowed hostname and public debug URLs;
+the actual hostname belongs only in your ignored local configuration.
+The browser then uses HTTPS paths `/__emulator/auth`, `/__emulator/firestore`,
+`/__emulator/functions`, and `/__emulator/storage`. Astro can forward these to
+local ports 9099, 8080, 5001, and 9199 whenever `EMULATOR_WEB_ORIGIN` is set.
+Leave it empty to disable the development emulator proxy. Native SDKs still use
+the configured host and
+the emulator ports over HTTP. The override never changes Live routing.
+Approved browsers can remember their device identity in IndexedDB. After a
+reload, local notes open offline. Cloud sync resumes after online device verification. See [external sync setup and transition](docs/EXTERNAL_SYNC_IMPLEMENTATION.md#provider-configuration)
+for provider setup and the device-verification flow.
 
 **Using VS Code:**
 
@@ -201,6 +220,24 @@ emulators with:
 npm test firebase-emulator-functions
 ```
 
+Run account-deletion safety and HTTP end-to-end tests against isolated Auth,
+Firestore, and Storage emulators (synthetic accounts only):
+
+```bash
+npm --prefix functions run test:deletion
+```
+
+Automatic deletion fails closed unless `ACCOUNT_DELETION_ENABLED=true` is set
+on the worker. Legacy schedules have no verified request record and remain on
+hold; do not convert them into verified requests without renewed user consent.
+Keep the deletion scheduler paused during rollout and incident review. Deploy
+protected-field Firestore rules first, then the backend with deletion disabled.
+See [account deletion operations](docs/ACCOUNT_DELETION.md) for the token-expiry
+wait, partial-deletion recovery procedure, release gate, and remaining rollout checks.
+The suite covers cancellation/worker races, OTP replay, provider sign-in hooks,
+reminders, and complete deletion/retry using synthetic data. OAuth provider
+consent screens and real email delivery still require separate live validation.
+
 Run the Firestore and Storage security-rules suite together, then exercise the
 managed review token directly against Auth, Functions, Firestore, and Storage:
 
@@ -215,6 +252,15 @@ Hosting from a connected Android target:
 ```bash
 npm test firebase-emulator-android -- -d <device-id>
 npm test firebase-environment-android -- -d <device-id>
+```
+
+Use a fresh iOS simulator or Android emulator and disposable local Firebase
+emulators to test account switching and recovery. The test creates synthetic
+accounts, saves a local-only note, removes the QA device’s cached key, and
+checks that passphrase recovery restores access to the same note.
+
+```bash
+npm test firebase-emulator-auth-recovery -- -d <simulator-or-emulator-id>
 ```
 
 ### Building the app
@@ -284,13 +330,21 @@ npm run build web
 
 This builds the indexable Astro marketing site at `/`, embeds Flutter Web at
 `/app/`, and validates the complete Firebase Hosting artifact in `build/web/`.
-Deploy that artifact to Firebase Hosting with:
+Use the scoped Hosting commands for releases:
 
 ```bash
-npm run deploy hosting
+npm run deploy hosting-web       # Website only; keep the live app
+npm run deploy hosting-app-beta  # New opt-in app beta; keep the website
+npm run deploy hosting-app-prod  # Promote the published beta; keep the website
+npm run deploy hosting-beta      # Website + new opt-in app beta
+npm run deploy hosting-prod      # Website + promote the published beta
 ```
 
-The Hosting deployment always rebuilds the web application first.
+Promotion reuses the published beta's paired builds and preserves each browser's
+storage. It never compiles current app source. Add `--prepare-only` to prepare a
+reviewable release without publishing. See [the Hosting release workflow](docs/WEB_BETA.md)
+for preparation, approval, validation and recovery. These commands deploy only the
+public Hosting site; backend and admin Hosting are excluded.
 
 ### Checks and release gate
 
@@ -314,7 +368,10 @@ npm run release
 ```
 
 The gate runs `npm run check analyze`, then `npm test release`, stopping on
-failure. CI uses this same command for pull requests, tags, and manual runs.
+failure. On GitHub Actions, the core checks and offline browser acceptance tests
+run in parallel. Both must pass for the Release gate to succeed.
+To run the offline acceptance suite locally with Firefox, set `FIREFOX_BIN` to
+the Firefox executable and run `npm test -- offline-browser`.
 Dependency audits are invoked manually with `npm run check audit` (root and
 Functions) or `npm run functions audit` (Functions only); they are not part of
 the release gate. Dependency installation may still print advisory summaries.
@@ -338,6 +395,7 @@ changes. Each affected component runs once:
 | Component | Local commit checks |
 | --- | --- |
 | Flutter | `flutter analyze --no-pub` and the complete local unit/widget suite |
+| Web sign-out coordination | For changes to AuthService, Web Locks, or release-channel scoping, run the stable and beta lock/reload tests in Chrome. Run them independently with `npm test -- web-sign-out-lock`. |
 | Functions | Existing compilation, script type checks, and unit tests |
 | Admin and marketing | Each affected workspace's Astro/TypeScript check and local tests |
 | Tooling | Local Node tests |

@@ -1,0 +1,33 @@
+---
+import PublicDocumentPage from '../components/PublicDocumentPage.astro';
+import { getPublicDocument } from '../data/public-documents';
+import { product } from '../data/product';
+---
+
+<PublicDocumentPage document={getPublicDocument('web-beta')}>
+  <section>
+    <h2>Try the beta</h2>
+    <ol>
+      <li>In your usual browser, sync or export any notes saved only on this device. Local-only notes stay in the library where you created them.</li>
+      <li>While online, open the <a href={`${product.webAppUrl}?channel=beta`}>web beta invitation</a> and choose <strong>Try beta</strong>. If there’s no active beta, the regular app opens.</li>
+      <li>Sign in with your usual Better Keep account. If asked to verify this browser, approve it from a trusted device or use your existing recovery passphrase.</li>
+    </ol>
+    <p>This browser remembers your choice the next time you open Better Keep.</p>
+  </section>
+
+  <section>
+    <h2>Return to stable</h2>
+    <ol>
+      <li>In beta, sync or export any changes you want to take with you. Close any other Better Keep tabs.</li>
+      <li>Select the <strong>Beta</strong> badge on the right edge of the screen, then choose <strong>Return to stable</strong>.</li>
+    </ol>
+    <p>If beta fails to load, choose <strong>Return to stable</strong> on the error screen when available. Stable reopens the original library for this browser profile. Unsynced beta notes stay in the beta library.</p>
+  </section>
+
+  <section>
+    <h2>If you can’t switch back</h2>
+    <p>If the app still opens but the Beta badge is missing, <a href={`${product.webAppUrl}?channel=stable`}>open your stable library</a> in the same browser profile and choose <strong>Return to stable</strong>.</p>
+    <p>If the only option is <strong>Retry</strong>, try again when you’re online. If the screen persists, <a href="/contact">contact support</a>. Keep your browser data so your local notes stay on this device.</p>
+    <p>If you see a recovery screen, leave <strong>Start Fresh</strong> alone. It resets your account and can delete synced notes. You can return to stable without resetting your account.</p>
+  </section>
+</PublicDocumentPage>

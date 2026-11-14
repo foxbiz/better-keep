@@ -9,6 +9,9 @@ enum UserPlan {
   /// Free tier - local-first with limited cloud features
   free,
 
+  /// Automatic sync using the user's external storage.
+  lite,
+
   /// Pro tier - full cloud sync and premium features
   pro;
 
@@ -17,6 +20,8 @@ enum UserPlan {
     switch (this) {
       case UserPlan.free:
         return 'Free';
+      case UserPlan.lite:
+        return 'Lite';
       case UserPlan.pro:
         return 'Pro';
     }
@@ -27,6 +32,8 @@ enum UserPlan {
     switch (this) {
       case UserPlan.free:
         return l10n.planFree;
+      case UserPlan.lite:
+        return l10n.lite;
       case UserPlan.pro:
         return l10n.planPro;
     }
@@ -40,6 +47,7 @@ enum UserPlan {
     switch (this) {
       case UserPlan.free:
         return false;
+      case UserPlan.lite:
       case UserPlan.pro:
         return true;
     }
@@ -48,6 +56,8 @@ enum UserPlan {
   /// Parse from string (e.g., from Firebase)
   static UserPlan fromString(String? value) {
     switch (value?.toLowerCase()) {
+      case 'lite':
+        return UserPlan.lite;
       case 'pro':
         return UserPlan.pro;
       default:
@@ -60,6 +70,8 @@ enum UserPlan {
     switch (this) {
       case UserPlan.free:
         return 'free';
+      case UserPlan.lite:
+        return 'lite';
       case UserPlan.pro:
         return 'pro';
     }

@@ -2,6 +2,12 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:better_keep/services/local_storage_recovery.dart';
+import 'package:better_keep/services/firebase_scoped_preferences.dart';
+import 'package:better_keep/services/file_system.dart'
+    show
+        LocalLibraryUnavailable,
+        localLibraryUnavailable,
+        verifyAccountFileDirectory;
 import 'package:better_keep/services/storage_health_service.dart';
 
 import 'package:alarm/alarm.dart';
@@ -14,7 +20,6 @@ import 'package:better_keep/l10n/app_localization_config.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/services/audio_playback_source_service.dart';
-import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/firebase_app_check_policy.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
@@ -42,6 +47,7 @@ import 'package:better_keep/utils/db_init.dart'
     if (dart.library.io) 'package:better_keep/utils/db_init_native.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
 import 'package:better_keep/services/alarm_id_service.dart';
 import 'package:better_keep/services/firebase_auth_redirect_domain.dart';
 import 'package:better_keep/services/firebase_apple_configuration.dart';
@@ -49,13 +55,18 @@ import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/firebase_bootstrap_coordinator.dart';
 import 'package:better_keep/services/firebase_default_app_initializer.dart';
+import 'package:better_keep/services/attachment_startup_cleanup.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_options.dart';
+import 'services/web_release.dart';
 
 void main() async {
   BetterKeepWidgetsBinding.ensureInitialized();
+
+  // Set before any service can read preferences, including motion settings.
+  if (isBetaWebBuild) SharedPreferences.setPrefix('flutter.beta.');
 
   // Enable edge-to-edge display for Android 15+ compatibility
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -184,7 +195,7 @@ void _activateAppCheckInBackground() {
     return;
   }
 
-  FirebaseAppCheck.instance
+  FirebaseAppCheck.instanceFor(app: FirebaseBackend.app)
       .activate(
         providerWeb: ReCaptchaV3Provider(
           const String.fromEnvironment('GOOGLE_RECAPTCHA_SITE_KEY'),
@@ -355,6 +366,38 @@ MaterialApp _buildLocalizedStartupApp({
   );
 }
 
+class LocalLibraryGate extends StatelessWidget {
+  const LocalLibraryGate({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: localLibraryUnavailable,
+    builder: (context, unavailable, _) {
+      if (!unavailable) return child;
+      return _buildLocalizedStartupApp(
+        home: AppStartupErrorView(
+          onRetry: () async {
+            try {
+              final prefs = await AppState.prefs;
+              await FirebaseScopedPreferences.reload(prefs);
+              verifyAccountFileDirectory(prefs);
+            } catch (error) {
+              AppLogger.error('Local library still unavailable', error);
+            }
+          },
+          onLibrarySignOut: () async {
+            try {
+              await AuthService.signOutUnavailableLibrary(duringStartup: false);
+            } catch (_) {
+              // SignOutProgressView owns retry after confirmation.
+            }
+          },
+        ),
+      );
+    },
+  );
+}
+
 class BetterKeep extends StatefulWidget {
   const BetterKeep({super.key});
 
@@ -364,7 +407,7 @@ class BetterKeep extends StatefulWidget {
 
 class _BetterKeepState extends State<BetterKeep> {
   Database? db;
-  bool _databaseStartupFailed = false;
+  Object? _databaseStartupError;
   late Future<void> _appServicesReady;
 
   /// App links for deep linking (OAuth callback)
@@ -406,9 +449,6 @@ class _BetterKeepState extends State<BetterKeep> {
     // Check notification permission status (read-only, no prompt)
     ReminderPermissionService().checkAndNotify();
 
-    // Initialize intent handler for opening/sharing files
-    IntentHandlerService.instance.init();
-
     // Initialize subscription service for IAP early (doesn't require auth)
     // This allows products to load while user is logging in
     unawaited(
@@ -420,13 +460,19 @@ class _BetterKeepState extends State<BetterKeep> {
       }),
     );
 
-    // Initialize subscription/plan tracking - this sets up auth state listener
-    // so it will react when users sign in/out, even if not currently logged in
-    await PlanService.instance.init();
-
-    // Use the same recoverable post-sign-in pipeline for restored sessions and
-    // fresh sign-ins. A transient cloud failure must not make startup fatal.
-    await AuthService.initializeCurrentUserServices();
+    final intentsReady = Completer<void>();
+    // Listen before account restoration: Android does not replay warm shares.
+    // Imports still wait for restored services and a rendered UI frame.
+    IntentHandlerService.instance.init(ready: intentsReady.future);
+    try {
+      // Restore the session before importing, but keep local sharing available
+      // if optional account services fail during startup.
+      await PlanService.instance.init();
+      ExternalSyncService.instance.init();
+      await AuthService.initializeCurrentUserServices();
+    } finally {
+      completeImageIntentStartup(intentsReady);
+    }
   }
 
   Future<void> _initializeOptionalReminderServices() async {
@@ -467,6 +513,15 @@ class _BetterKeepState extends State<BetterKeep> {
     AppLogger.log(
       '[DeepLink] Received: ${uri.scheme}://${uri.host}${uri.path}',
     );
+
+    // Storage grants are completed by the authenticated controller poll. The
+    // link only brings the app to the foreground; it carries no credentials.
+    if (uri.scheme == 'betterkeep' && uri.host == 'storage-sync') return;
+
+    if (uri.scheme == 'betterkeep' && uri.host == 'image-share') {
+      unawaited(IntentHandlerService.instance.checkPendingIntents());
+      return;
+    }
 
     // Handle OAuth callback (betterkeep://auth?code=xxx&transactionId=xxx)
     if (uri.scheme == 'betterkeep' && uri.host == 'auth') {
@@ -514,36 +569,70 @@ class _BetterKeepState extends State<BetterKeep> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_databaseStartupFailed) {
-      return _buildLocalizedStartupApp(
-        home: AppStartupErrorView(
-          onRetry: () {
-            setState(() {
-              _databaseStartupFailed = false;
-              db = null;
-            });
-            _startAppServices();
-          },
-        ),
-      );
-    }
+  Widget build(BuildContext context) => ValueListenableBuilder<SignOutStage?>(
+    valueListenable: AuthService.signOutStage,
+    builder: (context, stage, _) {
+      if (stage != null) {
+        return _buildLocalizedStartupApp(
+          home: SignOutProgressView(
+            stage: stage,
+            problem: AuthService.signOutProblem,
+            onRetry: () async {
+              if (_databaseStartupError != null &&
+                  AuthService.signOutProblem != SignOutProblem.otherWindow) {
+                setState(() => _databaseStartupError = null);
+                _startAppServices();
+                return;
+              }
+              try {
+                await AuthService.resumePendingSignOut();
+              } catch (_) {
+                // The failed state keeps Retry available.
+              }
+            },
+          ),
+        );
+      }
+      if (_databaseStartupError != null) {
+        return _buildLocalizedStartupApp(
+          home: AppStartupErrorView(
+            onLibrarySignOut: _databaseStartupError is LocalLibraryUnavailable
+                ? () async {
+                    try {
+                      await AuthService.signOutUnavailableLibrary(
+                        duringStartup: true,
+                      );
+                    } catch (_) {
+                      // SignOutProgressView handles the pending transition.
+                      return;
+                    }
+                    if (!mounted) return;
+                    setState(() => _databaseStartupError = null);
+                    _startAppServices();
+                  }
+                : null,
+            onRetry: () {
+              setState(() {
+                _databaseStartupError = null;
+                db = null;
+              });
+              _startAppServices();
+            },
+          ),
+        );
+      }
 
-    if (db == null) {
-      return _buildLocalizedStartupApp(home: const AppStartupLoadingView());
-    }
+      if (db == null) {
+        return _buildLocalizedStartupApp(home: const AppStartupLoadingView());
+      }
 
-    return App();
-  }
+      return LocalLibraryGate(child: App());
+    },
+  );
 
   Future<void> _initDb() async {
     try {
-      var db = await initDatabase(detectDataLoss: true);
-      final recovery = LocalStorageRecovery(await AppState.prefs);
-      if (recovery.pending) {
-        await AuthService.signOut();
-        db = AppState.db;
-      }
+      final db = await AuthService.openDatabaseForStartup();
       LocalDataEncryption.setDatabaseGetter(() => db);
       await NoteSortService().init();
       // Resolve interrupted local lock transactions before the note UI, sync,
@@ -567,6 +656,27 @@ class _BetterKeepState extends State<BetterKeep> {
         operations: protectedFileOperations,
         journal: NewAttachmentTransactionJournal(await AppState.prefs),
       );
+      if (!kIsWeb) {
+        try {
+          final prefs = await AppState.prefs;
+          final unresolved =
+              (await NoteLockJournal(prefs).load()).isNotEmpty ||
+              (await NoteLockRemovalJournal(prefs).load()).isNotEmpty ||
+              (await LegacySketchMigrationJournal(prefs).load()).isNotEmpty ||
+              (await NewAttachmentTransactionJournal(prefs).load()).isNotEmpty;
+          if (!unresolved) {
+            await AttachmentStartupCleanup.run(
+              database: db,
+              operations: protectedFileOperations,
+              retiredPaths: (await PendingAttachmentSourceCleanupJournal(
+                prefs,
+              ).load()).map((r) => r.sourcePath),
+            );
+          }
+        } catch (error, stackTrace) {
+          AppLogger.error('Attachment maintenance deferred', error, stackTrace);
+        }
+      }
       await PendingAttachmentSourceCleanupRecoveryService.recoverPending(
         database: db,
         operations: protectedFileOperations,
@@ -610,7 +720,9 @@ class _BetterKeepState extends State<BetterKeep> {
           );
         }),
       );
-      unawaited(SketchPreviewRepairService.runIfNeeded());
+      if (AuthService.signOutStage.value == null) {
+        unawaited(SketchPreviewRepairService.runIfNeeded());
+      }
       setState(() {
         this.db = db;
       });
@@ -622,7 +734,7 @@ class _BetterKeepState extends State<BetterKeep> {
       );
       if (mounted) {
         setState(() {
-          _databaseStartupFailed = true;
+          _databaseStartupError = error;
         });
       }
     }

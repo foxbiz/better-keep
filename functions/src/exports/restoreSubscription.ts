@@ -43,7 +43,7 @@ export default onNonReviewCall(
 						)
 					: await verifyGooglePlayPurchase(
 							userId,
-							SUBSCRIPTION_PRODUCT_ID,
+							productId || SUBSCRIPTION_PRODUCT_ID,
 							purchaseToken,
 						);
 

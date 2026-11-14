@@ -42,6 +42,7 @@ function emptyCleanup(): ReviewAccountCleanupResult {
 		deletedAccountLinkSessions: 0,
 		deletedOAuthStates: 0,
 		deletedOAuthCompletions: 0,
+		deletedStorageOAuthSessions: 0,
 		deletedUserStorageFiles: 0,
 		deletedShareStorageFiles: 0,
 	};
@@ -55,6 +56,7 @@ function printCleanup(label: string, cleanup: ReviewAccountCleanupResult): void 
 	console.log(`  Account-link sessions: ${cleanup.deletedAccountLinkSessions}`);
 	console.log(`  Legacy OAuth states: ${cleanup.deletedOAuthStates}`);
 	console.log(`  OAuth completions: ${cleanup.deletedOAuthCompletions}`);
+	console.log(`  Storage OAuth sessions: ${cleanup.deletedStorageOAuthSessions}`);
 	console.log(`  User storage files: ${cleanup.deletedUserStorageFiles}`);
 	console.log(`  Share storage files: ${cleanup.deletedShareStorageFiles}`);
 }

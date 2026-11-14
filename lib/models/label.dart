@@ -1,10 +1,13 @@
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/services/sync_track_store.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
+import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/services/label_sync_service.dart';
+import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
@@ -67,7 +70,13 @@ class Label extends BaseModel<Label> {
 
   static Future<Label?> findByName(String name) async {
     final db = AppState.db;
-    final result = await db.query(model, where: "name = ?", whereArgs: [name]);
+    final result = await db.query(
+      model,
+      where: "name = ?",
+      whereArgs: [name],
+      orderBy: 'sync_id, id',
+      limit: 1,
+    );
     if (result.isEmpty) return null;
     return Label.fromJson(result.first);
   }
@@ -86,7 +95,6 @@ class Label extends BaseModel<Label> {
   /// Add missing labels and remove duplicates.
   static Future<void> fixLabels() async {
     final db = AppState.db;
-    final allLabels = await db.rawQuery("SELECT labels from note");
     final existingLabels = await Label.get();
     final existingNames = existingLabels.map((l) => l.name).toSet();
 
@@ -97,6 +105,11 @@ class Label extends BaseModel<Label> {
         existingLabels.add(label);
       }
     }
+
+    // Stable replica labels are independent entities. Legacy name repair must
+    // not recreate tombstones or delete distinct remote identities by name.
+    if (await SyncMutationJournal.isInstalled(db)) return;
+    final allLabels = await db.rawQuery("SELECT labels from note");
 
     for (final row in allLabels) {
       final labelsString = row['labels'] as String?;
@@ -168,12 +181,56 @@ class Label extends BaseModel<Label> {
   }) async {
     final db = AppState.db;
     syncId ??= const Uuid().v4();
-    updatedAt = DateTime.now();
-
+    final now = DateTime.now();
+    if (origin != ModelChangeOrigin.remoteSync) updatedAt = now;
     final wasNew = id == null;
-    if (wasNew) createdAt = DateTime.now();
+    createdAt ??= now;
+    final renamedAliases = <Label>[];
+    final changedNotes = <int>[];
     final savedId = await db.transaction((transaction) async {
       requireCloudOperation();
+      if (!wasNew && origin == ModelChangeOrigin.local) {
+        final previous = await transaction.query(
+          model,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        if (previous.isNotEmpty && previous.single['name'] != name) {
+          changedNotes.addAll(
+            await _changeMemberships(
+              transaction,
+              previous.single['name'] as String,
+              name,
+              sync: sync,
+            ),
+          );
+          final aliases = await transaction.query(
+            model,
+            where: 'name = ? AND id != ?',
+            whereArgs: [previous.single['name'], id],
+          );
+          for (final row in aliases) {
+            final alias = Label.fromJson(row)
+              ..name = name
+              ..updatedAt = updatedAt;
+            await transaction.update(
+              model,
+              {'name': name, 'updated_at': updatedAt?.toIso8601String()},
+              where: 'id = ?',
+              whereArgs: [alias.id],
+            );
+            if (sync) {
+              await SyncTrackStore.queueInTransaction(
+                transaction: transaction,
+                table: LabelSyncTrack.model,
+                localId: alias.id!,
+                action: LabelSyncAction.upload.name,
+              );
+            }
+            renamedAliases.add(alias);
+          }
+        }
+      }
       final rowId = wasNew
           ? await transaction.insert(
               model,
@@ -197,12 +254,17 @@ class Label extends BaseModel<Label> {
           action: LabelSyncAction.upload.name,
         );
       }
+      requireCloudOperation();
       return rowId;
     });
     requireCloudOperation();
     id = savedId;
     notifyWithOrigin(wasNew ? 'created' : 'updated', origin);
+    for (final alias in renamedAliases) {
+      alias.notifyWithOrigin('updated', origin);
+    }
     if (sync) LabelSyncService().sync();
+    await _notifyMembershipChanges(changedNotes, sync: sync, origin: origin);
     return savedId;
   }
 
@@ -215,38 +277,108 @@ class Label extends BaseModel<Label> {
     }
 
     final labelId = id!;
+    final changedNotes = <int>[];
+    final deletedAliases = <Label>[];
     final rowsDeleted = await AppState.db.transaction((transaction) async {
       requireCloudOperation();
-      final count = await transaction.delete(
+      final target = await transaction.query(
         model,
         where: 'id = ?',
         whereArgs: [labelId],
       );
-      if (sync) {
-        await SyncTrackStore.queueInTransaction(
-          transaction: transaction,
-          table: LabelSyncTrack.model,
-          localId: labelId,
-          action: LabelSyncAction.delete.name,
+      if (target.isEmpty) return 0;
+      final currentName = target.single['name'] as String;
+      final aliases = await transaction.query(
+        model,
+        where: origin == ModelChangeOrigin.local ? 'name = ?' : 'id = ?',
+        whereArgs: [origin == ModelChangeOrigin.local ? currentName : labelId],
+      );
+      var count = 0;
+      for (final row in aliases) {
+        final alias = Label.fromJson(row);
+        count += await transaction.delete(
+          model,
+          where: 'id = ?',
+          whereArgs: [alias.id],
         );
+        if (sync) {
+          await SyncTrackStore.queueInTransaction(
+            transaction: transaction,
+            table: LabelSyncTrack.model,
+            localId: alias.id!,
+            action: LabelSyncAction.delete.name,
+          );
+        }
+        deletedAliases.add(alias);
       }
+      changedNotes.addAll(
+        await _changeMemberships(transaction, currentName, null, sync: sync),
+      );
+      requireCloudOperation();
       return count;
     });
     requireCloudOperation();
-    notifyWithOrigin('deleted', origin);
+    for (final alias in deletedAliases) {
+      alias.notifyWithOrigin('deleted', origin);
+    }
     if (sync) LabelSyncService().sync();
 
-    final notes = await Note.filterByLabels([name]);
-    for (final note in notes) {
-      if (note.labels != null) {
-        note.labels = note.labels!
-            .split(',')
-            .where((l) => l.trim() != name)
-            .join(',');
-      }
-      note.save(false);
-    }
+    await _notifyMembershipChanges(changedNotes, sync: sync, origin: origin);
     return rowsDeleted;
+  }
+
+  /// Only the originating device authors membership edits. Remote label
+  /// application leaves notes to reconcile through their own revisions.
+  static Future<List<int>> _changeMemberships(
+    Transaction txn,
+    String oldName,
+    String? newName, {
+    required bool sync,
+  }) async {
+    final changed = <int>[];
+    final notes = await txn.query(Note.model, columns: ['id', 'labels']);
+    final changedAt = DateTime.now().toUtc().toIso8601String();
+    for (final row in notes) {
+      final previous = row['labels'] as String? ?? '';
+      final labels = previous.split(',');
+      if (!labels.any((label) => label.trim() == oldName)) continue;
+      final next = labels
+          .map((label) => label.trim() == oldName ? newName : label)
+          .whereType<String>()
+          .toSet()
+          .join(',');
+      if (next == previous) continue;
+      final noteId = row['id'] as int;
+      await txn.update(
+        Note.model,
+        {'labels': next, 'updated_at': changedAt},
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+      if (sync) {
+        await SyncTrackStore.queueInTransaction(
+          transaction: txn,
+          table: NoteSyncTrack.model,
+          localId: noteId,
+          action: SyncAction.upload.name,
+        );
+      }
+      changed.add(noteId);
+    }
+    return changed;
+  }
+
+  static Future<void> _notifyMembershipChanges(
+    List<int> ids, {
+    required bool sync,
+    required ModelChangeOrigin origin,
+  }) async {
+    for (final noteId in ids) {
+      final note = await Note.findById(noteId);
+      requireCloudOperation();
+      note?.notifyWithOrigin('updated', origin);
+    }
+    if (sync && ids.isNotEmpty) NoteSyncService().sync();
   }
 
   Label clone() {
@@ -337,15 +469,23 @@ class _LabelSchema implements ModelSchema<Label> {
   Future<List<Label>> get(List<dynamic> args) async {
     bool countNotes = args.isNotEmpty && args[0] == true;
     final db = AppState.db;
-    final result = await db.query(Label.model);
-    final labels = <Label>[];
-
+    // Separate stable IDs can share a user-facing name after offline creation.
+    // Keep both replicas, while presenting one deterministic folder identity.
+    final result = await db.query(Label.model, orderBy: 'id');
+    final byName = <String, Label>{};
     for (final row in result) {
       final label = Label.fromJson(row);
+      final existing = byName[label.name];
+      if (existing == null ||
+          (label.syncId ?? '').compareTo(existing.syncId ?? '') < 0) {
+        byName[label.name] = label;
+      }
+    }
+    final labels = byName.values.toList();
+    for (final label in labels) {
       if (countNotes) {
         label.notesCount = await Note.countByLabels([label.name]);
       }
-      labels.add(label);
     }
     return labels;
   }
@@ -354,7 +494,7 @@ class _LabelSchema implements ModelSchema<Label> {
   Future<int> count(List<dynamic> args) async {
     final db = AppState.db;
     final result = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM ${Label.model}",
+      "SELECT COUNT(DISTINCT name) as count FROM ${Label.model}",
     );
     if (result.isNotEmpty) {
       return result.first['count'] as int;

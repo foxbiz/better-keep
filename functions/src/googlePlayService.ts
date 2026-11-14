@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { HttpsError } from "firebase-functions/v2/https";
 import { google } from "googleapis";
 import {
 	ANDROID_PACKAGE_NAME,
@@ -17,6 +18,13 @@ import {
 	resolveSubscriptionIssues,
 } from "./subscriptionIssues";
 import { reconcileUserEntitlement } from "./subscriptionReconciler";
+
+/** Deterministic provider identity failures require repair, not redelivery. */
+export class GooglePlayPermanentError extends HttpsError {
+	constructor(message: string) {
+		super("failed-precondition", message);
+	}
+}
 
 export interface RefreshedGooglePlaySubscription {
 	data: Record<string, unknown>;
@@ -190,23 +198,86 @@ export async function persistVerifiedGooglePlaySubscription({
 		requestedUserId ?? externalAccountId ?? oldUserId,
 		userExists,
 	);
-	const normalized = normalizeGooglePlaySubscription({
+	let normalized = normalizeGooglePlaySubscription({
 		productId,
 		purchaseToken,
 		resource,
 		userId,
 	});
-	const evaluated = evaluateSubscription(normalized);
-
-	await subscriptionRef.set(
-		{
+	if (normalized.plan === "free") {
+		throw new GooglePlayPermanentError(
+			"Unsupported Google Play product or base plan.",
+		);
+	}
+	const previousToken = resource.linkedPurchaseToken;
+	if (
+		previousToken &&
+		(previousToken === purchaseToken || previousToken.includes("/"))
+	) {
+		throw new Error("Invalid Google Play replacement identity");
+	}
+	const previousRef = previousToken
+		? db.collection("subscriptions").doc(previousToken)
+		: null;
+	// Publish the new purchase and retire its predecessor atomically. A missing
+	// predecessor gets an ownership marker so a late restore cannot revive it.
+	normalized = await db.runTransaction(async (transaction) => {
+		const current = await transaction.get(subscriptionRef);
+		const previous = previousRef ? await transaction.get(previousRef) : null;
+		for (const record of [current, previous]) {
+			if (record?.data()?.source && record.data()?.source !== "play_store") {
+				throw new GooglePlayPermanentError("Conflicting purchase provider.");
+			}
+			const owner = record?.data()?.userId;
+			if (owner && userId && owner !== userId) {
+				throw new GooglePlayPermanentError(
+					"This purchase belongs to another account.",
+				);
+			}
+		}
+		const currentData: Record<string, unknown> = {
 			...normalized,
-			lastVerifiedAt: FieldValue.serverTimestamp(),
-			...(!existing.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
-			updatedAt: FieldValue.serverTimestamp(),
-		},
-		{ merge: true },
-	);
+			...(current.data()?.supersededByPurchaseToken
+				? {
+						supersededByPurchaseToken:
+							current.data()?.supersededByPurchaseToken,
+					}
+				: {}),
+		};
+		currentData.entitlementState =
+			evaluateSubscription(currentData).entitlementState;
+		if (previousRef && userId && evaluateSubscription(currentData).entitled) {
+			const replacedBy = previous?.data()?.supersededByPurchaseToken;
+			if (replacedBy && replacedBy !== purchaseToken) {
+				throw new GooglePlayPermanentError(
+					"This purchase already has a different replacement.",
+				);
+			}
+			transaction.set(
+				previousRef,
+				{
+					userId,
+					source: "play_store",
+					supersededByPurchaseToken: purchaseToken,
+					entitlementState: "ended",
+					updatedAt: FieldValue.serverTimestamp(),
+				},
+				{ merge: true },
+			);
+		}
+		transaction.set(
+			subscriptionRef,
+			{
+				...currentData,
+				lastVerifiedAt: FieldValue.serverTimestamp(),
+				...(!current.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+				updatedAt: FieldValue.serverTimestamp(),
+			},
+			{ merge: true },
+		);
+		return currentData;
+	});
+	const evaluated = evaluateSubscription(normalized);
 
 	if (!userId) {
 		await recordSubscriptionIssue({

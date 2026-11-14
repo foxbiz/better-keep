@@ -1,3 +1,5 @@
+import 'package:better_keep/services/e2ee/secure_storage.dart';
+
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
@@ -22,6 +24,9 @@ import 'package:better_keep/services/camera_detection.dart';
 import 'package:better_keep/services/camera_capture.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/monetization/subscription_service.dart';
+import 'package:better_keep/services/review_access.dart';
+import 'package:better_keep/ui/paywall/paywall_sheet.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/image_attachment_preparation_service.dart';
@@ -41,8 +46,6 @@ import 'package:better_keep/pages/home/sidebar.dart';
 import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/pages/user_page.dart';
 import 'package:better_keep/services/note_sync_service.dart';
-import 'package:better_keep/services/sync_presentation.dart';
-import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/services/reminder_navigation_service.dart';
 import 'package:better_keep/state.dart';
@@ -63,12 +66,14 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   late bool _selectionMode;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final _libraryHasNotes = ValueNotifier(true);
   final GlobalKey<NotesState> _notesKey = GlobalKey<NotesState>();
 
   bool _shouldAnimateIcon = false;
   bool _searchMode = false;
   bool _shrinkDrawer = false;
   bool _hasPendingApprovals = false;
+  bool _recoveryPromptShown = false;
   int _approvalCheckGeneration = 0;
   bool _isBubbleMenuOpen = false;
 
@@ -114,6 +119,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     });
 
     AppState.subscribe("show_notes", _showNotesListener);
+    AppState.subscribe("filter_labels", _showNotesListener);
+    AppState.subscribe("current_folder", _showNotesListener);
     AppState.subscribe("selected_notes", _selectedNotesListener);
     NoteSortService().snapshots.addListener(_sortStateListener);
 
@@ -127,47 +134,42 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     E2EEService.instance.needsRecoveryKeySetup.addListener(
       _onRecoveryKeySetupNeeded,
     );
-    // Check if recovery key setup is already needed
-    _checkRecoveryKeySetup();
 
     // Trigger sync when Home is first shown (fallback for post-approval sync)
     // This ensures notes load even if the E2EE status change listener missed the trigger
     _ensureSyncOnInit();
 
-    // Check if we should show install prompt (first time on web)
-    _checkInstallPrompt();
-
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ReminderNavigationService.instance.registerReadyHost(this);
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      ReminderNavigationService.instance.registerReadyHost(this);
+      await _checkRecoveryKeySetup();
+      if (mounted && kIsWeb) _showWebStartupAction();
     });
   }
 
-  /// Check and show install prompt for first-time web users
-  void _checkInstallPrompt() {
-    if (!kIsWeb) return;
+  void _showWebStartupAction() {
+    if (FirebaseBackend.isConfigured &&
+        !AuthService.sessionInvalid.value &&
+        AuthService.currentUser != null &&
+        !ReviewAccess.isCloudMutationBlockedFor(AuthService.currentUser) &&
+        SubscriptionService.instance.takePricingUpgrade()) {
+      unawaited(showPaywall(context));
+      return;
+    }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+    final info = AppInstallService.instance.getInstallInfo();
+    if (info == null) return;
 
-      final info = AppInstallService.instance.getInstallInfo();
-      if (info == null) return;
+    if (info.shouldShowInstallPrompt) {
+      // Double-check we actually have something to offer before showing dialog
+      final hasContent =
+          info.isIOS || info.isAndroid || info.isWindows || info.canInstallPWA;
+      if (!hasContent) return;
 
-      if (info.shouldShowInstallPrompt) {
-        // Double-check we actually have something to offer before showing dialog
-        final hasContent =
-            info.isIOS ||
-            info.isAndroid ||
-            info.isWindows ||
-            info.canInstallPWA;
-        if (!hasContent) return;
-
-        AppInstallService.instance.markPromptShown();
-        _showInstallPromptDialog(info);
-      }
-    });
+      AppInstallService.instance.markPromptShown();
+      _showInstallPromptDialog(info);
+    }
   }
 
   /// Show install prompt dialog based on platform
@@ -300,59 +302,66 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   void _onRecoveryKeySetupNeeded() {
     if (E2EEService.instance.needsRecoveryKeySetup.value) {
-      _checkRecoveryKeySetup();
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _checkRecoveryKeySetup(),
+      );
     }
   }
 
   Future<void> _checkRecoveryKeySetup() async {
-    // Use post-frame callback to show dialog after widget is built
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (E2EEService.instance.needsRecoveryKeySetup.value) {
-        // Reset the flag
-        E2EEService.instance.needsRecoveryKeySetup.value = false;
+    if (!mounted || _recoveryPromptShown) return;
+    if (E2EEService.instance.needsRecoveryKeySetup.value) {
+      _recoveryPromptShown = true;
+      // Reset the flag
+      E2EEService.instance.needsRecoveryKeySetup.value = false;
 
-        // Show recovery key setup page
-        if (mounted) {
-          final result = await showSetupRecoveryKeyPage(context);
-          if (result == true && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.recoveryKeySavedSuccessfully),
-                backgroundColor: Colors.green,
+      // Show recovery key setup page
+      if (mounted) {
+        final result = await showSetupRecoveryKeyPage(
+          context,
+          legacyRecovery: E2EESecureStorage.instance.needsLegacyRecoverySetup,
+        );
+        if (result == true && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.recoveryKeySavedSuccessfully),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else if (result == false && mounted) {
+          // Show a more prominent warning dialog for skipped recovery key
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              icon: const Icon(
+                Icons.warning_amber,
+                color: Colors.orange,
+                size: 48,
               ),
-            );
-          } else if (result == false && mounted) {
-            // Show a more prominent warning dialog for skipped recovery key
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                icon: const Icon(
-                  Icons.warning_amber,
-                  color: Colors.orange,
-                  size: 48,
+              title: Text(context.l10n.noRecoveryKey),
+              content: Text(context.l10n.noRecoveryKeyWarning),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(context.l10n.iUnderstand),
                 ),
-                title: Text(context.l10n.noRecoveryKey),
-                content: Text(context.l10n.noRecoveryKeyWarning),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(context.l10n.iUnderstand),
-                  ),
-                ],
-              ),
-            );
-          }
+              ],
+            ),
+          );
         }
       }
-    });
+    }
   }
 
   @override
   void dispose() {
     ReminderNavigationService.instance.unregisterReadyHost(this);
+    _libraryHasNotes.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     AppState.unsubscribe("show_notes", _showNotesListener);
+    AppState.unsubscribe("filter_labels", _showNotesListener);
+    AppState.unsubscribe("current_folder", _showNotesListener);
     AppState.unsubscribe("selected_notes", _selectedNotesListener);
     NoteSortService().snapshots.removeListener(_sortStateListener);
     E2EEService.instance.deviceManager.pendingApprovals.removeListener(
@@ -366,6 +375,13 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final showCreateButton =
+        !_selectionMode && AppState.showNotes == NoteType.all && !_searchMode;
+    final fabBottom =
+        8.0 +
+        (kIsWeb || Platform.isWindows || Platform.isMacOS || Platform.isLinux
+            ? 16.0
+            : 0.0);
     return PopScope(
       canPop: !_searchMode && !_selectionMode && AppState.currentFolder == null,
       onPopInvokedWithResult: (didPop, _) {
@@ -404,18 +420,6 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           ),
           leading: _buildLeading(),
           actions: _buildActions(),
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(4.0),
-            child: ValueListenableBuilder<SyncProgress>(
-              valueListenable: SyncPresentation.instance,
-              builder: (context, progress, child) {
-                if (progress.isActive) {
-                  return const LinearProgressIndicator();
-                }
-                return const SizedBox(height: 4.0);
-              },
-            ),
-          ),
         ),
         drawer: _isBigScreen
             ? null
@@ -450,6 +454,8 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                       Expanded(
                         child: Notes(
                           key: _notesKey,
+                          onLibraryPresenceChanged: (hasNotes) =>
+                              _libraryHasNotes.value = hasNotes,
                           searchMode: _searchMode,
                           searchQuery: _searchController.text,
                         ),
@@ -469,43 +475,32 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
-                  const SyncProgressWidget(),
+                  // Keep long status messages above the create button. The
+                  // expanded creation menu takes priority over transient status.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _libraryHasNotes,
+                    builder: (_, hasNotes, _) => SyncProgressWidget(
+                      visible: !_isBubbleMenuOpen,
+                      showActivity: !showsEmptyLibrarySync(
+                        hasNotes: hasNotes,
+                        searchMode: _searchMode,
+                      ),
+                      bottom: showCreateButton ? fabBottom + _fabSize + 12 : 32,
+                    ),
+                  ),
                   // FAB with opacity/scale animation
                   Positioned(
                     right: 24,
-                    bottom:
-                        8 +
-                        MediaQuery.of(context).padding.bottom +
-                        // Extra margin for non-mobile platforms
-                        (kIsWeb ||
-                                (!kIsWeb &&
-                                    (Platform.isWindows ||
-                                        Platform.isMacOS ||
-                                        Platform.isLinux))
-                            ? 16
-                            : 0),
+                    bottom: fabBottom + MediaQuery.paddingOf(context).bottom,
                     child: AnimatedOpacity(
-                      opacity:
-                          _selectionMode ||
-                              AppState.showNotes != NoteType.all ||
-                              _searchMode
-                          ? 0.0
-                          : 1.0,
+                      opacity: showCreateButton ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
                       child: AnimatedScale(
-                        scale:
-                            _selectionMode ||
-                                AppState.showNotes != NoteType.all ||
-                                _searchMode
-                            ? 0.0
-                            : 1.0,
+                        scale: showCreateButton ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutBack,
                         child: IgnorePointer(
-                          ignoring:
-                              _selectionMode ||
-                              AppState.showNotes != NoteType.all ||
-                              _searchMode,
+                          ignoring: !showCreateButton,
                           child: _buildBubbleMenu(),
                         ),
                       ),
@@ -918,10 +913,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     );
   }
 
+  static const double _fabSize = 64;
+
   Widget _buildBubbleMenu() {
     return BubbleMenu(
       fabIcon: Icons.add,
-      fabSize: 64,
+      fabSize: _fabSize,
       itemDistance: 110,
       itemSize: 56,
       onMenuStateChanged: (isOpen) {

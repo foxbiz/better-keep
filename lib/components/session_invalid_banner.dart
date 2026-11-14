@@ -1,3 +1,4 @@
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -23,37 +24,7 @@ class _SessionInvalidBannerState extends State<SessionInvalidBanner> {
     final navContext = AppState.navigatorKey.currentContext;
     if (navContext == null) return;
 
-    final confirmed = await showDialog<bool>(
-      context: navContext,
-      builder: (dialogContext) => AlertDialog(
-        icon: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.logout, color: Colors.orange, size: 32),
-        ),
-        title: Text(
-          navContext.l10n.signOut,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Text(navContext.l10n.signOutConfirmationWithNote),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(navContext.l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text(navContext.l10n.signOut),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
+    if (await confirmDeviceSignOut(navContext)) {
       await AuthService.signOut();
     }
   }

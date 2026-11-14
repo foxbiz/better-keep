@@ -2,6 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- app_links owns URL delivery; Flutter must not push a second route. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).sync</string>
@@ -95,7 +98,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>We need access to your camera to add photos to notes.</string>
+	<string>Use your camera to add photos to notes or verify a new device.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>This app needs to access your Documents folder to store AI models for transcription.</string>
 	<key>NSDownloadsFolderUsageDescription</key>

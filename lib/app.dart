@@ -1,8 +1,15 @@
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
+import 'package:better_keep/services/e2ee/device_authorization.dart';
+
 import 'dart:async';
+
+import 'package:better_keep/services/file_system.dart'
+    show resumeAccountFileCleanup;
 
 import 'package:better_keep/services/storage_health_service.dart';
 
 import 'package:better_keep/components/auth_scaffold.dart';
+import 'package:better_keep/components/image_share_progress.dart';
 import 'package:better_keep/components/open_in_app_banner.dart';
 import 'package:better_keep/components/post_sign_in_recovery_view.dart';
 import 'package:better_keep/components/session_invalid_banner.dart';
@@ -22,7 +29,6 @@ import 'package:better_keep/services/app_install_service.dart';
 import 'package:better_keep/utils/quill_image_utils.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
-import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'package:better_keep/services/intent_handler_service.dart';
 import 'package:better_keep/services/reminder_coordinator.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
@@ -55,8 +61,9 @@ Future<void> _retryPostSignInSafely(String source) async {
   }
 }
 
-Future<void> _safeAuthSignOut(String source) async {
+Future<void> _safeAuthSignOut(BuildContext context, String source) async {
   try {
+    if (!await confirmDeviceSignOut(context)) return;
     await AuthService.signOut();
   } catch (error, stackTrace) {
     await AppLogger.error(
@@ -141,6 +148,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     );
     AuthService.setAppForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
+      unawaited(AppState.prefs.then(resumeAccountFileCleanup));
       // Check for token revocation when app resumes from background
       AuthService.checkTokenRevocationOnResume();
       // Refresh subscription status when app comes to foreground
@@ -210,8 +218,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             child: Overlay(
               initialEntries: [
                 OverlayEntry(
-                  builder: (context) =>
-                      _BannerLayout(child: child ?? const SizedBox.shrink()),
+                  builder: (context) => ImageShareProgress(
+                    busy: IntentHandlerService.instance.importingImages,
+                    child: _BannerLayout(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -222,7 +234,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           builder: (context, isSessionInvalid, child) {
             // If session is invalid, show home with warning banner
             // This allows user to access local notes even when auth fails
-            if (isSessionInvalid && E2EEService.instance.isCryptoReady) {
+            if (isSessionInvalid &&
+                !AuthService.hasDifferentLocalAccount &&
+                E2EEService.instance.isCryptoReady) {
               AppLogger.log(
                 '[Auth] Session invalid, showing Home with warning banner',
               );
@@ -241,6 +255,44 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                 if (snapshot.hasData) {
                   final user = snapshot.data!;
                   AppLogger.log('[Auth] User is logged in: ${user.email}');
+
+                  if (AuthService.hasDifferentLocalAccount) {
+                    return AuthScaffold(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            context.l10n.localAccountMismatch,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton(
+                            onPressed: () async {
+                              try {
+                                await AuthService.returnToLocalAccount();
+                              } catch (error, stack) {
+                                AppLogger.error(
+                                  'Could not switch accounts',
+                                  error,
+                                  stack,
+                                );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        context.l10n.somethingWentWrongTryAgain,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            child: Text(context.l10n.useDifferentAccount),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
 
                   // Check if email verification is required for email/password users
                   // OAuth users (Google, Facebook, etc.) don't need email verification
@@ -275,6 +327,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                           final route = resolveAuthenticatedStartupRoute(
                             postSignInState: postSignInState,
                             e2eeStatus: e2eeStatus,
+                            localState: E2EEService.instance.localState,
                           );
 
                           return switch (route) {
@@ -283,26 +336,44 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                             AuthenticatedStartupRoute.pendingApproval =>
                               const PendingApprovalPage(),
                             AuthenticatedStartupRoute.accountRecovery =>
-                              const AccountRecoveryPage(),
+                              AccountRecoveryPage(key: ValueKey(user.uid)),
                             AuthenticatedStartupRoute.recovery => AuthScaffold(
                               child: PostSignInRecoveryView(
-                                canContinueOffline:
-                                    E2EEService.instance.isCryptoReady,
+                                canRetry:
+                                    !postSignInState.accountDeletionInProgress,
                                 message:
-                                    switch (E2EEService.instance.localState) {
-                                      LocalEncryptionState.unavailable =>
-                                        context.l10n.localEncryptionUnavailable,
-                                      LocalEncryptionState.missing ||
-                                      LocalEncryptionState.corrupt =>
-                                        context.l10n.localEncryptionMissing,
-                                      _ => null,
-                                    },
+                                    postSignInState.accountDeletionInProgress
+                                    ? context.l10n.accountDeletionInProgress
+                                    : switch (E2EEService.instance.localState) {
+                                        LocalEncryptionState
+                                            .awaitingOnlineUnlock =>
+                                          context.l10n.browserUnlockOnline,
+                                        LocalEncryptionState
+                                            .legacyRecoveryUnavailable =>
+                                          context
+                                              .l10n
+                                              .browserLegacyRecoveryUnavailable,
+                                        LocalEncryptionState.unavailable
+                                            when kIsWeb =>
+                                          context
+                                              .l10n
+                                              .browserStorageUnavailable,
+                                        LocalEncryptionState.unavailable =>
+                                          context
+                                              .l10n
+                                              .localEncryptionUnavailable,
+                                        _ => null,
+                                      },
                                 onRetry: () => _retryPostSignInSafely(
                                   'authenticated startup screen',
                                 ),
-                                onContinueOffline: AuthService
-                                    .continueOfflineAfterInitializationFailure,
+                                onContinueOffline:
+                                    E2EEService.instance.isCryptoReady
+                                    ? AuthService
+                                          .continueOfflineAfterInitializationFailure
+                                    : null,
                                 onSignOut: () => _safeAuthSignOut(
+                                  context,
                                   'authenticated startup screen',
                                 ),
                               ),
@@ -402,7 +473,7 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
   }
 
   Future<void> _signOutSafely() async {
-    await _safeAuthSignOut('encryption loading screen');
+    await _safeAuthSignOut(context, 'encryption loading screen');
   }
 
   @override

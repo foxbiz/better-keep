@@ -8,6 +8,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+String? get pricingLinkCurrency => null;
+void clearPricingLink() {}
+
 /// Stub implementations for non-web platforms
 /// These are only used on mobile (which uses native Razorpay SDK)
 /// Desktop uses:

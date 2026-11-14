@@ -69,26 +69,32 @@ Future<CloudFunctionResult> callCloudFunction(
     return CloudFunctionResult(body['result']);
   }
 
-  // Parse error response and throw FirebaseFunctionsException
-  // to maintain compatibility with existing catch blocks
-  Map<String, dynamic>? errorBody;
+  throw parseCloudFunctionError(response.body);
+}
+
+/// Maps the direct HTTP transport's callable error without losing structured details.
+@visibleForTesting
+FirebaseFunctionsException parseCloudFunctionError(String responseBody) {
+  Map? error;
   try {
-    errorBody = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = jsonDecode(responseBody);
+    if (body is Map && body['error'] is Map) error = body['error'] as Map;
   } catch (_) {}
 
-  final error = errorBody?['error'] as Map<String, dynamic>?;
-  final message = error?['message'] as String? ?? 'Cloud Function call failed';
-  final status = error?['status'] as String? ?? 'INTERNAL';
-
-  throw FirebaseFunctionsException(
-    code: _mapStatusToCode(status),
-    message: message,
+  final message = error?['message'];
+  final status = error?['status'];
+  return FirebaseFunctionsException(
+    code: _mapStatusToCode(status is String ? status : 'INTERNAL'),
+    message: message is String ? message : 'Cloud Function call failed',
+    details: error?['details'],
   );
 }
 
 /// Maps HTTP/gRPC status strings to FirebaseFunctionsException error codes.
 String _mapStatusToCode(String status) {
   switch (status) {
+    case 'ABORTED':
+      return 'aborted';
     case 'ALREADY_EXISTS':
       return 'already-exists';
     case 'INVALID_ARGUMENT':

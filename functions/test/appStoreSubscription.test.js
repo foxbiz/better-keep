@@ -1,5 +1,25 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { activeAppStoreReceipt } = require("../lib/appStoreSubscription");
+
+test("a shorter Pro upgrade replaces the longer upgraded Lite receipt", () => {
+	const oldLite = { product_id: "lite_yearly", expires_date_ms: "9000", is_upgraded: "true" };
+	const currentPro = { product_id: "pro_monthly", expires_date_ms: "3000" };
+	assert.deepEqual(activeAppStoreReceipt([oldLite, currentPro], 1000), currentPro);
+});
+
+test("receipt restoration rejects expired, revoked, malformed and unknown products", () => {
+	const currentLite = { product_id: "lite_monthly", expires_date_ms: "3000" };
+	const rejected = [
+		{ ...currentLite, expires_date_ms: "999" },
+		{ ...currentLite, cancellation_date_ms: "999" },
+		{ ...currentLite, expires_date_ms: "Infinity" },
+		{ ...currentLite, expires_date_ms: "5000bad" },
+		{ ...currentLite, product_id: "unrelated", expires_date_ms: "9000" },
+	];
+	assert.equal(activeAppStoreReceipt(rejected, 1000), null);
+	assert.deepEqual(activeAppStoreReceipt([...rejected, currentLite], 1000), currentLite);
+});
 const { Timestamp } = require("firebase-admin/firestore");
 const {
 	appStoreEffectiveExpiryMillis,

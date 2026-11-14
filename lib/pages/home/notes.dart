@@ -1,3 +1,7 @@
+import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/services/sync_presentation.dart';
+import 'package:better_keep/components/sync_progress_widget.dart';
+import 'package:better_keep/components/cloud_sync_upgrade_notice.dart';
 import 'package:better_keep/utils/manual_sync_refresh.dart';
 
 import 'dart:async';
@@ -6,7 +10,9 @@ import 'package:better_keep/components/animated_masonry_reorder_layout.dart';
 import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/components/note_display_options_button.dart';
 import 'package:better_keep/components/storage_warning.dart';
+import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/label.dart';
+import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/pages/home/google_keep_import_visibility.dart';
 import 'package:better_keep/components/folder_tile.dart';
@@ -38,11 +44,28 @@ Future<void> runNotesRefreshSequence({
   }
 }
 
+bool showsEmptyLibrarySync({
+  required bool hasNotes,
+  required bool searchMode,
+}) =>
+    !hasNotes &&
+    !searchMode &&
+    AppState.showNotes == NoteType.all &&
+    AppState.filterLabels.isEmpty &&
+    AppState.currentFolder == null;
+
 class Notes extends StatefulWidget {
   final String? searchQuery;
   final bool searchMode;
 
-  const Notes({super.key, this.searchQuery, this.searchMode = false});
+  final ValueChanged<bool>? onLibraryPresenceChanged;
+
+  const Notes({
+    super.key,
+    this.searchQuery,
+    this.searchMode = false,
+    this.onLibraryPresenceChanged,
+  });
 
   @override
   State<Notes> createState() => NotesState();
@@ -61,11 +84,22 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   int? _notesCountWithoutLabels;
   int _loadGeneration = 0;
   int _noteRevision = 0;
+  bool _refreshOnReturn = false;
+  final Map<int, NoteCard> _noteCards = {};
   bool _hasStoredNotes = true;
+  void _setLibraryPresence(bool hasNotes) {
+    if (_hasStoredNotes == hasNotes) return;
+    _hasStoredNotes = hasNotes;
+    widget.onLibraryPresenceChanged?.call(hasNotes);
+  }
+
   double _pendingOffset = 0.0;
   bool _showLoader = false;
   Timer? _updateShowLoaderTimeout;
   Timer? _folderUpdateDebounce;
+  Timer? _bulkRefresh;
+  bool _bulkRefreshRunning = false;
+  int _changesSinceBulkRefresh = 0;
   final MasonryLayoutController _pinnedLayoutController =
       MasonryLayoutController();
   final MasonryLayoutController _otherLayoutController =
@@ -93,6 +127,8 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
   @override
   void initState() {
+    AppState.showSyncProgressNotifier.addListener(_progressVisibilityChanged);
+    NoteSyncBatch.active.addListener(_onBatchChanged);
     _autoScrollTicker = createTicker(_onAutoScrollTick);
     _fetchData();
 
@@ -129,7 +165,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       }
       _activeReorderController?.clear();
     }
+    AppState.showSyncProgressNotifier.removeListener(
+      _progressVisibilityChanged,
+    );
+    NoteSyncBatch.active.removeListener(_onBatchChanged);
     _autoScrollTicker.dispose();
+    _bulkRefresh?.cancel();
     _folderUpdateDebounce?.cancel();
     _updateShowLoaderTimeout?.cancel();
     _scrollController.dispose();
@@ -146,12 +187,59 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _noteCards.clear();
+    if (_refreshOnReturn && ModalRoute.isCurrentOf(context) != false) {
+      _refreshOnReturn = false;
+      _fetchData();
+    }
+  }
+
+  @override
   void didUpdateWidget(Notes oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.searchQuery != widget.searchQuery ||
         oldWidget.searchMode != widget.searchMode) {
       _fetchData();
     }
+  }
+
+  void _progressVisibilityChanged() => setState(() {});
+
+  void _onBatchChanged() {
+    if (NoteSyncBatch.active.value) return;
+    _changesSinceBulkRefresh = 0;
+    _bulkRefresh?.cancel();
+    _bulkRefresh = null;
+    unawaited(_refreshAfterRestore());
+  }
+
+  Future<void> _refreshAfterRestore() async {
+    if (ModalRoute.isCurrentOf(context) == false) {
+      _refreshOnReturn = true;
+    } else if (_activeReorderController != null) {
+      _pendingRefreshAfterDrag = true;
+    } else {
+      await _fetchData();
+    }
+  }
+
+  void _scheduleBulkRefresh() {
+    _bulkRefresh ??= Timer(const Duration(milliseconds: 400), () async {
+      _bulkRefresh = null;
+      if (_bulkRefreshRunning) {
+        _scheduleBulkRefresh();
+        return;
+      }
+      _bulkRefreshRunning = true;
+      _changesSinceBulkRefresh = 0;
+      try {
+        await _refreshAfterRestore();
+      } finally {
+        _bulkRefreshRunning = false;
+      }
+    });
   }
 
   @override
@@ -170,24 +258,17 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       builder: (context, constraints) {
         Widget content;
         if (_notes == null) {
-          if (!_showLoader) {
-            content = SizedBox.shrink();
-          } else {
-            content = Center(
-              child: CircularProgressIndicator(
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            );
-          }
+          content = _showLoader
+              ? const Center(child: CircularProgressIndicator())
+              : const SizedBox.shrink();
         } else if (AppState.currentFolder != null) {
-          content = _buildNotesView();
+          content = const SizedBox.shrink();
         } else {
           content = _buildFoldersGrid();
         }
 
-        return RefreshIndicator(
-          onRefresh: refresh,
-          child: CustomScrollView(
+        return _pullToRefresh(
+          CustomScrollView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -218,16 +299,30 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
               ),
               const SliverToBoxAdapter(child: StorageWarning()),
               SliverToBoxAdapter(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 1200),
-                      child: content,
-                    ),
-                  ),
+                child: CloudSyncUpgradeNotice(
+                  visible:
+                      !_selectionMode &&
+                      !widget.searchMode &&
+                      AppState.showNotes == NoteType.all,
                 ),
+              ),
+              _withEmptySyncActivity(
+                AppState.currentFolder != null
+                    ? _buildNotesSliver()
+                    : SliverToBoxAdapter(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
+                          ),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1200),
+                              child: content,
+                            ),
+                          ),
+                        ),
+                      ),
               ),
             ],
           ),
@@ -236,15 +331,18 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     );
   }
 
+  Widget _pullToRefresh(Widget child) => AppState.showSyncProgress
+      ? RefreshIndicator.noSpinner(onRefresh: refresh, child: child)
+      : RefreshIndicator(onRefresh: refresh, child: child);
+
   Widget _buildDefaultLayout() {
     final viewMode = AppState.notesViewMode;
 
     return LayoutBuilder(
       key: ValueKey('default_layout_$viewMode'),
       builder: (context, constraints) {
-        return RefreshIndicator(
-          onRefresh: refresh,
-          child: CustomScrollView(
+        return _pullToRefresh(
+          CustomScrollView(
             key: PageStorageKey('notes_scroll_view_$viewMode'),
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -297,17 +395,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                 ),
               const SliverToBoxAdapter(child: StorageWarning()),
               SliverToBoxAdapter(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 1200),
-                      child: _buildNotesView(),
-                    ),
-                  ),
+                child: CloudSyncUpgradeNotice(
+                  visible:
+                      !_selectionMode &&
+                      !widget.searchMode &&
+                      AppState.showNotes == NoteType.all,
                 ),
               ),
+              _withEmptySyncActivity(_buildNotesSliver()),
             ],
           ),
         );
@@ -345,8 +440,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   );
 
   Future<void> refresh() async {
+    final restore = NoteSyncBatch.pending;
+    if (restore != null) {
+      snackbar(context.l10n.syncDownloadingNotes);
+      await restore;
+      return;
+    }
     try {
-      _scrollController.jumpTo(0.0);
+      if (_scrollController.hasClients) _scrollController.jumpTo(0.0);
       await runNotesRefreshSequence(
         refreshNotes: () => refreshSyncFromUser(context),
         refreshLabels: () async {},
@@ -357,7 +458,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
   }
 
-  Future<void> _fetchData([dynamic _]) async {
+  Future<void> _fetchData([dynamic event]) async {
+    if (NoteSyncBatch.active.value &&
+        event is ModelEvent &&
+        event.origin == ModelChangeOrigin.remoteSync) {
+      return;
+    }
     final generation = ++_loadGeneration;
     final noteRevision = _noteRevision;
     final orderContext = _activeOrderContext;
@@ -382,8 +488,15 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       await _fetchData();
       return;
     }
+    _noteCards.clear();
     _notes = notes;
-    _hasStoredNotes = hasStoredNotes;
+    if (AppState.selectedNotes.isNotEmpty) {
+      final byId = {for (final note in notes) note.id: note};
+      AppState.selectedNotes = [
+        for (final selected in AppState.selectedNotes) ?byId[selected.id],
+      ];
+    }
+    _setLibraryPresence(hasStoredNotes);
     _colors = colors;
     _labels = labels;
     _notesCountWithoutLabels = notesCountWithoutLabels;
@@ -425,16 +538,14 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   Future<bool> _loadHasStoredNotes() async {
-    final rows = await AppState.db.rawQuery(
-      'SELECT EXISTS(SELECT 1 FROM ${Note.model} LIMIT 1) AS has_notes',
-    );
-    return rows.first['has_notes'] == 1;
+    return !await Note.libraryIsEmpty(AppState.db);
   }
 
   Future<void> _refreshHasStoredNotes() async {
+    final revision = _noteRevision;
     final hasStoredNotes = await _loadHasStoredNotes();
-    if (!mounted) return;
-    setState(() => _hasStoredNotes = hasStoredNotes);
+    if (!mounted || revision != _noteRevision) return;
+    setState(() => _setLibraryPresence(hasStoredNotes));
   }
 
   void _startLoading() {
@@ -941,17 +1052,28 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
   }
 
-  Widget _buildNoteCard(Note note, int index) {
+  Widget _buildNoteCard(Note note) {
     final id = note.id;
-    return NoteCard(
+    final canReorder = _canReorder && id != null;
+    final dragging = id != null && id == _draggingNoteId;
+    final cached = _noteCards[id];
+    if (cached != null &&
+        identical(cached.note, note) &&
+        (cached.reorderConfig != null) == canReorder &&
+        (cached.reorderConfig?.dragging ?? false) == dragging) {
+      return cached;
+    }
+    // Mutable notes must emit NoteEvent after every change; the listener
+    // invalidates this cache even when the Note instance is unchanged.
+    final card = NoteCard(
       key: ValueKey('note_card_$id'),
       note: note,
-      index: index,
-      reorderConfig: !_canReorder || id == null
+      animateEntrance: false,
+      reorderConfig: !canReorder
           ? null
           : NoteCardReorderConfig(
               enabled: true,
-              dragging: id == _draggingNoteId,
+              dragging: dragging,
               dragLabel: context.l10n.dragToReorder,
               moveBeforeLabel: context.l10n.moveNoteBefore,
               moveAfterLabel: context.l10n.moveNoteAfter,
@@ -963,10 +1085,86 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
               onMoveAfter: () => unawaited(_moveNoteWithKeyboard(note, 1)),
             ),
     );
+    if (id != null) _noteCards[id] = card;
+    return card;
+  }
+
+  bool _matchesCurrentFolder(Note note) {
+    if (widget.searchMode ||
+        !AppState.notesViewMode.isFolderMode ||
+        AppState.showNotes != NoteType.all) {
+      return true;
+    }
+    final folder = AppState.currentFolder;
+    if (folder == null) return false;
+    if (folder.isPinned) return note.pinned;
+    final label = folder.labelName;
+    if (label != null) {
+      return label.isEmpty
+          ? (note.labels ?? '').isEmpty
+          : note.matchesLabels([label]);
+    }
+    return note.color == folder.color;
   }
 
   void _notesListener(NoteEvent event) {
+    // The first committed note replaces the empty view immediately. The batch
+    // refresh loads subsequent inserts together from the database.
+    if (NoteSyncBatch.active.value &&
+        event.origin == ModelChangeOrigin.remoteSync &&
+        (event.event == 'created' || event.event == 'updated') &&
+        _hasStoredNotes) {
+      _changesSinceBulkRefresh++;
+      // Reproject roughly when the visible library doubles; always flush
+      // the final partial batch when the transfer ends.
+      if (_changesSinceBulkRefresh >= NoteSyncBatch.threshold &&
+          _changesSinceBulkRefresh >= (_notes?.length ?? 0)) {
+        _scheduleBulkRefresh();
+      }
+      return;
+    }
     _noteRevision++;
+    // Models are mutable; invalidate on every event, not just identity changes.
+    _noteCards.remove(event.note.id);
+    final newNote = event.note;
+    final shouldRemove =
+        event.event == "deleted" ||
+        !_matchesCurrentFolder(newNote) ||
+        !newNote.matchesLabels(
+          AppState.filterLabels,
+          matchAllLabels: AppState.matchAllLabels,
+        ) ||
+        switch (AppState.showNotes) {
+          NoteType.archived => !newNote.archived || newNote.trashed,
+          NoteType.trashed => !newNote.trashed,
+          NoteType.locked => !newNote.locked || newNote.trashed,
+          NoteType.pinned => !newNote.pinned || newNote.trashed,
+          NoteType.reminder =>
+            newNote.trashed ||
+                newNote.reminder == null ||
+                (newNote.completed &&
+                    !(newNote.reminder?.isRepeating ?? false)),
+          _ => newNote.trashed || newNote.archived,
+        };
+
+    final selection = AppState.selectedNotes;
+    if (event.event != 'created' &&
+        selection.any((note) => note.id == newNote.id)) {
+      AppState.selectedNotes = [
+        for (final note in selection)
+          if (note.id != newNote.id) note else if (!shouldRemove) newNote,
+      ];
+    }
+    // Bulk downloads must not rebuild the entire grid behind another page.
+    // Subscribe to route changes and reload committed state once on return.
+    if (ModalRoute.isCurrentOf(context) == false) {
+      _refreshOnReturn = true;
+      if (_activeReorderController != null) {
+        _pendingRefreshAfterDrag = false;
+        unawaited(_cancelDrag());
+      }
+      return;
+    }
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       _fetchData();
       return;
@@ -998,14 +1196,10 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       );
     }
 
-    if (AppState.selectedNotes.isNotEmpty) {
-      AppState.selectedNotes = [];
-    }
-
     if (event.event == 'deleted') {
       unawaited(_refreshHasStoredNotes());
     } else {
-      _hasStoredNotes = true;
+      _setLibraryPresence(true);
     }
 
     if (_notes == null) {
@@ -1016,26 +1210,6 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     // A database load may already include a committed note before its creation
     // event arrives. Keep that model, which may also contain newer local edits.
     if (event.event == 'created' && index != -1) return;
-    final newNote = event.note;
-
-    final shouldRemove =
-        event.event == "deleted" ||
-        !newNote.matchesLabels(
-          AppState.filterLabels,
-          matchAllLabels: AppState.matchAllLabels,
-        ) ||
-        switch (AppState.showNotes) {
-          NoteType.archived => !newNote.archived || newNote.trashed,
-          NoteType.trashed => !newNote.trashed,
-          NoteType.locked => !newNote.locked || newNote.trashed,
-          NoteType.pinned => !newNote.pinned || newNote.trashed,
-          NoteType.reminder =>
-            newNote.trashed ||
-                newNote.reminder == null ||
-                (newNote.completed &&
-                    !(newNote.reminder?.isRepeating ?? false)),
-          _ => newNote.trashed || newNote.archived,
-        };
 
     if (shouldRemove) {
       _notes = _notes!.where((note) => note.id != event.note.id);
@@ -1137,97 +1311,148 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
       );
     }
 
-    return _buildNotesLayout();
+    return const SizedBox.shrink();
   }
 
-  Widget _buildNotesLayout() {
+  Widget _withEmptySyncActivity(Widget content) {
+    if (!showsEmptyLibrarySync(
+      hasNotes: _hasStoredNotes,
+      searchMode: widget.searchMode,
+    )) {
+      return content;
+    }
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        NoteSyncBatch.active,
+        SyncPresentation.instance,
+        SyncPresentation.instance.recovery.activity,
+        SyncPresentation.instance.recovery.state,
+      ]),
+      child: content,
+      builder: (context, child) {
+        if (NoteSyncBatch.active.value) {
+          return const SliverFillRemaining(
+            hasScrollBody: false,
+            child: BulkSyncProgress(),
+          );
+        }
+        final progress = SyncPresentation.instance.emptyLibraryProgress;
+        if (!progress.isActive) return child!;
+        return SliverFillRemaining(
+          hasScrollBody: false,
+          child: SyncContentProgress(progress: progress),
+        );
+      },
+    );
+  }
+
+  Widget _buildNotesSliver() {
+    if (_notes == null || _notes!.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: _buildNotesView(),
+          ),
+        ),
+      );
+    }
     final sortedNotes = _sortNotes(_notes!.toList());
     final listMode =
         !widget.searchMode && AppState.notesViewMode == NoteViewMode.list;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(_gap, 0, _gap, 24),
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: listMode ? 600 : 1200),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final availableWidth = constraints.maxWidth;
-              final crossAxisCount = listMode
-                  ? 1
-                  : availableWidth > 900
-                  ? 4
-                  : availableWidth > 600
-                  ? 3
-                  : 2;
-              if (_activeReorderController != null &&
-                  _lastNoteCrossAxisCount != null &&
-                  _lastNoteCrossAxisCount != crossAxisCount) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _activeReorderController != null) {
-                    unawaited(_cancelDrag());
-                  }
-                });
-              }
-              _lastNoteCrossAxisCount = crossAxisCount;
-              final partition = NoteSectionPartition.from(
-                sortedNotes,
-                isPinned: (note) => note.pinned,
-              );
-              final pinned = _sectionNotes(partition.pinned, true);
-              final others = _sectionNotes(partition.others, false);
-              final separateSections =
-                  !widget.searchMode &&
-                  AppState.showNotes == NoteType.all &&
-                  partition.hasBoth;
-
-              if (!separateSections) {
-                final sectionNotes = pinned.isNotEmpty && others.isEmpty
-                    ? pinned
-                    : others.isNotEmpty && pinned.isEmpty
-                    ? others
-                    : sortedNotes;
-                final controller = pinned.isNotEmpty && others.isEmpty
-                    ? _pinnedLayoutController
-                    : others.isNotEmpty && pinned.isEmpty
-                    ? _otherLayoutController
-                    : _unsectionedLayoutController;
-                return _buildMasonrySection(
-                  notes: sectionNotes,
-                  controller: controller,
-                  crossAxisCount: crossAxisCount,
-                );
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildSectionHeading(
-                    key: const ValueKey('pinned_notes_heading'),
-                    label: context.l10n.pinnedNotes,
-                  ),
-                  _buildMasonrySection(
-                    notes: pinned,
-                    controller: _pinnedLayoutController,
-                    crossAxisCount: crossAxisCount,
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionHeading(
-                    key: const ValueKey('other_notes_heading'),
-                    label: context.l10n.otherNotes,
-                  ),
-                  _buildMasonrySection(
-                    notes: others,
-                    controller: _otherLayoutController,
-                    crossAxisCount: crossAxisCount,
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
+    double? previousWidth;
+    Widget? sectionLayout;
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        if (previousWidth == constraints.crossAxisExtent &&
+            sectionLayout != null) {
+          return sectionLayout!;
+        }
+        previousWidth = constraints.crossAxisExtent;
+        final maxWidth = listMode ? 600.0 : 1200.0;
+        final margin = ((constraints.crossAxisExtent - maxWidth) / 2).clamp(
+          _gap,
+          double.infinity,
+        );
+        final availableWidth = constraints.crossAxisExtent - margin * 2;
+        final crossAxisCount = listMode
+            ? 1
+            : availableWidth > 900
+            ? 4
+            : availableWidth > 600
+            ? 3
+            : 2;
+        if (_activeReorderController != null &&
+            _lastNoteCrossAxisCount != null &&
+            _lastNoteCrossAxisCount != crossAxisCount) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _activeReorderController != null) {
+              unawaited(_cancelDrag());
+            }
+          });
+        }
+        _lastNoteCrossAxisCount = crossAxisCount;
+        final partition = NoteSectionPartition.from(
+          sortedNotes,
+          isPinned: (note) => note.pinned,
+        );
+        final pinned = _sectionNotes(partition.pinned, true);
+        final others = _sectionNotes(partition.others, false);
+        final separateSections =
+            !widget.searchMode &&
+            AppState.showNotes == NoteType.all &&
+            partition.hasBoth;
+        final sections = <Widget>[];
+        if (separateSections) {
+          sections.addAll([
+            SliverToBoxAdapter(
+              child: _buildSectionHeading(
+                key: const ValueKey('pinned_notes_heading'),
+                label: context.l10n.pinnedNotes,
+              ),
+            ),
+            _buildMasonrySection(
+              notes: pinned,
+              controller: _pinnedLayoutController,
+              crossAxisCount: crossAxisCount,
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            SliverToBoxAdapter(
+              child: _buildSectionHeading(
+                key: const ValueKey('other_notes_heading'),
+                label: context.l10n.otherNotes,
+              ),
+            ),
+            _buildMasonrySection(
+              notes: others,
+              controller: _otherLayoutController,
+              crossAxisCount: crossAxisCount,
+            ),
+          ]);
+        } else {
+          sections.add(
+            _buildMasonrySection(
+              notes: pinned.isEmpty
+                  ? others
+                  : others.isEmpty
+                  ? pinned
+                  : sortedNotes,
+              controller: pinned.isEmpty
+                  ? _otherLayoutController
+                  : others.isEmpty
+                  ? _pinnedLayoutController
+                  : _unsectionedLayoutController,
+              crossAxisCount: crossAxisCount,
+            ),
+          );
+        }
+        return sectionLayout = SliverPadding(
+          padding: EdgeInsets.fromLTRB(margin, 0, margin, 24),
+          sliver: SliverMainAxisGroup(slivers: sections),
+        );
+      },
     );
   }
 
@@ -1255,27 +1480,41 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     required int crossAxisCount,
   }) {
     final activeInSection = identical(_activeLayoutController, controller);
-    return AnimatedMasonryReorderLayout(
-      controller: controller,
-      crossAxisCount: crossAxisCount,
-      mainAxisSpacing: _gap,
-      crossAxisSpacing: _gap,
-      activeId: activeInSection ? _draggingNoteId : null,
-      dragGlobalPosition: activeInSection ? _dragGlobalPosition : null,
-      dragAnchor: activeInSection ? _dragAnchor : Offset.zero,
-      placeholderColor:
-          (activeInSection && _invalidPinnedTarget
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.primary)
-              .withValues(alpha: 0.12),
-      children: [
-        for (final (index, note) in notes.indexed)
-          MasonryReorderItem(
-            key: ValueKey('masonry_note_${note.id}'),
-            id: note.id ?? -identityHashCode(note),
-            child: _buildNoteCard(note, index),
+    final children = [
+      for (final note in notes)
+        MasonryReorderItem.lazy(
+          key: ValueKey('masonry_note_${note.id}'),
+          id: note.id ?? -identityHashCode(note),
+          builder: (_) => _buildNoteCard(note),
+        ),
+    ];
+    Rect? previousBounds;
+    Widget? section;
+    return SliverLayoutBuilder(
+      key: ObjectKey(controller),
+      builder: (context, constraints) {
+        final bounds = masonryCacheBounds(constraints);
+        if (previousBounds == bounds && section != null) return section!;
+        previousBounds = bounds;
+        return section = SliverToBoxAdapter(
+          child: AnimatedMasonryReorderLayout(
+            controller: controller,
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: _gap,
+            crossAxisSpacing: _gap,
+            cacheBounds: bounds,
+            activeId: activeInSection ? _draggingNoteId : null,
+            dragGlobalPosition: activeInSection ? _dragGlobalPosition : null,
+            dragAnchor: activeInSection ? _dragAnchor : Offset.zero,
+            placeholderColor:
+                (activeInSection && _invalidPinnedTarget
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.primary)
+                    .withValues(alpha: 0.12),
+            children: children,
           ),
-      ],
+        );
+      },
     );
   }
 

@@ -39,6 +39,7 @@ test("lists build targets and treats an omitted target as help", () => {
 		"macos",
 		"macos-xcode",
 		"web",
+		"web-beta",
 		"windows",
 	]);
 	assert.match(formatBuildTaskHelp(), /npm run build <target>/);

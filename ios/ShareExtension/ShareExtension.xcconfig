@@ -1,0 +1,19 @@
+// ShareExtension needs version variables, but no Flutter or CocoaPods frameworks.
+#include "../Flutter/Generated.xcconfig"
+
+// Shared by Debug, Release, and Profile.
+APPLICATION_EXTENSION_API_ONLY = YES
+CLANG_ENABLE_OBJC_WEAK = NO
+CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements
+CURRENT_PROJECT_VERSION = $(FLUTTER_BUILD_NUMBER)
+DEVELOPMENT_TEAM = 8UGGZ66W6P
+INFOPLIST_FILE = ShareExtension/Info.plist
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
+MARKETING_VERSION = $(FLUTTER_BUILD_NAME)
+PRODUCT_BUNDLE_IDENTIFIER = io.foxbiz.better-keep.ShareExtension
+PRODUCT_NAME = $(TARGET_NAME)
+SDKROOT = iphoneos
+SKIP_INSTALL = YES
+SWIFT_VERSION = 5.0
+TARGETED_DEVICE_FAMILY = 1,2

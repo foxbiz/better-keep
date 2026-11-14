@@ -9,6 +9,9 @@ abstract class FileSystem {
   Future<Uint8List> readBytes(String path);
   Future<String> readString(String path);
   Future<bool> delete(String path);
+
+  /// Removes the supplied files or subtrees, without following symbolic links.
+  Future<void> deleteTrees(List<String> paths);
   Future<bool> exists(String path);
   Future<List<String>> list([String directory = '/']);
   Future<String> copy(String sourcePath, String targetPath);

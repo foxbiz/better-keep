@@ -496,16 +496,16 @@ void main() {
     'failed passphrase recovery preserves the existing keys and identity',
     () async {
       await e2ee.preloadCachedStatus();
-      Map<String, dynamic>? recovery;
-      backend.firestore.write = (path, data) async {
-        if (path.endsWith('/recovery_key')) recovery = Map.of(data);
-      };
       await RecoveryKeyService.instance.createRecoveryKey(
         'synthetic offline recovery phrase',
       );
+      expect(
+        backend.firestore.documents['users/account-a/e2ee/recovery_key'],
+        isNotNull,
+      );
       final before = Map.of(storage.data);
-      backend.firestore.response = (_, _) async =>
-          OfflineSnapshot(value: recovery);
+      backend.firestore.response = (path, _) async =>
+          OfflineSnapshot(value: backend.firestore.documents[path]);
       backend.firestore.write = (_, _) async =>
           throw TimeoutException('Offline during recovery');
       await expectLater(
@@ -566,7 +566,7 @@ void main() {
       storage.data.remove('e2ee_umk_cache');
       final before = Map.of(storage.data);
       expect(await e2ee.preloadCachedStatus(), isFalse);
-      expect(e2ee.localState, LocalEncryptionState.missing);
+      expect(e2ee.localState, LocalEncryptionState.approvedKeyMissing);
       await expectLater(e2ee.initialize(), throwsA(isA<FirebaseException>()));
       expect(storage.data, before);
       expect(backend.firestore.writes, isEmpty);

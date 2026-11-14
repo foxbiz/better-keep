@@ -11,18 +11,6 @@ class AppLogger {
   /// Maximum log file size in bytes (1MB)
   static const int _maxLogSize = 1024 * 1024;
 
-  static Future<String> get _logPath async {
-    final fs = await fileSystem();
-    final directory = await fs.cacheDir;
-    return path.join(directory, 'log.txt');
-  }
-
-  static Future<String> get _oldLogPath async {
-    final fs = await fileSystem();
-    final directory = await fs.cacheDir;
-    return path.join(directory, 'log.old.txt');
-  }
-
   static Future<void> log(String message) async {
     await _writeLog(message, isError: false);
   }
@@ -53,7 +41,7 @@ class AppLogger {
 
     try {
       final fs = await fileSystem();
-      final logPath = await _logPath;
+      final logPath = path.join(await fs.cacheDir, 'log.txt');
 
       // Check if log rotation is needed
       await _rotateLogIfNeeded(fs, logPath);
@@ -69,14 +57,19 @@ class AppLogger {
   /// Rotates the log file if it exceeds the maximum size
   static Future<void> _rotateLogIfNeeded(FileSystem fs, String logPath) async {
     try {
-      if (!await fs.exists(logPath)) return;
+      // Web length reads the content, so avoid opening the same log twice.
+      if (kIsWeb) {
+        if (!await fs.exists(logPath)) return;
+      } else if ((await fs.length(logPath) ?? 0) <= _maxLogSize) {
+        return;
+      }
 
       // Read as bytes and decode with error handling for non-UTF-8 data
       final bytes = await fs.readBytes(logPath);
       if (bytes.length > _maxLogSize) {
         final content = utf8.decode(bytes, allowMalformed: true);
         // Move current log to old log (overwrite)
-        final oldLogPath = await _oldLogPath;
+        final oldLogPath = path.join(path.dirname(logPath), 'log.old.txt');
         // Keep only the last half of the log
         final truncatedContent = content.substring(content.length ~/ 2);
         await fs.writeString(oldLogPath, truncatedContent);
@@ -91,7 +84,7 @@ class AppLogger {
   static Future<String> getLogs() async {
     try {
       final fs = await fileSystem();
-      final logPath = await _logPath;
+      final logPath = path.join(await fs.cacheDir, 'log.txt');
       if (await fs.exists(logPath)) {
         // Read as bytes and decode with error handling for non-UTF-8 data
         final bytes = await fs.readBytes(logPath);
@@ -106,7 +99,7 @@ class AppLogger {
   static Future<void> clearLogs() async {
     try {
       final fs = await fileSystem();
-      final logPath = await _logPath;
+      final logPath = path.join(await fs.cacheDir, 'log.txt');
       if (await fs.exists(logPath)) {
         await fs.delete(logPath);
       }

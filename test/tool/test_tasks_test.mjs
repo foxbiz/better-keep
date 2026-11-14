@@ -59,11 +59,15 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 	assert.deepEqual(TEST_SUITE_NAMES, [
 		"client-sync",
 		"database-migrations",
+		"device-pairing",
 		"external-links",
 		"firebase-apple",
 		"firebase-emulator-android",
+		"firebase-emulator-auth-recovery",
 		"firebase-emulator-config",
+		"firebase-emulator-deletion",
 		"firebase-emulator-functions",
+		"firebase-emulator-pairing",
 		"firebase-emulator-review",
 		"firebase-environment-android",
 		"firebase-environment-web",
@@ -71,6 +75,7 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"firebase-runtime",
 		"functions",
 		"hosting",
+		"image-share",
 		"ios-build-policy",
 		"keep-import",
 		"lighthouse",
@@ -78,13 +83,17 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"macos-build-policy",
 		"mobile-web",
 		"oauth-recovery",
+		"offline-browser",
 		"release",
+		"release-core",
 		"reminders",
 		"review-prompts",
 		"search",
 		"subscription-management",
 		"visibility",
+		"web-logout",
 		"web-release",
+		"web-sign-out-lock",
 		"windows-build-policy",
 	]);
 	assert.match(formatTestTaskHelp(), /npm test <suite>/);
@@ -92,7 +101,8 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 
 test("declared task commands reference existing repository files", () => {
 	const root = new URL("../../", import.meta.url);
-	const sourceFile = /^(?:\.\/)?(?:scripts|test|tool)\/[\w/.-]+\.(?:dart|mjs|mts|ts|py|sh)$/;
+	const sourceFile =
+		/^(?:\.\/)?(?:scripts|test|tool)\/[\w/.-]+\.(?:dart|mjs|mts|ts|py|sh)$/;
 	for (const suite of TEST_SUITE_NAMES) {
 		for (const operation of resolveTestTask([suite]).operations) {
 			for (const argument of [operation.command, ...(operation.args ?? [])]) {
@@ -207,21 +217,24 @@ test("focused PR suites pin every required Flutter test path", () => {
 });
 
 test("web release builds the combined site before deterministic validation", () => {
-	const operations = resolveTestTask(["web-release"]).operations;
+	const all = resolveTestTask(["web-release"]).operations;
+	const offline = resolveTestTask(["offline-browser"]).operations;
+	assert.deepEqual(all.slice(-offline.length), offline);
+	const operations = all.slice(0, -offline.length);
 	assert.deepEqual(operations[0], {
 		args: [],
 		command: "./scripts/build_web.sh",
 		environment: {},
 		type: "process",
 	});
-	assert.deepEqual(operations.at(-2), {
+	assert.deepEqual(operations.at(-3), {
 		args: ["--prefix", "site", "run", "test:mobile"],
 		command: "npm",
 		environment: {},
 		type: "process",
 	});
-	assert.equal(operations.at(-1).type, "firebase");
-	assert.deepEqual(operations.at(-1).args, [
+	assert.equal(operations.at(-2).type, "firebase");
+	assert.deepEqual(operations.at(-2).args, [
 		"--",
 		"emulators:exec",
 		"--only",
@@ -231,6 +244,12 @@ test("web release builds the combined site before deterministic validation", () 
 		"--project",
 		"better-keep-notes",
 		"./scripts/test_hosting_routes.sh",
+	]);
+	assert.deepEqual(operations.at(-1).args, [
+		"--test",
+		"test/web/beta_launcher_test.mjs",
+		"test/web/firebase_emulator_auth_restart_test.mjs",
+		"test/web/checkout_loading_test.mjs",
 	]);
 });
 
@@ -242,6 +261,10 @@ test("hosting assertions avoid optional local-only search tools", () => {
 
 test("release expands suites in the established order and excludes devices", () => {
 	const release = resolveTestTask(["release"]);
+	const core = resolveTestTask(["release-core"]).operations;
+	const offline = resolveTestTask(["offline-browser"]).operations;
+	assert.deepEqual(release.operations, [...core, ...offline]);
+	assert.ok(!core.some((op) => op.args.includes("node test/emulator/offline_browser.mjs")));
 	const serializedOperations = JSON.stringify(release.operations);
 	const orderedMarkers = [
 		"build_tasks_test.mjs",
@@ -265,8 +288,15 @@ test("release expands suites in the established order and excludes devices", () 
 		"macos_archive_config_test.mjs",
 		"windows_build_policy_test.mjs",
 		"database_merge_migration_test.dart",
+		"shared_image_note_service_test.dart",
+		"ios_image_share_inbox_test.dart",
+		"intent_handler_pending_test.dart",
+		"image_share_native_test.mjs",
+		"image_share_signing_test.mjs",
 		"build_web.sh",
 		"site_assets_test.mts",
+		"TEST_STORAGE_BACKEND=OPFS",
+		"TEST_STORAGE_BACKEND=IndexedDB",
 		"test_hosting_routes.sh",
 		"google_keep_import_service_test.dart",
 		"google_keep_import_discoverability_test.dart",
@@ -281,11 +311,12 @@ test("release expands suites in the established order and excludes devices", () 
 		"run_flutter_web_integration.mjs",
 		"test_firebase_rules.sh",
 		"test:emulator",
+		"test:deletion",
 		"review_isolation_acceptance_test.mjs",
 	];
 	let previousIndex = -1;
 	for (const marker of orderedMarkers) {
-		const index = serializedOperations.indexOf(marker);
+		const index = serializedOperations.indexOf(marker, previousIndex + 1);
 		assert.ok(index > previousIndex, `${marker} must retain release order`);
 		previousIndex = index;
 	}
@@ -373,4 +404,38 @@ test("passes merged environments to Firebase without changing the parent", async
 		"true",
 	);
 	assert.equal(process.env.OAUTH_LEGACY_V1_ENABLED, originalLegacyValue);
+});
+
+test("release gates pairing and both compiled web storage modes", () => {
+	const operations = resolveTestTask(["release"]).operations;
+	assert.ok(operations.some((op) =>
+		op.args?.includes("test/e2ee_browser_storage_test.dart") &&
+		op.args.includes("chrome") && op.environment.CHROME_EXECUTABLE,
+	));
+	assert.ok(operations.some((op) =>
+		op.type === "firebase" &&
+		op.args?.at(-1) === "node test/emulator/offline_browser.mjs" &&
+		op.args.includes("demo-better-keep-pairing"),
+	));
+	const pairing = operations.find((op) =>
+		op.args?.includes("test/device_pairing_code_test.dart"),
+	);
+	assert.ok(pairing.args.includes("test/device_approval_service_test.dart"));
+	assert.ok(pairing.args.includes("test/device_verification_widget_test.dart"));
+	const emulator = operations.find((op) =>
+		op.args?.includes("demo-better-keep-pairing"),
+	);
+	assert.equal(emulator.type, "firebase");
+	assert.ok(emulator.args.includes("firebase.emulator-tests.json"));
+	assert.ok(emulator.args.at(-1).includes("test/emulator/device_pairing.dart"));
+	assert.ok(emulator.environment.CHROME_EXECUTABLE);
+	for (const mode of ["true", "false"]) {
+		assert.ok(
+			operations.some(
+				(op) =>
+					op.args?.includes(`--dart-define=WEB_BETA=${mode}`) &&
+					op.args.includes("test/web_release_test.dart"),
+			),
+		);
+	}
 });

@@ -1,4 +1,6 @@
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:better_keep/components/auth_scaffold.dart';
+import 'package:better_keep/components/post_sign_in_recovery_view.dart';
 import 'package:better_keep/dialogs/loading_dialog.dart';
 import 'package:better_keep/dialogs/otp_dialog.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
@@ -22,8 +24,8 @@ class AccountRecoveryPage extends StatefulWidget {
 }
 
 class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
-  bool _hasRecoveryKey = false;
-  bool _isLoading = true;
+  bool? _hasRecoveryKey;
+  bool _isLoading = false;
   bool _isRequestingApproval = false;
   bool _isSigningOut = false;
 
@@ -34,6 +36,8 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
   }
 
   Future<void> _checkRecoveryKey() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
     try {
       final hasKey = await RecoveryKeyService.instance.hasRecoveryKey();
       if (mounted) {
@@ -112,7 +116,12 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
     if (_isSigningOut) return;
     setState(() => _isSigningOut = true);
     try {
-      await AuthService.signOut();
+      if (await confirmDeviceSignOut(
+        context,
+        warnWithoutRecovery: _hasRecoveryKey == false,
+      )) {
+        await AuthService.signOut();
+      }
     } finally {
       if (mounted) setState(() => _isSigningOut = false);
     }
@@ -150,13 +159,23 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
       );
     }
 
+    final hasRecoveryKey = _hasRecoveryKey;
+    if (hasRecoveryKey == null) {
+      return AuthScaffold(
+        child: PostSignInRecoveryView(
+          message: context.l10n.recoveryCheckUnavailable,
+          onRetry: _checkRecoveryKey,
+          onSignOut: _signOut,
+        ),
+      );
+    }
     return AuthScaffold(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            _hasRecoveryKey
+            hasRecoveryKey
                 ? context.l10n.recoverYourAccount
                 : context.l10n.accountRecoveryRequired,
             style: Theme.of(context).textTheme.headlineSmall
@@ -165,7 +184,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            _hasRecoveryKey
+            hasRecoveryKey
                 ? context.l10n.noActiveDevicesRecoveryKey
                 : context.l10n.noActiveDevicesNoRecoveryKey,
             style: Theme.of(context).textTheme.bodyLarge
@@ -174,7 +193,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
           ),
           const SizedBox(height: 32),
 
-          if (_hasRecoveryKey) ...[
+          if (hasRecoveryKey) ...[
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(

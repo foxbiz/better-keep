@@ -9,6 +9,22 @@ import 'firebase_backend.dart';
 class FirebaseScopedPreferences {
   FirebaseScopedPreferences._();
 
+  static int _startedReloads = 0;
+  static int _finishedReloads = 0;
+
+  /// An ownership proof can be reused only within one settled preference cache.
+  static int? get cacheRevision =>
+      _startedReloads == _finishedReloads ? _finishedReloads : null;
+
+  static Future<void> reload(SharedPreferences prefs) async {
+    _startedReloads++;
+    try {
+      await prefs.reload();
+    } finally {
+      _finishedReloads++;
+    }
+  }
+
   /// Process-independent pointer used only by background local-data handlers.
   ///
   /// It never selects or configures Firebase. The foreground startup still
@@ -54,8 +70,17 @@ class FirebaseScopedPreferences {
   }) async {
     // Old builds persisted the selection itself. It must never influence the
     // every-launch chooser, regardless of which account scope signs out.
-    await preferences.remove('debug_firebase_environment');
-    await preferences.remove('debug_firebase_use_emulators');
+    // remove() updates the memory cache even if the platform write fails.
+    // Enumerate persisted keys on every attempt, including crash recovery.
+    await reload(preferences);
+    Future<void> remove(String key) async {
+      if (!await preferences.remove(key)) {
+        throw StateError('Could not clear local account preferences');
+      }
+    }
+
+    await remove('debug_firebase_environment');
+    await remove('debug_firebase_use_emulators');
 
     final keys = preferences.getKeys().toList(growable: false);
     final scope =
@@ -66,13 +91,13 @@ class FirebaseScopedPreferences {
     if (scope.isEmulator) {
       const prefix = 'firebase_emulator.';
       for (final storedKey in keys.where((value) => value.startsWith(prefix))) {
-        await preferences.remove(storedKey);
+        await remove(storedKey);
       }
       return;
     }
 
     for (final storedKey in keys.where(isLiveAccountKey)) {
-      await preferences.remove(storedKey);
+      await remove(storedKey);
     }
   }
 

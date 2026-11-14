@@ -1,5 +1,6 @@
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/monetization/entitlements.dart';
 import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/utils/monetization_localizations.dart';
@@ -17,6 +18,18 @@ void main() {
       expect(AuthProgress.creatingAccount.localized(en), en.creatingAccount);
       expect(AuthProgress.creatingAccount.localized(ja), ja.creatingAccount);
       expect(AuthFailureKind.network.localized(en), en.noInternetConnection);
+      expect(
+        AuthFailureKind.accountExists.localized(en),
+        en.signInToExistingAccount,
+      );
+      expect(
+        AuthFailureKind.differentSignInMethod.localized(en),
+        en.useOriginalSignInMethod,
+      );
+      expect(
+        AuthFailureKind.invalidEmail.localized(en),
+        en.pleaseEnterAValidEmail,
+      );
       expect(
         VerificationFailureKind.invalidCode.localized(ja),
         ja.invalidVerificationCode,
@@ -38,6 +51,17 @@ void main() {
       expect(messages.join(' '), isNot(contains('Firestore')));
     },
   );
+
+  test('upload counts use locale grouping and argument order', () {
+    const transfer = (
+      stage: NoteTransferStage.uploading,
+      done: 1234,
+      total: 5678,
+      minutesLeft: null,
+    );
+    expect(transfer.localized(en), 'Uploading notes · 1,234 of 5,678');
+    expect(transfer.localized(ja), 'ノートをアップロード中 · 5,678 件中 1,234 件');
+  });
 
   test('sync failures use localized plurals and generic fallback', () {
     expect(const SyncProgress(SyncPhase.failed).localized(en), en.syncFailed);
@@ -68,6 +92,59 @@ void main() {
           }
         }
       }
+    },
+  );
+
+  test('upload guidance distinguishes Free/Lite from paused Pro uploads', () {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final l10n = lookupAppLocalizations(locale);
+      for (final access in [
+        Entitlements.free,
+        Entitlements.lite,
+        Entitlements.pro,
+      ]) {
+        final message = const SyncProgress(SyncPhase.uploadRestricted)
+            .localized(l10n, cloudUploadsRequirePro: !access.realtimeCloudSync);
+        expect(
+          message,
+          access.realtimeCloudSync
+              ? l10n.syncUploadRestricted
+              : l10n.syncUpgradeForUploads,
+        );
+        expect(l10n.syncUploadRestricted, isNot(l10n.syncUpgradeForUploads));
+      }
+    }
+    expect(en.syncUpgradeForUploads, contains('Upgrade to Pro'));
+    expect(en.syncUploadRestricted, contains('Enable Better Keep cloud'));
+  });
+
+  test(
+    'provider guidance never replaces connectivity or approval feedback',
+    () {
+      expect(
+        const SyncProgress(SyncPhase.deferred)
+            .localized(en, providerSelectionRequired: true),
+        en.externalSyncDescription,
+      );
+      expect(
+        const SyncProgress(SyncPhase.deferred).localized(en),
+        en.syncPaused,
+      );
+      expect(
+        const SyncProgress(SyncPhase.unavailable)
+            .localized(en, providerSelectionRequired: true),
+        en.noConnectionAvailable,
+      );
+      expect(
+        const SyncProgress(SyncPhase.waitingForApproval)
+            .localized(en, providerSelectionRequired: true),
+        en.waitingForDeviceApproval,
+      );
+      expect(
+        const SyncProgress(SyncPhase.signInRequired)
+            .localized(en, providerSelectionRequired: true),
+        en.pleaseSignInAgain,
+      );
     },
   );
 

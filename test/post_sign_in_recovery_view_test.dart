@@ -5,6 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'deletion support message hides retry without removing local access',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          PostSignInRecoveryView(
+            message: 'Account deletion has already started. Contact support@betterkeep.app for help.',
+            canRetry: false,
+            onRetry: () async {},
+            onContinueOffline: () async {},
+            onSignOut: () async {},
+          ),
+        ),
+      );
+      expect(
+        find.textContaining('Contact support@betterkeep.app'),
+        findsOneWidget,
+      );
+      expect(find.text('Retry'), findsNothing);
+      expect(find.text('Continue Offline'), findsOneWidget);
+    },
+  );
+
   testWidgets('authenticated recovery exposes retry and offline actions', (
     tester,
   ) async {
@@ -38,28 +61,27 @@ void main() {
     expect(offlineCount, 1);
   });
 
-  testWidgets('sign out requires confirmation', (tester) async {
-    var signOutCount = 0;
-    await tester.pumpWidget(
-      _host(
-        PostSignInRecoveryView(
-          onRetry: () async {},
-          onContinueOffline: () async {},
-          onSignOut: () async {
-            signOutCount++;
-          },
+  testWidgets(
+    'sign out delegates to the caller for account-aware confirmation',
+    (tester) async {
+      var signOutCount = 0;
+      await tester.pumpWidget(
+        _host(
+          PostSignInRecoveryView(
+            onRetry: () async {},
+            onContinueOffline: () async {},
+            onSignOut: () async {
+              signOutCount++;
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Sign Out'));
-    await tester.pumpAndSettle();
-    expect(signOutCount, 0);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Sign Out'));
-    await tester.pumpAndSettle();
-    expect(signOutCount, 1);
-  });
+      await tester.tap(find.text('Sign Out'));
+      await tester.pumpAndSettle();
+      expect(signOutCount, 1);
+    },
+  );
 }
 
 Widget _host(Widget child) => MaterialApp(

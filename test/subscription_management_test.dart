@@ -41,7 +41,6 @@ void main() {
       expect(target.action, SubscriptionManagementAction.externalUrl);
       expect(target.url, googlePlaySubscriptionsUrl);
       expect(Uri.parse(target.url!).queryParameters, {
-        'sku': 'better_keep_pro',
         'package': 'io.foxbiz.better_keep',
       });
     }
@@ -81,6 +80,6 @@ void main() {
     expect(Uri.parse(appleSubscriptionsUrl).queryParameters, isEmpty);
     final playParameters = Uri.parse(googlePlaySubscriptionsUrl)
         .queryParameters;
-    expect(playParameters.keys, unorderedEquals(['sku', 'package']));
+    expect(playParameters.keys, unorderedEquals(['package']));
   });
 }

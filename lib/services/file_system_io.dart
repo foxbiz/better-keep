@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:gal/gal.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'file_system_base.dart';
@@ -19,7 +20,7 @@ class IoFileSystem implements FileSystem {
   Future<String> get documentDir async {
     // IMPORTANT: Use getApplicationSupportDirectory() instead of getApplicationDocumentsDirectory()
     // On Windows, getApplicationDocumentsDirectory() returns the user's Documents folder
-    // (e.g., C:\Users\<user>\Documents), which would cause _clearFileSystemRecursively
+    // (e.g., C:\Users\<user>\Documents), which would cause sign-out cleanup
     // to delete ALL user documents on sign out!
     // getApplicationSupportDirectory() returns an app-specific directory that's safe to clear.
     final dir = await getApplicationSupportDirectory();
@@ -67,6 +68,25 @@ class IoFileSystem implements FileSystem {
     final file = File(path);
     if (!await file.exists()) throw "$path is not a file";
     return file.readAsString();
+  }
+
+  @override
+  Future<void> deleteTrees(List<String> paths) async {
+    for (final parent
+        in paths.map((path) => Directory(path).parent.path).toSet()) {
+      if (await FileSystemEntity.isLink(parent)) {
+        throw FileSystemException('Refusing to clean a linked directory');
+      }
+    }
+    await Future.wait(
+      paths.map((path) async {
+        try {
+          await Directory(path).delete(recursive: true);
+        } on PathNotFoundException {
+          // An already removed entry is also clean.
+        }
+      }),
+    );
   }
 
   @override
@@ -135,16 +155,12 @@ class IoFileSystem implements FileSystem {
   @override
   Future<bool> saveToGallery(Uint8List imageBytes, String fileName) async {
     try {
-      final tempDir = await getTemporaryDirectory();
-      final tempPath = '${tempDir.path}/$fileName';
-      final file = File(tempPath);
-      await file.writeAsBytes(imageBytes);
-
-      // Use Gal to save to gallery
-      await Gal.putImage(tempPath);
-
-      // Clean up temp file
-      await file.delete();
+      // PhotoKit preserves the supplied filename. Android and Windows append
+      // the extension inferred from the bytes.
+      final name = Platform.isIOS || Platform.isMacOS
+          ? p.basename(fileName)
+          : p.basenameWithoutExtension(fileName);
+      await Gal.putImageBytes(imageBytes, name: name);
       return true;
     } catch (e) {
       return false;

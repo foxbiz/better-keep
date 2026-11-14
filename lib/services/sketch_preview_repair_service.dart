@@ -15,6 +15,7 @@ import 'package:better_keep/utils/logger.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
 enum SketchPreviewRepairStatus {
   notNeeded,
@@ -124,7 +125,8 @@ class SketchPreviewRepairService {
       FirebaseScopedPreferences.key(
         'sketch_preview_renderer_v2_unlocked_note_ids',
       );
-  static bool _running = false;
+  static Future<void>? _startupRepair;
+  static int _startupGeneration = 0;
   static final Set<int> _startupAttemptedNoteIds = {};
 
   @visibleForTesting
@@ -133,21 +135,39 @@ class SketchPreviewRepairService {
   @visibleForTesting
   static int get currentVersion => _currentVersion;
 
-  static Future<void> runIfNeeded() async {
-    if (_running) return;
-    final prefs = await AppState.prefs;
-    if ((prefs.getInt(_preferenceKey) ?? 0) >= _currentVersion) return;
+  static Future<void> runIfNeeded() =>
+      _startupRepair ??= _runStartupRepair(_startupGeneration)
+          .whenComplete(() => _startupRepair = null);
 
-    _running = true;
+  /// Let the current item release its files before retiring the local library.
+  static Future<void> stopStartupRepair() async {
+    _startupGeneration++;
+    _startupAttemptedNoteIds.clear();
+    await _startupRepair;
+  }
+
+  static Future<void> _runStartupRepair(int generation) async {
+    final database = AppState.get('db');
+    if (database is! Database) return;
+    bool current() =>
+        generation == _startupGeneration &&
+        database.isOpen &&
+        identical(database, AppState.get('db'));
     try {
+      final prefs = await AppState.prefs;
+      if (!current() ||
+          (prefs.getInt(_preferenceKey) ?? 0) >= _currentVersion) {
+        return;
+      }
       // Keep only stable identifiers. Each row is loaded immediately before
       // rendering so startup never retains stale full-note snapshots.
-      final candidates = await AppState.db.query('note', columns: ['id']);
+      final candidates = await database.query('note', columns: ['id']);
       final progress = _loadProgress(prefs);
       final activeIds = <int>{};
       var allComplete = true;
 
       for (final candidate in candidates) {
+        if (!current()) return;
         final id = candidate['id'] as int?;
         if (id == null) continue;
         activeIds.add(id);
@@ -166,6 +186,7 @@ class SketchPreviewRepairService {
           result = await repairNoteById(
             id,
             scope: SketchPreviewRepairScope.imageSketchesOnly,
+            isCurrent: current,
             expectedSourceSignature: previous?.sourceSignature,
             completedSketchKeys: previous?.completedSketchKeys ?? const {},
             suppressMatchingSource:
@@ -173,6 +194,7 @@ class SketchPreviewRepairService {
                 SketchPreviewLocalProgressState.resolvedWithPlaceholder,
           );
         } catch (e, stackTrace) {
+          if (!current()) return;
           AppLogger.error(
             'Unexpected startup preview repair failure for note $id',
             e,
@@ -185,6 +207,7 @@ class SketchPreviewRepairService {
           );
         }
 
+        if (!current()) return;
         final next = advanceLocalProgress(previous: previous, result: result);
         progress[id] = next;
         await _saveProgress(prefs, progress);
@@ -211,9 +234,11 @@ class SketchPreviewRepairService {
         }
       }
 
+      if (!current()) return;
       progress.removeWhere((id, _) => !activeIds.contains(id));
       await _saveProgress(prefs, progress);
 
+      if (!current()) return;
       if (allComplete) {
         await prefs.setInt(_preferenceKey, _currentVersion);
       } else {
@@ -222,9 +247,9 @@ class SketchPreviewRepairService {
         );
       }
     } catch (e, stackTrace) {
-      AppLogger.error('Sketch preview repair failed', e, stackTrace);
-    } finally {
-      _running = false;
+      if (current()) {
+        AppLogger.error('Sketch preview repair failed', e, stackTrace);
+      }
     }
   }
 
@@ -430,7 +455,15 @@ class SketchPreviewRepairService {
     Future<void> Function(Note repairedNote)? onPersisted,
     Future<void> Function(List<String> paths)? cachePreviews,
     Future<void> Function(List<String> paths)? deleteGeneratedPreviews,
+    bool Function()? isCurrent,
   }) async {
+    final database = AppState.db;
+    bool current() =>
+        identical(database, AppState.db) && (isCurrent?.call() ?? true);
+    const cancelled = SketchPreviewRepairResult(
+      status: SketchPreviewRepairStatus.notNeeded,
+      sourceSignature: '',
+    );
     final repairPreviews =
         repair ??
         (note, completed) => repairNote(
@@ -446,7 +479,8 @@ class SketchPreviewRepairService {
     var lastCompletedSketchKeys = completedSketchKeys;
 
     for (var attempt = 0; attempt < 2; attempt++) {
-      final rows = await AppState.db.query(
+      if (!current()) return cancelled;
+      final rows = await database.query(
         'note',
         where: 'id = ?',
         whereArgs: [id],
@@ -461,6 +495,7 @@ class SketchPreviewRepairService {
 
       final row = rows.single;
       final note = await Note.fromJsonAsync(row);
+      if (!current()) return cancelled;
       final sourceSignature = sourceSignatureFor(note);
       lastSourceSignature = sourceSignature;
       final sameSource = expectedSourceSignature == sourceSignature;
@@ -503,6 +538,10 @@ class SketchPreviewRepairService {
       try {
         batch = await repairPreviews(note, effectiveCompleted);
         collectGeneratedPaths();
+        if (!current()) {
+          await cleanup(generatedPaths);
+          return cancelled;
+        }
         lastCompletedSketchKeys = batch.completedSketchKeys;
         if (!batch.changed) {
           await cleanup(generatedPaths);
@@ -517,15 +556,23 @@ class SketchPreviewRepairService {
         }
 
         final attachments = await note.serializeAttachmentsForLocalStorage();
+        if (!current()) {
+          await cleanup(generatedPaths);
+          return cancelled;
+        }
         persisted = await Note.updateAttachmentsIfUnchanged(
           id: id,
           expectedUpdatedAt: row['updated_at'],
           expectedAttachments: row['attachments'],
           attachments: attachments,
+          database: database,
         );
         if (persisted) {
+          if (!current()) return cancelled;
           await cache(generatedPaths);
+          if (!current()) return cancelled;
           await cleanup(batch.discardedPreviewPaths.toList());
+          if (!current()) return cancelled;
           await onPersisted?.call(note);
           return SketchPreviewRepairResult(
             status: batch.hasRetryableFailure
@@ -696,7 +743,10 @@ class SketchPreviewRepairService {
 
   /// Repairs missing previews opened from the editor without treating the
   /// repair as a user edit or triggering sync.
-  static Future<bool> repairMissingPreviews(Note note) async {
+  static Future<bool> repairMissingPreviews(
+    Note note, {
+    bool Function()? isCurrent,
+  }) async {
     final noteId = note.id;
     if (noteId == null) return false;
 
@@ -704,11 +754,12 @@ class SketchPreviewRepairService {
       final result = await repairNoteById(
         noteId,
         allowLocked: note.locked && note.unlocked,
+        isCurrent: isCurrent,
         onPersisted: (repairedNote) async {
           _copyPreviewFields(repairedNote, note);
         },
       );
-      if (result.isComplete) {
+      if ((isCurrent?.call() ?? true) && result.isComplete) {
         await _recordForcedRepairOutcome(noteId, result);
       }
       return result.isComplete;
@@ -843,7 +894,7 @@ class SketchPreviewRepairService {
     }
   }
 
-  @visibleForTesting
+  /// Identifies canonical sketch sources, excluding generated presentation.
   static String sourceSignatureFor(Note note) {
     final sources = <Map<String, Object?>>[
       for (final (index, sketch) in note.sketches.indexed)

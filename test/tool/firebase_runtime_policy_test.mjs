@@ -474,6 +474,28 @@ test("non-emulator Firebase commands do not resolve Java", async () => {
 	assert.equal(childOptions.command, "/firebase/node");
 	assert.equal(childOptions.env.JAVA_HOME, undefined);
 	assert.equal(childOptions.env.PATH, "/firebase:/host/bin");
+	assert.equal(childOptions.detached, false);
+});
+
+test("only POSIX emulator launchers isolate terminal interrupts", async () => {
+	for (const platform of ["darwin", "linux", "win32"]) {
+		for (const command of ["emulators:start", "emulators:exec"]) {
+			let childOptions;
+			const exitCode = await runFirebaseCli(["--", command], {
+				platform,
+				nodeVersion: pinnedNodeOutput,
+				processEnv: {},
+				resolveNodeRuntime: () => ({bin: process.execPath}),
+				resolveJavaRuntime: () => ({home: "/qa/java"}),
+				runChild: async (options) => {
+					childOptions = options;
+					return 0;
+				},
+			});
+			assert.equal(exitCode, 0);
+			assert.equal(childOptions.detached, platform !== "win32");
+		}
+	}
 });
 
 test("Functions wrapper selects Node 22 for npm without changing parent env", async () => {

@@ -44,9 +44,29 @@ void main() {
         loadKey: () async => false,
         isCurrent: () => true,
       ),
-      isNot(LocalEncryptionState.ready),
+      LocalEncryptionState.approvedKeyMissing,
     );
   });
+
+  test(
+    'a fresh device and an approved device without keys are distinct',
+    () async {
+      for (final (status, expected) in [
+        (null, LocalEncryptionState.missing),
+        ('approved', LocalEncryptionState.approvedKeyMissing),
+      ]) {
+        expect(
+          await readLocalEncryption(
+            hasDeviceKeys: () async => false,
+            readDeviceStatus: () async => status,
+            loadKey: () async => throw StateError('must not load'),
+            isCurrent: () => true,
+          ),
+          expected,
+        );
+      }
+    },
+  );
 
   test(
     'account change during storage read cannot unlock another session',

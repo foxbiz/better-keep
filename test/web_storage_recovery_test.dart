@@ -9,11 +9,39 @@ import 'package:better_keep/services/remote_sync_cache_service.dart';
 import 'package:better_keep/services/scoped_file_system.dart';
 import 'package:better_keep/services/storage_probe_web.dart';
 import 'package:better_keep/services/web_file_system.dart';
+import 'package:better_keep/services/share_attachment_staging_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web/web.dart' as web;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'missing cache cleanup cannot list or delete root attachments',
+    () async {
+      final fs = await WebFileSystem.instance();
+      final id = 'cleanup-${DateTime.now().microsecondsSinceEpoch}';
+      final rootFile = '/$id.txt';
+      final scoped = ScopedFileSystem(fs, directoryName: id);
+      final cache = '${await scoped.cacheDir}/share_attachments';
+      final cachedFile = '$cache/$id.txt';
+      addTearDown(() async {
+        await fs.delete(rootFile);
+        await fs.delete(cachedFile);
+      });
+      await fs.writeString(rootFile, 'keep attachment');
+      expect(await fs.list(cache), isEmpty);
+      final staging = ShareAttachmentStagingService(fileSystem: scoped);
+      expect(await staging.cleanupStaleFiles(), 0);
+      expect(await fs.readString(rootFile), 'keep attachment');
+
+      await fs.writeString(cachedFile, 'disposable share copy');
+      expect(await fs.list(cache), [cachedFile]);
+      expect(await staging.cleanupStaleFiles(), 1);
+      expect(await fs.exists(cachedFile), false);
+      expect(await fs.readString(rootFile), 'keep attachment');
+    },
+  );
 
   test('masked Chrome quota cannot clear an actual storage failure', () async {
     final storage = web.window.navigator.storage;

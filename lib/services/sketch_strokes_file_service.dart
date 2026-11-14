@@ -5,6 +5,7 @@ import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/encrypted_file_storage.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/utils/encryption.dart';
+import 'package:better_keep/utils/file_utils.dart';
 import 'package:better_keep/utils/logger.dart';
 
 enum SketchStrokesLoadResult {
@@ -28,7 +29,7 @@ enum SketchStrokesLoadResult {
 ///
 /// Password-protected files remain deferred unless an authenticated caller
 /// supplies a decoder. Decoding is in-memory and never rewrites the canonical
-/// source. [readBytes] and [pathExists] are injectable for deterministic tests.
+/// source. File access and path resolution are injectable for deterministic tests.
 class SketchStrokesFileService {
   SketchStrokesFileService._();
 
@@ -36,6 +37,7 @@ class SketchStrokesFileService {
     SketchData sketch, {
     Future<Uint8List> Function(String path)? readBytes,
     Future<bool> Function(String path)? pathExists,
+    Future<String> Function(String path)? resolvePath,
     Future<Uint8List> Function(Uint8List protectedBytes)?
     passwordProtectedDecoder,
   }) async {
@@ -58,14 +60,17 @@ class SketchStrokesFileService {
     }
 
     try {
+      // iOS may move the app container during an update. Resolve the source
+      // just like previews, without rewriting the persisted attachment.
+      final localPath = await (resolvePath ?? FileUtils.fixPath)(strokesPath);
       final exists = pathExists != null
-          ? await pathExists(strokesPath)
-          : await (await fileSystem()).exists(strokesPath);
+          ? await pathExists(localPath)
+          : await (await fileSystem()).exists(localPath);
       if (!exists) return SketchStrokesLoadResult.unavailable;
 
       var bytes = readBytes != null
-          ? await readBytes(strokesPath)
-          : await readEncryptedBytes(strokesPath);
+          ? await readBytes(localPath)
+          : await readEncryptedBytes(localPath);
       // ENCP is an expected state for a locked note downloaded on a new
       // device. An authenticated editor may decode it in memory without
       // changing the canonical protected file.

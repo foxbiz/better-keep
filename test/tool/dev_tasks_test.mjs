@@ -116,6 +116,7 @@ test("fixed targets retain exact Flutter device IDs and arguments", () => {
 		"-d",
 		"web-server",
 		"--web-port=63630",
+		"--base-href=/app/",
 		"--dart-define-from-file=.env",
 	]);
 });

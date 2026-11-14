@@ -10,6 +10,94 @@ class AppLocalizationsId extends AppLocalizations {
   AppLocalizationsId([String locale = 'id']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint =>
+      'Koleksi besar mungkin memerlukan beberapa menit.';
+
+  @override
+  String get syncCheckingNotes => 'Memeriksa catatan';
+
+  @override
+  String get syncDownloadingNotes => 'Mengunduh catatan';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString catatan';
+  }
+
+  @override
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Mengunggah catatan · $countString';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'Mengunggah catatan · $doneString dari $totalString';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Sekitar $minutes menit lagi',
+      zero: 'Kurang dari semenit lagi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sharedImageNamesConflict =>
+      'Beberapa gambar yang dibagikan memiliki nama file yang sama. Bagikan satu per satu.';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return 'Tidak dapat membuat catatan gambar ($fileName). Coba bagikan lagi dengan gambar maksimal 50 MB dan 24 megapiksel.';
+  }
+
+  @override
+  String get externalSyncContinue => 'Lanjutkan';
+
+  @override
+  String get externalSyncConnectionInfo => 'Info koneksi';
+
+  @override
+  String get externalSyncConnectPrompt =>
+      'Masuk untuk mulai menyinkronkan catatan Anda.';
+
+  @override
+  String get externalSyncNativeSetupPrompt =>
+      'Masuk ke Google Drive di perangkat ini.';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'Masukkan URL lengkap folder WebDAV dan kata sandi aplikasi. Sinkronisasi browser memerlukan izin permintaan lintas asal dari server Anda.';
+
+  @override
+  String showMoreDevices(int count) {
+    return 'Tampilkan lebih banyak ($count+)';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly =>
+      'Hanya perangkat utama Anda yang dapat menghapus perangkat lain.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -472,9 +560,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get cancelSignIn => 'Batalkan Masuk';
 
   @override
-  String get signInCancelled => 'Masuk dibatalkan';
-
-  @override
   String get signInWithFacebook => 'Masuk dengan Facebook';
 
   @override
@@ -541,12 +626,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get newPassword => 'Kata Sandi Baru';
 
   @override
-  String get enterNewPassword => 'Masukkan kata sandi baru';
-
-  @override
-  String get reenterNewPassword => 'Masukkan ulang kata sandi baru';
-
-  @override
   String get currentPassphrase => 'Frasa Sandi Saat Ini';
 
   @override
@@ -595,9 +674,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get addLabel => 'Tambah label';
 
   @override
-  String get searchLogs => 'Cari log...';
-
-  @override
   String get audioRecording => 'Rekaman Audio';
 
   @override
@@ -611,9 +687,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get theme => 'Tema';
-
-  @override
-  String get customizeAppearance => 'Sesuaikan tampilan aplikasi';
 
   @override
   String get followSystemTheme => 'Ikuti Tema Sistem';
@@ -647,12 +720,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get alarmSound => 'Suara Alarm';
 
   @override
-  String get reminderTimeSettings => 'Pengaturan Waktu Pengingat';
-
-  @override
-  String get setDefaultTimes => 'Atur waktu default untuk pengingat';
-
-  @override
   String get morning => 'Pagi';
 
   @override
@@ -662,30 +729,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get evening => 'Malam';
 
   @override
-  String get localDataProtection => 'Perlindungan Data Lokal';
-
-  @override
-  String get encryptDeviceData =>
-      'Enkripsi data yang disimpan di perangkat ini';
-
-  @override
-  String get encryptNotes => 'Enkripsi Catatan';
-
-  @override
-  String get encryptFiles => 'Enkripsi File';
-
-  @override
-  String get lockedNotesSecurity => 'Keamanan Catatan Terkunci';
-
-  @override
-  String get privacyLockedNotes => 'Pengaturan privasi untuk catatan terkunci';
-
-  @override
   String get forgetPasswordOnClose => 'Lupakan kata sandi saat ditutup';
-
-  @override
-  String get requirePasswordAgain =>
-      'Minta kata sandi setiap kali aplikasi dibuka';
 
   @override
   String get nerdStats => 'Statistik Pengembang';
@@ -811,9 +855,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get insert => 'Sisipkan';
 
   @override
-  String get importAsNote => 'Impor sebagai Catatan';
-
-  @override
   String get removeDevice => 'Hapus perangkat';
 
   @override
@@ -822,9 +863,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get passwordResetSuccess =>
       'Kata sandi berhasil direset! Silakan masuk.';
-
-  @override
-  String get emailVerifiedSuccess => 'Email berhasil diverifikasi!';
 
   @override
   String get useDifferentAccount => 'Gunakan akun lain';
@@ -843,14 +881,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Permintaan persetujuan ulang terkirim. Menunggu persetujuan...';
 
   @override
-  String failedReapproval(String error) {
-    return 'Gagal meminta persetujuan ulang: $error';
-  }
-
-  @override
-  String get rememberDevice => 'Ingat perangkat ini';
-
-  @override
   String get recoverWithPassphrase => 'Pulihkan dengan Frasa Sandi';
 
   @override
@@ -866,17 +896,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get accessApproved => 'Akses disetujui';
 
   @override
-  String failedToApprove(String error) {
-    return 'Gagal menyetujui: $error';
-  }
-
-  @override
   String get accessDenied => 'Akses ditolak';
-
-  @override
-  String failedToDeny(String error) {
-    return 'Gagal menolak: $error';
-  }
 
   @override
   String get allUpToDate => 'Semua sudah terbaru';
@@ -902,21 +922,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String unlinkedProvider(String provider) {
-    return 'Tautan $provider dilepas';
-  }
-
-  @override
-  String successfullyLinked(String provider) {
-    return 'Berhasil menautkan akun $provider';
-  }
-
-  @override
-  String unknownProvider(String provider) {
-    return 'Provider tidak dikenal: $provider';
-  }
-
-  @override
   String get recoveryKey => 'Kunci Pemulihan';
 
   @override
@@ -924,37 +929,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enableE2EE => 'Aktifkan Enkripsi End-to-End';
-
-  @override
-  String failedSaveRecoveryKey(String error) {
-    return 'Gagal menyimpan kunci pemulihan: $error';
-  }
-
-  @override
-  String get recoverySuccessWelcome =>
-      'Pemulihan berhasil! Selamat datang kembali.';
-
-  @override
-  String get confirmConsequences =>
-      'Harap konfirmasi bahwa Anda memahami konsekuensinya';
-
-  @override
-  String get accountResetSuccess => 'Akun berhasil direset. Selamat datang!';
-
-  @override
-  String failedResetAccount(String error) {
-    return 'Gagal mereset akun: $error';
-  }
-
-  @override
-  String errorSigningOut(String error) {
-    return 'Error saat keluar: $error';
-  }
-
-  @override
-  String errorPlayingSound(String error) {
-    return 'Error memutar suara: $error';
-  }
 
   @override
   String get checkNestedItems => 'Centang item bersarang?';
@@ -984,77 +958,25 @@ class AppLocalizationsId extends AppLocalizations {
   String get reminderSet => 'Pengingat diatur';
 
   @override
-  String get failedCreateImageNote => 'Gagal membuat catatan gambar';
-
-  @override
-  String errorSavingSketchWithError(String error) {
-    return 'Error menyimpan sketsa: $error';
-  }
-
-  @override
   String get failedSaveNote => 'Gagal menyimpan catatan';
-
-  @override
-  String failedSave(String error) {
-    return 'Gagal menyimpan: $error';
-  }
-
-  @override
-  String copiedAs(String format) {
-    return 'Disalin sebagai $format';
-  }
-
-  @override
-  String failedCopy(String error) {
-    return 'Gagal menyalin: $error';
-  }
 
   @override
   String get pastedAsPlainText => 'Ditempel sebagai teks biasa';
 
   @override
-  String failedPaste(String error) {
-    return 'Gagal menempel: $error';
-  }
-
-  @override
   String get contentInserted => 'Konten disisipkan';
-
-  @override
-  String failedInsertContent(String error) {
-    return 'Gagal menyisipkan konten: $error';
-  }
-
-  @override
-  String get actionCancelled => 'Tindakan dibatalkan';
 
   @override
   String get noteLocked => 'Catatan dikunci';
 
   @override
-  String failedLockNote(String error) {
-    return 'Gagal mengunci catatan: $error';
-  }
-
-  @override
   String get lockRemoved => 'Kunci dihapus';
-
-  @override
-  String failedRemoveLock(String error) {
-    return 'Gagal menghapus kunci: $error';
-  }
 
   @override
   String get noteDuplicated => 'Catatan diduplikat';
 
   @override
   String get errorSavingNote => 'Error menyimpan catatan';
-
-  @override
-  String get contentShared => 'Konten dibagikan';
-
-  @override
-  String get failedShare => 'Gagal membagikan';
 
   @override
   String get notes => 'Catatan';
@@ -1075,45 +997,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get otherNotes => 'Lainnya';
 
   @override
-  String get noNotes => 'Belum ada catatan';
-
-  @override
   String get noArchivedNotes => 'Tidak ada catatan yang diarsipkan';
-
-  @override
-  String get noDeletedNotes => 'Tidak ada catatan yang dihapus';
-
-  @override
-  String get searchNotes => 'Cari catatan';
-
-  @override
-  String nSelectedNotes(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count catatan dipilih',
-      one: '1 catatan dipilih',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get deleteNote => 'Hapus Catatan';
 
   @override
-  String get deleteNotes => 'Hapus Catatan';
-
-  @override
   String get moveToTrash => 'Pindahkan ke sampah';
-
-  @override
-  String get deletePermanently => 'Hapus permanen';
-
-  @override
-  String get pinNote => 'Pin';
-
-  @override
-  String get unpinNote => 'Lepas Pin';
 
   @override
   String get newNote => 'Catatan Baru';
@@ -1122,28 +1012,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get newSketch => 'Sketsa Baru';
 
   @override
-  String get newFolder => 'Folder Baru';
-
-  @override
-  String get renameFolder => 'Ubah Nama Folder';
-
-  @override
-  String get deleteFolder => 'Hapus Folder';
-
-  @override
-  String get folderName => 'Nama folder';
-
-  @override
   String get camera => 'Kamera';
 
   @override
   String get gallery => 'Galeri';
-
-  @override
-  String get audioRecorder => 'Perekam Audio';
-
-  @override
-  String get importFile => 'Impor File';
 
   @override
   String get language => 'Bahasa';
@@ -1152,25 +1024,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get systemDefault => 'Default Sistem';
 
   @override
-  String get selectLanguage => 'Pilih Bahasa';
-
-  @override
   String get english => 'English';
-
-  @override
-  String get japanese => '日本語';
-
-  @override
-  String get korean => '한국어';
-
-  @override
-  String get indonesian => 'Bahasa Indonesia';
-
-  @override
-  String get portugueseBrazil => 'Português (Brasil)';
-
-  @override
-  String get chinese => '中文';
 
   @override
   String get today => 'Hari Ini';
@@ -1183,9 +1037,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get nextMonth => 'Bulan depan';
-
-  @override
-  String get pickDateTime => 'Pilih tanggal & waktu';
 
   @override
   String get time => 'Waktu';
@@ -1221,28 +1072,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get yearly => 'Tahunan';
 
   @override
-  String get snooze => 'Tunda';
-
-  @override
-  String get fiveMinutes => '5 menit';
-
-  @override
-  String get tenMinutes => '10 menit';
-
-  @override
-  String get thirtyMinutes => '30 menit';
-
-  @override
   String get oneHour => '1 jam';
-
-  @override
-  String get gridView => 'Tampilan grid';
-
-  @override
-  String get listView => 'Tampilan daftar';
-
-  @override
-  String get galleryView => 'Tampilan galeri';
 
   @override
   String get undo => 'Urungkan';
@@ -1275,15 +1105,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get openChecklistView => 'Buka tampilan daftar';
 
   @override
-  String get convertToNormalText => 'Ubah menjadi teks biasa';
-
-  @override
   String get convertEntireChecklistToText =>
       'Ubah seluruh daftar centang menjadi teks';
-
-  @override
-  String get focusedChecklistRequiresChecklistOnly =>
-      'Tampilan daftar terfokus hanya tersedia jika setiap baris merupakan item daftar centang.';
 
   @override
   String get focusedChecklistUnsupportedContent =>
@@ -1338,25 +1161,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get alignRight => 'Rata kanan';
 
   @override
-  String get alignJustify => 'Rata kanan kiri';
-
-  @override
   String get increaseIndent => 'Tambah indentasi';
 
   @override
   String get decreaseIndent => 'Kurangi indentasi';
-
-  @override
-  String get heading1 => 'Heading 1';
-
-  @override
-  String get heading2 => 'Heading 2';
-
-  @override
-  String get heading3 => 'Heading 3';
-
-  @override
-  String get normalText => 'Teks normal';
 
   @override
   String get pen => 'Pena';
@@ -1374,21 +1182,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get eraser => 'Penghapus';
 
   @override
-  String get lasso => 'Lasso';
-
-  @override
   String get addPage => 'Tambah halaman';
 
   @override
-  String get deletePage => 'Hapus halaman';
-
-  @override
   String get page => 'Halaman';
-
-  @override
-  String pageNumber(int number) {
-    return 'Halaman $number';
-  }
 
   @override
   String get connectedAccounts => 'Akun Terhubung';
@@ -1406,20 +1203,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get trial => 'Uji Coba';
 
   @override
-  String trialEndsIn(int days) {
-    return 'Uji coba berakhir dalam $days hari';
-  }
-
-  @override
   String get devices => 'Perangkat';
 
   @override
   String get thisDevice => 'Perangkat ini';
-
-  @override
-  String lastActive(String time) {
-    return 'Terakhir aktif: $time';
-  }
 
   @override
   String get pendingApproval => 'Menunggu persetujuan';
@@ -1428,30 +1215,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get security => 'Keamanan';
 
   @override
-  String get endToEndEncryption => 'Enkripsi End-to-End';
-
-  @override
-  String get e2eeEnabled => 'Diaktifkan';
-
-  @override
-  String get e2eeDisabled => 'Tidak diaktifkan';
-
-  @override
   String get setupRecoveryKey => 'Atur Kunci Pemulihan';
-
-  @override
-  String get changeRecoveryKey => 'Ubah Kunci Pemulihan';
 
   @override
   String get verifyRecoveryKey => 'Verifikasi Kunci Pemulihan';
 
   @override
   String get error => 'Error';
-
-  @override
-  String errorWithMessage(String message) {
-    return 'Error: $message';
-  }
 
   @override
   String get loading => 'Memuat...';
@@ -1470,25 +1240,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get online => 'Online';
-
-  @override
-  String get getApp => 'Dapatkan Aplikasi';
-
-  @override
-  String get sessionExpired => 'Sesi Anda telah berakhir. Silakan masuk lagi.';
-
-  @override
-  String get confirmSignOut => 'Apakah Anda yakin ingin keluar?';
-
-  @override
-  String get unsyncedChanges =>
-      'Anda memiliki perubahan yang belum disinkronkan yang akan hilang.';
-
-  @override
-  String get deleteConfirmation => 'Apakah Anda yakin ingin menghapus ini?';
-
-  @override
-  String get permanentAction => 'Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get encryptNoteContent => 'Enkripsi Konten Catatan';
@@ -1518,9 +1269,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get appInfoCredits => 'Info aplikasi dan kredit';
-
-  @override
-  String get advancedSettings => 'Pengaturan Lanjutan';
 
   @override
   String get speechRecognitionModel => 'Model Pengenalan Suara';
@@ -1569,11 +1317,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get noteEncryptionEnabledSimple => 'Enkripsi catatan diaktifkan.';
 
   @override
-  String errorEncryptingNotes(String error) {
-    return 'Error mengenkripsi catatan: $error';
-  }
-
-  @override
   String get noteEncryptionDisabled => 'Enkripsi catatan dinonaktifkan.';
 
   @override
@@ -1582,10 +1325,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get fileEncryptionDisabled => 'Enkripsi file dinonaktifkan.';
-
-  @override
-  String get encryptDataOnDevice =>
-      'Enkripsi data yang disimpan di perangkat ini';
 
   @override
   String get signInCancelledMessage => 'Masuk dibatalkan';
@@ -1731,18 +1470,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get deviceRevoked => 'Perangkat Dicabut';
 
   @override
-  String get waitingForApprovalTitle => 'Menunggu Persetujuan';
-
-  @override
   String get deviceRevokedDescription =>
       'Perangkat ini telah dicabut dan tidak dapat lagi mengakses catatan Anda. Silakan masuk lagi dari perangkat yang disetujui untuk mengotorisasi ulang.';
-
-  @override
-  String get pleaseApproveFrom => 'Silakan setujui dari:';
-
-  @override
-  String get waitingForApprovalFromDevice =>
-      'Menunggu persetujuan dari perangkat lain...';
 
   @override
   String get rememberThisDevice => 'Ingat perangkat ini';
@@ -1756,9 +1485,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get checkStatus => 'Periksa Status';
-
-  @override
-  String get cancelRequest => 'Batalkan Permintaan';
 
   @override
   String get pleaseWait => 'Mohon tunggu...';
@@ -1848,11 +1574,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get insertTooltip => 'Sisipkan';
 
   @override
-  String failedToImport(String error) {
-    return 'Gagal mengimpor: $error';
-  }
-
-  @override
   String get notes_ => 'Catatan';
 
   @override
@@ -1906,10 +1627,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get subscriptionCancelled => 'Langganan Dibatalkan';
 
   @override
-  String get upgradeToProDescription =>
-      'Upgrade ke Pro untuk catatan terkunci tanpa batas, sinkronisasi cloud, dan lainnya.';
-
-  @override
   String get cancellingSubscription => 'Membatalkan...';
 
   @override
@@ -1955,20 +1672,7 @@ class AppLocalizationsId extends AppLocalizations {
       'Kami tidak dapat mengidentifikasi penyedia penagihan Anda. Hubungi contact@betterkeep.app untuk bantuan.';
 
   @override
-  String manageSubscriptionInStore(String store) {
-    return 'Kelola langganan Anda di $store.';
-  }
-
-  @override
-  String get loadingFailedTryAgain => 'Gagal memuat — Coba lagi';
-
-  @override
   String get reloadPrices => 'Muat ulang harga';
-
-  @override
-  String subscribeWithPrice(String price) {
-    return 'Berlangganan — $price';
-  }
 
   @override
   String get noAdsDescription =>
@@ -1986,14 +1690,11 @@ class AppLocalizationsId extends AppLocalizations {
       'Ingin self-host? Hubungi kami di contact@betterkeep.app';
 
   @override
-  String get welcomeToProMessage => 'Selamat datang di Better Keep Pro!';
-
-  @override
   String get paymentConfirmedTitle => 'Pembayaran dikonfirmasi';
 
   @override
   String get paymentConfirmedActivationPending =>
-      'Pembayaran telah dikonfirmasi, tetapi aktivasi Pro memerlukan waktu lebih lama. Jangan membeli lagi. Periksa ulang status atau kelola langganan di Google Play.';
+      'Pembayaran telah dikonfirmasi, tetapi aktivasi membutuhkan waktu lebih lama. Jangan membeli lagi. Periksa kembali status atau kelola langganan Anda.';
 
   @override
   String get recheckStatus => 'Periksa Ulang Status';
@@ -2024,16 +1725,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get subscriptionCancelledSuccessfully =>
       'Langganan berhasil dibatalkan.';
-
-  @override
-  String get subscriptionResumedSuccessfully =>
-      'Langganan berhasil dilanjutkan.';
-
-  @override
-  String get failedToCancelSubscription => 'Gagal membatalkan langganan.';
-
-  @override
-  String get failedToResumeSubscription => 'Gagal melanjutkan langganan.';
 
   @override
   String get featureTableHeader => 'Fitur';
@@ -2134,25 +1825,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteMyAccount => 'Hapus Akun Saya';
 
   @override
-  String get unsyncedNotesWarning =>
-      'Anda memiliki catatan yang belum disinkronkan ke cloud. Jika Anda keluar sekarang, catatan ini akan HILANG SELAMANYA.\n\nPertimbangkan untuk menunggu sinkronisasi selesai atau mengekspor data Anda terlebih dahulu.';
-
-  @override
-  String notesNotSynced(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count catatan belum disinkronkan',
-      one: '1 catatan belum disinkronkan',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get dataLossWarning => 'PERINGATAN KEHILANGAN DATA';
-
-  @override
-  String get noRecoveryKeySet => 'Kunci pemulihan belum diatur';
 
   @override
   String get signOutNoRecoveryKeyWarning =>
@@ -2192,24 +1865,11 @@ class AppLocalizationsId extends AppLocalizations {
       'Seseorang ingin melihat catatan yang Anda bagikan';
 
   @override
-  String get deviceApproved_ => 'Perangkat disetujui';
-
-  @override
-  String failedApproveDevice(String error) {
-    return 'Gagal menyetujui perangkat: $error';
-  }
-
-  @override
   String get deviceRemoved => 'Perangkat dihapus';
 
   @override
   String nDevicesRemoved(int count) {
     return '$count perangkat dihapus';
-  }
-
-  @override
-  String failedRemoveDevice(String error) {
-    return 'Gagal menghapus perangkat: $error';
   }
 
   @override
@@ -2226,11 +1886,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enableE2EE_ => 'Aktifkan E2EE';
-
-  @override
-  String failedEnableE2EE(String error) {
-    return 'Gagal mengaktifkan E2EE: $error';
-  }
 
   @override
   String get recoveryKeySavedSuccessfully =>
@@ -2291,10 +1946,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get failedUnlinkAccount => 'Gagal melepas tautan akun';
 
   @override
-  String get cannotUnlinkOnlyMethod =>
-      'Tidak dapat melepas tautan satu-satunya metode masuk.';
-
-  @override
   String unknownProviderError(String provider) {
     return 'Provider tidak dikenal: $provider';
   }
@@ -2305,9 +1956,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedSendCode => 'Gagal mengirim kode verifikasi';
-
-  @override
-  String get pleaseTryAgain => 'Silakan coba lagi.';
 
   @override
   String get pleaseSignInAgain => 'Silakan masuk lagi dan coba.';
@@ -2332,16 +1980,24 @@ class AppLocalizationsId extends AppLocalizations {
   String get failedLinkAccount => 'Gagal menautkan akun';
 
   @override
-  String providerLinkedToAnother(String provider) {
-    return 'Akun $provider ini sudah ditautkan ke pengguna lain.';
-  }
+  String get useOriginalSignInMethod =>
+      'Masuk dengan metode yang Anda gunakan sebelumnya, lalu tautkan penyedia baru di pengaturan akun.';
+
+  @override
+  String get localAccountMismatch =>
+      'Perangkat ini menyimpan catatan dari akun lain. Masuk dengan akun yang menyimpannya.';
+
+  @override
+  String get recoveryCheckUnavailable =>
+      'Opsi pemulihan tidak dapat diperiksa. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get signInToExistingAccount =>
+      'Akun dengan email ini sudah ada. Masuk untuk melanjutkan.';
 
   @override
   String get emailAlreadyInUse =>
       'Akun dengan email ini sudah ada. Masuk dengan akun tersebut terlebih dahulu, lalu tautkan dari sana.';
-
-  @override
-  String get linkingCancelled => 'Penautkan dibatalkan.';
 
   @override
   String successfullyLinkedProvider(String provider) {
@@ -2362,7 +2018,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get allAttachmentsRemoved => 'Semua lampiran dan media akan dihapus';
 
   @override
-  String get loggedOutAllDevices => 'Anda akan keluar dari semua perangkat';
+  String get loggedOutAllDevices =>
+      'Perangkat lain mungkin perlu waktu untuk keluar. Persetujuan perangkat tetap berlaku hingga penghapusan; hapus perangkat yang hilang terlebih dahulu.';
 
   @override
   String get accountCannotBeRecovered => 'Akun Anda tidak dapat dipulihkan';
@@ -2395,7 +2052,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'Akun Anda akan dihapus pada $date.';
+    return 'Akun Anda dapat dihapus mulai $date.';
   }
 
   @override
@@ -2427,11 +2084,8 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'Penghapusan akun dijadwalkan untuk $date. Masuk lagi untuk membatalkan.';
+    return 'Penghapusan dijadwalkan mulai $date. Masuk lagi untuk membatalkan.';
   }
-
-  @override
-  String get iphoneIpad => 'iPhone/iPad';
 
   @override
   String get webBrowser => 'Browser Web';
@@ -2510,10 +2164,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get notificationPermissionsRequired =>
-      'Izin notifikasi dan alarm diperlukan untuk pengingat';
-
-  @override
   String get checkAll => 'Centang Semua';
 
   @override
@@ -2532,12 +2182,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get somethingWentWrongTryAgain =>
       'Terjadi kesalahan. Silakan coba lagi.';
-
-  @override
-  String get verifyingPassphrase => 'Memverifikasi frasa sandi...';
-
-  @override
-  String get settingAsPrimaryDevice => 'Mengatur sebagai perangkat utama...';
 
   @override
   String get finalizing => 'Menyelesaikan...';
@@ -2820,9 +2464,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get createNewLink => 'Buat Tautan Baru';
 
   @override
-  String get revokeLink_ => 'Cabut tautan';
-
-  @override
   String get copy => 'Salin';
 
   @override
@@ -2841,11 +2482,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get linkRevoked => 'Tautan dicabut';
-
-  @override
-  String failedToRevoke(String error) {
-    return 'Gagal mencabut: $error';
-  }
 
   @override
   String get linkCopied => 'Tautan disalin ke clipboard';
@@ -2901,10 +2537,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get syncDisabledPleaseSignOut =>
       'Sinkronisasi dinonaktifkan. Silakan keluar dan masuk lagi.';
-
-  @override
-  String get signOutConfirmationWithNote =>
-      'Apakah Anda yakin ingin keluar?\n\nAnda perlu masuk lagi untuk mengakses catatan Anda.';
 
   @override
   String get sketchTool => 'Alat';
@@ -2980,9 +2612,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Gunakan aplikasi untuk pengalaman yang lebih baik';
 
   @override
-  String get noteMarkedAsDone => 'Catatan ditandai selesai';
-
-  @override
   String get pickTextColor => 'Pilih Warna Teks';
 
   @override
@@ -3040,31 +2669,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get pickNoteColor => 'Pilih Warna Catatan';
-
-  @override
-  String failedToPaste(String error) {
-    return 'Gagal menempel: $error';
-  }
-
-  @override
-  String failedToInsertContent(String error) {
-    return 'Gagal menyisipkan konten: $error';
-  }
-
-  @override
-  String failedToLockNote(String error) {
-    return 'Gagal mengunci catatan: $error';
-  }
-
-  @override
-  String failedToRemoveLock(String error) {
-    return 'Gagal menghapus kunci: $error';
-  }
-
-  @override
-  String noteDuplicatedButFailedToLock(String error) {
-    return 'Catatan diduplikat tetapi gagal dikunci: $error';
-  }
 
   @override
   String get pastedContent => 'Konten yang Ditempel';
@@ -3286,15 +2890,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'Tidak ada perangkat aktif yang ditemukan. Gunakan frasa sandi pemulihan Anda untuk memulihkan akses ke catatan terenkripsi Anda.';
+      'Gunakan frasa sandi pemulihan untuk membuka catatan terenkripsi Anda di perangkat ini.';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'Tidak ada perangkat aktif yang ditemukan dan tidak ada kunci pemulihan yang diatur. Anda dapat memulai dari awal dengan akun baru, tetapi catatan sebelumnya tidak dapat dipulihkan.';
+      'Akun ini tidak memiliki frasa sandi pemulihan. Anda dapat meminta persetujuan dari perangkat tepercaya.';
 
   @override
   String get previousNotesEncryptedWarning =>
-      'Catatan sebelumnya Anda dienkripsi dan tidak dapat dipulihkan tanpa kunci pemulihan.';
+      'Memulai dari awal membuat catatan terenkripsi sebelumnya tidak dapat diakses.';
 
   @override
   String get notYourMainDevice => 'Bukan perangkat utama Anda?';
@@ -3309,6 +2913,35 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get requestApprovalFromAnotherDevice =>
       'Minta Persetujuan dari Perangkat Lain';
+
+  @override
+  String get signOutClearingDevice => 'Menghapus data akun di perangkat ini…';
+
+  @override
+  String get signOutFinishing => 'Menyelesaikan proses keluar…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'Keluar akan menghapus catatan yang hanya tersimpan di perangkat ini. Untuk memulihkan catatan yang sudah disinkronkan, Anda memerlukan perangkat yang disetujui atau frasa sandi pemulihan.';
+
+  @override
+  String get localLibraryUnavailable =>
+      'Folder catatan lokal tidak dapat dikenali. Coba lagi, atau keluar untuk memulai koleksi lokal baru.';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      'Penyimpanan aman tidak tersedia. Buka kunci perangkat, lalu coba lagi.';
+
+  @override
+  String get signOutOtherWindowRetry =>
+      'Jendela lain sedang keluar dari akun. Coba lagi setelah selesai.';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'Basis data lokal tidak dapat dihapus. Tutup jendela Better Keep lainnya, lalu coba lagi.';
+
+  @override
+  String get signOutCleanupRetry => 'Belum berhasil keluar. Coba lagi.';
 
   @override
   String get signingOut => 'Keluar...';
@@ -3339,11 +2972,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedToResetAccount => 'Gagal mereset akun';
-
-  @override
-  String failedToResetAccountError(String error) {
-    return 'Gagal mereset akun: $error';
-  }
 
   @override
   String get startFreshQuestion => 'Mulai dari Awal?';
@@ -3389,11 +3017,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedToSaveSketch => 'Gagal menyimpan sketsa';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'Error menyimpan sketsa: $error';
-  }
 
   @override
   String get planFree => 'Gratis';
@@ -3456,20 +3079,10 @@ class AppLocalizationsId extends AppLocalizations {
       'Catatan terkunci tanpa batas dan sinkronisasi cloud real-time';
 
   @override
-  String get unlockTheFullExperience => 'Buka Pengalaman Lengkap';
-
-  @override
   String get maybeLater => 'Mungkin nanti';
 
   @override
   String get enableNotificationsTitle => 'Aktifkan Notifikasi';
-
-  @override
-  String get enableNotificationsForReminders =>
-      'Catatan yang disinkronkan memiliki pengingat. Aktifkan notifikasi agar Anda tidak melewatkannya.';
-
-  @override
-  String get enableNotifications => 'Aktifkan';
 
   @override
   String get rateOnAppStore => 'Beri Nilai di App Store';
@@ -3719,10 +3332,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Kunci enkripsi tersimpan tidak dapat dibaca. Buka kunci perangkat dan coba lagi. Data lokal Anda tetap disimpan.';
 
   @override
-  String get localEncryptionMissing =>
-      'Kunci untuk membuka catatan tersimpan hilang atau rusak. Sambungkan kembali untuk memulihkan akses atau gunakan pemulihan akun. Data lokal Anda tetap disimpan.';
-
-  @override
   String get syncCheckingConnection => 'Memeriksa koneksi…';
 
   @override
@@ -3730,7 +3339,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncUploadRestricted =>
-      'Perubahan disimpan di perangkat ini. Mengunggah memerlukan Pro.';
+      'Tersimpan di perangkat ini. Aktifkan cloud Better Keep untuk menyinkronkan perubahan.';
+
+  @override
+  String get syncUpgradeReminder =>
+      'Perubahan Anda tersimpan di sini. Sinkronkan dengan Pro.';
+
+  @override
+  String get syncUpgradeForUploads =>
+      'Tersimpan di perangkat ini. Upgrade ke Pro untuk mengunggah ke cloud Better Keep.';
 
   @override
   String get syncPaused => 'Sinkronisasi dijeda. Silakan coba lagi.';
@@ -3895,4 +3512,394 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get storageCleared =>
       'Data lokal telah dihapus dan Anda telah keluar. Masuk lagi untuk memulihkan catatan yang telah disinkronkan. Catatan yang dihapus sebelum disinkronkan tidak dapat dipulihkan dari cloud.';
+
+  @override
+  String get externalSyncTitle => 'Penyedia sinkronisasi';
+
+  @override
+  String get externalSyncDescription =>
+      'Pilih satu penyedia untuk menyinkronkan catatan antarperangkat.';
+
+  @override
+  String get externalSyncUnavailable =>
+      'Masuk, lalu setujui atau pulihkan perangkat ini untuk menghubungkan penyimpanan.';
+
+  @override
+  String get externalSyncAccount => 'Akun dan enkripsi';
+
+  @override
+  String get externalSyncCloud => 'Cloud Better Keep';
+
+  @override
+  String get externalSyncCloudDescription =>
+      'Sinkronisasi bawaan · Unggah perlu Pro';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': 'Hubungkan',
+      'browser': 'Masuk melalui browser',
+      'manual': 'Gunakan kata sandi aplikasi',
+      'reconnect': 'Hubungkan kembali',
+      'continue': 'Lanjutkan di browser',
+      'pause': 'Jeda',
+      'resume': 'Lanjutkan',
+      'disconnect': 'Putuskan koneksi',
+      'sync': 'Sinkronkan sekarang',
+      'other': 'Coba lagi',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': 'Menyiapkan otorisasi…',
+      'awaitingConsent': 'Siap diotorisasi melalui browser Anda',
+      'authorizing': 'Menghubungkan…',
+      'cancelling': 'Membatalkan otorisasi…',
+      'cancelPending':
+          'Pembatalan tidak dapat dikonfirmasi. Coba batalkan lagi.',
+      'connecting': 'Menghubungkan…',
+      'pausing': 'Menjeda…',
+      'enabling': 'Melanjutkan…',
+      'disconnecting': 'Memutuskan koneksi…',
+      'paused': 'Dijeda',
+      'notConnected': 'Tidak terhubung',
+      'keyRecovery':
+          'Pulihkan kunci enkripsi Anda untuk menggunakan koneksi ini.',
+      'pending': 'Beberapa perubahan menunggu untuk disinkronkan.',
+      'other': 'Terhubung',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired': 'Masuk ke akun Google Drive yang terhubung di perangkat ini. Catatan Anda tetap terenkripsi.',
+      'reconnectRequired':
+          'Hubungkan kembali akun ini untuk melanjutkan sinkronisasi.',
+      'quotaExceeded': 'Penyimpanan Anda penuh. Kosongkan ruang di penyedia ini, lalu coba lagi.',
+      'rateLimited': 'Penyedia meminta untuk menunggu. Sinkronisasi akan dicoba lagi secara otomatis.',
+      'corruptData': 'Sebagian data sinkronisasi tidak dapat diverifikasi. Catatan lokal Anda tetap disimpan.',
+      'unsupported':
+          'Penyedia atau browser ini tidak dapat menyelesaikan koneksi.',
+      'other': 'Tidak dapat menjangkau penyedia ini. Periksa koneksi Anda, lalu coba lagi.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return 'Sinkronisasi terakhir yang berhasil: $time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => 'Belum ada sinkronisasi yang berhasil';
+
+  @override
+  String get externalSyncBlocked =>
+      'Beberapa catatan atau lampiran belum siap diunggah. Sinkronisasi akan dicoba lagi.';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return 'Putuskan koneksi $provider?';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      'Ini menghentikan sinkronisasi dengan akun ini. Catatan di perangkat ini dan file yang sudah disimpan di penyedia tetap disimpan.';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Koneksi ke Better Keep telah diputus. Pencabutan akses tidak dapat dikonfirmasi. Hapus akses Better Keep di pengaturan akun penyedia Anda.';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Gunakan kata sandi aplikasi dari pengaturan keamanan Nextcloud Anda. Sinkronisasi melalui browser memerlukan server yang mengizinkan permintaan lintas asal.';
+
+  @override
+  String get externalSyncServer => 'URL server';
+
+  @override
+  String get externalSyncUsername => 'Nama pengguna';
+
+  @override
+  String get externalSyncAppPassword => 'Kata sandi aplikasi';
+
+  @override
+  String get externalSyncInvalidServer =>
+      'Masukkan URL server HTTPS tanpa nama pengguna, kata sandi, kueri, atau fragmen.';
+
+  @override
+  String get externalSyncRequired => 'Kolom ini wajib diisi.';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      'Otorisasi selesai sebelum pembatalan. Penyedia sudah terhubung. Gunakan Putuskan koneksi untuk menghapusnya.';
+
+  @override
+  String get externalSyncLogoutPending =>
+      'Beberapa perubahan masih menunggu sinkronisasi. Keluar dari akun akan menghapus catatan dan media lokal perangkat ini. Perubahan yang belum disimpan ke penyedia mana pun dapat hilang.\n\nSelesaikan sinkronisasi atau ekspor data Anda sebelum keluar.';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      'Kami tidak dapat memverifikasi apakah semua perubahan Anda sudah disinkronkan. Keluar dari akun akan menghapus catatan dan media lokal perangkat ini. Perubahan yang belum disimpan ke penyedia mana pun dapat hilang.\n\nPeriksa penyedia sinkronisasi Anda atau ekspor data Anda sebelum keluar.';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      'Beberapa catatan terkunci berisi sketsa lama yang perlu diperbarui. Di perangkat tempat Anda membuatnya, buka catatan tersebut dan buka kuncinya dengan PIN Anda, lalu coba sinkronkan lagi.';
+
+  @override
+  String get externalSyncOff => 'Sinkronisasi nonaktif';
+
+  @override
+  String get externalSyncCloudDownloadDescription =>
+      'Unduh catatan tersimpan · Unggahan memerlukan Pro';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Unduh catatan dari Better Keep cloud. Unggahan akan tetap dijeda.';
+
+  @override
+  String get externalSyncDownloadsOn => 'Unggahan dijeda · Unduhan aktif';
+
+  @override
+  String get externalSyncAllPaused => 'Unggahan dan unduhan dijeda';
+
+  @override
+  String get externalSyncOffDescription => 'Unggahan dijeda';
+
+  @override
+  String get externalSyncDetails => 'Detail sinkronisasi';
+
+  @override
+  String get externalSyncNeedsAttention => 'Perlu perhatian · Lihat detail';
+
+  @override
+  String get externalSyncConnectHelp =>
+      'Masuk untuk memberikan akses penyimpanan. Setelah terhubung, penyedia ini akan dipilih untuk sinkronisasi.';
+
+  @override
+  String get verifyNewDevice => 'Verifikasi perangkat baru';
+
+  @override
+  String get deviceVerificationInstructions =>
+      'Di perangkat tepercaya, pindai QR di perangkat baru.';
+
+  @override
+  String get deviceVerificationExpired =>
+      'Kode verifikasi kedaluwarsa. Buat kode baru di perangkat baru.';
+
+  @override
+  String get newVerificationCode => 'Buat kode baru';
+
+  @override
+  String get deviceVerificationMismatch =>
+      'Perangkat tidak cocok. Jangan setujui permintaan ini.';
+
+  @override
+  String get scanNewDevice => 'Pindai perangkat baru';
+
+  @override
+  String get compareSecurityCode => 'Bandingkan kode keamanan';
+
+  @override
+  String get deviceCameraUnavailable =>
+      'Kamera tidak tersedia. Izinkan akses kamera atau pulihkan dengan frasa sandi.';
+
+  @override
+  String get deviceVerificationRetry =>
+      'Verifikasi gagal. Perbarui kedua perangkat, buat kode baru di perangkat baru, lalu coba lagi.';
+
+  @override
+  String get browserStorageUnavailable =>
+      'Izinkan situs ini menyimpan data di pengaturan browser, lalu coba lagi.';
+
+  @override
+  String get browserLegacyRecoveryUnavailable =>
+      'Versi ini tidak dapat membuka kunci yang tersimpan di browser. Jangan hapus data browser ini. Buka catatan yang sudah disinkronkan di perangkat yang disetujui, atau gunakan frasa sandi pemulihan di browser lain.';
+
+  @override
+  String get browserSessionOnly => 'Hanya sesi ini';
+
+  @override
+  String get browserDeviceTrust =>
+      'Setelah browser ini menyimpan persetujuan Anda, catatan yang sudah diunduh dapat dibuka secara offline.';
+
+  @override
+  String get browserUnlockOnline =>
+      'Catatan Anda ada di perangkat ini. Hubungkan ke internet lalu ketuk Coba lagi untuk membukanya.';
+
+  @override
+  String get verifyTrustedDevice => 'Verifikasi perangkat tepercaya';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      'Pindai QR di perangkat tepercaya untuk menerima kunci enkripsi.';
+
+  @override
+  String get scanTrustedDevice => 'Pindai perangkat tepercaya';
+
+  @override
+  String get confirmOnNewDevice => 'Konfirmasi di perangkat baru';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      'Pindai QR ini dengan perangkat baru. Biarkan layar ini terbuka hingga perangkat terbuka.';
+
+  @override
+  String get storageSecurityUpgrade => 'Hubungkan ulang dengan aman';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      'Koneksi ini menggunakan penyimpanan kredensial lama yang dikelola server. Cabut akses Better Keep di pengaturan aplikasi terhubung penyedia (atau hapus kata sandi aplikasi Nextcloud), lalu hubungkan ulang di sini. Catatan dan file jarak jauh tetap disimpan. Kredensial baru dienkripsi di perangkat dengan kunci enkripsi catatan.';
+
+  @override
+  String get devicePairingScanInstruction =>
+      'Di perangkat tepercaya, buka permintaan persetujuan dan pindai kode ini.';
+
+  @override
+  String get showQrCode => 'Tampilkan kode QR';
+
+  @override
+  String get externalSyncSharedSetup =>
+      'Masuk ke Google Drive di perangkat ini.';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      'Masuk ke akun Google Drive yang terhubung di perangkat ini. Catatan Anda tetap terenkripsi.';
+
+  @override
+  String get externalSyncStorageFull =>
+      'Penyimpanan penuh. Sinkronisasi dijeda; catatan lokal Anda aman. Kosongkan ruang, lalu ketuk Sinkronkan sekarang.';
+
+  @override
+  String get externalSyncClear => 'Hapus data tersinkron';
+
+  @override
+  String get externalSyncClearMessage =>
+      'Hapus salinan tersinkron dan nonaktifkan sinkronisasi. Catatan lokal tetap tersimpan; data yang hanya ada di penyedia akan hilang.';
+
+  @override
+  String get externalSyncClearing => 'Menghapus data tersinkron…';
+
+  @override
+  String get externalSyncClearPending =>
+      'Penghapusan belum selesai · Ketuk untuk mencoba lagi';
+
+  @override
+  String get externalSyncClearDone =>
+      'Data tersinkron dihapus. Sinkronisasi nonaktif. Catatan lokal tetap tersimpan. Penyedia Anda mungkin menyimpan file yang dihapus di sampah.';
+
+  @override
+  String get externalSyncClearCodeSent =>
+      'Masukkan kode yang dikirim ke email Anda.';
+
+  @override
+  String get externalSyncClearCodeError =>
+      'Tidak dapat menghapus data tersinkron. Periksa kode dan koneksi Anda, atau minta kode baru. Jika penghapusan sudah dimulai, sinkronisasi tetap nonaktif hingga selesai.';
+
+  @override
+  String get externalSyncClearSendError =>
+      'Tidak dapat mengirim kode. Pastikan email akun Anda sudah diverifikasi, tunggu satu menit, lalu coba lagi.';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$used terpakai dari $total';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => 'Memeriksa penyimpanan…';
+
+  @override
+  String get externalSyncCapacityUnavailable =>
+      'Informasi penyimpanan tidak tersedia';
+
+  @override
+  String get externalSyncClearVerifyTitle => 'Verifikasi untuk menghapus';
+
+  @override
+  String get externalSyncClearSendCode => 'Kirim kode';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => 'Pilih paket Anda';
+
+  @override
+  String get automaticExternalSync => 'Sinkronisasi eksternal otomatis';
+
+  @override
+  String get manualExternalSync => 'Sinkronisasi eksternal manual';
+
+  @override
+  String get liteDescription =>
+      'Pembaruan otomatis dengan penyimpanan cloud Anda sendiri.';
+
+  @override
+  String get manualSyncDescription =>
+      'Sinkronisasi manual gratis. Lite dan Pro menyediakan pembaruan otomatis.';
+
+  @override
+  String get subscriptionActiveTitle => 'Langganan aktif';
+
+  @override
+  String get subscriptionChangePlan =>
+      'Kelola langganan Anda saat ini untuk mengganti paket.';
+
+  @override
+  String get subscribe => 'Langganan';
+
+  @override
+  String get builtInCloudSync => 'Sinkronisasi cloud bawaan';
+
+  @override
+  String get deviceAdded => 'Ditambahkan';
+
+  @override
+  String get accountDeletionInProgress =>
+      'Penghapusan akun sudah dimulai. Hubungi support@betterkeep.app untuk bantuan.';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      'Kode baru saja diminta. Periksa email Anda atau tunggu satu menit sebelum meminta kode lain.';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'Login Anda tidak dapat diverifikasi. Coba login lagi.';
+
+  @override
+  String get accountDeletionPaused =>
+      'Penghapusan akun dijeda sementara. Hubungi support@betterkeep.app.';
+
+  @override
+  String get deviceUsePairingCode => 'Gunakan kode';
+
+  @override
+  String get deviceEnterPairingCode => 'Masukkan kode pemasangan';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'Di perangkat tepercaya, pilih Masukkan kode pemasangan lalu masukkan delapan digit ini.';
+
+  @override
+  String get devicePairingCodeEntryInstruction =>
+      'Masukkan delapan digit yang ditampilkan di perangkat baru.';
+
+  @override
+  String get devicePairingCodeLabel => 'Kode pemasangan';
+
+  @override
+  String get devicePairingCodeExpired =>
+      'Kode ini tidak tersedia lagi. Buat kode baru.';
+
+  @override
+  String get devicePairingCodeFailed =>
+      'Periksa kode di perangkat baru dan coba lagi. Buat kode baru jika sudah kedaluwarsa.';
+
+  @override
+  String get devicePairingConnecting => 'Menghubungkan…';
 }

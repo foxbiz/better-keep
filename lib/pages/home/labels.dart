@@ -19,31 +19,24 @@ class Labels extends StatefulWidget {
 
 class _LabelsState extends State<Labels> {
   List<Label> _labels = [];
+  int _loadGeneration = 0;
 
-  void _labelsListener(LabelEvent event) {
-    setState(() {
-      if (event.event == "created") {
-        _labels = [event.label, ...(_labels)];
-      } else if (event.event == "deleted") {
-        _labels = _labels.where((label) => label.id != event.label.id).toList();
-      } else if (event.event == "updated") {
-        final index = _labels.indexWhere((label) => label.id == event.label.id);
-        if (index != -1) {
-          _labels[index] = event.label;
-        }
-      }
-    });
+  Future<void> _labelsListener([LabelEvent? event]) async {
+    final generation = ++_loadGeneration;
+    // Sync can add distinct replicas with the same name. Use the model's
+    // canonical display list instead of appending individual replica events.
+    try {
+      final labels = await Label.get();
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _labels = labels);
+    } catch (_) {
+      // Keep the last usable list while storage is unavailable or retiring.
+    }
   }
 
   @override
   void initState() {
-    Label.get().then((fetchedLabels) {
-      if (mounted) {
-        setState(() {
-          _labels = fetchedLabels;
-        });
-      }
-    });
+    _labelsListener();
     Label.on("changed", _labelsListener);
     super.initState();
   }

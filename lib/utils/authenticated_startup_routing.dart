@@ -1,4 +1,5 @@
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
+import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
 
 /// The authenticated destination shown while post-sign-in services initialize.
@@ -18,7 +19,16 @@ enum AuthenticatedStartupRoute {
 AuthenticatedStartupRoute resolveAuthenticatedStartupRoute({
   required PostSignInState postSignInState,
   required E2EEStatus e2eeStatus,
+  LocalEncryptionState? localState,
 }) {
+  if (!postSignInState.accountDeletionInProgress &&
+      (e2eeStatus == E2EEStatus.error ||
+          (e2eeStatus == E2EEStatus.notInitialized &&
+              postSignInState.hasRecoverableFailure)) &&
+      (localState == LocalEncryptionState.approvedKeyMissing ||
+          localState == LocalEncryptionState.corrupt)) {
+    return AuthenticatedStartupRoute.accountRecovery;
+  }
   return switch (e2eeStatus) {
     E2EEStatus.pendingApproval ||
     E2EEStatus.revoked => AuthenticatedStartupRoute.pendingApproval,

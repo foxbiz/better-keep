@@ -1,3 +1,4 @@
+import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/models/base_model.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/services/sync_track_store.dart';
@@ -166,6 +167,24 @@ class LabelSyncTrack extends BaseModel<LabelSyncTrack> {
     }
     await AppState.db.delete(model, where: "id = ?", whereArgs: [id]);
   }
+
+  /// Acknowledge the captured deletion without erasing newer queued work.
+  Future<bool> deleteIfUnchanged() => AppState.db.transaction((txn) async {
+    final rows = await txn.query(model, where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return true;
+    final current = LabelSyncTrack.fromJson(rows.single);
+    if (current.localId != localId ||
+        current.remoteId != remoteId ||
+        current.action != action ||
+        current.status != status ||
+        current.updatedAt != updatedAt) {
+      return false;
+    }
+    requireCloudOperation();
+    await txn.delete(model, where: 'id = ?', whereArgs: [id]);
+    requireCloudOperation();
+    return true;
+  });
 
   Map<String, dynamic> toJson() {
     return {

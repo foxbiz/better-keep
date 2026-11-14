@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:better_keep/components/quill_input_semantics.dart';
+
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/rich_checklist.dart';
@@ -516,6 +518,10 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
 
   Future<void> _enqueueSave() async {
     if (_readOnly || _externalConflict) return;
+    if (widget.note.id != null && !_hasPendingLocalChanges) {
+      await _saveTail;
+      return;
+    }
     _commitActiveRow();
     final snapshotRevision = _localEditRevision;
     late final _ChecklistWorkspaceSnapshot snapshot;
@@ -2193,7 +2199,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         ),
         customLinkPrefixes: const ['audio://'],
       ),
-    );
+    ).withWebInputSemantics();
     if (!_rowHasBackspaceSentinel) return editor;
     return Stack(
       children: [

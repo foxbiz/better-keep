@@ -13,6 +13,7 @@ import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/services/sketch_renderer.dart';
@@ -691,6 +692,17 @@ class _SketchPageState extends State<SketchPage>
     }
 
     final createdPaths = <String>[];
+    // Persist cleanup intent before switching the pointer. Never delete during
+    // an active session: uploads and editors may still be reading the old file.
+    final retiredSource = state.sketchData.strokesFilePath;
+    if (!kIsWeb && retiredSource != null && retiredSource.isNotEmpty) {
+      await PendingAttachmentSourceCleanupJournal(await AppState.prefs).put(
+        PendingAttachmentSourceCleanupRecord(
+          cleanupId: retiredSource,
+          sourcePath: retiredSource,
+        ),
+      );
+    }
     try {
       await state.note.persistSketchMutation(() async {
         _throwIfStale(state);
@@ -736,20 +748,15 @@ class _SketchPageState extends State<SketchPage>
         );
         _throwIfStale(state);
 
-        // Reuse existing strokes file path or create new one (only if valid local path)
-        final existingStrokesPath = state.sketchData.strokesFilePath;
-        String strokesFilePath;
-        if (existingStrokesPath != null &&
-            existingStrokesPath.isNotEmpty &&
-            !existingStrokesPath.startsWith('http')) {
-          strokesFilePath = existingStrokesPath;
-        } else {
-          strokesFilePath = path.join(
-            await fs.documentDir,
-            '${Uuid().v4()}.json',
-          );
-          createdPaths.add(strokesFilePath);
-        }
+        // A saved source belongs to its note revision. Replacing its bytes can
+        // change an in-flight sync snapshot and can look like an unchanged note
+        // when the small preview is identical. Publish a new path only after
+        // the new source is complete; retain the previous revision's file.
+        final strokesFilePath = path.join(
+          await fs.documentDir,
+          '${Uuid().v4()}.json',
+        );
+        createdPaths.add(strokesFilePath);
         final preparedSketch = SketchData(
           strokes: List<SketchStroke>.from(state.strokes),
           aspectRatio: bodySize.width / bodySize.height,

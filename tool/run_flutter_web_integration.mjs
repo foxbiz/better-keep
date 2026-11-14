@@ -1,7 +1,7 @@
-import {spawn} from "node:child_process";
-import {createServer} from "node:net";
-import {dirname, join} from "node:path";
-import {fileURLToPath} from "node:url";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const flutterBinary =
@@ -111,10 +111,7 @@ function waitForExit(child) {
 }
 
 async function main() {
-	if (
-		!Number.isFinite(timeoutMilliseconds) ||
-		timeoutMilliseconds < 30_000
-	) {
+	if (!Number.isFinite(timeoutMilliseconds) || timeoutMilliseconds < 30_000) {
 		throw new Error(
 			"FLUTTER_WEB_INTEGRATION_TIMEOUT_MS must be at least 30000.",
 		);
@@ -148,7 +145,7 @@ async function main() {
 		const flutterArguments = [
 			"drive",
 			"--driver=test_driver/integration_test.dart",
-			"--target=integration_test/firebase_environment_web_test.dart",
+			`--target=${process.argv[2] ?? "integration_test/firebase_environment_web_test.dart"}`,
 			"-d",
 			"web-server",
 			"--web-hostname=127.0.0.1",
@@ -156,6 +153,7 @@ async function main() {
 			"--headless",
 			"--browser-name=chrome",
 			"--timeout=180",
+			...process.argv.slice(3),
 		];
 		if (process.env.CHROME_BINARY) {
 			flutterArguments.push(`--chrome-binary=${process.env.CHROME_BINARY}`);
@@ -194,6 +192,8 @@ async function main() {
 }
 
 main().catch((error) => {
-	console.error(`Firebase environment web acceptance failed: ${error.stack}`);
+	console.error(
+		`Browser integration failed (${process.argv[2] ?? "integration_test/firebase_environment_web_test.dart"}): ${error.stack}`,
+	);
 	process.exitCode = 1;
 });

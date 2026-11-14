@@ -8,7 +8,7 @@ const {
 
 function operations(calls, failure) {
 	return Object.fromEntries(
-		["deleteSubcollections", "deleteStorage", "deleteAuthUser", "deleteFirestoreRoots"].map(
+		["deleteStorageOAuthSessions", "deleteSubcollections", "deleteStorage", "deleteAuthUser", "deleteFirestoreRoots"].map(
 			(name) => [name, async () => {
 				calls.push(name);
 				if (failure === name) throw new Error(`${name} failed`);
@@ -18,7 +18,7 @@ function operations(calls, failure) {
 }
 
 test("deletion preserves Firestore roots until every external step succeeds", async () => {
-	for (const failure of ["deleteSubcollections", "deleteStorage", "deleteAuthUser"]) {
+	for (const failure of ["deleteStorageOAuthSessions", "deleteSubcollections", "deleteStorage", "deleteAuthUser"]) {
 		const calls = [];
 		await assert.rejects(() => executeUserDeletion("user-1", operations(calls, failure)));
 		assert.equal(calls.includes("deleteFirestoreRoots"), false, `${failure} must retain retry marker`);
@@ -33,6 +33,7 @@ test("a retry converges after an earlier external failure", async () => {
 	const retryCalls = [];
 	await executeUserDeletion("user-1", operations(retryCalls));
 	assert.deepEqual(retryCalls, [
+		"deleteStorageOAuthSessions",
 		"deleteSubcollections",
 		"deleteStorage",
 		"deleteAuthUser",
@@ -52,4 +53,20 @@ test("the scheduled wrapper retries failures and recursively removes descendants
 	assert.match(source, /retryCount: 5/);
 	assert.match(source, /db\.recursiveDelete\(subcollection\)/);
 	assert.match(source, /if \(results\.failed > 0\)[\s\S]{0,120}throw new Error/);
+});
+
+
+test("account deletion removes top-level OAuth throttle metadata after sessions", async () => {
+  const { deleteStorageOAuthSessions } = require("../lib/storageAccountLifecycle");
+  const calls = [];
+  let page = 0;
+  const query = {where: () => query, limit: () => query, get: async () =>
+    ++page === 1 ? {empty: false, docs: [{ref: "session"}]} : {empty: true}};
+  const db = {
+    collection: (name) => name === "storageOAuthSessions" ? query : {
+      doc: (uid) => ({delete: async () => calls.push([name, uid])})},
+    batch: () => ({delete: (ref) => calls.push(ref), commit: async () => calls.push("committed")}),
+  };
+  await deleteStorageOAuthSessions(db, "qa-user");
+  assert.deepEqual(calls, ["session", "committed", ["oauth_exchange_limits", "qa-user"]]);
 });

@@ -9,6 +9,8 @@ class UserDeviceTile extends StatelessWidget {
     required this.isPending,
     required this.isCurrentDevice,
     required this.currentDeviceLabel,
+    this.createdAtLabel,
+    this.isFlat = false,
     this.trailing,
     super.key,
   });
@@ -19,6 +21,8 @@ class UserDeviceTile extends StatelessWidget {
   final bool isPending;
   final bool isCurrentDevice;
   final String currentDeviceLabel;
+  final String? createdAtLabel;
+  final bool isFlat;
   final Widget? trailing;
 
   @override
@@ -26,15 +30,19 @@ class UserDeviceTile extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: isCurrentDevice
-            ? Border.all(color: theme.colorScheme.primary, width: 1)
-            : null,
-      ),
+      margin: isFlat ? EdgeInsets.zero : const EdgeInsets.only(bottom: 8),
+      padding: isFlat
+          ? const EdgeInsets.symmetric(vertical: 16)
+          : const EdgeInsets.all(12),
+      decoration: isFlat
+          ? null
+          : BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: isCurrentDevice
+                  ? Border.all(color: theme.colorScheme.primary, width: 1)
+                  : null,
+            ),
       child: Row(
         children: [
           Icon(
@@ -92,6 +100,15 @@ class UserDeviceTile extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (createdAtLabel != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    createdAtLabel!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -10,6 +10,94 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String get syncCheckingLibraryHint =>
+      'Büyük arşivlerde bu birkaç dakika sürebilir.';
+
+  @override
+  String get syncCheckingNotes => 'Notlar kontrol ediliyor';
+
+  @override
+  String get syncDownloadingNotes => 'Notlar indiriliyor';
+
+  @override
+  String syncTotalNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString not';
+  }
+
+  @override
+  String syncUploadingNotes(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Notlar yükleniyor · $countString';
+  }
+
+  @override
+  String syncUploadingNotesOfTotal(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'Notlar yükleniyor · $totalString nottan $doneString tanesi';
+  }
+
+  @override
+  String syncEstimatedMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Yaklaşık $minutes dk. kaldı',
+      zero: 'Bir dakikadan az kaldı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sharedImageNamesConflict =>
+      'Paylaşılan bazı görsellerin dosya adları aynı. Lütfen bunları tek tek paylaşın.';
+
+  @override
+  String sharedImageImportFailed(String fileName) {
+    return 'Görsel notu oluşturulamadı ($fileName). En fazla 50 MB ve 24 megapiksel olan görsellerle tekrar paylaşmayı deneyin.';
+  }
+
+  @override
+  String get externalSyncContinue => 'Devam et';
+
+  @override
+  String get externalSyncConnectionInfo => 'Bağlantı bilgileri';
+
+  @override
+  String get externalSyncConnectPrompt =>
+      'Notlarınızı eşitlemeye başlamak için oturum açın.';
+
+  @override
+  String get externalSyncNativeSetupPrompt =>
+      'Bu cihazda Google Drive’a giriş yapın.';
+
+  @override
+  String get externalSyncWebDavHelp =>
+      'WebDAV klasörünüzün tam URL adresini ve bir uygulama parolasını girin. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.';
+
+  @override
+  String showMoreDevices(int count) {
+    return 'Daha fazla göster ($count+)';
+  }
+
+  @override
+  String get deviceRemovalMainDeviceOnly =>
+      'Diğer cihazları yalnızca ana cihazınız kaldırabilir.';
+
+  @override
   String get appTitle => 'Better Keep';
 
   @override
@@ -462,9 +550,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get cancelSignIn => 'Girişi İptal Et';
 
   @override
-  String get signInCancelled => 'Giriş iptal edildi';
-
-  @override
   String get signInWithFacebook => 'Facebook ile Giriş Yap';
 
   @override
@@ -531,12 +616,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get newPassword => 'Yeni Parola';
 
   @override
-  String get enterNewPassword => 'Yeni parola girin';
-
-  @override
-  String get reenterNewPassword => 'Yeni parolayı tekrar girin';
-
-  @override
   String get currentPassphrase => 'Mevcut İfade';
 
   @override
@@ -585,9 +664,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get addLabel => 'Etiket ekle';
 
   @override
-  String get searchLogs => 'Günlüklerde ara...';
-
-  @override
   String get audioRecording => 'Ses Kaydı';
 
   @override
@@ -601,9 +677,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get theme => 'Tema';
-
-  @override
-  String get customizeAppearance => 'Uygulama görünümünü özelleştir';
 
   @override
   String get followSystemTheme => 'Sistem Temasına Göre';
@@ -638,13 +711,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get alarmSound => 'Alarm Sesi';
 
   @override
-  String get reminderTimeSettings => 'Hatırlatıcı Zaman Ayarları';
-
-  @override
-  String get setDefaultTimes =>
-      'Hatırlatıcılar için varsayılan zamanları ayarla';
-
-  @override
   String get morning => 'Sabah';
 
   @override
@@ -654,28 +720,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get evening => 'Akşam';
 
   @override
-  String get localDataProtection => 'Yerel Veri Koruması';
-
-  @override
-  String get encryptDeviceData => 'Bu cihazda depolanan verileri şifrele';
-
-  @override
-  String get encryptNotes => 'Notları şifrele';
-
-  @override
-  String get encryptFiles => 'Dosyaları şifrele';
-
-  @override
-  String get lockedNotesSecurity => 'Kilitli Notlar Güvenliği';
-
-  @override
-  String get privacyLockedNotes => 'Kilitli notlar için gizlilik ayarları';
-
-  @override
   String get forgetPasswordOnClose => 'Kapatıldığında parolayı unut';
-
-  @override
-  String get requirePasswordAgain => 'Uygulama her açıldığında parola iste';
 
   @override
   String get nerdStats => 'Detaylı İstatistikler';
@@ -801,9 +846,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get insert => 'Ekle';
 
   @override
-  String get importAsNote => 'Not Olarak İçe Aktar';
-
-  @override
   String get removeDevice => 'Cihazı kaldır';
 
   @override
@@ -812,9 +854,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get passwordResetSuccess =>
       'Parola başarıyla sıfırlandı! Lütfen giriş yapın.';
-
-  @override
-  String get emailVerifiedSuccess => 'E-posta başarıyla doğrulandı!';
 
   @override
   String get useDifferentAccount => 'Farklı bir hesap kullan';
@@ -833,14 +872,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Yeniden onay isteği gönderildi. Onay bekleniyor...';
 
   @override
-  String failedReapproval(String error) {
-    return 'Yeniden onay istenemedi: $error';
-  }
-
-  @override
-  String get rememberDevice => 'Bu cihazı hatırla';
-
-  @override
   String get recoverWithPassphrase => 'İfade ile Kurtar';
 
   @override
@@ -856,17 +887,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get accessApproved => 'Erişim onaylandı';
 
   @override
-  String failedToApprove(String error) {
-    return 'Onaylanamadı: $error';
-  }
-
-  @override
   String get accessDenied => 'Erişim reddedildi';
-
-  @override
-  String failedToDeny(String error) {
-    return 'Reddedilemedi: $error';
-  }
 
   @override
   String get allUpToDate => 'Her şey güncel';
@@ -892,21 +913,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String unlinkedProvider(String provider) {
-    return '$provider bağlantısı kaldırıldı';
-  }
-
-  @override
-  String successfullyLinked(String provider) {
-    return '$provider hesabı başarıyla bağlandı';
-  }
-
-  @override
-  String unknownProvider(String provider) {
-    return 'Bilinmeyen sağlayıcı: $provider';
-  }
-
-  @override
   String get recoveryKey => 'Kurtarma Anahtarı';
 
   @override
@@ -914,36 +920,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enableE2EE => 'Uçtan Uca Şifrelemeyi Etkinleştir';
-
-  @override
-  String failedSaveRecoveryKey(String error) {
-    return 'Kurtarma Anahtarı kaydedilemedi: $error';
-  }
-
-  @override
-  String get recoverySuccessWelcome =>
-      'Kurtarma başarılı! Tekrar hoş geldiniz.';
-
-  @override
-  String get confirmConsequences => 'Lütfen sonuçları anladığınızı onaylayın';
-
-  @override
-  String get accountResetSuccess => 'Hesap başarıyla sıfırlandı. Hoş geldiniz!';
-
-  @override
-  String failedResetAccount(String error) {
-    return 'Hesap sıfırlanamadı: $error';
-  }
-
-  @override
-  String errorSigningOut(String error) {
-    return 'Çıkış yapılırken hata oluştu: $error';
-  }
-
-  @override
-  String errorPlayingSound(String error) {
-    return 'Ses çalınırken hata oluştu: $error';
-  }
 
   @override
   String get checkNestedItems => 'İç içe geçmiş öğeler işaretlensin mi?';
@@ -974,77 +950,25 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reminderSet => 'Hatırlatıcı ayarlandı';
 
   @override
-  String get failedCreateImageNote => 'Resim notu oluşturulamadı';
-
-  @override
-  String errorSavingSketchWithError(String error) {
-    return 'Çizim kaydedilirken hata oluştu: $error';
-  }
-
-  @override
   String get failedSaveNote => 'Not kaydedilemedi';
-
-  @override
-  String failedSave(String error) {
-    return 'Kaydedilemedi: $error';
-  }
-
-  @override
-  String copiedAs(String format) {
-    return '$format olarak kopyalandı';
-  }
-
-  @override
-  String failedCopy(String error) {
-    return 'Kopyalanamadı: $error';
-  }
 
   @override
   String get pastedAsPlainText => 'Düz metin olarak yapıştırıldı';
 
   @override
-  String failedPaste(String error) {
-    return 'Yapıştırılamadı: $error';
-  }
-
-  @override
   String get contentInserted => 'İçerik eklendi';
-
-  @override
-  String failedInsertContent(String error) {
-    return 'İçerik eklenemedi: $error';
-  }
-
-  @override
-  String get actionCancelled => 'İşlem iptal edildi';
 
   @override
   String get noteLocked => 'Not kilitlendi';
 
   @override
-  String failedLockNote(String error) {
-    return 'Not kilitlenemedi: $error';
-  }
-
-  @override
   String get lockRemoved => 'Kilit kaldırıldı';
-
-  @override
-  String failedRemoveLock(String error) {
-    return 'Kilit kaldırılamadı: $error';
-  }
 
   @override
   String get noteDuplicated => 'Not çoğaltıldı';
 
   @override
   String get errorSavingNote => 'Not kaydedilirken hata oluştu';
-
-  @override
-  String get contentShared => 'İçerik paylaşıldı';
-
-  @override
-  String get failedShare => 'Paylaşılamadı';
 
   @override
   String get notes => 'Notlar';
@@ -1065,45 +989,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get otherNotes => 'Diğerleri';
 
   @override
-  String get noNotes => 'Henüz not yok';
-
-  @override
   String get noArchivedNotes => 'Arşivlenmiş not yok';
-
-  @override
-  String get noDeletedNotes => 'Silinmiş not yok';
-
-  @override
-  String get searchNotes => 'Notlarda ara';
-
-  @override
-  String nSelectedNotes(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count not seçildi',
-      one: '1 not seçildi',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get deleteNote => 'Notu Sil';
 
   @override
-  String get deleteNotes => 'Notları Sil';
-
-  @override
   String get moveToTrash => 'Çöp kutusuna taşı';
-
-  @override
-  String get deletePermanently => 'Kalıcı olarak sil';
-
-  @override
-  String get pinNote => 'Sabitle';
-
-  @override
-  String get unpinNote => 'Sabitlemeyi kaldır';
 
   @override
   String get newNote => 'Yeni Not';
@@ -1112,28 +1004,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get newSketch => 'Yeni Çizim';
 
   @override
-  String get newFolder => 'Yeni Klasör';
-
-  @override
-  String get renameFolder => 'Klasörü Yeniden Adlandır';
-
-  @override
-  String get deleteFolder => 'Klasörü Sil';
-
-  @override
-  String get folderName => 'Klasör adı';
-
-  @override
   String get camera => 'Kamera';
 
   @override
   String get gallery => 'Galeri';
-
-  @override
-  String get audioRecorder => 'Ses Kaydedici';
-
-  @override
-  String get importFile => 'Dosya İçe Aktar';
 
   @override
   String get language => 'Dil';
@@ -1142,25 +1016,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get systemDefault => 'Sistem Varsayılanı';
 
   @override
-  String get selectLanguage => 'Dil Seç';
-
-  @override
   String get english => 'İngilizce';
-
-  @override
-  String get japanese => '日本語';
-
-  @override
-  String get korean => '한국어';
-
-  @override
-  String get indonesian => 'Bahasa Indonesia';
-
-  @override
-  String get portugueseBrazil => 'Português (Brasil)';
-
-  @override
-  String get chinese => '中文';
 
   @override
   String get today => 'Bugün';
@@ -1173,9 +1029,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get nextMonth => 'Gelecek ay';
-
-  @override
-  String get pickDateTime => 'Tarih ve saat seç';
 
   @override
   String get time => 'Saat';
@@ -1211,28 +1064,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get yearly => 'Yıllık';
 
   @override
-  String get snooze => 'Ertele';
-
-  @override
-  String get fiveMinutes => '5 dakika';
-
-  @override
-  String get tenMinutes => '10 dakika';
-
-  @override
-  String get thirtyMinutes => '30 dakika';
-
-  @override
   String get oneHour => '1 saat';
-
-  @override
-  String get gridView => 'Izgara görünümü';
-
-  @override
-  String get listView => 'Liste görünümü';
-
-  @override
-  String get galleryView => 'Galeri görünümü';
 
   @override
   String get undo => 'Geri al';
@@ -1265,15 +1097,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get openChecklistView => 'Liste görünümünü aç';
 
   @override
-  String get convertToNormalText => 'Normal metne dönüştür';
-
-  @override
   String get convertEntireChecklistToText =>
       'Tüm kontrol listesini metne dönüştür';
-
-  @override
-  String get focusedChecklistRequiresChecklistOnly =>
-      'Odaklanmış liste görünümü yalnızca her satır bir kontrol listesi öğesi olduğunda kullanılabilir.';
 
   @override
   String get focusedChecklistUnsupportedContent =>
@@ -1328,25 +1153,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get alignRight => 'Sağa hizala';
 
   @override
-  String get alignJustify => 'İki yana yasla';
-
-  @override
   String get increaseIndent => 'Girintiyi artır';
 
   @override
   String get decreaseIndent => 'Girintiyi azalt';
-
-  @override
-  String get heading1 => 'Başlık 1';
-
-  @override
-  String get heading2 => 'Başlık 2';
-
-  @override
-  String get heading3 => 'Başlık 3';
-
-  @override
-  String get normalText => 'Normal metin';
 
   @override
   String get pen => 'Tükenmez Kalem';
@@ -1364,21 +1174,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get eraser => 'Silgi';
 
   @override
-  String get lasso => 'Kement';
-
-  @override
   String get addPage => 'Sayfa ekle';
 
   @override
-  String get deletePage => 'Sayfayı sil';
-
-  @override
   String get page => 'Sayfa';
-
-  @override
-  String pageNumber(int number) {
-    return 'Sayfa $number';
-  }
 
   @override
   String get connectedAccounts => 'Bağlı Hesaplar';
@@ -1396,20 +1195,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get trial => 'Deneme';
 
   @override
-  String trialEndsIn(int days) {
-    return 'Deneme süresinin bitmesine $days gün kaldı';
-  }
-
-  @override
   String get devices => 'Cihazlar';
 
   @override
   String get thisDevice => 'Bu cihaz';
-
-  @override
-  String lastActive(String time) {
-    return 'Son etkinlik: $time';
-  }
 
   @override
   String get pendingApproval => 'Onay bekliyor';
@@ -1418,30 +1207,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get security => 'Güvenlik';
 
   @override
-  String get endToEndEncryption => 'Uçtan Uca Şifreleme';
-
-  @override
-  String get e2eeEnabled => 'Etkin';
-
-  @override
-  String get e2eeDisabled => 'Etkin değil';
-
-  @override
   String get setupRecoveryKey => 'Kurtarma Anahtarını Ayarla';
-
-  @override
-  String get changeRecoveryKey => 'Kurtarma Anahtarını Değiştir';
 
   @override
   String get verifyRecoveryKey => 'Kurtarma Anahtarını Doğrula';
 
   @override
   String get error => 'Hata';
-
-  @override
-  String errorWithMessage(String message) {
-    return 'Hata: $message';
-  }
 
   @override
   String get loading => 'Yükleniyor...';
@@ -1460,26 +1232,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get online => 'Çevrimiçi';
-
-  @override
-  String get getApp => 'Uygulamayı Edin';
-
-  @override
-  String get sessionExpired =>
-      'Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.';
-
-  @override
-  String get confirmSignOut => 'Çıkış yapmak istediğinizden emin misiniz?';
-
-  @override
-  String get unsyncedChanges =>
-      'Eşitlenmemiş değişiklikleriniz var, bunlar kaybolacak.';
-
-  @override
-  String get deleteConfirmation => 'Bunu silmek istediğinizden emin misiniz?';
-
-  @override
-  String get permanentAction => 'Bu işlem geri alınamaz.';
 
   @override
   String get encryptNoteContent => 'Not İçeriğini Şifrele';
@@ -1510,9 +1262,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get appInfoCredits => 'Uygulama bilgileri ve katkıda bulunanlar';
-
-  @override
-  String get advancedSettings => 'Gelişmiş Ayarlar';
 
   @override
   String get speechRecognitionModel => 'Ses Tanıma Modeli';
@@ -1562,11 +1311,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noteEncryptionEnabledSimple => 'Not şifreleme etkinleştirildi.';
 
   @override
-  String errorEncryptingNotes(String error) {
-    return 'Notlar şifrelenirken hata oluştu: $error';
-  }
-
-  @override
   String get noteEncryptionDisabled => 'Not şifreleme devre dışı bırakıldı.';
 
   @override
@@ -1575,9 +1319,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get fileEncryptionDisabled => 'Dosya şifreleme devre dışı bırakıldı.';
-
-  @override
-  String get encryptDataOnDevice => 'Bu cihazda depolanan verileri şifrele';
 
   @override
   String get signInCancelledMessage => 'Giriş iptal edildi';
@@ -1722,18 +1463,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceRevoked => 'Cihaz İptal Edildi';
 
   @override
-  String get waitingForApprovalTitle => 'Onay Bekleniyor';
-
-  @override
   String get deviceRevokedDescription =>
       'Bu cihaz iptal edildi ve artık notlarınıza erişemiyor. Yeniden yetkilendirmek için lütfen onaylı bir cihazdan tekrar giriş yapın.';
-
-  @override
-  String get pleaseApproveFrom => 'Lütfen şuradan onaylayın:';
-
-  @override
-  String get waitingForApprovalFromDevice =>
-      'Başka bir cihazdan onay bekleniyor...';
 
   @override
   String get rememberThisDevice => 'Bu cihazı hatırla';
@@ -1747,9 +1478,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get checkStatus => 'Durumu Kontrol Et';
-
-  @override
-  String get cancelRequest => 'İsteği İptal Et';
 
   @override
   String get pleaseWait => 'Lütfen bekleyin...';
@@ -1839,11 +1567,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get insertTooltip => 'Ekle';
 
   @override
-  String failedToImport(String error) {
-    return 'İçe aktarılamadı: $error';
-  }
-
-  @override
   String get notes_ => 'Notlar';
 
   @override
@@ -1897,10 +1620,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get subscriptionCancelled => 'Abonelik İptal Edildi';
 
   @override
-  String get upgradeToProDescription =>
-      'Sınırsız kilitli notlar, bulut eşitleme ve daha fazlası için Pro\'ya yükseltin.';
-
-  @override
   String get cancellingSubscription => 'İptal ediliyor...';
 
   @override
@@ -1945,20 +1664,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Faturalandırma sağlayıcınızı belirleyemedik. Yardım için contact@betterkeep.app adresiyle iletişime geçin.';
 
   @override
-  String manageSubscriptionInStore(String store) {
-    return '$store\'da aboneliğinizi yönetin.';
-  }
-
-  @override
-  String get loadingFailedTryAgain => 'Yükleme başarısız — Tekrar deneyin';
-
-  @override
   String get reloadPrices => 'Fiyatları yeniden yükle';
-
-  @override
-  String subscribeWithPrice(String price) {
-    return 'Abone ol — $price';
-  }
 
   @override
   String get noAdsDescription =>
@@ -1976,14 +1682,11 @@ class AppLocalizationsTr extends AppLocalizations {
       'Kendi sunucunuzu mu kurmak istiyorsunuz? contact@betterkeep.app adresinden bize ulaşın';
 
   @override
-  String get welcomeToProMessage => 'Better Keep Pro\'ya Hoş Geldiniz!';
-
-  @override
   String get paymentConfirmedTitle => 'Ödeme onaylandı';
 
   @override
   String get paymentConfirmedActivationPending =>
-      'Ödeme onaylandı ancak Pro etkinleştirmesi daha uzun sürüyor. Tekrar satın almayın. Durumu yeniden kontrol edin veya aboneliği Google Play\'de yönetin.';
+      'Ödemeniz onaylandı ancak etkinleştirme biraz daha uzun sürüyor. Tekrar satın almayın. Durumunuzu yeniden kontrol edin veya aboneliğinizi yönetin.';
 
   @override
   String get recheckStatus => 'Durumu Yeniden Kontrol Et';
@@ -2014,16 +1717,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get subscriptionCancelledSuccessfully =>
       'Abonelik başarıyla iptal edildi.';
-
-  @override
-  String get subscriptionResumedSuccessfully =>
-      'Abonelik başarıyla devam ettirildi.';
-
-  @override
-  String get failedToCancelSubscription => 'Abonelik iptal edilemedi.';
-
-  @override
-  String get failedToResumeSubscription => 'Abonelik devam ettirilemedi.';
 
   @override
   String get featureTableHeader => 'Özellik';
@@ -2124,25 +1817,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteMyAccount => 'Hesabımı Sil';
 
   @override
-  String get unsyncedNotesWarning =>
-      'Henüz buluta eşitlenmemiş notlarınız var. Şimdi çıkış yaparsanız, bu notlar SONSUZA KADAR KAYBOLACAKTIR.\n\nEşitlemenin tamamlanmasını beklemeyi veya önce verilerinizi dışa aktarmayı düşünün.';
-
-  @override
-  String notesNotSynced(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count not eşitlenmedi',
-      one: '1 not eşitlenmedi',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get dataLossWarning => 'VERİ KAYBI UYARISI';
-
-  @override
-  String get noRecoveryKeySet => 'Kurtarma Anahtarı ayarlanmamış';
 
   @override
   String get signOutNoRecoveryKeyWarning =>
@@ -2182,24 +1857,11 @@ class AppLocalizationsTr extends AppLocalizations {
       'Birisi paylaştığınız notu görüntülemek istiyor';
 
   @override
-  String get deviceApproved_ => 'Cihaz onaylandı';
-
-  @override
-  String failedApproveDevice(String error) {
-    return 'Cihaz onaylanamadı: $error';
-  }
-
-  @override
   String get deviceRemoved => 'Cihaz kaldırıldı';
 
   @override
   String nDevicesRemoved(int count) {
     return '$count cihaz kaldırıldı';
-  }
-
-  @override
-  String failedRemoveDevice(String error) {
-    return 'Cihaz kaldırılamadı: $error';
   }
 
   @override
@@ -2216,11 +1878,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enableE2EE_ => 'E2EE\'yi Etkinleştir';
-
-  @override
-  String failedEnableE2EE(String error) {
-    return 'E2EE etkinleştirilemedi: $error';
-  }
 
   @override
   String get recoveryKeySavedSuccessfully =>
@@ -2281,10 +1938,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get failedUnlinkAccount => 'Hesap bağlantısı kaldırılamadı';
 
   @override
-  String get cannotUnlinkOnlyMethod =>
-      'Tek giriş yönteminin bağlantısı kaldırılamaz.';
-
-  @override
   String unknownProviderError(String provider) {
     return 'Bilinmeyen sağlayıcı: $provider';
   }
@@ -2295,9 +1948,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get failedSendCode => 'Doğrulama kodu gönderilemedi';
-
-  @override
-  String get pleaseTryAgain => 'Lütfen tekrar deneyin.';
 
   @override
   String get pleaseSignInAgain => 'Lütfen tekrar giriş yapıp deneyin.';
@@ -2321,16 +1971,24 @@ class AppLocalizationsTr extends AppLocalizations {
   String get failedLinkAccount => 'Hesap bağlanamadı';
 
   @override
-  String providerLinkedToAnother(String provider) {
-    return 'Bu $provider hesabı zaten başka bir kullanıcıya bağlı.';
-  }
+  String get useOriginalSignInMethod =>
+      'Daha önce kullandığınız yöntemle giriş yapın, ardından hesap ayarlarından yeni sağlayıcıyı bağlayın.';
+
+  @override
+  String get localAccountMismatch =>
+      'Bu cihazda başka bir hesaba ait notlar var. Notları kaydeden hesapla giriş yapın.';
+
+  @override
+  String get recoveryCheckUnavailable =>
+      'Kurtarma seçenekleri kontrol edilemedi. Bağlantınızı kontrol edip tekrar deneyin.';
+
+  @override
+  String get signInToExistingAccount =>
+      'Bu e-postaya sahip bir hesap zaten var. Devam etmek için giriş yapın.';
 
   @override
   String get emailAlreadyInUse =>
       'Bu e-postaya sahip bir hesap zaten var. Önce o hesapla giriş yapın, ardından oradan bağlantı kurun.';
-
-  @override
-  String get linkingCancelled => 'Bağlantı işlemi iptal edildi.';
 
   @override
   String successfullyLinkedProvider(String provider) {
@@ -2350,7 +2008,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get allAttachmentsRemoved => 'Tüm ekler ve medya kaldırılacaktır';
 
   @override
-  String get loggedOutAllDevices => 'Tüm cihazlardan çıkış yapacaksınız';
+  String get loggedOutAllDevices =>
+      'Diğer cihazların çıkış yapması zaman alabilir. Cihaz onayı silinene kadar geçerlidir; kayıp cihazları önce kaldırın.';
 
   @override
   String get accountCannotBeRecovered => 'Hesabınız kurtarılamaz';
@@ -2383,7 +2042,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String accountWillBeDeletedOn(String date) {
-    return 'Hesabınız $date tarihinde silinecek.';
+    return 'Hesabınız $date tarihinden itibaren silinebilir.';
   }
 
   @override
@@ -2415,11 +2074,8 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String deletionScheduledMessage(String date) {
-    return 'Hesap silme işlemi $date için planlandı. İptal etmek için tekrar giriş yapın.';
+    return 'Silme işlemi $date tarihinden itibaren planlandı. İptal etmek için tekrar giriş yapın.';
   }
-
-  @override
-  String get iphoneIpad => 'iPhone/iPad';
 
   @override
   String get webBrowser => 'Web Tarayıcısı';
@@ -2497,10 +2153,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get notificationPermissionsRequired =>
-      'Hatırlatıcılar için bildirim ve alarm izinleri gereklidir';
-
-  @override
   String get checkAll => 'Tümünü İşaretle';
 
   @override
@@ -2531,12 +2183,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get somethingWentWrongTryAgain =>
       'Bir şeyler ters gitti. Lütfen tekrar deneyin.';
-
-  @override
-  String get verifyingPassphrase => 'İfade doğrulanıyor...';
-
-  @override
-  String get settingAsPrimaryDevice => 'Birincil cihaz olarak ayarlanıyor...';
 
   @override
   String get finalizing => 'Sonuçlandırılıyor...';
@@ -2820,9 +2466,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createNewLink => 'Yeni Bağlantı Oluştur';
 
   @override
-  String get revokeLink_ => 'Bağlantıyı iptal et';
-
-  @override
   String get copy => 'Kopyala';
 
   @override
@@ -2841,11 +2484,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get linkRevoked => 'Bağlantı iptal edildi';
-
-  @override
-  String failedToRevoke(String error) {
-    return 'İptal edilemedi: $error';
-  }
 
   @override
   String get linkCopied => 'Bağlantı panoya kopyalandı';
@@ -2901,10 +2539,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get syncDisabledPleaseSignOut =>
       'Eşitleme devre dışı. Lütfen çıkış yapıp tekrar giriş yapın.';
-
-  @override
-  String get signOutConfirmationWithNote =>
-      'Çıkış yapmak istediğinizden emin misiniz?\n\nNotlarınıza erişmek için tekrar giriş yapmanız gerekecek.';
 
   @override
   String get sketchTool => 'Araç';
@@ -2980,9 +2614,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Daha iyi bir deneyim için uygulamayı kullanın';
 
   @override
-  String get noteMarkedAsDone => 'Not tamamlandı olarak işaretlendi';
-
-  @override
   String get pickTextColor => 'Metin Rengi Seç';
 
   @override
@@ -3040,31 +2671,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get pickNoteColor => 'Not Rengi Seç';
-
-  @override
-  String failedToPaste(String error) {
-    return 'Yapıştırılamadı: $error';
-  }
-
-  @override
-  String failedToInsertContent(String error) {
-    return 'İçerik eklenemedi: $error';
-  }
-
-  @override
-  String failedToLockNote(String error) {
-    return 'Not kilitlenemedi: $error';
-  }
-
-  @override
-  String failedToRemoveLock(String error) {
-    return 'Kilit kaldırılamadı: $error';
-  }
-
-  @override
-  String noteDuplicatedButFailedToLock(String error) {
-    return 'Not çoğaltıldı ancak kilitlenemedi: $error';
-  }
 
   @override
   String get pastedContent => 'Yapıştırılan İçerik';
@@ -3287,15 +2893,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noActiveDevicesRecoveryKey =>
-      'Aktif cihaz bulunamadı. Şifrelenmiş notlarınıza erişimi geri yüklemek için kurtarma ifadenizi kullanın.';
+      'Bu cihazda şifrelenmiş notlarınızı açmak için kurtarma ifadenizi kullanın.';
 
   @override
   String get noActiveDevicesNoRecoveryKey =>
-      'Aktif cihaz bulunamadı ve Kurtarma Anahtarı ayarlanmamış. Yeni bir hesapla baştan başlayabilirsiniz, ancak önceki notlarınız kurtarılamaz.';
+      'Bu hesapta kurtarma ifadesi yok. Güvenilir bir cihazdan onay isteyebilirsiniz.';
 
   @override
   String get previousNotesEncryptedWarning =>
-      'Önceki notlarınız şifrelenmiştir ve Kurtarma Anahtarı olmadan kurtarılamaz.';
+      'Baştan başlarsanız önceki şifrelenmiş notlarınıza erişemezsiniz.';
 
   @override
   String get notYourMainDevice => 'Ana cihazınız değil mi?';
@@ -3309,6 +2915,35 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get requestApprovalFromAnotherDevice => 'Başka Bir Cihazdan Onay İste';
+
+  @override
+  String get signOutClearingDevice => 'Yerel hesap verileri temizleniyor…';
+
+  @override
+  String get signOutFinishing => 'Çıkış işlemi tamamlanıyor…';
+
+  @override
+  String get signOutLibraryWarning =>
+      'Çıkış yaptığınızda yalnızca bu cihazda kayıtlı notlar silinir. Eşitlenmiş notları geri yüklemek için onaylı bir cihaza veya kurtarma parolanıza ihtiyacınız olur.';
+
+  @override
+  String get localLibraryUnavailable =>
+      'Yerel not klasörünüz belirlenemedi. Tekrar deneyin veya yeni bir yerel arşiv oluşturmak için çıkış yapın.';
+
+  @override
+  String get signOutSecureStorageRetry =>
+      'Güvenli depolamaya erişilemiyor. Cihazınızın kilidini açıp tekrar deneyin.';
+
+  @override
+  String get signOutOtherWindowRetry =>
+      'Başka bir pencerede oturum kapatılıyor. Tamamlandığında tekrar deneyin.';
+
+  @override
+  String get signOutDatabaseRetry =>
+      'Yerel veritabanı temizlenemedi. Diğer Better Keep pencerelerini kapatıp tekrar deneyin.';
+
+  @override
+  String get signOutCleanupRetry => 'Oturum kapatılamadı. Tekrar deneyin.';
 
   @override
   String get signingOut => 'Çıkış yapılıyor...';
@@ -3340,11 +2975,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get failedToResetAccount => 'Hesap sıfırlanamadı';
-
-  @override
-  String failedToResetAccountError(String error) {
-    return 'Hesap sıfırlanamadı: $error';
-  }
 
   @override
   String get startFreshQuestion => 'Temiz Bir Başlangıç Yapılsın mı?';
@@ -3391,11 +3021,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get failedToSaveSketch => 'Çizim kaydedilemedi';
-
-  @override
-  String errorSavingSketch(String error) {
-    return 'Çizim kaydedilirken hata oluştu: $error';
-  }
 
   @override
   String get planFree => 'Ücretsiz';
@@ -3459,20 +3084,10 @@ class AppLocalizationsTr extends AppLocalizations {
       'Sınırsız kilitli notlar ve gerçek zamanlı bulut eşitlemesi';
 
   @override
-  String get unlockTheFullExperience => 'Tam Deneyimin Kilidini Açın';
-
-  @override
   String get maybeLater => 'Belki daha sonra';
 
   @override
   String get enableNotificationsTitle => 'Bildirimleri Etkinleştir';
-
-  @override
-  String get enableNotificationsForReminders =>
-      'Senkronize edilen notlarınızda hatırlatıcılar var. Kaçırmamak için bildirimleri etkinleştirin.';
-
-  @override
-  String get enableNotifications => 'Etkinleştir';
 
   @override
   String get rateOnAppStore => 'App Store\'da Değerlendir';
@@ -3723,10 +3338,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Kaydedilen şifreleme anahtarları okunamadı. Cihazınızın kilidini açıp tekrar deneyin. Yerel verileriniz korundu.';
 
   @override
-  String get localEncryptionMissing =>
-      'Kayıtlı notlarınızı açmak için gereken anahtarlar eksik veya hasarlı. Erişimi geri yüklemek için yeniden bağlanın veya hesap kurtarmayı kullanın. Yerel verileriniz korundu.';
-
-  @override
   String get syncCheckingConnection => 'Bağlantı kontrol ediliyor…';
 
   @override
@@ -3734,7 +3345,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncUploadRestricted =>
-      'Değişiklikler bu cihaza kaydedildi. Yüklemek için Pro gerekir.';
+      'Bu cihaza kaydedildi. Değişiklikleri eşitlemek için Better Keep bulutunu etkinleştirin.';
+
+  @override
+  String get syncUpgradeReminder =>
+      'Değişiklikleriniz burada kayıtlı. Pro ile eşitleyin.';
+
+  @override
+  String get syncUpgradeForUploads =>
+      'Bu cihaza kaydedildi. Better Keep bulutuna yüklemek için Pro’ya yükseltin.';
 
   @override
   String get syncPaused =>
@@ -3900,4 +3519,397 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get storageCleared =>
       'Yerel veriler silindi ve hesabınızdan çıkış yapıldı. Eşitlenmiş notları geri yüklemek için tekrar giriş yapın. Eşitlenmeden önce silinen notlar buluttan kurtarılamaz.';
+
+  @override
+  String get externalSyncTitle => 'Eşitleme sağlayıcısı';
+
+  @override
+  String get externalSyncDescription =>
+      'Notlarınızı cihazlar arasında eşitlemek için bir sağlayıcı seçin.';
+
+  @override
+  String get externalSyncUnavailable =>
+      'Depolamayı bağlamak için oturum açın ve bu cihazı onaylayın veya kurtarın.';
+
+  @override
+  String get externalSyncAccount => 'Hesap ve şifreleme';
+
+  @override
+  String get externalSyncCloud => 'Better Keep bulutu';
+
+  @override
+  String get externalSyncCloudDescription =>
+      'Yerleşik eşitleme · Yükleme için Pro gerekir';
+
+  @override
+  String externalSyncAction(String action) {
+    String _temp0 = intl.Intl.selectLogic(action, {
+      'connect': 'Bağlan',
+      'browser': 'Tarayıcıyla oturum aç',
+      'manual': 'Uygulama parolası kullan',
+      'reconnect': 'Yeniden bağlan',
+      'continue': 'Tarayıcıda devam et',
+      'pause': 'Duraklat',
+      'resume': 'Sürdür',
+      'disconnect': 'Bağlantıyı kes',
+      'sync': 'Şimdi eşitle',
+      'other': 'Yeniden dene',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncState(String state) {
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'preparing': 'Yetkilendirme hazırlanıyor…',
+      'awaitingConsent': 'Tarayıcınızda yetkilendirmeye hazır',
+      'authorizing': 'Bağlanıyor…',
+      'cancelling': 'Yetkilendirme iptal ediliyor…',
+      'cancelPending':
+          'İptal işlemi doğrulanamadı. İptal etmeyi yeniden deneyin.',
+      'connecting': 'Bağlanıyor…',
+      'pausing': 'Duraklatılıyor…',
+      'enabling': 'Sürdürülüyor…',
+      'disconnecting': 'Bağlantı kesiliyor…',
+      'paused': 'Duraklatıldı',
+      'notConnected': 'Bağlı değil',
+      'keyRecovery':
+          'Bu bağlantıyı kullanmak için şifreleme anahtarınızı kurtarın.',
+      'pending': 'Bazı değişiklikler eşitlenmeyi bekliyor.',
+      'other': 'Bağlı',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncFailure(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'sharedSetupRequired': 'Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.',
+      'reconnectRequired':
+          'Eşitlemeye devam etmek için bu hesabı yeniden bağlayın.',
+      'quotaExceeded':
+          'Depolama alanınız dolu. Bu sağlayıcıda yer açıp yeniden deneyin.',
+      'rateLimited': 'Sağlayıcı beklememizi istedi. Eşitleme otomatik olarak yeniden denenecek.',
+      'corruptData':
+          'Bazı eşitleme verileri doğrulanamadı. Yerel notlarınız korunur.',
+      'unsupported': 'Bu sağlayıcı veya tarayıcı bağlantıyı tamamlayamıyor.',
+      'other': 'Bu sağlayıcıya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String externalSyncLastSuccess(String time) {
+    return 'Son başarılı eşitleme: $time';
+  }
+
+  @override
+  String get externalSyncNeverSynced => 'Henüz başarılı bir eşitleme yok';
+
+  @override
+  String get externalSyncBlocked =>
+      'Bazı notlar veya ekler henüz yüklenmeye hazır değil. Eşitleme yeniden denenecek.';
+
+  @override
+  String externalSyncDisconnectTitle(String provider) {
+    return '$provider bağlantısı kesilsin mi?';
+  }
+
+  @override
+  String get externalSyncDisconnectMessage =>
+      'Bu işlem, bu hesapla eşitlemeyi durdurur. Bu cihazdaki notlar ve sağlayıcıda zaten saklanan dosyalar korunur.';
+
+  @override
+  String get externalSyncRevocationIncomplete =>
+      'Better Keep bağlantısı kesildi. Erişim izninin kaldırıldığı doğrulanamadı. Sağlayıcınızın hesap ayarlarından Better Keep\'in erişimini kaldırın.';
+
+  @override
+  String get externalSyncNextcloudHelp =>
+      'Nextcloud güvenlik ayarlarınızdaki bir uygulama parolasını kullanın. Tarayıcıda eşitleme için sunucunuzun farklı kaynaklardan gelen isteklere izin vermesi gerekir.';
+
+  @override
+  String get externalSyncServer => 'Sunucu URL\'si';
+
+  @override
+  String get externalSyncUsername => 'Kullanıcı adı';
+
+  @override
+  String get externalSyncAppPassword => 'Uygulama parolası';
+
+  @override
+  String get externalSyncInvalidServer =>
+      'Kullanıcı adı, parola, sorgu veya parça içermeyen bir HTTPS sunucu URL\'si girin.';
+
+  @override
+  String get externalSyncRequired => 'Bu alan zorunludur.';
+
+  @override
+  String get externalSyncAlreadyConnected =>
+      'Yetkilendirme, iptal işleminden önce tamamlandı. Sağlayıcı bağlı. Kaldırmak için Bağlantıyı kes seçeneğini kullanın.';
+
+  @override
+  String get externalSyncLogoutPending =>
+      'Bazı değişiklikler hâlâ eşitlenmeyi bekliyor. Oturumu kapatmak, bu cihazdaki yerel notları ve medyayı kaldırır. Hiçbir sağlayıcıya kaydedilmemiş değişiklikler kaybolabilir.\n\nOturumu kapatmadan önce eşitlemeyi tamamlayın veya verilerinizi dışa aktarın.';
+
+  @override
+  String get externalSyncLogoutUnknown =>
+      'Tüm değişikliklerinizin eşitlenip eşitlenmediğini doğrulayamadık. Oturumu kapatmak, bu cihazdaki yerel notları ve medyayı kaldırır. Hiçbir sağlayıcıya kaydedilmemiş değişiklikler kaybolabilir.\n\nOturumu kapatmadan önce eşitleme sağlayıcılarınızı kontrol edin veya verilerinizi dışa aktarın.';
+
+  @override
+  String get externalSyncUnlockSketches =>
+      'Bazı kilitli notlar, güncellenmesi gereken eski çizimler içeriyor. Çizimleri oluşturduğunuz cihazda bu notları açın ve PIN\'inizle kilitlerini kaldırın, ardından eşitlemeyi yeniden deneyin.';
+
+  @override
+  String get externalSyncOff => 'Eşitleme kapalı';
+
+  @override
+  String get externalSyncCloudDownloadDescription =>
+      'Kayıtlı notları indirin · Yükleme için Pro gerekir';
+
+  @override
+  String get externalSyncDownloadOnly =>
+      'Better Keep cloud üzerindeki notları indirin. Yüklemeler duraklatılmış olarak kalacak.';
+
+  @override
+  String get externalSyncDownloadsOn =>
+      'Yüklemeler duraklatıldı · İndirmeler açık';
+
+  @override
+  String get externalSyncAllPaused => 'Yüklemeler ve indirmeler duraklatıldı';
+
+  @override
+  String get externalSyncOffDescription => 'Yüklemeler duraklatıldı';
+
+  @override
+  String get externalSyncDetails => 'Eşitleme ayrıntıları';
+
+  @override
+  String get externalSyncNeedsAttention =>
+      'İlgilenmeniz gerekiyor · Ayrıntılara bakın';
+
+  @override
+  String get externalSyncConnectHelp =>
+      'Depolama erişimine izin vermek için giriş yapın. Bağlandıktan sonra bu sağlayıcı eşitleme için seçilecektir.';
+
+  @override
+  String get verifyNewDevice => 'Yeni cihazı doğrula';
+
+  @override
+  String get deviceVerificationInstructions =>
+      'Güvenilir cihazınızda yeni cihazdaki QR kodunu tarayın.';
+
+  @override
+  String get deviceVerificationExpired =>
+      'Doğrulama kodunun süresi doldu. Yeni cihazda yeni bir kod oluşturun.';
+
+  @override
+  String get newVerificationCode => 'Yeni kod oluştur';
+
+  @override
+  String get deviceVerificationMismatch =>
+      'Cihazlar eşleşmiyor. Bu isteği onaylamayın.';
+
+  @override
+  String get scanNewDevice => 'Yeni cihazı tara';
+
+  @override
+  String get compareSecurityCode => 'Güvenlik kodunu karşılaştır';
+
+  @override
+  String get deviceCameraUnavailable =>
+      'Kamera kullanılamıyor. Kamera erişimine izin verin veya kurtarma parolanızla erişimi geri yükleyin.';
+
+  @override
+  String get deviceVerificationRetry =>
+      'Doğrulama tamamlanamadı. Her iki cihazı güncelleyin, yeni cihazda yeni bir kod oluşturun ve tekrar deneyin.';
+
+  @override
+  String get browserStorageUnavailable =>
+      'Tarayıcı ayarlarında bu sitenin veri kaydetmesine izin verip yeniden deneyin.';
+
+  @override
+  String get browserLegacyRecoveryUnavailable =>
+      'Bu sürüm tarayıcıda kayıtlı anahtarların kilidini açamıyor. Bu tarayıcının verilerini silmeyin. Eşitlenmiş notlarınızı onaylı bir cihazda açın veya başka bir tarayıcıda kurtarma parolanızı kullanın.';
+
+  @override
+  String get browserSessionOnly => 'Yalnızca bu oturum';
+
+  @override
+  String get browserDeviceTrust =>
+      'Bu tarayıcı onayınızı kaydettikten sonra indirilen notları çevrimdışı açabilirsiniz.';
+
+  @override
+  String get browserUnlockOnline =>
+      'Notlarınız bu cihazda. Kilitlerini açmak için internete bağlanıp Tekrar dene seçeneğine dokunun.';
+
+  @override
+  String get verifyTrustedDevice => 'Güvenilir cihazı doğrula';
+
+  @override
+  String get verifyTrustedDeviceInstructions =>
+      'Şifreleme anahtarınızı almak için güvenilir cihazınızdaki QR kodunu tarayın.';
+
+  @override
+  String get scanTrustedDevice => 'Güvenilir cihazı tara';
+
+  @override
+  String get confirmOnNewDevice => 'Yeni cihazınızda onaylayın';
+
+  @override
+  String get confirmOnNewDeviceInstructions =>
+      'Bu QR kodunu yeni cihazla tarayın. Kilit açılana kadar bu ekranı açık tutun.';
+
+  @override
+  String get storageSecurityUpgrade => 'Güvenle yeniden bağlan';
+
+  @override
+  String get storageSecurityUpgradeInstructions =>
+      'Bu bağlantı, sunucunun yönettiği eski kimlik bilgisi deposunu kullanıyordu. Önce sağlayıcınızın bağlı uygulama ayarlarından Better Keep erişimini iptal edin (veya Nextcloud uygulama parolasını kaldırın), sonra buradan yeniden bağlanın. Notlarınız ve uzak dosyalarınız korunur. Yeni kimlik bilgileri, not şifreleme anahtarınızla cihazınızda şifrelenir.';
+
+  @override
+  String get devicePairingScanInstruction =>
+      'Güvendiğiniz cihazda onay isteğini açın ve bu kodu tarayın.';
+
+  @override
+  String get showQrCode => 'QR kodunu göster';
+
+  @override
+  String get externalSyncSharedSetup =>
+      'Bu cihazda Google Drive’a giriş yapın.';
+
+  @override
+  String get externalSyncSharedSetupHelp =>
+      'Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.';
+
+  @override
+  String get externalSyncStorageFull =>
+      'Depolama dolu. Eşitleme duraklatıldı; yerel notlarınız güvende. Yer açın, ardından Şimdi eşitle seçeneğine dokunun.';
+
+  @override
+  String get externalSyncClear => 'Eşitlenen verileri sil';
+
+  @override
+  String get externalSyncClearMessage =>
+      'Eşitlenen kopyaları silin ve eşitlemeyi kapatın. Yerel notlar kalır; yalnızca sağlayıcıda bulunan veriler kaybolur.';
+
+  @override
+  String get externalSyncClearing => 'Eşitlenen veriler siliniyor…';
+
+  @override
+  String get externalSyncClearPending =>
+      'Silme tamamlanmadı · Yeniden denemek için dokunun';
+
+  @override
+  String get externalSyncClearDone =>
+      'Eşitlenen veriler silindi. Eşitleme kapalı. Yerel notlar korundu. Sağlayıcınız silinen dosyaları çöp kutusunda tutabilir.';
+
+  @override
+  String get externalSyncClearCodeSent =>
+      'E-posta adresinize gönderilen kodu girin.';
+
+  @override
+  String get externalSyncClearCodeError =>
+      'Eşitlenen veriler silinemedi. Kodu ve bağlantınızı kontrol edin veya yeni bir kod isteyin. Silme işlemi başladıysa tamamlanana kadar eşitleme kapalı kalır.';
+
+  @override
+  String get externalSyncClearSendError =>
+      'Kod gönderilemedi. Hesabınızın e-posta adresinin doğrulandığından emin olun, bir dakika bekleyip tekrar deneyin.';
+
+  @override
+  String externalSyncCapacity(String used, String total) {
+    return '$total alanın $used kadarı kullanılıyor';
+  }
+
+  @override
+  String get externalSyncCapacityLoading => 'Depolama kontrol ediliyor…';
+
+  @override
+  String get externalSyncCapacityUnavailable =>
+      'Depolama bilgisi kullanılamıyor';
+
+  @override
+  String get externalSyncClearVerifyTitle => 'Silmek için doğrulayın';
+
+  @override
+  String get externalSyncClearSendCode => 'Kod gönder';
+
+  @override
+  String get lite => 'Lite';
+
+  @override
+  String get choosePlan => 'Planınızı seçin';
+
+  @override
+  String get automaticExternalSync => 'Otomatik harici senkronizasyon';
+
+  @override
+  String get manualExternalSync => 'Manuel harici senkronizasyon';
+
+  @override
+  String get liteDescription =>
+      'Kendi bulut depolamanızla otomatik güncellemeler.';
+
+  @override
+  String get manualSyncDescription =>
+      'Manuel senkronizasyon ücretsizdir. Lite ve Pro otomatik güncellemeler sunar.';
+
+  @override
+  String get subscriptionActiveTitle => 'Abonelik etkin';
+
+  @override
+  String get subscriptionChangePlan =>
+      'Plan değiştirmek için mevcut aboneliğinizi yönetin.';
+
+  @override
+  String get subscribe => 'Abone ol';
+
+  @override
+  String get builtInCloudSync => 'Yerleşik bulut senkronizasyonu';
+
+  @override
+  String get deviceAdded => 'Eklendi';
+
+  @override
+  String get accountDeletionInProgress =>
+      'Hesap silme işlemi başladı. Yardım için support@betterkeep.app ile iletişime geçin.';
+
+  @override
+  String get deletionCodeRecentlyRequested =>
+      'Kısa süre önce bir kod istendi. E-postanızı kontrol edin veya yeni bir kod istemeden önce bir dakika bekleyin.';
+
+  @override
+  String get providerSignInVerificationFailed =>
+      'Oturum açma işleminiz doğrulanamadı. Lütfen tekrar oturum açmayı deneyin.';
+
+  @override
+  String get accountDeletionPaused =>
+      'Hesap silme geçici olarak duraklatıldı. support@betterkeep.app ile iletişime geçin.';
+
+  @override
+  String get deviceUsePairingCode => 'Kod kullan';
+
+  @override
+  String get deviceEnterPairingCode => 'Eşleştirme kodunu gir';
+
+  @override
+  String get devicePairingCodeInstruction =>
+      'Güvenilir cihazınızda Eşleştirme kodunu gir seçeneğini seçin ve bu sekiz rakamı girin.';
+
+  @override
+  String get devicePairingCodeEntryInstruction =>
+      'Yeni cihazınızda gösterilen sekiz rakamı girin.';
+
+  @override
+  String get devicePairingCodeLabel => 'Eşleştirme kodu';
+
+  @override
+  String get devicePairingCodeExpired =>
+      'Bu kod artık kullanılamıyor. Yeni bir kod oluşturun.';
+
+  @override
+  String get devicePairingCodeFailed =>
+      'Yeni cihazınızdaki kodu kontrol edip tekrar deneyin. Süresi dolduysa yeni bir kod oluşturun.';
+
+  @override
+  String get devicePairingConnecting => 'Bağlanıyor…';
 }
