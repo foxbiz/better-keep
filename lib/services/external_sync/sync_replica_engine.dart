@@ -157,11 +157,15 @@ class SyncReplicaEngine {
     }
     var cursor = checkpoint?.cursor;
     var resetCursor = false;
-    final meter = NoteTransferMeter(NoteTransferStage.checking, null, (
-      progress,
-    ) {
-      if (isCurrent()) onProgress?.call(adapter, progress);
-    });
+    final meter = NoteTransferMeter(
+      checkpoint == null
+          ? NoteTransferStage.checking
+          : NoteTransferStage.checkingUpdates,
+      null,
+      (progress) {
+        if (isCurrent()) onProgress?.call(adapter, progress);
+      },
+    );
     var checkedBeforePage = checkpoint?.checkedNotes ?? 0;
     var reported = checkedBeforePage;
     if (reported > 0) meter.advance(reported);

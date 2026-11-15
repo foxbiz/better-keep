@@ -439,3 +439,16 @@ test("release gates pairing and both compiled web storage modes", () => {
 		);
 	}
 });
+
+test("release core includes startup feedback regression coverage", () => {
+	for (const suite of ["client-sync", "release-core"]) {
+		const args = resolveTestTask([suite]).operations.flatMap(step => step.args ?? []);
+		for (const file of [
+			"test/sync_startup_feedback_test.dart",
+			"test/manual_sync_feedback_test.dart",
+			"test/sync_replica_engine_test.dart",
+		]) {
+			assert.ok(args.includes(file), `${suite} must run ${file}`);
+		}
+	}
+});

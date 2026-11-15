@@ -297,3 +297,20 @@ no deployment or live cleanup was performed as part of this change.
   wait for Google access-token expiry or exercise long-term provider revocation.
 - Android debug build passed. New exchange behavior on iOS/macOS/Windows/Linux
   remains to be exercised on those platforms. No production deployment occurred.
+
+## Cold-start refresh feedback regression
+
+Run `flutter test integration_test/sync_startup_feedback_test.dart -d <simulator-id>`
+on a **disposable, signed-out simulator or emulator**, never over an installed
+personal app. The entry point runs synthetic state without starting `main.dart`,
+configuring Firebase, signing in, or accessing provider files. It refuses to run
+if a Firebase backend is already configured. It is not a live-provider OAuth or
+network acceptance test.
+
+The shared fixture covers queued and repeated refreshes, a 30-second startup
+ceiling with an actionable Retry, stalled provider settings and verification,
+Firebase unavailability during local initialization, recoverable startup retry,
+a bulk restore starting during the wait, and approval/sign-in/offline/account
+changes. Timeout scenarios use real elapsed time on native integration runners.
+The widget version runs in the `client-sync` / `release-core` gate; native execution
+remains a separate platform check. No real credentials or encryption keys are used.

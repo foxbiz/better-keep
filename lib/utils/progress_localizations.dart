@@ -119,8 +119,7 @@ extension SyncProgressLocalizations on SyncProgress {
     SyncPhase.failed when failedCount > 0 => l10n.syncFailedCount(failedCount),
     SyncPhase.failed => l10n.syncFailed,
     SyncPhase.syncing when notes != null => notes!.localized(l10n),
-    SyncPhase.checkingForUpdates ||
-    SyncPhase.fetchingUpdates => l10n.syncCheckingNotes,
+    SyncPhase.checkingForUpdates || SyncPhase.fetchingUpdates => l10n.syncing,
     SyncPhase.resuming ||
     SyncPhase.syncing ||
     SyncPhase.restarting ||
@@ -132,6 +131,7 @@ extension SyncProgressLocalizations on SyncProgress {
 extension NoteTransferLocalizations on NoteTransfer {
   String localized(AppLocalizations l10n) {
     if (stage == NoteTransferStage.checking) return l10n.syncCheckingNotes;
+    if (stage == NoteTransferStage.checkingUpdates) return l10n.syncing;
     if (stage == NoteTransferStage.downloading) {
       return l10n.syncDownloadingNotes;
     }

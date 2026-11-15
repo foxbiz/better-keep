@@ -566,6 +566,7 @@ void main() {
       final context = tester.element(find.byType(SyncRefreshButton));
       final first = refreshSyncFromUser(context);
       expect(identical(first, refreshSyncFromUser(context)), isTrue);
+      await tester.pump(); // Let the old account's transfer actually start.
       AuthService.cloudRecovery.stop();
       final second = refreshSyncFromUser(context);
       expect(identical(first, second), isFalse);

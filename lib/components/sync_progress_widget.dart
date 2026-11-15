@@ -218,9 +218,7 @@ class SyncContentProgress extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              if (progress.notes?.stage == NoteTransferStage.checking ||
-                  progress.phase == SyncPhase.fetchingUpdates ||
-                  progress.phase == SyncPhase.checkingForUpdates)
+              if (progress.notes?.stage == NoteTransferStage.checking)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(

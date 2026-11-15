@@ -460,6 +460,45 @@ void main() {
     },
   );
 
+  test('only the first provider scan reports initial note checking', () async {
+    final samples = <NoteTransfer?>[];
+    final adapter = _Adapter('dropbox')..incoming = [revision(1)];
+    engine = SyncReplicaEngine(
+      store: store,
+      content: content,
+      isCurrent: () => true,
+      onProgress: (_, value) => samples.add(value),
+    );
+    await engine.sync(adapter);
+    expect(
+      samples.whereType<NoteTransfer>().any(
+        (s) => s.stage == NoteTransferStage.checking,
+      ),
+      isTrue,
+    );
+    samples.clear();
+    // A new engine represents reopening the app with its persisted checkpoint.
+    engine = SyncReplicaEngine(
+      store: store,
+      content: content,
+      isCurrent: () => true,
+      onProgress: (_, value) => samples.add(value),
+    );
+    await engine.sync(adapter);
+    expect(
+      samples.whereType<NoteTransfer>().any(
+        (s) => s.stage == NoteTransferStage.checking,
+      ),
+      isFalse,
+    );
+    expect(
+      samples.whereType<NoteTransfer>().any(
+        (s) => s.stage == NoteTransferStage.checkingUpdates,
+      ),
+      isTrue,
+    );
+  });
+
   test('expired continuation restarts listing without reapplying acknowledged revisions', () async {
     final adapter = _Adapter('dav')..incoming = [revision(1)];
     await engine.sync(adapter);
@@ -493,7 +532,7 @@ void main() {
       content: content,
       isCurrent: () => true,
       onProgress: (_, progress) {
-        if (progress?.stage == NoteTransferStage.checking) {
+        if (progress?.stage == NoteTransferStage.checkingUpdates) {
           checked.add(progress!.done);
         }
       },

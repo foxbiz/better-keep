@@ -797,7 +797,7 @@ class NoteSyncService {
       "[SYNC] REFRESH START: Checking ${pendingSyncs.length} cached notes for updates from Firebase",
     );
     final meter = NoteTransferMeter(
-      NoteTransferStage.checking,
+      NoteTransferStage.checkingUpdates,
       null,
       _reportNoteProgress,
     );
@@ -2585,7 +2585,9 @@ class NoteSyncService {
     final meter =
         checkingMeter ??
         NoteTransferMeter(
-          NoteTransferStage.checking,
+          isBootstrap
+              ? NoteTransferStage.checking
+              : NoteTransferStage.checkingUpdates,
           null,
           _reportNoteProgress,
         );

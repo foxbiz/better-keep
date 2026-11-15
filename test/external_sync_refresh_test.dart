@@ -1,3 +1,9 @@
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
+import 'package:better_keep/services/firebase_backend.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
+
+import 'support/offline_firebase.dart';
+
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/external_sync/external_sync_progress.dart';
@@ -10,6 +16,36 @@ import 'package:better_keep/services/external_sync/sync_scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'manual external refresh initializes safely when startup has not run',
+    () async {
+      final service = ExternalSyncService.instance;
+      expect(await service.refreshWithOutcome(), isNull);
+      final backend = OfflineFirebase();
+      backend.auth.currentUser = null;
+      backend.configure();
+      var notifications = 0;
+      void changed() => notifications++;
+      service.addListener(changed);
+      try {
+        expect(backend.auth.changes.hasListener, isFalse);
+        expect(await service.refreshWithOutcome(), SyncRefreshOutcome.deferred);
+        expect(backend.auth.changes.hasListener, isTrue);
+        expect(notifications, 0);
+        final previous = notifications;
+        expect(await service.refreshWithOutcome(), SyncRefreshOutcome.deferred);
+        expect(notifications, previous);
+      } finally {
+        service.removeListener(changed);
+        service.dispose();
+        await backend.auth.changes.close();
+        backend.firebaseSync.dispose();
+        FirebaseSyncPreference.instanceOverride = null;
+        FirebaseBackend.resetForTesting();
+      }
+    },
+  );
+
   StorageConnection connection(String provider, {bool enabled = true}) =>
       StorageConnection(
         provider: provider,

@@ -117,7 +117,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncCheckingNotes.
   ///
   /// In en, this message translates to:
-  /// **'Check Notes'**
+  /// **'Checking Notes'**
   String get syncCheckingNotes;
 
   /// No description provided for @syncDownloadingNotes.

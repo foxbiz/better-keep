@@ -14,7 +14,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Large libraries can take a few minutes.';
 
   @override
-  String get syncCheckingNotes => 'Check Notes';
+  String get syncCheckingNotes => 'Checking Notes';
 
   @override
   String get syncDownloadingNotes => 'Downloading Notes';

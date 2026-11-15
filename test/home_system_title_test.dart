@@ -295,12 +295,13 @@ void main() {
           await tester.pump(const Duration(milliseconds: 250));
           expect(
             find.text('Large libraries can take a few minutes.'),
-            findsOneWidget,
+            findsNothing,
           );
+          expect(find.text('Syncing...'), findsOneWidget);
           sync.value = checking;
           await tester.pump(const Duration(milliseconds: 250));
           expect(glyph, findsOneWidget);
-          expect(find.text('Check Notes'), findsOneWidget);
+          expect(find.text('Checking Notes'), findsOneWidget);
           expect(
             find.text('Large libraries can take a few minutes.'),
             findsOneWidget,
@@ -317,13 +318,13 @@ void main() {
           expect(pill, findsNothing);
           AppState.set('show_sync_progress', false);
           await tester.pump();
-          expect(find.text('Check Notes'), findsNothing);
+          expect(find.text('Checking Notes'), findsNothing);
           expect(find.text('Create your first note'), findsNothing);
           expect(glyph, findsOneWidget);
           expect(find.byIcon(Icons.add).hitTestable(), findsOneWidget);
           AppState.set('show_sync_progress', true);
           await tester.pump();
-          expect(find.text('Check Notes'), findsOneWidget);
+          expect(find.text('Checking Notes'), findsOneWidget);
 
           expect(find.text('No notes yet'), findsNothing);
           final area = tester.getRect(find.byType(Notes));
@@ -342,7 +343,7 @@ void main() {
         expect(glyph, findsNothing);
         expect(pill, findsOneWidget);
         expect(
-          find.descendant(of: pill, matching: find.text('Check Notes')),
+          find.descendant(of: pill, matching: find.text('Checking Notes')),
           findsOneWidget,
         );
         AppState.showNotes = NoteType.archived;

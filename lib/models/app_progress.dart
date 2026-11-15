@@ -65,7 +65,7 @@ enum ExportPhase {
   failed,
 }
 
-enum NoteTransferStage { checking, downloading, uploading }
+enum NoteTransferStage { checking, checkingUpdates, downloading, uploading }
 
 typedef NoteTransfer = ({
   NoteTransferStage stage,
@@ -122,7 +122,8 @@ class NoteTransferMeter {
   }
 
   void _publishIfDue() {
-    if (stage == NoteTransferStage.checking) {
+    if (stage == NoteTransferStage.checking ||
+        stage == NoteTransferStage.checkingUpdates) {
       if (_done > 0 && _publishedItems == 0) _emit();
       return;
     }

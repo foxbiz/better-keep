@@ -53,6 +53,13 @@ enum E2EEStatus {
 bool e2eeStatusCanAccessLocalNotes(E2EEStatus status) =>
     status == E2EEStatus.ready || status == E2EEStatus.verifyingInBackground;
 
+bool e2eeStatusRequiresUserAction(E2EEStatus status) => const {
+  E2EEStatus.pendingApproval,
+  E2EEStatus.revoked,
+  E2EEStatus.needsRecovery,
+  E2EEStatus.error,
+}.contains(status);
+
 bool e2eeStatusIsCryptoReady(E2EEStatus status, {required bool hasUMK}) =>
     e2eeStatusCanAccessLocalNotes(status) && hasUMK;
 

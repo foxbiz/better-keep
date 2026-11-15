@@ -52,6 +52,33 @@ void main() {
     },
   );
 
+  test('initial checking is progressive; routine scans say syncing in every locale', () {
+    expect(en.syncCheckingNotes, 'Checking Notes');
+    for (final locale in AppLocalizations.supportedLocales) {
+      final l10n = lookupAppLocalizations(locale);
+      for (final phase in [
+        SyncPhase.fetchingUpdates,
+        SyncPhase.checkingForUpdates,
+      ]) {
+        expect(SyncProgress(phase).localized(l10n), l10n.syncing);
+      }
+      const initial = (
+        stage: NoteTransferStage.checking,
+        done: 0,
+        total: null,
+        minutesLeft: null,
+      );
+      const updates = (
+        stage: NoteTransferStage.checkingUpdates,
+        done: 0,
+        total: null,
+        minutesLeft: null,
+      );
+      expect(initial.localized(l10n), l10n.syncCheckingNotes);
+      expect(updates.localized(l10n), l10n.syncing);
+    }
+  });
+
   test('upload counts use locale grouping and argument order', () {
     const transfer = (
       stage: NoteTransferStage.uploading,

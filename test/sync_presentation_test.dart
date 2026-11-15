@@ -18,7 +18,7 @@ void main() {
   late SyncPresentation presentation;
   late Completer<CloudSessionState> verification;
   late Completer<void> initialization;
-  late ValueNotifier<bool> notes, labels, firebaseEnabled;
+  late ValueNotifier<bool> notes, labels, firebaseEnabled, sessionInvalid;
   late ValueNotifier<SyncProgress> external;
   late ValueNotifier<SyncProgress> noteStatus, labelStatus, orderStatus;
   late ValueNotifier<E2EEStatus> encryption;
@@ -33,6 +33,7 @@ void main() {
       onFailure: (_, _) {},
     )..setForeground(false);
     firebaseEnabled = ValueNotifier(true);
+    sessionInvalid = ValueNotifier(false);
     external = ValueNotifier(SyncProgress.idle);
     notes = ValueNotifier(false);
     labels = ValueNotifier(false);
@@ -54,7 +55,7 @@ void main() {
       labelStatus: labelStatus,
       noteFailures: ValueNotifier({}),
       labelFailures: ValueNotifier({}),
-      sessionInvalid: ValueNotifier(false),
+      sessionInvalid: sessionInvalid,
       encryptionStatus: encryption,
       postSignInState: postSignIn,
     );
@@ -281,6 +282,19 @@ void main() {
     },
   );
 
+  test('external progress cannot hide sign-in or approval requirements', () {
+    firebaseEnabled.value = false;
+    external.value = const SyncProgress(SyncPhase.syncing);
+    expect(presentation.value.phase, SyncPhase.syncing);
+    sessionInvalid.value = true;
+    expect(presentation.value.phase, SyncPhase.signInRequired);
+    sessionInvalid.value = false;
+    encryption.value = E2EEStatus.pendingApproval;
+    expect(presentation.value.phase, SyncPhase.waitingForApproval);
+    encryption.value = E2EEStatus.ready;
+    expect(presentation.value.phase, SyncPhase.syncing);
+  });
+
   test('external failure or pending work prevents a global success', () {
     recovery.state.value = CloudSessionState.ready;
     noteStatus.value = const SyncProgress(SyncPhase.complete);
@@ -344,7 +358,9 @@ void main() {
       encryption.value = status;
       expect(
         presentation.emptyLibraryProgress.phase,
-        SyncPhase.checkingConnection,
+        status == E2EEStatus.pendingApproval
+            ? SyncPhase.waitingForApproval
+            : SyncPhase.deferred,
       );
     }
     verification.complete(CloudSessionState.unavailable);

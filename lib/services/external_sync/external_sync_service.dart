@@ -94,6 +94,7 @@ class ExternalSyncService extends ChangeNotifier {
 
   /// A null result means there are no external destinations to refresh.
   Future<SyncRefreshOutcome?> refreshWithOutcome() async {
+    if (!_initialized) init(refresh: false);
     if (!_initialized) return null;
     if (_suspended || !_foreground) return SyncRefreshOutcome.deferred;
     LibrarySyncSession? captured;
@@ -128,7 +129,7 @@ class ExternalSyncService extends ChangeNotifier {
     }
   }
 
-  void init() {
+  void init({bool refresh = true}) {
     if (_initialized || !FirebaseBackend.isConfigured) return;
     _initialized = true;
     _lifecycle.addListener(notifyListeners);
@@ -145,7 +146,7 @@ class ExternalSyncService extends ChangeNotifier {
     Note.on('changed', _noteChanged);
     Label.on('changed', _labelChanged);
     NoteSortService().snapshots.addListener(_persistedChanged);
-    _refreshInBackground();
+    if (refresh) _refreshInBackground();
   }
 
   bool get _eligible =>

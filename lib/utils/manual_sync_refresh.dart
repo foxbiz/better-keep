@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:better_keep/utils/logger.dart';
+
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
@@ -79,6 +83,102 @@ Future<SyncRefreshOutcome> runManualSyncRefresh({
       : combineSyncRefreshOutcomes(outcomes);
 }
 
+@visibleForTesting
+Future<void> Function()? retrySyncStartupOverride;
+
+bool get _syncNeedsUserAction =>
+    AuthService.sessionInvalid.value ||
+    e2eeStatusRequiresUserAction(E2EEService.instance.status.value);
+
+Future<bool> _waitForSyncStartup(bool Function() current) async {
+  final recovery = AuthService.cloudRecovery;
+  final encryption = E2EEService.instance;
+  final preference = FirebaseSyncPreference.instance;
+  final changes = Listenable.merge([
+    recovery.state,
+    recovery.sessionRevision,
+    AuthService.postSignInState,
+    AuthService.sessionInvalid,
+    encryption.status,
+    encryption.deviceManager.hasUMK,
+    preference,
+  ]);
+  final ready = Completer<bool>();
+  var verificationRequested = false;
+  var retryRequested = false;
+  var retrying = false;
+  var retryFailed = false;
+  void changed() {
+    if (ready.isCompleted) return;
+    if (!current() ||
+        !recovery.hasSession ||
+        !recovery.networkAvailable ||
+        _syncNeedsUserAction) {
+      ready.complete(true);
+      return;
+    }
+    final startup = AuthService.postSignInState.value;
+    if (startup.hasRecoverableFailure && !retryRequested) {
+      retryRequested = true;
+      retrying = true;
+      unawaited(
+        Future<void>.sync(
+              retrySyncStartupOverride ??
+                  AuthService.retryPostSignInInitialization,
+            )
+            .catchError((Object error, StackTrace stack) {
+              retryFailed = true;
+              AppLogger.error('[SYNC] Startup retry failed', error, stack);
+            })
+            .whenComplete(() {
+              retrying = false;
+              changed();
+            }),
+      );
+    }
+    if (retrying) return;
+    if (retryFailed || startup.hasRecoverableFailure) {
+      ready.complete(false);
+      return;
+    }
+    if (startup.isRunning || !encryption.isCryptoReady) return;
+    if (preference.failed) {
+      ready.complete(false);
+      return;
+    }
+    if (preference.loading) return;
+    final firebase =
+        preference.selectedProvider == null ||
+        preference.allowsDownload(preference.accountId);
+    if (firebase && recovery.state.value == CloudSessionState.pending) {
+      if (!verificationRequested &&
+          recovery.activity.value == CloudRecoveryActivity.idle) {
+        verificationRequested = true;
+        unawaited(recovery.check());
+      }
+      return;
+    }
+    ready.complete(true);
+  }
+
+  changes.addListener(changed);
+  AppLogger.log('[SYNC] Waiting for manual refresh startup');
+  try {
+    changed();
+    return await ready.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () {
+        AppLogger.log('[SYNC] Manual refresh startup timed out');
+        ready.complete(false);
+        return false;
+      },
+    );
+  } finally {
+    changes.removeListener(changed);
+    AppLogger.log('[SYNC] Manual refresh startup wait released');
+  }
+}
+
 /// Feedback belongs only to user actions, never to automatic sync retries.
 Future<void> refreshSyncFromUser(BuildContext context) {
   if (!AuthService.cloudRecovery.networkAvailable) return Future.value();
@@ -96,6 +196,36 @@ Future<void> refreshSyncFromUser(BuildContext context) {
   late final Future<void> operation;
   operation =
       (() async {
+        final startupReady = await _waitForSyncStartup(current);
+        if (!current()) return;
+        if (!AuthService.cloudRecovery.networkAvailable) {
+          presentation.finishManual(request, SyncRefreshOutcome.unavailable);
+          return;
+        }
+        if (_syncNeedsUserAction) {
+          presentation.finishManual(request, SyncRefreshOutcome.deferred);
+          if (context.mounted) {
+            showSyncRefreshFeedback(context, SyncRefreshOutcome.deferred);
+          }
+          return;
+        }
+        if (!startupReady) {
+          presentation.finishManual(
+            request,
+            SyncRefreshOutcome.failed,
+            startupFailed: true,
+          );
+          if (context.mounted) {
+            showSyncRefreshFeedback(context, SyncRefreshOutcome.failed);
+          }
+          return;
+        }
+        final restore = NoteSyncBatch.pending;
+        if (restore != null) {
+          presentation.finishManual(request, SyncRefreshOutcome.deferred);
+          await restore;
+          return;
+        }
         final preference = FirebaseSyncPreference.instance;
         if (preference.loading && !await preference.waitForSelection()) {
           if (!current()) return;

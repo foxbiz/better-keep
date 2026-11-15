@@ -86,6 +86,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
   final ValueListenable<PostSignInState> postSignInState;
   late final Listenable _sources;
   Object? _manual;
+  bool _startupFailed = false;
   bool Function()? _current;
   bool _noteUploadRestricted = false;
   bool _labelUploadRestricted = false;
@@ -111,6 +112,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
   Object beginManual(bool Function() current) {
     final request = Object();
     _manual = request;
+    _startupFailed = false;
     _current = current;
     // Acknowledge the gesture synchronously, before verification or init awaits.
     if (value.notes != null && value.isActive) return request;
@@ -120,9 +122,14 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     return request;
   }
 
-  void finishManual(Object request, SyncRefreshOutcome outcome) {
+  void finishManual(
+    Object request,
+    SyncRefreshOutcome outcome, {
+    bool startupFailed = false,
+  }) {
     if (!identical(_manual, request) || _current?.call() != true) return;
     _manual = null;
+    _startupFailed = startupFailed;
     // Publish this outcome once; later service events resolve live state.
     _update(
       completion: SyncProgress(switch (outcome) {
@@ -144,6 +151,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
   void _resetSession() {
     _manual = null;
     _current = null;
+    _startupFailed = false;
     _noteUploadRestricted = false;
     _labelUploadRestricted = false;
     _orderUploadRestricted = false;
@@ -170,6 +178,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
         !isManualRefresh &&
         postSignInState.value == PostSignInState.ready;
     if (localAccess &&
+        (!_startupFailed || !recovery.networkAvailable) &&
         !sessionInvalid.value &&
         ((recovery.state.value == CloudSessionState.unavailable &&
                 (!isManualRefresh || !recovery.networkAvailable)) ||
@@ -189,7 +198,13 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
       return;
     }
     final states = [cloud, external];
-    if (states.any((s) => s.phase == SyncPhase.syncing)) {
+    if ((sessionInvalid.value ||
+            e2eeStatusRequiresUserAction(encryptionStatus.value)) &&
+        (recovery.hasSession || !external.isEmpty)) {
+      _startupFailed = false;
+      value = SyncProgress(_waitingPhase);
+    } else if (states.any((s) => s.phase == SyncPhase.syncing)) {
+      _startupFailed = false;
       value =
           external.phase == SyncPhase.syncing &&
               (cloud.phase != SyncPhase.syncing ||
@@ -197,9 +212,8 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
                   cloud.notes == null)
           ? external
           : cloud;
-    } else if (sessionInvalid.value &&
-        (recovery.hasSession || !external.isEmpty)) {
-      value = const SyncProgress(SyncPhase.signInRequired);
+    } else if (_startupFailed) {
+      value = const SyncProgress(SyncPhase.failed);
     } else if (states.any((s) => s.phase == SyncPhase.storageFull)) {
       value = const SyncProgress(SyncPhase.storageFull);
     } else if (states.any((s) => s.isFailure)) {
@@ -272,6 +286,17 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
         orderStatus?.value.isActive == true;
     final activity = recovery.activity.value;
     final cloud = recovery.state.value;
+    // An approval/sign-in requirement is actionable even while an older
+    // verification or transfer callback is still settling.
+    if (sessionInvalid.value) {
+      return const SyncProgress(SyncPhase.signInRequired);
+    }
+    if (e2eeStatusRequiresUserAction(encryptionStatus.value) ||
+        (!manual &&
+            (cloud == CloudSessionState.blocked ||
+                postSignInState.value.hasRecoverableFailure))) {
+      return SyncProgress(_waitingPhase);
+    }
     if (transferring && cloud == CloudSessionState.ready) {
       if (noteBusy.value &&
           (noteStatus.value.phase == SyncPhase.fetchingUpdates ||
@@ -285,19 +310,8 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     } else if (activity == CloudRecoveryActivity.verifying &&
         (manual || cloud != CloudSessionState.ready)) {
       return const SyncProgress(SyncPhase.checkingConnection);
-    } else if (sessionInvalid.value) {
-      return const SyncProgress(SyncPhase.signInRequired);
     } else if (cloud == CloudSessionState.unavailable) {
       return const SyncProgress(SyncPhase.unavailable);
-    } else if (cloud == CloudSessionState.blocked ||
-        const {
-          E2EEStatus.pendingApproval,
-          E2EEStatus.revoked,
-          E2EEStatus.needsRecovery,
-          E2EEStatus.error,
-        }.contains(encryptionStatus.value) ||
-        postSignInState.value.hasRecoverableFailure) {
-      return SyncProgress(_waitingPhase);
     } else if (completion != null &&
         !completion.isSuccess &&
         completion.phase != SyncPhase.deferred) {
