@@ -513,9 +513,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get signOutAnyway => 'それでもサインアウト';
 
   @override
-  String get continueOffline => 'オフラインで続行';
-
-  @override
   String get cancelSignIn => 'サインインをキャンセル';
 
   @override
@@ -3753,4 +3750,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get devicePairingConnecting => '接続中…';
+
+  @override
+  String get signInConnectionTitle => 'インターネット接続が必要です';
+
+  @override
+  String get signInConnectionMessage =>
+      'この端末でのログインを完了するには、インターネットに接続してからもう一度お試しください。';
 }

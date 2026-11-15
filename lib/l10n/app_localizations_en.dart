@@ -549,9 +549,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signOutAnyway => 'Sign Out Anyway';
 
   @override
-  String get continueOffline => 'Continue Offline';
-
-  @override
   String get cancelSignIn => 'Cancel Sign In';
 
   @override
@@ -3927,4 +3924,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get devicePairingConnecting => 'Connecting…';
+
+  @override
+  String get signInConnectionTitle => 'Connection needed';
+
+  @override
+  String get signInConnectionMessage =>
+      'Connect to the internet to finish signing in on this device, then try again.';
 }

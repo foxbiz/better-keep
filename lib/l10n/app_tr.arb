@@ -188,8 +188,6 @@
 	"signOutAnyway": "Yine de Çıkış Yap",
 	"@signOutAnyway": { "description": "Sign out anyway button text" },
 
-	"continueOffline": "Çevrimdışı Devam Et",
-	"@continueOffline": { "description": "Continue offline button text" },
 
 	"cancelSignIn": "Girişi İptal Et",
 	"@cancelSignIn": { "description": "Cancel sign in button text" },
@@ -3198,5 +3196,7 @@
   "devicePairingCodeLabel": "Eşleştirme kodu",
   "devicePairingCodeExpired": "Bu kod artık kullanılamıyor. Yeni bir kod oluşturun.",
   "devicePairingCodeFailed": "Yeni cihazınızdaki kodu kontrol edip tekrar deneyin. Süresi dolduysa yeni bir kod oluşturun.",
-  "devicePairingConnecting": "Bağlanıyor…"
+  "devicePairingConnecting": "Bağlanıyor…",
+  "signInConnectionTitle": "İnternet bağlantısı gerekli",
+  "signInConnectionMessage": "Bu cihazda oturum açmayı tamamlamak için internete bağlanın ve tekrar deneyin."
 }

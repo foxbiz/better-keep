@@ -28,6 +28,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'support/offline_firebase.dart';
+import 'support/avatar_http.dart';
 
 class _SignOutAuth extends OfflineAuth {
   int signOuts = 0;
@@ -106,8 +107,59 @@ class _FixtureFiles extends IoFileSystem {
   Future<String> get cacheDir async => root;
 }
 
+final class _BlockedAvatarFiles extends IOOverrides {
+  final started = Completer<void>();
+  final release = Completer<void>();
+  String? writtenPath;
+  bool failWrite = false;
+
+  @override
+  File createFile(String path) {
+    final file = super.createFile(path);
+    return RegExp(r'[\\/]profile_[0-9a-f]{64}_[0-9a-f]{64}\.jpg$')
+            .hasMatch(path)
+        ? _AvatarFile(file, this)
+        : file;
+  }
+}
+
+class _AvatarFile extends Fake implements File {
+  _AvatarFile(this.file, this.owner);
+  final File file;
+  final _BlockedAvatarFiles owner;
+  @override
+  Directory get parent => file.parent;
+  @override
+  Future<bool> exists() => file.exists();
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) =>
+      file.delete(recursive: recursive);
+  @override
+  Future<File> writeAsBytes(
+    List<int> bytes, {
+    FileMode mode = FileMode.write,
+    bool flush = false,
+  }) async {
+    owner.writtenPath = file.path;
+    owner.started.complete();
+    await owner.release.future;
+    // Recreate the parent as a delayed platform write could do after cleanup.
+    await file.parent.create(recursive: true);
+    final written = await file.writeAsBytes(bytes, mode: mode, flush: flush);
+    if (owner.failWrite) {
+      await File('${file.parent.path}/another-late-writer.txt')
+          .writeAsString('preserve');
+      throw const FileSystemException('fixture write failed');
+    }
+    return written;
+  }
+}
+
 enum _Scenario {
   normal,
+  avatarDownload,
+  avatarWrite,
+  avatarWriteFailure,
   notificationUnavailable,
   stalledNotification,
   transientAuth,
@@ -168,6 +220,7 @@ void main() {
       'audio_playback/file',
       'share_attachments/file',
       'profile_qa.jpg',
+      'profile_cache/profile_qa.jpg',
       '00000000-0000-4000-8000-000000000001.json',
       'better_keep_export_1.zip',
       'sketch_42_0.png',
@@ -458,6 +511,13 @@ void main() {
       });
       final prefs = await SharedPreferences.getInstance();
       await AppState.init(prefs: prefs);
+      if (scenario == _Scenario.avatarWrite ||
+          scenario == _Scenario.avatarWriteFailure) {
+        await prefs.setString(
+          'account_files.live.active',
+          '11111111-1111-4111-8111-111111111111',
+        );
+      }
       final db = await initDatabase(detectDataLoss: true);
       final recovery = LocalStorageRecovery(prefs);
       expect(recovery.pending, true);
@@ -489,6 +549,33 @@ void main() {
           AuthService.openDatabaseForStartup(),
           throwsA(isA<LocalLibraryUnavailable>()),
         );
+      }
+      Future<void>? avatar;
+      final http = AvatarHttp();
+      final avatarFiles = _BlockedAvatarFiles()
+        ..failWrite = scenario == _Scenario.avatarWriteFailure;
+      final delayedAvatarWrite =
+          scenario == _Scenario.avatarWrite ||
+          scenario == _Scenario.avatarWriteFailure;
+      if (scenario == _Scenario.avatarDownload || delayedAvatarWrite) {
+        final previousHttp = HttpOverrides.current;
+        final previousIo = IOOverrides.current;
+        HttpOverrides.global = http;
+        if (delayedAvatarWrite) IOOverrides.global = avatarFiles;
+        addTearDown(() {
+          if (!avatarFiles.release.isCompleted) avatarFiles.release.complete();
+          HttpOverrides.global = previousHttp;
+          IOOverrides.global = previousIo;
+        });
+        (auth.currentUser! as OfflineUser).photoURL =
+            'https://example.invalid/avatar.png';
+        avatar = AuthService.ensureProfileImageCached();
+        await pumpEventQueue();
+        expect(http.clients, hasLength(1));
+        if (delayedAvatarWrite) {
+          http.clients.single.response.complete(AvatarResponse());
+          await avatarFiles.started.future.timeout(const Duration(seconds: 2));
+        }
       }
       if (scenario == _Scenario.startup) {
         await db.close();
@@ -577,7 +664,11 @@ void main() {
           expect(LocalStorageRecovery(prefs).signOutPending, isTrue);
           await AuthService.resumePendingSignOut();
         } else {
-          await first;
+          if (avatar != null) {
+            await first.timeout(const Duration(seconds: 5));
+          } else {
+            await first;
+          }
         }
       }
       expect(AuthService.signOutStage.value, isNull);
@@ -592,7 +683,50 @@ void main() {
       failCacheLookup = false;
       await prefs.reload();
       await resumeAccountFileCleanup(prefs);
-      expect(await media.exists(), ambiguous);
+      expect(
+        await media.exists(),
+        ambiguous ||
+            scenario == _Scenario.avatarWrite ||
+            scenario == _Scenario.avatarWriteFailure,
+      );
+      if (avatar != null) {
+        // Release only after sign-out and retired-file cleanup have completed.
+        // A new account's file must survive the old writer finishing.
+        final nextPhoto = '${await next.documentDir}/profile_next.jpg';
+        await next.writeString(nextPhoto, 'next account avatar');
+        if (scenario == _Scenario.avatarDownload) {
+          http.clients.single.response.complete(AvatarResponse());
+        } else {
+          avatarFiles.release.complete();
+        }
+        await avatar;
+        await prefs.reload();
+        expect(prefs.containsKey('user_local_photo'), isFalse);
+        expect(prefs.containsKey('user_photoURL_downloaded'), isFalse);
+        expect(AuthService.localPhotoPath, isNull);
+        if (avatarFiles.writtenPath != null) {
+          expect(await File(avatarFiles.writtenPath!).exists(), isFalse);
+          expect(
+            await File(avatarFiles.writtenPath!).parent.exists(),
+            avatarFiles.failWrite,
+            reason: 'Remove only empty avatar directories, never recurse',
+          );
+          expect(
+            await File(avatarFiles.writtenPath!).parent.parent.exists(),
+            avatarFiles.failWrite,
+            reason: 'Also remove the empty retired library, never recurse',
+          );
+        }
+        if (avatarFiles.failWrite) {
+          final retired = File(avatarFiles.writtenPath!).parent;
+          expect(
+            await File('${retired.path}/another-late-writer.txt')
+                .readAsString(),
+            'preserve',
+          );
+        }
+        expect(await next.readString(nextPhoto), 'next account avatar');
+      }
       expect(await next.readString(nextMedia), 'new account');
       expect(await File('${inactive.path}/keep').exists(), isTrue);
       expect(await File('${outside.path}/keep').exists(), isTrue);

@@ -514,9 +514,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get signOutAnyway => '그래도 로그아웃';
 
   @override
-  String get continueOffline => '오프라인으로 계속';
-
-  @override
   String get cancelSignIn => '로그인 취소';
 
   @override
@@ -3751,4 +3748,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get devicePairingConnecting => '연결 중…';
+
+  @override
+  String get signInConnectionTitle => '인터넷 연결 필요';
+
+  @override
+  String get signInConnectionMessage =>
+      '이 기기에서 로그인을 완료하려면 인터넷에 연결한 후 다시 시도하세요.';
 }

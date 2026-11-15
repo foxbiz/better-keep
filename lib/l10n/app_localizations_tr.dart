@@ -544,9 +544,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get signOutAnyway => 'Yine de Çıkış Yap';
 
   @override
-  String get continueOffline => 'Çevrimdışı Devam Et';
-
-  @override
   String get cancelSignIn => 'Girişi İptal Et';
 
   @override
@@ -3912,4 +3909,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get devicePairingConnecting => 'Bağlanıyor…';
+
+  @override
+  String get signInConnectionTitle => 'İnternet bağlantısı gerekli';
+
+  @override
+  String get signInConnectionMessage =>
+      'Bu cihazda oturum açmayı tamamlamak için internete bağlanın ve tekrar deneyin.';
 }

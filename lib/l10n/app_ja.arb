@@ -150,7 +150,6 @@
 	"primary": "プライマリ",
 	"signOut": "サインアウト",
 	"signOutAnyway": "それでもサインアウト",
-	"continueOffline": "オフラインで続行",
 	"cancelSignIn": "サインインをキャンセル",
 	"signInWithFacebook": "Facebookでサインイン",
 	"signInWithGithub": "GitHubでサインイン",
@@ -1138,5 +1137,7 @@
   "devicePairingCodeLabel": "ペアリングコード",
   "devicePairingCodeExpired": "このコードは使用できません。新しいコードを生成してください。",
   "devicePairingCodeFailed": "新しいデバイスのコードを確認して再試行してください。期限切れの場合は新しいコードを生成してください。",
-  "devicePairingConnecting": "接続中…"
+  "devicePairingConnecting": "接続中…",
+  "signInConnectionTitle": "インターネット接続が必要です",
+  "signInConnectionMessage": "この端末でのログインを完了するには、インターネットに接続してからもう一度お試しください。"
 }

@@ -150,7 +150,6 @@
 	"primary": "Principal",
 	"signOut": "Sair",
 	"signOutAnyway": "Sair mesmo assim",
-	"continueOffline": "Continuar offline",
 	"cancelSignIn": "Cancelar login",
 	"signInWithFacebook": "Entrar com Facebook",
 	"signInWithGithub": "Entrar com GitHub",
@@ -1138,5 +1137,7 @@
   "devicePairingCodeLabel": "Código de pareamento",
   "devicePairingCodeExpired": "Este código não está mais disponível. Gere um novo.",
   "devicePairingCodeFailed": "Confira o código no novo dispositivo e tente novamente. Gere um novo código se ele tiver expirado.",
-  "devicePairingConnecting": "Conectando…"
+  "devicePairingConnecting": "Conectando…",
+  "signInConnectionTitle": "É necessária uma conexão",
+  "signInConnectionMessage": "Conecte-se à internet para concluir o login neste dispositivo e tente novamente."
 }

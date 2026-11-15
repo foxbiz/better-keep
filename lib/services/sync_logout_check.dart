@@ -20,7 +20,6 @@ Future<SyncLogoutState> inspectSyncBeforeLogout({
   required bool metadataReady,
   required bool Function() isCurrent,
 }) async {
-  if (!metadataReady) return SyncLogoutState.unknown;
   // Startup recreates these two labels even on a read-only restore. Only an
   // untouched seed is disposable; user labels, renames and tombstones count.
   final seedNames =
@@ -30,6 +29,28 @@ Future<SyncLogoutState> inspectSyncBeforeLogout({
   try {
     final result = await database.transaction((txn) async {
       if (!isCurrent()) return SyncLogoutState.unknown;
+      if (!metadataReady) {
+        // A fresh login can fail before provider settings arrive. No provider
+        // acknowledgement is needed when there is no user data to discard.
+        // Include deletion journals: an empty note list alone is insufficient.
+        final content = await txn.rawQuery('''
+          $seedNames
+          SELECT 1 FROM note
+          UNION ALL SELECT 1 FROM label l WHERE NOT ($seed)
+          UNION ALL SELECT 1 FROM sync_track
+          UNION ALL SELECT 1 FROM label_sync_track t
+            WHERE NOT EXISTS (SELECT 1 FROM label l WHERE l.id = t.local_id AND $seed
+              AND t.action = 'upload' AND (t.remote_id IS NULL OR t.remote_id = l.sync_id))
+          UNION ALL SELECT 1 FROM note_sort_context WHERE dirty != 0
+          UNION ALL SELECT 1 FROM ${SyncMutationJournal.table} v
+            WHERE NOT (v.kind = 'label' AND v.deleted = 0 AND EXISTS (
+              SELECT 1 FROM label l WHERE l.sync_id = v.entity_id AND $seed))
+          LIMIT 1
+        ''', Label.systemLabelNames);
+        return content.isEmpty
+            ? SyncLogoutState.complete
+            : SyncLogoutState.unknown;
+      }
       // With no selected external destination, paused Firebase queues still
       // reveal local-only changes that would otherwise disappear on sign-out.
       if (externalReplicaId == null) {
@@ -118,15 +139,12 @@ Future<SyncLogoutState> currentSyncLogoutState() async {
         live?.state == selected?.state;
   }
 
-  if (externalSelected && (!ready || selected == null)) {
-    return SyncLogoutState.unknown;
-  }
   return inspectSyncBeforeLogout(
     database: database,
     firebaseAccountId: AuthService.currentUser?.uid,
     scope: session?.engine.store.scope,
     externalReplicaId: externalSelected ? selected?.replicaId : null,
-    metadataReady: ready,
+    metadataReady: ready && (!externalSelected || selected != null),
     isCurrent: current,
   );
 }

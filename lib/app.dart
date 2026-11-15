@@ -339,11 +339,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                               AccountRecoveryPage(key: ValueKey(user.uid)),
                             AuthenticatedStartupRoute.recovery => AuthScaffold(
                               child: PostSignInRecoveryView(
+                                connectionUnavailable:
+                                    postSignInState.connectionUnavailable &&
+                                    !postSignInState.accountDeletionInProgress,
                                 canRetry:
                                     !postSignInState.accountDeletionInProgress,
                                 message:
                                     postSignInState.accountDeletionInProgress
                                     ? context.l10n.accountDeletionInProgress
+                                    : postSignInState.connectionUnavailable
+                                    ? null
                                     : switch (E2EEService.instance.localState) {
                                         LocalEncryptionState
                                             .awaitingOnlineUnlock =>
@@ -367,11 +372,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                 onRetry: () => _retryPostSignInSafely(
                                   'authenticated startup screen',
                                 ),
-                                onContinueOffline:
-                                    E2EEService.instance.isCryptoReady
-                                    ? AuthService
-                                          .continueOfflineAfterInitializationFailure
-                                    : null,
                                 onSignOut: () => _safeAuthSignOut(
                                   context,
                                   'authenticated startup screen',
@@ -406,70 +406,34 @@ class _E2EELoadingWidget extends StatefulWidget {
 
 class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
   bool _showTimeoutOptions = false;
-  int _retryCount = 0;
-  Timer? _autoRetryTimer;
+  bool _retrying = false;
   Timer? _showOptionsTimer;
-  static const _autoRetryTimeout = Duration(seconds: 5);
   static const _showOptionsTimeout = Duration(seconds: 6);
-  static const _maxAutoRetries = 1;
 
   @override
   void initState() {
     super.initState();
-    // Start auto-retry timer - if still stuck on notInitialized after timeout,
-    // automatically trigger initialize() to recover from race conditions
-    _scheduleAutoRetry();
+    // The service owns startup and its failures. A slow account request is not
+    // evidence that encryption failed, and rendering must never restart login.
+    _showOptionsTimer = Timer(_showOptionsTimeout, () {
+      if (mounted) setState(() => _showTimeoutOptions = true);
+    });
   }
 
   @override
   void dispose() {
-    _autoRetryTimer?.cancel();
     _showOptionsTimer?.cancel();
     super.dispose();
   }
 
-  void _scheduleAutoRetry() {
-    _autoRetryTimer?.cancel();
-    _autoRetryTimer = Timer(_autoRetryTimeout, () {
-      if (!mounted) return;
-      if (E2EEService.instance.status.value != E2EEStatus.notInitialized) {
-        return;
-      }
-
-      if (_retryCount < _maxAutoRetries) {
-        _retryCount++;
-        AppLogger.log(
-          '[Auth] E2EE init timeout, auto-retrying (attempt $_retryCount/$_maxAutoRetries)',
-        );
-        unawaited(_retryPostSignInSafely('encryption timeout'));
-        // Schedule next auto-retry
-        _scheduleAutoRetry();
-      } else {
-        // Max retries exhausted, transition to error state
-        AppLogger.log(
-          '[Auth] E2EE init failed after $_maxAutoRetries auto-retries, showing error',
-        );
-        E2EEService.instance.status.value = E2EEStatus.error;
-      }
-    });
-
-    // Also show manual retry options after a longer timeout (only once)
-    _showOptionsTimer ??= Timer(_showOptionsTimeout, () {
-      if (mounted &&
-          E2EEService.instance.status.value == E2EEStatus.notInitialized) {
-        setState(() => _showTimeoutOptions = true);
-      }
-    });
-  }
-
   Future<void> _retryInitialization() async {
-    setState(() => _showTimeoutOptions = false);
-    _retryCount = 0;
-    _showOptionsTimer?.cancel();
-    _showOptionsTimer = null;
-    await _retryPostSignInSafely('encryption loading screen');
-
-    _scheduleAutoRetry();
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      await _retryPostSignInSafely('encryption loading screen');
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
   }
 
   Future<void> _signOutSafely() async {
@@ -531,8 +495,13 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               OutlinedButton.icon(
-                onPressed: _retryInitialization,
-                icon: const Icon(Icons.refresh, size: 18),
+                onPressed: _retrying ? null : _retryInitialization,
+                icon: _retrying
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 18),
                 label: Text(context.l10n.retry),
               ),
               const SizedBox(width: 16),
@@ -542,11 +511,6 @@ class _E2EELoadingWidgetState extends State<_E2EELoadingWidget> {
                 label: Text(context.l10n.signOut),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: AuthService.continueOfflineAfterInitializationFailure,
-            child: Text(context.l10n.continueOffline),
           ),
         ],
       ],

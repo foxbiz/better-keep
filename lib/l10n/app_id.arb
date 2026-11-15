@@ -150,7 +150,6 @@
 	"primary": "Utama",
 	"signOut": "Keluar",
 	"signOutAnyway": "Tetap Keluar",
-	"continueOffline": "Lanjutkan Offline",
 	"cancelSignIn": "Batalkan Masuk",
 	"signInWithFacebook": "Masuk dengan Facebook",
 	"signInWithGithub": "Masuk dengan GitHub",
@@ -1138,5 +1137,7 @@
   "devicePairingCodeLabel": "Kode pemasangan",
   "devicePairingCodeExpired": "Kode ini tidak tersedia lagi. Buat kode baru.",
   "devicePairingCodeFailed": "Periksa kode di perangkat baru dan coba lagi. Buat kode baru jika sudah kedaluwarsa.",
-  "devicePairingConnecting": "Menghubungkan…"
+  "devicePairingConnecting": "Menghubungkan…",
+  "signInConnectionTitle": "Koneksi diperlukan",
+  "signInConnectionMessage": "Hubungkan ke internet untuk menyelesaikan proses masuk di perangkat ini, lalu coba lagi."
 }

@@ -300,6 +300,7 @@ Future<void> _clearLegacyFiles(FileSystem fs) async {
     'audio_playback',
     'remote_sync_cache',
     'share_attachments',
+    'profile_cache',
   };
   final documents = await fs.documentDir;
   final cache = await fs.cacheDir;

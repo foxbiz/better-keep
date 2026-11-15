@@ -1,3 +1,4 @@
+import 'package:better_keep/state.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
 import 'package:better_keep/models/note.dart';
@@ -14,7 +15,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(sqfliteFfiInit);
   late Database db;
+  Object? previousDatabase;
   setUp(() async {
+    previousDatabase = AppState.get('db');
     db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await Note.createTable(db);
     await Label.createTable(db);
@@ -25,6 +28,7 @@ void main() {
     await SyncMutationJournal.install(db);
   });
   tearDown(() async {
+    AppState.set('db', previousDatabase);
     if (db.isOpen) await db.close();
   });
 
@@ -58,6 +62,26 @@ void main() {
       }
     });
   }
+
+  test('production label seeds are safe until a user edits them', () async {
+    AppState.db = db;
+    await Label.fixLabels();
+    expect(await inspect(metadata: false), SyncLogoutState.complete);
+    final label = (await Label.get()).first;
+    label.name = 'Changed system label';
+    await label.save(sync: false);
+    expect(await inspect(metadata: false), SyncLogoutState.unknown);
+  });
+  test('an ordering tombstone alone prevents silent sign-out', () async {
+    await db.insert('note_sort_context', {
+      'context_key': 'main:grid',
+      'sort_mode': 'custom',
+      'revision': 'order-1',
+      'updated_at': '2026-01-01T00:00:00Z',
+    });
+    await db.delete('note_sort_context');
+    expect(await inspect(metadata: false), SyncLogoutState.unknown);
+  });
 
   test(
     'startup labels are reproducible but user changes must be backed up',
@@ -244,13 +268,35 @@ void main() {
     expect(await inspect(destination: null), SyncLogoutState.pending);
   });
 
-  test('unknown metadata, account changes and database errors never imply successful sync', () async {
-    expect(await inspect(metadata: false), SyncLogoutState.unknown);
-    await db.insert('note', {'id': 1, 'sync_id': 'pending'});
-    expect(await inspect(metadata: false), SyncLogoutState.unknown);
-    var calls = 0;
-    expect(await inspect(current: () => ++calls == 1), SyncLogoutState.unknown);
-    await db.close();
-    expect(await inspect(), SyncLogoutState.unknown);
-  });
+  test(
+    'empty startup needs no backup metadata; existing data still fails closed',
+    () async {
+      expect(await inspect(metadata: false), SyncLogoutState.complete);
+      for (final name in Label.systemLabelNames) {
+        await db.insert('label', {
+          'sync_id': name,
+          'name': name,
+          'is_system': 1,
+          'created_at': '2026-11-15',
+          'updated_at': '2026-11-15',
+        });
+      }
+      expect(await inspect(metadata: false), SyncLogoutState.complete);
+      await db.insert('note', {'id': 1, 'sync_id': 'pending'});
+      expect(await inspect(metadata: false), SyncLogoutState.unknown);
+      await db.delete('note');
+      expect(
+        await inspect(metadata: false),
+        SyncLogoutState.unknown,
+        reason: 'A local deletion must not be mistaken for a fresh library',
+      );
+      var calls = 0;
+      expect(
+        await inspect(current: () => ++calls == 1),
+        SyncLogoutState.unknown,
+      );
+      await db.close();
+      expect(await inspect(), SyncLogoutState.unknown);
+    },
+  );
 }

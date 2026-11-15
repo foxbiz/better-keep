@@ -2,6 +2,7 @@ import 'browser_connection.dart'
     if (dart.library.js_interop) 'browser_connection_web.dart';
 
 import 'auth_error_messages.dart';
+import 'async_keyed_serializer.dart';
 import 'remote_sync_cache_service.dart';
 import 'local_storage_recovery.dart';
 import 'sign_out_lock.dart'
@@ -16,8 +17,11 @@ import 'package:better_keep/services/cloud_read.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/device_authorization.dart';
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+
+import 'package:crypto/crypto.dart';
 
 import 'sketch_preview_repair_service.dart';
 
@@ -117,6 +121,7 @@ class AuthService {
 
   static Map<String, String>? _cachedProfile;
   static String? _localPhotoPath;
+  static String? _localPhotoUid;
 
   // Cached Firestore linked providers (from custom OAuth flow)
   static Set<String> _firestoreLinkedProviders = {};
@@ -281,7 +286,10 @@ class AuthService {
   }
 
   static Map<String, String>? get cachedProfile => _cachedProfile;
-  static String? get localPhotoPath => _localPhotoPath;
+  static String? get localPhotoPath =>
+      (currentUser?.uid ?? _cachedUserId) == _localPhotoUid
+      ? _localPhotoPath
+      : null;
 
   /// Check if there's a pending OAuth request
   static bool get hasPendingOAuth =>
@@ -681,6 +689,9 @@ class AuthService {
     );
 
     _cachedUserId = uid;
+    // Publish legacy paths only after the optional cache task verifies the file.
+    _localPhotoUid = null;
+    _localPhotoPath = null;
     if (email != null) {
       _cachedProfile = {
         'email': email,
@@ -695,13 +706,10 @@ class AuthService {
             ) ??
             '',
       };
-      _localPhotoPath = prefsInstance.getString(
-        FirebaseScopedPreferences.key('user_local_photo'),
-      );
 
       // Download profile image in background (don't block startup)
       if (_cachedProfile!['photoURL']!.isNotEmpty) {
-        _downloadProfileImageIfNeeded(uid: uid);
+        unawaited(ensureProfileImageCached());
       }
     }
 
@@ -837,41 +845,165 @@ class AuthService {
     });
   }
 
-  /// Downloads profile image in background if needed.
-  static void _downloadProfileImageIfNeeded({String? uid}) {
-    fileSystem()
-        .then((fs) async {
-          if (_localPhotoPath == null || !await fs.exists(_localPhotoPath!)) {
-            _downloadProfileImage(_cachedProfile!['photoURL']!, uid: uid);
-          }
-        })
-        .catchError((e) {
-          AppLogger.error('Error checking for profile image', e);
+  static final _profileImageFiles = AsyncKeyedSerializer<String>();
+  static Future<void>? _profileImageTask;
+  static (String, String, int)? _profileImageIdentity;
+
+  /// Shared by startup and avatar widgets; optional network work never blocks
+  /// account/encryption initialization, and simultaneous consumers reuse it.
+  static Future<void> ensureProfileImageCached() {
+    if (!FirebaseBackend.isConfigured) return Future.value();
+    final user = currentUser;
+    final url =
+        user?.photoURL ??
+        (user?.uid == _cachedUserId ? (_cachedProfile?['photoURL']) : null);
+    if (kIsWeb ||
+        user == null ||
+        hasDifferentLocalAccount ||
+        signOutStage.value != null ||
+        url == null ||
+        url.isEmpty) {
+      return Future.value();
+    }
+    final identity = (user.uid, url, _sessionEpoch);
+    if (_profileImageIdentity == identity && _profileImageTask != null) {
+      return _profileImageTask!;
+    }
+    _profileImageIdentity = identity;
+    final sessionCurrent = captureSession();
+    bool current() => sessionCurrent() && _profileImageIdentity == identity;
+    late final Future<void> task;
+    task = _cacheProfileImage(url, user.uid, current, sessionCurrent)
+        .whenComplete(() {
+          if (identical(_profileImageTask, task)) _profileImageTask = null;
         });
+    _profileImageTask = task;
+    return task;
   }
 
-  static Future<void> _downloadProfileImage(String url, {String? uid}) async {
-    if (kIsWeb) return; // Skip downloading profile image on web for now
+  static Future<void> _cacheProfileImage(
+    String url,
+    String uid,
+    bool Function() current,
+    bool Function() sessionCurrent,
+  ) async {
+    HttpClient? client;
     try {
-      final request = await HttpClient().getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        final fs = await fileSystem();
-        final bytes = await consolidateHttpClientResponseBytes(response);
-        final dir = await fs.documentDir;
-        final fileName = uid != null ? 'profile_$uid.jpg' : 'profile_image.jpg';
-        final filePath = '$dir/$fileName';
-        await fs.writeBytes(filePath, bytes);
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(
-          FirebaseScopedPreferences.key('user_local_photo'),
-          filePath,
-        );
-        _localPhotoPath = filePath;
+      if (!current()) return;
+      final prefs = await AppState.prefs;
+      final fs = await fileSystem();
+      final generation = currentAccountFileGeneration(prefs);
+      final scope = FirebaseScopedPreferences.scopeForPreferences(prefs);
+      final previousUrl = prefs.getString(
+        FirebaseScopedPreferences.key('user_photoURL_downloaded'),
+      );
+      final previousPath = prefs.getString(
+        FirebaseScopedPreferences.key('user_local_photo'),
+      );
+      if (_cachedUserId == uid &&
+          previousUrl == url &&
+          previousPath != null &&
+          await fs.exists(previousPath)) {
+        if (current()) {
+          _localPhotoUid = uid;
+          _localPhotoPath = previousPath;
+        }
+        return;
       }
-    } catch (e, stackTrace) {
-      AppLogger.error('Error downloading profile image', e, stackTrace);
+      // Keep each account's inventory identifiable even in a legacy shared root.
+      final library = await fs.documentDir;
+      final directory = path.join(library, 'profile_cache');
+      final prefix = 'profile_${sha256.convert(utf8.encode(uid))}_';
+      final filePath = path.join(
+        directory,
+        '$prefix${sha256.convert(utf8.encode(url))}.jpg',
+      );
+      final queueKey = '$directory/$prefix';
+      Future<void> adopt() async {
+        if (!current()) return;
+        final alreadyCurrent = localPhotoPath == filePath;
+        _localPhotoUid = uid;
+        _localPhotoPath = filePath;
+        if (alreadyCurrent) return;
+        // Pruning and cache lookups share a queue, so a newer request cannot
+        // adopt an older URL's file while its deletion is still in flight.
+        try {
+          final owned = RegExp('^${RegExp.escape(prefix)}[0-9a-f]{64}\\.jpg\$');
+          for (final candidate in await fs.list(directory)) {
+            if (!current()) return;
+            if (candidate != filePath &&
+                path.dirname(candidate) == directory &&
+                owned.hasMatch(path.basename(candidate))) {
+              await fs.delete(candidate);
+            }
+          }
+        } catch (_) {
+          // Optional cache housekeeping cannot turn a usable avatar into failure.
+        }
+      }
+
+      final cached = await _profileImageFiles.run(queueKey, () async {
+        if (!current()) return true;
+        if (!await fs.exists(filePath)) return false;
+        await adopt();
+        return true;
+      });
+      if (cached) return;
+      if (!current()) return;
+      final http = client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 5);
+      Future<Uint8List?> download() async {
+        final request = await http.getUrl(Uri.parse(url));
+        final response = await request.close();
+        return response.statusCode == 200
+            ? await consolidateHttpClientResponseBytes(response)
+            : null;
+      }
+
+      final bytes = await download().timeout(const Duration(seconds: 5));
+      client.close(force: true);
+      client = null;
+      if (bytes == null || !current()) return;
+      await _profileImageFiles.run(queueKey, () async {
+        if (!current()) return;
+        try {
+          await fs.writeBytes(filePath, bytes);
+        } catch (_) {
+          // A partial file must not become a cache hit on the next attempt.
+          await fs.delete(filePath);
+          rethrow;
+        } finally {
+          if (!sessionCurrent()) {
+            await fs.delete(filePath);
+            final active = currentAccountFileGeneration(prefs);
+            final retiredLibrary =
+                generation != null &&
+                active != null &&
+                active != generation &&
+                FirebaseScopedPreferences.scopeForPreferences(prefs) == scope &&
+                path.basename(library) == 'bk-library-$generation';
+            for (final emptyParent in [
+              directory,
+              if (retiredLibrary) library,
+            ]) {
+              try {
+                // Never recurse or delete a legacy support root. Nonempty
+                // directories (including another late writer's files) survive.
+                await Directory(emptyParent).delete();
+              } on FileSystemException {
+                // Best effort: account selection never relies on directory existence.
+              }
+            }
+          }
+        }
+        await adopt();
+      });
+    } catch (error, stack) {
+      if (current()) {
+        AppLogger.error('Profile image download deferred', error, stack);
+      }
+    } finally {
+      client?.close(force: true);
     }
   }
 
@@ -1866,6 +1998,7 @@ class AuthService {
         await E2EEService.instance.preloadCachedStatus()) {
       if (!current()) return;
       postSignInState.value = PostSignInState.ready;
+      unawaited(ExternalSyncService.instance.resume());
       cloudRecovery.start(currentUser!.uid);
       unawaited(cloudRecovery.check());
       return;
@@ -1908,19 +2041,6 @@ class AuthService {
           ? previousRequest.onStatusChange
           : null,
     );
-  }
-
-  static Future<void> continueOfflineAfterInitializationFailure() async {
-    final current = captureSession();
-    if (!canRestoreLocalSession) return;
-    if (!await E2EEService.instance.preloadCachedStatus()) {
-      return;
-    }
-    if (!current()) return;
-    postSignInState.value = PostSignInState.ready;
-    unawaited(ExternalSyncService.instance.resume());
-    cloudRecovery.start(currentUser!.uid);
-    unawaited(cloudRecovery.check());
   }
 
   static Future<void> _startPostSignInInitialization({
@@ -2050,6 +2170,7 @@ class AuthService {
       ],
       isFatalIdentityFailure: _isDefinitiveIdentityFailure,
       isAccountDeletionInProgress: isAccountDeletionInProgress,
+      isConnectionFailure: isCloudConnectionFailure,
       isSessionCurrent: isCurrent,
       signOut: signOut,
       clearSignInProgress: () async {
@@ -2189,7 +2310,6 @@ class AuthService {
         requireCloudOperation();
         // Cache user profile locally
         final prefs = await SharedPreferences.getInstance();
-        final fs = await fileSystem();
 
         requireCloudOperation();
         await prefs.setString(
@@ -2221,19 +2341,7 @@ class AuthService {
         };
 
         if (user.photoURL != null) {
-          final savedUrl = prefs.getString(
-            FirebaseScopedPreferences.key('user_photoURL_downloaded'),
-          );
-          if (savedUrl != user.photoURL ||
-              _localPhotoPath == null ||
-              !await fs.exists(_localPhotoPath!)) {
-            await _downloadProfileImage(user.photoURL!, uid: user.uid);
-            requireCloudOperation();
-            await prefs.setString(
-              FirebaseScopedPreferences.key('user_photoURL_downloaded'),
-              user.photoURL!,
-            );
-          }
+          unawaited(ensureProfileImageCached());
         }
 
         return; // Success
@@ -2617,6 +2725,7 @@ class AuthService {
       // Clear cache
       _cachedProfile = null;
       _localPhotoPath = null;
+      _localPhotoUid = null;
       _firestoreLinkedProviders = {};
       _primaryProvider = null;
 

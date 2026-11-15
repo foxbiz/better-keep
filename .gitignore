@@ -13,6 +13,7 @@
 .secrets
 outputs/
 migrate_working_dir/
+docs/reviews/
 
 # IntelliJ related
 *.iml

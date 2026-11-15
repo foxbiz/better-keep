@@ -57,6 +57,7 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 	assert.deepEqual(parseTestTaskArguments([]), { help: true });
 	assert.deepEqual(parseTestTaskArguments(["--help"]), { help: true });
 	assert.deepEqual(TEST_SUITE_NAMES, [
+		"auth-startup",
 		"client-sync",
 		"database-migrations",
 		"device-pairing",
@@ -451,4 +452,14 @@ test("release core includes startup feedback regression coverage", () => {
 			assert.ok(args.includes(file), `${suite} must run ${file}`);
 		}
 	}
+});
+
+test("release-core includes authenticated startup regression coverage", () => {
+	const operations = JSON.stringify(resolveTestTask(["release-core"]).operations);
+	for (const file of [
+		"auth_startup_screen_test", "post_sign_in_coordinator_test",
+		"post_sign_in_recovery_view_test", "sync_logout_check_test",
+		"authenticated_startup_routing_test", "cloud_session_recovery_test",
+		"offline_startup_integration_test", "user_avatar_test",
+	]) assert.ok(operations.includes(`test/${file}.dart`), file);
 });

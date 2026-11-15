@@ -314,3 +314,84 @@ a bulk restore starting during the wait, and approval/sign-in/offline/account
 changes. Timeout scenarios use real elapsed time on native integration runners.
 The widget version runs in the `client-sync` / `release-core` gate; native execution
 remains a separate platform check. No real credentials or encryption keys are used.
+
+
+## Account startup and connection failures — 15 November 2026
+
+The account loading view no longer launches its own automatic sign-in retry or
+forces an encryption error after ten seconds. Required-stage connection failures
+show connection guidance with explicit Retry. An empty local library can sign
+out without an unverified-backup warning; notes, modified labels, ordering and
+deletion journals still require the existing safety check. Missing/unreadable
+local data is never treated as proof of an empty library.
+
+Focused regression command (included in `release-core` CI):
+
+```sh
+npm test -- auth-startup
+```
+
+The suite covers the registration collision that previously left initialization
+stuck, retry after a nonauthoritative device read, automatic Home routing for
+approved offline sessions, and loading-screen Retry progress/double-tap handling.
+It also exercises production default-label creation and ordering tombstones in
+sign-out checks. Avatar tests cover a shared bounded download, client closure,
+disk-cache reuse, delayed results from an old account, same-account URL-cache pruning,
+and retry after a partial avatar write. The native sign-out fixture also checks
+empty retired-directory removal and nonempty-directory preservation. Avatar work is optional
+and no longer awaited by required account initialization.
+
+The native lifecycle fixture uses a **new disposable iOS simulator**, a synthetic
+Google identity and `demo-bkn-auth-lifecycle`. Start Auth/Firestore/Storage
+emulators with that project on 9099/8080/9199, using the repository rules and no
+imported records. Use an isolated configuration; do not share a running
+personal-development emulator. The fixture expects loopback ports and refuses
+physical devices. On the same simulator, run these phases in order. `--no-uninstall` is required:
+Flutter otherwise removes the app and its local data after each integration run.
+
+```sh
+flutter test --no-uninstall integration_test/auth_lifecycle_test.dart -d <disposable-ios-id> --dart-define=AUTH_LIFECYCLE_PHASE=setup
+flutter test --no-uninstall integration_test/auth_lifecycle_test.dart -d <disposable-ios-id> --dart-define=AUTH_LIFECYCLE_PHASE=offline-restart
+flutter test --no-uninstall integration_test/auth_lifecycle_test.dart -d <disposable-ios-id> --dart-define=AUTH_LIFECYCLE_PHASE=signed-out-restart
+```
+
+This exercises real native Firebase Auth, Firestore, Keychain and SQLite through
+service calls and the App router. The offline phase disables Firestore's network;
+it is not an airplane-mode test of Firebase Auth or third-party OAuth. It does
+not exercise the real Google/Apple consent screens or a signed TestFlight binary.
+
+Verified locally on 15 November: the focused auth-startup regression suite passed;
+`flutter analyze --no-pub` reported no issues; and all three lifecycle phases
+passed on a fresh iPhone 17 / iOS 26.3 simulator with the app preserved between
+runs. These included saved-note access with Firestore offline, sign-out followed
+by re-login and recovery of the same synthetic account, and a subsequent
+signed-out process restart. The initial harness runs were discarded: one used
+an invalid dummy API-key format, and another accidentally uninstalled the app
+between phases. Neither is counted as a passing restart test.
+
+Before publishing, verify on a signed iPhone build: an approved offline restart
+opens saved notes without warnings; a fresh sign-in interrupted by a lost
+connection offers a useful Retry; reconnecting completes the same attempt;
+sign-out after failed setup does not warn about nonexistent notes; sign-out with
+unsynced notes still warns; and sign-out/re-login plus a signed-out process
+restart work with the actual sign-in provider. Reinstall must not silently use
+an old Keychain login. Keep any test account's recovery passphrase outside logs.
+
+### End-to-end recheck after review fixes — 15 November 2026
+
+All three lifecycle phases passed again on a newly created iPhone 17 / iOS 26.3
+simulator, using the updated staged code and preserving the app between runs.
+For this run, the dedicated QA Auth emulator was paused before `offline-restart`
+and resumed only after the fixture confirmed Home and the saved note. Firestore
+networking was disabled by the fixture. Reconnection, sign-out, re-login,
+passphrase recovery, and the final signed-out cold restart all passed.
+
+`npm test -- offline-browser` also passed for stable and beta in Chromium. The
+proxy blocked traffic for both the page and service worker: offline edits,
+cold reopen, encrypted upload after reconnection, offline revocation enforcement,
+and same-profile beta-to-stable switching passed.
+
+These are disposable emulator accounts and real native/browser storage. Actual
+Google/Apple consent screens, Android, physical-device airplane mode, signed
+TestFlight behavior, and live external-provider authorization were not exercised.
+No runtime change or deployment was needed during this end-to-end run.

@@ -1,24 +1,24 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/firebase_backend.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class _AvatarCache {
-  static Uint8List? _cachedBytes;
   static MemoryImage? _cachedImage;
   static bool _isLoading = false;
   static bool _useDefaultIcon = false;
+  static int _generation = 0;
+  static String? _ownerUid;
 
   /// Notifier that fires when the avatar cache state changes (loaded or invalidated)
   static final ValueNotifier<int> cacheVersion = ValueNotifier(0);
 
   /// Check if we should retry loading (e.g., if we previously had no URL but now we do)
   static bool _shouldRetryLoad() {
-    if (!_useDefaultIcon) return false;
+    if (!_useDefaultIcon || !FirebaseBackend.isConfigured) return false;
     if (_cachedImage != null || _isLoading) return false;
 
     // Check if a photo URL is now available
@@ -33,65 +33,56 @@ class _AvatarCache {
   }
 
   static Future<void> loadAvatar() async {
-    // If we previously set useDefaultIcon but now have a URL, retry
-    if (_shouldRetryLoad()) {
-      _useDefaultIcon = false;
+    final uid = FirebaseBackend.isConfigured
+        ? AuthService.currentUser?.uid
+        : null;
+    if (_ownerUid != uid) {
+      invalidate(notify: false);
+      _ownerUid = uid;
     }
+    if (_shouldRetryLoad()) _useDefaultIcon = false;
+    if (_cachedImage != null || _useDefaultIcon || _isLoading) return;
 
-    if (_cachedImage != null || _useDefaultIcon || _isLoading) {
-      return;
-    }
-
+    final generation = _generation;
+    final sessionCurrent = AuthService.captureSessionIdentity();
+    bool current() =>
+        generation == _generation &&
+        sessionCurrent() &&
+        (FirebaseBackend.isConfigured ? AuthService.currentUser?.uid : null) ==
+            uid;
     _isLoading = true;
     try {
-      final fs = await fileSystem();
-      final user = AuthService.currentUser;
-      final cached = AuthService.cachedProfile;
-
-      String photoURL = AuthService.localPhotoPath ?? '';
-
-      if (photoURL.isEmpty || !(await fs.exists(photoURL))) {
-        photoURL = user?.photoURL ?? cached?['photoURL'] ?? '';
+      // The auth service owns the bounded download and persistent cache. Do not
+      // start a second HTTP request while account startup is fetching the photo.
+      await AuthService.ensureProfileImageCached();
+      if (!current()) return;
+      final path = FirebaseBackend.isConfigured
+          ? AuthService.localPhotoPath
+          : null;
+      final fs = path == null ? null : await fileSystem();
+      final bytes = path != null && await fs!.exists(path)
+          ? await fs.readBytes(path)
+          : null;
+      if (!current()) return;
+      _cachedImage = bytes == null ? null : MemoryImage(bytes);
+      _useDefaultIcon = bytes == null;
+    } catch (_) {
+      if (current()) _useDefaultIcon = true;
+    } finally {
+      if (current()) {
+        _isLoading = false;
+        cacheVersion.value++;
       }
-
-      if (photoURL.isEmpty) {
-        // Use default icon instead of PNG
-        _useDefaultIcon = true;
-      } else if (photoURL.startsWith('http')) {
-        try {
-          final httpClient = HttpClient();
-          final request = await httpClient.getUrl(Uri.parse(photoURL));
-          final response = await request.close();
-          _cachedBytes = await consolidateHttpClientResponseBytes(response);
-        } catch (e) {
-          // Fallback to default icon
-          _useDefaultIcon = true;
-        }
-      } else {
-        _cachedBytes = await fs.readBytes(photoURL);
-      }
-
-      // Create single MemoryImage instance to share across all widgets
-      if (_cachedBytes != null) {
-        _cachedImage = MemoryImage(_cachedBytes!);
-      }
-    } catch (e) {
-      // Fallback to default icon on error
-      _useDefaultIcon = true;
     }
-
-    _isLoading = false;
-    // Notify listeners that the cache has been updated
-    cacheVersion.value++;
   }
 
-  static void invalidate() {
-    _cachedBytes = null;
+  static void invalidate({bool notify = true}) {
+    _generation++;
     _cachedImage = null;
     _isLoading = false;
     _useDefaultIcon = false;
-    // Notify listeners that the cache has been invalidated
-    cacheVersion.value++;
+    // Loading may start during widget construction; notify only after its await.
+    if (notify) cacheVersion.value++;
   }
 }
 

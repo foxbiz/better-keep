@@ -227,8 +227,6 @@
 	"signOutAnyway": "Sign Out Anyway",
 	"@signOutAnyway": { "description": "Sign out anyway button text" },
 
-	"continueOffline": "Continue Offline",
-	"@continueOffline": { "description": "Continue offline button text" },
 
 	"cancelSignIn": "Cancel Sign In",
 	"@cancelSignIn": { "description": "Cancel sign in button text" },
@@ -3508,5 +3506,7 @@
   "devicePairingCodeLabel": "Pairing code",
   "devicePairingCodeExpired": "This code is no longer available. Generate a new one.",
   "devicePairingCodeFailed": "Check the code on your new device and try again. Generate a new code if it has expired.",
-  "devicePairingConnecting": "Connecting…"
+  "devicePairingConnecting": "Connecting…",
+  "signInConnectionTitle": "Connection needed",
+  "signInConnectionMessage": "Connect to the internet to finish signing in on this device, then try again."
 }

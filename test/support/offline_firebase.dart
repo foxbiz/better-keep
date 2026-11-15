@@ -54,7 +54,7 @@ class OfflineUser implements User {
   @override
   String get email => '$uid@example.invalid';
   @override
-  String? get photoURL => null;
+  String? photoURL;
   @override
   String get displayName => 'Test user';
   @override
@@ -395,6 +395,8 @@ class _Batch implements WriteBatch {
 }
 
 class _App implements FirebaseApp {
+  @override
+  String get name => 'offline-test';
   @override
   FirebaseOptions get options => const FirebaseOptions(
     apiKey: 'synthetic',

@@ -476,6 +476,18 @@ const suites = {
 		suiteStep("release-core"),
 		suiteStep("offline-browser"),
 	]),
+	"auth-startup": defineSuite("Run authenticated startup and sign-out safety tests.", () => [
+		flutterTests([
+			"test/auth_startup_screen_test.dart",
+			"test/post_sign_in_coordinator_test.dart",
+			"test/post_sign_in_recovery_view_test.dart",
+			"test/sync_logout_check_test.dart",
+			"test/authenticated_startup_routing_test.dart",
+			"test/cloud_session_recovery_test.dart",
+			"test/offline_startup_integration_test.dart",
+			"test/user_avatar_test.dart",
+		]),
+	]),
 	"release-core": defineSuite("Run release checks covered by the core CI job.", () => [
 		processStep("node", [
 			"--test",
@@ -515,6 +527,7 @@ const suites = {
 		suiteStep("oauth-recovery"),
 		suiteStep("firebase-apple"),
 		suiteStep("client-sync"),
+		suiteStep("auth-startup"),
 		suiteStep("firebase-emulator-config"),
 		suiteStep("firebase-environment-web"),
 		suiteStep("firebase-rules"),

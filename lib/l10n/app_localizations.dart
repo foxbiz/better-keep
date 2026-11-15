@@ -990,12 +990,6 @@ abstract class AppLocalizations {
   /// **'Sign Out Anyway'**
   String get signOutAnyway;
 
-  /// Continue offline button text
-  ///
-  /// In en, this message translates to:
-  /// **'Continue Offline'**
-  String get continueOffline;
-
   /// Cancel sign in button text
   ///
   /// In en, this message translates to:
@@ -6851,6 +6845,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connecting…'**
   String get devicePairingConnecting;
+
+  /// No description provided for @signInConnectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection needed'**
+  String get signInConnectionTitle;
+
+  /// No description provided for @signInConnectionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to the internet to finish signing in on this device, then try again.'**
+  String get signInConnectionMessage;
 }
 
 class _AppLocalizationsDelegate

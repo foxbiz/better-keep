@@ -150,7 +150,6 @@
 	"primary": "主要",
 	"signOut": "退出登录",
 	"signOutAnyway": "仍然退出",
-	"continueOffline": "离线继续",
 	"cancelSignIn": "取消登录",
 	"signInWithFacebook": "使用 Facebook 登录",
 	"signInWithGithub": "使用 GitHub 登录",
@@ -1138,5 +1137,7 @@
   "devicePairingCodeLabel": "配对码",
   "devicePairingCodeExpired": "此配对码已不可用。请生成新的配对码。",
   "devicePairingCodeFailed": "请检查新设备上的配对码并重试。如果已过期，请生成新的配对码。",
-  "devicePairingConnecting": "正在连接…"
+  "devicePairingConnecting": "正在连接…",
+  "signInConnectionTitle": "需要网络连接",
+  "signInConnectionMessage": "请连接互联网以完成此设备上的登录，然后重试。"
 }

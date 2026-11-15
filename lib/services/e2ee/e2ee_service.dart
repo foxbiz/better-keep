@@ -262,8 +262,17 @@ class E2EEService {
         final authorization = await checked(
           () => verifyLocalSessionAuthorization(isCurrent: current),
         );
-        if (authorization == DeviceAuthorization.unavailable) {
+        if (authorization == DeviceAuthorization.unavailable ||
+            authorization == DeviceAuthorization.unconfirmed) {
           throw const CloudVerificationUnavailable();
+        }
+        if (authorization == DeviceAuthorization.initializing) {
+          // Registration was awaited above. A still-missing server identity
+          // cannot become approved by retrying this completed initializer (for
+          // example, another device registered first while this one was offline).
+          // Preserve its keys and let the user explicitly recover the account.
+          localState = LocalEncryptionState.needsRecovery;
+          status.value = E2EEStatus.needsRecovery;
         }
         return;
       }

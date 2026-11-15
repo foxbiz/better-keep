@@ -502,9 +502,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signOutAnyway => '仍然退出';
 
   @override
-  String get continueOffline => '离线继续';
-
-  @override
   String get cancelSignIn => '取消登录';
 
   @override
@@ -3662,4 +3659,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get devicePairingConnecting => '正在连接…';
+
+  @override
+  String get signInConnectionTitle => '需要网络连接';
+
+  @override
+  String get signInConnectionMessage => '请连接互联网以完成此设备上的登录，然后重试。';
 }

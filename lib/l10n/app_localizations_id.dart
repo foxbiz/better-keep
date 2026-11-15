@@ -554,9 +554,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get signOutAnyway => 'Tetap Keluar';
 
   @override
-  String get continueOffline => 'Lanjutkan Offline';
-
-  @override
   String get cancelSignIn => 'Batalkan Masuk';
 
   @override
@@ -3902,4 +3899,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get devicePairingConnecting => 'Menghubungkan…';
+
+  @override
+  String get signInConnectionTitle => 'Koneksi diperlukan';
+
+  @override
+  String get signInConnectionMessage =>
+      'Hubungkan ke internet untuk menyelesaikan proses masuk di perangkat ini, lalu coba lagi.';
 }
