@@ -249,16 +249,18 @@ void main() {
         notifyModels: true,
       );
       replicas.add(b);
-      final resumedRefresh = await refreshExternalSession(
-        b.session,
-        isCurrent: () => true,
-        progress: () => externalSyncProgress(
+      // Reopening must drain the durable inbox without a manual refresh.
+      await b.session.scheduler.waitForIdle().timeout(
+        const Duration(seconds: 30),
+      );
+      expect(
+        externalSyncProgress(
           connections: b.session.connections.connections.values,
           progress: b.session.scheduler.progress,
           automatic: false,
-        ),
+        ).phase,
+        SyncPhase.complete,
       );
-      expect(resumedRefresh, SyncRefreshOutcome.complete);
       expect(await b.db.query('note'), hasLength(9));
       expect(
         server.uploads,

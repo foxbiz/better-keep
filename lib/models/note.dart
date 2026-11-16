@@ -199,7 +199,7 @@ class Note extends BaseModel<Note> {
     return _lastAllocatedId;
   }
 
-  static final ModelSchema<Note> _schema = _createSchema();
+  static final _NoteSchema _schema = _createSchema();
   static const model = "note";
 
   static Future<bool> libraryIsEmpty(Database db) async =>
@@ -282,6 +282,8 @@ class Note extends BaseModel<Note> {
   List<NoteAttachment> attachments;
 
   final _mutationQueue = _AsyncMutationQueue();
+
+  bool _metadataOnly = false;
 
   bool _unlocked = false;
 
@@ -458,6 +460,34 @@ class Note extends BaseModel<Note> {
       null,
       matchAllLabels,
     ]);
+  }
+
+  /// Metadata-only notes reject persistence. Await mutations to handle the
+  /// resulting StateError. Scheduling re-reads the full note under its per-note
+  /// lock; notification planning needs display content.
+  /// Row order is unspecified; the notification planner sorts by due time/id.
+  static Future<List<Note>> getForReminderReconciliation({
+    bool includeNotificationContent = false,
+  }) async {
+    final rows = await AppState.db.query(
+      model,
+      columns: includeNotificationContent
+          ? null
+          : const ['id', 'reminder', 'completed', 'trashed'],
+      where: includeNotificationContent
+          ? 'trashed = 0 AND archived = 0 AND completed = 0 AND reminder IS NOT NULL'
+          : 'trashed = 0 AND archived = 0',
+    );
+    if (!includeNotificationContent) {
+      return rows
+          .map((row) => Note.fromJson(row).._metadataOnly = true)
+          .toList();
+    }
+    final notificationRows = rows.where(
+      (row) =>
+          _parseReminder(row['reminder'])?.type == ReminderType.notification,
+    );
+    return _schema.decodeRows(notificationRows.toList());
   }
 
   static Future<int> count(
@@ -856,6 +886,7 @@ class Note extends BaseModel<Note> {
     required Future<bool> Function(Transaction) commitAttachments,
     required SyncVersion incomingVersion,
   }) async {
+    _requireCompleteNote();
     if (incomingVersion.kind != SyncEntityKind.note ||
         incomingVersion.deleted ||
         incomingVersion.entityId != incoming['sync_id']) {
@@ -2080,7 +2111,13 @@ class Note extends BaseModel<Note> {
   /// so repair flows can persist it with an attachment-only guarded update.
   Future<bool> generateMissingAttachmentThumbnails({
     Future<Uint8List> Function(String path)? readBytes,
-  }) => _generateMissingAttachmentThumbnails(attachments, readBytes: readBytes);
+  }) async {
+    _requireCompleteNote();
+    return _generateMissingAttachmentThumbnails(
+      attachments,
+      readBytes: readBytes,
+    );
+  }
 
   static Future<bool> _generateMissingAttachmentThumbnails(
     List<NoteAttachment> targetAttachments, {
@@ -2716,6 +2753,7 @@ class Note extends BaseModel<Note> {
     String filePath,
     Uint8List plaintext,
   ) async {
+    _requireCompleteNote();
     if (filePath.isEmpty || filePath.startsWith('http')) {
       throw const NoteRelockException(
         'A local attachment path is required for saving',
@@ -2797,7 +2835,20 @@ class Note extends BaseModel<Note> {
     await ReminderCoordinator.instance.schedule(this);
   }
 
+  void _requireCompleteNote() {
+    if (_metadataOnly) {
+      throw StateError(
+        'Cannot persist a metadata-only note; reload the complete note',
+      );
+    }
+  }
+
   Future<T> _enqueueMutation<T>(Future<T> Function() action) {
+    try {
+      _requireCompleteNote();
+    } catch (error, stackTrace) {
+      return Future<T>.error(error, stackTrace);
+    }
     final database = AppState.get('db') as Database?;
     final repairs = database == null
         ? null
@@ -3149,6 +3200,7 @@ class Note extends BaseModel<Note> {
     bool trackSync = true,
     ModelChangeOrigin origin = ModelChangeOrigin.local,
   }) async {
+    _requireCompleteNote();
     // If id is null, the note was never saved - nothing to delete
     if (id == null) {
       return 0;
@@ -3607,7 +3659,7 @@ bool _publishAttachments(
   return true;
 }
 
-ModelSchema<Note> _createSchema() {
+_NoteSchema _createSchema() {
   final schema = _NoteSchema();
   BaseModel.registerSchema<Note>(schema);
   return schema;
@@ -3657,6 +3709,10 @@ class _NoteSchema implements ModelSchema<Note> {
   @override
   Future<List<Note>> get(List<dynamic> args) async {
     final rows = await getOrCountRows(false, args);
+    return await decodeRows(rows);
+  }
+
+  Future<List<Note>> decodeRows(List<Map<String, dynamic>> rows) async {
     // Bound in-flight field decryption when reopening a restored library.
     const batchSize = 16;
     final notes = <Note>[];

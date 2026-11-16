@@ -26,6 +26,43 @@ Sign-out closes the account and rotates its local file directory. The account_fi
 
 Authenticated startup is owned by the post-sign-in coordinator. The loading view must not automatically retry sign-in or set an encryption error based on elapsed time. Connection failures show localized connection guidance and an explicit Retry. Approved local sessions open Home automatically while cloud verification is unavailable; startup screens do not offer a redundant Continue Offline action. An interrupted registration with no authoritative device identity must resolve to explicit recovery, and nonauthoritative reads remain retryable rather than caching unfinished initialization. Optional native avatar downloads are bounded, shared between startup and widgets, and run outside required account initialization. Avatar results are account/session guarded and cached under the account library's profile_cache directory without new shared preference writes; pruning never lists the full note directory. Legacy preference paths are published only after checking file existence. Sign-out does not wait for optional avatar I/O; late writers remove their captured retired-account file and best-effort delete its empty retired library without recursion. Avatar URL changes prune only same-account cache files after a replacement is available; legacy shared support roots and unrelated files are preserved.
 
+## Home navigation and startup
+
+Home navigation uses `home_layout.dart`: a persistent sidebar requires at least
+800 dp usable width and 640 dp usable height, scaled up for large text. Keyboard
+insets do not change this mode. Short browser/device windows use a square-edged
+drawer whose navigation and footer scroll together. Titlebar buttons have 48 dp
+targets, 8 dp gaps between actions and compact 6 dp outer gutters, respecting
+each side's own safe inset. The avatar has a 20 dp radius (40 dp diameter) inside
+its 48 dp target. This navigation policy is intentionally separate from windowed
+editor/page routing.
+Selection counts scale down only when they exceed the remaining title space.
+Preserve the original sidebar tile styling: full-width square selection when
+expanded, original icon/label spacing and animated collapse.
+iPhone and full-screen Android phones are portrait-only; iPad and Android screens
+with a smallest width of at least 600 dp can rotate. Android multi-window/PiP
+keeps system-managed orientation. These are intentional product changes; device qualification is
+tracked in `docs/EXTERNAL_SYNC_QA.md`.
+
+Startup requests reminder reconciliation only after account-service startup
+returns successfully. A new drain waits for the next rendered frame without
+blocking startup; a request joining an existing drain retains its timing.
+Requests still coalesce and wait for bulk restore. The sweep reads reminder
+metadata only; notification
+planning decrypts content only for active notification candidates, retaining
+locked-note privacy and the existing archived/trashed exclusions. Scheduling
+re-reads each alarm note inside the per-note serializer. Metadata-only notes
+returned by `Note.getForReminderReconciliation()` reject queued mutations,
+deletion, remote commits and direct attachment writes before any database or
+attachment work. Callers must await mutations to handle the resulting StateError.
+
+The `client-sync` release suite includes `home_navigation_layout_test.dart` and
+`home_system_title_test.dart`; `reminders` includes reminder metadata/content
+selection and deferred startup reconciliation coverage.
+The `unit` release suite automatically discovers remaining `test/**/*_test.dart`
+files not assigned to focused suites, using Chrome for browser-only tests. A
+generic tooling check requires every Flutter test to appear in `release-core`.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -108,6 +145,7 @@ better-keep/
 │   ├── pages/                    # Screen-level widgets
 │   │   ├── home/                 # Main screen (home, notes grid, sidebar, labels, folders)
 │   │   │   ├── home.dart         # Dashboard shell with sidebar + notes grid
+│   │   │   ├── home_layout.dart  # Height, width, safe-area and text-size navigation policy
 │   │   │   ├── notes.dart        # Masonry grid / list / folder view
 │   │   │   ├── sidebar.dart      # Navigation sidebar (labels, archive, trash, folders)
 │   │   │   ├── labels.dart       # Label management

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:better_keep/components/sync_progress_widget.dart';
+import 'package:better_keep/components/animated_icon.dart';
 
 import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/firebase_backend.dart';
@@ -17,9 +18,11 @@ import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/pages/home/home.dart';
+import 'package:better_keep/pages/home/sidebar.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -38,6 +41,8 @@ void main() {
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     AppState.db = database;
     AppState.selectedNotes = [];
+    AppState.showNotes = NoteType.all;
+    AppState.filterLabels = [];
     AppState.currentFolder = null;
     AppState.set('notes_view_mode', NoteViewMode.grid);
     await Note.createTable(database);
@@ -59,6 +64,8 @@ void main() {
   tearDown(() async {
     AppState.selectedNotes = [];
     AppState.showNotes = NoteType.all;
+    AppState.currentFolder = null;
+    AppState.filterLabels = [];
     await sortService.dispose();
     await database.close();
   });
@@ -365,6 +372,328 @@ void main() {
     },
   );
 
+  testWidgets('titlebar buttons have uniform targets and safe-area gutters', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      for (final note in [
+        Note(id: 1, title: 'Selected', content: '[]'),
+        Note(id: 2, title: 'Archived', content: '[]', archived: true),
+        Note(id: 3, title: 'Trashed', content: '[]', trashed: true),
+      ]) {
+        await database.insert(Note.model, note.toJson());
+      }
+    });
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewPadding);
+    for (final (size, padding, direction, platform) in [
+      (
+        const Size(320, 640),
+        const FakeViewPadding(),
+        TextDirection.ltr,
+        TargetPlatform.android,
+      ),
+      (
+        const Size(390, 800),
+        const FakeViewPadding(top: 24),
+        TextDirection.ltr,
+        TargetPlatform.iOS,
+      ),
+      (
+        const Size(852, 393),
+        const FakeViewPadding(left: 59, right: 20),
+        TextDirection.ltr,
+        TargetPlatform.macOS,
+      ),
+      (
+        const Size(852, 393),
+        const FakeViewPadding(left: 20, right: 59),
+        TextDirection.rtl,
+        TargetPlatform.macOS,
+      ),
+      (
+        const Size(1100, 800),
+        const FakeViewPadding(),
+        TextDirection.ltr,
+        TargetPlatform.macOS,
+      ),
+      (
+        const Size(1100, 800),
+        const FakeViewPadding(),
+        TextDirection.rtl,
+        TargetPlatform.macOS,
+      ),
+      (
+        const Size(1100, 800),
+        const FakeViewPadding(),
+        TextDirection.ltr,
+        TargetPlatform.android,
+      ),
+    ]) {
+      tester.view.physicalSize = size;
+      tester.view.padding = padding;
+      tester.view.viewPadding = padding;
+      for (final (type, selected) in [
+        (NoteType.all, false),
+        (NoteType.archived, false),
+        (NoteType.trashed, false),
+        (NoteType.all, true),
+      ]) {
+        AppState.showNotes = type;
+        AppState.selectedNotes = selected
+            ? [Note(id: 1, title: 'Selected')]
+            : [];
+        await tester.pumpWidget(
+          _app(
+            Directionality(textDirection: direction, child: const Home()),
+            platform: platform,
+          ),
+        );
+        await _drainDatabaseWork(tester);
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pump();
+        final buttons = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(IconButton),
+        );
+        final rects =
+            buttons
+                .evaluate()
+                .map((element) => tester.getRect(find.byWidget(element.widget)))
+                .toList()
+              ..sort((a, b) => a.left.compareTo(b.left));
+        expect(rects.length, greaterThanOrEqualTo(2));
+        for (final rect in rects) {
+          expect(rect.size, const Size.square(48));
+          expect(rect.top, padding.top + 6);
+        }
+        // Each end uses only its own safe inset; never mirror extra whitespace.
+        expect(rects.first.left, padding.left + 6);
+        expect(size.width - rects.last.right, padding.right + 6);
+        final actions = direction == TextDirection.ltr
+            ? rects.skip(1).toList()
+            : rects.take(rects.length - 1).toList();
+        for (var i = 1; i < actions.length; i++) {
+          expect(actions[i].left - actions[i - 1].right, 8);
+        }
+        if (selected) {
+          await tester.tap(find.byTooltip('Close'));
+          await tester.pump(const Duration(seconds: 4));
+          await tester.pump();
+          expect(AppState.selectedNotes, isEmpty);
+        } else if (type == NoteType.all) {
+          expect(find.byTooltip('User').hitTestable(), findsOneWidget);
+          final avatar = find.descendant(
+            of: find.byType(UserAvatar),
+            matching: find.byType(CircleAvatar),
+          );
+          expect(tester.getSize(avatar), const Size.square(40));
+          final desktopRefresh =
+              platform == TargetPlatform.macOS && size.shortestSide > 600;
+          expect(
+            find.byType(SyncRefreshButton),
+            desktopRefresh ? findsOneWidget : findsNothing,
+          );
+          if (size.width < 800 || size.height < 640) {
+            expect(
+              tester.getCenter(find.byType(TextField)).dx,
+              (size.width + padding.left - padding.right) / 2,
+            );
+          }
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainDatabaseWork(tester);
+      }
+    }
+  });
+
+  testWidgets('selection count is not clipped at 320 dp with large text', (
+    tester,
+  ) async {
+    final note = Note(id: 1, title: 'Selected', content: '[]');
+    await tester.runAsync(() => database.insert(Note.model, note.toJson()));
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    try {
+      for (final direction in [TextDirection.ltr, TextDirection.rtl]) {
+        AppState.selectedNotes = [note];
+        await tester.pumpWidget(
+          _app(
+            MediaQuery(
+              data: MediaQueryData(
+                size: const Size(320, 640),
+                textScaler: TextScaler.linear(2),
+              ),
+              child: Directionality(
+                textDirection: direction,
+                child: const Home(),
+              ),
+            ),
+            platform: TargetPlatform.android,
+          ),
+        );
+        await _drainDatabaseWork(tester);
+        final count = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('1'),
+        );
+        final paragraph = tester.renderObject<RenderParagraph>(count);
+        final glyph = paragraph
+            .getBoxesForSelection(
+              const TextSelection(baseOffset: 0, extentOffset: 1),
+            )
+            .single;
+        expect(glyph.left, greaterThanOrEqualTo(0));
+        expect(glyph.right, lessThanOrEqualTo(paragraph.size.width));
+        final bar = tester.widget<AppBar>(find.byType(AppBar));
+        final titleBounds = tester.getRect(find.byWidget(bar.title!));
+        final countBounds = tester.getRect(count);
+        expect(countBounds.left, greaterThanOrEqualTo(titleBounds.left));
+        expect(countBounds.right, lessThanOrEqualTo(titleBounds.right));
+        expect(countBounds.width, greaterThan(0));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainDatabaseWork(tester);
+      }
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainDatabaseWork(tester);
+    }
+  });
+
+  testWidgets('phone search stays usable at 320 dp with large text', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    try {
+      for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+        for (final direction in [TextDirection.ltr, TextDirection.rtl]) {
+          await tester.pumpWidget(
+            _app(
+              MediaQuery(
+                data: MediaQueryData(
+                  size: const Size(320, 640),
+                  textScaler: TextScaler.linear(2),
+                ),
+                child: Directionality(
+                  textDirection: direction,
+                  child: const Home(),
+                ),
+              ),
+              platform: platform,
+            ),
+          );
+          await _drainDatabaseWork(tester);
+          await tester.tap(find.byType(TextField));
+          await tester.enterText(find.byType(TextField), 'Search notes');
+          await tester.pump(const Duration(milliseconds: 300));
+          await _drainDatabaseWork(tester);
+          final bar = tester.widget<AppBar>(find.byType(AppBar));
+          expect(bar.leading, isNull);
+          expect(bar.actions, isEmpty);
+          final field = tester.getRect(find.byType(TextField));
+          expect(field.left, 6);
+          expect(field.right, 314);
+          final clear = find.ancestor(
+            of: find.byIcon(Icons.clear),
+            matching: find.byType(IconButton),
+          );
+          expect(tester.getSize(clear), const Size.square(48));
+          await tester.tap(clear);
+          await tester.pump(const Duration(milliseconds: 300));
+          await _drainDatabaseWork(tester);
+          expect(
+            tester.widget<TextField>(find.byType(TextField)).controller!.text,
+            isEmpty,
+          );
+          expect(find.byTooltip('User').hitTestable(), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await _drainDatabaseWork(tester);
+        }
+      }
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainDatabaseWork(tester);
+    }
+  });
+
+  testWidgets('home changes to a usable drawer when a wide window gets short', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1100, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    AppState.showNotes = NoteType.all;
+    await tester.pumpWidget(_app(const Home()));
+    await _drainDatabaseWork(tester);
+    final notesState = tester.state(find.byType(Notes));
+    expect(tester.widget<Sidebar>(find.byType(Sidebar)).persistent, isTrue);
+    final homeScaffold = find.descendant(
+      of: find.byType(Home),
+      matching: find.byType(Scaffold),
+    );
+    final scaffold = tester.state<ScaffoldState>(homeScaffold);
+    expect(tester.widget<Scaffold>(homeScaffold).drawer, isNull);
+
+    for (final size in [const Size(852, 393), const Size(1440, 450)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(tester.widget<Scaffold>(homeScaffold).drawer, isNotNull);
+      expect(find.byType(Sidebar), findsNothing);
+      expect(tester.state(find.byType(Notes)), same(notesState));
+      expect(tester.getSize(find.byType(Notes)).width, size.width);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byIcon(Icons.add).hitTestable(), findsOneWidget);
+      scaffold.openDrawer();
+      await tester.pumpAndSettle();
+      expect(tester.widget<Sidebar>(find.byType(Sidebar)).persistent, isFalse);
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      await _drainDatabaseWork(tester);
+      expect(scaffold.isDrawerOpen, isFalse);
+      expect(AppState.showNotes, NoteType.archived);
+      expect(find.byType(Home), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      AppState.showNotes = NoteType.all;
+      await _drainDatabaseWork(tester);
+    }
+
+    scaffold.openDrawer();
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(1100, 800);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Sidebar>(find.byType(Sidebar)).persistent, isTrue);
+    expect(tester.state(find.byType(Notes)), same(notesState));
+    expect(find.byType(TextField).hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    final toggle = find.ancestor(
+      of: find.byType(AnimatedMenuIcon),
+      matching: find.byType(IconButton),
+    );
+    for (final collapsed in [true, false]) {
+      await tester.tap(toggle);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Sidebar>(find.byType(Sidebar)).shrink, collapsed);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainDatabaseWork(tester);
+  });
+
   testWidgets('opening the create menu preserves a dismissed sync failure', (
     tester,
   ) async {
@@ -434,7 +763,10 @@ void main() {
         expect(find.byKey(const ValueKey('sync_progress')), findsNothing);
       }
       await tester.drag(
-        find.byType(CustomScrollView).first,
+        find.descendant(
+          of: find.byType(Notes),
+          matching: find.byType(CustomScrollView),
+        ),
         const Offset(0, 500),
       );
       await tester.pump();
@@ -563,9 +895,9 @@ void main() {
           reason: '$label should keep configure at the trailing edge',
         );
         if (type == NoteType.trashed) {
-          final deleteAction =
-              appBarWidget.actions![appBarWidget.actions!.length - 2]
-                  as IconButton;
+          final deleteAction = appBarWidget.actions!
+              .whereType<IconButton>()
+              .last;
           expect((deleteAction.icon as Icon).icon, Icons.delete_forever);
         }
 
@@ -625,13 +957,18 @@ void main() {
 }
 
 Future<void> _drainDatabaseWork(WidgetTester tester) async {
-  await tester.runAsync(
-    () => Future<void>.delayed(const Duration(milliseconds: 250)),
-  );
-  await tester.pump();
+  // Queries cross between the real SQLite isolate and the test's fake clock.
+  // Flush both queues so chained reads can finish before assertions run.
+  for (var i = 0; i < 10; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 25)),
+    );
+    await tester.pump();
+  }
 }
 
-Widget _app(Widget home) => MaterialApp(
+Widget _app(Widget home, {TargetPlatform? platform}) => MaterialApp(
+  theme: ThemeData(platform: platform),
   scaffoldMessengerKey: AppState.scaffoldMessengerKey,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,

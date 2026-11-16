@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Short windows use a scrollable navigation drawer instead of a cramped sidebar, with consistent titlebar touch targets and safe-area spacing.
+- Empty-note and search-result messages wrap correctly on narrow screens with large text.
+- Selection counts remain visible on narrow screens with large text.
+- Reminder repair no longer delays account restoration and avoids decrypting unrelated notes during its sweep.
 - Device pairing can recover interrupted approval publication without accepting a server-supplied key. Code pairing prevents method changes during approval and offers retry after an abandoned handoff.
 - Account deletion durably revokes sessions before allowing cancellation or a new sign-in, with retry on service outages.
 - Admin deployment builds the configured artifact directory and verifies the published dashboard. Release checks now include pairing and both web storage modes.
@@ -29,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- iPhones and full-screen Android phones use portrait orientation; iPads and large Android screens retain rotation. Android multi-window orientation remains system-managed.
 - An approved browser stays trusted when you reopen it. Sign out of Better Keep before leaving a shared browser.
 - You can keep working on downloaded notes offline. Refresh stays quiet on mobile and web, and sync is available again when you reconnect.
 - Account deletion now requires an atomic OTP-backed request, protects deletion fields

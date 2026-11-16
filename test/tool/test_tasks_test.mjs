@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import {
 	TEST_SUITE_NAMES,
@@ -91,6 +92,7 @@ test("lists every supported suite and treats an omitted suite as help", () => {
 		"review-prompts",
 		"search",
 		"subscription-management",
+		"unit",
 		"visibility",
 		"web-logout",
 		"web-release",
@@ -214,6 +216,39 @@ test("focused PR suites pin every required Flutter test path", () => {
 				type: "process",
 			},
 		]);
+	}
+});
+
+test("release gate registers every Flutter test, including browser-only files", () => {
+	const operations = resolveTestTask(["release-core"]).operations;
+	const args = operations.flatMap((operation) => operation.args ?? []).join(" ");
+	for (const relative of readdirSync("test", { recursive: true })) {
+		if (!relative.endsWith("_test.dart")) continue;
+		const file = `test/${relative.split(path.sep).join("/")}`;
+		assert.ok(args.includes(file), `${file} must run in release-core`);
+	}
+});
+
+test("fallback unit suite avoids focused suites and routes browser tests to Chrome", () => {
+	const fallback = resolveTestTask(["unit"]).operations;
+	const focused = TEST_SUITE_NAMES.filter(
+		(name) => !["unit", "release", "release-core"].includes(name),
+	)
+		.flatMap((name) => resolveTestTask([name]).operations)
+		.flatMap((operation) => operation.args ?? [])
+		.join(" ");
+	for (const operation of fallback) {
+		for (const file of operation.args.filter((arg) => arg.endsWith("_test.dart"))) {
+			assert.ok(!focused.includes(file), `${file} already has a focused suite`);
+			if (file === "test/storage_authorization_popup_test.dart") {
+				assert.ok(operation.args.includes("--dart-define=DROPBOX_CLIENT_ID=synthetic-client"));
+			}
+			assert.equal(
+				operation.args.includes("chrome"),
+				/@TestOn\(['"]browser['"]\)/.test(readFileSync(file, "utf8")),
+				file,
+			);
+		}
 	}
 });
 

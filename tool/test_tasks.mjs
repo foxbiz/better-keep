@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import path from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
 import { chromeBinary } from "./chrome_binary.mjs";
 import { fileURLToPath } from "node:url";
 import { runFirebaseCli } from "./firebase_cli.mjs";
@@ -41,6 +42,46 @@ function flutterTests(files) {
 	return processStep("flutter", ["test", ...files]);
 }
 
+function remainingUnitTests() {
+	// Focused suites keep their platform/configuration; only unassigned tests
+	// enter this fallback so adding a file cannot silently omit release coverage.
+	const dedicated = new Set();
+	for (const [name, suite] of Object.entries(suites)) {
+		if (["release", "release-core", "unit"].includes(name)) continue;
+		for (const step of suite.createSteps([])) {
+			for (const argument of step.args ?? []) {
+				for (const file of argument.matchAll(/\btest\/[\w/.-]+_test\.dart\b/g)) {
+					dedicated.add(file[0]);
+				}
+			}
+		}
+	}
+	const vm = [];
+	const browser = [];
+	const files = readdirSync(path.join(repositoryRoot, "test"), {
+		recursive: true,
+	}).sort();
+	for (const relative of files) {
+		if (!relative.endsWith("_test.dart")) continue;
+		const file = `test/${relative.split(path.sep).join("/")}`;
+		if (dedicated.has(file)) continue;
+		const source = readFileSync(path.join(repositoryRoot, file), "utf8");
+		(/@TestOn\(['"]browser['"]\)/.test(source) ? browser : vm).push(file);
+	}
+	return [
+		...(vm.length ? [flutterTests(vm)] : []),
+		...(browser.length
+			? [processStep("flutter", [
+				"test", "--platform", "chrome",
+				"--dart-define=DROPBOX_CLIENT_ID=synthetic-client",
+				...browser,
+			], {
+				CHROME_EXECUTABLE: chromeBinary(),
+			})]
+			: []),
+	];
+}
+
 function webReleaseChecks() {
 	return [
 		processStep("./scripts/build_web.sh", []),
@@ -72,6 +113,10 @@ function webReleaseChecks() {
 }
 
 const suites = {
+	unit: defineSuite(
+		"Run remaining unit/widget tests and browser-only regressions.",
+		remainingUnitTests,
+	),
 	"device-pairing": defineSuite(
 		"Run pairing protocol, service, and UI regressions.",
 		() => [
@@ -107,6 +152,7 @@ const suites = {
 		flutterTests([
 			"test/async_keyed_serializer_test.dart",
 			"test/home_system_title_test.dart",
+			"test/home_navigation_layout_test.dart",
 			"test/sketch_preview_repair_service_test.dart",
 			"test/storage_logout_test.dart",
 			"test/sync_presentation_test.dart",
@@ -361,6 +407,7 @@ const suites = {
 			"test/reminder_notification_plan_test.dart",
 			"test/reminder_notification_registration_test.dart",
 			"test/reminder_schedule_concurrency_test.dart",
+			"test/reminder_reconciliation_notes_test.dart",
 			"test/reminder_session_service_test.dart",
 			"test/reminder_sync_codec_test.dart",
 			"test/reminder_test.dart",
@@ -534,6 +581,7 @@ const suites = {
 		suiteStep("firebase-emulator-functions"),
 		suiteStep("firebase-emulator-deletion"),
 		suiteStep("firebase-emulator-review"),
+		suiteStep("unit"),
 	]),
 	"windows-build-policy": defineSuite("Run Windows build policy tests.", () => [
 		processStep("node", ["--test", "test/tool/windows_build_policy_test.mjs"]),

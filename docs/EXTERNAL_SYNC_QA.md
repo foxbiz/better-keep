@@ -1,5 +1,22 @@
 # External sync QA — 24 October 2026
 
+## 2026-11-16 navigation and startup qualification
+
+Automated coverage: `npm test -- client-sync`, `npm test -- reminders`.
+Reopening an interrupted external restore must drain the durable inbox without a
+manual refresh; the platform test verifies note/media integrity and no uploads.
+
+Physical-device checks remain pending before release:
+
+- [ ] iPhone stays portrait after launch from landscape; iPad rotates both ways.
+- [ ] Android phone stays portrait; tablet and unfolded large foldable rotate.
+- [ ] Fold/unfold and enter/exit split-screen, DeX/freeform or ChromeOS windows;
+      resizing must not force the managed window into portrait.
+- [ ] Short browser windows use a square drawer; every action remains reachable
+      with large text, and search/selection controls remain usable at 320 dp.
+- [ ] With a large local library, account restoration remains responsive and
+      existing notification/alarm reminders are repaired after startup.
+
 ## 2026-11-01 download-only release checks
 
 Older dated entries below describe their original runs only.

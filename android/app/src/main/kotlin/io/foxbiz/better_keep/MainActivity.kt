@@ -1,5 +1,7 @@
 package io.foxbiz.better_keep
 
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -30,7 +32,29 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configureOrientation(resources.configuration)
         configureEdgeToEdge()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        configureOrientation(newConfig)
+    }
+
+    private fun configureOrientation(configuration: Configuration) {
+        // Let the system own rotation while the activity is in a managed window.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+            (isInMultiWindowMode || isInPictureInPictureMode)
+        ) return
+        // Keep phones upright; tablets and unfolded large screens can rotate.
+        val orientation = if (configuration.smallestScreenWidthDp >= 600) {
+            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        if (requestedOrientation != orientation) {
+            requestedOrientation = orientation
+        }
     }
 
     @Suppress("DEPRECATION")

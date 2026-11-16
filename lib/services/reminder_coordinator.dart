@@ -308,7 +308,7 @@ class ReminderCoordinator {
       }
       final timeZoneChanged = await LocalNotificationService.instance
           .refreshTimeZone();
-      final notes = await Note.get(NoteType.all);
+      final notes = await Note.getForReminderReconciliation();
       for (final note in notes) {
         // A large restore may still be reconciling when the user signs out.
         // Leave the remaining deliveries to the account-wide cleanup.
@@ -344,11 +344,15 @@ class ReminderCoordinator {
 
   /// Requests a best-effort repair without blocking note synchronization.
   /// Concurrent requests are folded into at most one follow-up pass.
-  void requestReconciliation() {
+  /// [afterFrame] delays a newly started drain until the frame ends. Requests
+  /// joining an existing drain keep that drain's timing, even if it has started.
+  void requestReconciliation({bool afterFrame = false}) {
     _reconciliationRequested = true;
-    _reconciliationDrain ??= Future<void>.microtask(
-      _drainRequestedReconciliations,
-    );
+    _reconciliationDrain ??= afterFrame
+        ? WidgetsBinding.instance.endOfFrame.then(
+            (_) => _drainRequestedReconciliations(),
+          )
+        : Future<void>.microtask(_drainRequestedReconciliations);
   }
 
   @visibleForTesting
@@ -439,7 +443,9 @@ class ReminderCoordinator {
           return null;
         }
         final deliveryGeneration = await notifications.prepareDeliveries();
-        final notes = await Note.get(NoteType.all);
+        final notes = await Note.getForReminderReconciliation(
+          includeNotificationContent: true,
+        );
         final candidates = <ReminderNotificationCandidate>[];
         for (final current in notes) {
           final reminder = current.reminder;

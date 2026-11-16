@@ -473,6 +473,9 @@ class _BetterKeepState extends State<BetterKeep> {
     } finally {
       completeImageIntentStartup(intentsReady);
     }
+    if (mounted) {
+      ReminderCoordinator.instance.requestReconciliation(afterFrame: true);
+    }
   }
 
   Future<void> _initializeOptionalReminderServices() async {
@@ -480,7 +483,6 @@ class _BetterKeepState extends State<BetterKeep> {
       await ReminderCoordinator.instance.init();
       ReminderCoordinator.instance.attachUiActionListener();
       await ReminderCoordinator.instance.consumePendingUiActions();
-      await ReminderCoordinator.instance.reconcileAll();
     } catch (error, stackTrace) {
       await AppLogger.error(
         '[Main] Reminder services unavailable; startup will continue',

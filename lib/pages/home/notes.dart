@@ -1254,9 +1254,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
 
     if (_notes!.isEmpty) {
       final (icon, message) = _getEmptyStateContent();
-      return SizedBox(
-        height: MediaQuery.of(context).size.height * 0.6,
+      return ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1265,9 +1268,12 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
               children: [
                 Icon(icon, size: 48, color: Colors.grey),
                 const SizedBox(width: 16),
-                Text(
-                  message,
-                  style: const TextStyle(fontSize: 24, color: Colors.grey),
+                Flexible(
+                  child: Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, color: Colors.grey),
+                  ),
                 ),
               ],
             ),

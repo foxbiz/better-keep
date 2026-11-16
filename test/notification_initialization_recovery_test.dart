@@ -76,6 +76,38 @@ void main() {
     expect(passes, 2);
   });
 
+  testWidgets(
+    'startup reminder repair waits for a frame and coalesces requests',
+    (tester) async {
+      var passes = 0;
+      final coordinator = ReminderCoordinator.forTesting(
+        reconcile: () async => passes++,
+      );
+      coordinator.requestReconciliation(afterFrame: true);
+      coordinator.requestReconciliation();
+      await Future<void>.microtask(() {});
+      expect(passes, 0);
+      await tester.pump();
+      await coordinator.waitForRequestedReconciliation();
+      expect(passes, 1);
+    },
+  );
+
+  testWidgets('a frame request does not delay an already queued repair', (
+    tester,
+  ) async {
+    var passes = 0;
+    final coordinator = ReminderCoordinator.forTesting(
+      reconcile: () async => passes++,
+    );
+    coordinator.requestReconciliation();
+    coordinator.requestReconciliation(afterFrame: true);
+    await coordinator.waitForRequestedReconciliation();
+    expect(passes, 1);
+    await tester.pump();
+    expect(passes, 1);
+  });
+
   test('interrupted bulk restore releases one pending reminder scan', () async {
     var scans = 0;
     final coordinator = ReminderCoordinator.forTesting(
