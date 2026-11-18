@@ -89,6 +89,23 @@ class CloudSessionRecovery {
   int _generation = 0;
   int _accountGeneration = 0;
   bool _foreground = true;
+  bool _networkAvailable = true;
+  bool get networkAvailable => _networkAvailable;
+
+  void setNetworkAvailable(bool available) {
+    if (_networkAvailable == available) return;
+    _networkAvailable = available;
+    if (!available) {
+      _generation++;
+      _running = null;
+      _recheck = null;
+      _retry.cancel();
+      connectionLost();
+    } else if (_foreground && _uid != null) {
+      unawaited(check());
+    }
+  }
+
   Future<CloudSessionState>? _running;
   Future<CloudSessionState>? _recheck;
   Future<void>? _resuming;
@@ -104,13 +121,16 @@ class CloudSessionRecovery {
     if (_uid == uid) return;
     stop();
     _uid = uid;
-    state.value = CloudSessionState.pending;
+    state.value = _networkAvailable
+        ? CloudSessionState.pending
+        : CloudSessionState.unavailable;
     // Pending may already be the state; publish the newly available session.
     sessionRevision.value++;
   }
 
   Future<CloudSessionState> check() {
     if (_uid == null) return Future.value(CloudSessionState.blocked);
+    if (!_networkAvailable) return Future.value(CloudSessionState.unavailable);
     final running = _running;
     if (running != null) return running;
     final generation = ++_generation;
@@ -230,7 +250,9 @@ class CloudSessionRecovery {
   }
 
   void _schedule() {
-    if (_foreground && _uid != null) _retry.schedule(check);
+    if (_networkAvailable && _foreground && _uid != null) {
+      _retry.schedule(check);
+    }
   }
 
   void setForeground(bool foreground) {

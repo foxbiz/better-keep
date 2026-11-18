@@ -1,4 +1,5 @@
 import Flutter
+import GoogleSignIn
 import UIKit
 import BackgroundTasks
 import UserNotifications
@@ -36,6 +37,34 @@ import flutter_local_notifications
       GeneratedPluginRegistrant.register(with: registry)
     }
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ImageShareInbox") {
+      let channel = FlutterMethodChannel(name: "com.betterkeep/image_shares", binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        do {
+          switch call.method {
+          case "pending":
+            result(try ImageShareInbox.pending())
+          case "complete", "failed":
+            guard let id = call.arguments as? String else {
+              result(FlutterError(code: "invalid_share", message: "Missing share ID", details: nil))
+              return
+            }
+            if call.method == "failed" {
+              result(try ImageShareInbox.failed(id))
+            } else {
+              try ImageShareInbox.complete(id)
+              result(nil)
+            }
+          default:
+            result(FlutterMethodNotImplemented)
+          }
+        } catch ImageShareError.unavailable {
+          result(FlutterError(code: "image_share_unavailable", message: "Image share container is unavailable", details: nil))
+        } catch {
+          result(FlutterError(code: "image_share_failed", message: error.localizedDescription, details: nil))
+        }
+      }
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "StorageHealth") {
       let channel = FlutterMethodChannel(
         name: "com.betterkeep/storage", binaryMessenger: registrar.messenger())
@@ -58,6 +87,33 @@ import flutter_local_notifications
         }
       }
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BetterKeepStorageGoogle") {
+      let channel = FlutterMethodChannel(name: "com.betterkeep/storage_google", binaryMessenger: registrar.messenger())
+    channel.setMethodCallHandler { call, result in
+      let signIn = GIDSignIn.sharedInstance
+      if call.method == "clientId" {
+        result(signIn.configuration?.clientID)
+        return
+      }
+      guard call.method == "grant" else { result(FlutterMethodNotImplemented); return }
+      guard let user = signIn.currentUser else {
+        result(FlutterError(code: "consent_required", message: "Authorize Google Drive again", details: nil)); return
+      }
+      user.refreshTokensIfNeeded { refreshed, error in
+        guard error == nil, let refreshed = refreshed,
+          let expiry = refreshed.accessToken.expirationDate else {
+          result(FlutterError(code: "consent_required", message: "Authorize Google Drive again", details: nil)); return
+        }
+        result([
+          "clientId": refreshed.configuration.clientID,
+          "accessToken": refreshed.accessToken.tokenString,
+          "refreshToken": refreshed.refreshToken.tokenString,
+          "expiresAt": Int64(expiry.timeIntervalSince1970 * 1000)
+        ])
+      }
+    }
+    }
+
   }
 
   @available(iOS 13.0, *)

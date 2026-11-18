@@ -1,5 +1,4 @@
 import 'subscription_status.dart';
-import 'user_plan.dart';
 
 class SubscriptionSnapshotResolution {
   const SubscriptionSnapshotResolution({
@@ -68,7 +67,7 @@ SubscriptionSnapshotResolution resolveSubscriptionSnapshot({
 
 bool _isActiveProviderAt(SubscriptionStatus? status, DateTime now) {
   if (status == null ||
-      status.plan != UserPlan.pro ||
+      !status.plan.isPaid ||
       status.expiresAt == null ||
       !status.expiresAt!.isAfter(now)) {
     return false;

@@ -36,10 +36,8 @@ abstract final class CustomIcons {
   /// Also known as: rubber, clear
   static const IconData eraser = IconData(0xe906, fontFamily: _fontFamily);
 
-  /// Icon: **file-empty1** — `U+E907`
-  ///
-  /// Also known as: file1, document1, paper1, page1, new1, empty1, blank1
-  static const IconData fileEmpty = IconData(0xe907, fontFamily: _fontFamily);
+  /// Icon: **empty-page** — `U+E907`
+  static const IconData emptyPage = IconData(0xe907, fontFamily: _fontFamily);
 
   /// Icon: **highlight** — `U+E908`
   ///
@@ -284,4 +282,19 @@ abstract final class CustomIcons {
   ///
   /// Also known as: left1, arrow-left1
   static const IconData undo = IconData(0xe934, fontFamily: _fontFamily);
+
+  /// Icon: **nextcloud** — `U+E935`
+  static const IconData nextcloud = IconData(0xe935, fontFamily: _fontFamily);
+
+  /// Icon: **dropbox** — `U+E936`
+  static const IconData dropbox = IconData(0xe936, fontFamily: _fontFamily);
+
+  /// Icon: **googledrive** — `U+E937`
+  static const IconData googledrive = IconData(0xe937, fontFamily: _fontFamily);
+
+  /// Icon: **microsoftonedrive** — `U+E938`
+  static const IconData microsoftonedrive = IconData(
+    0xe938,
+    fontFamily: _fontFamily,
+  );
 }

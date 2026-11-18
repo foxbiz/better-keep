@@ -1,3 +1,5 @@
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
+
 import 'dart:async';
 
 import 'package:better_keep/components/auth_scaffold.dart';
@@ -173,6 +175,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
 
   Future<void> _signOut() async {
     try {
+      if (!await confirmDeviceSignOut(context)) return;
       await AuthService.signOut();
     } catch (e) {
       AppLogger.error('Error signing out: $e');

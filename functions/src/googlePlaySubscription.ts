@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { evaluateSubscription } from "./subscriptionEntitlement";
+import { playSubscriptionProduct } from "./subscriptionProducts";
 
 interface PlayLineItem {
 	autoRenewingPlan?: { autoRenewEnabled?: boolean | null } | null;
@@ -34,7 +35,7 @@ function latestLineItem(
 	const matching = productId
 		? lineItems.filter((lineItem) => lineItem.productId === productId)
 		: lineItems;
-	const candidates = matching.length > 0 ? matching : lineItems;
+	const candidates = matching;
 	return (
 		[...candidates].sort(
 			(a, b) =>
@@ -62,8 +63,12 @@ export function normalizeGooglePlaySubscription({
 	const subscriptionState = resource.subscriptionState ?? null;
 	const environment = resource.testPurchase ? "test" : "production";
 	const autoRenewEnabled = lineItem?.autoRenewingPlan?.autoRenewEnabled;
+	const product = playSubscriptionProduct(
+		lineItem?.productId ?? "",
+		lineItem?.offerDetails?.basePlanId ?? "",
+	);
 	const baseData: Record<string, unknown> = {
-		plan: "pro",
+		plan: product?.plan ?? "free",
 		source: "play_store",
 		environment,
 		userId,
@@ -71,10 +76,7 @@ export function normalizeGooglePlaySubscription({
 		purchaseToken,
 		basePlanId: lineItem?.offerDetails?.basePlanId ?? null,
 		offerId: lineItem?.offerDetails?.offerId ?? null,
-		billingPeriod:
-			lineItem?.offerDetails?.basePlanId === "pro-yearly"
-				? "yearly"
-				: "monthly",
+		billingPeriod: product?.period ?? null,
 		subscriptionState,
 		renewalState:
 			typeof autoRenewEnabled === "boolean"

@@ -18,10 +18,15 @@ class Entitlements {
   /// Whether the user can export notes (available to all)
   final bool canExport;
 
+  /// Automatic external-provider transfers and remote change notifications.
+  /// Manual external sync is available to every plan.
+  final bool automaticExternalSync;
+
   const Entitlements({
     required this.maxLockedNotes,
     required this.realtimeCloudSync,
     required this.canExport,
+    this.automaticExternalSync = false,
   });
 
   /// Free tier entitlements
@@ -31,8 +36,16 @@ class Entitlements {
     canExport: true,
   );
 
+  static const Entitlements lite = Entitlements(
+    maxLockedNotes: 5,
+    realtimeCloudSync: false,
+    canExport: true,
+    automaticExternalSync: true,
+  );
+
   /// Pro tier entitlements
   static const Entitlements pro = Entitlements(
+    automaticExternalSync: true,
     maxLockedNotes: -1, // Unlimited
     realtimeCloudSync: true,
     canExport: true,
@@ -43,6 +56,8 @@ class Entitlements {
     switch (plan) {
       case UserPlan.free:
         return free;
+      case UserPlan.lite:
+        return lite;
       case UserPlan.pro:
         return pro;
     }
@@ -62,11 +77,14 @@ class Entitlements {
     int? maxLockedNotes,
     bool? realtimeCloudSync,
     bool? canExport,
+    bool? automaticExternalSync,
   }) {
     return Entitlements(
       maxLockedNotes: maxLockedNotes ?? this.maxLockedNotes,
       realtimeCloudSync: realtimeCloudSync ?? this.realtimeCloudSync,
       canExport: canExport ?? this.canExport,
+      automaticExternalSync:
+          automaticExternalSync ?? this.automaticExternalSync,
     );
   }
 

@@ -1,5 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 
+import 'firebase_backend.dart';
+import 'web_release.dart';
+
 /// Runs one asynchronous default-app initialization at a time and recovers
 /// when the platform reports that the app was initialized by another isolate.
 class SingleFlightDefaultAppInitializer<T> {
@@ -46,11 +49,14 @@ _defaultFirebaseAppInitializer =
 Future<FirebaseApp> initializeDefaultFirebaseApp(FirebaseOptions options) =>
     _defaultFirebaseAppInitializer.initialize(
       currentApps: () => Firebase.apps,
-      isDefaultApp: (app) => app.name == defaultFirebaseAppName,
-      createApp: () => Firebase.initializeApp(options: options),
+      isDefaultApp: (app) => app.name == webFirebaseAppName,
+      createApp: () => Firebase.initializeApp(
+        name: isBetaWebBuild ? webFirebaseAppName : null,
+        options: options,
+      ),
       isDuplicateAppError: (error) =>
           error is FirebaseException &&
           error.plugin == 'core' &&
           error.code == 'duplicate-app',
-      currentDefaultApp: Firebase.app,
+      currentDefaultApp: () => FirebaseBackend.defaultApp,
     );

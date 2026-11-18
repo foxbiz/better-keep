@@ -215,12 +215,13 @@ export async function openOAuthState(
 export function oauthCookieHeader(
 	browserNonce: string,
 	maxAgeSeconds = Math.floor(OAUTH_STATE_TTL_MS / 1000),
+	secure = true,
 ): string {
-	return `${OAUTH_BROWSER_COOKIE}=${browserNonce}; Max-Age=${maxAgeSeconds}; Path=/; Secure; HttpOnly; SameSite=Lax`;
+	return `${OAUTH_BROWSER_COOKIE}=${browserNonce}; Max-Age=${maxAgeSeconds}; Path=/;${secure ? " Secure;" : ""} HttpOnly; SameSite=Lax`;
 }
 
-export function clearOAuthCookieHeader(): string {
-	return `${OAUTH_BROWSER_COOKIE}=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax`;
+export function clearOAuthCookieHeader(secure = true): string {
+	return oauthCookieHeader("", 0, secure);
 }
 
 export function readOAuthBrowserNonce(

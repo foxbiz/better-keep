@@ -1,7 +1,12 @@
+import 'external_sync/firebase_sync_migration.dart';
+import 'external_sync/sync_version.dart';
+
 import 'package:better_keep/services/cloud_read.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 
 import 'dart:math';
+
+import 'note_sort_cloud_manifest.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -24,6 +29,9 @@ abstract interface class NoteSortCloudRepository {
     required String? baseRevision,
     required int chunkCount,
     required int noteCount,
+    required DateTime updatedAt,
+    required String contentHash,
+    bool deleted = false,
   });
 
   Future<void> deleteRevision(String revision, int chunkCount);
@@ -69,7 +77,15 @@ class FirestoreNoteSortCloudRepository implements NoteSortCloudRepository {
       _manifests.doc(contextKey),
       isCurrent: isCurrent,
     );
-    return document.exists ? document.data() : null;
+    final data = document.data();
+    return data == null
+        ? null
+        : FirebaseSyncMigration.resolve(
+            _manifests.doc(contextKey),
+            SyncEntityKind.order,
+            data,
+            _checkCurrent,
+          );
   }
 
   @override
@@ -92,18 +108,42 @@ class FirestoreNoteSortCloudRepository implements NoteSortCloudRepository {
 
   @override
   Future<void> writeChunks(String revision, List<List<String>> chunks) async {
-    for (var batchStart = 0; batchStart < chunks.length; batchStart += 450) {
+    // The same edit may arrive independently from several providers. A retry
+    // may fill missing chunks but must never overwrite a published revision.
+    for (var start = 0; start < chunks.length; start += 8) {
       _checkCurrent();
-      final batch = firestore.batch();
-      final batchEnd = min(batchStart + 450, chunks.length);
-      for (var index = batchStart; index < batchEnd; index++) {
-        batch.set(_chunkRef(revision, index), {
-          'schema_version': schemaVersion,
-          'revision': revision,
-          'note_ids': chunks[index],
-        });
-      }
-      await batch.commit().timeout(const Duration(seconds: 10));
+      final end = min(start + 8, chunks.length);
+      await firestore
+          .runTransaction((transaction) async {
+            final existing = <DocumentSnapshot<Map<String, dynamic>>>[];
+            for (var index = start; index < end; index++) {
+              existing.add(await transaction.get(_chunkRef(revision, index)));
+              _checkCurrent();
+            }
+            for (var index = start; index < end; index++) {
+              final stored = existing[index - start];
+              if (stored.exists) {
+                final data = stored.data();
+                final ids = data?['note_ids'];
+                if (data?['schema_version'] != schemaVersion ||
+                    data?['revision'] != revision ||
+                    ids is! List ||
+                    ids.any((id) => id is! String) ||
+                    NoteSortCloudManifest.contentHash(ids.cast<String>()) !=
+                        NoteSortCloudManifest.contentHash(chunks[index])) {
+                  throw const FormatException('Order revision content changed');
+                }
+              } else {
+                transaction.set(_chunkRef(revision, index), {
+                  'schema_version': schemaVersion,
+                  'revision': revision,
+                  'note_ids': chunks[index],
+                });
+              }
+            }
+            _checkCurrent();
+          })
+          .timeout(const Duration(seconds: 10));
       _checkCurrent();
     }
   }
@@ -116,47 +156,74 @@ class FirestoreNoteSortCloudRepository implements NoteSortCloudRepository {
     required String? baseRevision,
     required int chunkCount,
     required int noteCount,
+    required DateTime updatedAt,
+    required String contentHash,
+    bool deleted = false,
   }) {
+    final payload = NoteSortCloudManifest.encode(
+      schemaVersion: schemaVersion,
+      contextKey: contextKey,
+      sortMode: sortMode,
+      revision: revision,
+      updatedAt: updatedAt,
+      chunkCount: chunkCount,
+      noteCount: noteCount,
+      contentHash: contentHash,
+      deleted: deleted,
+    );
+    final incoming = NoteSortCloudManifest.version(payload);
     final manifest = _manifests.doc(contextKey);
     _checkCurrent();
-    return firestore
-        .runTransaction((transaction) async {
-          _checkCurrent();
-          final current = await transaction.get(manifest);
-          _checkCurrent();
-          final currentData = current.data();
-          final revisionValue = currentData?['revision'];
-          final chunkCountValue = currentData?['chunk_count'];
-          final previousRevision = revisionValue is String
-              ? revisionValue
-              : null;
-          final previousChunkCount = chunkCountValue is int
-              ? chunkCountValue
-              : 0;
-          if (current.exists &&
-              (currentData?['schema_version'] != schemaVersion ||
-                  (previousRevision != baseRevision &&
-                      previousRevision != revision))) {
-            return NoteSortCloudCommitResult.conflict(
+    return FirebaseSyncMigration.retry(
+      manifest,
+      SyncEntityKind.order,
+      _checkCurrent,
+      () => firestore
+          .runTransaction((transaction) async {
+            _checkCurrent();
+            final current = await transaction.get(manifest);
+            _checkCurrent();
+            final currentData = current.data();
+            final revisionValue = currentData?['revision'];
+            final chunkCountValue = currentData?['chunk_count'];
+            final previousRevision = revisionValue is String
+                ? revisionValue
+                : null;
+            final previousChunkCount = chunkCountValue is int
+                ? chunkCountValue
+                : 0;
+            if (current.exists &&
+                (currentData?['schema_version'] != schemaVersion ||
+                    currentData?['context_key'] != contextKey ||
+                    incoming.compareTo(
+                          NoteSortCloudManifest.version(currentData!),
+                        ) <
+                        0)) {
+              return NoteSortCloudCommitResult.conflict(
+                previousRevision: previousRevision,
+                previousChunkCount: previousChunkCount,
+              );
+            }
+            if (currentData != null &&
+                incoming.compareTo(
+                      NoteSortCloudManifest.version(currentData),
+                    ) ==
+                    0 &&
+                (currentData['sort_mode'] != sortMode ||
+                    currentData['chunk_count'] != chunkCount ||
+                    currentData['note_count'] != noteCount ||
+                    (currentData['content_hash'] != null &&
+                        currentData['content_hash'] != contentHash))) {
+              throw const FormatException('Order revision content changed');
+            }
+            transaction.set(manifest, payload);
+            return NoteSortCloudCommitResult.committed(
               previousRevision: previousRevision,
               previousChunkCount: previousChunkCount,
             );
-          }
-          transaction.set(manifest, {
-            'schema_version': schemaVersion,
-            'context_key': contextKey,
-            'sort_mode': sortMode,
-            'revision': revision,
-            'chunk_count': chunkCount,
-            'note_count': noteCount,
-            'updated_at': FieldValue.serverTimestamp(),
-          });
-          return NoteSortCloudCommitResult.committed(
-            previousRevision: previousRevision,
-            previousChunkCount: previousChunkCount,
-          );
-        })
-        .timeout(const Duration(seconds: 10));
+          })
+          .timeout(const Duration(seconds: 10)),
+    );
   }
 
   @override

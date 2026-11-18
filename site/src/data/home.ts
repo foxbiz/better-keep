@@ -39,7 +39,7 @@ export const primaryFeatures: readonly Feature[] = [
     number: '02',
     title: 'Private encrypted sync',
     description:
-      'Keep notes on your device for free. Pro adds encrypted sync between approved devices.',
+      'Keep notes on your device or sync manually with your own storage for free.',
     icon: 'ShieldCheck',
     href: '/private-encrypted-notes'
   },

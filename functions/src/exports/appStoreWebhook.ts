@@ -14,6 +14,7 @@ import { auth, db, emailPassword } from "../config";
 import { enqueueRevenueEventInTransaction } from "../revenueOutbox";
 import { normalizedSubscriptionFields } from "../subscriptionEntitlement";
 import { recordSubscriptionIssue } from "../subscriptionIssues";
+import { appleSubscriptionProduct } from "../subscriptionProducts";
 import { reconcileUserEntitlement } from "../subscriptionReconciler";
 import { sendEmail } from "../utils";
 
@@ -185,6 +186,24 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 			return;
 		}
 
+		const product = appleSubscriptionProduct(productId ?? "");
+		if (!product) {
+			await recordSubscriptionIssue({
+				type: "app_store_unknown_product",
+				source: "app_store",
+				providerKey: originalTransactionId,
+				details: { productId },
+			});
+			await dedupeRef.set({
+				notificationType,
+				subtype,
+				productId,
+				status: "ignored_unknown_product",
+				processedAt: FieldValue.serverTimestamp(),
+			});
+			res.status(200).send("OK");
+			return;
+		}
 		const subscriptionId = `ios_${originalTransactionId}`;
 		const subscriptionRef = db.collection("subscriptions").doc(subscriptionId);
 		const subSnap = await subscriptionRef.get();
@@ -302,7 +321,7 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 											? "test"
 											: "unknown",
 								expiresAt,
-								plan: "pro",
+								plan: product.plan,
 								source: "app_store",
 								subscriptionState: decision.subscriptionState,
 								willAutoRenew,

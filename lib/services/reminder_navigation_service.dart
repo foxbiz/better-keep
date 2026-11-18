@@ -243,10 +243,20 @@ class ReminderNavigationService {
   }
 
   Future<void> clearForSignOut() async {
-    await clear();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_lastActivationKey(prefs));
-    await prefs.remove(_lastActivationAtKey(prefs));
+    _pending = null;
+    const timeout = Duration(seconds: 5);
+    final prefs = await SharedPreferences.getInstance().timeout(timeout);
+    // Submit the whole cleanup before awaiting replies. A timed-out attempt
+    // cannot resume and remove a later account's reminder navigation.
+    final removed = await Future.wait([
+      prefs.remove(_noteIdKey(prefs)),
+      prefs.remove(_createdAtKey(prefs)),
+      prefs.remove(_lastActivationKey(prefs)),
+      prefs.remove(_lastActivationAtKey(prefs)),
+    ]).timeout(timeout);
+    if (removed.contains(false)) {
+      throw StateError('Could not clear saved reminder navigation');
+    }
   }
 
   Future<void> _clearPersisted(SharedPreferences prefs) async {

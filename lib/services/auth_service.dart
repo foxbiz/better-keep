@@ -1,14 +1,31 @@
+import 'browser_connection.dart'
+    if (dart.library.js_interop) 'browser_connection_web.dart';
+
+import 'auth_error_messages.dart';
+import 'async_keyed_serializer.dart';
 import 'remote_sync_cache_service.dart';
 import 'local_storage_recovery.dart';
+import 'sign_out_lock.dart'
+    if (dart.library.js_interop) 'sign_out_lock_web.dart';
 
+import 'google_sign_in_initialization.dart';
+
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/cloud_read.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/device_authorization.dart';
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+
+import 'package:crypto/crypto.dart';
+
+import 'sketch_preview_repair_service.dart';
+
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
 
 import 'package:alarm/alarm.dart';
 import 'package:better_keep/components/user_avatar.dart';
@@ -48,13 +65,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:better_keep/services/web_oauth_stub.dart'
     if (dart.library.html) 'package:better_keep/services/web_oauth.dart'
     as web_oauth;
+
+enum SignOutStage { working, clearingDevice, finishing, retry }
+
+enum SignOutProblem { secureStorage, database, otherWindow }
 
 typedef _NativeAppleAuthorization = ({
   AuthorizationCredentialAppleID appleCredential,
@@ -90,8 +112,6 @@ class AuthService {
     PostSignInState.idle,
   );
 
-  static const String? _serverClientId = null;
-
   // Completer for OAuth callback
   static Completer<_OAuthCallbackResult>? _oauthCompleter;
   static String? _pendingOAuthTransactionId;
@@ -101,6 +121,7 @@ class AuthService {
 
   static Map<String, String>? _cachedProfile;
   static String? _localPhotoPath;
+  static String? _localPhotoUid;
 
   // Cached Firestore linked providers (from custom OAuth flow)
   static Set<String> _firestoreLinkedProviders = {};
@@ -144,6 +165,7 @@ class AuthService {
       _cachedUserId != null && currentUser?.uid != _cachedUserId;
 
   static bool get canRestoreLocalSession =>
+      signOutStage.value == null &&
       _freshSignInUid == null &&
       currentUser != null &&
       currentUser!.uid == _cachedUserId &&
@@ -154,6 +176,7 @@ class AuthService {
       final user = currentUser;
       if (_deferLocalRestore) return CloudSessionState.pending;
       if (user == null ||
+          hasDifferentLocalAccount ||
           sessionInvalid.value ||
           ReviewAccess.isReviewIdentity(user)) {
         return CloudSessionState.blocked;
@@ -215,6 +238,14 @@ class AuthService {
           await start();
         }),
       );
+      if (isCurrent() &&
+          canRestoreLocalSession &&
+          E2EEService.instance.isCryptoReady &&
+          postSignInState.value.hasRecoverableFailure &&
+          postSignInState.value.stage ==
+              PostSignInStage.encryptionInitialization) {
+        postSignInState.value = PostSignInState.ready;
+      }
     },
     onFailure: (error, stack) {
       AppLogger.error('[CLOUD_RECOVERY] Verification deferred', error, stack);
@@ -222,10 +253,18 @@ class AuthService {
   );
 
   static bool get canSyncCloud =>
+      !hasDifferentLocalAccount &&
       !sessionInvalid.value &&
       cloudRecovery.state.value == CloudSessionState.ready;
 
+  static bool _appForeground = true;
+  static bool _observingConnection = false;
+
   static void setAppForeground(bool foreground) {
+    _appForeground = foreground;
+    ExternalSyncService.instance.setForeground(
+      foreground && cloudRecovery.networkAvailable,
+    );
     cloudRecovery.setForeground(foreground);
     if (foreground && canSyncCloud && AppState.get('db') != null) {
       final current = captureSession();
@@ -247,7 +286,10 @@ class AuthService {
   }
 
   static Map<String, String>? get cachedProfile => _cachedProfile;
-  static String? get localPhotoPath => _localPhotoPath;
+  static String? get localPhotoPath =>
+      (currentUser?.uid ?? _cachedUserId) == _localPhotoUid
+      ? _localPhotoPath
+      : null;
 
   /// Check if there's a pending OAuth request
   static bool get hasPendingOAuth =>
@@ -503,11 +545,93 @@ class AuthService {
   /// Token validation is deferred to background to not block app startup.
   static bool _deferLocalRestore = false;
 
+  static Future<void> resetFreshIosInstall(
+    SharedPreferences prefs, {
+    required File installMarker,
+    required Future<bool> Function() hasLocalLibrary,
+    required Future<void> Function() clearIdentity,
+    required Future<void> Function() signOut,
+  }) async {
+    var markerUncertain = false;
+    try {
+      if (await installMarker.readAsString() == 'complete') return;
+      markerUncertain = true;
+    } on PathNotFoundException {
+      // A new install has no durable marker. Check upgrade evidence first.
+    } on Exception {
+      markerUncertain = true;
+    }
+    final existingAccount = FirebaseLocalDataScope.values.any(
+      (scope) => ['user_uid', 'user_email'].any(
+        (key) => prefs.getString(scope.preferenceKey(key))?.isNotEmpty == true,
+      ),
+    );
+    if (prefs.getBool('has_launched_before') != true && !existingAccount) {
+      bool? libraryPresent;
+      try {
+        libraryPresent = await hasLocalLibrary();
+      } on Exception {
+        // Failed filesystem/plugin probes cannot justify deleting an identity.
+      }
+      if (!markerUncertain && libraryPresent == false) await clearIdentity();
+      if (libraryPresent != true) await signOut();
+    }
+    // This lives outside account cleanup. Commit it before allowing sign-in,
+    // so a failed preferences write cannot wipe a newly approved identity.
+    await installMarker.parent.create(recursive: true);
+    final pending = File('${installMarker.path}.pending');
+    await pending.writeAsString('complete', flush: true);
+    await pending.rename(installMarker.path);
+    try {
+      await prefs.setBool('has_launched_before', true);
+    } catch (error, stack) {
+      AppLogger.error(
+        'Could not update the legacy install preference',
+        error,
+        stack,
+      );
+    }
+  }
+
+  static Future<bool> _hasIosLocalLibrary() async {
+    final databases = await getDatabasesPath();
+    final support = await getApplicationSupportDirectory();
+    for (final scope in FirebaseLocalDataScope.values) {
+      final database = File(path.join(databases, scope.databaseName));
+      try {
+        // exists() can collapse access failures into absence; opening cannot.
+        final handle = await database.open();
+        await handle.close();
+        return true;
+      } on PathNotFoundException {
+        // Continue checking the other scope and account media.
+      }
+      final directory = Directory(
+        path.join(support.path, scope.fileDirectoryName),
+      );
+      try {
+        await for (final entry in directory.list(followLinks: false)) {
+          if (path.basename(entry.path).startsWith('bk-library-')) return true;
+        }
+      } on PathNotFoundException {
+        // An absent scope directory is expected on first install.
+      }
+    }
+    return false;
+  }
+
   static Future<void> init({
     SharedPreferences? prefs,
     bool deferLocalRestore = false,
   }) async {
     _deferLocalRestore = deferLocalRestore;
+    if (kIsWeb && !_observingConnection) {
+      _observingConnection = true;
+      observeBrowserConnection((available) {
+        cloudRecovery.setNetworkAvailable(available);
+        ExternalSyncService.instance.setForeground(_appForeground && available);
+      });
+    }
     try {
       await purgeExpiredOAuthTransactions();
     } catch (error, stackTrace) {
@@ -521,7 +645,7 @@ class AuthService {
     // Start GoogleSignIn initialization (doesn't need to complete before continuing)
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
       unawaited(
-        _googleSignIn.initialize(serverClientId: _serverClientId).catchError((
+        initializeNativeGoogleSignIn().catchError((
           Object error,
           StackTrace stack,
         ) {
@@ -542,18 +666,21 @@ class AuthService {
     // SharedPreferences is cleared on uninstall, so we use it to detect a
     // fresh install and sign out to clear the stale Keychain token.
     if (!kIsWeb && Platform.isIOS) {
-      final hasLaunchedBefore =
-          prefsInstance.getBool('has_launched_before') ?? false;
-      if (!hasLaunchedBefore) {
-        await prefsInstance.setBool('has_launched_before', true);
-        if (_auth.currentUser != null) {
-          AppLogger.log(
-            '[AuthService] Fresh install detected on iOS — clearing stale Keychain session.',
-          );
-          await _auth.signOut();
-        }
-      }
+      await resetFreshIosInstall(
+        prefsInstance,
+        installMarker: File(
+          path.join(
+            (await getLibraryDirectory()).path,
+            'BetterKeepInstallation',
+            'identity-reset',
+          ),
+        ),
+        hasLocalLibrary: _hasIosLocalLibrary,
+        clearIdentity: E2EESecureStorage.instance.clearIosInstallIdentities,
+        signOut: _auth.signOut,
+      );
     }
+    FirebaseSyncPreference.instance.init();
     final email = prefsInstance.getString(
       FirebaseScopedPreferences.key('user_email'),
     );
@@ -562,6 +689,9 @@ class AuthService {
     );
 
     _cachedUserId = uid;
+    // Publish legacy paths only after the optional cache task verifies the file.
+    _localPhotoUid = null;
+    _localPhotoPath = null;
     if (email != null) {
       _cachedProfile = {
         'email': email,
@@ -576,13 +706,10 @@ class AuthService {
             ) ??
             '',
       };
-      _localPhotoPath = prefsInstance.getString(
-        FirebaseScopedPreferences.key('user_local_photo'),
-      );
 
       // Download profile image in background (don't block startup)
       if (_cachedProfile!['photoURL']!.isNotEmpty) {
-        _downloadProfileImageIfNeeded(uid: uid);
+        unawaited(ensureProfileImageCached());
       }
     }
 
@@ -718,41 +845,165 @@ class AuthService {
     });
   }
 
-  /// Downloads profile image in background if needed.
-  static void _downloadProfileImageIfNeeded({String? uid}) {
-    fileSystem()
-        .then((fs) async {
-          if (_localPhotoPath == null || !await fs.exists(_localPhotoPath!)) {
-            _downloadProfileImage(_cachedProfile!['photoURL']!, uid: uid);
-          }
-        })
-        .catchError((e) {
-          AppLogger.error('Error checking for profile image', e);
+  static final _profileImageFiles = AsyncKeyedSerializer<String>();
+  static Future<void>? _profileImageTask;
+  static (String, String, int)? _profileImageIdentity;
+
+  /// Shared by startup and avatar widgets; optional network work never blocks
+  /// account/encryption initialization, and simultaneous consumers reuse it.
+  static Future<void> ensureProfileImageCached() {
+    if (!FirebaseBackend.isConfigured) return Future.value();
+    final user = currentUser;
+    final url =
+        user?.photoURL ??
+        (user?.uid == _cachedUserId ? (_cachedProfile?['photoURL']) : null);
+    if (kIsWeb ||
+        user == null ||
+        hasDifferentLocalAccount ||
+        signOutStage.value != null ||
+        url == null ||
+        url.isEmpty) {
+      return Future.value();
+    }
+    final identity = (user.uid, url, _sessionEpoch);
+    if (_profileImageIdentity == identity && _profileImageTask != null) {
+      return _profileImageTask!;
+    }
+    _profileImageIdentity = identity;
+    final sessionCurrent = captureSession();
+    bool current() => sessionCurrent() && _profileImageIdentity == identity;
+    late final Future<void> task;
+    task = _cacheProfileImage(url, user.uid, current, sessionCurrent)
+        .whenComplete(() {
+          if (identical(_profileImageTask, task)) _profileImageTask = null;
         });
+    _profileImageTask = task;
+    return task;
   }
 
-  static Future<void> _downloadProfileImage(String url, {String? uid}) async {
-    if (kIsWeb) return; // Skip downloading profile image on web for now
+  static Future<void> _cacheProfileImage(
+    String url,
+    String uid,
+    bool Function() current,
+    bool Function() sessionCurrent,
+  ) async {
+    HttpClient? client;
     try {
-      final request = await HttpClient().getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        final fs = await fileSystem();
-        final bytes = await consolidateHttpClientResponseBytes(response);
-        final dir = await fs.documentDir;
-        final fileName = uid != null ? 'profile_$uid.jpg' : 'profile_image.jpg';
-        final filePath = '$dir/$fileName';
-        await fs.writeBytes(filePath, bytes);
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(
-          FirebaseScopedPreferences.key('user_local_photo'),
-          filePath,
-        );
-        _localPhotoPath = filePath;
+      if (!current()) return;
+      final prefs = await AppState.prefs;
+      final fs = await fileSystem();
+      final generation = currentAccountFileGeneration(prefs);
+      final scope = FirebaseScopedPreferences.scopeForPreferences(prefs);
+      final previousUrl = prefs.getString(
+        FirebaseScopedPreferences.key('user_photoURL_downloaded'),
+      );
+      final previousPath = prefs.getString(
+        FirebaseScopedPreferences.key('user_local_photo'),
+      );
+      if (_cachedUserId == uid &&
+          previousUrl == url &&
+          previousPath != null &&
+          await fs.exists(previousPath)) {
+        if (current()) {
+          _localPhotoUid = uid;
+          _localPhotoPath = previousPath;
+        }
+        return;
       }
-    } catch (e, stackTrace) {
-      AppLogger.error('Error downloading profile image', e, stackTrace);
+      // Keep each account's inventory identifiable even in a legacy shared root.
+      final library = await fs.documentDir;
+      final directory = path.join(library, 'profile_cache');
+      final prefix = 'profile_${sha256.convert(utf8.encode(uid))}_';
+      final filePath = path.join(
+        directory,
+        '$prefix${sha256.convert(utf8.encode(url))}.jpg',
+      );
+      final queueKey = '$directory/$prefix';
+      Future<void> adopt() async {
+        if (!current()) return;
+        final alreadyCurrent = localPhotoPath == filePath;
+        _localPhotoUid = uid;
+        _localPhotoPath = filePath;
+        if (alreadyCurrent) return;
+        // Pruning and cache lookups share a queue, so a newer request cannot
+        // adopt an older URL's file while its deletion is still in flight.
+        try {
+          final owned = RegExp('^${RegExp.escape(prefix)}[0-9a-f]{64}\\.jpg\$');
+          for (final candidate in await fs.list(directory)) {
+            if (!current()) return;
+            if (candidate != filePath &&
+                path.dirname(candidate) == directory &&
+                owned.hasMatch(path.basename(candidate))) {
+              await fs.delete(candidate);
+            }
+          }
+        } catch (_) {
+          // Optional cache housekeeping cannot turn a usable avatar into failure.
+        }
+      }
+
+      final cached = await _profileImageFiles.run(queueKey, () async {
+        if (!current()) return true;
+        if (!await fs.exists(filePath)) return false;
+        await adopt();
+        return true;
+      });
+      if (cached) return;
+      if (!current()) return;
+      final http = client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 5);
+      Future<Uint8List?> download() async {
+        final request = await http.getUrl(Uri.parse(url));
+        final response = await request.close();
+        return response.statusCode == 200
+            ? await consolidateHttpClientResponseBytes(response)
+            : null;
+      }
+
+      final bytes = await download().timeout(const Duration(seconds: 5));
+      client.close(force: true);
+      client = null;
+      if (bytes == null || !current()) return;
+      await _profileImageFiles.run(queueKey, () async {
+        if (!current()) return;
+        try {
+          await fs.writeBytes(filePath, bytes);
+        } catch (_) {
+          // A partial file must not become a cache hit on the next attempt.
+          await fs.delete(filePath);
+          rethrow;
+        } finally {
+          if (!sessionCurrent()) {
+            await fs.delete(filePath);
+            final active = currentAccountFileGeneration(prefs);
+            final retiredLibrary =
+                generation != null &&
+                active != null &&
+                active != generation &&
+                FirebaseScopedPreferences.scopeForPreferences(prefs) == scope &&
+                path.basename(library) == 'bk-library-$generation';
+            for (final emptyParent in [
+              directory,
+              if (retiredLibrary) library,
+            ]) {
+              try {
+                // Never recurse or delete a legacy support root. Nonempty
+                // directories (including another late writer's files) survive.
+                await Directory(emptyParent).delete();
+              } on FileSystemException {
+                // Best effort: account selection never relies on directory existence.
+              }
+            }
+          }
+        }
+        await adopt();
+      });
+    } catch (error, stack) {
+      if (current()) {
+        AppLogger.error('Profile image download deferred', error, stack);
+      }
+    } finally {
+      client?.close(force: true);
     }
   }
 
@@ -1654,6 +1905,12 @@ class AuthService {
     String provider,
   ) async {
     await _signOutFuture;
+    final prefs = await AppState.prefs;
+    if (kIsWeb) await FirebaseScopedPreferences.reload(prefs);
+    if (signOutStage.value != null ||
+        LocalStorageRecovery(prefs).signOutPending) {
+      throw StateError('Local sign-out has not finished');
+    }
     if (currentUser?.uid != user.uid) return;
     _deferLocalRestore = false;
     _freshSignInUid = user.uid;
@@ -1679,6 +1936,12 @@ class AuthService {
   /// Initializes cloud and encryption services for a restored Firebase Auth
   /// session. This uses the same recoverable pipeline as a fresh sign-in.
   static Future<void> initializeCurrentUserServices() async {
+    final prefs = await AppState.prefs;
+    if (kIsWeb) await FirebaseScopedPreferences.reload(prefs);
+    if (signOutStage.value != null ||
+        LocalStorageRecovery(prefs).signOutPending) {
+      return;
+    }
     _deferLocalRestore = false;
     final user = currentUser;
     final current = captureSession();
@@ -1691,6 +1954,9 @@ class AuthService {
         await E2EEService.instance.preloadCachedStatus()) {
       if (!current()) return;
       postSignInState.value = PostSignInState.ready;
+      // Local startup and Firebase recovery must not wait for another provider's
+      // session initialization or for retired provider work to drain.
+      unawaited(ExternalSyncService.instance.resume());
       cloudRecovery.start(user.uid);
       unawaited(cloudRecovery.check());
       return;
@@ -1699,17 +1965,19 @@ class AuthService {
     if (!current()) return;
     if (canRestoreLocalSession) {
       final local = E2EEService.instance.localState;
-      if (local == LocalEncryptionState.pending ||
-          local == LocalEncryptionState.revoked ||
-          local == LocalEncryptionState.needsRecovery ||
+      final requiresLocalRepair =
           local == LocalEncryptionState.unavailable ||
-          local == LocalEncryptionState.corrupt) {
+          local == LocalEncryptionState.legacyRecoveryUnavailable ||
+          local == LocalEncryptionState.corrupt;
+      if (requiresLocalRepair ||
+          local == LocalEncryptionState.pending ||
+          local == LocalEncryptionState.revoked ||
+          local == LocalEncryptionState.needsRecovery) {
         postSignInState.value = PostSignInState.recoverableFailure(
           PostSignInStage.encryptionInitialization,
           operation: 'restore-local-encryption',
         );
-        if (local != LocalEncryptionState.unavailable &&
-            local != LocalEncryptionState.corrupt) {
+        if (!requiresLocalRepair) {
           cloudRecovery.start(user.uid);
           unawaited(cloudRecovery.check());
         }
@@ -1730,11 +1998,19 @@ class AuthService {
         await E2EEService.instance.preloadCachedStatus()) {
       if (!current()) return;
       postSignInState.value = PostSignInState.ready;
+      unawaited(ExternalSyncService.instance.resume());
       cloudRecovery.start(currentUser!.uid);
       unawaited(cloudRecovery.check());
       return;
     }
     if (!current()) return;
+    if (canRestoreLocalSession &&
+        E2EEService.instance.localState ==
+            LocalEncryptionState.legacyRecoveryUnavailable) {
+      // Preload already retried the legacy key locally. A network request
+      // cannot unlock it and could hide the recovery guidance when offline.
+      return;
+    }
     final inFlight = _postSignInFuture;
     if (inFlight != null) {
       await inFlight;
@@ -1765,16 +2041,6 @@ class AuthService {
           ? previousRequest.onStatusChange
           : null,
     );
-  }
-
-  static Future<void> continueOfflineAfterInitializationFailure() async {
-    if (!canRestoreLocalSession) return;
-    if (!await E2EEService.instance.preloadCachedStatus()) {
-      return;
-    }
-    postSignInState.value = PostSignInState.ready;
-    cloudRecovery.start(currentUser!.uid);
-    unawaited(cloudRecovery.check());
   }
 
   static Future<void> _startPostSignInInitialization({
@@ -1823,6 +2089,9 @@ class AuthService {
         !kIsWeb || E2EESecureStorage.isWebStorageConfigured;
     final coordinator = PostSignInCoordinator(
       validateIdentity: PostSignInOperation('validate-identity', () async {
+        if (hasDifferentLocalAccount) {
+          throw StateError('Local account mismatch');
+        }
         request.onStatusChange?.call(AuthProgress.verifying);
         await user.getIdToken(true).timeout(const Duration(seconds: 10));
         requireCurrentSession(isCurrent);
@@ -1869,6 +2138,9 @@ class AuthService {
         },
       ),
       auxiliaryServices: [
+        PostSignInOperation('external-sync', () async {
+          if (!isReviewSession) await ExternalSyncService.instance.resume();
+        }),
         PostSignInOperation('refresh-linked-providers', () async {
           if (!isReviewSession) await refreshLinkedProviders();
         }),
@@ -1897,6 +2169,8 @@ class AuthService {
         }),
       ],
       isFatalIdentityFailure: _isDefinitiveIdentityFailure,
+      isAccountDeletionInProgress: isAccountDeletionInProgress,
+      isConnectionFailure: isCloudConnectionFailure,
       isSessionCurrent: isCurrent,
       signOut: signOut,
       clearSignInProgress: () async {
@@ -2017,34 +2291,12 @@ class AuthService {
             AppLogger.log(
               "[AUTH] Found scheduled deletion, calling cancelScheduledDeletion Cloud Function",
             );
-            try {
-              // Call Cloud Function to cancel deletion (sends email notification)
-              final result = await callCloudFunction('cancelScheduledDeletion');
-              AppLogger.log(
-                "[AUTH] Cancelled scheduled deletion via Cloud Function for user: ${user.uid}, result: ${result.data}",
-              );
-              AppLogger.log(
-                "[AUTH] Account deletion cancelled successfully for user: ${user.uid}",
-              );
-            } catch (e, stack) {
-              // Fallback to direct Firestore update if Cloud Function fails
-              AppLogger.log(
-                "[AUTH] Cloud Function failed, falling back to direct update: $e",
-              );
-              AppLogger.log(
-                "[AUTH] cancelScheduledDeletion Cloud Function failed: $e\n$stack",
-              );
-              await userRef
-                  .update({
-                    'scheduledDeletion': FieldValue.delete(),
-                    'tokensRevokedAt': FieldValue.delete(),
-                    'lastSeen': FieldValue.serverTimestamp(),
-                  })
-                  .timeout(const Duration(seconds: 30));
-              AppLogger.log(
-                "[AUTH] Cancelled scheduled deletion directly for user: ${user.uid}",
-              );
-            }
+            // Only the backend can cancel: a direct write could erase a worker's
+            // irreversible deletion claim after cancellation was rejected.
+            await callCloudFunction('cancelScheduledDeletion');
+            AppLogger.log(
+              "[AUTH] Account deletion cancelled for user: ${user.uid}",
+            );
           } else {
             AppLogger.log(
               "[AUTH] No scheduled deletion found for user: ${user.uid}",
@@ -2058,7 +2310,6 @@ class AuthService {
         requireCloudOperation();
         // Cache user profile locally
         final prefs = await SharedPreferences.getInstance();
-        final fs = await fileSystem();
 
         requireCloudOperation();
         await prefs.setString(
@@ -2090,24 +2341,14 @@ class AuthService {
         };
 
         if (user.photoURL != null) {
-          final savedUrl = prefs.getString(
-            FirebaseScopedPreferences.key('user_photoURL_downloaded'),
-          );
-          if (savedUrl != user.photoURL ||
-              _localPhotoPath == null ||
-              !await fs.exists(_localPhotoPath!)) {
-            await _downloadProfileImage(user.photoURL!, uid: user.uid);
-            requireCloudOperation();
-            await prefs.setString(
-              FirebaseScopedPreferences.key('user_photoURL_downloaded'),
-              user.photoURL!,
-            );
-          }
+          unawaited(ensureProfileImageCached());
         }
 
         return; // Success
       } catch (e) {
-        if (e is CloudOperationCancelled || isCloudConnectionFailure(e)) {
+        if (isAccountDeletionInProgress(e) ||
+            e is CloudOperationCancelled ||
+            isCloudConnectionFailure(e)) {
           rethrow;
         }
         AppLogger.log("[AUTH] Attempt $attempts failed: $e");
@@ -2212,14 +2453,155 @@ class AuthService {
   }
 
   static Future<void>? _signOutFuture;
+  static SignOutSnapshot? _webSignOutSource;
+  static String? _webSignOutJournal;
+  static final signOutStage = ValueNotifier<SignOutStage?>(null);
 
-  static Future<void> signOut() {
-    return _signOutFuture ??= _performSignOut().whenComplete(() {
-      _signOutFuture = null;
-    });
+  static Future<void> returnToLocalAccount() async {
+    if (currentUser != null && hasDifferentLocalAccount) {
+      await _auth.signOut();
+    }
   }
 
-  static Future<void> _performSignOut() async {
+  static Future<void> signOut({bool duringStartup = false}) {
+    if (!duringStartup &&
+        signOutStage.value == null &&
+        currentUser != null &&
+        hasDifferentLocalAccount) {
+      return returnToLocalAccount();
+    }
+    return _finishLocalSignOut(reopenDatabase: !duringStartup);
+  }
+
+  // The recovery screen has explicitly confirmed discarding this library,
+  // including when the restored Firebase identity differs from its owner.
+  static Future<void> signOutUnavailableLibrary({
+    required bool duringStartup,
+  }) => _finishLocalSignOut(reopenDatabase: !duringStartup);
+
+  /// Complete interrupted account transitions before exposing a library.
+  static Future<Database> openDatabaseForStartup() async {
+    final recovery = LocalStorageRecovery(await AppState.prefs);
+    if (recovery.signOutPending) {
+      await resumePendingSignOut(duringStartup: true);
+    }
+    verifyAccountFileDirectory(recovery.preferences);
+    unawaited(resumeAccountFileCleanup(recovery.preferences));
+    final db = await initDatabase(detectDataLoss: true);
+    if (!recovery.pending) return db;
+    await signOut();
+    return AppState.db;
+  }
+
+  // Startup calls this before exposing local data when sign-out was interrupted.
+  static Future<void> resumePendingSignOut({bool duringStartup = false}) async {
+    final prefs = await AppState.prefs;
+    if (kIsWeb) await FirebaseScopedPreferences.reload(prefs);
+    if (signOutStage.value != null ||
+        LocalStorageRecovery(prefs).signOutPending) {
+      await _finishLocalSignOut(reopenDatabase: !duringStartup);
+    }
+  }
+
+  static Future<void> _finishLocalSignOut({bool reopenDatabase = true}) {
+    return _signOutFuture ??= _journaledSignOut(reopenDatabase: reopenDatabase)
+        .whenComplete(() => _signOutFuture = null);
+  }
+
+  // A platform key deletion cannot be cancelled. Keep its actual Future until
+  // it settles, even if waiting for it times out. Retry joins that operation.
+  static SignOutProblem? _signOutProblem;
+  static SignOutProblem? get signOutProblem => _signOutProblem;
+  static Future<void>? _keyCleanup;
+  @visibleForTesting
+  static Duration signOutKeyTimeout = const Duration(seconds: 15);
+  static Future<void> _clearSignOutKeys() {
+    final cleanup = _keyCleanup ??= E2EEService.instance.dispose().whenComplete(
+      () {
+        _keyCleanup = null;
+      },
+    );
+    return cleanup.timeout(signOutKeyTimeout);
+  }
+
+  static Future<void> _journaledSignOut({required bool reopenDatabase}) async {
+    signOutStage.value = SignOutStage.working;
+    try {
+      final recovery = LocalStorageRecovery(await AppState.prefs);
+      final scope = FirebaseScopedPreferences.scopeForPreferences(
+        recovery.preferences,
+      ).name;
+      if (kIsWeb) {
+        if (_signOutProblem == SignOutProblem.otherWindow) {
+          await refreshAfterExternalSignOut(scope);
+          return;
+        }
+        _webSignOutSource ??= recovery.signOutSnapshot;
+      }
+      // Serialize retries so a slow session teardown cannot race the next account.
+      for (var attempt = 0; ; attempt++) {
+        try {
+          _signOutProblem = null;
+          var superseded = false;
+          final completed = await withSignOutLock(scope, () async {
+            if (kIsWeb) {
+              await FirebaseScopedPreferences.reload(recovery.preferences);
+              superseded = !recovery.canContinueSignOut(
+                _webSignOutSource!,
+                ownJournal: _webSignOutJournal,
+              );
+              if (superseded) return;
+            }
+            final next = await recovery.beginSignOut();
+            if (kIsWeb) _webSignOutJournal = next;
+            await _performSignOut(next, reopenDatabase: reopenDatabase);
+            await recovery.completeLogout();
+            await recovery.finishSignOut();
+          });
+          if (!completed || superseded) {
+            _signOutProblem = SignOutProblem.otherWindow;
+            // Retry is observation-only from here, including if the other
+            // window restores or creates notes before this tab tries again.
+            await refreshAfterExternalSignOut(scope);
+            return;
+          }
+          _webSignOutSource = null;
+          _webSignOutJournal = null;
+          unawaited(resumeAccountFileCleanup(recovery.preferences));
+          break;
+        } on TimeoutException {
+          rethrow;
+        } catch (_) {
+          if (attempt == 1 || _signOutProblem == SignOutProblem.otherWindow) {
+            rethrow;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+      }
+      signOutStage.value = null;
+    } catch (_) {
+      signOutStage.value = SignOutStage.retry;
+      rethrow;
+    }
+  }
+
+  static Future<void> _finishPendingSignOutWrites() async {
+    try {
+      await FirebaseBackend.firestore.waitForPendingWrites().timeout(
+        const Duration(seconds: 3),
+      );
+    } catch (error) {
+      AppLogger.log(
+        'Firestore write flush unavailable during sign-out (${error.runtimeType})',
+      );
+    }
+  }
+
+  static Future<void> _performSignOut(
+    String nextGeneration, {
+    required bool reopenDatabase,
+  }) async {
+    signOutStage.value = SignOutStage.working;
     _sessionEpoch++;
     AttachmentRepairCoordinator.instance.reset();
     E2EEService.instance.resetInitialization();
@@ -2232,6 +2614,12 @@ class AuthService {
     _postSignInFuture = null;
     postSignInState.value = PostSignInState.idle;
     try {
+      await Future.wait([
+        SketchPreviewRepairService.stopStartupRepair().timeout(
+          signOutKeyTimeout,
+        ),
+        ExternalSyncService.instance.stop(),
+      ]);
       try {
         await ReminderSessionService.setSignedIn(false);
       } catch (error) {
@@ -2241,14 +2629,18 @@ class AuthService {
       // Stop token revocation listener
       _stopTokenRevocationListener();
 
-      // Cancel only note reminder deliveries before the note database is
-      // deleted. Device-approval notifications use a separate payload and ID
-      // namespace and remain independently managed below.
       try {
-        await ReminderSignOutCleanupService.cancelDeliveries();
-      } catch (e) {
-        AppLogger.error('Error cancelling reminders during signout: $e');
+        DeviceApprovalNotificationService().dispose();
+      } catch (error, stack) {
+        unawaited(
+          AppLogger.error(
+            'Could not dispose device approval notifications',
+            error,
+            stack,
+          ),
+        );
       }
+      await ReminderSignOutCleanupService.cancelDeliveries();
 
       // Cancel all alarms
       try {
@@ -2257,14 +2649,6 @@ class AuthService {
         }
       } catch (e) {
         AppLogger.error('Error stopping alarms during signout: $e');
-      }
-
-      // Dispose device approval notifications
-      try {
-        DeviceApprovalNotificationService().dispose();
-        await DeviceApprovalNotificationService().cancelAllNotifications();
-      } catch (e) {
-        AppLogger.error('Error disposing device approval notifications: $e');
       }
 
       // Stop sync service listeners BEFORE signing out to prevent permission errors
@@ -2298,16 +2682,12 @@ class AuthService {
         AppLogger.error('Error disposing PlanService: $e');
       }
 
-      // Clean up E2EE state (clears secure storage including device keys)
+      // Local key deletion must finish before another account can obtain keys.
       try {
-        await E2EEService.instance.dispose().timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            AppLogger.log('Timeout disposing E2EE service during signout');
-          },
-        );
-      } catch (e) {
-        AppLogger.error('Error disposing E2EE service: $e');
+        await _clearSignOutKeys();
+      } catch (_) {
+        _signOutProblem = SignOutProblem.secureStorage;
+        rethrow;
       }
 
       try {
@@ -2319,61 +2699,25 @@ class AuthService {
         );
       }
 
-      // Wait for pending Firestore writes and disable network before signing out
-      // This prevents permission-denied errors from in-flight operations after auth is cleared
-      try {
-        final firestore = FirebaseBackend.firestore;
-        // Wait for any pending writes to complete (with timeout)
-        await firestore.waitForPendingWrites().timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            AppLogger.log('Timeout waiting for pending Firestore writes');
-          },
-        );
-        // Disable network to prevent any new operations
-        await firestore.disableNetwork().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () {
-            AppLogger.log('Timeout disabling Firestore network during signout');
-          },
-        );
-      } catch (e) {
-        AppLogger.error('Error waiting for Firestore writes: $e');
-      }
-
-      // Close database connection before deleting
+      // Sync listeners are stopped. Give queued writes a bounded chance to
+      // finish while clearing local data, before releasing the Firebase user.
+      final pendingWrites = _finishPendingSignOutWrites();
+      signOutStage.value = SignOutStage.clearingDevice;
+      // A later account may only open the namespace after these steps succeed.
       try {
         final database = AppState.get('db');
-        if (database != null) await AppState.db.close();
-      } catch (e) {
-        AppLogger.error('Error closing database during signout', e);
+        if (database is Database && database.isOpen) await database.close();
+        await deleteSignedOutDatabase(await activeDatabasePath());
+      } catch (_) {
+        _signOutProblem = SignOutProblem.database;
+        rethrow;
       }
-      try {
-        await deleteDatabase(await activeDatabasePath());
-      } catch (e) {
-        AppLogger.error('Error closing/deleting database: $e');
-      }
-
-      // Clear only the selected environment's account preferences. Global UI
-      // choices, Firebase chooser details, and the inactive backend stay intact.
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await FirebaseScopedPreferences.clearActiveAccountPreferences(prefs);
-        LocalDataEncryption.resetScopedPreferenceCache();
-        await AlarmIdService.resetForScopeChange(prefs: prefs);
-        await prefs.setBool('has_launched_before', true);
-      } catch (e) {
-        AppLogger.error('Error clearing SharedPreferences: $e');
-      }
-
-      // Clear File System
-      try {
-        final fs = await fileSystem();
-        await _clearFileSystemRecursively(await fs.documentDir);
-        await _clearFileSystemRecursively(await fs.cacheDir);
-      } catch (error) {
-        AppLogger.error('Error accessing files during signout', error);
-      }
+      await AppState.clearSignOutPreferences();
+      final prefs = await AppState.prefs;
+      LocalDataEncryption.resetScopedPreferenceCache();
+      await AlarmIdService.resetForScopeChange(prefs: prefs);
+      await prefs.setBool('has_launched_before', true);
+      await retireAccountFiles(prefs, nextGeneration);
 
       // Invalidate avatar cache so new user gets fresh avatar
       UserAvatar.invalidateCache();
@@ -2381,6 +2725,7 @@ class AuthService {
       // Clear cache
       _cachedProfile = null;
       _localPhotoPath = null;
+      _localPhotoUid = null;
       _firestoreLinkedProviders = {};
       _primaryProvider = null;
 
@@ -2388,49 +2733,33 @@ class AuthService {
       sessionInvalid.value = false;
       ReviewAccess.clear();
 
-      // Reset App State
-      try {
-        await Future.microtask(() {});
-        await AppState.reset();
-      } catch (e) {
-        AppLogger.error('Error resetting AppState: $e');
-      }
+      await AppState.reset();
 
-      // Re-enable Firestore network after signing out
-      // Note: We intentionally do NOT call terminate() or clearPersistence() because:
-      // 1. terminate() makes the Firestore instance permanently unusable until app restart
-      // 2. clearPersistence() requires terminate() first, which breaks re-login
-      // Security rules will prevent access to old cached data from other users
-      try {
-        final firestore = FirebaseBackend.firestore;
-        await firestore.enableNetwork().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () {
-            AppLogger.log(
-              'Timeout re-enabling Firestore network after signout',
-            );
-          },
-        );
-      } catch (e) {
-        AppLogger.error('Error re-enabling Firestore network: $e');
-      }
+      signOutStage.value = SignOutStage.finishing;
+      await pendingWrites;
 
       // Sign Out
       if (!kIsWeb &&
           (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
-        await _googleSignIn.signOut();
+        try {
+          await _googleSignIn.signOut();
+        } catch (error) {
+          AppLogger.error(
+            'Could not sign out of the native Google session',
+            error,
+          );
+        }
       }
       await _auth.signOut();
 
-      // Reinitialize database after sign out
-      await Future.microtask(() {});
-      await initDatabase();
-      await NoteSortService().init();
+      if (reopenDatabase) {
+        await initDatabase();
+        await NoteSortService().init();
+      }
     } catch (e) {
       AppLogger.error('Error signing out', e);
       // Ensure we at least sign out from Firebase even if cleanup fails.
-      // Once Firebase auth is cleared, the app can recover through the
-      // normal signed-out flow even if some cleanup steps were best-effort.
+      // The account gate stays closed until unfinished local cleanup succeeds.
       try {
         await _auth.signOut();
         ReviewAccess.clear();
@@ -2443,61 +2772,13 @@ class AuthService {
         rethrow;
       }
 
-      try {
-        await initDatabase();
-        await NoteSortService().init();
-      } catch (dbError) {
-        AppLogger.error(
-          'Error reinitializing database after fallback signout: $dbError',
-        );
-      }
+      // Keep the durable marker and the account gate until a full retry succeeds.
+      rethrow;
     } finally {
       sessionInvalid.value = false;
-      // Authentication is already cleared. Failed local cleanup must not hide
-      // the login screen; fresh sign-in strictly retries reset before syncing.
-      for (final cleanup in <Future<void> Function()>[
-        AppState.clearSyncCheckpoints,
-        () =>
-            RemoteSyncCacheService().clear(strict: true, enforceSession: false),
-        () async {
-          if (currentUser == null) {
-            await LocalStorageRecovery(await AppState.prefs).completeLogout();
-          }
-        },
-      ]) {
-        try {
-          await cleanup();
-        } catch (error, stack) {
-          AppLogger.error('Local sign-out cleanup deferred', error, stack);
-        }
-      }
-    }
-  }
-
-  static Future<void> _clearFileSystemRecursively(String directory) async {
-    final fs = await fileSystem();
-
-    try {
-      AppLogger.log('Clearing file system directory: $directory');
-      final files = await fs.list(directory);
-      for (final file in files) {
-        final filePath = isAbsolute(file) ? file : join(directory, file);
-        try {
-          final isDir = await fs.isDirectory(filePath);
-          AppLogger.log('Deleting ${isDir ? "directory" : "file"}: $filePath');
-          if (isDir) {
-            await _clearFileSystemRecursively(filePath);
-            await fs.delete(filePath);
-          } else {
-            await fs.delete(filePath);
-          }
-          AppLogger.log('Deleted: $filePath');
-        } catch (e) {
-          AppLogger.error('Error deleting file/directory $filePath: $e');
-        }
-      }
-    } catch (e) {
-      AppLogger.error('Error clearing file system: $e');
+      // The preference drain owns checkpoint removal. Waiting on it again here
+      // would swallow its timeout and prevent the sign-out screen from offering Retry.
+      RemoteSyncCacheService().resetAfterSignOut();
     }
   }
 }

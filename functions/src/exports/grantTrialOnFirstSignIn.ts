@@ -1,5 +1,6 @@
 import { beforeUserSignedIn, HttpsError } from "firebase-functions/v2/identity";
-import { emailPassword } from "../config";
+import { cancelDeletion } from "../accountDeletionLifecycle";
+import { db, emailPassword } from "../config";
 import {
 	authorizeNativeAccountLink,
 	newNativeProviderLink,
@@ -58,6 +59,19 @@ export default beforeUserSignedIn(
 					"Verify the account-link code before linking this provider",
 				);
 			}
+		}
+
+		// Fail closed: a verified sign-in must cancel pending deletion before proceeding.
+		try {
+			await cancelDeletion(db, user.uid, "beforeUserSignedIn");
+		} catch (error) {
+			if (error instanceof HttpsError && error.code === "failed-precondition")
+				throw error;
+			console.error("Sign-in deletion safety check unavailable");
+			throw new HttpsError(
+				"unavailable",
+				"Sign-in is temporarily unavailable. Please try again.",
+			);
 		}
 
 		try {

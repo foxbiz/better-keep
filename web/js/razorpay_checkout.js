@@ -4,42 +4,38 @@
 (function () {
   'use strict';
 
-  // Store callbacks for Dart communication
-  let _onPaymentSuccess = null;
-  let _onPaymentError = null;
-  let _onPaymentCancelled = null;
-
-  /**
-   * Open Razorpay Checkout for Subscription
-   * @param {Object} options - Checkout options
-   * @param {string} options.keyId - Razorpay Key ID
-   * @param {string} options.subscriptionId - Razorpay Subscription ID
-   * @param {string} options.name - Business name
-   * @param {string} options.description - Plan description
-   * @param {string} options.prefillEmail - User's email
-   * @param {string} options.prefillContact - User's phone (optional)
-   * @param {string} options.theme - Theme color (hex)
-   */
-  window.openRazorpaySubscription = function (options) {
-    console.log('razorpay_checkout.js: openRazorpaySubscription called');
-    console.log('razorpay_checkout.js: options received:', JSON.stringify(options));
-    console.log('razorpay_checkout.js: theme color:', options.theme);
-    return new Promise((resolve, reject) => {
-      if (typeof Razorpay === 'undefined') {
-        reject({ error: 'Razorpay SDK not loaded' });
-        return;
+  let loading;
+  window.loadRazorpayCheckout = function () {
+    if (typeof window.Razorpay === 'function') return Promise.resolve(true);
+    if (loading) return loading;
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    loading = new Promise((resolve) => {
+      function finish() {
+        clearTimeout(timer);
+        script.onload = script.onerror = null;
+        const ready = typeof window.Razorpay === 'function';
+        if (!ready) script.remove();
+        resolve(ready);
       }
+      const timer = setTimeout(finish, 15000);
+      script.onload = script.onerror = finish;
+      document.head.appendChild(script);
+    }).finally(() => { loading = null; });
+    return loading;
+  };
 
+  function openCheckout(options, payment) {
+    return new Promise((resolve, reject) => {
       const themeColor = options.theme || '#FFA726';
       // Use a dark backdrop to match dark app themes
       const backdropColor = options.backdropColor || 'rgba(0, 0, 0, 0.7)';
-      console.log('razorpay_checkout.js: Using theme color:', themeColor);
 
       const rzpOptions = {
         key: options.keyId,
-        subscription_id: options.subscriptionId,
+        ...payment,
         name: options.name || 'Better Keep',
-        description: options.description || 'Pro Subscription',
+        description: options.description,
         image: 'https://betterkeep.app/icons/logo.png',
         prefill: {
           email: options.prefillEmail || '',
@@ -62,6 +58,7 @@
             success: true,
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_order_id: response.razorpay_order_id,
             razorpay_signature: response.razorpay_signature,
           });
         },
@@ -87,14 +84,14 @@
         reject({ error: true, message: e.message || 'Failed to open Razorpay' });
       }
     });
-  };
+  }
 
-  /**
-   * Check if Razorpay SDK is loaded
-   */
-  window.isRazorpayLoaded = function () {
-    return typeof Razorpay !== 'undefined';
-  };
-
-  console.log('Razorpay checkout bridge initialized');
+  window.openRazorpaySubscription = (options) =>
+    openCheckout(options, { subscription_id: options.subscriptionId });
+  window.openRazorpayOrder = (options) =>
+    openCheckout(options, {
+      order_id: options.orderId,
+      amount: options.amount,
+      currency: options.currency,
+    });
 })();

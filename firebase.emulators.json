@@ -20,6 +20,10 @@
     ],
     "headers": [
       {
+        "source": "/app{,/**}/offline_worker.js",
+        "headers": [{ "key": "Service-Worker-Allowed", "value": "/app" }]
+      },
+      {
         "source": "**",
         "headers": [
           {
@@ -42,6 +46,13 @@
             "key": "Cache-Control",
             "value": "no-cache, max-age=0, must-revalidate"
           }
+        ]
+      },
+      {
+        "source": "/oauth/storage/callback",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
         ]
       },
       {
@@ -168,6 +179,14 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/oauth/storage/start",
+        "function": "storageOAuthStart"
+      },
+      {
+        "source": "/oauth/storage/callback",
+        "destination": "/app/storage-auth.html"
+      },
       {
         "source": "/oauth/start",
         "function": "oauthStart"

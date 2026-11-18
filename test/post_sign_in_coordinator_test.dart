@@ -1,7 +1,48 @@
+import 'dart:async';
+
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final stage in [
+    PostSignInStage.identityValidation,
+    PostSignInStage.accountInitialization,
+    PostSignInStage.encryptionInitialization,
+  ]) {
+    test(
+      'network failure at ${stage.name} is recoverable without losing identity',
+      () async {
+        final harness = _Harness(
+          failingStage: stage,
+          failure: TimeoutException('offline'),
+        );
+        expect(
+          await harness.coordinator.run(),
+          PostSignInResult.recoverableFailure,
+        );
+        expect(harness.states.last.connectionUnavailable, true);
+        expect(harness.signOutCount, 0);
+        harness.failingStage = null;
+        expect(await harness.coordinator.run(), PostSignInResult.ready);
+        expect(harness.states.last.connectionUnavailable, false);
+      },
+    );
+  }
+
+  test('account deletion failure retains a stable support reason', () async {
+    final harness = _Harness(
+      failingStage: PostSignInStage.accountInitialization,
+      deletionFailure: true,
+    );
+    expect(
+      await harness.coordinator.run(),
+      PostSignInResult.recoverableFailure,
+    );
+    expect(harness.states.last.accountDeletionInProgress, true);
+    expect(harness.events.contains('encryption'), false);
+  });
+
   test('runs required stages and auxiliary services in order', () async {
     final harness = _Harness();
 
@@ -120,6 +161,7 @@ class _Harness {
     this.failingStage,
     this.failure = const _TestFailure(),
     this.fatalIdentityFailure = false,
+    this.deletionFailure = false,
     this.failingAuxiliary,
     this.failAllAuxiliaries = false,
   });
@@ -127,6 +169,7 @@ class _Harness {
   PostSignInStage? failingStage;
   final Object failure;
   final bool fatalIdentityFailure;
+  final bool deletionFailure;
   final String? failingAuxiliary;
   final bool failAllAuxiliaries;
   bool sessionCurrent = true;
@@ -172,6 +215,8 @@ class _Harness {
       ),
     ],
     isFatalIdentityFailure: (_) => fatalIdentityFailure,
+    isAccountDeletionInProgress: (_) => deletionFailure,
+    isConnectionFailure: isCloudConnectionFailure,
     isSessionCurrent: () => sessionCurrent,
     signOut: () async {
       signOutCount++;

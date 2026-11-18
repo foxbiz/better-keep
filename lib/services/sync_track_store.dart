@@ -270,7 +270,7 @@ class SyncTrackStore {
         return const SyncTrackTransition(applied: true, row: null);
       }
 
-      final now = DateTime.now();
+      final now = _nextRevision(current.updatedAt);
       requireCloudOperation();
       await transaction.update(
         table,
@@ -310,7 +310,7 @@ class SyncTrackStore {
       if (expectedUpdatedAt != null && current.updatedAt != expectedUpdatedAt) {
         return current;
       }
-      final now = DateTime.now();
+      final now = _nextRevision(current.updatedAt);
       requireCloudOperation();
       await transaction.update(
         table,
@@ -358,7 +358,7 @@ class SyncTrackStore {
         : incoming.action;
     final status =
         forceStatus ?? _dominantStatus(current?.status, incoming.status);
-    final now = DateTime.now();
+    final now = _nextRevision(current?.updatedAt);
     final createdAt = current?.createdAt ?? incoming.createdAt ?? now;
     final row = SyncTrackRow(
       id: current?.id,
@@ -398,6 +398,13 @@ class SyncTrackStore {
       whereArgs: [row.id],
     );
     return row;
+  }
+
+  // A queued edit must have a new revision even on a coarse or adjusted clock.
+  static DateTime _nextRevision(DateTime? previous) {
+    final now = DateTime.now();
+    if (previous == null || now.isAfter(previous)) return now;
+    return previous.add(const Duration(milliseconds: 1));
   }
 
   static Future<SyncTrackRow?> _findByLocalId(

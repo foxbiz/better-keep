@@ -7,6 +7,8 @@ const staticPaths = [
   ...pages.map((page) => page.slug),
   'pricing',
   'contact',
+  'help',
+  'web-beta',
   'privacy',
   'terms',
   'cancellation-refund',

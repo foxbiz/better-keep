@@ -24,7 +24,7 @@ export interface ReconciledEntitlement {
 	activeSources: string[];
 	entitlementState: string | null;
 	expiresAt: Timestamp | null;
-	plan: "free" | "pro";
+	plan: "free" | "lite" | "pro";
 	primarySource: string | null;
 	providerState: string | null;
 	renewalState: RenewalState;
@@ -62,6 +62,10 @@ function providerCandidate(
 }
 
 function compareCandidates(a: Candidate, b: Candidate): number {
+	const rank = (candidate: Candidate) =>
+		candidate.evaluated.plan === "pro" ? 2 : 1;
+	const tierDifference = rank(b) - rank(a);
+	if (tierDifference !== 0) return tierDifference;
 	const expiryDifference =
 		(b.evaluated.expiresAt?.toMillis() ?? 0) -
 		(a.evaluated.expiresAt?.toMillis() ?? 0);
@@ -116,7 +120,9 @@ export function selectEffectiveEntitlements({
 		const preservedProvider =
 			currentSource && isPaidSubscriptionSource(currentSource)
 				? activeProviders.find(
-						(candidate) => candidate.evaluated.source === currentSource,
+						(candidate) =>
+							candidate.evaluated.source === currentSource &&
+							candidate.evaluated.plan === activeProviders[0].evaluated.plan,
 					)
 				: null;
 		return {
@@ -168,7 +174,7 @@ export function selectEffectiveEntitlements({
 
 async function updateClaims(
 	userId: string,
-	plan: "free" | "pro",
+	plan: "free" | "lite" | "pro",
 	expiresAt: Timestamp | null,
 	claimsAuth: SubscriptionClaimsAuth,
 ): Promise<void> {
@@ -203,11 +209,13 @@ export async function reconcileUserEntitlement(
 		})),
 		now,
 	});
-	const maximumExpiry = active.reduce<Timestamp | null>((latest, candidate) => {
-		const expiry = candidate.evaluated.expiresAt;
-		if (!expiry) return latest;
-		return !latest || expiry.toMillis() > latest.toMillis() ? expiry : latest;
-	}, null);
+	const maximumExpiry = active
+		.filter((candidate) => candidate.evaluated.plan === primary?.evaluated.plan)
+		.reduce<Timestamp | null>((latest, candidate) => {
+			const expiry = candidate.evaluated.expiresAt;
+			if (!expiry) return latest;
+			return !latest || expiry.toMillis() > latest.toMillis() ? expiry : latest;
+		}, null);
 	const activeSources = [
 		...new Set(
 			active
@@ -226,7 +234,11 @@ export async function reconcileUserEntitlement(
 			inactiveProvider?.evaluated.entitlementState ??
 			null,
 		expiresAt: maximumExpiry ?? inactiveProvider?.evaluated.expiresAt ?? null,
-		plan: primary ? "pro" : "free",
+		plan: primary
+			? primary.evaluated.plan === "lite"
+				? "lite"
+				: "pro"
+			: "free",
 		primarySource:
 			primary?.evaluated.source ?? inactiveProvider?.evaluated.source ?? null,
 		providerState:
@@ -249,7 +261,7 @@ export async function reconcileUserEntitlement(
 	} else {
 		await statusRef.set(
 			{
-				plan: "pro",
+				plan: result.plan,
 				source: primary.evaluated.source,
 				// Canonical fields above replace all legacy aliases. In particular,
 				// a stale purchasePlatform/expiryDate from a trial must not override
@@ -304,12 +316,7 @@ export async function reconcileUserEntitlement(
 		.collection(ADMIN_SUBSCRIPTION_ISSUE_COLLECTION)
 		.doc(issueId("claims", userId));
 	try {
-		await updateClaims(
-			userId,
-			primary ? "pro" : "free",
-			maximumExpiry,
-			claimsAuth,
-		);
+		await updateClaims(userId, result.plan, maximumExpiry, claimsAuth);
 		await claimsIssueRef.delete();
 	} catch (error) {
 		if (isDeletedAuthUserError(error)) {

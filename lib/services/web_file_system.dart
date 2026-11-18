@@ -10,8 +10,9 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'file_system_base.dart';
+import 'web_release.dart';
 
-class WebFileSystem implements FileSystem {
+class WebFileSystem implements FileSystem, FileSystemMetadata {
   WebFileSystem._(this._backend);
 
   static WebFileSystem? _cached;
@@ -78,6 +79,9 @@ class WebFileSystem implements FileSystem {
   Future<String> readString(String path) => _backend.readString(path);
 
   @override
+  Future<void> deleteTrees(List<String> paths) => _backend.deleteTrees(paths);
+
+  @override
   Future<bool> delete(String path) => _backend.delete(path);
 
   @override
@@ -90,14 +94,27 @@ class WebFileSystem implements FileSystem {
   Future<bool> isFile(String path) => _backend.isFile(path);
 
   @override
-  Future<List<String>> list([String directory = '/']) =>
-      _backend.list(directory);
+  Future<List<String>> list([String directory = '/']) async {
+    final prefix = '/${_segments(directory).join('/')}';
+    final entries = await _backend.list(prefix);
+    return entries
+        .map((name) => prefix == '/' ? '/$name' : '$prefix/$name')
+        .toList();
+  }
 
   @override
   Future<String> copy(String sourcePath, String targetPath) async {
     final bytes = await readBytes(sourcePath);
     await writeBytes(targetPath, bytes);
     return targetPath;
+  }
+
+  @override
+  Future<int?> metadataLength(String path) async {
+    if (_backend case FileSystemMetadata metadata) {
+      return metadata.metadataLength(path);
+    }
+    return null;
   }
 
   @override
@@ -176,7 +193,7 @@ class WebFileSystem implements FileSystem {
 
     List<String> entries;
     try {
-      entries = await list(directory);
+      entries = await _backend.list(directory);
     } catch (e) {
       result.add({
         'path': directory,
@@ -217,7 +234,7 @@ class WebFileSystem implements FileSystem {
       int? size;
       bool isFile = false;
       try {
-        size = await length(fullPath);
+        size = await metadataLength(fullPath) ?? await length(fullPath);
         isFile = true;
       } catch (_) {
         // Not a file or can't read - might be a directory
@@ -228,7 +245,7 @@ class WebFileSystem implements FileSystem {
       } else {
         // Try as directory
         try {
-          final subEntries = await list(fullPath);
+          final subEntries = await _backend.list(fullPath);
           result.add({
             'path': fullPath,
             'type': 'directory',
@@ -297,7 +314,9 @@ class WebFileSystem implements FileSystem {
       return backend;
     }
 
-    final backend = _IndexedDbBackend(dbName: 'better_keep_fs');
+    final backend = _IndexedDbBackend(
+      dbName: '${webStoragePrefix}better_keep_fs',
+    );
     await backend.init().timeout(
       const Duration(seconds: 5),
       onTimeout: () => throw TimeoutException('IndexedDB init timed out'),
@@ -310,6 +329,7 @@ class WebFileSystem implements FileSystem {
 Future<FileSystem> createFileSystem() => WebFileSystem.instance();
 
 abstract class _FileSystemBackend {
+  Future<void> deleteTrees(List<String> paths);
   Future<void> init();
   Future<void> writeBytes(String path, Uint8List data, {bool append = false});
   Future<void> writeString(String path, String data, {bool append = false});
@@ -322,7 +342,7 @@ abstract class _FileSystemBackend {
   Future<List<String>> list(String directory);
 }
 
-class _OpfsBackend implements _FileSystemBackend {
+class _OpfsBackend implements _FileSystemBackend, FileSystemMetadata {
   dynamic _root;
 
   static bool get isSupported {
@@ -336,6 +356,14 @@ class _OpfsBackend implements _FileSystemBackend {
   Future<void> init() async {
     final storage = js_util.getProperty(html.window.navigator, 'storage');
     _root = await _promise(js_util.callMethod(storage, 'getDirectory', []));
+    if (isBetaWebBuild) {
+      _root = await _promise(
+        js_util.callMethod(_root, 'getDirectoryHandle', [
+          'better_keep_beta',
+          js_util.jsify({'create': true}),
+        ]),
+      );
+    }
 
     // Test that createWritable is actually available (Safari doesn't support it)
     await _testCreateWritable();
@@ -418,6 +446,23 @@ class _OpfsBackend implements _FileSystemBackend {
   }
 
   @override
+  Future<int?> metadataLength(String path) async {
+    final fileHandle = await _getFileHandle(path, create: false);
+    if (fileHandle == null) return null;
+    try {
+      final file = await _promise(
+        js_util.callMethod(fileHandle, 'getFile', []),
+      );
+      return (js_util.getProperty(file, 'size') as num).toInt();
+    } catch (error) {
+      if (error is html.DomException && error.name == 'NotFoundError') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  @override
   Future<Uint8List> readBytes(String path) async {
     final fileHandle = await _getFileHandle(path, create: false);
     if (fileHandle == null) throw "$path is not a file";
@@ -431,6 +476,27 @@ class _OpfsBackend implements _FileSystemBackend {
   Future<String> readString(String path) async {
     final bytes = await readBytes(path);
     return utf8.decode(bytes);
+  }
+
+  @override
+  Future<void> deleteTrees(List<String> paths) async {
+    await Future.wait(
+      paths.map((path) async {
+        final parts = _PathParts.from(path);
+        final dir = await _resolveDirectory(parts.directories, create: false);
+        if (dir == null) return;
+        try {
+          await _promise(
+            js_util.callMethod(dir, 'removeEntry', [
+              parts.fileName,
+              js_util.jsify({'recursive': true}),
+            ]),
+          );
+        } on html.DomException catch (error) {
+          if (error.name != 'NotFoundError') rethrow;
+        }
+      }),
+    );
   }
 
   @override
@@ -468,7 +534,7 @@ class _OpfsBackend implements _FileSystemBackend {
   @override
   Future<List<String>> list(String directory) async {
     final segments = _segments(directory);
-    final dirHandle = await _resolveDirectory(segments, create: false) ?? _root;
+    final dirHandle = await _resolveDirectory(segments, create: false);
     if (dirHandle == null) return const [];
 
     final iterator = js_util.callMethod(dirHandle, 'entries', []);
@@ -638,6 +704,19 @@ class _IndexedDbBackend implements _FileSystemBackend {
   }
 
   @override
+  Future<void> deleteTrees(List<String> paths) async {
+    final txn = _db!.transaction(_storeName, 'readwrite');
+    final store = txn.objectStore(_storeName);
+    await Future.wait([
+      for (final path in paths) ...[
+        store.delete(path),
+        store.delete(idb.KeyRange.bound('$path/', '${path}0', false, true)),
+      ],
+      txn.completed,
+    ]);
+  }
+
+  @override
   Future<bool> delete(String path) async {
     final txn = _db!.transaction(_storeName, 'readwrite');
     final store = txn.objectStore(_storeName);
@@ -688,40 +767,41 @@ class _IndexedDbBackend implements _FileSystemBackend {
   Future<List<String>> list(String directory) async {
     final txn = _db!.transaction(_storeName, 'readonly');
     final store = txn.objectStore(_storeName);
-    final List<String> allKeys = [];
-
-    await store.openCursor(autoAdvance: true).forEach((cursor) {
-      if (cursor != null) {
-        allKeys.add(cursor.key.toString());
+    // Enumerate only keys below this directory. Scanning values here would
+    // deserialize the entire media library before sign-out could remove it.
+    final base = directory == '/' ? '' : directory;
+    final prefix = '$base/';
+    final request = store.openKeyCursor(
+      idb.KeyRange.bound(prefix, '${base}0', false, true),
+    );
+    final entries = <String>{};
+    Object? cursorError;
+    final subscription = request.onSuccess.listen((_) {
+      // IndexedDB completes the read transaction when no continuation is
+      // queued. Propagate callback failures instead of returning half a list.
+      try {
+        final cursor = request.result as idb.Cursor?;
+        if (cursor == null) return;
+        final key = cursor.key;
+        if (key is! String) {
+          cursor.next();
+          return;
+        }
+        final slash = key.indexOf('/', prefix.length);
+        final child = key.substring(prefix.length, slash < 0 ? null : slash);
+        if (child.isNotEmpty) entries.add(child);
+        cursor.next(slash < 0 ? null : '${key.substring(0, slash)}0');
+      } catch (error) {
+        cursorError = error;
       }
     });
-
-    await txn.completed;
-
-    // IndexedDB stores flat key-value pairs with full paths as keys.
-    // We need to filter to entries directly under the given directory
-    // and return only the immediate child name (not full path).
-    final normalizedDir = directory == '/' ? '' : directory;
-    final prefix = normalizedDir.isEmpty ? '/' : '$normalizedDir/';
-
-    final Set<String> entries = {};
-    for (final key in allKeys) {
-      if (!key.startsWith(prefix)) continue;
-
-      // Get the part after the prefix
-      final remainder = key.substring(prefix.length);
-      if (remainder.isEmpty) continue;
-
-      // Get just the first segment (immediate child)
-      final slashIndex = remainder.indexOf('/');
-      final childName = slashIndex == -1
-          ? remainder
-          : remainder.substring(0, slashIndex);
-      if (childName.isNotEmpty) {
-        entries.add(childName);
-      }
+    try {
+      await txn.completed;
+      final error = cursorError;
+      if (error != null) throw error;
+    } finally {
+      await subscription.cancel();
     }
-
     return entries.toList();
   }
 }

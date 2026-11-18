@@ -172,10 +172,7 @@ void main() {
           home: Scaffold(
             body: Align(
               alignment: Alignment.topLeft,
-              child: SizedBox(
-                width: 300,
-                child: NoteCard(note: note, index: 0),
-              ),
+              child: SizedBox(width: 300, child: NoteCard(note: note)),
             ),
           ),
         ),
@@ -285,7 +282,7 @@ void main() {
                       alignment: Alignment.topLeft,
                       child: SizedBox(
                         width: width,
-                        child: NoteCard(note: note, index: 0),
+                        child: NoteCard(note: note),
                       ),
                     ),
                   ),
@@ -379,7 +376,7 @@ void main() {
                     alignment: Alignment.topLeft,
                     child: SizedBox(
                       width: width,
-                      child: NoteCard(note: note, index: 0),
+                      child: NoteCard(note: note),
                     ),
                   ),
                 ),

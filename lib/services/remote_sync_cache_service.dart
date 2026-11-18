@@ -72,8 +72,23 @@ class RemoteSyncCacheService {
   /// Whether the cache has been initialized
   bool _initialized = false;
 
-  /// Lock to prevent concurrent file operations
-  bool _isWriting = false;
+  Future<void> _pendingWrites = Future.value();
+
+  Future<T> _withWriteLock<T>(Future<T> Function() operation) {
+    final result = _pendingWrites.then((_) => operation());
+    _pendingWrites = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  void _requireSession(RemoteSyncCacheMetadata? session) {
+    requireCloudOperation();
+    if (session == null || !identical(session, _metadata)) {
+      throw const CloudOperationCancelled();
+    }
+  }
 
   /// Get cache directory path
   Future<String> _getCacheDir() async {
@@ -89,7 +104,12 @@ class RemoteSyncCacheService {
     try {
       await _loadMetadata();
       if (_metadata != null && !_metadata!.isCommitReady) {
-        await _loadAllPages();
+        if (!await _loadAllPages()) {
+          // An older cache may also have removed completed pages. Without a
+          // complete page set, only the library checkpoint is safe to resume.
+          _metadata!.allPagesFetched = false;
+          _pages.clear();
+        }
         _recomputeCompletionState();
         await _saveMetadata();
         AppLogger.log(
@@ -130,15 +150,24 @@ class RemoteSyncCacheService {
 
   /// Start a new sync session - clears existing cache and prepares for new sync
   Future<RemoteSyncCacheMetadata> startNewSync(
-    CloudSyncCursor? startingCursor,
-  ) async {
-    await clear();
-    final metadata = RemoteSyncCacheMetadata(lastCursor: startingCursor);
+    CloudSyncCursor? startingCursor, {
+    String? ownerUid,
+  }) => _withWriteLock(() async {
+    await _clear(false);
+    requireCloudOperation();
+    final metadata = RemoteSyncCacheMetadata(
+      lastCursor: startingCursor,
+      ownerUid: ownerUid,
+    );
     _metadata = metadata;
-    await _saveMetadata();
+    await _writeSessionFile(
+      _metadataFile,
+      jsonEncode(metadata.toJson()),
+      metadata,
+    );
     AppLogger.log("[SYNC] CACHE: Started new sync session");
     return metadata;
-  }
+  });
 
   /// Add a new page of syncs to the cache
   /// [maxCursor] is the greatest exact cloud cursor safe to commit once all
@@ -153,19 +182,39 @@ class RemoteSyncCacheService {
       );
       return;
     }
-    _pages[page.pageIndex] = page;
-    _metadata!.totalPages = _pages.length;
-    _metadata!.updatedAt = DateTime.now();
-
-    if (maxCursor != null) {
-      final current = _metadata!.lastCursor;
-      _metadata!.lastCursor = current == null
-          ? maxCursor
-          : current.max(maxCursor);
-    }
-
-    await _savePage(page);
-    await _saveMetadata();
+    final session = _metadata!;
+    await _withWriteLock(() async {
+      _requireSession(session);
+      final fs = await _fileSystemProvider();
+      final directory = path.join(await fs.cacheDir, _cacheDir);
+      final file = path.join(directory, 'page_${page.pageIndex}.json');
+      _requireSession(session);
+      try {
+        await _writeCacheFile(fs, file, jsonEncode(page.toJson()), session);
+        _requireSession(session);
+      } on CloudOperationCancelled {
+        // The replacement session cannot reuse this index until the lock is released.
+        if (page.pageIndex >= session.totalPages && await fs.exists(file)) {
+          await fs.delete(file);
+        }
+        rethrow;
+      }
+      _pages[page.pageIndex] = page;
+      if (page.syncs.isNotEmpty) session.syncComplete = false;
+      if (page.pageIndex >= session.totalPages) {
+        session.totalPages = page.pageIndex + 1;
+      }
+      session.updatedAt = DateTime.now();
+      if (maxCursor != null) {
+        session.lastCursor = session.lastCursor?.max(maxCursor) ?? maxCursor;
+      }
+      await _writeCacheFile(
+        fs,
+        path.join(directory, _metadataFile),
+        jsonEncode(session.toJson()),
+        session,
+      );
+    });
     AppLogger.log(
       "[SYNC] CACHE: Added page ${page.pageIndex} with ${page.syncs.length} syncs",
     );
@@ -233,12 +282,12 @@ class RemoteSyncCacheService {
 
         entry.value.syncs.remove(remoteDocId);
 
-        // If page is now empty, delete the page file
-        if (entry.value.syncs.isEmpty) {
-          await _deletePageFile(entry.key);
+        // Keep the empty page on disk as proof it was applied until the
+        // whole fetch is committed. A missing file must trigger a refetch.
+        await _savePage(entry.value);
+        if (entry.value.syncs.isEmpty &&
+            identical(_pages[entry.key], entry.value)) {
           _pages.remove(entry.key);
-        } else {
-          await _savePage(entry.value);
         }
         break;
       }
@@ -268,21 +317,6 @@ class RemoteSyncCacheService {
         metadata.allPagesFetched && _getTotalRemainingCount() == 0;
     if (!wasComplete && metadata.syncComplete) {
       AppLogger.log("[SYNC] CACHE: All syncs completed!");
-    }
-  }
-
-  /// Delete a page file from disk
-  Future<void> _deletePageFile(int pageIndex) async {
-    try {
-      final fs = await _fileSystemProvider();
-      final cacheDir = await _getCacheDir();
-      final pagePath = path.join(cacheDir, 'page_$pageIndex.json');
-      if (await fs.exists(pagePath)) {
-        await fs.delete(pagePath);
-        AppLogger.log("[SYNC] CACHE: Deleted empty page file $pageIndex");
-      }
-    } catch (e) {
-      AppLogger.error('[SYNC] CACHE ERROR: Deleting page file $pageIndex', e);
     }
   }
 
@@ -458,10 +492,21 @@ class RemoteSyncCacheService {
     };
   }
 
+  /// The retired account directory is cleaned in the background. Drop only
+  /// the in-memory pages here, including when sign-out needs another attempt.
+  void resetAfterSignOut() {
+    _pages.clear();
+    _metadata = null;
+    _initialized = false;
+  }
+
   /// Clear the entire cache
-  Future<void> clear({bool strict = false, bool enforceSession = true}) async {
+  Future<void> clear({bool strict = false}) =>
+      _withWriteLock(() => _clear(strict));
+
+  Future<void> _clear(bool strict) async {
     final fs = await _fileSystemProvider();
-    final cacheDir = await _getCacheDir();
+    final cacheDir = path.join(await fs.cacheDir, _cacheDir);
 
     try {
       final files = await fs.isDirectory(cacheDir)
@@ -469,7 +514,7 @@ class RemoteSyncCacheService {
           : <String>[];
       for (final fileName in files) {
         final filePath = path.join(cacheDir, fileName);
-        if (enforceSession) requireCloudOperation();
+        requireCloudOperation();
         final deleted = await fs.delete(filePath);
         if (strict && !deleted && await fs.exists(filePath)) {
           throw StateError('Could not clear remote sync cache');
@@ -505,71 +550,82 @@ class RemoteSyncCacheService {
 
   /// Save metadata to disk
   Future<void> _saveMetadata() async {
-    if (_metadata == null) return;
-    await _writeFile(_metadataFile, jsonEncode(_metadata!.toJson()));
+    final session = _metadata;
+    if (session == null) return;
+    await _withWriteLock(
+      () => _writeSessionFile(
+        _metadataFile,
+        jsonEncode(session.toJson()),
+        session,
+      ),
+    );
   }
 
-  /// Load all pages from disk
-  Future<void> _loadAllPages() async {
-    if (_metadata == null) return;
-
+  /// Returns false when an expected page is missing, even if others survived.
+  Future<bool> _loadAllPages() async {
     final fs = await _fileSystemProvider();
     final cacheDir = await _getCacheDir();
 
     for (int i = 0; i < _metadata!.totalPages; i++) {
       final pagePath = path.join(cacheDir, 'page_$i.json');
       try {
-        if (await fs.exists(pagePath)) {
-          final content = await fs.readString(pagePath);
-          final json = jsonDecode(content) as Map<String, dynamic>;
-          final page = PendingRemoteSyncPage.fromJson(json);
-          page.syncs.removeWhere(
-            (_, sync) => sync.status == PendingRemoteSyncStatus.completed,
-          );
-          for (final sync in page.syncs.values) {
-            if (sync.status == PendingRemoteSyncStatus.inProgress) {
-              sync.status = PendingRemoteSyncStatus.pending;
-            }
+        if (!await fs.exists(pagePath)) return false;
+        final content = await fs.readString(pagePath);
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        final page = PendingRemoteSyncPage.fromJson(json);
+        page.syncs.removeWhere(
+          (_, sync) => sync.status == PendingRemoteSyncStatus.completed,
+        );
+        for (final sync in page.syncs.values) {
+          if (sync.status == PendingRemoteSyncStatus.inProgress) {
+            sync.status = PendingRemoteSyncStatus.pending;
           }
-          _pages[i] = page;
         }
+        if (page.syncs.isNotEmpty) _pages[i] = page;
       } catch (e) {
         AppLogger.error('[SYNC] CACHE ERROR: Loading page $i', e);
         rethrow;
       }
     }
+    return true;
   }
 
   /// Save a page to disk
-  Future<void> _savePage(PendingRemoteSyncPage page) async {
-    await _writeFile('page_${page.pageIndex}.json', jsonEncode(page.toJson()));
+  Future<void> _savePage(PendingRemoteSyncPage page) {
+    final session = _metadata;
+    return _withWriteLock(
+      () => _writeSessionFile(
+        'page_${page.pageIndex}.json',
+        jsonEncode(page.toJson()),
+        session,
+      ),
+    );
   }
 
-  /// Write a file to the cache directory with simple locking
-  Future<void> _writeFile(String fileName, String content) async {
-    // Simple lock to prevent concurrent writes
-    while (_isWriting) {
-      await Future.delayed(const Duration(milliseconds: 10));
-    }
-    _isWriting = true;
+  Future<void> _writeSessionFile(
+    String fileName,
+    String content,
+    RemoteSyncCacheMetadata? session,
+  ) async {
+    final fs = await _fileSystemProvider();
+    final file = path.join(await fs.cacheDir, _cacheDir, fileName);
+    await _writeCacheFile(fs, file, content, session);
+  }
 
+  Future<void> _writeCacheFile(
+    FileSystem fs,
+    String file,
+    String content,
+    RemoteSyncCacheMetadata? session,
+  ) async {
+    _requireSession(session);
+    final temp = '$file.tmp';
     try {
-      final fs = await _fileSystemProvider();
-      final cacheDir = await _getCacheDir();
-      final filePath = path.join(cacheDir, fileName);
-
-      // Write to temp file first, then rename for atomicity
-      final tempPath = '$filePath.tmp';
-      requireCloudOperation();
-      await fs.writeString(tempPath, content);
-
-      // Keep the previous file until the replacement bytes are ready.
-      requireCloudOperation();
-      // Replace from the staged file
-      await fs.copy(tempPath, filePath);
-      await fs.delete(tempPath);
+      await fs.writeString(temp, content);
+      _requireSession(session);
+      await fs.copy(temp, file);
     } finally {
-      _isWriting = false;
+      await fs.delete(temp);
     }
   }
 }

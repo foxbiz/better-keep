@@ -30,6 +30,9 @@ class OtpInputField extends StatelessWidget {
   /// Whether to auto-focus this field
   final bool autofocus;
 
+  /// Smaller spacing for compact dialogs without changing other OTP flows.
+  final bool compact;
+
   const OtpInputField({
     super.key,
     required this.controller,
@@ -40,6 +43,7 @@ class OtpInputField extends StatelessWidget {
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
+    this.compact = false,
   });
 
   @override
@@ -51,22 +55,24 @@ class OtpInputField extends StatelessWidget {
       controller: controller,
       focusNode: focusNode,
       keyboardType: TextInputType.number,
+      textInputAction: TextInputAction.done,
+      autofillHints: const [AutofillHints.oneTimeCode],
       textAlign: TextAlign.center,
       maxLength: 6,
       enabled: enabled,
       autofocus: autofocus,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      style: const TextStyle(
-        fontSize: 28,
-        letterSpacing: 12,
+      style: TextStyle(
+        fontSize: compact ? 20 : 28,
+        letterSpacing: compact ? 4 : 12,
         fontWeight: FontWeight.bold,
       ),
       decoration: InputDecoration(
         counterText: '',
         hintText: '••••••',
         hintStyle: TextStyle(
-          fontSize: 28,
-          letterSpacing: 12,
+          fontSize: compact ? 20 : 28,
+          letterSpacing: compact ? 4 : 12,
           color: theme.colorScheme.outline.withValues(alpha: 0.5),
         ),
         errorText: errorText,
@@ -97,9 +103,9 @@ class OtpInputField extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: theme.colorScheme.error, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 16,
-          horizontal: 16,
+        contentPadding: EdgeInsets.symmetric(
+          vertical: compact ? 12 : 16,
+          horizontal: compact ? 12 : 16,
         ),
       ),
       onChanged: onChanged,

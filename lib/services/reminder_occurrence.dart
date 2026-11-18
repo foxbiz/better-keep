@@ -62,9 +62,11 @@ bool isReminderOccurrence(
 String encodeReminderNotificationPayload(
   int noteId,
   Reminder reminder,
-  DateTime dueAt,
-) {
+  DateTime dueAt, {
+  String? deliveryGeneration,
+}) {
   return jsonEncode({
+    'deliveryGeneration': ?deliveryGeneration,
     'kind': 'reminder',
     'scheduleVersion': 2,
     'noteId': noteId,

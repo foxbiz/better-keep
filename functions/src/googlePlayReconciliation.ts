@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import {
-	evaluateSubscription,
 	type EntitlementState,
+	evaluateSubscription,
 	type SubscriptionEnvironment,
 } from "./subscriptionEntitlement";
 

@@ -273,10 +273,7 @@ void main() {
               alignment: Alignment.topLeft,
               child: SizedBox(
                 width: width,
-                child: NoteCard(
-                  note: reminderNote(completed: completed),
-                  index: 0,
-                ),
+                child: NoteCard(note: reminderNote(completed: completed)),
               ),
             ),
           ),
@@ -357,7 +354,7 @@ void main() {
         MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: NoteCard(note: allDayNote, index: 0)),
+          home: Scaffold(body: NoteCard(note: allDayNote)),
         ),
       );
       await tester.pump(const Duration(milliseconds: 300));

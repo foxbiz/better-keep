@@ -24,6 +24,7 @@ export const GET: APIRoute = () => {
       '## Primary links',
       '',
       `- [Website](${product.siteUrl}/)`,
+      `- [Plans and pricing](${product.siteUrl}/pricing)`,
       `- [Security design](${product.siteUrl}/security)`,
       `- [Source code](${product.githubUrl})`,
       `- [Privacy policy](${product.siteUrl}/privacy)`,

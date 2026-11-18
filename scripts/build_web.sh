@@ -9,10 +9,11 @@ ADMIN_HOSTING_OUTPUT="$PROJECT_DIR/build/admin"
 
 cd "$PROJECT_DIR"
 
-DART_DEFINE_ARGS=()
 if [[ -f "$PROJECT_DIR/.env" ]]; then
-  DART_DEFINE_ARGS+=(--dart-define-from-file="$PROJECT_DIR/.env")
+  set -- "--dart-define-from-file=$PROJECT_DIR/.env" "$@"
 fi
+
+node "$PROJECT_DIR/scripts/validate_web_compatibility.mjs" "$@"
 
 rm -rf "$APP_OUTPUT"
 
@@ -20,8 +21,9 @@ rm -rf "$APP_OUTPUT"
   --release \
   --base-href=/app/ \
   --output="$APP_OUTPUT" \
-  "${DART_DEFINE_ARGS[@]}" \
   "$@"
+
+node "$PROJECT_DIR/tool/prepare_offline_assets.mjs" "$APP_OUTPUT"
 
 npm --prefix "$PROJECT_DIR/site" run build
 npm --prefix "$PROJECT_DIR/admin-site" run build
@@ -49,6 +51,9 @@ do
 done
 
 cp -R "$PROJECT_DIR/web/js" "$HOSTING_OUTPUT/js"
+
+# The emulator bridge is used only by debug builds.
+node "$PROJECT_DIR/scripts/strip_emulator_proxy.mjs" "$HOSTING_OUTPUT"
 
 node "$PROJECT_DIR/scripts/validate_visibility.mjs" "$HOSTING_OUTPUT"
 

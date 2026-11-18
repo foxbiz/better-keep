@@ -4,8 +4,13 @@ import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show compute, kDebugMode;
+import 'package:better_keep/components/sync_provider_tile.dart';
 import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
 import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/models/note.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
@@ -30,7 +35,16 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   Map<String, dynamic> _stats = {};
   List<NoteSyncTrack> _pendingItems = [];
   bool _loading = true;
-  bool _isRefreshing = false;
+  Timer? _refreshTimer;
+  bool _refreshing = false;
+  bool _refreshAgain = false;
+  static const _pageSize = 50;
+  int _pendingLimit = _pageSize;
+  int _pendingTotal = 0;
+  Future<int>? _databaseSize;
+  String? _listedProvider;
+  String? _listedAccount;
+  bool _externalRunning = false;
 
   // Web-specific state
   String _opfsStatus = '';
@@ -56,76 +70,126 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    Note.on('changed', _onNoteChanged);
+    FirebaseSyncPreference.instance.addListener(_onSyncStatusChange);
+    ExternalSyncService.instance.addListener(_onExternalSync);
     NoteSyncService().isSyncing.addListener(_onSyncStatusChange);
+    unawaited(_refresh());
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    Note.off('changed', _onNoteChanged);
+    FirebaseSyncPreference.instance.removeListener(_onSyncStatusChange);
+    ExternalSyncService.instance.removeListener(_onExternalSync);
     NoteSyncService().isSyncing.removeListener(_onSyncStatusChange);
     super.dispose();
   }
 
-  void _onSyncStatusChange() {
-    // Don't refresh while already refreshing
-    if (_isRefreshing) return;
-    _refresh();
+  void _onExternalSync() {
+    final active = ExternalSyncService.instance.progress.isActive;
+    // Idle notifications can also change the selected connection's metadata.
+    if (_externalRunning && active) return;
+    _externalRunning = active;
+    _onSyncStatusChange();
+  }
+
+  void _onNoteChanged(NoteEvent _) =>
+      _scheduleRefresh(const Duration(seconds: 1));
+
+  void _onSyncStatusChange() =>
+      _scheduleRefresh(const Duration(milliseconds: 250));
+
+  void _scheduleRefresh(Duration delay) {
+    _refreshTimer ??= Timer(delay, () {
+      _refreshTimer = null;
+      _refresh();
+    });
   }
 
   Future<void> _refresh() async {
     if (!mounted) return;
-    if (_isRefreshing) return;
-
-    _isRefreshing = true;
-    setState(() => _loading = true);
-
+    if (_refreshing) {
+      _refreshAgain = true;
+      return;
+    }
+    _refreshing = true;
+    final preference = FirebaseSyncPreference.instance;
+    final provider = preference.selectedProvider;
+    final session = ExternalSyncService.instance.session;
+    final connection = session?.connections.connections[provider];
+    final account = preference.accountId;
     try {
-      // Run all async operations in parallel for faster loading
-      final results =
-          await Future.wait([
-            NoteSyncTrack.count(status: SyncStatus.synced),
-            NoteSyncTrack.count(status: SyncStatus.failed),
-            NoteSyncTrack.count(),
-            NoteSyncTrack.get(pending: true),
-            _getDbSize(),
-          ]).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              // Return default values on timeout
-              return [0, 0, 0, <NoteSyncTrack>[], 0];
-            },
-          );
-
-      if (mounted) {
-        setState(() {
-          _stats = {
-            'Synced Notes': results[0] as int,
-            'Pending Notes': (results[3] as List).length,
-            'Failed Notes': results[1] as int,
-            'SyncTrack Items': results[2] as int,
-            'DB Size': '${((results[4] as int) / 1024).toStringAsFixed(2)} KB',
-            'Is Syncing': NoteSyncService().isSyncing.value,
-            'Cache Has Pending': RemoteSyncCacheService().hasPendingSyncs,
-            'Sync Cache Active': RemoteSyncCacheService().metadata != null,
-            'E2EE Status': E2EEService.instance.status.value.name,
-            'E2EE UMK Available': E2EEService.instance.isAvailable,
-          };
-          _pendingItems = results[3] as List<NoteSyncTrack>;
-          _loading = false;
-          _isRefreshing = false;
-        });
-      } else {
-        _isRefreshing = false;
+      if (provider != _listedProvider || account != _listedAccount) {
+        _pendingLimit = _pageSize;
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _stats = {'Error': e.toString()};
-          _loading = false;
-          _isRefreshing = false;
+      if (account != _listedAccount) _databaseSize = null;
+      final stats = <String, dynamic>{};
+      var pendingTotal = 0;
+      var items = <NoteSyncTrack>[];
+      if (provider == 'firebase') {
+        items = await NoteSyncTrack.get(pending: true, limit: _pendingLimit);
+        pendingTotal = await NoteSyncTrack.count(pending: true);
+        stats.addAll({
+          'Synced Notes': await NoteSyncTrack.count(status: SyncStatus.synced),
+          'Pending Notes': pendingTotal,
+          'Failed Notes': await NoteSyncTrack.count(status: SyncStatus.failed),
+          'Is Syncing': NoteSyncService().isSyncing.value,
+          'Cache Has Pending': RemoteSyncCacheService().hasPendingSyncs,
+          'Sync Cache Active': RemoteSyncCacheService().metadata != null,
         });
-      } else {
-        _isRefreshing = false;
+      } else if (session != null &&
+          connection != null &&
+          session.connections.canVerifyBackup(connection.provider)) {
+        final store = session.engine.store;
+        stats['Unacknowledged Notes'] =
+            await SyncMutationJournal.pendingNotesForProvider(
+              store.database,
+              store.scope,
+              connection.replicaId,
+            );
+      } else if (syncProviderOptions.containsKey(provider)) {
+        stats['Unacknowledged Notes'] = 'Unavailable';
+      }
+      final dbSize = await (_databaseSize ??= _getDbSize());
+      stats.addAll({
+        'DB Size': '${(dbSize / 1024).toStringAsFixed(2)} KB',
+        'E2EE Status': E2EEService.instance.status.value.name,
+        'E2EE UMK Available': E2EEService.instance.isAvailable,
+      });
+      if (!mounted ||
+          provider != preference.selectedProvider ||
+          account != preference.accountId) {
+        return;
+      }
+      setState(() {
+        _listedProvider = provider;
+        _listedAccount = account;
+        _stats = stats;
+        _pendingItems = items;
+        _pendingTotal = pendingTotal;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted ||
+          provider != preference.selectedProvider ||
+          account != preference.accountId) {
+        return;
+      }
+      setState(() {
+        _listedProvider = null;
+        _pendingLimit = _pageSize;
+        _pendingTotal = 0;
+        _pendingItems = [];
+        _stats = {'Error': e.toString()};
+        _loading = false;
+      });
+    } finally {
+      _refreshing = false;
+      if (mounted && _refreshAgain) {
+        _refreshAgain = false;
+        _onSyncStatusChange();
       }
     }
   }
@@ -329,7 +393,13 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
       appBar: AppBar(
         title: const Text("Nerd Stats"),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              _databaseSize = null;
+              _refresh();
+            },
+          ),
         ],
       ),
       body: _loading
@@ -337,53 +407,66 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
           : ListView(
               children: [
                 _buildStatCard(),
-                const Divider(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: ValueListenableBuilder<SyncProgress>(
-                    valueListenable: NoteSyncService().syncStatus,
-                    builder: (context, status, child) {
-                      if (status.isEmpty) return const SizedBox.shrink();
-                      return Card(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            "Status: ${status.phase.name}",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                if (_listedProvider == 'firebase') ...[
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: ValueListenableBuilder<SyncProgress>(
+                      valueListenable: NoteSyncService().syncStatus,
+                      builder: (context, status, child) {
+                        if (status.isEmpty) return const SizedBox.shrink();
+                        return Card(
+                          color: Colors.blue.withValues(alpha: 0.1),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              "Status: ${status.phase.name}",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    "Pending Sync Items (${_pendingItems.length})",
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                ..._pendingItems.map(
-                  (item) => ListTile(
-                    title: Text(item.action.name.toUpperCase()),
-                    subtitle: Text(
-                      "Local: ${item.localId}\nRemote: ${item.remoteId ?? 'N/A'}\nStatus: ${item.status}",
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: () async {
-                        await AppState.db.delete(
-                          'sync_track',
-                          where: 'id = ?',
-                          whereArgs: [item.id],
                         );
-                        _refresh();
                       },
                     ),
                   ),
-                ),
-                const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      "Pending Sync Items ($_pendingTotal)",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  ..._pendingItems.map(
+                    (item) => ListTile(
+                      title: Text(item.action.name.toUpperCase()),
+                      subtitle: Text(
+                        "Local: ${item.localId}\nRemote: ${item.remoteId ?? 'N/A'}\nStatus: ${item.status}",
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () async {
+                          final preference = FirebaseSyncPreference.instance;
+                          if (preference.selectedProvider != 'firebase' ||
+                              preference.accountId != _listedAccount) {
+                            return;
+                          }
+                          await item.discardPendingIfUnchanged();
+                          _refresh();
+                        },
+                      ),
+                    ),
+                  ),
+                  if (_pendingItems.length < _pendingTotal)
+                    TextButton(
+                      onPressed: () {
+                        _pendingLimit += _pageSize;
+                        _refresh();
+                      },
+                      child: const Text('Show more'),
+                    ),
+                  const Divider(),
+                ],
                 // OPFS section (Web only)
                 if (kIsWeb) ...[_buildOpfsSection(), const Divider()],
                 // SQLite Database Viewer (debug only - exposes raw DB access)
@@ -391,8 +474,7 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                   _buildDatabaseViewerSection(),
                   const Divider(),
                 ],
-                // Sync Cache Debug section
-                _buildCacheDebugSection(),
+                if (_listedProvider == 'firebase') _buildCacheDebugSection(),
                 const Divider(),
                 ListTile(
                   title: const Text("View Sync Logs"),
@@ -402,42 +484,54 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
                     showPage(context, const LogViewerPage());
                   },
                 ),
-                ListTile(
-                  title: const Text("Clear Sync Track"),
-                  subtitle: const Text(
-                    "Deletes all pending sync items (Dangerous)",
-                  ),
-                  trailing: const Icon(Icons.delete_forever, color: Colors.red),
-                  onTap: () async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Clear Sync Track?'),
-                        content: const Text(
-                          'This will delete all pending sync items. '
-                          'This action cannot be undone and may cause sync issues.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
+                if (_listedProvider == 'firebase')
+                  ListTile(
+                    title: const Text("Clear Sync Track"),
+                    subtitle: const Text(
+                      "Deletes all pending sync items (Dangerous)",
+                    ),
+                    trailing: const Icon(
+                      Icons.delete_forever,
+                      color: Colors.red,
+                    ),
+                    onTap: () async {
+                      final database = AppState.db;
+                      final account = _listedAccount;
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Clear Sync Track?'),
+                          content: const Text(
+                            'This will delete all pending sync items. '
+                            'This action cannot be undone and may cause sync issues.',
                           ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel'),
                             ),
-                            child: const Text('Delete All'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      await AppState.db.delete('sync_track');
-                      _refresh();
-                    }
-                  },
-                ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                              ),
+                              child: const Text('Delete All'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (mounted &&
+                          confirm == true &&
+                          identical(database, AppState.get('db')) &&
+                          account ==
+                              FirebaseSyncPreference.instance.accountId &&
+                          FirebaseSyncPreference.instance.selectedProvider ==
+                              'firebase') {
+                        await NoteSyncTrack.clearPending();
+                        _refresh();
+                      }
+                    },
+                  ),
               ],
             ),
     );
@@ -1147,12 +1241,19 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
   }
 
   Widget _buildStatCard() {
+    final preference = FirebaseSyncPreference.instance;
+    final stats = {
+      if (preference.selectedProvider == _listedProvider &&
+          preference.accountId == _listedAccount)
+        'Sync provider': syncProviderDisplayName(context, preference),
+      ..._stats,
+    };
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          children: _stats.entries.map((e) {
+          children: stats.entries.map((e) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(

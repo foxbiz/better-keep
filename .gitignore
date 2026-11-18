@@ -11,7 +11,9 @@
 .svn/
 .swiftpm/
 .secrets
+outputs/
 migrate_working_dir/
+docs/reviews/
 
 # IntelliJ related
 *.iml
@@ -64,3 +66,5 @@ web/firebase-config.json
 .env
 .firebase/
 firepit-log.txt
+
+/ios/build/

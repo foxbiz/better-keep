@@ -1,9 +1,13 @@
 import 'dart:async';
+
+import 'package:better_keep/components/device_verification.dart';
+
 import 'dart:io';
 
 import 'package:better_keep/components/e2ee_status_card.dart';
 import 'package:better_keep/components/user_avatar.dart';
 import 'package:better_keep/components/user_device_tile.dart';
+import 'package:better_keep/components/user_devices_section.dart';
 import 'package:better_keep/dialogs/loading_dialog.dart';
 import 'package:better_keep/dialogs/otp_dialog.dart';
 import 'package:better_keep/dialogs/recovery_key_dialog.dart';
@@ -11,9 +15,11 @@ import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/share_link.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/pages/setup_recovery_key_page.dart';
+import 'package:better_keep/pages/settings/storage_sync_page.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/models/note_sync_track.dart';
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/ui/custom_icons.dart';
 import 'package:better_keep/services/device_approval_notification_service.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
@@ -36,10 +42,17 @@ import 'package:better_keep/services/cloud_functions_helper.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../components/sync_provider_tile.dart';
+
 import 'package:sqflite/sqflite.dart';
 
 class UserPage extends StatefulWidget {
-  const UserPage({super.key});
+  const UserPage({super.key}) : _showAllDevices = false;
+
+  const UserPage._devices() : _showAllDevices = true;
+
+  final bool _showAllDevices;
 
   @override
   State<UserPage> createState() => _UserPageState();
@@ -81,21 +94,25 @@ class _UserPageState extends State<UserPage> {
 
   @override
   void initState() {
-    _fetchStats();
+    if (!widget._showAllDevices) _fetchStats();
     if (!_isManagedReview) {
       _fetchE2EEInfo();
-      _fetchLinkedProviders();
-      _initShareService();
+      if (!widget._showAllDevices) {
+        _fetchLinkedProviders();
+        _initShareService();
+      }
     } else {
       _isLoadingDevices = false;
     }
-    NoteSyncService().isSyncing.addListener(_onSyncChange);
+    if (!widget._showAllDevices) {
+      NoteSyncService().isSyncing.addListener(_onSyncChange);
+      NoteShareService().pendingRequests.addListener(_onShareRequestsChange);
+      NoteShareService().activeShares.addListener(_onActiveSharesChange);
+    }
     E2EEService.instance.status.addListener(_onE2EEStatusChange);
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
       _onPendingApprovalsChange,
     );
-    NoteShareService().pendingRequests.addListener(_onShareRequestsChange);
-    NoteShareService().activeShares.addListener(_onActiveSharesChange);
     super.initState();
   }
 
@@ -147,6 +164,35 @@ class _UserPageState extends State<UserPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget._showAllDevices) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(context.l10n.yourDevices),
+          actions: [
+            IconButton(
+              onPressed: _isLoadingDevices ? null : _fetchE2EEInfo,
+              icon: const Icon(Icons.refresh),
+              tooltip: context.l10n.refresh,
+            ),
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: _fetchE2EEInfo,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: _buildDeviceSection(context),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final user = AuthService.currentUser;
     final cached = AuthService.cachedProfile;
 
@@ -239,6 +285,21 @@ class _UserPageState extends State<UserPage> {
                         // Subscription Section
                         _buildSubscriptionSection(context),
                         const SizedBox(height: 32),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Card(
+                            margin: EdgeInsets.zero,
+                            clipBehavior: Clip.antiAlias,
+                            child: SyncProviderTile(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const StorageSyncPage(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
                         // Connected Accounts Section
                         _buildConnectedPlatformsSection(context),
                         const SizedBox(height: 32),
@@ -300,197 +361,14 @@ class _UserPageState extends State<UserPage> {
   }
 
   Future<void> _handleSignOut(BuildContext context) async {
-    // Track if user has already confirmed through a warning dialog
-    bool hasConfirmed = false;
-
-    // Check for unsynced notes first
-    int pendingSyncCount = 0;
-    try {
-      pendingSyncCount = await NoteSyncTrack.count(pending: true);
-    } catch (e) {
-      // If we can't check, assume no pending syncs
-      debugPrint('Error checking pending syncs: $e');
-    }
-
-    if (pendingSyncCount > 0 && context.mounted) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.sync_problem, color: Colors.red, size: 48),
-          ),
-          title: Text(
-            "⚠️ ${context.l10n.dataLossWarning}",
-            style: const TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.cloud_off, color: Colors.red),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        context.l10n.notesNotSynced(pendingSyncCount),
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(context.l10n.unsyncedNotesWarning),
-            ],
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: Text(context.l10n.signOutAnyway),
-            ),
-          ],
-        ),
-      );
-
-      if (proceed != true) return;
-      hasConfirmed = true;
-    }
-
-    if (!context.mounted) {
-      AppLogger.log('Sign out cancelled because its page was disposed');
+    final accountCurrent = AuthService.captureSession();
+    if (!await confirmDeviceSignOut(
+      context,
+      warnWithoutRecovery: !_hasRecoveryKey && _devices.isNotEmpty,
+    )) {
       return;
     }
-
-    // Check if recovery key is set - warn user if not
-    if (!_hasRecoveryKey && _devices.isNotEmpty) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.warning_rounded,
-              color: Colors.red,
-              size: 48,
-            ),
-          ),
-          title: Text(
-            "⚠️ ${context.l10n.dataLossWarning}",
-            style: const TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.key_off, color: Colors.red),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        context.l10n.noRecoveryKeySet,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(context.l10n.signOutNoRecoveryKeyWarning),
-            ],
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: Text(context.l10n.signOutAnyway),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed != true) return;
-    } else if (!hasConfirmed) {
-      // Standard confirmation dialog (only if user hasn't already confirmed)
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.logout, color: Colors.orange, size: 32),
-          ),
-          title: Text(
-            context.l10n.signOut,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Text(context.l10n.signOutConfirmation),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-              child: Text(context.l10n.signOut),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed != true) return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
+    if (!context.mounted || !accountCurrent()) return;
 
     try {
       await AuthService.signOut();
@@ -500,9 +378,6 @@ class _UserPageState extends State<UserPage> {
     } catch (error, stackTrace) {
       AppLogger.error('Failed to sign out', error, stackTrace);
       if (context.mounted) {
-        setState(() {
-          _isLoading = false;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.somethingWentWrongTryAgain),
@@ -923,6 +798,22 @@ class _UserPageState extends State<UserPage> {
                   // Subscription details for paid users
                   _buildSubscriptionDetails(context, status),
                   const SizedBox(height: 16),
+                  if (!kIsWeb &&
+                      Platform.isAndroid &&
+                      status.isActiveProviderEntitlement &&
+                      status.isPlayStoreSubscription) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => showPaywall(
+                        context,
+                        initialPlan: status.plan == UserPlan.lite
+                            ? UserPlan.pro
+                            : UserPlan.lite,
+                      ),
+                      icon: const Icon(Icons.swap_horiz),
+                      label: Text(context.l10n.choosePlan),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   // Show different buttons based on subscription state
                   if (status.isTrialSubscription) ...[
                     // Trial users - show upgrade button
@@ -932,7 +823,7 @@ class _UserPageState extends State<UserPage> {
                           child: FilledButton.icon(
                             onPressed: () => _handleSubscribe(context),
                             icon: const Icon(Icons.star),
-                            label: Text(context.l10n.upgradeToPro),
+                            label: Text(context.l10n.upgrade),
                           ),
                         ),
                       ],
@@ -1055,7 +946,7 @@ class _UserPageState extends State<UserPage> {
                 ] else ...[
                   // Upgrade prompt for free users
                   Text(
-                    context.l10n.upgradeToProDescription,
+                    context.l10n.choosePlan,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -1067,7 +958,7 @@ class _UserPageState extends State<UserPage> {
                         child: FilledButton.icon(
                           onPressed: () => _handleSubscribe(context),
                           icon: const Icon(Icons.star),
-                          label: Text(context.l10n.upgradeToPro),
+                          label: Text(context.l10n.upgrade),
                         ),
                       ),
                     ],
@@ -1102,6 +993,7 @@ class _UserPageState extends State<UserPage> {
           backgroundColor = theme.colorScheme.surfaceContainerHighest;
           textColor = theme.colorScheme.onSurfaceVariant;
           break;
+        case UserPlan.lite:
         case UserPlan.pro:
           backgroundColor = theme.colorScheme.primaryContainer;
           textColor = theme.colorScheme.onPrimaryContainer;
@@ -1383,7 +1275,7 @@ class _UserPageState extends State<UserPage> {
     }
 
     if (!context.mounted) return;
-    showPaywall(context, feature: GatedFeature.realtimeCloudSync);
+    showPaywall(context);
   }
 
   Future<void> _handleCancelSubscription(BuildContext context) async {
@@ -1961,124 +1853,27 @@ class _UserPageState extends State<UserPage> {
     }
   }
 
-  Widget _buildDeviceSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final approvedDevices = _devices.where((d) => d.isApproved).toList();
-    final pendingDevices = _devices.where((d) => d.isPending).toList();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.devices, size: 24),
-                const SizedBox(width: 12),
-                Text(
-                  context.l10n.yourDevices,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                if (_isLoadingDevices)
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Show error message if there's an error
-            if (_devicesError != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer.withValues(
-                    alpha: 0.3,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.wifi_off,
-                      size: 20,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _devicesError!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _fetchE2EEInfo,
-                      child: Text(context.l10n.retry),
-                    ),
-                  ],
-                ),
-              ),
-            ]
-            // Show skeleton loader while loading
-            else if (_isLoadingDevices && _devices.isEmpty) ...[
-              _buildDeviceSkeletonLoader(context),
-            ]
-            // Show devices
-            else ...[
-              // Pending devices (show approval buttons) - only on primary device
-              if (pendingDevices.isNotEmpty && _isFirstDevice) ...[
-                Text(
-                  context.l10n.pendingApprovalSection,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...pendingDevices.map(
-                  (device) =>
-                      _buildDeviceTile(context, device, isPending: true),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Approved devices
-              if (approvedDevices.isNotEmpty) ...[
-                Text(
-                  context.l10n.authorizedDevices,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...approvedDevices.map(
-                  (device) =>
-                      _buildDeviceTile(context, device, isPending: false),
-                ),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
+  Future<void> _openDevicesPage() async {
+    if (_isManagedReview) return;
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const UserPage._devices()));
+    // Reflect approvals/removals made on the full list when returning.
+    if (mounted) await _fetchE2EEInfo();
   }
+
+  Widget _buildDeviceSection(BuildContext context) => UserDevicesSection(
+    devices: _devices,
+    showAll: widget._showAllDevices,
+    isMainDevice: _isFirstDevice,
+    loading: _isLoadingDevices,
+    error: _devicesError,
+    onRefresh: _fetchE2EEInfo,
+    onShowAll: _openDevicesPage,
+    loadingBuilder: _buildDeviceSkeletonLoader,
+    tileBuilder: (context, device, pending) =>
+        _buildDeviceTile(context, device, isPending: pending),
+  );
 
   /// Builds a skeleton loader for the device list.
   Widget _buildDeviceSkeletonLoader(BuildContext context) {
@@ -2216,13 +2011,30 @@ class _UserPageState extends State<UserPage> {
       );
     }
 
+    final createdAt = device.createdAt.toLocal();
+    final formats = MaterialLocalizations.of(context);
+    final createdDate = formats.formatShortDate(createdAt);
+    final createdTime = formats.formatTimeOfDay(
+      TimeOfDay.fromDateTime(createdAt),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
     return UserDeviceTile(
+      isFlat: widget._showAllDevices,
+      createdAtLabel:
+          '${context.l10n.deviceAdded}: $createdDate · $createdTime',
       name: localizedDeviceName(context.l10n, device.name),
       subtitle: _formatDeviceSubtitle(device),
       platformIcon: platformIcon,
       isPending: isPending,
       isCurrentDevice: isCurrentDevice,
-      currentDeviceLabel: context.l10n.thisDevice,
+      currentDeviceLabel:
+          kIsWeb &&
+              isCurrentDevice &&
+              !isPending &&
+              E2EEService.instance.isCryptoReady &&
+              !E2EESecureStorage.instance.hasRememberedBrowserIdentity
+          ? context.l10n.browserSessionOnly
+          : context.l10n.thisDevice,
       trailing: trailing,
     );
   }
@@ -2404,20 +2216,41 @@ class _UserPageState extends State<UserPage> {
   Future<void> _approveDevice(String deviceId) async {
     setState(() => _processingDeviceIds.add(deviceId));
     try {
-      await E2EEService.instance.deviceManager.approveDevice(deviceId);
-      // Cancel the notification for this device
-      await DeviceApprovalNotificationService().cancelNotification(deviceId);
-      await _fetchE2EEInfo();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(context.l10n.deviceApproved_)));
+      final manager = E2EEService.instance.deviceManager;
+      final request = await manager.pendingVerificationRequest(deviceId);
+      if (!mounted) return;
+      final verified = await showDeviceVerificationDialog(
+        context,
+        request,
+        updates: manager.watchPendingVerificationRequest(deviceId),
+        verifyCode: (request, code, current) =>
+            manager.verifyDevicePairingCode(request, code, isCurrent: current),
+      );
+      if (!mounted || verified == null) return;
+      final receipt = await manager.approveDevice(verified);
+      if (!mounted) return;
+      // Show the next step immediately; metadata refresh is not part of pairing.
+      final confirmation = showDeviceApprovalReceipt(
+        context,
+        receipt,
+        finished: manager.approvalReceiptFinished(receipt),
+      );
+      try {
+        await DeviceApprovalNotificationService().cancelNotification(deviceId);
+        await _fetchE2EEInfo();
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to refresh devices after approval',
+          error,
+          stackTrace,
+        );
       }
+      await confirmation;
     } catch (error, stackTrace) {
       AppLogger.error('Failed to approve device', error, stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.somethingWentWrongTryAgain)),
+          SnackBar(content: Text(context.l10n.deviceVerificationRetry)),
         );
       }
     } finally {
@@ -2802,17 +2635,29 @@ class _UserPageState extends State<UserPage> {
       return null;
     }
 
-    if (!loadingResult.success) {
+    final cooldown = deletionOtpCooldown(loadingResult.error);
+    if (!loadingResult.success && cooldown == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.l10n.failedSendCode),
+          content: Text(
+            isAccountDeletionPaused(loadingResult.error)
+                ? context.l10n.accountDeletionPaused
+                : context.l10n.failedSendCode,
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return null;
     }
-
-    final maskedEmail = loadingResult.data?['email'] as String?;
+    if (cooldown != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.deletionCodeRecentlyRequested)),
+      );
+    }
+    // A retry during cooldown can still use the original code; do not strand
+    // users outside the input dialog after a cancelled or timed-out send.
+    final maskedEmail =
+        (loadingResult.data?['email'] ?? cooldown?['email']) as String?;
 
     // Show OTP input dialog using reusable component
     // Note: We don't verify on server here - just collect the OTP
@@ -2992,7 +2837,11 @@ class _UserPageState extends State<UserPage> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.l10n.failedScheduleDeletion),
+            content: Text(
+              isAccountDeletionPaused(error)
+                  ? context.l10n.accountDeletionPaused
+                  : context.l10n.failedScheduleDeletion,
+            ),
             backgroundColor: Colors.red,
           ),
         );

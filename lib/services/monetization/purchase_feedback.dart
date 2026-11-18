@@ -4,6 +4,7 @@ enum PurchaseOutcome {
   activated,
   restored,
   alreadyActive,
+  changePlanRequired,
   activationPending,
   ownershipConflict,
   cancelled,

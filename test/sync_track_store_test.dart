@@ -21,6 +21,51 @@ void main() {
 
   tearDown(() => database.close());
 
+  test('diagnostic clear preserves completed and in-flight uploads', () async {
+    for (final status in SyncStatus.values) {
+      await database.insert('sync_track', {
+        'local_id': status.index + 1,
+        'action': 'upload',
+        'status': status.name,
+      });
+    }
+    final row = (await NoteSyncTrack.get(status: SyncStatus.pending)).single;
+    await database.update(
+      'sync_track',
+      {'status': 'synced'},
+      where: 'id = ?',
+      whereArgs: [row.id],
+    );
+    expect(await row.discardPendingIfUnchanged(), isFalse);
+    expect(await NoteSyncTrack.clearPending(), 1);
+    expect(await NoteSyncTrack.count(status: SyncStatus.synced), 2);
+    expect(await NoteSyncTrack.count(status: SyncStatus.syncing), 1);
+  });
+
+  test(
+    'stale diagnostics cannot discard a requeued edit or deletion',
+    () async {
+      final current = NoteSyncTrack(localId: 1, action: SyncAction.upload);
+      await current.save();
+      // A clock adjustment must not let two edits share a revision.
+      await database.update('sync_track', {
+        'updated_at': DateTime.now()
+            .add(const Duration(days: 1))
+            .toIso8601String(),
+      });
+      for (final action in [SyncAction.upload, SyncAction.delete]) {
+        final displayed = (await NoteSyncTrack.get(pending: true)).single;
+        await current.setAction(action);
+        expect(current.id, displayed.id);
+        expect(current.updatedAt!.isAfter(displayed.updatedAt!), isTrue);
+        expect(await displayed.discardPendingIfUnchanged(), isFalse);
+        expect((await NoteSyncTrack.get(pending: true)).single.action, action);
+      }
+      expect(await current.discardPendingIfUnchanged(), isTrue);
+      expect(await NoteSyncTrack.get(pending: true), isEmpty);
+    },
+  );
+
   for (final fixture in _fixtures) {
     group(fixture.name, () {
       test('stale null identity preserves canonical remote ID', () async {

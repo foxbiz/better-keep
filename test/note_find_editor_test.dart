@@ -46,7 +46,7 @@ void main() {
       isTrue,
     );
 
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     expect(
       editor.controller.selection,
       const TextSelection(baseOffset: 0, extentOffset: 5),
@@ -123,7 +123,7 @@ void main() {
     tester,
   ) async {
     await _pumpEditor(tester, body: 'alpha beta alpha');
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.controller.updateSelection(
       const TextSelection(baseOffset: 11, extentOffset: 16),
       ChangeSource.local,
@@ -270,7 +270,7 @@ void main() {
     tester,
   ) async {
     await _pumpEditor(tester, body: 'alpha beta alpha');
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.focusNode.requestFocus();
     await tester.pump();
 
@@ -336,7 +336,7 @@ void main() {
     tester,
   ) async {
     await _pumpEditor(tester, body: 'alpha', platform: TargetPlatform.windows);
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.focusNode.requestFocus();
     await tester.pump();
 
@@ -370,7 +370,7 @@ void main() {
 
   testWidgets('Cmd+Option+F opens replace on macOS', (tester) async {
     await _pumpEditor(tester, body: 'alpha');
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.focusNode.requestFocus();
     await tester.pump();
 

@@ -1,6 +1,8 @@
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:better_keep/components/storage_warning.dart';
 import 'package:flutter/material.dart';
+import 'package:better_keep/services/auth_service.dart';
 
 /// A localized, implementation-agnostic loading screen used before the main
 /// application shell is ready.
@@ -27,7 +29,9 @@ class AppStartupLoadingView extends StatelessWidget {
 /// A localized startup failure screen that deliberately keeps diagnostics out
 /// of user-visible copy. Callers are responsible for logging the root cause.
 class AppStartupErrorView extends StatelessWidget {
-  const AppStartupErrorView({super.key, this.onRetry});
+  const AppStartupErrorView({super.key, this.onRetry, this.onLibrarySignOut});
+
+  final VoidCallback? onLibrarySignOut;
 
   final VoidCallback? onRetry;
 
@@ -63,7 +67,9 @@ class AppStartupErrorView extends StatelessWidget {
                     const SizedBox(height: 12),
                     const StorageWarning(),
                     Text(
-                      retry == null
+                      onLibrarySignOut != null
+                          ? context.l10n.localLibraryUnavailable
+                          : retry == null
                           ? context.l10n.startupRestartMessage
                           : context.l10n.startupRetryMessage,
                       textAlign: TextAlign.center,
@@ -76,6 +82,19 @@ class AppStartupErrorView extends StatelessWidget {
                         label: Text(context.l10n.retry),
                       ),
                     ],
+                    if (onLibrarySignOut != null)
+                      TextButton(
+                        onPressed: () async {
+                          if (await confirmDeviceSignOut(
+                                context,
+                                unavailableLibrary: true,
+                              ) &&
+                              context.mounted) {
+                            onLibrarySignOut?.call();
+                          }
+                        },
+                        child: Text(context.l10n.signOut),
+                      ),
                   ],
                 ),
               ),
@@ -85,4 +104,63 @@ class AppStartupErrorView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Replaces the account navigator while shared local storage is being cleared.
+class SignOutProgressView extends StatelessWidget {
+  const SignOutProgressView({
+    super.key,
+    required this.stage,
+    this.problem,
+    required this.onRetry,
+  });
+
+  final SignOutStage stage;
+  final SignOutProblem? problem;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (stage != SignOutStage.retry) ...[
+                const SizedBox(width: 180, child: LinearProgressIndicator()),
+                const SizedBox(height: 16),
+              ],
+              Semantics(
+                liveRegion: true,
+                child: Text(switch (stage) {
+                  SignOutStage.working => context.l10n.signingOut,
+                  SignOutStage.clearingDevice =>
+                    context.l10n.signOutClearingDevice,
+                  SignOutStage.finishing => context.l10n.signOutFinishing,
+                  SignOutStage.retry => switch (problem) {
+                    SignOutProblem.secureStorage =>
+                      context.l10n.signOutSecureStorageRetry,
+                    SignOutProblem.otherWindow =>
+                      context.l10n.signOutOtherWindowRetry,
+                    SignOutProblem.database =>
+                      context.l10n.signOutDatabaseRetry,
+                    null => context.l10n.signOutCleanupRetry,
+                  },
+                }, textAlign: TextAlign.center),
+              ),
+              if (stage == SignOutStage.retry) ...[
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: onRetry,
+                  child: Text(context.l10n.retry),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }

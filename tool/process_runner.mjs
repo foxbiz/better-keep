@@ -15,6 +15,7 @@ function runSpawnedProcess({
 	command,
 	args,
 	cwd,
+	detached = false,
 	env,
 	buildResult,
 	onChild,
@@ -25,6 +26,7 @@ function runSpawnedProcess({
 	return new Promise((resolve, reject) => {
 		const child = spawnImplementation(command, args, {
 			cwd,
+			...(detached ? {detached: true} : {}),
 			env,
 			stdio,
 		});
@@ -83,6 +85,7 @@ export function runChildProcess({
 	command,
 	args,
 	cwd,
+	detached = false,
 	env,
 	spawnImplementation = crossSpawn,
 	signalHost = process,
@@ -92,6 +95,7 @@ export function runChildProcess({
 		buildResult: childExitCode,
 		command,
 		cwd,
+		detached,
 		env,
 		signalHost,
 		spawnImplementation,

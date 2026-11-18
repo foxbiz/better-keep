@@ -4,7 +4,6 @@ import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/e2ee/device_manager.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
-import 'package:better_keep/services/e2ee/secure_storage.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
@@ -298,8 +297,6 @@ class _RecoverWithPassphraseDialogState
         }
 
         _updateStatus(RecoveryProgress.almostThere);
-        // Cache the device status as approved
-        await E2EESecureStorage.instance.cacheDeviceStatus('approved');
 
         // Update E2EE status to ready and start listening for changes
         E2EEService.instance.status.value = E2EEStatus.ready;

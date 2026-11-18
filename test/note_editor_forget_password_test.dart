@@ -44,6 +44,32 @@ void main() {
     });
   }
 
+  testWidgets(
+    'closing an untouched synced note preserves its stored revision',
+    (tester) async {
+      // Equivalent delta with different serialization and a legacy separate title.
+      const original = '[ { "insert": "café 日本語 🌿" }, { "insert": "\\n" } ]';
+      final modified = DateTime.utc(2026, 1, 1);
+      final note = Note(
+        id: 81,
+        title: 'Original title',
+        content: original,
+        updatedAt: modified,
+      );
+      await _pumpEditorLauncher(tester, note);
+      await tester.tap(find.text('Open editor'));
+      await tester.pumpAndSettle();
+      final titleField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(titleField.controller!.text, 'Original title');
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Open editor'), findsOneWidget);
+      expect(note.content, original);
+      expect(note.title, 'Original title');
+      expect(note.updatedAt, modified);
+    },
+  );
+
   testWidgets('unchanged locked editor re-locks before its route closes', (
     tester,
   ) async {

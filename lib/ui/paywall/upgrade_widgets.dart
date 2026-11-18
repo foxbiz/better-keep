@@ -26,7 +26,7 @@ class UpgradeBanner extends StatelessWidget {
     return ValueListenableBuilder<SubscriptionStatus>(
       valueListenable: planService.statusNotifier,
       builder: (context, status, child) {
-        if (status.effectivePlan != UserPlan.free) {
+        if (status.effectivePlan == UserPlan.pro) {
           return const SizedBox.shrink();
         }
         return child!;

@@ -52,7 +52,8 @@ export function aggregateRevenueTransactions(
 			continue;
 		}
 		const month = monthKey(occurredAt.toDate());
-		const monthly = (result.months[month] ??= emptyTotals());
+		result.months[month] ??= emptyTotals();
+		const monthly = result.months[month];
 		for (const totals of [result.lifetime, monthly]) {
 			add(totals.grossCurrencies, currency, contribution.gross);
 			add(totals.refundCurrencies, currency, contribution.refunds);

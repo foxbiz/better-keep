@@ -14,6 +14,7 @@ const runnerPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(runnerPath), "..");
 const componentOrder = [
 	"flutter",
+	"web-sign-out-lock",
 	"functions",
 	"admin-site",
 	"site",
@@ -31,6 +32,15 @@ export function affectedComponents(files) {
 	const components = new Set();
 	for (const file of files) {
 		if (isDocumentation(file)) continue;
+		if (
+			[
+				"lib/services/sign_out_lock.dart",
+				"lib/services/sign_out_lock_web.dart",
+				"lib/services/web_release.dart",
+				"lib/services/auth_service.dart",
+				"test/web_sign_out_lock_test.dart",
+			].includes(file)
+		) components.add("web-sign-out-lock");
 		if (
 			["package.json", "package-lock.json", ".npmrc", ".nvmrc"].includes(file)
 		) {
@@ -83,6 +93,8 @@ export function componentCommands(component, root = repositoryRoot) {
 				step("flutter", "analyze", "--no-pub"),
 				step("flutter", "test", "--no-pub", "test"),
 			];
+		case "web-sign-out-lock":
+			return [step("node", "tool/test_tasks.mjs", "web-sign-out-lock")];
 		case "functions":
 			// This existing command compiles once, checks scripts, then runs unit tests.
 			return [step("node", "tool/test_tasks.mjs", "functions")];

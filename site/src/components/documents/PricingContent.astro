@@ -1,182 +1,103 @@
 ---
 import DocumentIcon from './DocumentIcon.astro';
+import { product } from '../../data/product';
+
+const plans = [
+  { id: 'free', name: 'Free', benefit: 'Sync manually with your own storage.' },
+  { id: 'lite', name: 'Lite', benefit: 'Keep your devices up to date automatically with your own storage.' },
+  { id: 'pro', name: 'Pro', benefit: 'Use Better Keep cloud or your own storage, and lock as many notes as you like.' }
+] as const;
+
+const currencies = ['USD', 'INR'] as const;
+function formatPrice(amount: number, currency: typeof currencies[number]) {
+  return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+    style: 'currency', currency, minimumFractionDigits: amount % 100 === 0 ? 0 : 2
+  }).format(amount / 100);
+}
+
+const features = [
+  ['Local notes', 'Unlimited', 'Unlimited', 'Unlimited'],
+  ['Manual external sync', 'Yes', 'Yes', 'Yes'],
+  ['Automatic external sync', 'No', 'Yes', 'Yes'],
+  ['Built-in cloud sync', 'No', 'No', 'Yes'],
+  ['Locked Notes', 5, 5, 'Unlimited']
+] as const;
+
+const valueIcons = { Yes: 'check', No: 'circle-minus', Unlimited: 'infinity' } as const;
 ---
 
-<!-- Feature Comparison Table -->
-    <section class="comparison-section">
-      <h2>Feature Comparison</h2>
-      <table class="comparison-table">
-        <thead>
-          <tr>
-            <th>Feature</th>
-            <th>Free</th>
-            <th>Pro</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="feature-name">Local notes</td>
-            <td>Unlimited</td>
-            <td>Unlimited</td>
-          </tr>
-          <tr>
-            <td class="feature-name">Locked notes</td>
-            <td>Up to 5</td>
-            <td>Unlimited</td>
-          </tr>
-          <tr>
-            <td class="feature-name">Real-time cloud sync</td>
-            <td><span class="x-icon">✕</span></td>
-            <td><span class="check-icon">✓</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+<section>
+  <h2 id="plan-comparison">Feature Comparison</h2>
+  <table class="comparison-table" aria-labelledby="plan-comparison">
+    <thead><tr><th scope="col">Feature</th>{plans.map(plan => <th scope="col">{plan.name}</th>)}</tr></thead>
+    <tbody>
+      {features.map(([feature, ...values]) => (
+        <tr>
+          <th scope="row">{feature}</th>
+          {values.map(value => (
+            <td>
+              {typeof value === 'number' ? value : (
+                <span class="comparison-value" role="img" aria-label={value} title={value}>
+                  <DocumentIcon name={valueIcons[value]} size={value === 'Unlimited' ? 22 : 18} />
+                </span>
+              )}
+            </td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+  <p>You can restore previously synced Better Keep cloud notes on every plan.</p>
+</section>
 
-    <!-- Why We Charge Section -->
-    <section class="why-pay-section">
-      <h2>Pro features</h2>
-      <p>
-        Use Free for notes you keep on one device. Choose Pro when you want to
-        continue writing across devices or lock more than five notes.
-      </p>
-      <div class="why-cards">
-        <div class="why-card">
-          <DocumentIcon name="server" />
-          <h3>Sync across devices</h3>
-          <p>Capture a thought on your phone, then continue on your computer. Pro syncs notes and supported attachments across your approved devices.</p>
-        </div>
-        <div class="why-card">
-          <DocumentIcon name="shield-check" />
-          <h3>Sync personal writing privately</h3>
-          <p>Note titles, content, and supported attachments are encrypted on your device before syncing. <a href="/security">Read what encryption covers.</a></p>
-        </div>
-        <div class="why-card">
-          <DocumentIcon name="code-2" />
-          <h3>Lock more than five notes</h3>
-          <p>Free includes up to five PIN-locked notes. Pro removes that limit for personal journals, records, and other notes you want to lock.</p>
-        </div>
-        <div class="why-card">
-          <DocumentIcon name="ban" />
-          <h3>Support an independent app</h3>
-          <p>Your subscription helps fund continued development, maintenance, and the service that keeps your devices in sync.</p>
-        </div>
-      </div>
-    </section>
+<section class="web-pricing" hidden>
+  <h2>Pricing</h2>
+  <fieldset class="pricing-currencies">
+    <legend>Billing currency</legend>
+    {currencies.map(currency => (
+      <label><input type="radio" form="pricing-upgrade" name="upgrade" value={currency} checked={currency === 'USD'} /> {currency}</label>
+    ))}
+  </fieldset>
+  <div class="plan-grid">
+    {plans.map(plan => (
+      <article class="plan-card">
+        <h3>{plan.name}</h3>
+        {currencies.map(currency => {
+          const price = plan.id === 'free' ? null : product.webPrices[plan.id][currency];
+          return (
+            <div data-currency={currency}>
+              <strong>{formatPrice(price?.monthly ?? 0, currency)}</strong>
+              {price && <> / month</>}
+              {price && <small>or {formatPrice(price.yearly, currency)} per year</small>}
+            </div>
+          );
+        })}
+        <p>{plan.benefit}</p>
+      </article>
+    ))}
+  </div>
+  <form id="pricing-upgrade" action={product.webAppUrl} method="get">
+    <button class="button" type="submit">Subscribe</button>
+  </form>
+</section>
 
-    <!-- Free Forever Section -->
-    <section class="free-forever">
-      <h2>Free Plan</h2>
-      <p>
-        These features are included in the free plan. An account is required:
-      </p>
-      <div class="free-features">
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>Unlimited local notes</span>
-        </div>
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>Local encryption</span>
-        </div>
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>5 locked notes</span>
-        </div>
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>Labels & colors</span>
-        </div>
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>Pin notes</span>
-        </div>
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>Reminders</span>
-        </div>
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>Read-only mode</span>
-        </div>
-        <div class="free-feature">
-          <DocumentIcon name="check" />
-          <span>Works offline</span>
-        </div>
-      </div>
-    </section>
+<section>
+  <h2>Sync with your own storage</h2>
+  <p>In <strong>Sync provider</strong>, choose Google Drive, Dropbox, Nextcloud, or WebDAV. Select <strong>Sync now</strong> to send and receive changes on Free. Lite and Pro can sync changes automatically. Your notes and supported attachments are encrypted before upload.</p>
+</section>
 
-    <!-- FAQ Section -->
-    <section class="faq-section">
-      <h2>Frequently Asked Questions</h2>
-
-      <details class="faq-item">
-        <summary class="faq-question">
-          <span>Is an account required to use the app?</span>
-          <DocumentIcon name="chevron-down" />
-        </summary>
-        <div class="faq-answer">
-          Yes. An account is required to use Better Keep Notes. After signing in,
-          you can create, edit, and organize local notes offline on the free plan.
-          Optional encrypted cloud sync requires Pro.
-        </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">
-          <span>What happens when my Pro subscription expires?</span>
-          <DocumentIcon name="chevron-down" />
-        </summary>
-        <div class="faq-answer">
-          You can still access your local notes when your subscription expires. Cloud sync pauses,
-          and you can export your notes from the app.
-        </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">
-          <span>Is there a free trial for Pro?</span>
-          <DocumentIcon name="chevron-down" />
-        </summary>
-        <div class="faq-answer">
-          If your account receives a Pro trial, the app shows the remaining trial
-          time. Trial availability and duration depend on the current offer.
-          A trial does not automatically become a paid subscription; choose a
-          paid plan to continue using Pro after it ends.
-        </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">
-          <span>Can I switch between monthly and yearly billing?</span>
-          <DocumentIcon name="chevron-down" />
-        </summary>
-        <div class="faq-answer">
-          Yes, you can change your billing cycle at any time. If you switch from monthly to yearly, you'll get a
-          prorated credit for your remaining monthly subscription.
-        </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">
-          <span>Can I self-host Better Keep Notes?</span>
-          <DocumentIcon name="chevron-down" />
-        </summary>
-        <div class="faq-answer">
-          Yes. To run your own backend with Firebase or Supabase, contact us at
-          <a href="mailto:contact@betterkeep.app">contact@betterkeep.app</a> and we'll
-          help you get set up.
-        </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">
-          <span>Can I get a refund?</span>
-          <DocumentIcon name="chevron-down" />
-        </summary>
-        <div class="faq-answer">
-          Yes. If you're not satisfied within the first 30 days, contact us for a full refund. For subscriptions
-          purchased through app stores, refunds are processed according to their respective policies.
-        </div>
-      </details>
-    </section>
+<section>
+  <h2>Common questions</h2>
+  <details class="faq-item">
+    <summary class="faq-question">What happens if my subscription ends? <DocumentIcon name="chevron-down" /></summary>
+    <p class="faq-answer">You can keep editing local notes and use manual sync with your storage. If you used Better Keep cloud, you can still download notes you previously synced. Uploading new changes to Better Keep cloud requires Pro.</p>
+  </details>
+  <details class="faq-item">
+    <summary class="faq-question">Can I use Free offline? <DocumentIcon name="chevron-down" /></summary>
+    <p class="faq-answer">Yes. Sign in once while online. You can then create and edit notes on your device offline. Reconnect when you want to sync.</p>
+  </details>
+  <details class="faq-item">
+    <summary class="faq-question">How do I cancel or request a refund? <DocumentIcon name="chevron-down" /></summary>
+    <p class="faq-answer">Use the store or payment provider where you subscribed. See the <a href="/cancellation-refund">cancellation and refund policy</a> for instructions.</p>
+  </details>
+</section>

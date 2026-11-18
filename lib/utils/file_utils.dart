@@ -13,43 +13,46 @@ class FileUtils {
 
     final fs = await fileSystem();
 
-    // On iOS, the container ID changes on every run/update.
-    // We need to strip the old container path and replace it with the current one.
+    return rebaseIosPath(
+      pathName,
+      documentDir: await fs.documentDir,
+      cacheDir: await fs.cacheDir,
+    );
+  }
 
-    // Check if it's a path in the Caches directory
-    if (pathName.contains('/Library/Caches/')) {
-      final cacheDir = await fs.cacheDir;
-      // Try to find the part after 'Caches/'
-      final parts = pathName.split('/Library/Caches/');
-      if (parts.length > 1) {
-        final relativePath = parts[1];
-        return path.join(cacheDir, relativePath);
+  /// Rebase the container while retaining an existing environment subdirectory.
+  /// The supplied roots may already include the emulator's directory.
+  @visibleForTesting
+  static String rebaseIosPath(
+    String source, {
+    required String documentDir,
+    required String cacheDir,
+  }) {
+    const documentMarkers = ['/Library/Application Support/', '/Documents/'];
+    const cacheMarker = '/Library/Caches/';
+    for (final marker in [cacheMarker, ...documentMarkers]) {
+      final index = source.indexOf(marker);
+      if (index < 0) continue;
+      final root = marker == cacheMarker ? cacheDir : documentDir;
+      var relative = source.substring(index + marker.length);
+      final rootMarkers = marker == cacheMarker
+          ? [cacheMarker]
+          : documentMarkers;
+      for (final rootMarker in rootMarkers) {
+        final rootIndex = root.indexOf(rootMarker);
+        if (rootIndex < 0) continue;
+        final scope = root.substring(rootIndex + rootMarker.length);
+        if (scope.isNotEmpty) {
+          if (relative == scope) {
+            relative = '';
+          } else if (relative.startsWith('$scope/')) {
+            relative = relative.substring(scope.length + 1);
+          }
+        }
+        break;
       }
-      return path.join(cacheDir, path.basename(pathName));
+      return path.posix.join(root, relative);
     }
-
-    // Check if it's a path in the Application Support directory
-    // This is where all media files are stored (via getApplicationSupportDirectory)
-    if (pathName.contains('/Library/Application Support/')) {
-      final docDir = await fs.documentDir;
-      final parts = pathName.split('/Library/Application Support/');
-      if (parts.length > 1) {
-        final relativePath = parts[1];
-        return path.join(docDir, relativePath);
-      }
-      return path.join(docDir, path.basename(pathName));
-    }
-
-    // Check if it's a path in the Documents directory
-    if (pathName.contains('/Documents/')) {
-      final docDir = await fs.documentDir;
-      final parts = pathName.split('/Documents/');
-      if (parts.length > 1) {
-        final relativePath = parts[1];
-        return path.join(docDir, relativePath);
-      }
-    }
-
-    return pathName;
+    return source;
   }
 }

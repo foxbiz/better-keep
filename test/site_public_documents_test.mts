@@ -30,12 +30,13 @@ async function collectHtml(directory: string, prefix = ""): Promise<string[]> {
 	return files;
 }
 
-test("web keeps only the four operational HTML entry points", async () => {
+test("web keeps only the operational HTML entry points", async () => {
 	assert.deepEqual((await collectHtml(webRoot)).sort(), [
 		"auth.html",
 		"desktop-checkout.html",
 		"index.html",
 		"reset-password.html",
+		"storage-auth.html",
 	]);
 
 	const shareRoute = await readFile(
@@ -91,11 +92,12 @@ test("specialized document structures and links remain present", async () => {
 		readDocument("DeleteUserContent.astro"),
 	]);
 
-	assert.equal((pricing.match(/class="why-card"/g) || []).length, 4);
-	assert.equal((pricing.match(/class="free-feature"/g) || []).length, 8);
-	assert.equal((pricing.match(/class="faq-item"/g) || []).length, 6);
-	assert.equal((pricing.match(/<details class="faq-item">/g) || []).length, 6);
-	assert.equal((pricing.match(/<summary class="faq-question">/g) || []).length, 6);
+	assert.match(pricing, /Manual external sync', 'Yes', 'Yes', 'Yes'/);
+	assert.match(pricing, /Automatic external sync', 'No', 'Yes', 'Yes'/);
+	assert.match(pricing, /Built-in cloud sync', 'No', 'No', 'Yes'/);
+	assert.match(pricing, /Locked Notes', 5, 5, 'Unlimited'/);
+	assert.match(pricing, /role="img" aria-label=\{value\}/);
+	assert.match(pricing, /<details class="faq-item">\s*<summary class="faq-question">/);
 	assert.doesNotMatch(pricing, /onclick=|toggleFaq/);
 	assert.match(pricing, /class="comparison-table"/);
 

@@ -93,9 +93,10 @@ test("the release workflow runs the release suite with localization coverage", (
 		path.join(repositoryRoot, ".github/workflows/build-release.yml"),
 		"utf8",
 	);
-	assert.match(workflow, /^\s*npm run release\s*$/m);
+	assert.ok(workflow.includes('npm test -- "${{ matrix.suite }}"'));
+	assert.ok(workflow.includes("release-core"));
 	assert.ok(
-		resolveTestTask(["release"]).operations.some(
+		resolveTestTask(["release-core"]).operations.some(
 			(operation) =>
 				operation.command === "node" &&
 				operation.args.includes("test/tool/localization_policy_test.mjs"),

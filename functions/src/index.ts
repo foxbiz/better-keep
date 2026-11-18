@@ -19,11 +19,11 @@ import confirmAccountLink from "./exports/confirmAccountLink";
 import createCustomToken from "./exports/createCustomToken";
 import createRazorpaySubscription from "./exports/createRazorpaySubscription";
 import debugDeleteSubscription from "./exports/debugDeleteSubscription";
+import desktopAppleAuth from "./exports/desktopAppleAuth";
 import getPublicStats from "./exports/getPublicStats";
 import grantTrialOnFirstSignIn from "./exports/grantTrialOnFirstSignIn";
 import oauthCallback from "./exports/oauthCallback";
 import oauthStart from "./exports/oauthStart";
-import desktopAppleAuth from "./exports/desktopAppleAuth";
 import processPlayStoreNotification from "./exports/playStoreWebhook";
 import processAdminRevenueEvent from "./exports/processAdminRevenueEvent";
 import processScheduledDeletions from "./exports/processScheduledDeletions";
@@ -39,6 +39,7 @@ import resumeRazorpaySubscription from "./exports/resumeRazorpaySubscription";
 import retryAdminRevenueEvents from "./exports/retryAdminRevenueEvents";
 import revokeSharesOnNoteDelete from "./exports/revokeSharesOnNoteDelete";
 import scheduleAccountDeletion from "./exports/scheduleAccountDeletion";
+import sendDeletionCancellation from "./exports/sendDeletionCancellation";
 import sendDeletionOtp from "./exports/sendDeletionOtp";
 import sendDeletionReminders from "./exports/sendDeletionReminders";
 import sendEmailVerificationOtp from "./exports/sendEmailVerificationOtp";
@@ -46,6 +47,7 @@ import sendPasswordResetOtp from "./exports/sendPasswordResetOtp";
 import sendStartFreshOtp from "./exports/sendStartFreshOtp";
 import setEmulatorTestClaims from "./exports/setEmulatorTestClaims";
 import stampLabelSyncCommit from "./exports/stampLabelSyncCommit";
+import stampLegacySyncDocument from "./exports/stampLegacySyncDocument";
 import stampNoteSyncCommit from "./exports/stampNoteSyncCommit";
 import startFreshWithOtp from "./exports/startFreshWithOtp";
 import syncAdminSubscription from "./exports/syncAdminSubscription";
@@ -59,6 +61,33 @@ import verifyPasswordResetOtp from "./exports/verifyPasswordResetOtp";
 import verifyPurchase from "./exports/verifyPurchase";
 import verifyRazorpaySubscription from "./exports/verifyRazorpaySubscription";
 
+export { default as revokeScheduledDeletionSessions } from "./exports/revokeScheduledDeletionSessions";
+export {
+	acquireStorageRefreshLease,
+	beginStorageClear,
+	beginStorageDisconnect,
+	connectNextcloudStorage,
+	disconnectStorageConnection,
+	finishStorageClear,
+	finishStorageRefresh,
+	getEncryptedStorageCredentials,
+	getStorageAccess,
+	registerEncryptedStorageConnection,
+	releaseStorageRefreshLease,
+	requestStorageClearOtp,
+	setStorageConnectionEnabled,
+} from "./storageConnectionBackend";
+export {
+	cancelStorageOAuth,
+	completeStorageOAuth,
+	prepareStorageOAuth,
+	storageOAuthCallback,
+	storageOAuthStart,
+} from "./storageOAuthBackend";
+export {
+	exchangeStorageOAuthToken,
+	prepareStorageTokenExchange,
+} from "./storageTokenExchangeBackend";
 export {
 	adminGetOverview,
 	adminGetUser,
@@ -79,11 +108,11 @@ export {
 	createCustomToken,
 	createRazorpaySubscription,
 	debugDeleteSubscription,
+	desktopAppleAuth,
 	getPublicStats,
 	grantTrialOnFirstSignIn,
 	oauthCallback,
 	oauthStart,
-	desktopAppleAuth,
 	processAdminRevenueEvent,
 	processPlayStoreNotification,
 	processScheduledDeletions,
@@ -99,6 +128,7 @@ export {
 	retryAdminRevenueEvents,
 	revokeSharesOnNoteDelete,
 	scheduleAccountDeletion,
+	sendDeletionCancellation,
 	sendDeletionOtp,
 	sendDeletionReminders,
 	sendEmailVerificationOtp,
@@ -106,6 +136,7 @@ export {
 	sendStartFreshOtp,
 	setEmulatorTestClaims,
 	stampLabelSyncCommit,
+	stampLegacySyncDocument,
 	stampNoteSyncCommit,
 	startFreshWithOtp,
 	syncAdminSubscription,
