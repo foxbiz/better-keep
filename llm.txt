@@ -9,6 +9,10 @@
 - The website lists help guides at `/help`. The `/web-beta` guide links to the explicit `/app/?channel=beta` invitation and explains how to return to stable using the Beta badge or, if the app opens without the badge, `/app/?channel=stable`. The link requires a valid release manifest.
 - Firebase note restore records `owner_uid` in cache metadata. A fully fetched cache for the current account can collect later commits while individual notes retry. The library checkpoint advances once all cached revisions have been handled or durably queued.
 
+## External upload throughput and progress
+
+Non-batch external publication runs at most four note workers per pending page. Shared object uploads are deduplicated only within that page; retries recheck provider durability. Verified cached objects up to `SyncLimits.uploadBufferBytes` can bypass the serialized full-object lane. Large/unknown objects remain serialized through upload; size hints are checked first, then native/OPFS use the optional `FileSystemMetadata` capability for cheap cold-cache probes; IndexedDB keeps cold unknown files serialized. WebDAV/Nextcloud share one in-flight collection initialization and retry after failure. Drive's independent `multipartUploadBytes` threshold is 1 MiB; larger files use resumable uploads. Preserve revision checks before/after transfer, guarded acknowledgements and draining workers on failure. Upload/download progress is note-based; ETA uses at most 32 per-second completion samples. Queued passes keep the running state, clear the previous transfer before starting, and settle even if a listener backgrounds the app or disables automatic sync between passes. Engine progress emits transfers only; the scheduler owns completion and clearing.
+
 ## Overview
 
 Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app inspired by Google Keep. Built with **Flutter** (Dart), backed by **Firebase** (Auth, Firestore, Storage, Cloud Functions). Features rich-text editing, E2E encryption, AI audio transcription (Whisper), reminders, sketches, labels, folders, and subscription monetization.

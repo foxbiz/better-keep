@@ -77,6 +77,95 @@ void main() {
   });
 
   test(
+    'small binary files use one multipart upload with private metadata',
+    () async {
+      final requests = <http.Request>[];
+      final bytes = Uint8List.fromList([0, 13, 10, 255, 128, 1]);
+      final drive = transport(
+        MockClient((request) async {
+          requests.add(request);
+          if (request.method == 'GET') return json({'files': []});
+          expect(request.method, 'POST');
+          expect(request.url.queryParameters['uploadType'], 'multipart');
+          expect(request.followRedirects, false);
+          final boundary = request.headers['Content-Type']!
+              .split('boundary=')
+              .last;
+          final body = latin1.decode(request.bodyBytes);
+          final parts = body.split('--$boundary');
+          expect(parts, hasLength(4));
+          final data = jsonDecode(parts[1].split('\r\n\r\n')[1].trim());
+          expect(data['parents'], ['appDataFolder']);
+          expect(data['appProperties']['library'], library);
+          expect(data['appProperties']['logical'], name);
+          expect(
+            parts[2],
+            '\r\nContent-Type: application/octet-stream\r\n\r\n'
+            '${latin1.decode(bytes)}\r\n',
+          );
+          return json({'id': 'created'}, 200);
+        }),
+      );
+      expect(await drive.create(name, bytes), true);
+      expect(requests.map((r) => r.method), ['GET', 'POST']);
+    },
+  );
+
+  test(
+    'multipart threshold stays independent of cache prefetch sizing',
+    () async {
+      expect(GoogleDriveSyncTransport.multipartUploadBytes, 1024 * 1024);
+      for (final size in [1024 * 1024, 1024 * 1024 + 1]) {
+        String? uploadType;
+        final client = MockClient((request) async {
+          if (request.method == 'GET') return json({'files': []});
+          if (request.method == 'POST') {
+            uploadType = request.url.queryParameters['uploadType'];
+            if (uploadType == 'multipart') return json({'id': 'small'});
+            return http.Response(
+              '',
+              200,
+              headers: {
+                'location': 'https://www.googleapis.com/upload/drive/v3/files?upload_id=test',
+              },
+            );
+          }
+          return json({'id': 'large'}, 201);
+        });
+        addTearDown(client.close);
+        expect(await transport(client).create(name, Uint8List(size)), true);
+        expect(uploadType, size == 1024 * 1024 ? 'multipart' : 'resumable');
+      }
+    },
+  );
+
+  test(
+    'lost multipart response leaves an immutable file for verified retry',
+    () async {
+      var created = false;
+      var posts = 0;
+      final drive = transport(
+        MockClient((request) async {
+          if (request.method == 'GET') {
+            return json({
+              'files': created ? [metadata('existing', name)] : [],
+            });
+          }
+          posts++;
+          created = true;
+          throw http.ClientException('lost response');
+        }),
+      );
+      await expectLater(
+        drive.create(name, Uint8List(3)),
+        throwsA(isA<SyncProviderFailure>()),
+      );
+      expect(await drive.create(name, Uint8List(3)), false);
+      expect(posts, 1);
+    },
+  );
+
+  test(
     'resumable upload commits metadata and acknowledges exact chunk ranges',
     () async {
       const chunk = 8 * 1024 * 1024;
@@ -124,6 +213,7 @@ void main() {
     'resumes a partially persisted final chunk from its acknowledged offset',
     () async {
       final ranges = <String>[];
+      const size = GoogleDriveSyncTransport.multipartUploadBytes + 10;
       final drive = transport(
         MockClient((request) async {
           if (request.method == 'GET') return json({});
@@ -142,8 +232,11 @@ void main() {
               : json({'id': 'complete'}, 201);
         }),
       );
-      expect(await drive.create(name, Uint8List(10)), true);
-      expect(ranges, ['bytes 0-9/10', 'bytes 4-9/10']);
+      expect(await drive.create(name, Uint8List(size)), true);
+      expect(ranges, [
+        'bytes 0-${size - 1}/$size',
+        'bytes 4-${size - 1}/$size',
+      ]);
     },
   );
 
@@ -168,7 +261,10 @@ void main() {
         }),
       );
       await expectLater(
-        drive.create(name, Uint8List(10)),
+        drive.create(
+          name,
+          Uint8List(GoogleDriveSyncTransport.multipartUploadBytes + 1),
+        ),
         throwsA(isA<SyncProviderFailure>()),
       );
       expect(puts, 3);
@@ -228,10 +324,19 @@ void main() {
     });
     final drive = transport(client);
     await expectLater(
-      drive.create(name, Uint8List(1)),
+      drive.create(
+        name,
+        Uint8List(GoogleDriveSyncTransport.multipartUploadBytes + 1),
+      ),
       throwsA(isA<SyncProviderFailure>()),
     );
-    expect(await drive.create(name, Uint8List(1)), isFalse);
+    expect(
+      await drive.create(
+        name,
+        Uint8List(GoogleDriveSyncTransport.multipartUploadBytes + 1),
+      ),
+      isFalse,
+    );
     client.close();
   });
 
@@ -249,7 +354,10 @@ void main() {
         );
       });
       await expectLater(
-        transport(client).create(name, Uint8List(1)),
+        transport(client).create(
+          name,
+          Uint8List(GoogleDriveSyncTransport.multipartUploadBytes + 1),
+        ),
         throwsA(isA<SyncProviderFailure>()),
       );
       expect(requests.length, 2);

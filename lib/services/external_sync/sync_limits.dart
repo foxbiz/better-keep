@@ -5,6 +5,7 @@ abstract final class SyncLimits {
   static const batchBytes = 4 * 1024 * 1024;
   static const batchFiles = 32;
   static const prefetchBytes = 1024 * 1024;
+  static const uploadBufferBytes = 1024 * 1024;
   static const commitBytes = 512 * 1024;
   static const metadataBytes = 8 * 1024 * 1024;
   static const attachmentCount = 1024;

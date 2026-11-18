@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -26,6 +27,66 @@ void main() {
         appPassword: () async => 'app-password',
         libraryId: id ?? library,
       );
+
+  for (final failFirst in [false, true]) {
+    test(
+      'concurrent DAV creates share setup and retry failures: $failFirst',
+      () async {
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        var collections = 0, puts = 0;
+        final client = MockClient((request) async {
+          if (request.method == 'MKCOL') {
+            collections++;
+            if (collections == 1) {
+              entered.complete();
+              await release.future;
+              if (failFirst) return http.Response('', 503);
+            }
+            return http.Response('', 201);
+          }
+          expect(request.method, 'PUT');
+          puts++;
+          return http.Response('', 201);
+        });
+        addTearDown(client.close);
+        final dav = WebDavSyncTransport(
+          httpClient: ProviderHttp(client),
+          server: Uri.parse('https://example.test/dav'),
+          username: 'qa',
+          appPassword: () async => 'fixture',
+          libraryId: library,
+        );
+        Future<List<bool>> create() => Future.wait(
+          List.generate(
+            4,
+            (i) => dav.create(
+              'o-${i.toRadixString(16).padLeft(64, '0')}',
+              Uint8List(1),
+            ),
+          ),
+        );
+        final result = create();
+        final checked = expectLater(
+          result,
+          failFirst
+              ? throwsA(isA<SyncProviderFailure>())
+              : completion(everyElement(isTrue)),
+        );
+        await entered.future;
+        expect(collections, 1);
+        expect(puts, 0);
+        release.complete();
+        await checked;
+        if (failFirst) {
+          expect(puts, 0);
+          expect(await create(), everyElement(isTrue));
+        }
+        expect(collections, failFirst ? 3 : 2);
+        expect(puts, 4);
+      },
+    );
+  }
 
   test('large DAV scans stream beyond 8 MiB and reuse exact continuation', () async {
     String name(int i) => 'c-${i.toRadixString(16).padLeft(64, '0')}.json';

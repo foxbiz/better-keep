@@ -156,30 +156,30 @@ void main() {
       AuthService.cloudRecovery.start('synthetic-account');
       AuthService.cloudRecovery.state.value = CloudSessionState.ready;
       NoteSyncService().isSyncing.value = true;
-      NoteSyncService().syncStatus.value = const SyncProgress(
-        SyncPhase.syncing,
-        notes: (
-          stage: NoteTransferStage.downloading,
-          done: 123,
-          total: 456,
-          minutesLeft: 3,
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('456 notes'), findsOneWidget);
-      expect(find.text('26%'), findsOneWidget);
-      final bar = tester.widget<LinearProgressIndicator>(
-        find.byType(LinearProgressIndicator),
-      );
-      expect(bar.value, closeTo(123 / 456, 0.0001));
-      final transferPill = tester.getRect(
-        find.byKey(const ValueKey('sync_progress')),
-      );
-      expect(transferPill.bottom, lessThanOrEqualTo(fab.top - 12));
-      expect(transferPill.left, greaterThanOrEqualTo(16));
-      expect(transferPill.right, lessThanOrEqualTo(width - 16));
-      expect(tester.takeException(), isNull);
+      for (final stage in [
+        NoteTransferStage.downloading,
+        NoteTransferStage.uploading,
+      ]) {
+        NoteSyncService().syncStatus.value = SyncProgress(
+          SyncPhase.syncing,
+          notes: (stage: stage, done: 123, total: 456, minutesLeft: 3),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('456 notes'), findsOneWidget);
+        expect(find.text('26%'), findsOneWidget);
+        final bar = tester.widget<LinearProgressIndicator>(
+          find.byType(LinearProgressIndicator),
+        );
+        expect(bar.value, closeTo(123 / 456, 0.0001));
+        final transferPill = tester.getRect(
+          find.byKey(const ValueKey('sync_progress')),
+        );
+        expect(transferPill.bottom, lessThanOrEqualTo(fab.top - 12));
+        expect(transferPill.left, greaterThanOrEqualTo(16));
+        expect(transferPill.right, lessThanOrEqualTo(width - 16));
+        expect(tester.takeException(), isNull);
+      }
       await tester.pumpWidget(const SizedBox());
     });
   }

@@ -43,3 +43,10 @@ abstract class FileSystem {
   /// Check if path is file
   Future<bool> isFile(String path);
 }
+
+/// Optional size lookup that never reads file contents into memory.
+/// Null means missing or unavailable; callers must not fall back to a full read
+/// when using this capability to bound concurrent allocations.
+abstract interface class FileSystemMetadata {
+  Future<int?> metadataLength(String path);
+}

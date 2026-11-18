@@ -1,14 +1,13 @@
-import '../../models/app_progress.dart';
-import '../note_sync_batch.dart';
-
 import 'dart:typed_data';
-
-import '../bounded_async.dart';
-import 'sync_limits.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../models/app_progress.dart';
+import '../async_keyed_serializer.dart';
+import '../bounded_async.dart';
+import '../note_sync_batch.dart';
+import 'sync_limits.dart';
 import 'sync_provider_adapter.dart';
 import 'sync_replica_store.dart';
 import 'sync_revision.dart';
@@ -23,6 +22,13 @@ abstract interface class SyncReplicaContent {
   /// All referenced objects are already cached. Update notes/labels/order in
   /// this transaction, preserving the supplied revision and modification time.
   Future<void> apply(Transaction txn, SyncRevision revision);
+}
+
+/// Optional local-cache read that rejects oversized files before buffering.
+/// Missing/corrupt or larger-than-uploadBufferBytes objects return null and use
+/// the serialized full-object path instead.
+abstract interface class SmallSyncReplicaContent {
+  Future<Uint8List?> readSmall(String objectId);
 }
 
 /// Content implementations may prepare files/decryption outside the SQLite
@@ -59,7 +65,7 @@ class SyncReplicaEngine {
   final Future<bool> Function()? isEmptyLibrary;
   final noteBatch = NoteSyncBatch();
   final void Function(String connectionId)? onPublished;
-  final void Function(SyncProviderAdapter adapter, NoteTransfer? progress)?
+  final void Function(SyncProviderAdapter adapter, NoteTransfer progress)?
   onProgress;
   final SyncReplicaStore store;
   final SyncReplicaContent content;
@@ -90,7 +96,6 @@ class SyncReplicaEngine {
     final task = _track(
       _sync(adapter, downloadOnly: downloadOnly).whenComplete(() {
         _running.remove(adapter.connectionId);
-        onProgress?.call(adapter, null);
       }),
     );
     _running[adapter.connectionId] = (
@@ -151,12 +156,6 @@ class SyncReplicaEngine {
     if (checkpoint != null && checkpoint.checkedNotes == null) {
       await _applyInbox(adapter, deferIdentityConflicts: true);
     }
-    if (preparing != null && !downloadOnly) {
-      await preparing.captureLocalChanges();
-      _guard();
-    }
-    var cursor = checkpoint?.cursor;
-    var resetCursor = false;
     final meter = NoteTransferMeter(
       checkpoint == null
           ? NoteTransferStage.checking
@@ -166,6 +165,12 @@ class SyncReplicaEngine {
         if (isCurrent()) onProgress?.call(adapter, progress);
       },
     );
+    if (preparing != null && !downloadOnly) {
+      await preparing.captureLocalChanges();
+      _guard();
+    }
+    var cursor = checkpoint?.cursor;
+    var resetCursor = false;
     var checkedBeforePage = checkpoint?.checkedNotes ?? 0;
     var reported = checkedBeforePage;
     if (reported > 0) meter.advance(reported);
@@ -271,23 +276,57 @@ class SyncReplicaEngine {
       // Keep this bounded by the pending page. Immutable objects shared by
       // several notes need only one successful upload to this provider per page.
       // Never retain this across runs: retries must recheck remote durability.
-      final uploadedObjects = <String>{};
-      for (final revision in pending) {
+      final uploadedObjects = <String, Future<void>>{};
+      final fullObjectTransfers = AsyncKeyedSerializer<bool>();
+      Future<void> putObject(String id) =>
+          uploadedObjects.putIfAbsent(id, () async {
+            if (content case SmallSyncReplicaContent local) {
+              _guard();
+              final cached = await local.readSmall(id);
+              _guard();
+              if (cached != null) {
+                if (cached.length > SyncLimits.uploadBufferBytes) {
+                  throw const SyncProviderFailure(
+                    SyncProviderFailureKind.corruptData,
+                  );
+                }
+                _verify(id, cached);
+                await adapter.putObject(id, cached);
+                _guard();
+                return;
+              }
+            }
+            // Unknown/large objects stay serial through their upload. Verified small
+            // cached objects above can progress without waiting on this lane.
+            final small = await fullObjectTransfers.run<Uint8List?>(
+              true,
+              () async {
+                _guard();
+                final bytes = await _object(id, adapter);
+                if (bytes.length <= SyncLimits.uploadBufferBytes) return bytes;
+                await adapter.putObject(id, bytes);
+                _guard();
+                return null;
+              },
+            );
+            if (small != null) {
+              _guard();
+              await adapter.putObject(id, small);
+              _guard();
+            }
+          });
+      await forEachBounded(pending, (revision) async {
         _guard();
         if (!await _isOutgoingCurrent(revision, preparing)) {
           if (revision.kind == SyncEntityKind.note) upload.exclude();
-          continue;
+          return;
         }
         for (final id in [...revision.blobIds, ?revision.payloadObjectId]) {
-          if (uploadedObjects.contains(id)) continue;
-          final bytes = await _object(id, adapter);
-          await adapter.putObject(id, bytes);
-          _guard();
-          uploadedObjects.add(id);
+          await putObject(id);
         }
         if (!await _isOutgoingCurrent(revision, preparing)) {
           if (revision.kind == SyncEntityKind.note) upload.exclude();
-          continue;
+          return;
         }
         await adapter.publish(revision);
         _guard();
@@ -303,7 +342,7 @@ class SyncReplicaEngine {
         });
         if (revision.kind == SyncEntityKind.note) upload.advance();
         onPublished?.call(adapter.connectionId);
-      }
+      });
       after = (pending.last.kind.name, pending.last.entityId);
     }
   }

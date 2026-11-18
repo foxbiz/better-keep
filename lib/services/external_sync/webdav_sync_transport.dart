@@ -63,6 +63,7 @@ class WebDavSyncTransport
   final Future<String> Function() appPassword;
   final String libraryId;
   bool _initialized = false;
+  Future<void>? _initializing;
   Map<String, String>? _listing;
   String? _continuation;
   Map<String, String>? _seen;
@@ -163,8 +164,14 @@ class WebDavSyncTransport
     maxResponseBytes: maxResponseBytes,
   );
 
-  Future<void> _initialize() async {
-    if (_initialized) return;
+  Future<void> _initialize() {
+    if (_initialized) return Future.value();
+    return _initializing ??= _createCollections().whenComplete(() {
+      _initializing = null;
+    });
+  }
+
+  Future<void> _createCollections() async {
     for (final uri in [
       _uri(['']),
       _uri([libraryId, '']),

@@ -97,11 +97,9 @@ class LibrarySyncSession extends ChangeNotifier {
       isEmptyLibrary: () => Note.libraryIsEmpty(database),
       onProgress: (adapter, value) {
         if (!_current()) return;
-        if (value == null) {
-          transfers.remove(adapter.connectionId);
-        } else {
-          transfers[adapter.connectionId] = value;
-        }
+        // Keep the last transfer visible until the scheduler has finished its
+        // durability checks. Clearing it at engine return flashes "Syncing...".
+        transfers[adapter.connectionId] = value;
         _progressChanged();
       },
       onPublished: (id) => signals?.published(id),
@@ -131,6 +129,7 @@ class LibrarySyncSession extends ChangeNotifier {
 
     scheduler = SyncScheduler(
       sync: run,
+      onPassStarted: (adapter) => transfers.remove(adapter.connectionId),
       restore: (adapter) => run(adapter, downloadOnly: true),
       isCurrent: _current,
       blockedEntities: () => content.captureFailures.length,
@@ -143,7 +142,7 @@ class LibrarySyncSession extends ChangeNotifier {
     );
     signals = createSignals?.call(store, scheduler.remoteChanged);
     connections.addListener(_connectionsChanged);
-    scheduler.addListener(_progressChanged);
+    scheduler.addListener(_schedulerProgressChanged);
     _connectionsChanged();
     unawaited(status.load().catchError((Object _) {}));
   }
@@ -174,6 +173,12 @@ class LibrarySyncSession extends ChangeNotifier {
     scheduler.setAdapters(connections.adapters);
     _updateSignals();
     notifyListeners();
+  }
+
+  void _schedulerProgressChanged() {
+    final progress = scheduler.progress;
+    transfers.removeWhere((id, _) => progress[id]?.running != true);
+    _progressChanged();
   }
 
   void _progressChanged() {
@@ -231,7 +236,7 @@ class LibrarySyncSession extends ChangeNotifier {
     _retired = true;
     engine.noteBatch.reset();
     connections.removeListener(_connectionsChanged);
-    scheduler.removeListener(_progressChanged);
+    scheduler.removeListener(_schedulerProgressChanged);
     signals?.dispose();
     connections.dispose();
     scheduler.dispose();

@@ -1,4 +1,5 @@
 import 'package:better_keep/services/note_lock_transaction_service.dart';
+import 'package:better_keep/models/app_progress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/storage_authorization.dart';
@@ -27,6 +28,10 @@ import 'package:better_keep/services/external_sync/firebase_attachment_reader.da
 import 'package:crypto/crypto.dart';
 import 'package:better_keep/services/file_system_io.dart';
 import 'package:better_keep/services/external_sync/library_replica_content.dart';
+import 'package:better_keep/services/external_sync/file_sync_adapter.dart';
+import 'package:better_keep/services/external_sync/dropbox_sync_transport.dart';
+import 'package:better_keep/services/external_sync/google_drive_sync_transport.dart';
+import 'package:better_keep/services/external_sync/provider_http.dart';
 import 'package:better_keep/services/external_sync/library_sync_session.dart';
 import 'package:better_keep/services/external_sync/storage_connection_controller.dart';
 import 'package:better_keep/services/external_sync/sync_cipher.dart';
@@ -196,6 +201,127 @@ void main() {
     expect((await a.db.query('note', where: 'id = 1')).single['title'], 'Note');
   });
 
+  test('encrypted Dropbox-to-Drive migration restores notes and media through both HTTP transports', () async {
+    const count =
+        104; // Cross both the outgoing and Drive discovery page limits.
+    final media = [0, 255, 128, 3, 7];
+    final image = await a.source('migration.png', media);
+    await a.note(
+      attachments: [
+        {
+          'type': 'image',
+          'data': {
+            'src': image,
+            'size': media.length,
+            'index': 0,
+            'aspectRatio': '1:1',
+            'lastModified': 'first',
+          },
+        },
+      ],
+    );
+    final original = (await a.db.query('note')).single;
+    await a.db.transaction((txn) async {
+      for (var i = 2; i <= count; i++) {
+        await txn.insert('note', {
+          ...original,
+          'id': i,
+          'sync_id': 'migration-$i',
+          'title': 'Migration note $i',
+        });
+      }
+    });
+    final dropbox = _DropboxServer();
+    final dropboxHttp = MockClient(dropbox.handle);
+    addTearDown(dropboxHttp.close);
+    final source = FileSyncAdapter(
+      connectionId: 'dropbox:1',
+      cipher: a.cipher,
+      transport: DropboxSyncTransport(
+        httpClient: ProviderHttp(dropboxHttp),
+        accessToken: () async => 'synthetic-access',
+        libraryId: a.cipher.libraryId,
+      ),
+    );
+    await a.engine.sync(source);
+    expect(await a.store.pendingNoteCount(source.connectionId), 0);
+    final server = _DriveServer();
+    final driveHttp = MockClient(server.handle);
+    addTearDown(driveHttp.close);
+    FileSyncAdapter destination(SyncCipher cipher) => FileSyncAdapter(
+      connectionId: 'drive:1',
+      cipher: cipher,
+      transport: GoogleDriveSyncTransport(
+        httpClient: ProviderHttp(driveHttp),
+        accessToken: () async => 'synthetic-access',
+        libraryId: cipher.libraryId,
+      ),
+    );
+    final drive = destination(a.cipher);
+    await a.engine.sync(drive);
+    expect(server.peakUploads, greaterThan(1));
+    expect(server.peakUploads, lessThanOrEqualTo(4));
+    // Includes discovery and shared-object verification: still fewer requests
+    // than three per file, without depending on the page/lookup implementation.
+    expect(server.requests, lessThan(server.uploads * 3));
+    expect(await a.store.pendingNoteCount(drive.connectionId), 0);
+    expect(await a.store.pendingNoteCount(source.connectionId), 0);
+    final uploads = server.uploads;
+    await a.engine.sync(drive);
+    expect(server.uploads, uploads);
+    await b.engine.sync(destination(b.cipher), downloadOnly: true);
+    final restored = await b.db.query('note');
+    expect(restored, hasLength(count));
+    expect(
+      restored.map((r) => r['sync_id']).toSet(),
+      (await a.db.query('note')).map((r) => r['sync_id']).toSet(),
+    );
+    for (final row in restored) {
+      expect(row['content'], original['content']);
+      final attachment =
+          (jsonDecode(row['attachments'] as String) as List).single;
+      expect(
+        await b.session.attachments.read(attachment['data']['src'] as String),
+        media,
+      );
+    }
+    expect(server.uploads, uploads);
+    // No plaintext content or filenames are transmitted to either provider.
+    for (final bytes in server.files.values) {
+      expect(latin1.decode(bytes).contains('Migration note'), false);
+      expect(latin1.decode(bytes).contains('migration.png'), false);
+    }
+  });
+
+  test('queued session pass clears the previous completed transfer before notifying', () async {
+    await a.note();
+    final provider = _Remote('google_drive:queued');
+    final scheduler = a.session.scheduler;
+    a.session.setAutomatic(false);
+    a.session.setForeground(true);
+    scheduler.setAdapters([provider]);
+    Future<void>? queued;
+    var sawNextPass = false;
+    a.session.addListener(() {
+      final state = scheduler.progress[provider.connectionId];
+      final transfer = a.session.transfers[provider.connectionId];
+      if (queued != null && state?.running == true && transfer == null) {
+        sawNextPass = true;
+      }
+      if (queued == null &&
+          transfer?.stage == NoteTransferStage.uploading &&
+          transfer!.done == transfer.total) {
+        queued = scheduler.syncNow();
+      }
+    });
+    await scheduler.syncNow();
+    expect(queued, isNotNull);
+    await queued;
+    expect(sawNextPass, true);
+    expect(a.session.transfers, isEmpty);
+    expect(scheduler.progress[provider.connectionId]!.failure, isNull);
+  });
+
   test('switching providers preserves independent progress for notes, media and deletions', () async {
     final media = await a.source('switch-image.png', [1, 2, 3, 4]);
     await a.note(
@@ -217,6 +343,22 @@ void main() {
     final drive = _Remote('google_drive:1');
     final dropbox = _Remote('dropbox:1');
     final scheduler = a.session.scheduler;
+    var uploading = false;
+    a.session.addListener(() {
+      for (final entry in scheduler.progress.entries) {
+        final transfer = a.session.transfers[entry.key];
+        if (!entry.value.running) {
+          expect(transfer, isNull);
+          uploading = false;
+        } else if (transfer?.stage == NoteTransferStage.uploading) {
+          uploading = true;
+        } else if (uploading) {
+          // Engine completion must not erase the transfer while status and
+          // mutation-journal checks are still running.
+          expect(transfer, isNotNull);
+        }
+      }
+    });
     a.session.setAutomatic(false);
     a.session.setForeground(true);
     Future<void> select(_Remote provider) async {
@@ -972,6 +1114,32 @@ void main() {
     },
   );
 
+  test(
+    'cold native small-object reads reject large files before buffering',
+    () async {
+      final small = Uint8List.fromList([1, 2, 3]);
+      final large = Uint8List(1024 * 1024 + 1);
+      final smallId = sha256.convert(small).toString();
+      final largeId = sha256.convert(large).toString();
+      await a.objects.write(smallId, small);
+      await a.objects.write(largeId, large);
+      final files = _CountingReadFileSystem();
+      final cold = SyncObjectCache(
+        database: a.db,
+        files: files,
+        root: a.objects.root,
+        scope: a.objects.scope,
+        cipher: a.cipher,
+      );
+      expect(await cold.readSmall(largeId, maxBytes: 1024 * 1024), null);
+      expect(files.reads, 0);
+      expect(await cold.readSmall(smallId, maxBytes: 1024 * 1024), small);
+      expect(files.reads, 1);
+      expect(await cold.readSmall('f' * 64, maxBytes: 1024 * 1024), null);
+      expect(files.reads, 1);
+    },
+  );
+
   test('existence probe never bypasses cache integrity verification', () async {
     final id = await a.objects.encrypt(Uint8List.fromList([42]));
     final file = File(
@@ -1722,4 +1890,88 @@ class _ChildNameFileSystem extends IoFileSystem {
   @override
   Future<List<String>> list([String directory = '/']) async =>
       (await super.list(directory)).map(p.basename).toList();
+}
+
+/// Drive protocol fixture. Only the HTTP boundary is simulated; multipart
+/// uploads, encrypted commits, paging, local capture, and restore use real code.
+class _DriveServer {
+  final files = <String, Uint8List>{};
+  final metadata = <String, Map<String, dynamic>>{};
+  int requests = 0, uploads = 0, activeUploads = 0, peakUploads = 0;
+
+  Future<http.Response> handle(http.Request request) async {
+    requests++;
+    expect(request.headers['authorization'], 'Bearer synthetic-access');
+    expect(request.followRedirects, false);
+    http.Response json(Object value) => http.Response(jsonEncode(value), 200);
+    final path = request.url.path;
+    final query = request.url.queryParameters;
+    if (request.method == 'POST') {
+      expect(query['uploadType'], 'multipart');
+      activeUploads++;
+      if (activeUploads > peakUploads) peakUploads = activeUploads;
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final boundary = request.headers['Content-Type']!
+            .split('boundary=')
+            .last;
+        final parts = latin1.decode(request.bodyBytes).split('--$boundary');
+        final header = jsonDecode(
+          parts[1].split('\r\n\r\n')[1].trim(),
+        ) as Map<String, dynamic>;
+        final payload = parts[2].substring(parts[2].indexOf('\r\n\r\n') + 4);
+        final id = 'file-${uploads++}';
+        files[id] = Uint8List.fromList(
+          latin1.encode(payload.substring(0, payload.length - 2)),
+        );
+        metadata[id] = {...header, 'id': id};
+        return json({'id': id});
+      } finally {
+        activeUploads--;
+      }
+    }
+    if (path.endsWith('startPageToken')) {
+      return json({'startPageToken': '${files.length}'});
+    }
+    if (path.endsWith('/changes')) {
+      final offset = int.parse(query['pageToken']!);
+      final page = metadata.values.skip(offset).take(100).toList();
+      final next = offset + page.length;
+      return json({
+        'changes': page.map((f) => {'file': f}).toList(),
+        if (next < files.length)
+          'nextPageToken': '$next'
+        else
+          'newStartPageToken': '${files.length}',
+      });
+    }
+    if (query['alt'] == 'media') {
+      return http.Response.bytes(files[request.url.pathSegments.last]!, 200);
+    }
+    expect(path, '/drive/v3/files');
+    final name = RegExp("name = '([^']+)'")
+        .firstMatch(query['q'] ?? '')
+        ?.group(1);
+    if (name != null) {
+      return json({
+        'files': metadata.values.where((f) => f['name'] == name).toList(),
+      });
+    }
+    final offset = int.parse(query['pageToken'] ?? '0');
+    final page = metadata.values.skip(offset).take(100).toList();
+    return json({
+      'files': page,
+      if (offset + page.length < files.length)
+        'nextPageToken': '${offset + page.length}',
+    });
+  }
+}
+
+class _CountingReadFileSystem extends IoFileSystem {
+  int reads = 0;
+  @override
+  Future<Uint8List> readBytes(String path) {
+    reads++;
+    return super.readBytes(path);
+  }
 }

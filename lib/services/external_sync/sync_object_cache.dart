@@ -25,6 +25,13 @@ class SyncObjectCache {
   final String scope;
   final SyncCipher cipher;
   final _writes = AsyncKeyedSerializer<String>();
+  final _sizes = <String, int>{};
+
+  void _rememberSize(String id, int size) {
+    _sizes.remove(id);
+    _sizes[id] = size;
+    if (_sizes.length > 256) _sizes.remove(_sizes.keys.first);
+  }
 
   static Future<void> createTable(DatabaseExecutor db) => db.execute('''
     CREATE TABLE IF NOT EXISTS replica_object_sources (
@@ -42,11 +49,50 @@ class SyncObjectCache {
       _writes.run(id, () => files.exists(_path(id)));
 
   Future<Uint8List?> read(String id) => _writes.run(id, () => _read(id));
+
+  Future<Uint8List?> readSmall(String id, {required int maxBytes}) =>
+      _writes.run(id, () async {
+        // Immutable object hints avoid repeated stat/OPFS metadata calls.
+        // Cold IndexedDB objects still use the serialized full-read lane.
+        final size =
+            _sizes[id] ??
+            switch (files) {
+              FileSystemMetadata sizes => await sizes.metadataLength(_path(id)),
+              _ => null,
+            };
+        if (size == null || size > maxBytes) return null;
+        // Cache writes for this immutable ID share this lock. Probe the size
+        // before buffering, then use the same integrity checks as a full read.
+        return _read(id);
+      });
+
   Future<Uint8List?> _read(String id) async {
     final path = _path(id);
     if (!await files.exists(path)) return null;
-    final bytes = await files.readBytes(path);
-    if (sha256.convert(bytes).toString() == id) return bytes;
+    Uint8List bytes;
+    try {
+      bytes = await files.readBytes(path);
+    } on Error {
+      rethrow;
+    } catch (error, stack) {
+      // A file removed outside this cache may disappear after exists(). Only
+      // treat a confirmed absence as a cache miss; preserve the read failure
+      // (including its stack) if checking existence also fails.
+      final bool stillExists;
+      try {
+        stillExists = await files.exists(path);
+      } catch (_) {
+        Error.throwWithStackTrace(error, stack);
+      }
+      if (stillExists) rethrow;
+      _sizes.remove(id);
+      return null;
+    }
+    if (sha256.convert(bytes).toString() == id) {
+      _rememberSize(id, bytes.length);
+      return bytes;
+    }
+    _sizes.remove(id);
     // A partial write or damaged cache can be repaired from an immutable remote.
     await files.delete(path);
     return null;
@@ -60,6 +106,7 @@ class SyncObjectCache {
     final path = _path(id);
     await files.createDirectory(p.dirname(path));
     await files.writeBytes(path, bytes);
+    _rememberSize(id, bytes.length);
   });
 
   Future<String> encrypt(Uint8List plaintext) async {

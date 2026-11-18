@@ -104,6 +104,7 @@ class NoteTransferMeter {
   int _done = 0;
   int _excluded = 0;
   int _publishedItems = 0;
+  final _samples = <({Duration at, int done})>[];
 
   // A deferred or superseded revision is no longer part of this pass.
   void exclude([int count = 1]) {
@@ -118,6 +119,14 @@ class NoteTransferMeter {
   void advance([int count = 1]) {
     if (count <= 0) return;
     _done += count;
+    final at = _elapsed();
+    // Retain one completion snapshot per second so fast transfers still span
+    // enough time to estimate throughput. Initial preparation is excluded.
+    if (_samples.isNotEmpty && _samples.last.at.inSeconds == at.inSeconds) {
+      _samples.removeLast();
+    }
+    _samples.add((at: at, done: _done));
+    if (_samples.length > 32) _samples.removeAt(0);
     _publishIfDue();
   }
 
@@ -146,9 +155,14 @@ class NoteTransferMeter {
     final knownTotal = eligible > 0 && _done <= eligible ? eligible : null;
     final remaining = eligible - _done;
     int? minutes;
-    if (_done >= 3 && remaining > 0 && _last.inSeconds >= 2) {
-      final seconds = _last.inMilliseconds * remaining / _done / 1000;
-      minutes = seconds < 60 ? 0 : (seconds / 60).round();
+    if (_samples.length >= 4 && remaining > 0) {
+      final first = _samples.first;
+      final completed = _done - first.done;
+      final interval = _samples.last.at - first.at;
+      if (completed >= 8 && interval >= const Duration(seconds: 10)) {
+        final seconds = interval.inMilliseconds * remaining / completed / 1000;
+        minutes = seconds < 60 ? 0 : (seconds / 60).round();
+      }
     }
     if (expected <= 0) return;
     publish((

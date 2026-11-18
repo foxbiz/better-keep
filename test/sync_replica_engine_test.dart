@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
+import 'package:better_keep/services/external_sync/sync_limits.dart';
 import 'package:better_keep/services/external_sync/sync_replica_engine.dart';
 import 'package:better_keep/services/external_sync/sync_replica_store.dart';
 import 'package:better_keep/services/external_sync/sync_revision.dart';
@@ -76,55 +77,48 @@ void main() {
     },
   );
 
-  test(
-    'counts only durable note updates and clears progress on retry',
-    () async {
-      final samples = <NoteTransfer?>[];
-      final adapter = _Adapter('progress')..incoming = [revision(1)];
-      engine = SyncReplicaEngine(
-        store: store,
-        content: content,
-        isCurrent: () => active,
-        onProgress: (_, value) => samples.add(value),
-      );
-      content.failApply = true;
-      await expectLater(engine.sync(adapter), throwsStateError);
-      expect(samples.last, isNull);
-      expect(
-        samples
-            .whereType<NoteTransfer>()
-            .where((s) => s.stage == NoteTransferStage.downloading)
-            .every((s) => s.done == 0),
-        true,
-      );
-      content.failApply = false;
-      samples.clear();
-      await engine.sync(adapter);
-      expect(
-        samples.whereType<NoteTransfer>().any(
-          (s) =>
-              s.stage == NoteTransferStage.downloading &&
-              s.done == 1 &&
-              s.total == 1,
-        ),
-        true,
-      );
-      expect(samples.last, isNull);
-      final other = _Adapter('second');
-      samples.clear();
-      await engine.sync(other);
-      expect(
-        samples.whereType<NoteTransfer>().any(
-          (s) =>
-              s.stage == NoteTransferStage.uploading &&
-              s.done == 1 &&
-              s.total == 1,
-        ),
-        true,
-      );
-      expect(samples.last, isNull);
-    },
-  );
+  test('counts only durable note updates across failure and retry', () async {
+    final samples = <NoteTransfer>[];
+    final adapter = _Adapter('progress')..incoming = [revision(1)];
+    engine = SyncReplicaEngine(
+      store: store,
+      content: content,
+      isCurrent: () => active,
+      onProgress: (_, value) => samples.add(value),
+    );
+    content.failApply = true;
+    await expectLater(engine.sync(adapter), throwsStateError);
+    expect(
+      samples
+          .where((s) => s.stage == NoteTransferStage.downloading)
+          .every((s) => s.done == 0),
+      true,
+    );
+    content.failApply = false;
+    samples.clear();
+    await engine.sync(adapter);
+    expect(
+      samples.any(
+        (s) =>
+            s.stage == NoteTransferStage.downloading &&
+            s.done == 1 &&
+            s.total == 1,
+      ),
+      true,
+    );
+    final other = _Adapter('second');
+    samples.clear();
+    await engine.sync(other);
+    expect(
+      samples.any(
+        (s) =>
+            s.stage == NoteTransferStage.uploading &&
+            s.done == 1 &&
+            s.total == 1,
+      ),
+      true,
+    );
+  });
 
   for (final failRestore in [false, true]) {
     test(
@@ -461,7 +455,7 @@ void main() {
   );
 
   test('only the first provider scan reports initial note checking', () async {
-    final samples = <NoteTransfer?>[];
+    final samples = <NoteTransfer>[];
     final adapter = _Adapter('dropbox')..incoming = [revision(1)];
     engine = SyncReplicaEngine(
       store: store,
@@ -470,12 +464,7 @@ void main() {
       onProgress: (_, value) => samples.add(value),
     );
     await engine.sync(adapter);
-    expect(
-      samples.whereType<NoteTransfer>().any(
-        (s) => s.stage == NoteTransferStage.checking,
-      ),
-      isTrue,
-    );
+    expect(samples.any((s) => s.stage == NoteTransferStage.checking), isTrue);
     samples.clear();
     // A new engine represents reopening the app with its persisted checkpoint.
     engine = SyncReplicaEngine(
@@ -485,16 +474,9 @@ void main() {
       onProgress: (_, value) => samples.add(value),
     );
     await engine.sync(adapter);
+    expect(samples.any((s) => s.stage == NoteTransferStage.checking), isFalse);
     expect(
-      samples.whereType<NoteTransfer>().any(
-        (s) => s.stage == NoteTransferStage.checking,
-      ),
-      isFalse,
-    );
-    expect(
-      samples.whereType<NoteTransfer>().any(
-        (s) => s.stage == NoteTransferStage.checkingUpdates,
-      ),
+      samples.any((s) => s.stage == NoteTransferStage.checkingUpdates),
       isTrue,
     );
   });
@@ -532,8 +514,8 @@ void main() {
       content: content,
       isCurrent: () => true,
       onProgress: (_, progress) {
-        if (progress?.stage == NoteTransferStage.checkingUpdates) {
-          checked.add(progress!.done);
+        if (progress.stage == NoteTransferStage.checkingUpdates) {
+          checked.add(progress.done);
         }
       },
     );
@@ -856,9 +838,7 @@ void main() {
         store: SyncReplicaStore(db, scope: store.scope),
         content: content,
         isCurrent: () => true,
-        onProgress: (_, value) {
-          if (value != null) samples.add(value);
-        },
+        onProgress: (_, value) => samples.add(value),
       );
       await fresh.sync(source, downloadOnly: true);
       final beforeDownload = samples.takeWhile(
@@ -906,7 +886,7 @@ void main() {
       final source = _Adapter('dropbox')
         ..incoming = revisions
         ..objects[revisions.first.payloadObjectId!] = data.first;
-      SyncReplicaEngine open(List<NoteTransfer?> samples) => SyncReplicaEngine(
+      SyncReplicaEngine open(List<NoteTransfer> samples) => SyncReplicaEngine(
         store: SyncReplicaStore(disk, scope: store.scope),
         content: _Content(),
         isCurrent: () => true,
@@ -933,10 +913,10 @@ void main() {
           hasMore: false,
         );
       };
-      final samples = <NoteTransfer?>[];
+      final samples = <NoteTransfer>[];
       final restored = open(samples);
       await restored.sync(source, downloadOnly: true);
-      final first = samples.whereType<NoteTransfer>().first;
+      final first = samples.first;
       expect(first.stage, NoteTransferStage.downloading);
       expect(first.total, 23);
       expect(await restored.store.inbox(source.connectionId), isEmpty);
@@ -1132,6 +1112,221 @@ void main() {
     },
   );
 
+  test('provider switch uploads in bounded parallel work and preserves per-provider acknowledgements', () async {
+    final revisions = List.generate(
+      1132,
+      (i) => SyncRevision(
+        kind: SyncEntityKind.note,
+        entityId: 'note-${i.toString().padLeft(4, '0')}',
+        revisionId: 'revision-$i',
+        modifiedAtMicros: i,
+        deleted: false,
+        payloadObjectId: objectId,
+      ),
+    );
+    final source = _Adapter('dropbox')..incoming = revisions;
+    await engine.sync(source);
+    final release = Completer<void>();
+    final fourStarted = Completer<void>();
+    var inFlight = 0, peak = 0, started = 0;
+    final target = _Adapter('drive')
+      ..onPublish = () async {
+        started++;
+        inFlight++;
+        if (inFlight > peak) peak = inFlight;
+        if (started == 4) fourStarted.complete();
+        await release.future;
+        inFlight--;
+      };
+    final pageSize = (await store.pending('drive')).length;
+    final work = engine.sync(target);
+    await fourStarted.future.timeout(const Duration(seconds: 5));
+    expect(started, 4);
+    expect(await store.pendingNoteCount('drive'), 1132);
+    expect(await store.pendingNoteCount('dropbox'), 0);
+    release.complete();
+    await work;
+    expect(peak, 4);
+    expect(target.published, hasLength(1132));
+    expect(await store.pendingNoteCount('drive'), 0);
+    // Shared objects are uploaded only once per bounded page.
+    expect(
+      target.events.where((e) => e == 'object'),
+      hasLength((revisions.length / pageSize).ceil()),
+    );
+    final uploaded = target.events.length;
+    await engine.sync(target);
+    expect(target.events, hasLength(uploaded));
+    expect(source.published, isEmpty);
+  });
+
+  test('parallel upload failure drains in-flight writes and retains failed revisions for retry', () async {
+    for (var i = 0; i < 8; i++) {
+      await save(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'note-$i',
+          revisionId: 'revision-$i',
+          modifiedAtMicros: i,
+          deleted: false,
+          payloadObjectId: objectId,
+        ),
+      );
+    }
+    final gates = List.generate(4, (_) => Completer<void>());
+    final fourStarted = Completer<void>();
+    var started = 0, settled = false;
+    final target = _Adapter('drive')
+      ..onPublish = () async {
+        final index = started++;
+        if (started == 4) fourStarted.complete();
+        await gates[index].future;
+      };
+    final work = engine.sync(target);
+    final expectation = expectLater(
+      work,
+      throwsA(isA<SyncProviderFailure>()),
+    ).then((_) => settled = true);
+    await fourStarted.future.timeout(const Duration(seconds: 5));
+    gates[0].completeError(
+      const SyncProviderFailure(SyncProviderFailureKind.unavailable),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(settled, false);
+    expect(started, 4);
+    for (final gate in gates.skip(1)) {
+      gate.complete();
+    }
+    await expectation;
+    expect(target.published, hasLength(3));
+    expect(await store.pendingNoteCount('drive'), 5);
+    target.onPublish = null;
+    await engine.sync(target);
+    expect(target.published, hasLength(8));
+    expect(await store.pendingNoteCount('drive'), 0);
+  });
+
+  test('retiring a parallel upload drains every worker without acknowledging stale work', () async {
+    for (var i = 0; i < 8; i++) {
+      await save(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'note-$i',
+          revisionId: 'revision-$i',
+          modifiedAtMicros: i,
+          deleted: false,
+          payloadObjectId: objectId,
+        ),
+      );
+    }
+    final release = Completer<void>();
+    final started = Completer<void>();
+    var publishing = 0;
+    final target = _Adapter('drive')
+      ..onPublish = () async {
+        if (++publishing == 4) started.complete();
+        await release.future;
+      };
+    final work = engine.sync(target);
+    final result = expectLater(work, throwsA(isA<SyncReplicaCancelled>()));
+    await started.future.timeout(const Duration(seconds: 5));
+    active = false;
+    release.complete();
+    await result;
+    await engine.waitForIdle();
+    expect(publishing, 4);
+    expect(await store.pendingNoteCount('drive'), 8);
+    expect(await store.pendingSignal('drive'), isNull);
+  });
+
+  test(
+    'small cached notes publish while a large media transfer is still waiting',
+    () async {
+      final large = Uint8List(SyncLimits.uploadBufferBytes + 1);
+      final largeId = sha256.convert(large).toString();
+      content.objects[largeId] = large;
+      await save(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'a-large',
+          revisionId: 'large',
+          modifiedAtMicros: 1,
+          deleted: false,
+          payloadObjectId: largeId,
+        ),
+      );
+      await save(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'b-small',
+          revisionId: 'small',
+          modifiedAtMicros: 1,
+          deleted: false,
+          payloadObjectId: objectId,
+        ),
+      );
+      final releaseLarge = Completer<void>();
+      final largeStarted = Completer<void>();
+      final smallPublished = Completer<void>();
+      final target = _Adapter('drive')
+        ..beforePut = (id) async {
+          if (id == largeId) {
+            largeStarted.complete();
+            await releaseLarge.future;
+          }
+        }
+        ..onPublish = () async {
+          if (!smallPublished.isCompleted) smallPublished.complete();
+        };
+      final work = engine.sync(target);
+      try {
+        await largeStarted.future.timeout(const Duration(seconds: 5));
+        await smallPublished.future.timeout(const Duration(seconds: 5));
+        expect(releaseLarge.isCompleted, false);
+        expect(target.objects.containsKey(largeId), false);
+      } finally {
+        releaseLarge.complete();
+        await work;
+      }
+      expect(target.published.map((r) => r.entityId), ['b-small', 'a-large']);
+      expect(await store.pendingNoteCount('drive'), 0);
+    },
+  );
+
+  test('large upload buffers stay serial through their transfer', () async {
+    final blobs = List.generate(4, (i) {
+      final bytes = Uint8List(SyncLimits.uploadBufferBytes + 1)..[0] = i;
+      final id = sha256.convert(bytes).toString();
+      content.objects[id] = bytes;
+      return id;
+    });
+    for (var i = 0; i < 4; i++) {
+      await save(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'note-$i',
+          revisionId: 'revision-$i',
+          modifiedAtMicros: i,
+          deleted: false,
+          payloadObjectId: blobs[i],
+        ),
+      );
+    }
+    var activeUploads = 0, peak = 0;
+    final target = _Adapter('drive')
+      ..onPut = () async {
+        activeUploads++;
+        if (activeUploads > peak) peak = activeUploads;
+        final reads = content.readCalls;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        expect(content.readCalls, reads);
+        activeUploads--;
+      };
+    await engine.sync(target);
+    expect(peak, 1);
+    expect(target.published, hasLength(4));
+  });
+
   test('replacement provider accounts start fresh without clearing previous provider records', () async {
     await save(revision(1));
     final original = _Adapter('google_drive:1');
@@ -1169,7 +1364,7 @@ void main() {
   });
 }
 
-class _Content implements SyncReplicaContent {
+class _Content implements SyncReplicaContent, SmallSyncReplicaContent {
   final objects = <String, Uint8List>{};
   bool failApply = false;
   int readCalls = 0;
@@ -1180,6 +1375,15 @@ class _Content implements SyncReplicaContent {
   Future<Uint8List?> read(String objectId) async {
     readCalls++;
     return objects[objectId];
+  }
+
+  @override
+  Future<Uint8List?> readSmall(String objectId) async {
+    final bytes = objects[objectId];
+    if (bytes == null || bytes.length > SyncLimits.uploadBufferBytes) {
+      return null;
+    }
+    return read(objectId);
   }
 
   @override
@@ -1207,6 +1411,7 @@ class _Adapter implements SyncProviderAdapter {
   bool failPublish = false;
   Future<void> Function()? onPublish;
   Future<void> Function()? onPut;
+  Future<void> Function(String)? beforePut;
   @override
   Future<SyncChangePage> changes(
     String? cursor, {
@@ -1225,6 +1430,7 @@ class _Adapter implements SyncProviderAdapter {
 
   @override
   Future<void> putObject(String objectId, Uint8List encryptedBytes) async {
+    await beforePut?.call(objectId);
     objects[objectId] = encryptedBytes;
     events.add('object');
     await onPut?.call();

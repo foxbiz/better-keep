@@ -8,7 +8,7 @@ import 'file_system_base.dart';
 ///
 /// Emulator storage is nested below its environment root. After sign-out,
 /// both environments also place each new library in its own generation.
-class ScopedFileSystem implements FileSystem {
+class ScopedFileSystem implements FileSystem, FileSystemMetadata {
   ScopedFileSystem(this._delegate, {required this.directoryName})
     : _resolve = null,
       assert(directoryName.isNotEmpty);
@@ -84,6 +84,14 @@ class ScopedFileSystem implements FileSystem {
   @override
   Future<String> copy(String sourcePath, String targetPath) =>
       _delegate.copy(sourcePath, targetPath);
+
+  @override
+  Future<int?> metadataLength(String filePath) async {
+    if (_delegate case FileSystemMetadata metadata) {
+      return metadata.metadataLength(filePath);
+    }
+    return null;
+  }
 
   @override
   Future<int?> length(String filePath) => _delegate.length(filePath);

@@ -6,6 +6,7 @@ import 'package:better_keep/services/sync_track_store.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'portable_sync_codec.dart';
+import 'sync_limits.dart';
 import 'sync_mutation_journal.dart';
 import 'sync_object_cache.dart';
 import 'sync_replica_engine.dart';
@@ -30,7 +31,10 @@ class SyncAppliedChange {
 /// Connects provider-independent revisions to the existing local library.
 /// Network/filesystem preparation never holds the domain transaction open.
 class LibraryReplicaContent
-    implements SyncReplicaContent, PreparingSyncReplicaContent {
+    implements
+        SyncReplicaContent,
+        PreparingSyncReplicaContent,
+        SmallSyncReplicaContent {
   LibraryReplicaContent({
     required this.store,
     required this.objects,
@@ -61,6 +65,17 @@ class LibraryReplicaContent
   Future<Uint8List?> read(String objectId) async {
     _guard();
     final bytes = await objects.read(objectId);
+    _guard();
+    return bytes;
+  }
+
+  @override
+  Future<Uint8List?> readSmall(String objectId) async {
+    _guard();
+    final bytes = await objects.readSmall(
+      objectId,
+      maxBytes: SyncLimits.uploadBufferBytes,
+    );
     _guard();
     return bytes;
   }

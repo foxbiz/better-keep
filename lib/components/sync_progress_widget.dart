@@ -228,9 +228,10 @@ class SyncContentProgress extends StatelessWidget {
                   ),
                 ),
               if (progress.notes case final transfer?
-                  when transfer.stage == NoteTransferStage.downloading &&
+                  when (transfer.stage == NoteTransferStage.downloading ||
+                          transfer.stage == NoteTransferStage.uploading) &&
                       transfer.fraction != null)
-                _DownloadProgress(transfer),
+                _TransferProgress(transfer),
             ],
           ],
         ),
@@ -239,8 +240,8 @@ class SyncContentProgress extends StatelessWidget {
   );
 }
 
-class _DownloadProgress extends StatelessWidget {
-  const _DownloadProgress(this.transfer);
+class _TransferProgress extends StatelessWidget {
+  const _TransferProgress(this.transfer);
   static final _percentFormats = <String, NumberFormat>{};
   final NoteTransfer transfer;
 
@@ -366,10 +367,12 @@ class _SyncProgressCard extends StatelessWidget {
                         ),
                       ),
                       if (syncStatus.notes case final transfer?
-                          when transfer.stage ==
-                                  NoteTransferStage.downloading &&
+                          when (transfer.stage ==
+                                      NoteTransferStage.downloading ||
+                                  transfer.stage ==
+                                      NoteTransferStage.uploading) &&
                               transfer.fraction != null)
-                        _DownloadProgress(transfer),
+                        _TransferProgress(transfer),
                     ],
                   ),
                 ),

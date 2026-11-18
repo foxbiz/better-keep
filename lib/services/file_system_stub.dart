@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'file_system_base.dart';
 
 /// Stub implementation used when no file system backend is available.
+/// Omits FileSystemMetadata because it cannot provide file-size metadata.
 class FileSystemStub implements FileSystem {
   const FileSystemStub();
 

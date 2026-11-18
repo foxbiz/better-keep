@@ -96,6 +96,85 @@ void main() {
     expect(syncs, 1);
   });
 
+  testWidgets('queued manual pass never announces completion between passes', (
+    tester,
+  ) async {
+    final first = Completer<void>();
+    final second = Completer<void>();
+    var calls = 0;
+    final scheduler = SyncScheduler(
+      automatic: false,
+      isCurrent: () => true,
+      sync: (_) => ++calls == 1 ? first.future : second.future,
+    );
+    addTearDown(scheduler.dispose);
+    final samples = <SyncConnectionProgress>[];
+    scheduler.setAdapters([_Provider('drive')]);
+    scheduler.addListener(() => samples.add(scheduler.progress['drive']!));
+    final initial = scheduler.syncNow();
+    await tester.pump();
+    final queued = scheduler.syncNow();
+    first.complete();
+    await tester.pump();
+    expect(calls, 2);
+    expect(samples.every((s) => s.running), true);
+    second.complete();
+    await tester.pump();
+    await Future.wait([initial, queued]);
+    expect(samples.last.running, false);
+    expect(samples.last.lastSuccess, isNotNull);
+  });
+
+  for (final stop in ['background', 'manual']) {
+    testWidgets('queued pass settles when a listener switches to $stop', (
+      tester,
+    ) async {
+      final release = Completer<void>();
+      var runs = 0, starts = 0;
+      final scheduler = SyncScheduler(
+        isCurrent: () => true,
+        onPassStarted: (_) => starts++,
+        sync: (_) async {
+          runs++;
+          await release.future;
+        },
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('drive')]);
+      await tester.pump();
+      scheduler.remoteChanged('drive');
+      var stopped = false;
+      scheduler.addListener(() {
+        final state = scheduler.progress['drive']!;
+        if (!stopped && state.running && state.lastSuccess != null) {
+          stopped = true;
+          if (stop == 'background') {
+            scheduler.setForeground(false);
+          } else {
+            scheduler.setAutomatic(false);
+          }
+        }
+      });
+      release.complete();
+      await tester.pump();
+      await scheduler.waitForIdle();
+      expect(runs, 1);
+      expect(starts, 1);
+      expect(scheduler.progress['drive']!.running, false);
+      expect(scheduler.progress['drive']!.lastSuccess, isNotNull);
+      if (stop == 'background') {
+        scheduler.setForeground(true);
+      } else {
+        scheduler.setAutomatic(true);
+      }
+      await tester.pump();
+      await scheduler.waitForIdle();
+      expect(runs, 2);
+      expect(starts, 2);
+      expect(scheduler.progress['drive']!.running, false);
+    });
+  }
+
   testWidgets('free retries a failed initial download after resume', (
     tester,
   ) async {

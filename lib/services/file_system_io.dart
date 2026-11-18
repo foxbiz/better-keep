@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'file_system_base.dart';
 
-class IoFileSystem implements FileSystem {
+class IoFileSystem implements FileSystem, FileSystemMetadata {
   const IoFileSystem();
 
   @override
@@ -138,6 +138,12 @@ class IoFileSystem implements FileSystem {
     await File(targetPath).parent.create(recursive: true);
     final copied = await sourceFile.copy(targetPath);
     return copied.path;
+  }
+
+  @override
+  Future<int?> metadataLength(String path) async {
+    final stat = await File(path).stat();
+    return stat.type == FileSystemEntityType.file ? stat.size : null;
   }
 
   @override

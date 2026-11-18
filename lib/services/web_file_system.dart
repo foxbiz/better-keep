@@ -12,7 +12,7 @@ import 'package:flutter/foundation.dart';
 import 'file_system_base.dart';
 import 'web_release.dart';
 
-class WebFileSystem implements FileSystem {
+class WebFileSystem implements FileSystem, FileSystemMetadata {
   WebFileSystem._(this._backend);
 
   static WebFileSystem? _cached;
@@ -107,6 +107,14 @@ class WebFileSystem implements FileSystem {
     final bytes = await readBytes(sourcePath);
     await writeBytes(targetPath, bytes);
     return targetPath;
+  }
+
+  @override
+  Future<int?> metadataLength(String path) async {
+    if (_backend case FileSystemMetadata metadata) {
+      return metadata.metadataLength(path);
+    }
+    return null;
   }
 
   @override
@@ -226,7 +234,7 @@ class WebFileSystem implements FileSystem {
       int? size;
       bool isFile = false;
       try {
-        size = await length(fullPath);
+        size = await metadataLength(fullPath) ?? await length(fullPath);
         isFile = true;
       } catch (_) {
         // Not a file or can't read - might be a directory
@@ -334,7 +342,7 @@ abstract class _FileSystemBackend {
   Future<List<String>> list(String directory);
 }
 
-class _OpfsBackend implements _FileSystemBackend {
+class _OpfsBackend implements _FileSystemBackend, FileSystemMetadata {
   dynamic _root;
 
   static bool get isSupported {
@@ -435,6 +443,23 @@ class _OpfsBackend implements _FileSystemBackend {
       Uint8List.fromList(utf8.encode(data)),
       append: append,
     );
+  }
+
+  @override
+  Future<int?> metadataLength(String path) async {
+    final fileHandle = await _getFileHandle(path, create: false);
+    if (fileHandle == null) return null;
+    try {
+      final file = await _promise(
+        js_util.callMethod(fileHandle, 'getFile', []),
+      );
+      return (js_util.getProperty(file, 'size') as num).toInt();
+    } catch (error) {
+      if (error is html.DomException && error.name == 'NotFoundError') {
+        return null;
+      }
+      rethrow;
+    }
   }
 
   @override

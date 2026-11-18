@@ -38,6 +38,38 @@ There is no periodic provider polling. No server
 file-transfer proxy or closed-app continuous-sync guarantee. Nextcloud requires
 HTTPS and appropriate CORS for browser use. Keep manual external sync independent of subscription entitlements. No production changes, deployments or publishing without permission.
 
+## Bounded external publication
+
+Non-batch providers publish through four note workers per pending page. Object
+uploads shared by revisions use one future per object per page; retries start a
+new page map and recheck remote durability. Revision checks remain before and
+after object transfer, acknowledgements remain version-guarded, and failures
+wait for in-flight workers before leaving the pass. Existence checks and writes
+are awaited sequentially within each worker: this path has at most four provider
+requests in flight, not eight. Dropbox's batch path is unchanged.
+
+Verified local objects up to `SyncLimits.uploadBufferBytes` (1 MiB) can upload
+beside a large transfer. Unknown or large objects are loaded and transferred
+serially to avoid several full media buffers. Native and OPFS cached files use
+size hints first, then the optional `FileSystemMetadata` capability to read cold
+file sizes without loading content; account filesystem wrappers forward it.
+IndexedDB has no cheap size lookup and uses bounded in-memory size hints. Cold
+unknown IndexedDB objects conservatively retain the serialized path. No
+persistent schema or ciphertext format changes.
+
+Upload and download indicators report completed notes, not bytes. ETA retains
+up to 32 completion samples, at most one per second, and needs eight completions
+across ten seconds before estimating. It is approximate for mixed media sizes.
+The last transfer remains visible through scheduler durability checks; a queued
+pass clears it before its running notification, without a completion flash.
+Backgrounding or disabling automatic sync between passes settles the status.
+Engine progress emits transfers only; scheduler notifications own completion.
+WebDAV/Nextcloud callers share one in-flight collection initialization; failures
+clear it for a later retry. OPFS diagnostic file listings use metadata for size
+instead of loading contents. Cache reads recheck existence after a read failure
+and treat only confirmed absence as a miss. Programming errors propagate, and a
+failed existence recheck preserves the original read failure and stack.
+
 ## Provider selection and browser return
 
 `users/{uid}/sync_settings/firebase` now stores `provider` alongside the legacy
@@ -176,7 +208,8 @@ is best effort. Storage credentials never pass through the backend callback.
   before the connection controller registers the grant.
 - Provider tests use mocked HTTP only; no real provider account was accessed.
 - `GoogleDriveSyncTransport` implements appDataFolder objects, capture-before-list
-  bootstrap, incremental change cursors and resumable uploads. Drive duplicate
+  bootstrap, incremental change cursors, multipart uploads up to its independent
+  `multipartUploadBytes` threshold (1 MiB), and resumable uploads above it. Drive duplicate
   names are handled by the optional `SyncFileCopies` capability; the common file
   protocol authenticates all copies and rejects conflicting revision contents.
 - The old server vault/OAuth brokerage has been replaced by client-encrypted

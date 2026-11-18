@@ -34,6 +34,7 @@ class SyncScheduler extends ChangeNotifier {
   SyncScheduler({
     required this.sync,
     this.restore,
+    this.onPassStarted,
     required this.isCurrent,
     this.blockedEntities,
     this.notesRequiringUnlock,
@@ -47,6 +48,7 @@ class SyncScheduler extends ChangeNotifier {
   }) : now = now ?? DateTime.now;
 
   final Future<void> Function(SyncProviderAdapter) sync;
+  final void Function(SyncProviderAdapter)? onPassStarted;
 
   /// Initial downloads are available independently of automatic uploads.
   final Future<void> Function(SyncProviderAdapter)? restore;
@@ -195,6 +197,18 @@ class SyncScheduler extends ChangeNotifier {
         .whenComplete(() {
           entry.running = null;
           _tasks.remove(task);
+          if (_owns(entry) && entry.progress.running) {
+            final previous = entry.progress;
+            entry.progress = SyncConnectionProgress(
+              lastSuccess: previous.lastSuccess,
+              failure: previous.failure,
+              retryAt: previous.retryAt,
+              blockedEntities: previous.blockedEntities,
+              notesRequiringUnlock: previous.notesRequiringUnlock,
+              pendingLocalChanges: previous.pendingLocalChanges,
+            );
+            notifyListeners();
+          }
         });
     entry.running = task;
     _tasks.add(task);
@@ -208,6 +222,7 @@ class SyncScheduler extends ChangeNotifier {
       final restoring = !_automatic && !force && entry.needsRestore;
       if (restoring) entry.restoreAttempts++;
       entry.again = entry.forceAgain = false;
+      onPassStarted?.call(entry.adapter);
       final previous = entry.progress;
       var lastSuccess = previous.lastSuccess;
       entry.progress = SyncConnectionProgress(
@@ -239,6 +254,10 @@ class SyncScheduler extends ChangeNotifier {
         entry.needsRestore = false;
         entry.failures = 0;
         entry.progress = SyncConnectionProgress(
+          // A queued pass belongs to the same operation. Do not flash success
+          // between passes while a manual refresh or a remote change is queued.
+          running:
+              _foreground && entry.again && (_automatic || entry.forceAgain),
           lastSuccess: lastSuccess,
           blockedEntities: blocked,
           notesRequiringUnlock: notesRequiringUnlock?.call() ?? 0,

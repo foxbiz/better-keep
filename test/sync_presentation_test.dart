@@ -187,8 +187,13 @@ void main() {
     elapsed = const Duration(seconds: 6);
     meter.advance();
     expect(samples.last.done, 3);
+    expect(samples.last.minutesLeft, isNull);
+    for (var i = 4; i <= 12; i++) {
+      elapsed = Duration(seconds: i * 2);
+      meter.advance();
+    }
     expect(samples.last.minutesLeft, 2);
-    for (var i = 3; i < 60; i++) {
+    for (var i = 12; i < 60; i++) {
       meter.advance();
     }
     expect(samples.last.fraction, 1);
@@ -196,6 +201,71 @@ void main() {
     NoteTransferMeter(NoteTransferStage.uploading, 3, samples.add);
     expect(samples.last.done, 0);
     expect(samples.last.minutesLeft, isNull);
+  });
+
+  test(
+    'upload estimate excludes startup delay and follows recent throughput',
+    () {
+      var elapsed = const Duration(minutes: 5);
+      final samples = <NoteTransfer>[];
+      final meter = NoteTransferMeter(
+        NoteTransferStage.uploading,
+        1000,
+        samples.add,
+        elapsed: () => elapsed,
+      );
+      for (var i = 0; i < 12; i++) {
+        meter.advance();
+        elapsed += const Duration(seconds: 2);
+      }
+      expect(samples.last.minutesLeft, 33);
+      for (var i = 0; i < 40; i++) {
+        meter.advance();
+        elapsed += const Duration(seconds: 1);
+      }
+      meter.flush();
+      expect(samples.last.minutesLeft, 16);
+      expect(samples.last.done, 52);
+    },
+  );
+
+  test('fast long transfers retain enough elapsed history to estimate', () {
+    var elapsed = Duration.zero;
+    final samples = <NoteTransfer>[];
+    final meter = NoteTransferMeter(
+      NoteTransferStage.uploading,
+      10000,
+      samples.add,
+      elapsed: () => elapsed,
+    );
+    for (var i = 0; i < 1000; i++) {
+      elapsed += const Duration(milliseconds: 100);
+      meter.advance();
+    }
+    meter.flush();
+    expect(samples.last.done, 1000);
+    expect(samples.last.minutesLeft, 15);
+  });
+
+  test('delayed flush does not count idle time as transfer time', () {
+    var elapsed = Duration.zero;
+    final samples = <NoteTransfer>[];
+    final meter = NoteTransferMeter(
+      NoteTransferStage.uploading,
+      1000,
+      samples.add,
+      elapsed: () => elapsed,
+    );
+    for (var i = 0; i < 12; i++) {
+      meter.advance();
+      elapsed += const Duration(seconds: 2);
+    }
+    elapsed = const Duration(milliseconds: 22100);
+    meter.advance(); // Under the 500 ms publish interval.
+    elapsed = const Duration(minutes: 3);
+    meter.flush();
+    expect(samples.last.done, 13);
+    expect(samples.last.minutesLeft, 30);
   });
 
   test('download progress keeps its total when a revision is skipped', () {

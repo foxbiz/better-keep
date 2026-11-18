@@ -2,6 +2,7 @@ import 'sync_limits.dart';
 import 'storage_usage.dart';
 
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -31,6 +32,9 @@ class GoogleDriveSyncTransport
   final ProviderHttp httpClient;
   final Future<String> Function() accessToken;
   final String libraryId;
+
+  static const multipartUploadBytes = 1024 * 1024;
+  static final _random = Random.secure();
 
   static const _fileFields = 'id,name,appProperties,trashed';
   String get _query =>
@@ -292,6 +296,38 @@ class GoogleDriveSyncTransport
       'parents': ['appDataFolder'],
       'appProperties': {'library': libraryId, 'protocol': '1', 'logical': name},
     };
+    // Small encrypted notes and commits do not need a resumable session.
+    // Keep larger media on the chunked path, including on mobile connections.
+    if (bytes.length <= multipartUploadBytes) {
+      final boundary = List.generate(
+        24,
+        (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+      ).join();
+      final body = BytesBuilder(copy: false)
+        ..add(
+          utf8.encode(
+            '--$boundary\r\n'
+            'Content-Type: application/json; charset=UTF-8\r\n\r\n'
+            '${jsonEncode(metadata)}\r\n'
+            '--$boundary\r\n'
+            'Content-Type: application/octet-stream\r\n\r\n',
+          ),
+        )
+        ..add(bytes)
+        ..add(utf8.encode('\r\n--$boundary--\r\n'));
+      final result = await _request(
+        'POST',
+        Uri.https('www.googleapis.com', '/upload/drive/v3/files', {
+          'uploadType': 'multipart',
+          'fields': 'id',
+        }),
+        headers: {'Content-Type': 'multipart/related; boundary=$boundary'},
+        body: body.takeBytes(),
+      );
+      if (result.statusCode != 200 && result.statusCode != 201) _fail(result);
+      _string(_json(result), 'id');
+      return true;
+    }
     final start = await _request(
       'POST',
       Uri.https('www.googleapis.com', '/upload/drive/v3/files', {
