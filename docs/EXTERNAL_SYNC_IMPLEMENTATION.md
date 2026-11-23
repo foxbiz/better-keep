@@ -38,6 +38,116 @@ There is no periodic provider polling. No server
 file-transfer proxy or closed-app continuous-sync guarantee. Nextcloud requires
 HTTPS and appropriate CORS for browser use. Keep manual external sync independent of subscription entitlements. No production changes, deployments or publishing without permission.
 
+## Interrupted uploads
+
+External sync passes establish their own library account/key/database cloud-operation zone, so nested local writes do not inherit an expired startup/recovery guard; retirement still cancels the pass.
+
+Before an outgoing pass, the client durably records an upload intent scoped to
+account, encryption library and provider connection generation. Launch and
+foreground resume finish runnable requested work even on Free. Once only blocked
+sources remain, clear the intent while retaining pending/unlock/storage feedback;
+later Free edits and repaired sources require another manual sync. Compare blocked
+revision IDs with current journal versions so concurrent edits remain runnable. Switching
+to another provider or Sync off stops scheduling the previous connection.
+Selecting the same connection again resumes its retained intent. Disconnecting
+and reauthorizing creates a new connection generation, so a Free user starts a
+new upload with manual sync. Turning off automatic sync does not cancel work
+already requested; after it finishes, later Free edits remain manual.
+Transient failures keep the intent and retry with the existing provider backoff;
+authorization, quota and corrupt-data failures still require user action.
+Failures reading/writing local sync history or intent are reported as local
+storage failures, with the existing retry backoff, rather than network outages.
+The same classification covers SQLite exceptions escaping sync/restore and pending
+queue checks. Local object-cache and attachment filesystem boundaries also report
+storage failures, including browser file errors; cancellation and integrity errors
+remain distinct. A typed attachment-source read failure blocks only that entity:
+capture and upload continue for healthy notes, then report that some attachments
+could not be uploaded while explaining that other notes can still sync.
+Cache-write and database faults abort the pass and retain its durable intent.
+Neither path acknowledges a failed mutation. The pill, details and manual-refresh
+snackbar distinguish source-read failures from whole-pass device-storage failures.
+Blocked-source feedback offers **View notes**, opening a local, revision-filtered
+list of affected notes. The normal editor and PIN dialog handle opening/unlocking;
+locked titles are masked in the query as well as the UI. Recovery reads reject
+incomplete attachment/content decoding before opening an editable note, including
+nested sketch parsing and unlocked editor content validation, preserving the original
+row. Validation uses the editor compatibility normalizer without rewriting source
+content; legacy inline/file sketches, audio formats, title headers and missing final
+newlines remain supported. Locked content and legacy protected sketches stay opaque
+until the existing PIN flow authenticates them; recovery validates the decrypted body
+before opening the editor. Recovery validates the registered embed types and their
+payloads: attachment identity/source strings, image/video source strings, and tables
+through `NoteTableData.fromJson`, including populated cell Delta content and nested
+tables. Missing attachment files remain valid references and show the existing
+placeholder. Validation preserves optional legacy sizing and does not rewrite source
+content. Embed cardinality is checked explicitly in release builds, and malformed
+sketch or embed data raises a sanitized `FormatException`. Other readers retain
+their defaults. The list refreshes after relevant note changes and finished sync
+passes, without querying on each progress tick. Missing-attachment guidance suggests
+syncing from the device where the attachment was added, without asking users to inspect files.
+**Retry now** on that page runs a manual sync and reports its returned outcome
+rather than a potentially stale global status. Late terminal notifications and list
+reloads preserve that result; a new sync attempt or changed failure set clears it.
+Provider details retain results across duplicate notifications but replace them when
+the connection, error, blocked-note counts or pending state changes. An open failure
+clears when affected notes change or a new sync starts. Details also disable duplicate
+requests while waiting.
+A note that cannot be opened gets
+note-specific guidance without blaming storage. Opening the list does not grant
+automatic sync or change upload intent. Session replacement closes the list and
+its PIN/editor routes. Provider setup failures retain provider-level guidance,
+and generic local-access errors do not assume the device is out of storage.
+Cancelled passes retain upload intent without a network error, success stamp or
+backoff retry; a subsequent manual/foreground request can resume them.
+Local-storage feedback intentionally takes precedence over generic failure.
+
+Upload continuation requires a newly captured revision or a durable provider
+publication. A pass with runnable work but no progress backs off from 5 to 300
+seconds; the quiet "Sync will retry shortly" state and **Retry now** action explain
+that wait without an active spinner. The waiting pill fades after three seconds;
+the pending state remains available in provider details. A manual retry can bypass
+it. Intent writes are skipped while the same intent is already known durable;
+the SQLite transaction and retirement guards remain. Progress count pairs retain compact formatting unless rounding would show
+equal counts before completion, in which case they use exact localized numbers.
+Connection details close when their owning session is replaced.
+
+Completion checks both the mutation journal and that connection's unacknowledged
+revisions. The queued-revision check reads only entity identities and current local
+revision IDs in bounded pages, avoiding payload decoding and per-entity database
+round trips. It still checks every blocked revision to detect edits safely.
+A download-only pass cannot claim completion while local uploads are pending. Settings label this timestamp "Last completed sync" and show pending
+changes separately when no pass is running; it is not a last-download timestamp.
+Open connection details observe current progress and completion. Bounded capture batches continue within the requested operation, without
+a success flash or another pull-to-refresh. The v13 → v14 local migration adds a SQLite table that stores
+only the intent; no backend, credential or remote-format changes are required.
+An upload interrupted by an older build has no intent marker: one manual refresh
+starts the resumable operation after upgrading.
+
+Upload progress uses an animated upward transfer arrow, localized compact counts,
+then remaining time and percentage above the progress bar. It omits the duplicate
+total. Existing notes retain the floating pill; empty-library restore stays in the
+content area. Reduced-motion settings stop the activity animation.
+
+Validation for this change covers migration/history preservation, per-connection
+intent isolation, failure/retry and Free-plan behavior, large-text layouts, and
+both transfer animations. `integration_test/external_sync_platform_test.dart`
+with `--dart-define=UPLOAD_RESUME_QA=true` exercises an encrypted 104-note/image
+Dropbox-to-Drive switch, on-disk reopen, foreground resume and restore without
+manual refresh. The transport boundary is synthetic; SQLite, files, encryption,
+providers and scheduler are real.
+
+For an OS force-stop test, also pass a unique
+`--dart-define=UPLOAD_RESUME_PROCESS=<run-id>`. The first launch reports
+`UPLOAD PROCESS READY FOR FORCE STOP` with an unfinished queue. Stop the host
+test runner without its automatic app-uninstall cleanup, terminate only the QA
+app, then rerun with the same run ID. The new process must report
+`UPLOAD PROCESS RESTART PASS`, complete the queue and restore every note/image
+without `syncNow` or refresh. Use disposable simulators/emulators only.
+
+Before shipping, smoke-test the release/TestFlight build against a real Drive
+account while locking/unlocking and force-closing during upload; synthetic
+transport tests do not qualify real-provider connectivity or OS background time.
+
 ## Bounded external publication
 
 Non-batch providers publish through four note workers per pending page. Object
@@ -55,7 +165,7 @@ size hints first, then the optional `FileSystemMetadata` capability to read cold
 file sizes without loading content; account filesystem wrappers forward it.
 IndexedDB has no cheap size lookup and uses bounded in-memory size hints. Cold
 unknown IndexedDB objects conservatively retain the serialized path. No
-persistent schema or ciphertext format changes.
+ciphertext format changes in this buffering path.
 
 Upload and download indicators report completed notes, not bytes. ETA retains
 up to 32 completion samples, at most one per second, and needs eight completions

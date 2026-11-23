@@ -114,6 +114,9 @@ class ExternalSyncService extends ChangeNotifier {
         progress: () => progress,
       );
     } on SyncProviderFailure catch (error) {
+      if (error.kind == SyncProviderFailureKind.localStorage) {
+        return SyncRefreshOutcome.localStorageFailure;
+      }
       return error.kind == SyncProviderFailureKind.unavailable ||
               error.kind == SyncProviderFailureKind.rateLimited
           ? SyncRefreshOutcome.unavailable

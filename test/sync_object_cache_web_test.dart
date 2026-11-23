@@ -3,6 +3,10 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:better_keep/services/cloud_session_recovery.dart';
+
+import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
+
 import 'package:better_keep/services/external_sync/sync_cipher.dart';
 import 'package:better_keep/services/external_sync/sync_object_cache.dart';
 import 'package:better_keep/services/file_system_base.dart';
@@ -101,6 +105,14 @@ void main() {
     );
     expect(existenceChecks, 1); // Errors must bypass the absence fallback.
 
+    existenceChecks = 0;
+    files.beforeRead = (_) => throw const CloudOperationCancelled();
+    await expectLater(
+      cold.read(smallId),
+      throwsA(isA<CloudOperationCancelled>()),
+    );
+    expect(existenceChecks, 1); // Cancellation must not be treated as a miss.
+
     final original = Exception('original read failure');
     final originalStack = StackTrace.fromString('original-cache-read-stack');
     existenceChecks = 0;
@@ -113,7 +125,14 @@ void main() {
       await cold.readSmall(smallId, maxBytes: 1024 * 1024);
       fail('Expected the original read failure');
     } catch (error, stack) {
-      expect(error, same(original));
+      expect(
+        error,
+        isA<SyncProviderFailure>().having(
+          (error) => error.kind,
+          'kind',
+          SyncProviderFailureKind.localStorage,
+        ),
+      );
       expect(stack.toString(), contains('original-cache-read-stack'));
     }
     expect(existenceChecks, 2);

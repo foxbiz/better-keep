@@ -1,3 +1,5 @@
+import 'package:better_keep/services/cloud_session_recovery.dart';
+
 import 'dart:async';
 
 import 'package:better_keep/services/external_sync/storage_usage.dart';
@@ -427,6 +429,162 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets(
+    'details distinguish incomplete sync from pending local changes',
+    (tester) async {
+      final l10n = lookupAppLocalizations(const Locale('en'));
+      connections.values['dropbox'] = _connection('dropbox');
+      (service.session!.scheduler as _Scheduler).progress['dropbox:1'] =
+          const SyncConnectionProgress(pendingLocalChanges: true);
+      await mount(tester);
+      await tester.pumpAndSettle();
+      await menu(tester, 'dropbox', l10n.externalSyncDetails);
+      expect(find.text('Sync has not fully completed yet'), findsOneWidget);
+      expect(find.text(l10n.externalSyncState('pending')), findsOneWidget);
+      expect(find.text('No successful sync yet'), findsNothing);
+      await tester.tap(find.widgetWithText(TextButton, l10n.retry));
+      await tester.pump();
+      expect(service.refreshCalls, 1);
+      final session = service.session! as _Session;
+      session.updateProgress(
+        'dropbox:1',
+        const SyncConnectionProgress(running: true, pendingLocalChanges: true),
+      );
+      await tester.pump();
+      expect(find.text(l10n.externalSyncState('pending')), findsNothing);
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, l10n.retry))
+            .onPressed,
+        isNull,
+      );
+      session.updateProgress(
+        'dropbox:1',
+        const SyncConnectionProgress(pendingLocalChanges: true),
+      );
+      await tester.pump();
+      expect(find.text(l10n.externalSyncState('pending')), findsOneWidget);
+      session.updateProgress(
+        'dropbox:1',
+        SyncConnectionProgress(lastSuccess: DateTime.utc(2026, 11, 23, 12)),
+      );
+      await tester.pump();
+      expect(find.text(l10n.externalSyncState('pending')), findsNothing);
+      expect(find.text('Sync has not fully completed yet'), findsNothing);
+      expect(find.textContaining('Last completed sync:'), findsOneWidget);
+    },
+  );
+
+  for (final outcome in [
+    SyncRefreshOutcome.unavailable,
+    SyncRefreshOutcome.deferred,
+  ]) {
+    testWidgets(
+      'details reports $outcome and preserves it across late updates',
+      (tester) async {
+        connections.values['dropbox'] = _connection('dropbox');
+        service.outcome = outcome;
+        await mount(tester);
+        await tester.pumpAndSettle();
+        final l10n = lookupAppLocalizations(const Locale('en'));
+        await menu(tester, 'dropbox', l10n.externalSyncDetails);
+        await tester.tap(find.widgetWithText(TextButton, l10n.retry));
+        await tester.pumpAndSettle();
+        final message = outcome == SyncRefreshOutcome.unavailable
+            ? l10n.noConnectionAvailable
+            : l10n.syncPaused;
+        expect(find.text(message), findsOneWidget);
+        service.notifyListeners();
+        await tester.pump();
+        expect(find.text(message), findsOneWidget);
+        (service.session! as _Session).updateProgress(
+          'dropbox:1',
+          const SyncConnectionProgress(running: true),
+        );
+        await tester.pump();
+        expect(find.text(message), findsNothing);
+      },
+    );
+  }
+
+  testWidgets(
+    'details prevents duplicate retries and ignores completion after close',
+    (tester) async {
+      connections.values['dropbox'] = _connection('dropbox');
+      final gate = service.gate = Completer<void>();
+      await mount(tester);
+      await tester.pumpAndSettle();
+      final l10n = lookupAppLocalizations(const Locale('en'));
+      await menu(tester, 'dropbox', l10n.externalSyncDetails);
+      await tester.tap(find.widgetWithText(TextButton, l10n.retry));
+      await tester.pump();
+      expect(service.refreshCalls, 1);
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, l10n.loading))
+            .onPressed,
+        isNull,
+      );
+      service.session = null;
+      service.notifyListeners();
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final withError in [false, true]) {
+    testWidgets(
+      'newer provider failure supersedes Retry success (error map: $withError)',
+      (tester) async {
+        connections.values['dropbox'] = _connection('dropbox');
+        await mount(tester);
+        await tester.pumpAndSettle();
+        final l10n = lookupAppLocalizations(const Locale('en'));
+        await menu(tester, 'dropbox', l10n.externalSyncDetails);
+        await tester.tap(find.widgetWithText(TextButton, l10n.retry));
+        await tester.pumpAndSettle();
+        expect(find.text('Sync complete'), findsOneWidget);
+        connections.values['dropbox'] = _connection(
+          'dropbox',
+          state: 'reconnect_required',
+        );
+        if (withError) {
+          connections.failures['dropbox'] =
+              SyncProviderFailureKind.reconnectRequired;
+        }
+        service.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(
+          find.text(l10n.externalSyncFailure('reconnectRequired')),
+          findsOneWidget,
+        );
+        expect(find.text('Sync complete'), findsNothing);
+      },
+    );
+  }
+
+  testWidgets('details close when the active library session changes', (
+    tester,
+  ) async {
+    connections.values['dropbox'] = _connection('dropbox');
+    await mount(tester);
+    await tester.pumpAndSettle();
+    await menu(
+      tester,
+      'dropbox',
+      lookupAppLocalizations(const Locale('en')).externalSyncDetails,
+    );
+    expect(find.byType(AlertDialog), findsOneWidget);
+    service.session = null;
+    service.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final language in ['en', 'pt', 'id', 'ja', 'ko', 'tr', 'zh']) {
     testWidgets('compact cards and details fit narrow large text: $language', (
       tester,
@@ -453,6 +611,16 @@ void main() {
       );
       await menu(tester, 'google_drive', l10n.externalSyncDetails);
       expect(find.text(l10n.externalSyncUnlockSketches), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final scheduler = service.session!.scheduler as _Scheduler;
+      scheduler.progress['google_drive:1'] = const SyncConnectionProgress(
+        blockedEntities: 1,
+        failure: SyncProviderFailureKind.sourceRead,
+      );
+      service.session!.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.externalSyncFailure('sourceRead')), findsOneWidget);
+      expect(find.text(l10n.externalSyncBlocked), findsNothing);
       expect(tester.takeException(), isNull);
       Navigator.of(tester.element(find.byType(AlertDialog))).pop();
       await tester.pumpAndSettle();
@@ -1019,6 +1187,16 @@ StorageConnection _connection(
 
 class _Service extends ChangeNotifier implements ExternalSyncService {
   _Service(this.session);
+  int refreshCalls = 0;
+  SyncRefreshOutcome outcome = SyncRefreshOutcome.complete;
+  Completer<void>? gate;
+  @override
+  Future<SyncRefreshOutcome?> refreshWithOutcome() async {
+    refreshCalls++;
+    await gate?.future;
+    return outcome;
+  }
+
   @override
   LibrarySyncSession? session;
   @override
@@ -1031,6 +1209,11 @@ class _Service extends ChangeNotifier implements ExternalSyncService {
 
 class _Session extends ChangeNotifier implements LibrarySyncSession {
   _Session(this.connections);
+  void updateProgress(String id, SyncConnectionProgress value) {
+    (scheduler as _Scheduler).progress[id] = value;
+    notifyListeners();
+  }
+
   @override
   final StorageConnectionController connections;
   @override
@@ -1067,6 +1250,8 @@ class _Connections extends ChangeNotifier
   SyncProviderFailureKind? get metadataFailure => null;
   @override
   bool isBusy(String provider) => busy;
+  @override
+  bool isSelected(String provider) => values[provider]?.enabled == true;
   @override
   bool canCancelOAuth(String provider) => states.containsKey(provider);
   @override

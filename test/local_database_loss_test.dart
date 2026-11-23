@@ -12,7 +12,7 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
-    'only confirmed recreation of an established store requests logout',
+    'fresh v14 schema is safe; only confirmed recreation requests logout',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'storage-loss-fixture-',
@@ -31,6 +31,8 @@ void main() {
 
       db = await initDatabase(detectDataLoss: true);
       expect(recovery.pending, false); // First install.
+      expect(await db.getVersion(), 14);
+      expect(await db.query('replica_upload_intents'), isEmpty);
       final fixturePath = db.path;
       expect(fixturePath, startsWith(directory.path));
       await db.close();

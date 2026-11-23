@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../cloud_operation.dart';
 import '../file_system_base.dart';
 import 'library_replica_content.dart';
 import 'portable_sync_codec.dart';
@@ -89,6 +90,7 @@ class LibrarySyncSession extends ChangeNotifier {
         // edits made during this pass are detected by the journal below.
       },
     );
+    final publications = <String, int>{};
     engine = SyncReplicaEngine(
       store: store,
       content: content,
@@ -102,30 +104,35 @@ class LibrarySyncSession extends ChangeNotifier {
         transfers[adapter.connectionId] = value;
         _progressChanged();
       },
-      onPublished: (id) => signals?.published(id),
+      onPublished: (id) {
+        publications[id] = (publications[id] ?? 0) + 1;
+        signals?.published(id);
+      },
     );
     connections = createConnections(_current);
     Future<void> run(
       SyncProviderAdapter adapter, {
       bool downloadOnly = false,
-    }) async {
+    }) => runCloudOperation(_current, () async {
+      // A session can outlive the startup/recovery operation that created it.
+      // Nested local writes must use this library's account/key/database guard.
+      final capturedBefore = content.capturedRevisions;
+      final publishedBefore = publications[adapter.connectionId] ?? 0;
       await engine.sync(adapter, downloadOnly: downloadOnly);
       if (!_current()) throw const SyncReplicaCancelled();
-      final pending = await SyncMutationJournal.pending(
-        database,
-        scope,
-        limit: 1,
-      );
+      final pending = await content.pendingUploadState(adapter.connectionId);
       if (!_current()) throw const SyncReplicaCancelled();
-      _pendingLocalChanges = pending.isNotEmpty;
-      // Large initial libraries are captured in bounded pages. Continue soon,
-      // but leave unavailable sources for a later retry rather than spin.
-      if (!downloadOnly &&
-          _pendingLocalChanges &&
-          content.captureFailures.isEmpty) {
-        scheduler.localChanged();
+      _pendingLocalChanges = pending.pending;
+      _runnableLocalChanges = pending.runnable;
+      if (!downloadOnly && pending.runnable) {
+        scheduler.continueUpload(
+          adapter.connectionId,
+          madeProgress:
+              content.capturedRevisions != capturedBefore ||
+              (publications[adapter.connectionId] ?? 0) != publishedBefore,
+        );
       }
-    }
+    });
 
     scheduler = SyncScheduler(
       sync: run,
@@ -135,8 +142,12 @@ class LibrarySyncSession extends ChangeNotifier {
       blockedEntities: () => content.captureFailures.length,
       notesRequiringUnlock: () => content.notesRequiringUnlock,
       pendingLocalChanges: () => _pendingLocalChanges,
+      hasRunnableUpload: () => _runnableLocalChanges,
+      hasSourceReadFailures: () => content.hasSourceReadFailures,
       loadLastSuccess: status.read,
       saveLastSuccess: status.save,
+      loadPendingUpload: status.hasPendingUpload,
+      savePendingUpload: status.setPendingUpload,
       foreground: foreground,
       automatic: automatic,
     );
@@ -150,6 +161,7 @@ class LibrarySyncSession extends ChangeNotifier {
   final transfers = <String, NoteTransfer>{};
   SyncChangeSignals? signals;
   bool _foreground, _automatic;
+  bool _runnableLocalChanges = false;
   final SyncCipher cipher;
   final bool Function() _isCurrent;
   late final SyncObjectCache objects;

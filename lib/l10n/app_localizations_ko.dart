@@ -19,9 +19,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDownloadingNotes => '노트 다운로드 중';
 
   @override
+  String syncDownloadingNotesOfTotal(String done, String total) {
+    return '노트 다운로드 중 · $total개 중 $done개';
+  }
+
+  @override
   String syncTotalNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return '노트 $countString개';
@@ -29,24 +35,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String syncUploadingNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return '노트 업로드 중 · $countString개';
   }
 
   @override
-  String syncUploadingNotesOfTotal(int done, int total) {
-    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
-      localeName,
-    );
-    final String doneString = doneNumberFormat.format(done);
-    final intl.NumberFormat totalNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String totalString = totalNumberFormat.format(total);
-
-    return '노트 업로드 중 · $totalString개 중 $doneString개';
+  String syncUploadingNotesOfTotal(String done, String total) {
+    return '노트 업로드 중 · $total개 중 $done개';
   }
 
   @override
@@ -3435,6 +3434,8 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String externalSyncFailure(String reason) {
     String _temp0 = intl.Intl.selectLogic(reason, {
+      'sourceRead': '일부 첨부 파일을 업로드하지 못했습니다. 다른 노트는 계속 동기화할 수 있습니다.',
+      'localStorage': '동기화에 필요한 이 기기의 데이터에 접근하지 못했습니다. 다시 시도하세요.',
       'sharedSetupRequired':
           '이 기기에서 연결된 Google Drive 계정에 로그인하세요. 노트는 계속 암호화됩니다.',
       'reconnectRequired': '동기화를 계속하려면 이 계정을 다시 연결하세요.',
@@ -3449,15 +3450,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String externalSyncLastSuccess(String time) {
-    return '마지막 동기화 성공: $time';
+    return '마지막으로 완료된 동기화: $time';
   }
 
   @override
-  String get externalSyncNeverSynced => '아직 동기화에 성공하지 못했습니다';
+  String get externalSyncNeverSynced => '동기화가 아직 완전히 끝나지 않았습니다';
 
   @override
   String get externalSyncBlocked =>
-      '일부 노트 또는 첨부 파일을 아직 업로드할 수 없습니다. 동기화가 다시 시도됩니다.';
+      '일부 노트를 업로드하지 못했습니다. 다른 노트는 계속 동기화할 수 있습니다.';
 
   @override
   String externalSyncDisconnectTitle(String provider) {
@@ -3755,4 +3756,32 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get signInConnectionMessage =>
       '이 기기에서 로그인을 완료하려면 인터넷에 연결한 후 다시 시도하세요.';
+
+  @override
+  String get syncViewNotes => '노트 보기';
+
+  @override
+  String get syncIssuesTitle => '동기화 대기 중인 노트';
+
+  @override
+  String get syncIssuesHint =>
+      '아래 노트를 열어 잠금을 해제하거나 내용을 확인하세요. 첨부 파일이 없다면 해당 파일을 추가한 기기에서 동기화해 보세요.';
+
+  @override
+  String get syncIssuesEmpty => '표시할 문제가 있는 노트가 없습니다.';
+
+  @override
+  String get syncIssueUploadFailed => '이 노트를 업로드하지 못했습니다';
+
+  @override
+  String get syncNotesNeedUnlock => '일부 노트는 동기화하기 전에 잠금을 해제해야 합니다.';
+
+  @override
+  String get syncRetryScheduled => '잠시 후 동기화를 다시 시도합니다.';
+
+  @override
+  String get syncRetryNow => '지금 다시 시도';
+
+  @override
+  String get syncNoteOpenFailed => '이 노트를 열 수 없습니다. 다시 시도하거나 다른 기기에서 열어 보세요.';
 }

@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import '../async_keyed_serializer.dart';
+import '../cloud_session_recovery.dart' show CloudOperationCancelled;
 import 'sync_provider_adapter.dart';
-import 'sync_replica_engine.dart';
+import 'sync_cancellation.dart';
 
 class SyncConnectionProgress {
   const SyncConnectionProgress({
@@ -39,8 +41,12 @@ class SyncScheduler extends ChangeNotifier {
     this.blockedEntities,
     this.notesRequiringUnlock,
     this.pendingLocalChanges,
+    this.hasRunnableUpload,
+    this.hasSourceReadFailures,
     this.loadLastSuccess,
     this.saveLastSuccess,
+    this.loadPendingUpload,
+    this.savePendingUpload,
     DateTime Function()? now,
     this.saveDebounce = const Duration(seconds: 2),
     this._automatic = true,
@@ -56,9 +62,14 @@ class SyncScheduler extends ChangeNotifier {
   final int Function()? blockedEntities;
   final int Function()? notesRequiringUnlock;
   final bool Function()? pendingLocalChanges;
+  final bool Function()? hasRunnableUpload;
+  final bool Function()? hasSourceReadFailures;
   final Future<DateTime?> Function(String connectionId)? loadLastSuccess;
   final Future<void> Function(String connectionId, DateTime time)?
   saveLastSuccess;
+  final Future<bool> Function(String connectionId)? loadPendingUpload;
+  final Future<void> Function(String connectionId, bool pending)?
+  savePendingUpload;
   final DateTime Function() now;
   final Duration saveDebounce;
   final _entries = <String, _ScheduledConnection>{};
@@ -114,11 +125,27 @@ class SyncScheduler extends ChangeNotifier {
       );
     }
     notifyListeners();
-    if (!_automatic) return;
+    if (!_automatic && !_entries.values.any((e) => e.needsUpload)) return;
     _save?.cancel();
     _save = Timer(saveDebounce, () {
       unawaited(_requestAll());
     });
+  }
+
+  /// Bounded capture left more of this requested upload to process. Keep its
+  /// progress visible and drain another page without requiring another gesture.
+  void continueUpload(String connectionId, {bool madeProgress = true}) {
+    final entry = _entries[connectionId];
+    if (_active &&
+        entry != null &&
+        entry.needsUpload &&
+        entry.running != null) {
+      if (madeProgress) {
+        entry.again = true;
+      } else {
+        entry.deferContinuation = true;
+      }
+    }
   }
 
   void setAutomatic(bool enabled) {
@@ -168,6 +195,8 @@ class SyncScheduler extends ChangeNotifier {
         !_foreground ||
         (!force &&
             !_automatic &&
+            !entry.needsUpload &&
+            (entry.intentLoaded || loadPendingUpload == null) &&
             (!entry.needsRestore || entry.restoreAttempts >= 3))) {
       return Future.value();
     }
@@ -219,9 +248,11 @@ class SyncScheduler extends ChangeNotifier {
     force |= entry.forceAgain;
     do {
       if (!_owns(entry) || !_foreground) return;
-      final restoring = !_automatic && !force && entry.needsRestore;
-      if (restoring) entry.restoreAttempts++;
+      var restoring = false;
+      // Metadata persistence failures must not masquerade as network outages.
+      var accessingLocalState = true;
       entry.again = entry.forceAgain = false;
+      entry.deferContinuation = false;
       onPassStarted?.call(entry.adapter);
       final previous = entry.progress;
       var lastSuccess = previous.lastSuccess;
@@ -238,10 +269,50 @@ class SyncScheduler extends ChangeNotifier {
         if (!_owns(entry)) return;
         lastSuccess ??= await loadLastSuccess?.call(entry.adapter.connectionId);
         if (!_owns(entry)) return;
+        if (!entry.intentLoaded) {
+          entry.needsUpload =
+              await loadPendingUpload?.call(entry.adapter.connectionId) ??
+              false;
+          if (!_owns(entry)) return;
+          entry.persistedIntent = entry.needsUpload;
+          entry.intentLoaded = true;
+        }
+        // A manual upload remains requested across sleep, transient failure and
+        // restart. After it completes, later edits still require manual sync.
+        if (!_foreground) return;
+        if (!_automatic &&
+            !force &&
+            !entry.needsUpload &&
+            !entry.needsRestore) {
+          return;
+        }
+        restoring = !_automatic && !force && !entry.needsUpload;
+        if (restoring) {
+          entry.restoreAttempts++;
+        } else {
+          entry.needsUpload = true;
+          if (!entry.persistedIntent) {
+            await savePendingUpload?.call(entry.adapter.connectionId, true);
+            entry.persistedIntent = true;
+          }
+          if (!_owns(entry)) return;
+          if (!_foreground) return;
+        }
+        accessingLocalState = false;
         await (restoring ? restore! : sync)(entry.adapter);
+        accessingLocalState = true;
         if (!_owns(entry)) return;
         final blocked = restoring ? 0 : blockedEntities?.call() ?? 0;
         final pending = pendingLocalChanges?.call() ?? false;
+        final runnable = hasRunnableUpload?.call() ?? (blocked > 0 || pending);
+        if (!restoring && !runnable) {
+          if (entry.persistedIntent) {
+            await savePendingUpload?.call(entry.adapter.connectionId, false);
+            if (!_owns(entry)) return;
+            entry.persistedIntent = false;
+          }
+          entry.needsUpload = false;
+        }
         if (blocked == 0 && !pending) {
           final clock = now();
           final success = lastSuccess != null && lastSuccess.isAfter(clock)
@@ -253,28 +324,61 @@ class SyncScheduler extends ChangeNotifier {
         }
         entry.needsRestore = false;
         entry.failures = 0;
+        entry.stalledPasses = entry.deferContinuation
+            ? entry.stalledPasses + 1
+            : 0;
         entry.progress = SyncConnectionProgress(
           // A queued pass belongs to the same operation. Do not flash success
           // between passes while a manual refresh or a remote change is queued.
           running:
-              _foreground && entry.again && (_automatic || entry.forceAgain),
+              _foreground &&
+              entry.again &&
+              (_automatic || entry.forceAgain || entry.needsUpload),
           lastSuccess: lastSuccess,
+          failure: hasSourceReadFailures?.call() == true
+              ? SyncProviderFailureKind.sourceRead
+              : null,
+          retryAt: entry.deferContinuation && runnable
+              ? now().add(_backoff(entry.stalledPasses))
+              : null,
           blockedEntities: blocked,
           notesRequiringUnlock: notesRequiringUnlock?.call() ?? 0,
           pendingLocalChanges: pending,
         );
-      } on SyncReplicaCancelled {
-        if (!_owns(entry)) return;
-        entry.progress = SyncConnectionProgress(lastSuccess: lastSuccess);
       } catch (error) {
+        if (error is SyncReplicaCancelled || error is CloudOperationCancelled) {
+          if (!_owns(entry)) return;
+          if (restoring) entry.restoreAttempts--;
+          // A cancelled pass has neither succeeded nor failed. Keep its durable
+          // intent for the next explicit/foreground request, without retry spin.
+          entry.again = entry.forceAgain;
+          entry.progress = SyncConnectionProgress(
+            lastSuccess: lastSuccess,
+            blockedEntities:
+                blockedEntities?.call() ?? previous.blockedEntities,
+            notesRequiringUnlock:
+                notesRequiringUnlock?.call() ?? previous.notesRequiringUnlock,
+            pendingLocalChanges:
+                pendingLocalChanges?.call() ?? previous.pendingLocalChanges,
+          );
+          entry.retry?.cancel();
+          notifyListeners();
+          // Honor a manual request queued during this pass, but do not let a
+          // continuation callback turn neutral cancellation into a busy loop.
+          if (entry.forceAgain) {
+            force = true;
+            continue;
+          }
+          return;
+        }
         if (!_owns(entry)) return;
         entry.failures++;
-        final delay = Duration(
-          seconds: math.min(300, 5 * (1 << math.min(6, entry.failures - 1))),
-        );
+        final delay = _backoff(entry.failures);
         final retry = error is SyncProviderFailure ? error.retryAfter : null;
         final failure = error is SyncProviderFailure
             ? error.kind
+            : accessingLocalState || error is DatabaseException
+            ? SyncProviderFailureKind.localStorage
             : error is FormatException
             ? SyncProviderFailureKind.corruptData
             : SyncProviderFailureKind.unavailable;
@@ -296,12 +400,15 @@ class SyncScheduler extends ChangeNotifier {
       _scheduleRetry(entry);
       force = entry.forceAgain;
     } while (entry.again &&
-        (_automatic || entry.forceAgain) &&
+        (_automatic || entry.forceAgain || entry.needsUpload) &&
         entry.progress.failure != SyncProviderFailureKind.sharedSetupRequired &&
         (entry.forceAgain ||
             (!_requiresManualRetry(entry.progress.failure) &&
                 !(entry.progress.retryAt?.isAfter(now()) ?? false))));
   }
+
+  static Duration _backoff(int attempts) =>
+      Duration(seconds: math.min(300, 5 * (1 << math.min(6, attempts - 1))));
 
   static bool _requiresManualRetry(SyncProviderFailureKind? failure) => const {
     SyncProviderFailureKind.corruptData,
@@ -315,7 +422,10 @@ class SyncScheduler extends ChangeNotifier {
     final retryAt = entry.progress.retryAt;
     if (!_owns(entry) ||
         !_foreground ||
-        (!_automatic && (!entry.needsRestore || entry.restoreAttempts >= 3)) ||
+        (!_automatic &&
+            !entry.needsUpload &&
+            (entry.intentLoaded || loadPendingUpload == null) &&
+            (!entry.needsRestore || entry.restoreAttempts >= 3)) ||
         retryAt == null) {
       return;
     }
@@ -344,11 +454,13 @@ class SyncScheduler extends ChangeNotifier {
 class _ScheduledConnection {
   _ScheduledConnection(this.adapter, {required this.needsRestore});
   bool needsRestore;
+  bool intentLoaded = false, needsUpload = false, persistedIntent = false;
+  bool deferContinuation = false;
   final SyncProviderAdapter adapter;
   SyncConnectionProgress progress = const SyncConnectionProgress();
   Future<void>? running;
   Timer? retry;
-  int failures = 0;
+  int failures = 0, stalledPasses = 0;
   int restoreAttempts = 0;
   bool again = false, forceAgain = false;
 }

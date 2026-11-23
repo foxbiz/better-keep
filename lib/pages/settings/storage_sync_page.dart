@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'storage_clear_dialog.dart';
 import 'storage_usage_text.dart';
+import 'sync_issues_page.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -19,6 +20,10 @@ import '../../services/external_sync/storage_credential_broker.dart';
 import '../../services/external_sync/sync_provider_adapter.dart';
 import '../../components/sync_provider_tile.dart';
 import '../../utils/l10n_helper.dart';
+import '../../utils/progress_localizations.dart';
+import '../../models/app_progress.dart';
+import '../../services/sync_presentation.dart';
+import '../../services/cloud_session_recovery.dart';
 import '../user_page.dart';
 
 class StorageSyncPage extends StatefulWidget {
@@ -473,54 +478,158 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
           ?.failure;
 
   void _details(LibrarySyncSession session, String provider) {
-    final connection = session.connections.connections[provider];
-    final progress = session.scheduler.progress[connection?.replicaId];
-    final last =
-        progress?.lastSuccess ??
-        session.status.lastSuccess[connection?.replicaId];
-    final failure = session.connections.errors[provider] ?? progress?.failure;
-    final formats = MaterialLocalizations.of(context);
-    final time = last?.toLocal();
+    SyncProgress? feedback;
+    var retrying = false;
+    var wasRunning = false;
+    // Only substantive state changes supersede a returned Retry result. Late
+    // notifications and timestamp updates must not make that result disappear.
+    currentFeedbackState() {
+      final connection = session.connections.connections[provider];
+      final progress = session.scheduler.progress[connection?.replicaId];
+      return (
+        replicaId: connection?.replicaId,
+        state: connection?.state,
+        enabled: connection?.enabled,
+        failure: session.connections.errors[provider] ?? progress?.failure,
+        blocked: progress?.blockedEntities ?? 0,
+        locked: progress?.notesRequiringUnlock ?? 0,
+        pending: progress?.pendingLocalChanges ?? false,
+      );
+    }
+
+    var feedbackState = currentFeedbackState();
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(_providers[provider]!.name),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (connection?.accountLabel.isNotEmpty == true) ...[
-                Text(connection!.accountLabel),
-                const SizedBox(height: 12),
-              ],
-              Text(
-                time == null
-                    ? context.l10n.externalSyncNeverSynced
-                    : context.l10n.externalSyncLastSuccess(
-                        '${formats.formatMediumDate(time)} ${formats.formatTimeOfDay(TimeOfDay.fromDateTime(time))}',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AnimatedBuilder(
+          animation: Listenable.merge([session, _service]),
+          builder: (context, _) {
+            if (!identical(_service.session, session)) {
+              final route = ModalRoute.of(context);
+              final navigator = Navigator.of(context);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (route?.isActive == true) navigator.removeRoute(route!);
+              });
+              return const SizedBox.shrink();
+            }
+            final connection = session.connections.connections[provider];
+            final progress = session.scheduler.progress[connection?.replicaId];
+            final running = progress?.running == true;
+            if ((running && !wasRunning) ||
+                feedbackState != currentFeedbackState()) {
+              feedback = null;
+            }
+            wasRunning = running;
+            final last =
+                progress?.lastSuccess ??
+                session.status.lastSuccess[connection?.replicaId];
+            final failure = connection?.state == 'reconnect_required'
+                ? SyncProviderFailureKind.reconnectRequired
+                : session.connections.errors[provider] ?? progress?.failure;
+            final formats = MaterialLocalizations.of(context);
+            final time = last?.toLocal();
+            return AlertDialog(
+              title: Text(_providers[provider]!.name),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (connection?.accountLabel.isNotEmpty == true) ...[
+                      Text(connection!.accountLabel),
+                      const SizedBox(height: 12),
+                    ],
+                    Text(
+                      time == null
+                          ? context.l10n.externalSyncNeverSynced
+                          : context.l10n.externalSyncLastSuccess(
+                              '${formats.formatMediumDate(time)} ${formats.formatTimeOfDay(TimeOfDay.fromDateTime(time))}',
+                            ),
+                    ),
+                    if (progress?.pendingLocalChanges == true &&
+                        progress?.running != true) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        progress?.retryAt != null
+                            ? context.l10n.syncRetryScheduled
+                            : context.l10n.externalSyncState('pending'),
                       ),
+                    ],
+                    if (feedback case final result?) ...[
+                      const SizedBox(height: 12),
+                      Text(result.localized(context.l10n)),
+                    ] else if (failure != null) ...[
+                      const SizedBox(height: 12),
+                      Text(context.l10n.externalSyncFailure(failure.name)),
+                    ],
+                    if (feedback == null &&
+                        (progress?.notesRequiringUnlock ?? 0) > 0) ...[
+                      const SizedBox(height: 12),
+                      Text(context.l10n.externalSyncUnlockSketches),
+                    ] else if (feedback == null &&
+                        (progress?.blockedEntities ?? 0) > 0 &&
+                        failure != SyncProviderFailureKind.sourceRead) ...[
+                      const SizedBox(height: 12),
+                      Text(context.l10n.externalSyncBlocked),
+                    ],
+                  ],
+                ),
               ),
-              if (failure != null) ...[
-                const SizedBox(height: 12),
-                Text(context.l10n.externalSyncFailure(failure.name)),
+              actions: [
+                if ((progress?.blockedEntities ?? 0) > 0)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      showSyncIssuesPage(this.context, service: _service);
+                    },
+                    child: Text(context.l10n.syncViewNotes),
+                  ),
+                if (connection?.enabled == true &&
+                    connection?.isReady == true &&
+                    session.connections.isSelected(provider))
+                  TextButton(
+                    onPressed: retrying || running
+                        ? null
+                        : () async {
+                            setDialogState(() {
+                              retrying = true;
+                              feedback = null;
+                            });
+                            var result = const SyncProgress(SyncPhase.failed);
+                            try {
+                              final outcome = await _service
+                                  .refreshWithOutcome();
+                              result = syncRefreshProgress(
+                                outcome ?? SyncRefreshOutcome.deferred,
+                              );
+                            } catch (_) {
+                              // Keep provider diagnostics out of user-facing copy.
+                            }
+                            if (!mounted ||
+                                !context.mounted ||
+                                !identical(_service.session, session)) {
+                              return;
+                            }
+                            setDialogState(() {
+                              retrying = false;
+                              feedback = result;
+                              feedbackState = currentFeedbackState();
+                            });
+                          },
+                    child: Text(
+                      retrying ? context.l10n.loading : context.l10n.retry,
+                    ),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    MaterialLocalizations.of(context).closeButtonLabel,
+                  ),
+                ),
               ],
-              if ((progress?.notesRequiringUnlock ?? 0) > 0) ...[
-                const SizedBox(height: 12),
-                Text(context.l10n.externalSyncUnlockSketches),
-              ] else if ((progress?.blockedEntities ?? 0) > 0) ...[
-                const SizedBox(height: 12),
-                Text(context.l10n.externalSyncBlocked),
-              ],
-            ],
-          ),
+            );
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(MaterialLocalizations.of(context).closeButtonLabel),
-          ),
-        ],
       ),
     );
   }

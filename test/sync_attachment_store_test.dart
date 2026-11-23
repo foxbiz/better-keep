@@ -1,4 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:better_keep/services/cloud_session_recovery.dart';
+
+import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
+
 import 'dart:typed_data';
 
 import 'package:better_keep/services/external_sync/sync_attachment_store.dart';
@@ -169,6 +175,22 @@ void main() {
     );
   });
 
+  test('incoming read-back failure remains local storage, not outgoing source recovery', () async {
+    files.beforeRead = () =>
+        throw const FileSystemException('verification read failed');
+    await expectLater(
+      store().materialize('note', objectId, '.png', bytes),
+      throwsA(
+        isA<SyncProviderFailure>().having(
+          (e) => e.kind,
+          'kind',
+          SyncProviderFailureKind.localStorage,
+        ),
+      ),
+    );
+    expect(files.values, isEmpty);
+  });
+
   test(
     'rejects outside-app sources and unsafe extensions before writing',
     () async {
@@ -215,14 +237,53 @@ void main() {
     },
   );
 
+  for (final failure in [
+    const FormatException('bad local content'),
+    const SyncReplicaCancelled(),
+    const CloudOperationCancelled(),
+  ]) {
+    test('cleanup cannot mask ${failure.runtimeType} or its stack', () async {
+      final originalStack = StackTrace.fromString(
+        'original-materialization-stack',
+      );
+      files.afterWrite = () async =>
+          Error.throwWithStackTrace(failure, originalStack);
+      files.beforeDelete = () =>
+          throw const FileSystemException('cleanup failed');
+      try {
+        await store().materialize('note', objectId, '.png', bytes);
+        fail('Expected original failure');
+      } catch (error, stack) {
+        expect(error, same(failure));
+        expect(stack.toString(), contains('original-materialization-stack'));
+      }
+      expect(await db.query('replica_attachment_cache'), isEmpty);
+      expect(
+        files.values,
+        hasLength(1),
+      ); // Unindexed; never reused as a success.
+      files.afterWrite = null;
+      files.beforeDelete = null;
+      final path = await store().materialize('note', objectId, '.png', bytes);
+      expect(await store().read(path), bytes);
+    });
+  }
+
   test(
     'partial writes are cleaned and cannot poison a subsequent retry',
     () async {
-      files.afterWrite = () async => throw StateError('Partial write');
+      files.afterWrite = () async =>
+          throw const FileSystemException('Partial write');
       final writer = store();
       await expectLater(
         writer.materialize('note', objectId, '.png', bytes),
-        throwsStateError,
+        throwsA(
+          isA<SyncProviderFailure>().having(
+            (error) => error.kind,
+            'kind',
+            SyncProviderFailureKind.localStorage,
+          ),
+        ),
       );
       expect(files.values, isEmpty);
       expect(await db.query('replica_attachment_cache'), isEmpty);
@@ -237,6 +298,8 @@ class _Files implements FileSystem {
   final values = <String, Uint8List>{};
   int writes = 0, reads = 0;
   Future<void> Function()? afterWrite;
+  void Function()? beforeDelete;
+  void Function()? beforeRead;
   @override
   Future<void> createDirectory(String path) async {}
   @override
@@ -253,13 +316,18 @@ class _Files implements FileSystem {
   @override
   Future<Uint8List> readBytes(String path) async {
     reads++;
+    beforeRead?.call();
     return values[path] ?? (throw StateError('Missing file'));
   }
 
   @override
   Future<bool> exists(String path) async => values.containsKey(path);
   @override
-  Future<bool> delete(String path) async => values.remove(path) != null;
+  Future<bool> delete(String path) async {
+    beforeDelete?.call();
+    return values.remove(path) != null;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

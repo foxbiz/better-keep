@@ -20,9 +20,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncDownloadingNotes => 'Downloading Notes';
 
   @override
+  String syncDownloadingNotesOfTotal(String done, String total) {
+    return 'Downloading notes · $done of $total';
+  }
+
+  @override
   String syncTotalNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     String _temp0 = intl.Intl.pluralLogic(
@@ -36,24 +42,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String syncUploadingNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return 'Uploading notes · $countString';
   }
 
   @override
-  String syncUploadingNotesOfTotal(int done, int total) {
-    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
-      localeName,
-    );
-    final String doneString = doneNumberFormat.format(done);
-    final intl.NumberFormat totalNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String totalString = totalNumberFormat.format(total);
-
-    return 'Uploading notes · $doneString of $totalString';
+  String syncUploadingNotesOfTotal(String done, String total) {
+    return 'Uploading notes · $done of $total';
   }
 
   @override
@@ -3599,6 +3598,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String externalSyncFailure(String reason) {
     String _temp0 = intl.Intl.selectLogic(reason, {
+      'sourceRead':
+          'Some attachments could not be uploaded. Other notes can still sync.',
+      'localStorage': 'Sync could not access data on this device. Try again.',
       'sharedSetupRequired': 'Sign in to the connected Google Drive account on this device. Your notes stay encrypted.',
       'reconnectRequired': 'Reconnect this account to continue syncing.',
       'quotaExceeded':
@@ -3616,15 +3618,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String externalSyncLastSuccess(String time) {
-    return 'Last successful sync: $time';
+    return 'Last completed sync: $time';
   }
 
   @override
-  String get externalSyncNeverSynced => 'No successful sync yet';
+  String get externalSyncNeverSynced => 'Sync has not fully completed yet';
 
   @override
   String get externalSyncBlocked =>
-      'Some notes or attachments are not ready to upload. Sync will retry.';
+      'Some notes could not be uploaded. Other notes can still sync.';
 
   @override
   String externalSyncDisconnectTitle(String provider) {
@@ -3931,4 +3933,34 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get signInConnectionMessage =>
       'Connect to the internet to finish signing in on this device, then try again.';
+
+  @override
+  String get syncViewNotes => 'View notes';
+
+  @override
+  String get syncIssuesTitle => 'Notes waiting to sync';
+
+  @override
+  String get syncIssuesHint =>
+      'Open a note below to unlock it or view its contents. If an attachment is missing, try syncing from the device where you added it.';
+
+  @override
+  String get syncIssuesEmpty => 'No affected notes to show.';
+
+  @override
+  String get syncIssueUploadFailed => 'Could not upload this note';
+
+  @override
+  String get syncNotesNeedUnlock =>
+      'Some notes need unlocking before they can sync.';
+
+  @override
+  String get syncRetryScheduled => 'Sync will retry shortly.';
+
+  @override
+  String get syncRetryNow => 'Retry now';
+
+  @override
+  String get syncNoteOpenFailed =>
+      'This note couldn\'t be opened. Try again, or open it on another device.';
 }

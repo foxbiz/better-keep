@@ -1256,6 +1256,11 @@ class NoteSortService {
           SyncRefreshOutcome.uploadRestricted => SyncPhase.uploadRestricted,
           SyncRefreshOutcome.unavailable => SyncPhase.unavailable,
           SyncRefreshOutcome.failed => SyncPhase.failed,
+          SyncRefreshOutcome.sourceReadFailure => SyncPhase.sourceReadFailure,
+          SyncRefreshOutcome.notesNeedAttention => SyncPhase.notesNeedAttention,
+          SyncRefreshOutcome.retryScheduled => SyncPhase.retryScheduled,
+          SyncRefreshOutcome.localStorageFailure =>
+            SyncPhase.localStorageFailure,
           SyncRefreshOutcome.deferred => SyncPhase.deferred,
         });
       }

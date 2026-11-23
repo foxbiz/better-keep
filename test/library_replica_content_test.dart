@@ -1,3 +1,7 @@
+import 'support/drive_http_fixture.dart';
+
+import 'package:better_keep/services/cloud_operation.dart';
+
 import 'package:better_keep/services/note_lock_transaction_service.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +12,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:better_keep/services/file_system_base.dart';
 
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/label.dart';
@@ -63,6 +69,76 @@ void main() {
   tearDown(() async {
     await a.dispose();
     await b.dispose();
+  });
+
+  for (final encoded in [
+    '[{"type":"audio","data":"/source.mp3"},{"type":"unknown","data":{}}]',
+    '{"bad":"shape"}',
+    'ENC:AA==',
+    jsonEncode([
+      {
+        'type': 'sketch',
+        'data': {
+          'strokesFilePath': '/synthetic/drawing.json',
+          'previewImage': '/synthetic/preview.png',
+          'aspectRatio': 'bad',
+        },
+      },
+    ]),
+  ]) {
+    test(
+      'editable recovery rejects incomplete attachment decoding: $encoded',
+      () async {
+        await a.note();
+        await a.db.update('note', {'attachments': encoded});
+        final before = Map.of((await a.db.query('note')).single);
+        await expectLater(
+          a.content.openAffectedNote('note-id'),
+          throwsA(anything),
+        );
+        expect((await a.db.query('note')).single, before);
+      },
+    );
+  }
+
+  for (final body in [
+    'ENC:AA==',
+    '{invalid-json',
+    '{}',
+    '[42]',
+    '[{"insert":"body","attributes":"bad"}]',
+    '[{"retain":1}]',
+  ]) {
+    test('editable recovery refuses malformed content: $body', () async {
+      await a.note();
+      await a.db.update('note', {'content': body});
+      final before = Map.of((await a.db.query('note')).single);
+      await expectLater(
+        a.content.openAffectedNote('note-id'),
+        throwsA(isA<FormatException>()),
+      );
+      expect((await a.db.query('note')).single, before);
+    });
+  }
+
+  test('editable recovery preserves every valid attachment and rejects retired reads', () async {
+    await a.note(
+      attachments: [
+        {'type': 'audio', 'data': '/first.mp3'},
+        {'type': 'audio', 'data': '/second.mp3'},
+      ],
+    );
+    final note = (await a.content.openAffectedNote('note-id'))!;
+    expect(note.attachments, hasLength(2));
+    expect(
+      jsonDecode(await note.serializeAttachmentsForLocalStorage()),
+      hasLength(2),
+    );
+    await a.session.close();
+    await expectLater(
+      a.content.openAffectedNote('note-id'),
+      throwsA(isA<SyncReplicaCancelled>()),
+    );
   });
 
   for (final pendingDeletion in [false, true]) {
@@ -245,7 +321,7 @@ void main() {
     );
     await a.engine.sync(source);
     expect(await a.store.pendingNoteCount(source.connectionId), 0);
-    final server = _DriveServer();
+    final server = DriveHttpFixture();
     final driveHttp = MockClient(server.handle);
     addTearDown(driveHttp.close);
     FileSyncAdapter destination(SyncCipher cipher) => FileSyncAdapter(
@@ -292,6 +368,34 @@ void main() {
       expect(latin1.decode(bytes).contains('migration.png'), false);
     }
   });
+
+  for (final retireDuringRead in [false, true]) {
+    test(
+      'external restore owns its session guard after startup ends (retire=$retireDuringRead)',
+      () async {
+        await a.note();
+        final remote = _Remote('drive:startup-zone');
+        await a.engine.sync(remote);
+        if (retireDuringRead) {
+          remote.beforeRead = () async => b.session.retire();
+        }
+        final scheduler = b.session.scheduler;
+        scheduler.setAutomatic(false);
+        scheduler.setForeground(true);
+        var startupCurrent = true;
+        await runCloudOperation(() => startupCurrent, () async {
+          scheduler.setAdapters([remote]);
+          startupCurrent = false;
+          await scheduler.syncNow();
+        });
+        expect(await b.db.query('note'), hasLength(retireDuringRead ? 0 : 1));
+        if (!retireDuringRead) {
+          expect(scheduler.progress[remote.connectionId]!.failure, isNull);
+        }
+        scheduler.setForeground(false);
+      },
+    );
+  }
 
   test('queued session pass clears the previous completed transfer before notifying', () async {
     await a.note();
@@ -1039,6 +1143,205 @@ void main() {
     expect(a.content.captureFailures, isEmpty);
   });
 
+  for (final operation in ['source read', 'cache write']) {
+    test(
+      'local $operation failure reaches the scheduler and retains the revision',
+      () async {
+        final files = _FailingLocalFiles();
+        final device = await _Device.create(files: files);
+        addTearDown(device.dispose);
+        final source = await device.source('source.png', [1, 2, 3]);
+        await device.note(
+          attachments: [
+            {
+              'type': 'image',
+              'data': {
+                'src': source,
+                'size': 3,
+                'index': 0,
+                'aspectRatio': '1:1',
+                'lastModified': '',
+              },
+            },
+          ],
+        );
+        final healthy =
+            Map<String, Object?>.from((await device.db.query('note')).single)
+              ..['id'] = 2
+              ..['sync_id'] = 'zz-healthy'
+              ..['attachments'] = '[]';
+        await device.db.insert('note', healthy);
+        files.failingRead = operation == 'source read' ? source : null;
+        files.failWrites = operation == 'cache write';
+        final remote = _Remote('drive');
+        final scheduler = device.session.scheduler;
+        scheduler.setAutomatic(false);
+        scheduler.setAdapters([remote]);
+        scheduler.setForeground(true);
+        await scheduler.syncNow();
+        expect(
+          scheduler.progress['drive']!.failure,
+          operation == 'source read'
+              ? SyncProviderFailureKind.sourceRead
+              : SyncProviderFailureKind.localStorage,
+        );
+        expect(scheduler.progress['drive']!.lastSuccess, isNull);
+        expect(
+          remote.revisions.map((r) => r.entityId),
+          operation == 'source read' ? ['zz-healthy'] : isEmpty,
+        );
+        expect(
+          await device.session.status.hasPendingUpload('drive'),
+          operation != 'source read',
+        );
+        expect(
+          await SyncMutationJournal.current(
+            device.db,
+            SyncEntityKind.note,
+            'note-id',
+          ),
+          isNotNull,
+        );
+        files.failingRead = null;
+        files.failWrites = false;
+        await scheduler.syncNow();
+        expect(scheduler.progress['drive']!.failure, isNull);
+        expect(
+          remote.revisions.map((r) => r.entityId),
+          unorderedEquals(['note-id', 'zz-healthy']),
+        );
+      },
+    );
+  }
+
+  test(
+    'pending provider metadata is paged and uses current local identities',
+    () async {
+      for (var i = 0; i < 105; i++) {
+        final id = 'queued-${i.toString().padLeft(3, '0')}';
+        await a.db.insert('replica_entities', {
+          'scope': a.store.scope,
+          'kind': 'note',
+          'entity_id': id,
+          'revision_id': 'captured-$i',
+          'revision': 'must not decode payload',
+        });
+        if (i < 104) {
+          await a.db.insert(SyncMutationJournal.table, {
+            'kind': 'note',
+            'entity_id': id,
+            'local_id': id,
+            'revision_id': 'newer-$i',
+            'modified_at_micros': i,
+            'deleted': 0,
+          });
+        }
+      }
+      final first = await a.store.pendingLocalVersions('drive');
+      expect(first, hasLength(100));
+      expect(first.first.localRevisionId, 'newer-0');
+      final second = await a.store.pendingLocalVersions(
+        'drive',
+        after: (first.last.kind, first.last.entityId),
+      );
+      expect(second, hasLength(5));
+      expect(second.first.localRevisionId, 'newer-100');
+      expect(second.last.localRevisionId, isNull);
+      await a.db.insert('replica_acknowledgements', {
+        'scope': a.store.scope,
+        'connection_id': 'drive',
+        'kind': 'note',
+        'entity_id': 'queued-000',
+        'revision_id': 'captured-0',
+        'revision': '',
+      });
+      expect(
+        (await a.store.pendingLocalVersions('drive')).first.entityId,
+        'queued-001',
+      );
+      expect(
+        (await a.store.pendingLocalVersions('dropbox')).first.entityId,
+        'queued-000',
+      );
+      expect(
+        await SyncReplicaStore(
+          a.db,
+          scope: 'other',
+        ).pendingLocalVersions('drive'),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'blocked revision does not hide a newer edit from runnable work',
+    () async {
+      await a.note();
+      await a.content.captureLocalChanges();
+      await a.db.update('note', {
+        'title': 'Changed attachment',
+        'attachments': jsonEncode([
+          {
+            'type': 'image',
+            'data': {
+              'src': '/missing.png',
+              'size': 0,
+              'index': 0,
+              'aspectRatio': '1:1',
+              'lastModified': '',
+            },
+          },
+        ]),
+      });
+      final remote = _Remote('drive');
+      await a.engine.sync(remote);
+      expect(await a.content.pendingUploadState('drive'), (
+        pending: true,
+        runnable: false,
+      ));
+      final issues = await a.content.affectedNotes();
+      expect(issues.single.syncId, 'note-id');
+      expect(issues.single.title, 'Changed attachment');
+      expect((await a.content.openAffectedNote('note-id'))!.syncId, 'note-id');
+      await a.db.update('note', {'attachments': '[]', 'title': 'Fixed'});
+      expect(await a.content.affectedNotes(), isEmpty);
+      expect(await a.content.pendingUploadState('drive'), (
+        pending: true,
+        runnable: true,
+      ));
+      await a.engine.sync(remote);
+      expect(await a.content.pendingUploadState('drive'), (
+        pending: false,
+        runnable: false,
+      ));
+    },
+  );
+
+  test('download cache failure keeps inbox and retries without a network diagnosis', () async {
+    await a.note();
+    final remote = _Remote('drive');
+    await a.engine.sync(remote);
+    final files = _FailingLocalFiles()..failWrites = true;
+    final device = await _Device.create(files: files);
+    addTearDown(device.dispose);
+    final scheduler = device.session.scheduler;
+    scheduler.setAutomatic(false);
+    scheduler.setAdapters([remote]);
+    scheduler.setForeground(true);
+    await scheduler.waitForIdle();
+    expect(
+      scheduler.progress['drive']!.failure,
+      SyncProviderFailureKind.localStorage,
+    );
+    expect(scheduler.progress['drive']!.lastSuccess, isNull);
+    expect(await device.db.query('note'), isEmpty);
+    expect(await device.db.query('replica_inbox'), isNotEmpty);
+    files.failWrites = false;
+    await scheduler.syncNow();
+    expect(scheduler.progress['drive']!.failure, isNull);
+    expect((await device.db.query('note')).single['sync_id'], 'note-id');
+  });
+
   test('quiescent cache cleanup retains entity, inbox and provider acknowledgement objects', () async {
     final ids = <String>[];
     for (var i = 0; i < 4; i++) {
@@ -1199,6 +1502,9 @@ void main() {
     expect(remote.revisions, isEmpty);
     expect(a.content.captureFailures, isNotEmpty);
     expect(a.content.notesRequiringUnlock, 1);
+    final issues = await a.content.affectedNotes();
+    expect(issues.single.locked, isTrue);
+    expect(issues.single.title, isEmpty);
     // The existing unlock migration verifies the sources before replacing the
     // stored metadata with a PIN-protected file. Sync must retry that change.
     sketch.remove('encrypted_metadata');
@@ -1486,6 +1792,7 @@ void main() {
           scheduler.progress['drive']!.lastSuccess,
           blocked ? isNull : isNotNull,
         );
+        expect(await a.session.status.hasPendingUpload('drive'), isFalse);
         final published = remote.revisions.length;
         a.session.persistedChanged();
         await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -1648,6 +1955,7 @@ class _Device {
   final LibrarySyncSession session;
   final List<SyncAppliedChange> appliedChanges;
   static Future<_Device> create({
+    FileSystem files = const IoFileSystem(),
     AttachmentStorageRepository? firebase,
     Uint8List? masterKey,
     StorageConnectionController Function(SyncCipher, bool Function())?
@@ -1676,7 +1984,7 @@ class _Device {
     final session = LibrarySyncSession(
       uid: 'synthetic-user',
       database: db,
-      files: const IoFileSystem(),
+      files: files,
       documentRoot: root.path,
       cacheRoot: p.join(root.path, 'cache'),
       cipher: cipher,
@@ -1892,86 +2200,29 @@ class _ChildNameFileSystem extends IoFileSystem {
       (await super.list(directory)).map(p.basename).toList();
 }
 
-/// Drive protocol fixture. Only the HTTP boundary is simulated; multipart
-/// uploads, encrypted commits, paging, local capture, and restore use real code.
-class _DriveServer {
-  final files = <String, Uint8List>{};
-  final metadata = <String, Map<String, dynamic>>{};
-  int requests = 0, uploads = 0, activeUploads = 0, peakUploads = 0;
-
-  Future<http.Response> handle(http.Request request) async {
-    requests++;
-    expect(request.headers['authorization'], 'Bearer synthetic-access');
-    expect(request.followRedirects, false);
-    http.Response json(Object value) => http.Response(jsonEncode(value), 200);
-    final path = request.url.path;
-    final query = request.url.queryParameters;
-    if (request.method == 'POST') {
-      expect(query['uploadType'], 'multipart');
-      activeUploads++;
-      if (activeUploads > peakUploads) peakUploads = activeUploads;
-      try {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-        final boundary = request.headers['Content-Type']!
-            .split('boundary=')
-            .last;
-        final parts = latin1.decode(request.bodyBytes).split('--$boundary');
-        final header = jsonDecode(
-          parts[1].split('\r\n\r\n')[1].trim(),
-        ) as Map<String, dynamic>;
-        final payload = parts[2].substring(parts[2].indexOf('\r\n\r\n') + 4);
-        final id = 'file-${uploads++}';
-        files[id] = Uint8List.fromList(
-          latin1.encode(payload.substring(0, payload.length - 2)),
-        );
-        metadata[id] = {...header, 'id': id};
-        return json({'id': id});
-      } finally {
-        activeUploads--;
-      }
-    }
-    if (path.endsWith('startPageToken')) {
-      return json({'startPageToken': '${files.length}'});
-    }
-    if (path.endsWith('/changes')) {
-      final offset = int.parse(query['pageToken']!);
-      final page = metadata.values.skip(offset).take(100).toList();
-      final next = offset + page.length;
-      return json({
-        'changes': page.map((f) => {'file': f}).toList(),
-        if (next < files.length)
-          'nextPageToken': '$next'
-        else
-          'newStartPageToken': '${files.length}',
-      });
-    }
-    if (query['alt'] == 'media') {
-      return http.Response.bytes(files[request.url.pathSegments.last]!, 200);
-    }
-    expect(path, '/drive/v3/files');
-    final name = RegExp("name = '([^']+)'")
-        .firstMatch(query['q'] ?? '')
-        ?.group(1);
-    if (name != null) {
-      return json({
-        'files': metadata.values.where((f) => f['name'] == name).toList(),
-      });
-    }
-    final offset = int.parse(query['pageToken'] ?? '0');
-    final page = metadata.values.skip(offset).take(100).toList();
-    return json({
-      'files': page,
-      if (offset + page.length < files.length)
-        'nextPageToken': '${offset + page.length}',
-    });
-  }
-}
-
 class _CountingReadFileSystem extends IoFileSystem {
   int reads = 0;
   @override
   Future<Uint8List> readBytes(String path) {
     reads++;
     return super.readBytes(path);
+  }
+}
+
+class _FailingLocalFiles extends IoFileSystem {
+  String? failingRead;
+  bool failWrites = false;
+  @override
+  Future<Uint8List> readBytes(String path) {
+    if (path == failingRead) {
+      throw const FileSystemException('synthetic read failure');
+    }
+    return super.readBytes(path);
+  }
+
+  @override
+  Future<void> writeBytes(String path, Uint8List data, {bool append = false}) {
+    if (failWrites) throw const FileSystemException('synthetic disk full');
+    return super.writeBytes(path, data, append: append);
   }
 }

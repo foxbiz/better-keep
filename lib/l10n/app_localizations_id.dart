@@ -20,9 +20,15 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncDownloadingNotes => 'Mengunduh catatan';
 
   @override
+  String syncDownloadingNotesOfTotal(String done, String total) {
+    return 'Mengunduh catatan · $done dari $total';
+  }
+
+  @override
   String syncTotalNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return '$countString catatan';
@@ -30,24 +36,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String syncUploadingNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return 'Mengunggah catatan · $countString';
   }
 
   @override
-  String syncUploadingNotesOfTotal(int done, int total) {
-    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
-      localeName,
-    );
-    final String doneString = doneNumberFormat.format(done);
-    final intl.NumberFormat totalNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String totalString = totalNumberFormat.format(total);
-
-    return 'Mengunggah catatan · $doneString dari $totalString';
+  String syncUploadingNotesOfTotal(String done, String total) {
+    return 'Mengunggah catatan · $done dari $total';
   }
 
   @override
@@ -3574,6 +3573,8 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String externalSyncFailure(String reason) {
     String _temp0 = intl.Intl.selectLogic(reason, {
+      'sourceRead': 'Beberapa lampiran tidak dapat diunggah. Catatan lainnya tetap dapat disinkronkan.',
+      'localStorage': 'Sinkronisasi tidak dapat mengakses data di perangkat ini. Coba lagi.',
       'sharedSetupRequired': 'Masuk ke akun Google Drive yang terhubung di perangkat ini. Catatan Anda tetap terenkripsi.',
       'reconnectRequired':
           'Hubungkan kembali akun ini untuk melanjutkan sinkronisasi.',
@@ -3589,15 +3590,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String externalSyncLastSuccess(String time) {
-    return 'Sinkronisasi terakhir yang berhasil: $time';
+    return 'Sinkronisasi terakhir yang selesai: $time';
   }
 
   @override
-  String get externalSyncNeverSynced => 'Belum ada sinkronisasi yang berhasil';
+  String get externalSyncNeverSynced => 'Sinkronisasi belum sepenuhnya selesai';
 
   @override
   String get externalSyncBlocked =>
-      'Beberapa catatan atau lampiran belum siap diunggah. Sinkronisasi akan dicoba lagi.';
+      'Beberapa catatan tidak dapat diunggah. Catatan lainnya tetap dapat disinkronkan.';
 
   @override
   String externalSyncDisconnectTitle(String provider) {
@@ -3906,4 +3907,35 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get signInConnectionMessage =>
       'Hubungkan ke internet untuk menyelesaikan proses masuk di perangkat ini, lalu coba lagi.';
+
+  @override
+  String get syncViewNotes => 'Lihat catatan';
+
+  @override
+  String get syncIssuesTitle => 'Catatan menunggu sinkronisasi';
+
+  @override
+  String get syncIssuesHint =>
+      'Buka catatan di bawah untuk membuka kunci atau melihat isinya. Jika lampiran hilang, coba sinkronkan dari perangkat tempat Anda menambahkannya.';
+
+  @override
+  String get syncIssuesEmpty =>
+      'Tidak ada catatan bermasalah untuk ditampilkan.';
+
+  @override
+  String get syncIssueUploadFailed => 'Catatan ini tidak dapat diunggah';
+
+  @override
+  String get syncNotesNeedUnlock =>
+      'Beberapa catatan perlu dibuka kuncinya sebelum dapat disinkronkan.';
+
+  @override
+  String get syncRetryScheduled => 'Sinkronisasi akan segera dicoba lagi.';
+
+  @override
+  String get syncRetryNow => 'Coba sekarang';
+
+  @override
+  String get syncNoteOpenFailed =>
+      'Catatan ini tidak dapat dibuka. Coba lagi, atau buka di perangkat lain.';
 }

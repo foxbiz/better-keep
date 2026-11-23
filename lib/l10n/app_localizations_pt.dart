@@ -20,9 +20,15 @@ class AppLocalizationsPt extends AppLocalizations {
   String get syncDownloadingNotes => 'Baixando notas';
 
   @override
+  String syncDownloadingNotesOfTotal(String done, String total) {
+    return 'Baixando notas · $done de $total';
+  }
+
+  @override
   String syncTotalNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     String _temp0 = intl.Intl.pluralLogic(
@@ -36,24 +42,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String syncUploadingNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return 'Enviando notas · $countString';
   }
 
   @override
-  String syncUploadingNotesOfTotal(int done, int total) {
-    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
-      localeName,
-    );
-    final String doneString = doneNumberFormat.format(done);
-    final intl.NumberFormat totalNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String totalString = totalNumberFormat.format(total);
-
-    return 'Enviando notas · $doneString de $totalString';
+  String syncUploadingNotesOfTotal(String done, String total) {
+    return 'Enviando notas · $done de $total';
   }
 
   @override
@@ -3634,6 +3633,8 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String externalSyncFailure(String reason) {
     String _temp0 = intl.Intl.selectLogic(reason, {
+      'sourceRead': 'Alguns anexos não puderam ser enviados. As outras notas ainda podem ser sincronizadas.',
+      'localStorage': 'A sincronização não conseguiu acessar os dados neste dispositivo. Tente novamente.',
       'sharedSetupRequired': 'Entre na conta do Google Drive conectada neste dispositivo. Suas notas continuam criptografadas.',
       'reconnectRequired': 'Reconecte esta conta para continuar sincronizando.',
       'quotaExceeded': 'Seu armazenamento está cheio. Libere espaço neste provedor e tente novamente.',
@@ -3648,16 +3649,16 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String externalSyncLastSuccess(String time) {
-    return 'Última sincronização bem-sucedida: $time';
+    return 'Última sincronização concluída: $time';
   }
 
   @override
   String get externalSyncNeverSynced =>
-      'Nenhuma sincronização bem-sucedida ainda';
+      'A sincronização ainda não foi concluída por completo';
 
   @override
   String get externalSyncBlocked =>
-      'Algumas notas ou anexos ainda não podem ser enviados. A sincronização tentará novamente.';
+      'Algumas notas não puderam ser enviadas. As outras notas ainda podem ser sincronizadas.';
 
   @override
   String externalSyncDisconnectTitle(String provider) {
@@ -3966,4 +3967,35 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get signInConnectionMessage =>
       'Conecte-se à internet para concluir o login neste dispositivo e tente novamente.';
+
+  @override
+  String get syncViewNotes => 'Ver notas';
+
+  @override
+  String get syncIssuesTitle => 'Notas aguardando sincronização';
+
+  @override
+  String get syncIssuesHint =>
+      'Abra uma nota abaixo para desbloqueá-la ou ver seu conteúdo. Se faltar um anexo, tente sincronizar pelo dispositivo em que você o adicionou.';
+
+  @override
+  String get syncIssuesEmpty => 'Nenhuma nota afetada para mostrar.';
+
+  @override
+  String get syncIssueUploadFailed => 'Não foi possível enviar esta nota';
+
+  @override
+  String get syncNotesNeedUnlock =>
+      'Algumas notas precisam ser desbloqueadas antes de sincronizar.';
+
+  @override
+  String get syncRetryScheduled =>
+      'A sincronização tentará novamente em breve.';
+
+  @override
+  String get syncRetryNow => 'Tentar agora';
+
+  @override
+  String get syncNoteOpenFailed =>
+      'Não foi possível abrir esta nota. Tente novamente ou abra em outro dispositivo.';
 }

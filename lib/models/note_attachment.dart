@@ -32,19 +32,27 @@ class NoteAttachment {
     return NoteAttachment(type: AttachmentType.audio, recording: recording);
   }
 
-  factory NoteAttachment.fromJson(Map<String, dynamic> json) {
-    final attachment = NoteAttachment._fromJson(json);
+  factory NoteAttachment.fromJson(
+    Map<String, dynamic> json, {
+    bool strict = false,
+  }) {
+    final attachment = NoteAttachment._fromJson(json, strict: strict);
     attachment.id = json['id'] as String?;
     return attachment;
   }
 
-  factory NoteAttachment._fromJson(Map<String, dynamic> json) {
+  factory NoteAttachment._fromJson(
+    Map<String, dynamic> json, {
+    required bool strict,
+  }) {
     final typeStr = json['type'] as String;
     switch (typeStr) {
       case 'image':
         return NoteAttachment.image(NoteImage.fromJson(json['data']));
       case 'sketch':
-        return NoteAttachment.sketch(SketchData.fromJson(json['data']));
+        return NoteAttachment.sketch(
+          SketchData.fromJson(json['data'], strict: strict),
+        );
       case 'audio':
         // Support old format (just path string) and intermediate format (map with path/title)
         final data = json['data'];

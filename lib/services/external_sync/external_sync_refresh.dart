@@ -44,6 +44,16 @@ Future<SyncRefreshOutcome?> refreshExternalSession(
     if (state.phase == SyncPhase.unavailable) {
       return SyncRefreshOutcome.unavailable;
     }
+    if (state.phase == SyncPhase.localStorageFailure) {
+      return SyncRefreshOutcome.localStorageFailure;
+    }
+    if (state.phase == SyncPhase.sourceReadFailure) {
+      return SyncRefreshOutcome.sourceReadFailure;
+    }
+    if (state.hasNoteIssues) return SyncRefreshOutcome.notesNeedAttention;
+    if (state.phase == SyncPhase.retryScheduled) {
+      return SyncRefreshOutcome.retryScheduled;
+    }
     if (state.isFailure) return SyncRefreshOutcome.failed;
     if (state.isSuccess) return SyncRefreshOutcome.complete;
     final remaining = session.scheduler.progress.values;

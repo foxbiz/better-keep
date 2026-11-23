@@ -352,6 +352,72 @@ void main() {
     },
   );
 
+  test(
+    'source read feedback survives presentation and yields to storage failure',
+    () {
+      external.value = const SyncProgress(SyncPhase.sourceReadFailure);
+      expect(presentation.value.phase, SyncPhase.sourceReadFailure);
+      expect(presentation.value.isFailure, isTrue);
+      final request = presentation.beginManual(() => true);
+      presentation.finishManual(request, SyncRefreshOutcome.sourceReadFailure);
+      expect(presentation.value.phase, SyncPhase.sourceReadFailure);
+      expect(
+        combineSyncRefreshOutcomes([
+          SyncRefreshOutcome.unavailable,
+          SyncRefreshOutcome.sourceReadFailure,
+        ]),
+        SyncRefreshOutcome.sourceReadFailure,
+      );
+      expect(
+        combineSyncRefreshOutcomes([
+          SyncRefreshOutcome.localStorageFailure,
+          SyncRefreshOutcome.sourceReadFailure,
+        ]),
+        SyncRefreshOutcome.localStorageFailure,
+      );
+      expect(
+        combineSyncRefreshOutcomes([
+          SyncRefreshOutcome.failed,
+          SyncRefreshOutcome.sourceReadFailure,
+        ]),
+        SyncRefreshOutcome.failed,
+      );
+    },
+  );
+
+  test('guided note recovery and retry waits retain their presentation', () {
+    firebaseEnabled.value = false;
+    for (final phase in [
+      SyncPhase.notesNeedUnlock,
+      SyncPhase.notesNeedAttention,
+      SyncPhase.retryScheduled,
+    ]) {
+      external.value = SyncProgress(phase);
+      expect(presentation.value.phase, phase);
+      expect(presentation.value.isActive, isFalse);
+    }
+    final request = presentation.beginManual(() => true);
+    presentation.finishManual(request, SyncRefreshOutcome.retryScheduled);
+    expect(presentation.value.phase, SyncPhase.retryScheduled);
+  });
+
+  test('local storage failure survives aggregation and manual completion', () {
+    external.value = const SyncProgress(SyncPhase.localStorageFailure);
+    expect(presentation.value.phase, SyncPhase.localStorageFailure);
+    expect(presentation.value.isFailure, isTrue);
+    final request = presentation.beginManual(() => true);
+    presentation.finishManual(request, SyncRefreshOutcome.localStorageFailure);
+    expect(presentation.value.phase, SyncPhase.localStorageFailure);
+    expect(
+      combineSyncRefreshOutcomes([
+        SyncRefreshOutcome.unavailable,
+        SyncRefreshOutcome.localStorageFailure,
+        SyncRefreshOutcome.failed,
+      ]),
+      SyncRefreshOutcome.localStorageFailure,
+    );
+  });
+
   test('external progress cannot hide sign-in or approval requirements', () {
     firebaseEnabled.value = false;
     external.value = const SyncProgress(SyncPhase.syncing);

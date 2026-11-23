@@ -13,6 +13,10 @@ enum CloudRecoveryActivity { idle, verifying, resuming }
 enum SyncRefreshOutcome {
   complete,
   uploadRestricted,
+  localStorageFailure,
+  sourceReadFailure,
+  notesNeedAttention,
+  retryScheduled,
   unavailable,
   deferred,
   failed,
@@ -37,7 +41,11 @@ SyncRefreshOutcome combineSyncRefreshOutcomes(
 ) {
   // A real content/storage failure must not be hidden by another offline task.
   for (final outcome in [
+    SyncRefreshOutcome.localStorageFailure,
     SyncRefreshOutcome.failed,
+    SyncRefreshOutcome.sourceReadFailure,
+    SyncRefreshOutcome.notesNeedAttention,
+    SyncRefreshOutcome.retryScheduled,
     SyncRefreshOutcome.unavailable,
     SyncRefreshOutcome.deferred,
     SyncRefreshOutcome.uploadRestricted,

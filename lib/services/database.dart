@@ -99,6 +99,9 @@ Future<void> upgradeReplicaTables(
       );
     }
   }
+  if (oldVersion < 14 && newVersion >= 14) {
+    await SyncStatusStore.createTable(db);
+  }
 }
 
 /// Reconciles the two different schemas that existed at database version 10.

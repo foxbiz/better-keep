@@ -38,6 +38,13 @@ SyncProgress externalSyncProgress({
   if (failures.contains(SyncProviderFailureKind.quotaExceeded)) {
     return const SyncProgress(SyncPhase.storageFull);
   }
+  if (failures.contains(SyncProviderFailureKind.localStorage)) {
+    return const SyncProgress(SyncPhase.localStorageFailure);
+  }
+  if (failures.isNotEmpty &&
+      failures.every((f) => f == SyncProviderFailureKind.sourceRead)) {
+    return const SyncProgress(SyncPhase.sourceReadFailure);
+  }
   if (failures.isNotEmpty) {
     if (failures.every(
       (f) => f == SyncProviderFailureKind.sharedSetupRequired,
@@ -57,18 +64,29 @@ SyncProgress externalSyncProgress({
   if (!metadataReady) return const SyncProgress(SyncPhase.preparing);
   if (selected.isEmpty) return SyncProgress.idle;
   if (selected.any(
-    (c) =>
-        blockedProviders.contains(c.provider) ||
-        !c.isReady ||
-        (progress[c.replicaId]?.blockedEntities ?? 0) > 0,
+    (c) => blockedProviders.contains(c.provider) || !c.isReady,
   )) {
+    return const SyncProgress(SyncPhase.failed);
+  }
+  if (selected.any((c) => (progress[c.replicaId]?.blockedEntities ?? 0) > 0)) {
     return SyncProgress(
-      SyncPhase.failed,
+      selected.any(
+            (c) => (progress[c.replicaId]?.notesRequiringUnlock ?? 0) > 0,
+          )
+          ? SyncPhase.notesNeedUnlock
+          : SyncPhase.notesNeedAttention,
       failedCount: selected.fold<int>(
         0,
         (count, c) => count + (progress[c.replicaId]?.blockedEntities ?? 0),
       ),
     );
+  }
+  if (selected.any(
+    (c) =>
+        progress[c.replicaId]?.pendingLocalChanges == true &&
+        progress[c.replicaId]?.retryAt != null,
+  )) {
+    return const SyncProgress(SyncPhase.retryScheduled);
   }
   if (selected.any((c) => progress[c.replicaId]?.pendingLocalChanges == true)) {
     // Queued edits are normal while waiting for the debounce or a manual sync.

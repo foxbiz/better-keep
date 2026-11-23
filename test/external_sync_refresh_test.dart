@@ -102,6 +102,10 @@ void main() {
     );
     expect(status().phase, SyncPhase.unavailable);
     progress[restored.replicaId] = const SyncConnectionProgress(
+      failure: SyncProviderFailureKind.localStorage,
+    );
+    expect(status().phase, SyncPhase.localStorageFailure);
+    progress[restored.replicaId] = const SyncConnectionProgress(
       pendingLocalChanges: true,
     );
     expect(status().phase, SyncPhase.preparing);
@@ -133,8 +137,36 @@ void main() {
     );
     expect(status().phase, SyncPhase.preparing);
     progress['dropbox:1'] = const SyncConnectionProgress(blockedEntities: 1);
-    expect(status().phase, SyncPhase.failed);
+    expect(status().phase, SyncPhase.notesNeedAttention);
     expect(status().failedCount, 1);
+    progress['dropbox:1'] = const SyncConnectionProgress(
+      blockedEntities: 1,
+      notesRequiringUnlock: 1,
+    );
+    expect(status().phase, SyncPhase.notesNeedUnlock);
+    expect(
+      externalSyncProgress(
+        connections: values,
+        progress: progress,
+        blockedProviders: {'dropbox'},
+      ).phase,
+      SyncPhase.failed,
+    );
+    progress['dropbox:1'] = SyncConnectionProgress(
+      pendingLocalChanges: true,
+      retryAt: DateTime.utc(2030),
+    );
+    expect(status().phase, SyncPhase.retryScheduled);
+    expect(status().isActive, isFalse);
+    expect(
+      externalSyncProgress(
+        connections: values,
+        progress: progress,
+        automatic: false,
+      ).phase,
+      SyncPhase.retryScheduled,
+    );
+
     values[1] = connection('dropbox', enabled: false);
     expect(status().phase, SyncPhase.complete);
   });
@@ -216,6 +248,38 @@ void main() {
     );
     expect(passes, 3);
   });
+
+  for (final (failure, outcome) in [
+    (
+      SyncProviderFailureKind.localStorage,
+      SyncRefreshOutcome.localStorageFailure,
+    ),
+    (SyncProviderFailureKind.sourceRead, SyncRefreshOutcome.sourceReadFailure),
+  ]) {
+    test(
+      'manual refresh preserves $failure as an actionable outcome',
+      () async {
+        final session = _Session();
+        session.connections.values['google_drive'] = connection('google_drive');
+        session.scheduler.run = () async {
+          session.scheduler.values['google_drive:1'] = SyncConnectionProgress(
+            failure: failure,
+          );
+        };
+        expect(
+          await refreshExternalSession(
+            session,
+            isCurrent: () => true,
+            progress: () => externalSyncProgress(
+              connections: session.connections.values.values,
+              progress: session.scheduler.values,
+            ),
+          ),
+          outcome,
+        );
+      },
+    );
+  }
 
   test('manual refresh drains capture batches and completes only when all are acknowledged', () async {
     final session = _Session();

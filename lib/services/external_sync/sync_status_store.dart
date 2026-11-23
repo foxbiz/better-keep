@@ -21,12 +21,54 @@ class SyncStatusStore {
   Future<void>? _loading;
 
   Map<String, DateTime> get lastSuccess => Map.unmodifiable(_successes);
-  static Future<void> createTable(DatabaseExecutor db) => db.execute('''
+  static Future<void> createTable(DatabaseExecutor db) async {
+    await db.execute('''
     CREATE TABLE IF NOT EXISTS replica_connection_status (
       scope TEXT NOT NULL, connection_id TEXT NOT NULL,
       last_success_micros INTEGER NOT NULL,
       PRIMARY KEY(scope, connection_id))
   ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS replica_upload_intents (
+        scope TEXT NOT NULL, connection_id TEXT NOT NULL,
+        PRIMARY KEY(scope, connection_id))
+    ''');
+  }
+
+  /// An interrupted requested upload is work to resume, not an automatic-sync
+  /// preference. Keep it separate from successful-download history.
+  Future<bool> hasPendingUpload(String connectionId) async {
+    _guard();
+    final rows = await database.query(
+      'replica_upload_intents',
+      where: 'scope = ? AND connection_id = ?',
+      whereArgs: [scope, connectionId],
+      limit: 1,
+    );
+    _guard();
+    return rows.isNotEmpty;
+  }
+
+  Future<void> setPendingUpload(String connectionId, bool pending) =>
+      _writes.run(connectionId, () async {
+        _guard();
+        await database.transaction((txn) async {
+          _guard();
+          if (pending) {
+            await txn.insert('replica_upload_intents', {
+              'scope': scope,
+              'connection_id': connectionId,
+            }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          } else {
+            await txn.delete(
+              'replica_upload_intents',
+              where: 'scope = ? AND connection_id = ?',
+              whereArgs: [scope, connectionId],
+            );
+          }
+          _guard();
+        });
+      });
 
   void _guard() {
     if (!isCurrent()) throw const SyncReplicaCancelled();

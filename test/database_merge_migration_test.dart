@@ -149,6 +149,40 @@ void main() {
     );
   }
 
+  test(
+    'v13 upgrade adds upload intents without losing sync history or notes',
+    () async {
+      final database = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+      );
+      addTearDown(database.close);
+      await Note.createTable(database);
+      await database.insert('note', {'id': 1, 'content': 'keep me'});
+      await database.execute("""CREATE TABLE replica_connection_status (
+      scope TEXT NOT NULL, connection_id TEXT NOT NULL,
+      last_success_micros INTEGER NOT NULL,
+      PRIMARY KEY(scope, connection_id))""");
+      await database.insert('replica_connection_status', {
+        'scope': 'account/library',
+        'connection_id': 'drive:1',
+        'last_success_micros': 123,
+      });
+      await upgradeReplicaTables(database, 13, 14);
+      await database.insert('replica_upload_intents', {
+        'scope': 'account/library',
+        'connection_id': 'drive:1',
+      });
+      await upgradeReplicaTables(database, 13, 14);
+      expect((await database.query('note')).single['content'], 'keep me');
+      expect(
+        (await database.query('replica_connection_status'))
+            .single['last_success_micros'],
+        123,
+      );
+      expect(await database.query('replica_upload_intents'), hasLength(1));
+    },
+  );
+
   for (final oldVersion in [11, 12]) {
     test(
       'version $oldVersion cursors upgrade to v13 repeatedly without data loss',
@@ -191,6 +225,7 @@ void main() {
         'replica_cursors',
         'replica_attachment_cache',
         'replica_connection_status',
+        'replica_upload_intents',
       ]) {
         expect(await hasTable(database, table), isTrue);
       }

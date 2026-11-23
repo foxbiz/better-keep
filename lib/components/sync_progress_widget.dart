@@ -4,9 +4,11 @@ import 'package:better_keep/utils/manual_sync_refresh.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 
 import 'dart:async';
+
 import 'dart:ui';
 
 import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/pages/settings/sync_issues_page.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -115,7 +117,9 @@ class _SyncProgressWidgetState extends State<SyncProgressWidget>
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    if (_progress.isFailure) return;
+    if (_progress.isFailure) {
+      return;
+    }
     _hideTimer = Timer(const Duration(seconds: 3), () async {
       await _animationController.reverse();
       if (mounted && !_progress.isActive) {
@@ -208,6 +212,7 @@ class SyncContentProgress extends StatelessWidget {
           children: [
             _ActivityIcon(
               download: progress.notes?.stage == NoteTransferStage.downloading,
+              upload: progress.notes?.stage == NoteTransferStage.uploading,
               size: 40,
               color: Theme.of(context).colorScheme.primary,
             ),
@@ -231,7 +236,10 @@ class SyncContentProgress extends StatelessWidget {
                   when (transfer.stage == NoteTransferStage.downloading ||
                           transfer.stage == NoteTransferStage.uploading) &&
                       transfer.fraction != null)
-                _TransferProgress(transfer),
+                _TransferProgress(
+                  transfer,
+                  showTotal: transfer.stage == NoteTransferStage.downloading,
+                ),
             ],
           ],
         ),
@@ -241,9 +249,10 @@ class SyncContentProgress extends StatelessWidget {
 }
 
 class _TransferProgress extends StatelessWidget {
-  const _TransferProgress(this.transfer);
+  const _TransferProgress(this.transfer, {this.showTotal = false});
   static final _percentFormats = <String, NumberFormat>{};
   final NoteTransfer transfer;
+  final bool showTotal;
 
   @override
   Widget build(BuildContext context) {
@@ -253,32 +262,43 @@ class _TransferProgress extends StatelessWidget {
         .putIfAbsent(locale, () => NumberFormat.percentPattern(locale))
         .format(percent / 100);
     final total = context.l10n.syncTotalNotes(transfer.total!);
+    final detail = showTotal
+        ? total
+        : transfer.minutesLeft == null
+        ? null
+        : context.l10n.syncEstimatedMinutes(transfer.minutesLeft!);
     return SizedBox(
-      width: 192,
+      width: 224,
       child: Padding(
-        padding: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.only(top: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            LinearProgressIndicator(
-              value: transfer.fraction,
-              semanticsLabel: total,
-              semanticsValue: percentage,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            const SizedBox(height: 4),
-            ExcludeSemantics(
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                spacing: 8,
-                children: [
-                  Text(total, style: Theme.of(context).textTheme.labelSmall),
-                  Text(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: detail == null
+                      ? const SizedBox.shrink()
+                      : Text(
+                          detail,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                ),
+                const SizedBox(width: 8),
+                ExcludeSemantics(
+                  child: Text(
                     percentage,
                     style: Theme.of(context).textTheme.labelSmall,
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(
+              value: transfer.fraction,
+              semanticsValue: percentage,
+              borderRadius: BorderRadius.circular(4),
             ),
           ],
         ),
@@ -332,6 +352,11 @@ class _SyncProgressCard extends StatelessWidget {
     };
 
     final statusText = _buildStatusText(context);
+    final actionLabel = syncStatus.hasNoteIssues
+        ? context.l10n.syncViewNotes
+        : syncStatus.phase == SyncPhase.retryScheduled
+        ? context.l10n.syncRetryNow
+        : null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
@@ -380,7 +405,20 @@ class _SyncProgressCard extends StatelessWidget {
                 AnimatedSize(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
-                  child: syncStatus.isFailure
+                  child: actionLabel != null
+                      ? ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 112),
+                          child: TextButton(
+                            onPressed: syncStatus.hasNoteIssues
+                                ? () => showSyncIssuesPage(context)
+                                : onRetry,
+                            child: Text(
+                              actionLabel,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        )
+                      : syncStatus.isFailure
                       ? IconButton(
                           tooltip: context.l10n.retry,
                           icon: const Icon(Icons.refresh, size: 18),
@@ -405,6 +443,17 @@ class _SyncProgressCard extends StatelessWidget {
     if (hasFailed && syncStatus.isEmpty) {
       return context.l10n.syncFailedCount(failedCount);
     }
+    if (syncStatus.notes case final transfer?
+        when isSyncing &&
+            transfer.stage == NoteTransferStage.downloading &&
+            transfer.fraction != null) {
+      return syncTransferCountLabel(
+        context.l10n,
+        transfer.done,
+        transfer.total!,
+        downloading: true,
+      );
+    }
     if (!syncStatus.isEmpty) {
       return syncStatus.localized(
         context.l10n,
@@ -421,16 +470,24 @@ class _SyncProgressCard extends StatelessWidget {
   Widget _buildStateIcon(Color color, _MessageType type) {
     if (isSyncing) {
       final download = syncStatus.notes?.stage == NoteTransferStage.downloading;
-      return _ActivityIcon(download: download, size: 16, color: color);
+      return _ActivityIcon(
+        download: download,
+        upload: syncStatus.notes?.stage == NoteTransferStage.uploading,
+        size: 20,
+        color: color,
+      );
     }
-    return Icon(
-      switch (type) {
-        _MessageType.error => Icons.error_outline,
-        _MessageType.success => Icons.check_circle_outline,
-        _MessageType.info => Icons.sync,
-      },
-      size: 16,
-      color: color,
+    return SizedBox.square(
+      dimension: 20,
+      child: Icon(
+        switch (type) {
+          _MessageType.error => Icons.error_outline,
+          _MessageType.success => Icons.check_circle_outline,
+          _MessageType.info => Icons.sync,
+        },
+        size: 16,
+        color: color,
+      ),
     );
   }
 
@@ -440,11 +497,12 @@ class _SyncProgressCard extends StatelessWidget {
 class _ActivityIcon extends StatefulWidget {
   const _ActivityIcon({
     required this.download,
+    required this.upload,
     required this.size,
     required this.color,
   });
 
-  final bool download;
+  final bool download, upload;
   final double size;
   final Color color;
 
@@ -468,7 +526,8 @@ class _ActivityIconState extends State<_ActivityIcon>
   @override
   void didUpdateWidget(_ActivityIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.download != widget.download) {
+    if (oldWidget.download != widget.download ||
+        oldWidget.upload != widget.upload) {
       _motion.value = 0;
       _updateMotion();
     }
@@ -491,23 +550,25 @@ class _ActivityIconState extends State<_ActivityIcon>
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.download) {
+    if (!widget.download && !widget.upload) {
       return RotationTransition(
         turns: _motion,
         child: Icon(Icons.sync, size: widget.size, color: widget.color),
       );
     }
     return CustomPaint(
-      key: const ValueKey('download_activity'),
+      key: ValueKey(widget.upload ? 'upload_activity' : 'download_activity'),
       size: Size.square(widget.size),
-      painter: _DownloadPainter(_motion, widget.color),
+      painter: _TransferPainter(_motion, widget.color, upload: widget.upload),
     );
   }
 }
 
-// The arrow collapses into a parcel, lands in the tray, then draws in again.
-class _DownloadPainter extends CustomPainter {
-  _DownloadPainter(this.motion, this.color) : super(repaint: motion);
+// A parcel moves into/out of the tray before the next arrow draws in.
+class _TransferPainter extends CustomPainter {
+  _TransferPainter(this.motion, this.color, {required this.upload})
+    : super(repaint: motion);
+  final bool upload;
   final Animation<double> motion;
   final Color color;
 
@@ -519,7 +580,8 @@ class _DownloadPainter extends CustomPainter {
     final drop = phase(.12, .54);
     final draw = phase(.66, .96);
     final arrow = 1 - drop + draw;
-    final tip = 14 + 4 * (drop - phase(.55, .66));
+    final tip = upload ? 8 - 6 * drop : 14 + 4 * (drop - phase(.55, .66));
+    final direction = upload ? -1 : 1;
     final stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -528,7 +590,8 @@ class _DownloadPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     canvas.save();
     canvas.scale(size.width / 24, size.height / 24);
-    final impact = phase(.40, .55) - phase(.55, .82);
+    // Only a landing parcel bends the tray; uploads leave it stationary.
+    final impact = upload ? 0.0 : phase(.40, .55) - phase(.55, .82);
     canvas.drawPath(
       Path()
         ..moveTo(3, 15)
@@ -543,20 +606,24 @@ class _DownloadPainter extends CustomPainter {
     stroke.color = color.withValues(
       alpha: color.a * (1 - phase(.50, .56) + draw),
     );
-    canvas.drawLine(Offset(12, tip - 11 * arrow), Offset(12, tip), stroke);
+    canvas.drawLine(
+      Offset(12, tip - 11 * arrow * direction),
+      Offset(12, tip),
+      stroke,
+    );
     canvas.drawPath(
       Path()
-        ..moveTo(12 - 4.5 * arrow, tip - 4.5 * arrow)
+        ..moveTo(12 - 4.5 * arrow, tip - 4.5 * arrow * direction)
         ..lineTo(12, tip)
-        ..lineTo(12 + 4.5 * arrow, tip - 4.5 * arrow),
+        ..lineTo(12 + 4.5 * arrow, tip - 4.5 * arrow * direction),
       stroke,
     );
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_DownloadPainter old) =>
-      old.color != color || old.motion != motion;
+  bool shouldRepaint(_TransferPainter old) =>
+      old.color != color || old.motion != motion || old.upload != upload;
 }
 
 enum _MessageType { info, success, error }

@@ -325,7 +325,10 @@ class SketchData {
     }
   }
 
-  factory SketchData.fromJson(Map<String, dynamic> json) {
+  factory SketchData.fromJson(
+    Map<String, dynamic> json, {
+    bool strict = false,
+  }) {
     try {
       // Check if strokes are encrypted (from locked note)
       final encryptedStrokes = json['encryptedStrokes'] as String?;
@@ -369,6 +372,9 @@ class SketchData {
         strokesContentHash: json['strokesContentHash'] as String?,
       );
     } catch (e) {
+      if (strict) {
+        throw const FormatException('Sketch data could not be decoded');
+      }
       AppLogger.error('Error parsing sketch data', e);
       return SketchData();
     }

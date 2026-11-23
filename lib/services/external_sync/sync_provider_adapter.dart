@@ -50,6 +50,8 @@ class SyncChangePage {
 
 enum SyncProviderFailureKind {
   unavailable,
+  localStorage,
+  sourceRead,
   reconnectRequired,
   sharedSetupRequired,
   quotaExceeded,

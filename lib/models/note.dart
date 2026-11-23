@@ -715,7 +715,7 @@ class Note extends BaseModel<Note> {
   }) : _locked = locked,
        attachments = attachments ?? [];
 
-  factory Note.fromJson(Map<String, dynamic> obj) {
+  factory Note.fromJson(Map<String, dynamic> obj, {bool strict = false}) {
     final locked = (obj['locked'] == 1 || obj['locked'] == true) ? true : false;
 
     int colorValue =
@@ -738,16 +738,24 @@ class Note extends BaseModel<Note> {
         } else {
           try {
             parsedAttachments = (json.decode(attachmentsData) as List)
-                .map((e) => NoteAttachment.fromJson(e))
+                .map((e) => NoteAttachment.fromJson(e, strict: strict))
                 .toList();
           } catch (e) {
+            if (strict) rethrow;
             AppLogger.error('Error parsing attachments in fromJson', e);
           }
         }
       } else if (attachmentsData is List) {
         parsedAttachments = attachmentsData
-            .map((e) => NoteAttachment.fromJson(e as Map<String, dynamic>))
+            .map(
+              (e) => NoteAttachment.fromJson(
+                e as Map<String, dynamic>,
+                strict: strict,
+              ),
+            )
             .toList();
+      } else if (strict) {
+        throw const FormatException('Invalid note attachments');
       }
     }
 
@@ -974,18 +982,27 @@ class Note extends BaseModel<Note> {
     return result;
   }
 
-  static Future<Note> fromJsonAsync(Map<String, dynamic> obj) async {
-    final note = Note.fromJson(obj);
-    await note.decryptFields();
+  /// Recovery must not offer an editable model after silently dropping data.
+  /// Strict reads fail without modifying the durable source row.
+  static Future<Note> fromJsonAsync(
+    Map<String, dynamic> obj, {
+    bool strict = false,
+  }) async {
+    final note = Note.fromJson(obj, strict: strict);
+    await note.decryptFields(strict: strict);
     return note;
   }
 
-  Future<void> decryptFields() async {
+  Future<void> decryptFields({bool strict = false}) async {
     final localEncryption = LocalDataEncryption.instance;
 
     // Decrypt content
     if (content != null && content!.isNotEmpty) {
+      final encrypted = LocalDataEncryption.isEncrypted(content!);
       content = await localEncryption.decryptString(content!);
+      if (strict && encrypted && content!.isEmpty) {
+        throw const FormatException('Note content could not be decoded');
+      }
     }
 
     if (_rawEncryptedAttachments != null) {
@@ -995,10 +1012,16 @@ class Note extends BaseModel<Note> {
         );
         final List attachmentList = json.decode(decryptedStr);
         attachments = attachmentList
-            .map((a) => NoteAttachment.fromJson(a as Map<String, dynamic>))
+            .map(
+              (a) => NoteAttachment.fromJson(
+                a as Map<String, dynamic>,
+                strict: strict,
+              ),
+            )
             .toList();
         _rawEncryptedAttachments = null;
       } catch (e) {
+        if (strict) rethrow;
         AppLogger.error('Error decrypting attachments', e);
       }
     }
@@ -1031,9 +1054,71 @@ class Note extends BaseModel<Note> {
           attachment.sketch!.encryptedMetadata = null;
           attachment.sketch!.markStrokesHydrated();
         } catch (e) {
+          if (strict) rethrow;
           AppLogger.error('Error decrypting sketch metadata', e);
         }
       }
+    }
+    if (strict) validateReadableContent();
+  }
+
+  /// Checks recovery content without rewriting legacy Delta data. PIN ciphertext
+  /// stays opaque until authenticated, including notes that remain PIN-protected
+  /// while their current in-memory body is unlocked.
+  void validateReadableContent() {
+    if ((_locked && !_unlocked) || content == null || content!.isEmpty) return;
+    try {
+      final operations = json.decode(content!);
+      if (operations is! List) throw const FormatException();
+      // Cells are Delta documents too. Visit populated cells iteratively so
+      // legacy nested tables receive the same validation as the outer note.
+      final pending = <List<dynamic>>[operations];
+      while (pending.isNotEmpty) {
+        final delta = pending.removeLast();
+        for (final operation in delta) {
+          if (operation is! Map<String, dynamic> ||
+              (operation['insert'] is! String && operation['insert'] is! Map) ||
+              operation.containsKey('retain') ||
+              operation.containsKey('delete') ||
+              (operation['attributes'] != null &&
+                  operation['attributes'] is! Map<String, dynamic>)) {
+            throw const FormatException();
+          }
+          // Quill checks cardinality only with an assert and does not invoke
+          // the app's embed builders while parsing a document.
+          if (operation['insert'] case final Map embed) {
+            if (embed.length != 1) throw const FormatException();
+            final payload = embed.values.single;
+            switch (embed.keys.single) {
+              case NoteTableData.type:
+                final table = NoteTableData.fromJson(payload);
+                for (final key in table.cells.keys) {
+                  final coordinates = key.split(':');
+                  if (coordinates.length != 2 ||
+                      coordinates.any((value) => int.tryParse(value) == null)) {
+                    throw const FormatException();
+                  }
+                }
+                pending.addAll(table.cells.values);
+              case 'note-attachment':
+                if (payload is! Map<String, dynamic> ||
+                    payload['id'] is! String ||
+                    payload['src'] is! String) {
+                  throw const FormatException();
+                }
+              case BlockEmbed.imageType:
+              case BlockEmbed.videoType:
+                if (payload is! String) throw const FormatException();
+              default:
+                // The editor has no builder for an unknown embed type.
+                throw const FormatException();
+            }
+          }
+        }
+        documentFromJsonSafe(delta).close();
+      }
+    } catch (_) {
+      throw const FormatException('Note content could not be decoded');
     }
   }
 

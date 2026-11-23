@@ -41,24 +41,154 @@ void main() {
     AuthService.cloudRecovery.stop();
   });
 
-  Future<void> mountFeedback(WidgetTester tester) => tester.pumpWidget(
-    MaterialApp(
-      scaffoldMessengerKey: AppState.scaffoldMessengerKey,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Builder(
-        builder: (context) => Scaffold(
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              SyncRefreshButton(onRefresh: () => refreshSyncFromUser(context)),
-              const SyncProgressWidget(),
-            ],
+  Future<void> mountFeedback(WidgetTester tester, {Locale? locale}) =>
+      tester.pumpWidget(
+        MaterialApp(
+          locale: locale,
+          scaffoldMessengerKey: AppState.scaffoldMessengerKey,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Stack(
+                fit: StackFit.expand,
+                children: [
+                  SyncRefreshButton(
+                    onRefresh: () => refreshSyncFromUser(context),
+                  ),
+                  const SyncProgressWidget(),
+                ],
+              ),
+            ),
           ),
         ),
+      );
+
+  testWidgets('upload animation stays still when reduced motion is enabled', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await mountFeedback(tester);
+    SyncPresentation.instance.value = const SyncProgress(
+      SyncPhase.syncing,
+      notes: (
+        stage: NoteTransferStage.uploading,
+        done: 1,
+        total: 4,
+        minutesLeft: null,
       ),
-    ),
-  );
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final icon = find.byKey(const ValueKey('upload_activity'));
+    List<Offset> shaft() {
+      final canvas = TestRecordingCanvas();
+      tester
+          .widget<CustomPaint>(icon)
+          .painter!
+          .paint(canvas, tester.getSize(icon));
+      return canvas.invocations
+          .map((c) => c.invocation)
+          .singleWhere((c) => c.memberName == #drawLine)
+          .positionalArguments
+          .take(2)
+          .cast<Offset>()
+          .toList();
+    }
+
+    expect(icon, findsOneWidget);
+    final before = shaft();
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(shaft(), before);
+  });
+
+  for (final (reason, outcome) in [
+    ('localStorage', SyncRefreshOutcome.localStorageFailure),
+    ('sourceRead', SyncRefreshOutcome.sourceReadFailure),
+  ]) {
+    for (final showPill in [true, false]) {
+      testWidgets(
+        '$reason guidance reaches ${showPill ? 'pill' : 'snackbar'} with recovery action',
+        (tester) async {
+          AppState.set('show_sync_progress', showPill);
+          await mountFeedback(tester);
+          final context = tester.element(find.byType(SyncRefreshButton));
+          final request = SyncPresentation.instance.beginManual(() => true);
+          SyncPresentation.instance.finishManual(request, outcome);
+          showSyncRefreshFeedback(context, outcome);
+          await tester.pumpAndSettle();
+          final l10n = AppLocalizations.of(context)!;
+          expect(find.text(l10n.externalSyncFailure(reason)), findsOneWidget);
+          expect(find.text(l10n.syncFailed), findsNothing);
+          expect(
+            find.byType(SnackBar),
+            showPill ? findsNothing : findsOneWidget,
+          );
+          expect(
+            reason == 'sourceRead'
+                ? find.text(l10n.syncViewNotes)
+                : showPill
+                ? find.byTooltip(l10n.retry)
+                : find.text(l10n.retry),
+            findsOneWidget,
+          );
+        },
+      );
+    }
+  }
+
+  testWidgets('retry wait is quiet, offers immediate retry, then fades away', (
+    tester,
+  ) async {
+    await mountFeedback(tester);
+    SyncPresentation.instance.value = const SyncProgress(
+      SyncPhase.retryScheduled,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Sync will retry shortly.'), findsOneWidget);
+    expect(find.text('Retry now'), findsOneWidget);
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry now'), findsNothing);
+  });
+
+  for (final locale in AppLocalizations.supportedLocales) {
+    testWidgets('guided sync actions fit narrow large text: $locale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await mountFeedback(tester, locale: locale);
+      final context = tester.element(find.byType(SyncProgressWidget));
+      final l10n = AppLocalizations.of(context)!;
+      for (final phase in [
+        SyncPhase.sourceReadFailure,
+        SyncPhase.notesNeedUnlock,
+        SyncPhase.retryScheduled,
+      ]) {
+        SyncPresentation.instance.value = SyncProgress(phase);
+        await tester.pumpAndSettle();
+        final action = find.text(
+          phase == SyncPhase.retryScheduled
+              ? l10n.syncRetryNow
+              : l10n.syncViewNotes,
+        );
+        expect(action, findsOneWidget);
+        final pill = tester.getRect(
+          find.byKey(const ValueKey('sync_progress')),
+        );
+        expect(pill.contains(tester.getCenter(action)), isTrue);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
 
   for (final width in [320.0, 390.0, 800.0]) {
     testWidgets('long status stays above FAB at width $width and large text', (
@@ -139,20 +269,27 @@ void main() {
         tester.getSize(find.widgetWithIcon(IconButton, Icons.refresh)),
         const Size(48, 48),
       );
-      SyncPresentation.instance.value = const SyncProgress(
-        SyncPhase.storageFull,
-      );
-      await tester.pumpAndSettle();
-      final card = tester.getRect(
-        find
-            .descendant(of: find.byType(Card), matching: find.byType(Material))
-            .first,
-      );
-      final label = tester.getRect(find.textContaining('Storage full'));
-      if (width == 320) expect(label.height, greaterThan(48));
-      expect(label.top - card.top, greaterThanOrEqualTo(4));
-      expect(card.bottom - label.bottom, greaterThanOrEqualTo(4));
-      expect(card.bottom, lessThanOrEqualTo(fab.top - 12));
+      for (final (phase, message) in [
+        (SyncPhase.storageFull, 'Storage full'),
+        (SyncPhase.localStorageFailure, 'Sync could not access data'),
+      ]) {
+        SyncPresentation.instance.value = SyncProgress(phase);
+        await tester.pumpAndSettle();
+        final card = tester.getRect(
+          find
+              .descendant(
+                of: find.byType(Card),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        final label = tester.getRect(find.textContaining(message));
+        if (width == 320) expect(label.height, greaterThan(48));
+        expect(label.top - card.top, greaterThanOrEqualTo(4));
+        expect(card.bottom - label.bottom, greaterThanOrEqualTo(4));
+        expect(card.bottom, lessThanOrEqualTo(fab.top - 12));
+        expect(tester.takeException(), isNull);
+      }
       AuthService.cloudRecovery.start('synthetic-account');
       AuthService.cloudRecovery.state.value = CloudSessionState.ready;
       NoteSyncService().isSyncing.value = true;
@@ -162,22 +299,75 @@ void main() {
       ]) {
         NoteSyncService().syncStatus.value = SyncProgress(
           SyncPhase.syncing,
-          notes: (stage: stage, done: 123, total: 456, minutesLeft: 3),
+          notes: (stage: stage, done: 1234, total: 5678, minutesLeft: 3),
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        expect(find.text('456 notes'), findsOneWidget);
-        expect(find.text('26%'), findsOneWidget);
+        final uploading = stage == NoteTransferStage.uploading;
+        expect(find.text('5.68K notes'), findsNothing);
+        if (uploading) {
+          expect(find.byKey(const ValueKey('upload_activity')), findsOneWidget);
+          List<Offset> shaft() {
+            final painter = tester
+                .widget<CustomPaint>(
+                  find.byKey(const ValueKey('upload_activity')),
+                )
+                .painter!;
+            final canvas = TestRecordingCanvas();
+            painter.paint(canvas, const Size.square(20));
+            return canvas.invocations
+                .map((call) => call.invocation)
+                .singleWhere((call) => call.memberName == #drawLine)
+                .positionalArguments
+                .take(2)
+                .cast<Offset>()
+                .toList();
+          }
+
+          final before = shaft();
+          expect(
+            before.last.dy,
+            lessThan(before.first.dy),
+            reason: 'Upload arrow points upward',
+          );
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(shaft(), isNot(before), reason: 'Upload animation moves');
+        }
+        final count = tester.getRect(
+          find.text(
+            '${uploading ? 'Uploading' : 'Downloading'} notes · 1.23K of 5.68K',
+          ),
+        );
+        final eta = tester.getRect(find.text('About 3 min left'));
+        final progressBar = tester.getRect(
+          find.byType(LinearProgressIndicator),
+        );
+        expect(eta.top, greaterThanOrEqualTo(count.bottom));
+        expect(progressBar.top, greaterThanOrEqualTo(eta.bottom));
+        expect(find.text('21%'), findsOneWidget);
         final bar = tester.widget<LinearProgressIndicator>(
           find.byType(LinearProgressIndicator),
         );
-        expect(bar.value, closeTo(123 / 456, 0.0001));
+        expect(bar.value, closeTo(1234 / 5678, 0.0001));
         final transferPill = tester.getRect(
           find.byKey(const ValueKey('sync_progress')),
         );
         expect(transferPill.bottom, lessThanOrEqualTo(fab.top - 12));
         expect(transferPill.left, greaterThanOrEqualTo(16));
         expect(transferPill.right, lessThanOrEqualTo(width - 16));
+        expect(tester.takeException(), isNull);
+        NoteSyncService().syncStatus.value = SyncProgress(
+          SyncPhase.syncing,
+          notes: (stage: stage, done: 1233, total: 1234, minutesLeft: 1),
+        );
+        await tester.pump();
+        expect(find.textContaining('1,233 of 1,234'), findsOneWidget);
+        final exactPill = tester.getRect(
+          find.byKey(const ValueKey('sync_progress')),
+        );
+        expect(exactPill.bottom, lessThanOrEqualTo(fab.top - 12));
+        expect(exactPill.left, greaterThanOrEqualTo(16));
+        expect(exactPill.right, lessThanOrEqualTo(width - 16));
         expect(tester.takeException(), isNull);
       }
       await tester.pumpWidget(const SizedBox());

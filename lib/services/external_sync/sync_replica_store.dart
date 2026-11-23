@@ -1,8 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 
+import 'sync_mutation_journal.dart';
+import 'sync_object_cache.dart';
 import 'sync_provider_adapter.dart';
 import 'sync_revision.dart';
-import 'sync_object_cache.dart';
 
 /// Durable replica bookkeeping. [scope] binds an account and encryption-library
 /// generation. Environment separation is provided by the existing database.
@@ -166,6 +167,30 @@ class SyncReplicaStore {
     );
     return rows
         .map((row) => SyncRevision.decode(row['revision'] as String))
+        .toList();
+  }
+
+  /// Metadata only for runnable-work checks. Read current local identity in the
+  /// same query, without decoding payloads or issuing one query per entity.
+  Future<List<({String kind, String entityId, String? localRevisionId})>>
+  pendingLocalVersions(String connectionId, {(String, String)? after}) async {
+    final rows = await database.rawQuery(
+      '''SELECT e.kind, e.entity_id,
+        (SELECT v.revision_id FROM ${SyncMutationJournal.table} v
+          WHERE v.kind = e.kind AND v.entity_id = e.entity_id) AS local_revision_id
+        $_pendingFrom
+        AND (? IS NULL OR e.kind > ? OR (e.kind = ? AND e.entity_id > ?))
+        ORDER BY e.kind, e.entity_id LIMIT 100''',
+      [connectionId, scope, after?.$1, after?.$1, after?.$1, after?.$2],
+    );
+    return rows
+        .map(
+          (row) => (
+            kind: row['kind'] as String,
+            entityId: row['entity_id'] as String,
+            localRevisionId: row['local_revision_id'] as String?,
+          ),
+        )
         .toList();
   }
 

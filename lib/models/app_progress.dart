@@ -39,6 +39,11 @@ enum SyncPhase {
   signInRequired,
   providerSetupRequired,
   storageFull,
+  localStorageFailure,
+  sourceReadFailure,
+  notesNeedAttention,
+  notesNeedUnlock,
+  retryScheduled,
   deferred,
   uploadRestricted,
   resuming,
@@ -187,8 +192,16 @@ class SyncProgress {
 
   bool get isEmpty => phase == SyncPhase.idle;
   bool get isSuccess => phase == SyncPhase.complete;
+  bool get hasNoteIssues => const {
+    SyncPhase.sourceReadFailure,
+    SyncPhase.notesNeedAttention,
+    SyncPhase.notesNeedUnlock,
+  }.contains(phase);
   bool get isFailure =>
-      phase == SyncPhase.failed || phase == SyncPhase.storageFull;
+      phase == SyncPhase.failed ||
+      phase == SyncPhase.storageFull ||
+      phase == SyncPhase.localStorageFailure ||
+      hasNoteIssues;
   bool get isActive => const {
     SyncPhase.checkingConnection,
     SyncPhase.preparing,

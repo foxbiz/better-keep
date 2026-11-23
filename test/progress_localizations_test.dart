@@ -13,6 +13,27 @@ void main() {
   final ja = lookupAppLocalizations(const Locale('ja'));
 
   test(
+    'unreadable source guidance is distinct from storage and manual-safe',
+    () {
+      for (final language in ['en', 'pt', 'id', 'ja', 'ko', 'tr', 'zh']) {
+        final l10n = lookupAppLocalizations(Locale(language));
+        final message = const SyncProgress(SyncPhase.sourceReadFailure)
+            .localized(l10n);
+        expect(message, l10n.externalSyncFailure('sourceRead'));
+        expect(message, isNot(l10n.externalSyncFailure('localStorage')));
+        expect(message, isNot(l10n.externalSyncFailure('other')));
+      }
+      expect(
+        en.externalSyncFailure('sourceRead'),
+        contains('Other notes can still sync.'),
+      );
+      expect(en.externalSyncBlocked, contains('Other notes can still sync.'));
+      expect(en.externalSyncBlocked, isNot(contains('Check')));
+      expect(en.externalSyncBlocked, isNot(contains('will retry')));
+    },
+  );
+
+  test(
     'typed authentication states are localized at the presentation edge',
     () {
       expect(AuthProgress.creatingAccount.localized(en), en.creatingAccount);
@@ -79,15 +100,62 @@ void main() {
     }
   });
 
-  test('upload counts use locale grouping and argument order', () {
+  test('upload counts use compact locale numbers and argument order', () {
     const transfer = (
       stage: NoteTransferStage.uploading,
       done: 1234,
       total: 5678,
       minutesLeft: null,
     );
-    expect(transfer.localized(en), 'Uploading notes · 1,234 of 5,678');
-    expect(transfer.localized(ja), 'ノートをアップロード中 · 5,678 件中 1,234 件');
+    expect(transfer.localized(en), 'Uploading notes · 1.23K of 5.68K');
+    expect(transfer.localized(ja), 'ノートをアップロード中 · 5678 件中 1234 件');
+  });
+
+  test(
+    'download pill counts use compact locale numbers and argument order',
+    () {
+      expect(
+        syncTransferCountLabel(en, 1234, 5678, downloading: true),
+        'Downloading notes · 1.23K of 5.68K',
+      );
+      expect(
+        syncTransferCountLabel(ja, 1234, 5678, downloading: true),
+        'ノートをダウンロード中 · 5678 件中 1234 件',
+      );
+    },
+  );
+
+  test(
+    'rounded-equal transfer counts use exact locale numbers until complete',
+    () {
+      for (final downloading in [false, true]) {
+        final label = syncTransferCountLabel(
+          en,
+          1233,
+          1234,
+          downloading: downloading,
+        );
+        expect(label, contains('1,233 of 1,234'));
+        expect(
+          syncTransferCountLabel(en, 1234, 1234, downloading: downloading),
+          contains('1.23K of 1.23K'),
+        );
+      }
+    },
+  );
+
+  test('local storage failures have distinct translated guidance', () {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final l10n = lookupAppLocalizations(locale);
+      expect(
+        l10n.externalSyncFailure('localStorage'),
+        isNot(l10n.externalSyncFailure('unavailable')),
+      );
+    }
+    expect(
+      en.externalSyncFailure('localStorage'),
+      contains('could not access data on this device'),
+    );
   });
 
   test('sync failures use localized plurals and generic fallback', () {

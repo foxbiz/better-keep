@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:better_keep/utils/logger.dart';
 
 import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/pages/settings/sync_issues_page.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
 import 'package:better_keep/services/note_sort_service.dart';
@@ -303,17 +304,43 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
             : context.l10n.e2eeNotReady,
       );
     case SyncRefreshOutcome.failed:
+    case SyncRefreshOutcome.localStorageFailure:
+    case SyncRefreshOutcome.sourceReadFailure:
+    case SyncRefreshOutcome.notesNeedAttention:
+    case SyncRefreshOutcome.retryScheduled:
       if (AppState.showSyncProgress &&
           ModalRoute.of(context)?.isCurrent == true &&
-          SyncPresentation.instance.value.isFailure) {
+          (SyncPresentation.instance.value.isFailure ||
+              SyncPresentation.instance.value.phase ==
+                  SyncPhase.retryScheduled)) {
         return;
       }
       final accountCurrent = AuthService.captureSessionIdentity();
       snackbarWithAction(
-        context.l10n.syncFailed,
-        actionLabel: context.l10n.retry,
+        outcome == SyncRefreshOutcome.localStorageFailure
+            ? context.l10n.externalSyncFailure('localStorage')
+            : outcome == SyncRefreshOutcome.sourceReadFailure
+            ? context.l10n.externalSyncFailure('sourceRead')
+            : outcome == SyncRefreshOutcome.notesNeedAttention
+            ? context.l10n.externalSyncBlocked
+            : outcome == SyncRefreshOutcome.retryScheduled
+            ? context.l10n.syncRetryScheduled
+            : context.l10n.syncFailed,
+        actionLabel:
+            outcome == SyncRefreshOutcome.sourceReadFailure ||
+                outcome == SyncRefreshOutcome.notesNeedAttention
+            ? context.l10n.syncViewNotes
+            : outcome == SyncRefreshOutcome.retryScheduled
+            ? context.l10n.syncRetryNow
+            : context.l10n.retry,
         onAction: () {
-          if (context.mounted && accountCurrent()) refreshSyncFromUser(context);
+          if (!context.mounted || !accountCurrent()) return;
+          if (outcome == SyncRefreshOutcome.sourceReadFailure ||
+              outcome == SyncRefreshOutcome.notesNeedAttention) {
+            showSyncIssuesPage(context);
+          } else {
+            refreshSyncFromUser(context);
+          }
         },
       );
     case SyncRefreshOutcome.complete:

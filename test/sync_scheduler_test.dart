@@ -1,10 +1,412 @@
 import 'dart:async';
 
+import 'package:better_keep/services/cloud_session_recovery.dart';
+import 'package:better_keep/services/external_sync/sync_replica_engine.dart';
+
+import 'package:sqflite/sqflite.dart' show DatabaseException;
+
 import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
 import 'package:better_keep/services/external_sync/sync_scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'blocked-only manual work clears intent without enabling later edits',
+    (tester) async {
+      var uploads = 0, pendingIntent = false;
+      SyncScheduler create() => SyncScheduler(
+        automatic: false,
+        isCurrent: () => true,
+        blockedEntities: () => 1,
+        notesRequiringUnlock: () => 1,
+        pendingLocalChanges: () => true,
+        hasRunnableUpload: () => false,
+        loadPendingUpload: (_) async => pendingIntent,
+        savePendingUpload: (_, value) async => pendingIntent = value,
+        sync: (_) async {
+          uploads++;
+        },
+      );
+      final scheduler = create();
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('drive:1')]);
+      await scheduler.syncNow();
+      expect(uploads, 1);
+      expect(pendingIntent, false);
+      expect(scheduler.progress['drive:1']!.notesRequiringUnlock, 1);
+      expect(scheduler.progress['drive:1']!.lastSuccess, isNull);
+      scheduler.localChanged();
+      await tester.pump(const Duration(seconds: 3));
+      scheduler.setForeground(false);
+      scheduler.setForeground(true);
+      await tester.pump();
+      expect(uploads, 1);
+      final reopened = create();
+      addTearDown(reopened.dispose);
+      reopened.setAdapters([_Provider('drive:1')]);
+      await tester.pump();
+      expect(uploads, 1);
+      await reopened.syncNow();
+      expect(uploads, 2);
+    },
+  );
+
+  testWidgets('no-progress continuation waits and reuses durable intent', (
+    tester,
+  ) async {
+    var calls = 0;
+    final writes = <bool>[];
+    late SyncScheduler scheduler;
+    scheduler = SyncScheduler(
+      automatic: false,
+      isCurrent: () => true,
+      now: tester.binding.clock.now,
+      pendingLocalChanges: () => calls < 3,
+      hasRunnableUpload: () => calls < 3,
+      savePendingUpload: (_, value) async {
+        writes.add(value);
+      },
+      sync: (adapter) async {
+        calls++;
+        if (calls < 3) {
+          scheduler.continueUpload(adapter.connectionId, madeProgress: false);
+        }
+      },
+    );
+    addTearDown(scheduler.dispose);
+    scheduler.setAdapters([_Provider('drive:1')]);
+    await scheduler.syncNow();
+    expect(calls, 1);
+    expect(writes, [true]);
+    expect(scheduler.progress['drive:1']!.retryAt, isNotNull);
+    await tester.pump(const Duration(seconds: 1));
+    expect(calls, 1);
+    await tester.pump(const Duration(seconds: 4));
+    expect(calls, 2);
+    expect(writes, [true]);
+    await tester.pump(const Duration(seconds: 10));
+    expect(calls, 3);
+    expect(writes, [true, false]);
+    expect(scheduler.progress['drive:1']!.lastSuccess, isNotNull);
+  });
+
+  for (final cancellation in [
+    const CloudOperationCancelled(),
+    const SyncReplicaCancelled(),
+  ]) {
+    testWidgets(
+      'cancelled Free restores preserve retry allowance: ${cancellation.runtimeType}',
+      (tester) async {
+        var restores = 0;
+        final scheduler = SyncScheduler(
+          automatic: false,
+          isCurrent: () => true,
+          now: tester.binding.clock.now,
+          sync: (_) async => fail('Free restore must not upload'),
+          restore: (_) async {
+            restores++;
+            if (restores <= 3) throw cancellation;
+            if (restores == 4) {
+              throw const SyncProviderFailure(
+                SyncProviderFailureKind.unavailable,
+              );
+            }
+          },
+        );
+        addTearDown(scheduler.dispose);
+        scheduler.setAdapters([_Provider('drive:1')]);
+        await tester.pump();
+        for (var i = 1; i <= 3; i++) {
+          expect(restores, i);
+          expect(scheduler.progress['drive:1']!.failure, isNull);
+          expect(scheduler.progress['drive:1']!.retryAt, isNull);
+          scheduler.setForeground(false);
+          scheduler.setForeground(true);
+          await tester.pump();
+        }
+        expect(restores, 4);
+        expect(scheduler.progress['drive:1']!.retryAt, isNotNull);
+        await tester.pump(const Duration(seconds: 5));
+        expect(restores, 5);
+        expect(scheduler.progress['drive:1']!.lastSuccess, isNotNull);
+      },
+    );
+  }
+
+  for (final cancellation in [
+    const CloudOperationCancelled(),
+    const SyncReplicaCancelled(),
+  ]) {
+    testWidgets(
+      'neutral ${cancellation.runtimeType} retains intent without retry spin',
+      (tester) async {
+        var calls = 0, pending = false, successes = 0;
+        late SyncScheduler scheduler;
+        scheduler = SyncScheduler(
+          automatic: false,
+          isCurrent: () => true,
+          now: tester.binding.clock.now,
+          pendingLocalChanges: () => pending,
+          savePendingUpload: (_, value) async => pending = value,
+          saveLastSuccess: (_, _) async => successes++,
+          sync: (adapter) async {
+            if (++calls == 1) {
+              scheduler.continueUpload(adapter.connectionId);
+              throw cancellation;
+            }
+            pending = false;
+          },
+        );
+        addTearDown(scheduler.dispose);
+        scheduler.setAdapters([_Provider('drive:1')]);
+        await scheduler.syncNow();
+        expect(calls, 1);
+        expect(pending, isTrue);
+        expect(successes, 0);
+        final progress = scheduler.progress['drive:1']!;
+        expect(progress.running, isFalse);
+        expect(progress.failure, isNull);
+        expect(progress.retryAt, isNull);
+        expect(progress.lastSuccess, isNull);
+        expect(progress.pendingLocalChanges, isTrue);
+        await tester.pump(const Duration(minutes: 10));
+        expect(calls, 1);
+        scheduler.setForeground(false);
+        scheduler.setForeground(true);
+        await tester.pump();
+        await scheduler.waitForIdle();
+        expect(calls, 2);
+        expect(pending, isFalse);
+        expect(successes, 1);
+      },
+    );
+  }
+
+  testWidgets('manual retry queued during cancellation still runs', (
+    tester,
+  ) async {
+    final release = Completer<void>();
+    var calls = 0;
+    final scheduler = SyncScheduler(
+      automatic: false,
+      isCurrent: () => true,
+      sync: (_) async {
+        if (++calls == 1) {
+          await release.future;
+          throw const CloudOperationCancelled();
+        }
+      },
+    );
+    addTearDown(scheduler.dispose);
+    scheduler.setAdapters([_Provider('drive:1')]);
+    final first = scheduler.syncNow();
+    await tester.pump();
+    final retry = scheduler.syncNow();
+    release.complete();
+    await Future.wait([first, retry]);
+    expect(calls, 2);
+    expect(scheduler.progress['drive:1']!.failure, isNull);
+    expect(scheduler.progress['drive:1']!.lastSuccess, isNotNull);
+  });
+
+  testWidgets(
+    'restart resumes only the connection with unfinished upload intent',
+    (tester) async {
+      final intents = <String>{'drive:1'};
+      final uploads = <String>[];
+      final restores = <String>[];
+      final scheduler = SyncScheduler(
+        automatic: false,
+        isCurrent: () => true,
+        loadPendingUpload: (id) async => intents.contains(id),
+        savePendingUpload: (id, pending) async {
+          if (pending) {
+            intents.add(id);
+          } else {
+            intents.remove(id);
+          }
+        },
+        restore: (adapter) async {
+          restores.add(adapter.connectionId);
+        },
+        sync: (adapter) async {
+          expectSync(intents, contains(adapter.connectionId));
+          uploads.add(adapter.connectionId);
+        },
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('dropbox:1'), _Provider('drive:1')]);
+      await tester.pump();
+      await scheduler.waitForIdle();
+      expect(uploads, ['drive:1']);
+      expect(restores, ['dropbox:1']);
+      expect(intents, isEmpty);
+      scheduler.localChanged();
+      scheduler.setForeground(false);
+      scheduler.setForeground(true);
+      await tester.pump(const Duration(minutes: 1));
+      expect(uploads, ['drive:1']);
+    },
+  );
+
+  testWidgets(
+    'sleep during manual upload retains intent and retries on unlock',
+    (tester) async {
+      final release = Completer<void>();
+      var uploads = 0, pendingIntent = false;
+      final scheduler = SyncScheduler(
+        automatic: false,
+        now: tester.binding.clock.now,
+        isCurrent: () => true,
+        loadPendingUpload: (_) async => pendingIntent,
+        savePendingUpload: (_, pending) async {
+          pendingIntent = pending;
+        },
+        sync: (_) async {
+          expectSync(pendingIntent, isTrue);
+          if (++uploads == 1) {
+            await release.future;
+            throw const SyncProviderFailure(
+              SyncProviderFailureKind.unavailable,
+            );
+          }
+        },
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('drive:1')]);
+      final manual = scheduler.syncNow();
+      await tester.pump();
+      expect(uploads, 1);
+      scheduler.setForeground(false);
+      release.complete();
+      await tester.pump();
+      await manual;
+      expect(pendingIntent, isTrue);
+      expect(scheduler.progress['drive:1']!.lastSuccess, isNull);
+      await tester.pump(const Duration(minutes: 1));
+      expect(uploads, 1);
+      scheduler.setForeground(true);
+      await tester.pump();
+      await scheduler.waitForIdle();
+      expect(uploads, 2);
+      expect(pendingIntent, isFalse);
+      expect(scheduler.progress['drive:1']!.lastSuccess, isNotNull);
+    },
+  );
+
+  testWidgets(
+    'intent persistence failure prevents uploading and remains retryable',
+    (tester) async {
+      var writes = 0, uploads = 0;
+      final scheduler = SyncScheduler(
+        automatic: false,
+        now: tester.binding.clock.now,
+        isCurrent: () => true,
+        loadPendingUpload: (_) async => false,
+        savePendingUpload: (_, pending) async {
+          if (++writes == 1) {
+            throw StateError('Storage temporarily unavailable');
+          }
+        },
+        sync: (_) async {
+          uploads++;
+        },
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('drive:1')]);
+      final requested = scheduler.syncNow();
+      await tester.pump();
+      await requested;
+      expect(uploads, 0);
+      expect(scheduler.progress['drive:1']!.lastSuccess, isNull);
+      await tester.pump(const Duration(seconds: 5));
+      expect(uploads, 1);
+      expect(scheduler.progress['drive:1']!.failure, isNull);
+    },
+  );
+
+  for (final operation in [
+    'load history',
+    'load intent',
+    'save intent',
+    'clear intent',
+    'save history',
+  ]) {
+    testWidgets(
+      'local $operation failure is retryable without an offline diagnosis',
+      (tester) async {
+        var failed = false;
+        void check(String step) {
+          if (step == operation && !failed) {
+            failed = true;
+            throw StateError('synthetic local storage failure');
+          }
+        }
+
+        final scheduler = SyncScheduler(
+          isCurrent: () => true,
+          now: tester.binding.clock.now,
+          loadLastSuccess: (_) async {
+            check('load history');
+            return null;
+          },
+          loadPendingUpload: (_) async {
+            check('load intent');
+            return false;
+          },
+          savePendingUpload: (_, pending) async {
+            check(pending ? 'save intent' : 'clear intent');
+          },
+          saveLastSuccess: (_, _) async {
+            check('save history');
+          },
+          sync: (_) async {},
+        );
+        addTearDown(scheduler.dispose);
+        scheduler.setAdapters([_Provider('drive:1')]);
+        await tester.pump();
+        expect(
+          scheduler.progress['drive:1']!.failure,
+          SyncProviderFailureKind.localStorage,
+        );
+        expect(scheduler.progress['drive:1']!.retryAt, isNotNull);
+        await tester.pump(const Duration(seconds: 5));
+        expect(scheduler.progress['drive:1']!.failure, isNull);
+        expect(scheduler.progress['drive:1']!.lastSuccess, isNotNull);
+      },
+    );
+  }
+
+  for (final automatic in [false, true]) {
+    testWidgets(
+      'SQLite failure inside ${automatic ? 'sync' : 'restore'} is not offline',
+      (tester) async {
+        var calls = 0;
+        Future<void> run(SyncProviderAdapter _) async {
+          if (++calls == 1) throw _DatabaseFailure();
+        }
+
+        final scheduler = SyncScheduler(
+          automatic: automatic,
+          isCurrent: () => true,
+          now: tester.binding.clock.now,
+          sync: run,
+          restore: run,
+        );
+        addTearDown(scheduler.dispose);
+        scheduler.setAdapters([_Provider('drive:1')]);
+        await tester.pump();
+        expect(
+          scheduler.progress['drive:1']!.failure,
+          SyncProviderFailureKind.localStorage,
+        );
+        await tester.pump(const Duration(seconds: 5));
+        expect(calls, 2);
+        expect(scheduler.progress['drive:1']!.failure, isNull);
+      },
+    );
+  }
+
   testWidgets('manual sync before restore starts is not lost', (tester) async {
     var restores = 0, uploads = 0;
     final scheduler = SyncScheduler(
@@ -205,30 +607,39 @@ void main() {
     expect(restores, 2);
   });
 
-  testWidgets('downgrade preserves an unfinished initial restore retry', (
-    tester,
-  ) async {
-    var restores = 0;
-    final scheduler = SyncScheduler(
-      automatic: true,
-      isCurrent: () => true,
-      now: tester.binding.clock.now,
-      sync: (_) async =>
-          throw const SyncProviderFailure(SyncProviderFailureKind.unavailable),
-      restore: (_) async {
-        restores++;
-      },
-    );
-    addTearDown(scheduler.dispose);
-    scheduler.setAdapters([_Provider('dropbox:1')]);
-    await tester.pump();
-    scheduler.setAutomatic(false);
-    await tester.pump(const Duration(seconds: 5));
-    expect(restores, 1);
-    expect(scheduler.progress['dropbox:1']!.failure, isNull);
-    await tester.pump(const Duration(hours: 1));
-    expect(restores, 1);
-  });
+  testWidgets(
+    'downgrade finishes an interrupted upload without enabling later edits',
+    (tester) async {
+      var restores = 0, uploads = 0;
+      final scheduler = SyncScheduler(
+        isCurrent: () => true,
+        now: tester.binding.clock.now,
+        sync: (_) async {
+          if (++uploads == 1) {
+            throw const SyncProviderFailure(
+              SyncProviderFailureKind.unavailable,
+            );
+          }
+        },
+        restore: (_) async {
+          restores++;
+        },
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('dropbox:1')]);
+      await tester.pump();
+      scheduler.setAutomatic(false);
+      await tester.pump(const Duration(seconds: 5));
+      expect(uploads, 2);
+      expect(restores, 0);
+      expect(scheduler.progress['dropbox:1']!.failure, isNull);
+      scheduler.localChanged();
+      scheduler.setForeground(false);
+      scheduler.setForeground(true);
+      await tester.pump(const Duration(hours: 1));
+      expect(uploads, 2);
+    },
+  );
 
   testWidgets(
     'free keeps manual sync but ignores automatic triggers and downgrade stops retries',
@@ -659,6 +1070,11 @@ class _Provider implements SyncProviderAdapter {
   _Provider(this.connectionId);
   @override
   final String connectionId;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DatabaseFailure implements DatabaseException {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

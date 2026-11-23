@@ -1,3 +1,7 @@
+import '../test/support/drive_http_fixture.dart';
+
+import 'package:better_keep/services/external_sync/google_drive_sync_transport.dart';
+
 import 'package:better_keep/services/external_sync/sync_replica_engine.dart';
 
 import '../test/support/offline_firebase.dart';
@@ -77,6 +81,10 @@ import 'package:sqflite/sqflite.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (const bool.fromEnvironment('UPLOAD_RESUME_QA')) {
+    _registerUploadResumeTest();
+    return;
+  }
   if (const bool.fromEnvironment('SYNC_STRESS')) {
     if (kIsWeb) {
       testWidgets('browser sync skips unsupported reminder library scans', (
@@ -1122,6 +1130,323 @@ class _ReadyConnection extends ChangeNotifier
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+// Exercises the same session startup/lifecycle used by the app, with native
+// SQLite/files and real encrypted provider transports. No live account access.
+void _registerUploadResumeTest() {
+  testWidgets('Dropbox to Drive resumes after restart and sleep without refresh', (
+    tester,
+  ) async {
+    initializeDb();
+    final files = await fileSystem();
+    const processRun = String.fromEnvironment('UPLOAD_RESUME_PROCESS');
+    final root = p.join(
+      await files.documentDir,
+      'upload-resume-qa-${processRun.isEmpty ? DateTime.now().microsecondsSinceEpoch : processRun}',
+    );
+    final checkpointPath = p.join(root, 'provider-fixture.json');
+    final dropbox = _DropboxBoundary();
+    final drive = DriveHttpFixture();
+    final live = <_Replica>[];
+    Future<void> stop(_Replica replica) async {
+      await replica.session.close();
+      replica.client.close();
+      await replica.db.close();
+      live.remove(replica);
+    }
+
+    addTearDown(() async {
+      for (final replica in live.toList()) {
+        await stop(replica);
+      }
+      await _deleteTestFiles(files, root);
+    });
+    Future<_Replica> open({
+      bool useDrive = false,
+      bool start = false,
+      String name = 'a',
+    }) async {
+      final replica = await _Replica.create(
+        files,
+        p.join(root, name),
+        dropbox,
+        drive: useDrive ? drive : null,
+        restoreOnStart: start,
+      );
+      live.add(replica);
+      return replica;
+    }
+
+    const count = 104; // Cross the revision/discovery page boundary.
+    final media = Uint8List.fromList([0, 255, 128, 3, 7]);
+    if (processRun.isNotEmpty && await files.exists(checkpointPath)) {
+      final saved = jsonDecode(await files.readString(checkpointPath)) as Map;
+      drive.uploads = saved['uploads'] as int;
+      for (final entry in (saved['files'] as Map).entries) {
+        drive.files[entry.key as String] = base64Decode(entry.value as String);
+      }
+      for (final entry in (saved['metadata'] as Map).entries) {
+        drive.metadata[entry.key as String] = Map<String, dynamic>.from(
+          entry.value as Map,
+        );
+      }
+      // This branch is entered by a new native process after force-stop.
+      // No manual refresh or syncNow is allowed to start the resumed upload.
+      final resumed = await open(useDrive: true, start: true);
+      await resumed.session.scheduler.waitForIdle();
+      expect(
+        await resumed.session.content.store.pendingNoteCount(
+          resumed.adapter.connectionId,
+        ),
+        0,
+      );
+      expect(
+        await resumed.session.status.hasPendingUpload(
+          resumed.adapter.connectionId,
+        ),
+        isFalse,
+      );
+      expect(
+        resumed
+            .session
+            .scheduler
+            .progress[resumed.adapter.connectionId]!
+            .failure,
+        isNull,
+      );
+      final writes = drive.uploads;
+      final receiver = await open(
+        useDrive: true,
+        start: true,
+        name: 'receiver',
+      );
+      await receiver.session.scheduler.waitForIdle();
+      final rows = await receiver.db.query('note');
+      expect(rows, hasLength(count));
+      for (final row in rows) {
+        final attachment =
+            (jsonDecode(row['attachments'] as String) as List).single;
+        expect(
+          await receiver.session.attachments.read(
+            attachment['data']['src'] as String,
+          ),
+          media,
+        );
+      }
+      expect(drive.uploads, writes);
+      debugPrint(
+        'UPLOAD PROCESS RESTART PASS: $count notes + media, no manual refresh',
+      );
+      return;
+    }
+    final source = await open();
+    final imagePath = p.join(source.root, 'migration.png');
+    await files.writeBytes(imagePath, media);
+    await source.db.transaction((txn) async {
+      for (var i = 0; i < count; i++) {
+        await txn.insert('note', {
+          'id': i + 1,
+          'sync_id': 'resume-$i',
+          'title': 'QA upload $i',
+          'content': '[{"insert":"QA body\\n"}]',
+          'created_at': '2030-01-01T00:00:00Z',
+          'updated_at': '2030-01-01T00:00:00Z',
+          'attachments': jsonEncode([
+            {
+              'id': 'image',
+              'type': 'image',
+              'data': {
+                'src': imagePath,
+                'size': media.length,
+                'index': 0,
+                'aspectRatio': '1:1',
+                'lastModified': '',
+              },
+            },
+          ]),
+        });
+      }
+    });
+    await source.sync();
+    expect(
+      await source.session.content.store.pendingNoteCount(
+        source.adapter.connectionId,
+      ),
+      0,
+    );
+    final dropboxWrites = dropbox.uploads;
+    await stop(source);
+
+    var uploading = await open(useDrive: true, start: true);
+    await uploading.session.scheduler.waitForIdle();
+    expect(
+      drive.uploads,
+      0,
+      reason: 'Choosing a provider must not enable free automatic uploads',
+    );
+    final restoredStatus =
+        uploading.session.scheduler.progress[uploading.adapter.connectionId]!;
+    expect(restoredStatus.pendingLocalChanges, isTrue);
+    expect(
+      restoredStatus.lastSuccess,
+      isNull,
+      reason: 'Download-only startup cannot declare queued uploads complete',
+    );
+    final interrupted = Completer<void>(), release = Completer<void>();
+    var heldUploads = 0;
+    drive.beforeUpload = () async {
+      if (drive.uploads >= 12) {
+        heldUploads++;
+        if (!interrupted.isCompleted) interrupted.complete();
+        await release.future;
+      }
+    };
+    final requested = uploading.session.scheduler.syncNow();
+    await interrupted.future;
+    expect(
+      await uploading.session.status.hasPendingUpload(
+        uploading.adapter.connectionId,
+      ),
+      isTrue,
+    );
+    final pending = await uploading.session.content.store.pendingNoteCount(
+      uploading.adapter.connectionId,
+    );
+    expect(pending, greaterThan(0));
+    expect(pending, lessThan(count));
+    if (processRun.isNotEmpty) {
+      // Freeze the synthetic provider at a stable checkpoint. Local SQLite and
+      // encrypted caches are left open for an actual OS process termination.
+      while (drive.activeUploads != heldUploads) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await files.writeString(
+        checkpointPath,
+        jsonEncode({
+          'uploads': drive.uploads,
+          'files': drive.files.map(
+            (id, bytes) => MapEntry(id, base64Encode(bytes)),
+          ),
+          'metadata': drive.metadata,
+        }),
+      );
+      debugPrint('UPLOAD PROCESS READY FOR FORCE STOP: $pending pending notes');
+      await Completer<void>().future;
+    }
+    uploading.session.retire();
+    release.complete();
+    await requested;
+    await stop(uploading);
+    drive.beforeUpload = null;
+
+    // Reopen the same on-disk database/cache. Deliberately no syncNow/refresh.
+    uploading = await open(useDrive: true, start: true);
+    await uploading.session.scheduler.waitForIdle();
+    expect(
+      await uploading.session.content.store.pendingNoteCount(
+        uploading.adapter.connectionId,
+      ),
+      0,
+    );
+    expect(
+      await uploading.session.status.hasPendingUpload(
+        uploading.adapter.connectionId,
+      ),
+      isFalse,
+    );
+    expect(
+      uploading
+          .session
+          .scheduler
+          .progress[uploading.adapter.connectionId]!
+          .lastSuccess,
+      isNotNull,
+    );
+    expect(dropbox.uploads, dropboxWrites);
+
+    // A new edit still waits for a gesture once the previous request completed.
+    await uploading.db.update('note', {
+      'title': 'Edited after completion',
+    }, where: 'id = 1');
+    uploading.session.localChanged();
+    final settledWrites = drive.uploads;
+    uploading.session.setForeground(false);
+    uploading.session.setForeground(true);
+    await uploading.session.scheduler.waitForIdle();
+    expect(drive.uploads, settledWrites);
+
+    final asleep = Completer<void>(), wake = Completer<void>();
+    drive.beforeUpload = () async {
+      if (!asleep.isCompleted) asleep.complete();
+      await wake.future;
+      throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
+    };
+    final manual = uploading.session.scheduler.syncNow();
+    await asleep.future;
+    uploading.session.setForeground(false);
+    wake.complete();
+    await manual;
+    expect(
+      await uploading.session.status.hasPendingUpload(
+        uploading.adapter.connectionId,
+      ),
+      isTrue,
+    );
+    drive.beforeUpload = null;
+    // Let the transient provider backoff elapse while asleep.
+    await Future<void>.delayed(const Duration(seconds: 6));
+    uploading.session.setForeground(true);
+    await uploading.session.scheduler.waitForIdle();
+    expect(
+      await uploading.session.content.store.pendingNoteCount(
+        uploading.adapter.connectionId,
+      ),
+      0,
+    );
+    expect(
+      await uploading.session.status.hasPendingUpload(
+        uploading.adapter.connectionId,
+      ),
+      isFalse,
+    );
+    expect(
+      uploading
+          .session
+          .scheduler
+          .progress[uploading.adapter.connectionId]!
+          .failure,
+      isNull,
+    );
+
+    final writes = drive.uploads;
+    final downloaded = await open(useDrive: true, start: true, name: 'b');
+    await downloaded.session.scheduler.waitForIdle();
+    final restored = await downloaded.db.query('note');
+    expect(restored, hasLength(count));
+    expect(
+      restored.singleWhere((row) => row['sync_id'] == 'resume-0')['title'],
+      'Edited after completion',
+    );
+    for (final row in restored) {
+      final attachment =
+          (jsonDecode(row['attachments'] as String) as List).single;
+      expect(
+        await downloaded.session.attachments.read(
+          attachment['data']['src'] as String,
+        ),
+        media,
+      );
+    }
+    expect(
+      drive.uploads,
+      writes,
+      reason: 'Restore must not echo unchanged notes',
+    );
+    debugPrint(
+      'UPLOAD RESUME QA PASS: Dropbox → Drive, reopen, sleep/unlock, 104 notes + media, no refresh',
+    );
+  }, timeout: const Timeout(Duration(minutes: 10)));
+}
+
 class _Replica {
   _Replica(
     this.db,
@@ -1141,6 +1466,7 @@ class _Replica {
     FileSystem files,
     String root,
     _DropboxBoundary server, {
+    DriveHttpFixture? drive,
     String uid = 'isolated-platform-qa',
     FirebaseFirestore? firestore,
     String deviceId = 'synthetic-device',
@@ -1161,9 +1487,9 @@ class _Replica {
     await SyncStatusStore.createTable(db);
     await SyncMutationJournal.install(db);
     final cipher = await SyncCipher.create(uid, Uint8List(32));
-    final client = MockClient(server.handle);
+    final client = MockClient(drive?.handle ?? server.handle);
     final connection = StorageConnection(
-      provider: 'dropbox',
+      provider: drive == null ? 'dropbox' : 'google_drive',
       libraryId: cipher.libraryId,
       accountLabel: '',
       encryptedCapability: '',
@@ -1174,11 +1500,17 @@ class _Replica {
     final adapter = FileSyncAdapter(
       connectionId: connection.replicaId,
       cipher: cipher,
-      transport: DropboxSyncTransport(
-        httpClient: ProviderHttp(client),
-        accessToken: () async => 'synthetic',
-        libraryId: cipher.libraryId,
-      ),
+      transport: drive == null
+          ? DropboxSyncTransport(
+              httpClient: ProviderHttp(client),
+              accessToken: () async => 'synthetic',
+              libraryId: cipher.libraryId,
+            )
+          : GoogleDriveSyncTransport(
+              httpClient: ProviderHttp(client),
+              accessToken: () async => 'synthetic-access',
+              libraryId: cipher.libraryId,
+            ),
     );
     final session = LibrarySyncSession(
       uid: uid,

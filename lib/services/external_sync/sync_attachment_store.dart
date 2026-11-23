@@ -6,10 +6,12 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../async_keyed_serializer.dart';
+import '../cloud_session_recovery.dart' show CloudOperationCancelled;
 import '../file_system_base.dart';
 import '../local_data_encryption.dart';
 import '../../utils/file_utils.dart';
-import 'sync_replica_engine.dart';
+import 'sync_cancellation.dart';
+import 'sync_local_storage.dart';
 
 /// A validated app path has no local source. Other read/decryption failures
 /// must not silently fall back to an older cloud copy.
@@ -61,19 +63,32 @@ class SyncAttachmentStore {
     if (!isCurrent()) throw const SyncReplicaCancelled();
   }
 
-  Future<Uint8List> read(String source) async {
+  Future<Uint8List> read(String source) => _read(source, sourceRead: true);
+
+  Future<Uint8List> _read(String source, {required bool sourceRead}) async {
     _guard();
-    final path = p.normalize(await normalizePath(source));
+    final path = p.normalize(
+      await runSyncLocalFileOperation(
+        () => normalizePath(source),
+        sourceRead: sourceRead,
+      ),
+    );
     _guard();
     if (!allowedSourceRoots.any(
       (root) => p.isWithin(p.normalize(root), path),
     )) {
       throw const FormatException('Attachment is outside app storage');
     }
-    final exists = await files.exists(path);
+    final exists = await runSyncLocalFileOperation(
+      () => files.exists(path),
+      sourceRead: sourceRead,
+    );
     _guard();
     if (!exists) throw SyncAttachmentMissing(path);
-    final stored = await files.readBytes(path);
+    final stored = await runSyncLocalFileOperation(
+      () => files.readBytes(path),
+      sourceRead: sourceRead,
+    );
     _guard();
     final bytes = await decrypt(stored);
     _guard();
@@ -111,11 +126,16 @@ class SyncAttachmentStore {
       if (matches.isNotEmpty) {
         try {
           final path = p.normalize(
-            await normalizePath(matches.single['path'] as String),
+            await runSyncLocalFileOperation(
+              () => normalizePath(matches.single['path'] as String),
+            ),
           );
           _guard();
-          if (p.isWithin(p.normalize(root), path) && await files.exists(path)) {
-            final stored = await files.readBytes(path);
+          if (p.isWithin(p.normalize(root), path) &&
+              await runSyncLocalFileOperation(() => files.exists(path))) {
+            final stored = await runSyncLocalFileOperation(
+              () => files.readBytes(path),
+            );
             _guard();
             final restored = await decrypt(stored);
             _guard();
@@ -125,6 +145,8 @@ class SyncAttachmentStore {
             }
           }
         } on SyncReplicaCancelled {
+          rethrow;
+        } on CloudOperationCancelled {
           rethrow;
         } catch (_) {
           // This index is a hint, not the source of truth. Recreate missing or
@@ -146,11 +168,12 @@ class SyncAttachmentStore {
       final path = p.join(root, '${const Uuid().v4()}$extension');
       var indexed = false;
       try {
-        await files.createDirectory(root);
+        await runSyncLocalFileOperation(() => files.createDirectory(root));
         _guard();
-        await files.writeBytes(path, stored);
+        await runSyncLocalFileOperation(() => files.writeBytes(path, stored));
         _guard();
-        if (sha256.convert(await read(path)) != expectedHash) {
+        if (sha256.convert(await _read(path, sourceRead: false)) !=
+            expectedHash) {
           throw const FormatException(
             'Local attachment write failed verification',
           );
@@ -170,8 +193,16 @@ class SyncAttachmentStore {
         indexed = true;
         _guard();
         return path;
-      } finally {
-        if (!indexed) await files.delete(path);
+      } catch (error, stack) {
+        if (!indexed) {
+          try {
+            await runSyncLocalFileOperation(() => files.delete(path));
+          } catch (_) {
+            // Cleanup is best effort. Preserve the original failure/cancellation
+            // and leave this unindexed file unreferenced if deletion also fails.
+          }
+        }
+        Error.throwWithStackTrace(error, stack);
       }
     });
   }

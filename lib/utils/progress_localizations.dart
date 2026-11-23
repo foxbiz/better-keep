@@ -1,6 +1,7 @@
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_error_messages.dart';
+import 'package:intl/intl.dart';
 
 extension AuthProgressLocalizations on AuthProgress {
   String localized(AppLocalizations l10n) => switch (this) {
@@ -106,6 +107,11 @@ extension SyncProgressLocalizations on SyncProgress {
     SyncPhase.waitingForApproval => l10n.waitingForDeviceApproval,
     SyncPhase.signInRequired => l10n.pleaseSignInAgain,
     SyncPhase.storageFull => l10n.externalSyncStorageFull,
+    SyncPhase.localStorageFailure => l10n.externalSyncFailure('localStorage'),
+    SyncPhase.sourceReadFailure => l10n.externalSyncFailure('sourceRead'),
+    SyncPhase.notesNeedAttention => l10n.externalSyncBlocked,
+    SyncPhase.notesNeedUnlock => l10n.syncNotesNeedUnlock,
+    SyncPhase.retryScheduled => l10n.syncRetryScheduled,
     SyncPhase.providerSetupRequired => l10n.externalSyncSharedSetup,
     SyncPhase.deferred =>
       providerSelectionRequired
@@ -128,6 +134,34 @@ extension SyncProgressLocalizations on SyncProgress {
   };
 }
 
+final _compactSyncCounts = <String, NumberFormat>{};
+final _exactSyncCounts = <String, NumberFormat>{};
+
+/// Keep compact counts unless rounding would falsely display equal progress.
+String syncTransferCountLabel(
+  AppLocalizations l10n,
+  int done,
+  int total, {
+  bool downloading = false,
+}) {
+  final compact = _compactSyncCounts.putIfAbsent(
+    l10n.localeName,
+    () => NumberFormat.compact(locale: l10n.localeName),
+  );
+  var completed = compact.format(done), expected = compact.format(total);
+  if (done != total && completed == expected) {
+    final exact = _exactSyncCounts.putIfAbsent(
+      l10n.localeName,
+      () => NumberFormat.decimalPattern(l10n.localeName),
+    );
+    completed = exact.format(done);
+    expected = exact.format(total);
+  }
+  return downloading
+      ? l10n.syncDownloadingNotesOfTotal(completed, expected)
+      : l10n.syncUploadingNotesOfTotal(completed, expected);
+}
+
 extension NoteTransferLocalizations on NoteTransfer {
   String localized(AppLocalizations l10n) {
     if (stage == NoteTransferStage.checking) return l10n.syncCheckingNotes;
@@ -136,12 +170,9 @@ extension NoteTransferLocalizations on NoteTransfer {
       return l10n.syncDownloadingNotes;
     }
     final expected = total;
-    final label = expected == null
+    return expected == null
         ? l10n.syncUploadingNotes(done)
-        : l10n.syncUploadingNotesOfTotal(done, expected);
-    return minutesLeft == null
-        ? label
-        : '$label\n${l10n.syncEstimatedMinutes(minutesLeft!)}';
+        : syncTransferCountLabel(l10n, done, expected);
   }
 }
 

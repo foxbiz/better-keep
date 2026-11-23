@@ -126,6 +126,12 @@ abstract class AppLocalizations {
   /// **'Downloading Notes'**
   String get syncDownloadingNotes;
 
+  /// No description provided for @syncDownloadingNotesOfTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading notes · {done} of {total}'**
+  String syncDownloadingNotesOfTotal(String done, String total);
+
   /// No description provided for @syncTotalNotes.
   ///
   /// In en, this message translates to:
@@ -142,7 +148,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Uploading notes · {done} of {total}'**
-  String syncUploadingNotesOfTotal(int done, int total);
+  String syncUploadingNotesOfTotal(String done, String total);
 
   /// No description provided for @syncEstimatedMinutes.
   ///
@@ -6321,25 +6327,25 @@ abstract class AppLocalizations {
   /// External storage sync settings: externalSyncFailure
   ///
   /// In en, this message translates to:
-  /// **'{reason, select, sharedSetupRequired{Sign in to the connected Google Drive account on this device. Your notes stay encrypted.} reconnectRequired{Reconnect this account to continue syncing.} quotaExceeded{Your storage is full. Free up space in this provider and retry.} rateLimited{The provider asked us to wait. Sync will retry automatically.} corruptData{Some sync data could not be verified. Your local notes are kept.} unsupported{This provider or browser cannot complete the connection.} other{Could not reach this provider. Check your connection and retry.}}'**
+  /// **'{reason, select, sourceRead{Some attachments could not be uploaded. Other notes can still sync.} localStorage{Sync could not access data on this device. Try again.} sharedSetupRequired{Sign in to the connected Google Drive account on this device. Your notes stay encrypted.} reconnectRequired{Reconnect this account to continue syncing.} quotaExceeded{Your storage is full. Free up space in this provider and retry.} rateLimited{The provider asked us to wait. Sync will retry automatically.} corruptData{Some sync data could not be verified. Your local notes are kept.} unsupported{This provider or browser cannot complete the connection.} other{Could not reach this provider. Check your connection and retry.}}'**
   String externalSyncFailure(String reason);
 
   /// External storage sync settings: externalSyncLastSuccess
   ///
   /// In en, this message translates to:
-  /// **'Last successful sync: {time}'**
+  /// **'Last completed sync: {time}'**
   String externalSyncLastSuccess(String time);
 
   /// External storage sync settings: externalSyncNeverSynced
   ///
   /// In en, this message translates to:
-  /// **'No successful sync yet'**
+  /// **'Sync has not fully completed yet'**
   String get externalSyncNeverSynced;
 
   /// External storage sync settings: externalSyncBlocked
   ///
   /// In en, this message translates to:
-  /// **'Some notes or attachments are not ready to upload. Sync will retry.'**
+  /// **'Some notes could not be uploaded. Other notes can still sync.'**
   String get externalSyncBlocked;
 
   /// External storage sync settings: externalSyncDisconnectTitle
@@ -6857,6 +6863,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connect to the internet to finish signing in on this device, then try again.'**
   String get signInConnectionMessage;
+
+  /// Action that opens the local list of notes that failed to upload.
+  ///
+  /// In en, this message translates to:
+  /// **'View notes'**
+  String get syncViewNotes;
+
+  /// Title of the external sync recovery page.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes waiting to sync'**
+  String get syncIssuesTitle;
+
+  /// Nontechnical guidance for opening affected notes and recovering missing attachments from another device.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a note below to unlock it or view its contents. If an attachment is missing, try syncing from the device where you added it.'**
+  String get syncIssuesHint;
+
+  /// Shown when no currently affected notes are available; does not claim all providers are synced.
+  ///
+  /// In en, this message translates to:
+  /// **'No affected notes to show.'**
+  String get syncIssuesEmpty;
+
+  /// Subtitle for a note with an upload problem.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not upload this note'**
+  String get syncIssueUploadFailed;
+
+  /// Sync status for notes that need the existing PIN unlock before upload.
+  ///
+  /// In en, this message translates to:
+  /// **'Some notes need unlocking before they can sync.'**
+  String get syncNotesNeedUnlock;
+
+  /// Quiet status while an existing upload retry is waiting for its scheduled time.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync will retry shortly.'**
+  String get syncRetryScheduled;
+
+  /// Action to bypass the scheduled retry wait with a manual sync.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry now'**
+  String get syncRetryNow;
+
+  /// Safe, nontechnical recovery guidance when an affected note cannot be opened without losing data.
+  ///
+  /// In en, this message translates to:
+  /// **'This note couldn\'t be opened. Try again, or open it on another device.'**
+  String get syncNoteOpenFailed;
 }
 
 class _AppLocalizationsDelegate

@@ -16,6 +16,47 @@ void main() {
     await SyncStatusStore.createTable(db);
   });
   tearDown(() => db.close());
+  test(
+    'unfinished upload intent survives a new store and is generation scoped',
+    () async {
+      await store().setPendingUpload('drive:1', true);
+      expect(await store().hasPendingUpload('drive:1'), isTrue);
+      for (final id in ['drive:2', 'dropbox:1']) {
+        expect(await store().hasPendingUpload(id), isFalse);
+      }
+      expect(await store('other/library').hasPendingUpload('drive:1'), isFalse);
+      expect(
+        await store('account/rotated').hasPendingUpload('drive:1'),
+        isFalse,
+      );
+      await store().save('drive:1', first);
+      expect(
+        await store().hasPendingUpload('drive:1'),
+        isTrue,
+        reason: 'successful download history cannot clear unfinished uploads',
+      );
+      await store().setPendingUpload('drive:1', false);
+      expect(await store().hasPendingUpload('drive:1'), isFalse);
+      expect(await store().read('drive:1'), first);
+    },
+  );
+  test('intent writes preserve invocation order and retirement rejects queued writes', () async {
+    final history = store();
+    await Future.wait([
+      history.setPendingUpload('drive:1', true),
+      history.setPendingUpload('drive:1', false),
+      history.setPendingUpload('drive:1', true),
+    ]);
+    expect(await history.hasPendingUpload('drive:1'), isTrue);
+    // Retire before the serialized operation enters its transaction.
+    final clear = history.setPendingUpload('drive:1', false);
+    current = false;
+    await expectLater(clear, throwsA(isA<SyncReplicaCancelled>()));
+    await history.waitForIdle();
+    current = true;
+    expect(await store().hasPendingUpload('drive:1'), isTrue);
+  });
+
   test('success survives restart and is isolated by account, library and connection generation', () async {
     await store().save('drive:1', first);
     expect(await store().read('drive:1'), first);

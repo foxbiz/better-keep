@@ -20,9 +20,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDownloadingNotes => 'Notlar indiriliyor';
 
   @override
+  String syncDownloadingNotesOfTotal(String done, String total) {
+    return 'Notlar indiriliyor · $total nottan $done tanesi';
+  }
+
+  @override
   String syncTotalNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return '$countString not';
@@ -30,24 +36,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String syncUploadingNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return 'Notlar yükleniyor · $countString';
   }
 
   @override
-  String syncUploadingNotesOfTotal(int done, int total) {
-    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
-      localeName,
-    );
-    final String doneString = doneNumberFormat.format(done);
-    final intl.NumberFormat totalNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String totalString = totalNumberFormat.format(total);
-
-    return 'Notlar yükleniyor · $totalString nottan $doneString tanesi';
+  String syncUploadingNotesOfTotal(String done, String total) {
+    return 'Notlar yükleniyor · $total nottan $done tanesi';
   }
 
   @override
@@ -3581,6 +3580,10 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String externalSyncFailure(String reason) {
     String _temp0 = intl.Intl.selectLogic(reason, {
+      'sourceRead':
+          'Bazı ekler yüklenemedi. Diğer notlar eşitlenmeye devam edebilir.',
+      'localStorage':
+          'Eşitleme bu cihazdaki verilere erişemedi. Yeniden deneyin.',
       'sharedSetupRequired': 'Bu cihazda bağlı Google Drive hesabına giriş yapın. Notlarınız şifreli kalır.',
       'reconnectRequired':
           'Eşitlemeye devam etmek için bu hesabı yeniden bağlayın.',
@@ -3597,15 +3600,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String externalSyncLastSuccess(String time) {
-    return 'Son başarılı eşitleme: $time';
+    return 'Son tamamlanan eşitleme: $time';
   }
 
   @override
-  String get externalSyncNeverSynced => 'Henüz başarılı bir eşitleme yok';
+  String get externalSyncNeverSynced => 'Eşitleme henüz tamamen tamamlanmadı';
 
   @override
   String get externalSyncBlocked =>
-      'Bazı notlar veya ekler henüz yüklenmeye hazır değil. Eşitleme yeniden denenecek.';
+      'Bazı notlar yüklenemedi. Diğer notlar eşitlenmeye devam edebilir.';
 
   @override
   String externalSyncDisconnectTitle(String provider) {
@@ -3916,4 +3919,35 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get signInConnectionMessage =>
       'Bu cihazda oturum açmayı tamamlamak için internete bağlanın ve tekrar deneyin.';
+
+  @override
+  String get syncViewNotes => 'Notları görüntüle';
+
+  @override
+  String get syncIssuesTitle => 'Eşitlenmeyi bekleyen notlar';
+
+  @override
+  String get syncIssuesHint =>
+      'Kilidini açmak veya içeriğini görmek için aşağıdaki bir notu açın. Bir ek eksikse onu eklediğiniz cihazdan senkronize etmeyi deneyin.';
+
+  @override
+  String get syncIssuesEmpty => 'Gösterilecek sorunlu not yok.';
+
+  @override
+  String get syncIssueUploadFailed => 'Bu not yüklenemedi';
+
+  @override
+  String get syncNotesNeedUnlock =>
+      'Bazı notların eşitlenmesi için önce kilitlerinin açılması gerekiyor.';
+
+  @override
+  String get syncRetryScheduled =>
+      'Eşitleme kısa süre sonra yeniden denenecek.';
+
+  @override
+  String get syncRetryNow => 'Şimdi yeniden dene';
+
+  @override
+  String get syncNoteOpenFailed =>
+      'Bu not açılamadı. Yeniden deneyin veya başka bir cihazda açın.';
 }

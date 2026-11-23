@@ -7,10 +7,13 @@ import '../../models/app_progress.dart';
 import '../async_keyed_serializer.dart';
 import '../bounded_async.dart';
 import '../note_sync_batch.dart';
+import 'sync_cancellation.dart';
 import 'sync_limits.dart';
 import 'sync_provider_adapter.dart';
 import 'sync_replica_store.dart';
 import 'sync_revision.dart';
+
+export 'sync_cancellation.dart' show SyncReplicaCancelled;
 
 /// Implemented by the app's encrypted payload/media codec. Object IDs are the
 /// SHA-256 of encrypted bytes; identical IDs always represent identical bytes.
@@ -662,8 +665,4 @@ class SyncReplicaEngine {
       throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
     }
   }
-}
-
-class SyncReplicaCancelled implements Exception {
-  const SyncReplicaCancelled();
 }

@@ -19,9 +19,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDownloadingNotes => '正在下载笔记';
 
   @override
+  String syncDownloadingNotesOfTotal(String done, String total) {
+    return '正在下载笔记 · 已完成 $done 条，共 $total 条';
+  }
+
+  @override
   String syncTotalNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return '共 $countString 条笔记';
@@ -29,24 +35,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncUploadingNotes(int count) {
-    final intl.NumberFormat countNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
     final String countString = countNumberFormat.format(count);
 
     return '正在上传笔记 · $countString 条';
   }
 
   @override
-  String syncUploadingNotesOfTotal(int done, int total) {
-    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
-      localeName,
-    );
-    final String doneString = doneNumberFormat.format(done);
-    final intl.NumberFormat totalNumberFormat =
-        intl.NumberFormat.decimalPattern(localeName);
-    final String totalString = totalNumberFormat.format(total);
-
-    return '正在上传笔记 · 已完成 $doneString 条，共 $totalString 条';
+  String syncUploadingNotesOfTotal(String done, String total) {
+    return '正在上传笔记 · 已完成 $done 条，共 $total 条';
   }
 
   @override
@@ -3368,6 +3367,8 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String externalSyncFailure(String reason) {
     String _temp0 = intl.Intl.selectLogic(reason, {
+      'sourceRead': '部分附件未能上传。其他笔记仍可同步。',
+      'localStorage': '同步无法访问此设备上的数据。请重试。',
       'sharedSetupRequired': '请在此设备上登录已连接的 Google Drive 账号。您的笔记仍保持加密。',
       'reconnectRequired': '请重新连接此账户以继续同步。',
       'quotaExceeded': '您的存储空间已满。请在此服务商处释放空间后重试。',
@@ -3381,14 +3382,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String externalSyncLastSuccess(String time) {
-    return '上次同步成功：$time';
+    return '上次完成同步：$time';
   }
 
   @override
-  String get externalSyncNeverSynced => '尚未成功同步';
+  String get externalSyncNeverSynced => '同步尚未全部完成';
 
   @override
-  String get externalSyncBlocked => '部分笔记或附件尚未准备好上传。同步将重试。';
+  String get externalSyncBlocked => '部分笔记未能上传。其他笔记仍可同步。';
 
   @override
   String externalSyncDisconnectTitle(String provider) {
@@ -3665,4 +3666,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get signInConnectionMessage => '请连接互联网以完成此设备上的登录，然后重试。';
+
+  @override
+  String get syncViewNotes => '查看笔记';
+
+  @override
+  String get syncIssuesTitle => '等待同步的笔记';
+
+  @override
+  String get syncIssuesHint => '打开下方笔记以解锁或查看内容。如果附件缺失，请尝试在添加该附件的设备上同步。';
+
+  @override
+  String get syncIssuesEmpty => '没有受影响的笔记可显示。';
+
+  @override
+  String get syncIssueUploadFailed => '此笔记未能上传';
+
+  @override
+  String get syncNotesNeedUnlock => '部分笔记需要先解锁才能同步。';
+
+  @override
+  String get syncRetryScheduled => '稍后将重试同步。';
+
+  @override
+  String get syncRetryNow => '立即重试';
+
+  @override
+  String get syncNoteOpenFailed => '无法打开此笔记。请重试，或在其他设备上打开。';
 }

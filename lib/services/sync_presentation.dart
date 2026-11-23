@@ -10,6 +10,23 @@ import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:flutter/foundation.dart';
 
+/// A completed user request must not be inferred from a stale live status.
+SyncProgress syncRefreshProgress(
+  SyncRefreshOutcome outcome, {
+  SyncPhase deferredPhase = SyncPhase.deferred,
+  SyncPhase noteIssuePhase = SyncPhase.notesNeedAttention,
+}) => SyncProgress(switch (outcome) {
+  SyncRefreshOutcome.complete => SyncPhase.complete,
+  SyncRefreshOutcome.uploadRestricted => SyncPhase.uploadRestricted,
+  SyncRefreshOutcome.unavailable => SyncPhase.unavailable,
+  SyncRefreshOutcome.failed => SyncPhase.failed,
+  SyncRefreshOutcome.localStorageFailure => SyncPhase.localStorageFailure,
+  SyncRefreshOutcome.sourceReadFailure => SyncPhase.sourceReadFailure,
+  SyncRefreshOutcome.notesNeedAttention => noteIssuePhase,
+  SyncRefreshOutcome.retryScheduled => SyncPhase.retryScheduled,
+  SyncRefreshOutcome.deferred => deferredPhase,
+});
+
 /// One presentation of verification, manual refresh, and both sync services.
 /// This observes work; it never changes authorization or starts cloud requests.
 class SyncPresentation extends ValueNotifier<SyncProgress> {
@@ -132,13 +149,7 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
     _startupFailed = startupFailed;
     // Publish this outcome once; later service events resolve live state.
     _update(
-      completion: SyncProgress(switch (outcome) {
-        SyncRefreshOutcome.complete => SyncPhase.complete,
-        SyncRefreshOutcome.uploadRestricted => SyncPhase.uploadRestricted,
-        SyncRefreshOutcome.unavailable => SyncPhase.unavailable,
-        SyncRefreshOutcome.failed => SyncPhase.failed,
-        SyncRefreshOutcome.deferred => _waitingPhase,
-      }),
+      completion: syncRefreshProgress(outcome, deferredPhase: _waitingPhase),
     );
   }
 
@@ -216,6 +227,14 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
       value = const SyncProgress(SyncPhase.failed);
     } else if (states.any((s) => s.phase == SyncPhase.storageFull)) {
       value = const SyncProgress(SyncPhase.storageFull);
+    } else if (states.any((s) => s.phase == SyncPhase.localStorageFailure)) {
+      value = const SyncProgress(SyncPhase.localStorageFailure);
+    } else if (states.any((s) => s.phase == SyncPhase.sourceReadFailure) &&
+        !states.any((s) => s.phase == SyncPhase.failed)) {
+      value = const SyncProgress(SyncPhase.sourceReadFailure);
+    } else if (states.any((s) => s.hasNoteIssues) &&
+        !states.any((s) => s.phase == SyncPhase.failed)) {
+      value = states.firstWhere((s) => s.hasNoteIssues);
     } else if (states.any((s) => s.isFailure)) {
       value = SyncProgress(
         SyncPhase.failed,
@@ -241,6 +260,8 @@ class SyncPresentation extends ValueNotifier<SyncProgress> {
           SyncPhase.deferred,
         }.contains(s.phase),
       );
+    } else if (states.any((s) => s.phase == SyncPhase.retryScheduled)) {
+      value = const SyncProgress(SyncPhase.retryScheduled);
     } else if (completion != null && !completion.isSuccess) {
       value = completion.phase == SyncPhase.unavailable
           ? SyncProgress.idle

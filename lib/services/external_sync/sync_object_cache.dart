@@ -6,7 +6,10 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../cloud_session_recovery.dart' show CloudOperationCancelled;
+import 'sync_cancellation.dart';
 import 'sync_cipher.dart';
+import 'sync_local_storage.dart';
 import 'sync_revision.dart';
 
 /// Persistent immutable encrypted objects. Content fingerprints are local-only
@@ -45,8 +48,10 @@ class SyncObjectCache {
     return p.join(root, cipher.libraryId, 'objects', id);
   }
 
-  Future<bool> contains(String id) =>
-      _writes.run(id, () => files.exists(_path(id)));
+  Future<bool> contains(String id) => _writes.run(
+    id,
+    () => runSyncLocalFileOperation(() => files.exists(_path(id))),
+  );
 
   Future<Uint8List?> read(String id) => _writes.run(id, () => _read(id));
 
@@ -57,7 +62,9 @@ class SyncObjectCache {
         final size =
             _sizes[id] ??
             switch (files) {
-              FileSystemMetadata sizes => await sizes.metadataLength(_path(id)),
+              FileSystemMetadata sizes => await runSyncLocalFileOperation(
+                () => sizes.metadataLength(_path(id)),
+              ),
               _ => null,
             };
         if (size == null || size > maxBytes) return null;
@@ -66,7 +73,7 @@ class SyncObjectCache {
         return _read(id);
       });
 
-  Future<Uint8List?> _read(String id) async {
+  Future<Uint8List?> _read(String id) => runSyncLocalFileOperation(() async {
     final path = _path(id);
     if (!await files.exists(path)) return null;
     Uint8List bytes;
@@ -75,6 +82,9 @@ class SyncObjectCache {
     } on Error {
       rethrow;
     } catch (error, stack) {
+      if (error is CloudOperationCancelled || error is SyncReplicaCancelled) {
+        rethrow;
+      }
       // A file removed outside this cache may disappear after exists(). Only
       // treat a confirmed absence as a cache miss; preserve the read failure
       // (including its stack) if checking existence also fails.
@@ -96,7 +106,7 @@ class SyncObjectCache {
     // A partial write or damaged cache can be repaired from an immutable remote.
     await files.delete(path);
     return null;
-  }
+  });
 
   Future<void> write(String id, Uint8List bytes) => _writes.run(id, () async {
     if (sha256.convert(bytes).toString() != id) {
@@ -104,8 +114,10 @@ class SyncObjectCache {
     }
     if (await _read(id) != null) return;
     final path = _path(id);
-    await files.createDirectory(p.dirname(path));
-    await files.writeBytes(path, bytes);
+    await runSyncLocalFileOperation(() async {
+      await files.createDirectory(p.dirname(path));
+      await files.writeBytes(path, bytes);
+    });
     _rememberSize(id, bytes.length);
   });
 
@@ -170,7 +182,9 @@ class SyncObjectCache {
     });
     var removed = 0;
     final directory = p.join(root, cipher.libraryId, 'objects');
-    for (final entry in await files.list(directory)) {
+    for (final entry in await runSyncLocalFileOperation(
+      () => files.list(directory),
+    )) {
       if (removed >= limit) break;
       // Native listings return paths; browser stores return child names.
       if (!p.isAbsolute(entry) && p.basename(entry) != entry) continue;
@@ -181,7 +195,7 @@ class SyncObjectCache {
           referenced.contains(id)) {
         continue;
       }
-      if (await files.delete(path)) {
+      if (await runSyncLocalFileOperation(() => files.delete(path))) {
         await database.delete(
           'replica_object_sources',
           where: 'scope = ? AND object_id = ?',

@@ -5,15 +5,30 @@ import 'package:better_keep/services/async_keyed_serializer.dart';
 import 'package:better_keep/services/sync_track_store.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../cloud_session_recovery.dart' show CloudOperationCancelled;
 import 'portable_sync_codec.dart';
 import 'sync_limits.dart';
+import 'sync_provider_adapter.dart';
 import 'sync_mutation_journal.dart';
 import 'sync_object_cache.dart';
 import 'sync_replica_engine.dart';
 import 'sync_replica_store.dart';
 import 'sync_revision.dart';
 
-enum SyncCaptureFailure { unavailable, invalidSource, unlockRequired }
+enum SyncCaptureFailure {
+  unavailable,
+  invalidSource,
+  unlockRequired,
+  sourceRead,
+}
+
+typedef SyncNoteIssue = ({
+  String syncId,
+  String title,
+  bool locked,
+  String? updatedAt,
+  SyncCaptureFailure reason,
+});
 
 class SyncAppliedChange {
   SyncAppliedChange({
@@ -49,6 +64,116 @@ class LibraryReplicaContent
   final Future<void> Function(SyncAppliedChange change)? onApplied;
   final _capture = AsyncKeyedSerializer<String>();
   final Map<String, SyncCaptureFailure> captureFailures = {};
+  final _failedVersions = <String, String>{};
+  int capturedRevisions = 0;
+  bool get hasSourceReadFailures =>
+      captureFailures.containsValue(SyncCaptureFailure.sourceRead);
+
+  void _clearFailure(String key) {
+    captureFailures.remove(key);
+    _failedVersions.remove(key);
+  }
+
+  /// A blocked source is pending, but must not keep manual uploads enabled.
+  /// Compare revision identities so an edit during the pass remains runnable.
+  Future<({bool pending, bool runnable})> pendingUploadState(
+    String connectionId,
+  ) async {
+    var any = false;
+    (String, String)? after;
+    while (true) {
+      _guard();
+      final page = await SyncMutationJournal.pending(
+        store.database,
+        store.scope,
+        limit: 100,
+        after: after,
+      );
+      _guard();
+      if (page.isEmpty) break;
+      any = true;
+      for (final version in page) {
+        if (_failedVersions['${version.kind.name}:${version.entityId}'] !=
+            version.revisionId) {
+          return (pending: true, runnable: true);
+        }
+      }
+      after = (page.last.kind.name, page.last.entityId);
+    }
+    after = null;
+    while (true) {
+      final page = await store.pendingLocalVersions(connectionId, after: after);
+      _guard();
+      if (page.isEmpty) break;
+      any = true;
+      for (final revision in page) {
+        final failed = _failedVersions['${revision.kind}:${revision.entityId}'];
+        if (failed == null || revision.localRevisionId != failed) {
+          return (pending: true, runnable: true);
+        }
+      }
+      after = (page.last.kind, page.last.entityId);
+    }
+    return (pending: any, runnable: false);
+  }
+
+  Future<List<SyncNoteIssue>> affectedNotes() async {
+    final failures = Map.of(captureFailures);
+    final versions = Map.of(_failedVersions);
+    final ids = failures.keys
+        .where((key) => key.startsWith('note:'))
+        .map((key) => key.substring(5))
+        .toList();
+    final result = <SyncNoteIssue>[];
+    for (var start = 0; start < ids.length; start += 100) {
+      _guard();
+      final page = ids.skip(start).take(100).toList();
+      final rows = await store.database.rawQuery(
+        '''SELECT n.sync_id, CASE WHEN n.locked = 1 THEN '' ELSE n.title END AS title,
+          n.locked, n.updated_at, v.revision_id
+        FROM note n JOIN ${SyncMutationJournal.table} v
+          ON v.kind = 'note' AND v.entity_id = n.sync_id
+        WHERE n.sync_id IN (${List.filled(page.length, '?').join(',')})''',
+        page,
+      );
+      _guard();
+      for (final row in rows) {
+        final id = row['sync_id'] as String;
+        final key = 'note:$id';
+        // An edited or successfully uploaded note must not inherit old advice.
+        if (versions[key] != row['revision_id'] ||
+            _failedVersions[key] != row['revision_id']) {
+          continue;
+        }
+        final locked = row['locked'] == 1;
+        result.add((
+          syncId: id,
+          title: locked ? '' : row['title'] as String? ?? '',
+          locked: locked,
+          updatedAt: row['updated_at'] as String?,
+          reason: failures[key]!,
+        ));
+      }
+    }
+    _guard();
+    return result;
+  }
+
+  Future<Note?> openAffectedNote(String syncId) async {
+    _guard();
+    final rows = await store.database.query(
+      'note',
+      where: 'sync_id = ?',
+      whereArgs: [syncId],
+      limit: 1,
+    );
+    _guard();
+    if (rows.isEmpty) return null;
+    final note = await Note.fromJsonAsync(rows.single, strict: true);
+    _guard();
+    return note;
+  }
+
   int get notesRequiringUnlock => captureFailures.values
       .where((failure) => failure == SyncCaptureFailure.unlockRequired)
       .length;
@@ -164,23 +289,35 @@ class LibraryReplicaContent
             orderedIds: snapshot.$2,
           );
           _guard();
-          await store.database.transaction((txn) async {
+          final captured = await store.database.transaction((txn) async {
             _guard();
             final current = await SyncMutationJournal.current(
               txn,
               version.kind,
               version.entityId,
             );
+            var accepted = false;
             if (current?.revisionId == version.revisionId) {
-              await store.accept(txn, revision);
+              accepted = await store.accept(txn, revision);
             }
             _guard();
+            return accepted;
           });
-          captureFailures.remove(key);
+          if (captured) capturedRevisions++;
+          _clearFailure(key);
         } on SyncReplicaCancelled {
+          rethrow;
+        } on CloudOperationCancelled {
           rethrow;
         } catch (error) {
           _guard();
+          // A single unreadable source must not strand unrelated notes. Cache
+          // writes and database failures still abort before unsafe publication.
+          if (error is DatabaseException ||
+              (error is SyncProviderFailure &&
+                  error.kind == SyncProviderFailureKind.localStorage)) {
+            rethrow;
+          }
           final current = await SyncMutationJournal.current(
             store.database,
             version.kind,
@@ -190,10 +327,15 @@ class LibraryReplicaContent
           if (current?.revisionId != version.revisionId) {
             // Another provider may have replaced the source while this read was
             // in flight. Its successful application must not inherit our error.
-            captureFailures.remove(key);
+            _clearFailure(key);
             continue;
           }
-          captureFailures[key] = error is SyncSourceRequiresUnlock
+          _failedVersions[key] = version.revisionId;
+          captureFailures[key] =
+              error is SyncProviderFailure &&
+                  error.kind == SyncProviderFailureKind.sourceRead
+              ? SyncCaptureFailure.sourceRead
+              : error is SyncSourceRequiresUnlock
               ? SyncCaptureFailure.unlockRequired
               : error is FormatException
               ? SyncCaptureFailure.invalidSource
@@ -323,7 +465,7 @@ class LibraryReplicaContent
       didCommit: () async {
         _guard();
         if (committed != null) {
-          captureFailures.remove('${revision.kind.name}:${revision.entityId}');
+          _clearFailure('${revision.kind.name}:${revision.entityId}');
           await onApplied?.call(committed!);
         }
       },
