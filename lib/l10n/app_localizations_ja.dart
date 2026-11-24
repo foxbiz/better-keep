@@ -3637,7 +3637,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get externalSyncClearMessage =>
-      '同期済みのコピーを削除して同期をオフにします。端末内のノートは保持されますが、プロバイダーにしかないデータは失われます。';
+      'このプロバイダーの同期済みコピーを削除し、同期を一時停止します。端末内のノートは残りますが、プロバイダーにしかないデータは失われます。他のプロバイダーには影響しません。';
 
   @override
   String get externalSyncClearing => '同期済みデータを削除中…';
@@ -3647,14 +3647,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get externalSyncClearDone =>
-      '同期済みデータを削除しました。同期はオフです。端末内のノートは保持されています。削除したファイルがプロバイダーのゴミ箱に残る場合があります。';
+      'このプロバイダーの同期済みコピーを削除しました。同期は一時停止中です。端末内のノートは保持されました。削除したファイルはプロバイダーのゴミ箱に残る場合があります。';
 
   @override
   String get externalSyncClearCodeSent => 'メールで届いたコードを入力してください。';
 
   @override
   String get externalSyncClearCodeError =>
-      '同期済みデータを削除できませんでした。コードと接続を確認するか、新しいコードをリクエストしてください。削除が開始されている場合、完了するまで同期はオフのままです。';
+      'コードを確認できませんでした。コードと接続を確認するか、新しいコードをリクエストしてください。';
 
   @override
   String get externalSyncClearSendError =>
@@ -3786,4 +3786,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncNoteOpenFailed => 'このノートを開けませんでした。もう一度試すか、別の端末で開いてください。';
+
+  @override
+  String get externalSyncClearRetryError =>
+      '削除が完了しませんでした。再試行して続けてください。このプロバイダーの同期は一時停止したままです。';
+
+  @override
+  String get externalSyncClearVerifying => 'コードを確認中…';
+
+  @override
+  String get externalSyncClearWaiting => 'このプロバイダーの同期を停止中…';
+
+  @override
+  String get externalSyncClearFinishing => '削除を完了しています…';
+
+  @override
+  String get externalSyncClearWorkingHint =>
+      '大きなライブラリでは数分かかることがあります。この画面を閉じてBetter Keepを使い続けられます。削除が終わるまでアプリを開いたままにしてください。';
+
+  @override
+  String get externalSyncClearUnconfirmed =>
+      '削除が開始されたか確認できませんでした。新しいコードを取得して再試行してください。';
+
+  @override
+  String get externalSyncClearRateLimited => '数分待ってから、削除を再試行してください。';
 }

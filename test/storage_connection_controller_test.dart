@@ -217,9 +217,12 @@ void main() {
       controller = create(
         client: () => MockClient((request) async {
           expect(drained, true);
-          expect(request.url.path, '/2/files/delete_v2');
+          expect(request.url.path, '/2/files/delete_batch');
           deletes++;
-          return http.Response('{}', rejectDelete ? 503 : 200);
+          return http.Response(
+            '{".tag":"complete","entries":[{".tag":"success"}]}',
+            rejectDelete ? 503 : 200,
+          );
         }),
       );
       await controller.prepareOAuth('dropbox');
@@ -271,6 +274,7 @@ void main() {
       );
       expect(deletes, 0);
       expect(drained, false);
+      expect(controller.errors, isEmpty);
       await expectLater(
         controller.clearSyncedData('dropbox', 'request', '123456', () async {
           drained = true;
@@ -300,6 +304,180 @@ void main() {
         'dropbox:1:${'d' * 64}',
       );
       expect(controller.adapters, isEmpty);
+    },
+  );
+
+  for (final malformed in [false, true]) {
+    test(
+      'unconfirmed begin reloads state without deleting (malformed=$malformed)',
+      () async {
+        await controller.prepareOAuth('dropbox');
+        await controller.authorizeOAuth('dropbox');
+        invoke = (name, _) async {
+          expect(name, 'beginStorageClear');
+          server['dropbox'] = {
+            ...server['dropbox']!,
+            'state': 'clearing',
+            'enabled': false,
+            'clearOperationId': 'c' * 64,
+            'updatedAt': 10,
+          };
+          // Deliberately do not publish a metadata event.
+          if (malformed) return {'operationId': ''};
+          throw TimeoutException('Lost response');
+        };
+        var drained = false;
+        await expectLater(
+          controller.clearSyncedData('dropbox', 'request', '123456', () async {
+            drained = true;
+          }),
+          throwsA(isA<StorageClearNotConfirmed>()),
+        );
+        expect(controller.connections['dropbox']!.state, 'clearing');
+        expect(controller.isBusy('dropbox'), false);
+        expect(drained, false);
+      },
+    );
+  }
+
+  testWidgets(
+    'five-minute cleanup deadline prevents late deletion after stalled credentials',
+    (tester) async {
+      var requests = 0, finishes = 0;
+      var waitingForCredentials = false;
+      final credentials = Completer<Map<String, dynamic>>();
+      controller.dispose();
+      controller = create(
+        client: () => MockClient((request) async {
+          requests++;
+          return http.Response(
+            request.url.path.endsWith('/delete_batch')
+                ? '{".tag":"async_job_id","async_job_id":"job"}'
+                : '{".tag":"in_progress"}',
+            200,
+          );
+        }),
+      );
+      await tester.runAsync(() async {
+        await controller.prepareOAuth('dropbox');
+        await controller.authorizeOAuth('dropbox');
+      });
+      final base = invoke;
+      invoke = (name, data) async {
+        if (name == 'beginStorageClear') {
+          server['dropbox'] = {
+            ...server['dropbox']!,
+            'state': 'clearing',
+            'enabled': false,
+            'clearOperationId': 'c' * 64,
+            'updatedAt': 10,
+          };
+          return {'operationId': 'c' * 64};
+        }
+        if (name == 'getEncryptedStorageCredentials') {
+          waitingForCredentials = true;
+          return credentials.future;
+        }
+        if (name == 'finishStorageClear') {
+          finishes++;
+          return {};
+        }
+        return base(name, data);
+      };
+      var ended = false;
+      final clearing = controller.clearSyncedData(
+        'dropbox',
+        'request',
+        '123456',
+        () async {},
+      );
+      final result = expectLater(
+        clearing.whenComplete(() => ended = true),
+        throwsA(isA<SyncProviderFailure>()),
+      );
+      for (var i = 0; i < 30 && !waitingForCredentials; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(waitingForCredentials, true);
+      await tester.pump(const Duration(minutes: 4, seconds: 59));
+      expect(ended, false);
+      await tester.pump(const Duration(seconds: 1));
+      await result;
+      credentials.complete(records['dropbox']!);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump(const Duration(seconds: 10));
+      expect(requests, 0);
+      expect(finishes, 0);
+      expect(controller.isBusy('dropbox'), false);
+      expect(controller.connections['dropbox']!.state, 'clearing');
+    },
+  );
+
+  testWidgets(
+    'a stalled clear drain times out without late provider deletion',
+    (tester) async {
+      var deletes = 0;
+      controller.dispose();
+      controller = create(
+        client: () => MockClient((_) async {
+          deletes++;
+          return http.Response(
+            '{".tag":"complete","entries":[{".tag":"success"}]}',
+            200,
+          );
+        }),
+      );
+      await tester.runAsync(() async {
+        await controller.prepareOAuth('dropbox');
+        await controller.authorizeOAuth('dropbox');
+      });
+      final base = invoke;
+      invoke = (name, data) async {
+        if (name == 'beginStorageClear') {
+          server['dropbox'] = {
+            ...server['dropbox']!,
+            'state': 'clearing',
+            'enabled': false,
+            'clearOperationId': 'c' * 64,
+            'updatedAt': 10,
+          };
+          metadata.add(server);
+          return {'operationId': 'c' * 64};
+        }
+        return base(name, data);
+      };
+      final stalled = Completer<void>();
+      final stages = <StorageClearStage>[];
+      var draining = false;
+      final clear = controller.clearSyncedData(
+        'dropbox',
+        'request',
+        '123456',
+        () {
+          draining = true;
+          return stalled.future;
+        },
+        onProgress: stages.add,
+      );
+      final failure = expectLater(clear, throwsA(isA<SyncProviderFailure>()));
+      for (var i = 0; i < 20 && !draining; i++) {
+        await tester.pump();
+      }
+      expect(draining, true);
+      await tester.pump(const Duration(seconds: 45));
+      await failure;
+      expect(controller.isBusy('dropbox'), false);
+      expect(controller.connections['dropbox']!.state, 'clearing');
+      expect(stages, [StorageClearStage.verifying, StorageClearStage.waiting]);
+      stalled.complete();
+      await tester.pump();
+      expect(deletes, 0);
+      expect(calls, isNot(contains('finishStorageClear')));
     },
   );
 

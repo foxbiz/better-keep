@@ -54,6 +54,32 @@ void main() {
   });
   tearDown(() => db.close());
 
+  test('connection drain does not wait for another provider', () async {
+    final gates = {'dropbox': Completer<void>(), 'drive': Completer<void>()};
+    final started = {'dropbox': Completer<void>(), 'drive': Completer<void>()};
+    _Adapter adapter(String id) => _Adapter(id)
+      ..listChanges = (_) async {
+        started[id]!.complete();
+        await gates[id]!.future;
+        return SyncChangePage(revisions: [], cursor: 'end', hasMore: false);
+      };
+    final a = engine.sync(adapter('dropbox'));
+    final b = engine.sync(adapter('drive'));
+    await Future.wait(started.values.map((value) => value.future));
+    var drained = false, allDrained = false;
+    final drain = engine
+        .waitForIdle(connectionId: 'dropbox')
+        .then((_) => drained = true);
+    final all = engine.waitForIdle().then((_) => allDrained = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(drained, false);
+    gates['dropbox']!.complete();
+    await drain;
+    expect(allDrained, false);
+    gates['drive']!.complete();
+    await Future.wait([a, b, all]);
+  });
+
   test(
     'download-only restore never writes an index; normal sync maintains it',
     () async {
@@ -213,7 +239,9 @@ void main() {
             : restore;
         await started.future;
         var idle = false;
-        final drained = engine.waitForIdle().then((_) => idle = true);
+        final drained = engine
+            .waitForIdle(connectionId: 'review')
+            .then((_) => idle = true);
         final requests = List.generate(20, (_) => engine.sync(adapter));
         restoreRelease.complete();
         await fullStarted.future;

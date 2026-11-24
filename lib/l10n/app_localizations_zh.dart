@@ -3552,7 +3552,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get externalSyncClearMessage =>
-      '删除已同步的副本并关闭同步。本地笔记会保留；仅存于存储服务商中的数据将丢失。';
+      '删除此提供商上的已同步副本并暂停其同步。本地笔记将保留；仅存储在此提供商上的数据将丢失。其他提供商不受影响。';
 
   @override
   String get externalSyncClearing => '正在清除已同步数据…';
@@ -3562,14 +3562,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get externalSyncClearDone =>
-      '已清除同步数据，同步已关闭。本地笔记已保留。存储服务商可能会在回收站中保留已删除的文件。';
+      '已清除此提供商上的同步副本，其同步已暂停。本地笔记已保留。删除的文件可能仍在提供商的回收站中。';
 
   @override
   String get externalSyncClearCodeSent => '请输入发送到您邮箱的验证码。';
 
   @override
-  String get externalSyncClearCodeError =>
-      '无法清除已同步数据。请检查验证码和网络连接，或重新获取验证码。如果清除已开始，同步将保持关闭，直到清除完成。';
+  String get externalSyncClearCodeError => '无法验证验证码。请检查验证码和网络连接，或请求新的验证码。';
 
   @override
   String get externalSyncClearSendError => '无法发送验证码。请确认您的账户邮箱已验证，等待一分钟后重试。';
@@ -3693,4 +3692,26 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncNoteOpenFailed => '无法打开此笔记。请重试，或在其他设备上打开。';
+
+  @override
+  String get externalSyncClearRetryError => '清理尚未完成。请重试以继续。此提供商的同步将保持暂停。';
+
+  @override
+  String get externalSyncClearVerifying => '正在验证验证码…';
+
+  @override
+  String get externalSyncClearWaiting => '正在停止此提供商的同步…';
+
+  @override
+  String get externalSyncClearFinishing => '正在完成清理…';
+
+  @override
+  String get externalSyncClearWorkingHint =>
+      '大型资料库可能需要几分钟。你可以关闭此对话框并继续使用 Better Keep。请保持应用打开，直到清理完成。';
+
+  @override
+  String get externalSyncClearUnconfirmed => '无法确认清理是否已开始。请获取新验证码后重试。';
+
+  @override
+  String get externalSyncClearRateLimited => '请等待几分钟，然后再尝试清理。';
 }

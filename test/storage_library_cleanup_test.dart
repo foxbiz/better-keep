@@ -1,3 +1,5 @@
+import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -21,11 +23,15 @@ void main() {
     var calls = 0;
     final client = MockClient((r) async {
       calls++;
-      expect(r.url.path, '/2/files/delete_v2');
-      expect(jsonDecode(r.body), {'path': '/betterkeep-v1/$library'});
+      expect(r.url.path, '/2/files/delete_batch');
+      expect(jsonDecode(r.body), {
+        'entries': [
+          {'path': '/betterkeep-v1/$library'},
+        ],
+      });
       return http.Response(
-        '{"error_summary":"path_lookup/not_found/..."}',
-        409,
+        '{".tag":"complete","entries":[{".tag":"failure","failure":{".tag":"path_lookup","path_lookup":{".tag":"not_found"}}}]}',
+        200,
       );
     });
     await DropboxSyncTransport(
@@ -36,6 +42,150 @@ void main() {
     expect(calls, 1);
     client.close();
   });
+  testWidgets('Dropbox waits for asynchronous deletion completion', (
+    tester,
+  ) async {
+    var polls = 0, done = false;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/delete_batch')) {
+        expectSync(jsonDecode(request.body)['entries'], [
+          {'path': '/betterkeep-v1/$library'},
+        ]);
+        return http.Response(
+          '{".tag":"async_job_id","async_job_id":"job"}',
+          200,
+        );
+      }
+      expectSync(request.url.path, '/2/files/delete_batch/check');
+      expectSync(jsonDecode(request.body), {'async_job_id': 'job'});
+      polls++;
+      return http.Response(
+        polls == 1
+            ? '{".tag":"in_progress"}'
+            : '{".tag":"complete","entries":[{".tag":"success"}]}',
+        200,
+      );
+    });
+    addTearDown(client.close);
+    final clearing = DropboxSyncTransport(
+      httpClient: ProviderHttp(client),
+      accessToken: () async => 'test',
+      libraryId: library,
+    ).clearLibrary().then((_) => done = true);
+    await tester.pump();
+    expect(done, false);
+    expect(polls, 1);
+    await tester.pump(const Duration(seconds: 2));
+    await clearing;
+    expect(done, true);
+    expect(polls, 2);
+  });
+
+  test(
+    'Dropbox batch write throttling preserves rate limit and retry delay',
+    () async {
+      final client = MockClient(
+        (_) async => http.Response(
+          '{".tag":"complete","entries":[{".tag":"failure","failure":{".tag":"too_many_write_operations"}}]}',
+          200,
+          headers: {'retry-after': '12'},
+        ),
+      );
+      addTearDown(client.close);
+      await expectLater(
+        DropboxSyncTransport(
+          httpClient: ProviderHttp(client),
+          accessToken: () async => 'test',
+          libraryId: library,
+        ).clearLibrary(),
+        throwsA(
+          isA<SyncProviderFailure>()
+              .having(
+                (e) => e.kind,
+                'kind',
+                SyncProviderFailureKind.rateLimited,
+              )
+              .having(
+                (e) => e.retryAfter,
+                'retry delay',
+                const Duration(seconds: 12),
+              ),
+        ),
+      );
+    },
+  );
+
+  test('Dropbox rejects failed or malformed batch completion', () async {
+    for (final result in [
+      {'.tag': 'complete', 'entries': <Object>[]},
+      {
+        '.tag': 'complete',
+        'entries': [
+          {
+            '.tag': 'failure',
+            'failure': {'.tag': 'too_many_write_operations'},
+          },
+        ],
+      },
+      {'.tag': 'async_job_id', 'async_job_id': ''},
+      {'.tag': 'in_progress'},
+    ]) {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return http.Response(jsonEncode(result), 200);
+      });
+      addTearDown(client.close);
+      await expectLater(
+        DropboxSyncTransport(
+          httpClient: ProviderHttp(client),
+          accessToken: () async => 'test',
+          libraryId: library,
+        ).clearLibrary(),
+        throwsA(isA<Exception>()),
+      );
+      expect(calls, 1);
+    }
+  });
+
+  test('Drive clears with bounded concurrency', () async {
+    final drive = DriveHttpFixture();
+    for (var i = 0; i < 12; i++) {
+      final logical = 'o-${i.toRadixString(16).padLeft(64, '0')}';
+      drive.files['file-$i'] = Uint8List(0);
+      drive.metadata['file-$i'] = {
+        'id': 'file-$i',
+        'name': 'bk1-$library-$logical',
+        'appProperties': {
+          'library': library,
+          'protocol': '1',
+          'logical': logical,
+        },
+      };
+    }
+    var active = 0, peak = 0;
+    final client = MockClient((request) async {
+      if (request.method != 'DELETE') return drive.handle(request);
+      active++;
+      if (active > peak) peak = active;
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      try {
+        return await drive.handle(request);
+      } finally {
+        active--;
+      }
+    });
+    addTearDown(client.close);
+    await GoogleDriveSyncTransport(
+      httpClient: ProviderHttp(client),
+      accessToken: () async => 'synthetic-access',
+      libraryId: library,
+    ).clearLibrary();
+    expect(peak, 4);
+    expect(active, 0);
+    expect(drive.files, isEmpty);
+  });
+
   test(
     'Nextcloud clears only the account library and never initializes it',
     () async {
@@ -161,6 +311,15 @@ void main() {
       return http.Response(
         jsonEncode({
           'files': [
+            {
+              'id': 'valid-first',
+              'name': 'bk1-$library-o-${'b' * 64}',
+              'appProperties': {
+                'library': library,
+                'protocol': '1',
+                'logical': 'o-${'b' * 64}',
+              },
+            },
             {
               'id': 'foreign',
               'name': 'foreign',

@@ -3163,10 +3163,10 @@
   "externalSyncCapacityLoading": "Depolama kontrol ediliyor…",
   "externalSyncCapacityUnavailable": "Depolama bilgisi kullanılamıyor",
   "externalSyncClear": "Eşitlenen verileri sil",
-  "externalSyncClearCodeError": "Eşitlenen veriler silinemedi. Kodu ve bağlantınızı kontrol edin veya yeni bir kod isteyin. Silme işlemi başladıysa tamamlanana kadar eşitleme kapalı kalır.",
+  "externalSyncClearCodeError": "Kod doğrulanamadı. Kodu ve bağlantınızı kontrol edin veya yeni bir kod isteyin.",
   "externalSyncClearCodeSent": "E-posta adresinize gönderilen kodu girin.",
-  "externalSyncClearDone": "Eşitlenen veriler silindi. Eşitleme kapalı. Yerel notlar korundu. Sağlayıcınız silinen dosyaları çöp kutusunda tutabilir.",
-  "externalSyncClearMessage": "Eşitlenen kopyaları silin ve eşitlemeyi kapatın. Yerel notlar kalır; yalnızca sağlayıcıda bulunan veriler kaybolur.",
+  "externalSyncClearDone": "Bu sağlayıcıdaki eşitlenmiş kopyalar temizlendi. Eşitlemesi duraklatıldı. Yerel notlar korundu. Silinen dosyalar sağlayıcının çöp kutusunda kalabilir.",
+  "externalSyncClearMessage": "Bu sağlayıcıdaki eşitlenmiş kopyaları silin ve eşitlemesini duraklatın. Yerel notlar kalır; yalnızca sağlayıcıda bulunan veriler kaybolur. Diğer sağlayıcılar etkilenmez.",
   "externalSyncClearPending": "Silme tamamlanmadı · Yeniden denemek için dokunun",
   "externalSyncClearSendCode": "Kod gönder",
   "externalSyncClearSendError": "Kod gönderilemedi. Hesabınızın e-posta adresinin doğrulandığından emin olun, bir dakika bekleyip tekrar deneyin.",
@@ -3208,5 +3208,12 @@
   "syncNotesNeedUnlock": "Bazı notların eşitlenmesi için önce kilitlerinin açılması gerekiyor.",
   "syncRetryScheduled": "Eşitleme kısa süre sonra yeniden denenecek.",
   "syncRetryNow": "Şimdi yeniden dene",
-  "syncNoteOpenFailed": "Bu not açılamadı. Yeniden deneyin veya başka bir cihazda açın."
+  "syncNoteOpenFailed": "Bu not açılamadı. Yeniden deneyin veya başka bir cihazda açın.",
+  "externalSyncClearRetryError": "Temizleme tamamlanmadı. Devam etmek için yeniden deneyin. Bu sağlayıcının eşitlemesi duraklatılmış olarak kalır.",
+  "externalSyncClearVerifying": "Kod doğrulanıyor…",
+  "externalSyncClearWaiting": "Bu sağlayıcının eşitlemesi durduruluyor…",
+  "externalSyncClearFinishing": "Temizleme tamamlanıyor…",
+  "externalSyncClearWorkingHint": "Büyük kitaplıklar birkaç dakika sürebilir. Bu pencereyi kapatıp Better Keep'i kullanmaya devam edebilirsiniz. Temizleme bitene kadar uygulamayı açık tutun.",
+  "externalSyncClearUnconfirmed": "Temizlemenin başlayıp başlamadığını doğrulayamadık. Yeniden denemek için yeni bir kod isteyin.",
+  "externalSyncClearRateLimited": "Birkaç dakika bekleyip temizlemeyi yeniden deneyin."
 }

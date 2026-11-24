@@ -564,7 +564,7 @@ class _ActivityIconState extends State<_ActivityIcon>
   }
 }
 
-// A parcel moves into/out of the tray before the next arrow draws in.
+// Keep the tray and arrow shape stable; only position and opacity animate.
 class _TransferPainter extends CustomPainter {
   _TransferPainter(this.motion, this.color, {required this.upload})
     : super(repaint: motion);
@@ -577,11 +577,13 @@ class _TransferPainter extends CustomPainter {
     final t = motion.value;
     double phase(double start, double end) =>
         Interval(start, end, curve: Curves.easeInOut).transform(t);
-    final drop = phase(.12, .54);
-    final draw = phase(.66, .96);
-    final arrow = 1 - drop + draw;
-    final tip = upload ? 8 - 6 * drop : 14 + 4 * (drop - phase(.55, .66));
-    final direction = upload ? -1 : 1;
+    final travel = phase(.08, .68);
+    final reset = phase(.70, 1);
+    final direction = upload ? -1.0 : 1.0;
+    // Travel in the transfer direction, then return gently as the arrow fades
+    // back in. Endpoints match exactly and reduced motion uses the full glyph.
+    final offset = direction * 3 * (travel - reset);
+    final tip = (upload ? 5.0 : 14.0) + offset;
     final stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -590,32 +592,25 @@ class _TransferPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     canvas.save();
     canvas.scale(size.width / 24, size.height / 24);
-    // Only a landing parcel bends the tray; uploads leave it stationary.
-    final impact = upload ? 0.0 : phase(.40, .55) - phase(.55, .82);
     canvas.drawPath(
       Path()
         ..moveTo(3, 15)
-        ..lineTo(3, 17)
-        ..quadraticBezierTo(3, 19, 5, 19)
-        ..quadraticBezierTo(12, 19 + 3 * impact, 19, 19)
-        ..quadraticBezierTo(21, 19, 21, 17)
+        ..lineTo(3, 18)
+        ..quadraticBezierTo(3, 20, 5, 20)
+        ..lineTo(19, 20)
+        ..quadraticBezierTo(21, 20, 21, 18)
         ..lineTo(21, 15),
       stroke,
     );
-    // Fade the parcel into the tray before drawing the next arrow.
     stroke.color = color.withValues(
-      alpha: color.a * (1 - phase(.50, .56) + draw),
+      alpha: color.a * (1 - .75 * phase(.35, .70) + .75 * reset),
     );
-    canvas.drawLine(
-      Offset(12, tip - 11 * arrow * direction),
-      Offset(12, tip),
-      stroke,
-    );
+    canvas.drawLine(Offset(12, tip - 9 * direction), Offset(12, tip), stroke);
     canvas.drawPath(
       Path()
-        ..moveTo(12 - 4.5 * arrow, tip - 4.5 * arrow * direction)
+        ..moveTo(12 - 4, tip - 4 * direction)
         ..lineTo(12, tip)
-        ..lineTo(12 + 4.5 * arrow, tip - 4.5 * arrow * direction),
+        ..lineTo(12 + 4, tip - 4 * direction),
       stroke,
     );
     canvas.restore();

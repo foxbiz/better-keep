@@ -8,8 +8,20 @@ import 'package:better_keep/services/external_sync/sync_metadata_index.dart';
 import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
 import 'package:better_keep/services/external_sync/sync_revision.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:better_keep/services/file_system.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUpAll(() async {
+    // Initialize browser log storage outside fake time: advancing a network
+    // deadline must not also expire OPFS/IndexedDB startup in widget tests.
+    if (kIsWeb) {
+      SharedPreferences.setMockInitialValues({});
+      final files = await fileSystem();
+      await files.cacheDir;
+    }
+  });
   late SyncCipher cipher;
   late _Files files;
   SyncRevision revision(String id, {int time = 1}) => SyncRevision(
@@ -41,6 +53,94 @@ void main() {
     files = _Files();
   });
   tearDown(() => cipher.dispose());
+
+  testWidgets(
+    'optional receipt load times out without failing a durable upload',
+    (tester) async {
+      await add(revision('existing'));
+      final seed = adapter();
+      await seed.changes(null);
+      await seed.maintainIndex();
+      final oldIndex = files.index;
+      final current = adapter();
+      files.listPage = (_) =>
+          SyncFilePage(names: [], cursor: 'end', hasMore: false);
+      await current.changes('end');
+      files.listPage = null;
+      final pending = Completer<Uint8List?>();
+      files.onIndexRead = (_) => pending.future;
+      var done = false;
+      final upload = current.publish(revision('new')).then((_) => done = true);
+      await tester.pump();
+      expect(
+        files.commits.containsKey(FileSyncAdapter.commitName(revision('new'))),
+        true,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      expect(done, false);
+      await tester.pump(const Duration(seconds: 1));
+      await upload;
+      expect(done, true);
+      await current.maintainIndex();
+      expect(files.writes, 1, reason: 'No partial index is published');
+      files.onIndexRead = null;
+      await current.changes(null);
+      await current.maintainIndex();
+      expect(files.writes, 2);
+      final reads = files.commitReads;
+      pending.complete(oldIndex);
+      await tester.pump();
+      await current.changes(null);
+      expect(
+        files.commitReads,
+        reads,
+        reason: 'Late cache read cannot replace repaired metadata',
+      );
+    },
+  );
+
+  test('unexpected receipt error cannot fail an acknowledged commit', () async {
+    final current = adapter();
+    await current.changes(null);
+    files.failReceipt = true;
+    await current.publish(revision('one'));
+    expect(files.commits, hasLength(1));
+    files.failReceipt = false;
+    expect((await current.changes(null)).revisions, hasLength(1));
+  });
+
+  test('scan diagnostics reset after failure and sample repeated successful passes', () async {
+    final messages = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message?.contains('Metadata check:') ?? false) messages.add(message!);
+    };
+    addTearDown(() => debugPrint = original);
+    var now = DateTime.utc(2026);
+    final one = await add(revision('one'));
+    final two = await add(revision('two'));
+    files.listPage = (cursor) => SyncFilePage(
+      names: [cursor == null ? one : two],
+      cursor: 'next',
+      hasMore: cursor == null,
+      commitVersions: files.versions,
+    );
+    final current = adapter(now: () => now);
+    await current.changes(null);
+    files.failCommit = two;
+    await expectLater(current.changes('next'), throwsStateError);
+    files.failCommit = null;
+    now = now.add(const Duration(minutes: 10));
+    await current.changes('next');
+    expect(messages, hasLength(1));
+    expect(messages.single, contains('cached=0 fetched=1'));
+    await current.changes('next');
+    expect(messages, hasLength(1));
+    now = now.add(const Duration(minutes: 1));
+    await current.changes('next');
+    expect(messages, hasLength(2));
+    expect(messages.last, contains('cached=1 fetched=0'));
+  });
 
   for (final corrupt in [false, true]) {
     test(
@@ -643,13 +743,22 @@ void main() {
 }
 
 class _Files
+    with SyncFileWriteReceipts
     implements SyncFileTransport, SyncFileCopies, SyncIndexFileTransport {
   final commits = <String, List<Uint8List>>{};
   final versions = <String, List<String>>{};
   Uint8List? index;
   final indexPages = <String, Uint8List>{};
   int commitReads = 0, indexReads = 0, writes = 0, listings = 0;
-  bool failRead = false, failWrite = false;
+  bool failRead = false, failWrite = false, failReceipt = false;
+  String? failCommit;
+  Future<Uint8List?> Function(String name)? onIndexRead;
+  @override
+  List<String>? takeWriteReceipt(String name) {
+    if (failReceipt) throw StateError('Synthetic receipt failure');
+    return super.takeWriteReceipt(name);
+  }
+
   Future<void> Function()? beforeWrite;
   Future<void> Function(String name)? onIndexWrite;
   SyncFilePage Function(String?)? listPage;
@@ -668,19 +777,28 @@ class _Files
   @override
   Future<List<Uint8List>> readCopies(String name) async {
     commitReads++;
+    if (name == failCommit) throw StateError('Synthetic interrupted scan');
     return commits[name]!;
   }
 
   @override
   Future<Uint8List> read(String name) async => (await readCopies(name)).first;
   @override
-  Future<bool> create(String name, Uint8List bytes) async =>
-      throw UnimplementedError();
+  Future<bool> create(String name, Uint8List bytes) async {
+    clearWriteReceipt(name);
+    if (commits.containsKey(name)) return false;
+    commits[name] = [bytes];
+    versions[name] = ['version-1'];
+    recordWriteReceipt(name, 'version-1');
+    return true;
+  }
+
   @override
   Future<Uint8List?> readIndex({
     String name = SyncMetadataIndex.fileName,
   }) async {
     indexReads++;
+    if (onIndexRead != null) return onIndexRead!(name);
     if (failRead) throw StateError('Unavailable cache');
     return name == SyncMetadataIndex.fileName ? index : indexPages[name];
   }

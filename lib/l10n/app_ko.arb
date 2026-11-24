@@ -1104,10 +1104,10 @@
   "externalSyncCapacityLoading": "저장 공간 확인 중…",
   "externalSyncCapacityUnavailable": "저장 공간 정보를 사용할 수 없습니다",
   "externalSyncClear": "동기화된 데이터 삭제",
-  "externalSyncClearCodeError": "동기화된 데이터를 삭제할 수 없습니다. 코드와 연결을 확인하거나 새 코드를 요청하세요. 삭제가 시작된 경우 완료될 때까지 동기화가 꺼진 상태로 유지됩니다.",
+  "externalSyncClearCodeError": "코드를 확인할 수 없습니다. 코드와 연결을 확인하거나 새 코드를 요청하세요.",
   "externalSyncClearCodeSent": "이메일로 전송된 코드를 입력하세요.",
-  "externalSyncClearDone": "동기화된 데이터가 삭제되었습니다. 동기화가 꺼졌습니다. 기기의 노트는 유지됩니다. 삭제된 파일이 제공업체의 휴지통에 남아 있을 수 있습니다.",
-  "externalSyncClearMessage": "동기화된 사본을 삭제하고 동기화를 끕니다. 기기의 노트는 유지되지만 제공업체에만 있는 데이터는 삭제됩니다.",
+  "externalSyncClearDone": "이 제공업체의 동기화된 사본을 삭제했습니다. 동기화가 일시 중지되었습니다. 로컬 노트는 유지됩니다. 삭제된 파일은 제공업체의 휴지통에 남아 있을 수 있습니다.",
+  "externalSyncClearMessage": "이 제공업체의 동기화된 사본을 삭제하고 동기화를 일시 중지합니다. 로컬 노트는 유지되지만 제공업체에만 있는 데이터는 손실됩니다. 다른 제공업체에는 영향을 주지 않습니다.",
   "externalSyncClearPending": "삭제 미완료 · 탭하여 다시 시도",
   "externalSyncClearSendCode": "코드 보내기",
   "externalSyncClearSendError": "코드를 보낼 수 없습니다. 계정 이메일이 인증되었는지 확인하고 1분 후 다시 시도하세요.",
@@ -1149,5 +1149,12 @@
   "syncNotesNeedUnlock": "일부 노트는 동기화하기 전에 잠금을 해제해야 합니다.",
   "syncRetryScheduled": "잠시 후 동기화를 다시 시도합니다.",
   "syncRetryNow": "지금 다시 시도",
-  "syncNoteOpenFailed": "이 노트를 열 수 없습니다. 다시 시도하거나 다른 기기에서 열어 보세요."
+  "syncNoteOpenFailed": "이 노트를 열 수 없습니다. 다시 시도하거나 다른 기기에서 열어 보세요.",
+  "externalSyncClearRetryError": "삭제가 완료되지 않았습니다. 다시 시도하여 계속하세요. 이 제공업체의 동기화는 일시 중지된 상태로 유지됩니다.",
+  "externalSyncClearVerifying": "코드 확인 중…",
+  "externalSyncClearWaiting": "이 제공업체의 동기화 중지 중…",
+  "externalSyncClearFinishing": "삭제 마무리 중…",
+  "externalSyncClearWorkingHint": "라이브러리가 크면 몇 분 정도 걸릴 수 있습니다. 이 창을 닫고 Better Keep을 계속 사용할 수 있습니다. 정리가 끝날 때까지 앱을 열어 두세요.",
+  "externalSyncClearUnconfirmed": "정리가 시작되었는지 확인할 수 없습니다. 새 코드를 요청해 다시 시도하세요.",
+  "externalSyncClearRateLimited": "몇 분 기다린 후 다시 정리해 주세요."
 }

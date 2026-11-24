@@ -14,6 +14,7 @@ class DriveHttpFixture {
   Duration readLatency = Duration.zero;
   final _sessions = <String, Map<String, dynamic>>{};
   int indexWrites = 0;
+  bool omitWriteVersions = false;
 
   Future<void> Function()? beforeUpload;
 
@@ -55,7 +56,10 @@ class DriveHttpFixture {
       } else {
         uploads++;
       }
-      return json({'id': id});
+      return json({
+        'id': id,
+        if (!omitWriteVersions) 'version': metadata[id]!['version'],
+      });
     }
 
     if (request.method == 'DELETE') {
@@ -72,7 +76,10 @@ class DriveHttpFixture {
       files[id] = request.bodyBytes;
       metadata[id]!['version'] = '${int.parse(metadata[id]!['version']) + 1}';
       indexWrites++;
-      return json({'id': id});
+      return json({
+        'id': id,
+        if (!omitWriteVersions) 'version': metadata[id]!['version'],
+      });
     }
     if (request.method == 'PUT') {
       final header = _sessions.remove(query['upload_id']);

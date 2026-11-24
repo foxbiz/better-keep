@@ -22,7 +22,7 @@ class DropboxHttpFixture {
   int pageSize;
   Future<void> Function(int offset)? beforeContinue;
   int? failDownloadAt, loseUploadAckAt;
-  bool offline = false;
+  bool offline = false, omitWriteVersions = false;
   Future<http.Response> handle(http.Request request) async {
     requests++;
     if (offline) return http.Response('unavailable', 503);
@@ -105,7 +105,13 @@ class DropboxHttpFixture {
             });
           } else {
             files[path] = bytes;
-            results.add({'.tag': 'success', 'name': p.basename(path)});
+            // Match the HTTP wire format, not the SDK's typed union accessor.
+            results.add({
+              '.tag': 'success',
+              'name': p.basename(path),
+              'id': path,
+              if (!omitWriteVersions) 'rev': sha256.convert(bytes).toString(),
+            });
           }
           if (uploads == loseUploadAckAt) return http.Response('lost ack', 503);
         }
@@ -128,7 +134,14 @@ class DropboxHttpFixture {
         }
         files[path] = Uint8List.fromList(request.bodyBytes);
         if (uploads == loseUploadAckAt) return http.Response('lost ack', 503);
-        return http.Response('{}', 200);
+        return http.Response(
+          jsonEncode({
+            'id': path,
+            if (!omitWriteVersions)
+              'rev': sha256.convert(files[path]!).toString(),
+          }),
+          200,
+        );
       case '/2/files/download':
         final bytes = files[args['path']];
         return bytes == null

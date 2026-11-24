@@ -21,6 +21,228 @@ import 'support/dropbox_http_fixture.dart';
 import 'support/webdav_server.dart';
 
 void main() {
+  for (final provider in ['drive', 'dropbox', 'webdav', 'nextcloud']) {
+    for (final receipts in [true, false]) {
+      test(
+        '$provider first upload and fresh device (receipts=$receipts)',
+        () async {
+          final cipher = await SyncCipher.create('index-qa', Uint8List(32));
+          addTearDown(cipher.dispose);
+          final drive = DriveHttpFixture()..omitWriteVersions = !receipts;
+          final dav = WebDavServer()..weakWriteEtag = !receipts;
+          final dropbox = DropboxHttpFixture(
+            accessToken: 'synthetic-access',
+            pageSize: 100,
+          )..omitWriteVersions = !receipts;
+          var commitReads = 0;
+          final client = MockClient((request) async {
+            if (provider == 'drive') {
+              if (request.url.queryParameters['alt'] == 'media' &&
+                  (drive.metadata[request.url.pathSegments.last]?['name']
+                              as String? ??
+                          '')
+                      .contains('-c-')) {
+                commitReads++;
+              }
+              return drive.handle(request);
+            }
+            if (provider == 'dropbox') {
+              if (request.url.path.endsWith('/download') &&
+                  (request.headers['dropbox-api-arg'] ?? '').contains('/c-')) {
+                commitReads++;
+              }
+              return dropbox.handle(request);
+            }
+            if (request.method == 'GET' &&
+                request.url.pathSegments.last.startsWith('c-')) {
+              commitReads++;
+            }
+            return dav.handle(request);
+          });
+          addTearDown(client.close);
+          SyncFileTransport transport() => switch (provider) {
+            'drive' => GoogleDriveSyncTransport(
+              httpClient: ProviderHttp(client),
+              accessToken: () async => 'synthetic-access',
+              libraryId: cipher.libraryId,
+            ),
+            'dropbox' => DropboxSyncTransport(
+              httpClient: ProviderHttp(client),
+              accessToken: () async => 'synthetic-access',
+              libraryId: cipher.libraryId,
+            ),
+            'nextcloud' => NextcloudSyncTransport(
+              httpClient: ProviderHttp(client),
+              server: dav.root,
+              username: 'qa',
+              appPassword: () async => 'synthetic',
+              libraryId: cipher.libraryId,
+            ),
+            _ => WebDavSyncTransport(
+              httpClient: ProviderHttp(client),
+              server: dav.root,
+              username: 'qa',
+              appPassword: () async => 'synthetic',
+              libraryId: cipher.libraryId,
+            ),
+          };
+          FileSyncAdapter adapter() => FileSyncAdapter(
+            connectionId: provider,
+            cipher: cipher,
+            transport: transport(),
+          );
+          SyncRevision revision(String id) => SyncRevision(
+            kind: SyncEntityKind.note,
+            entityId: id,
+            revisionId: 'revision-$id',
+            modifiedAtMicros: 1,
+            deleted: false,
+            payloadObjectId: 'a' * 64,
+          );
+
+          Future<List<SyncRevision>> scan(FileSyncAdapter source) async {
+            final revisions = <SyncRevision>[];
+            String? cursor;
+            while (true) {
+              final page = await source.changes(cursor);
+              revisions.addAll(page.revisions);
+              if (!page.hasMore) return revisions;
+              cursor = page.cursor;
+            }
+          }
+
+          final count =
+              receipts && (provider == 'dropbox' || provider == 'drive')
+              ? 1000
+              : 20;
+          final first = adapter();
+          expect(await scan(first), isEmpty);
+          final values = List.generate(count, (i) => revision('$i'));
+          if (await first.supportsBatchWrites) {
+            await first.publish(values.first);
+            await first.publishBatch(values.skip(1).toList());
+          } else {
+            for (final value in values) {
+              await first.publish(value);
+            }
+          }
+          // Match the engine: uploads are followed by maintenance, not another scan.
+          await first.maintainIndex();
+          expect(
+            commitReads,
+            0,
+            reason: 'Write receipts need no commit read-back',
+          );
+          final restored = await scan(adapter());
+          expect(
+            restored.map((r) => r.entityId),
+            unorderedEquals(values.map((r) => r.entityId)),
+          );
+          expect(
+            commitReads,
+            receipts ? 0 : count,
+            reason: 'Only trustworthy write receipts may seed the index',
+          );
+          if (provider == 'drive' && receipts) {
+            final listing = transport();
+            String? cursor;
+            while (true) {
+              final page = await listing.list(cursor);
+              cursor = page.cursor;
+              if (!page.hasMore) break;
+            }
+            final resumed = adapter();
+            expect((await resumed.changes(cursor)).revisions, isEmpty);
+            drive.readLatency = const Duration(milliseconds: 10);
+            await Future.wait([
+              resumed.publish(revision('after-restart-one')),
+              resumed.publish(revision('after-restart-two')),
+            ]);
+            drive.readLatency = Duration.zero;
+            await resumed.maintainIndex();
+            expect(await scan(adapter()), hasLength(count + 2));
+            expect(
+              commitReads,
+              0,
+              reason: 'Incremental sessions also index new uploads',
+            );
+          }
+          // Provider version changes must still invalidate only the changed entry.
+          if (provider == 'drive' && receipts) {
+            final record = drive.metadata.values.firstWhere(
+              (m) => (m['name'] as String).contains('-c-'),
+            );
+            record['version'] = '2';
+            expect(await scan(adapter()), hasLength(count + 2));
+            expect(commitReads, 1);
+          }
+        },
+      );
+    }
+  }
+
+  test(
+    'write receipts cannot bypass legacy fingerprint normalization',
+    () async {
+      final cipher = await SyncCipher.create('legacy-qa', Uint8List(32));
+      addTearDown(cipher.dispose);
+      final dropbox = DropboxHttpFixture(accessToken: 'synthetic-access');
+      final client = MockClient(dropbox.handle);
+      addTearDown(client.close);
+      var normalized = 0;
+      FileSyncAdapter adapter() => FileSyncAdapter(
+        connectionId: 'dropbox',
+        cipher: cipher,
+        transport: DropboxSyncTransport(
+          httpClient: ProviderHttp(client),
+          accessToken: () async => 'synthetic-access',
+          libraryId: cipher.libraryId,
+        ),
+        normalizeLegacyRevision: (revision, _) async {
+          normalized++;
+          return SyncRevision(
+            kind: revision.kind,
+            entityId: revision.entityId,
+            revisionId: revision.revisionId,
+            modifiedAtMicros: revision.modifiedAtMicros,
+            deleted: false,
+            payloadObjectId: revision.payloadObjectId,
+            contentFingerprint: 'b' * 64,
+            legacyContentFingerprints: [revision.contentFingerprint!],
+          );
+        },
+      );
+      final writer = adapter();
+      await writer.changes(null);
+      await writer.publish(
+        SyncRevision(
+          kind: SyncEntityKind.note,
+          entityId: 'legacy',
+          revisionId: 'legacy',
+          modifiedAtMicros: 1,
+          deleted: false,
+          payloadObjectId: 'a' * 64,
+          contentFingerprint: 'c' * 64,
+        ),
+      );
+      await writer.maintainIndex();
+      final reader = adapter();
+      final page = await reader.changes(null);
+      expect(normalized, 1);
+      expect(page.revisions.single.contentFingerprint, 'b' * 64);
+      await reader.maintainIndex();
+      expect(
+        (await adapter().changes(null)).revisions.single.contentFingerprint,
+        'b' * 64,
+      );
+      expect(
+        normalized,
+        1,
+        reason: 'The normalized revision can then be cached',
+      );
+    },
+  );
+
   for (final invalidCopies in [1, 3]) {
     test(
       'Drive tries at most three authenticated index copies ($invalidCopies invalid)',

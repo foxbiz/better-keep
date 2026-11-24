@@ -1104,10 +1104,10 @@
   "externalSyncCapacityLoading": "正在检查存储空间…",
   "externalSyncCapacityUnavailable": "无法获取存储空间信息",
   "externalSyncClear": "清除已同步数据",
-  "externalSyncClearCodeError": "无法清除已同步数据。请检查验证码和网络连接，或重新获取验证码。如果清除已开始，同步将保持关闭，直到清除完成。",
+  "externalSyncClearCodeError": "无法验证验证码。请检查验证码和网络连接，或请求新的验证码。",
   "externalSyncClearCodeSent": "请输入发送到您邮箱的验证码。",
-  "externalSyncClearDone": "已清除同步数据，同步已关闭。本地笔记已保留。存储服务商可能会在回收站中保留已删除的文件。",
-  "externalSyncClearMessage": "删除已同步的副本并关闭同步。本地笔记会保留；仅存于存储服务商中的数据将丢失。",
+  "externalSyncClearDone": "已清除此提供商上的同步副本，其同步已暂停。本地笔记已保留。删除的文件可能仍在提供商的回收站中。",
+  "externalSyncClearMessage": "删除此提供商上的已同步副本并暂停其同步。本地笔记将保留；仅存储在此提供商上的数据将丢失。其他提供商不受影响。",
   "externalSyncClearPending": "清除未完成 · 点击重试",
   "externalSyncClearSendCode": "发送验证码",
   "externalSyncClearSendError": "无法发送验证码。请确认您的账户邮箱已验证，等待一分钟后重试。",
@@ -1149,5 +1149,12 @@
   "syncNotesNeedUnlock": "部分笔记需要先解锁才能同步。",
   "syncRetryScheduled": "稍后将重试同步。",
   "syncRetryNow": "立即重试",
-  "syncNoteOpenFailed": "无法打开此笔记。请重试，或在其他设备上打开。"
+  "syncNoteOpenFailed": "无法打开此笔记。请重试，或在其他设备上打开。",
+  "externalSyncClearRetryError": "清理尚未完成。请重试以继续。此提供商的同步将保持暂停。",
+  "externalSyncClearVerifying": "正在验证验证码…",
+  "externalSyncClearWaiting": "正在停止此提供商的同步…",
+  "externalSyncClearFinishing": "正在完成清理…",
+  "externalSyncClearWorkingHint": "大型资料库可能需要几分钟。你可以关闭此对话框并继续使用 Better Keep。请保持应用打开，直到清理完成。",
+  "externalSyncClearUnconfirmed": "无法确认清理是否已开始。请获取新验证码后重试。",
+  "externalSyncClearRateLimited": "请等待几分钟，然后再尝试清理。"
 }

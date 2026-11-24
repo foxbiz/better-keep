@@ -79,7 +79,7 @@ class SyncReplicaEngine {
     ({SyncProviderAdapter adapter, bool downloadOnly, Future<void> task})
   >
   _running = {};
-  final _tasks = <Future<void>>{};
+  final _tasks = <Future<void>, String>{};
 
   Future<void> sync(SyncProviderAdapter adapter, {bool downloadOnly = false}) {
     final running = _running[adapter.connectionId];
@@ -89,6 +89,7 @@ class SyncReplicaEngine {
         return running.task;
       }
       return _track(
+        adapter.connectionId,
         running.task.then(
           (_) => sync(adapter, downloadOnly: downloadOnly),
           onError: (Object _, StackTrace _) =>
@@ -97,6 +98,7 @@ class SyncReplicaEngine {
       );
     }
     final task = _track(
+      adapter.connectionId,
       _sync(adapter, downloadOnly: downloadOnly).whenComplete(() {
         _running.remove(adapter.connectionId);
       }),
@@ -109,17 +111,22 @@ class SyncReplicaEngine {
     return task;
   }
 
-  Future<void> _track(Future<void> operation) {
+  Future<void> _track(String connectionId, Future<void> operation) {
     late final Future<void> task;
     task = operation.whenComplete(() => _tasks.remove(task));
-    _tasks.add(task);
+    _tasks[task] = connectionId;
     return task;
   }
 
-  Future<void> waitForIdle() async {
-    while (_tasks.isNotEmpty) {
+  Future<void> waitForIdle({String? connectionId}) async {
+    while (true) {
+      final pending = _tasks.entries
+          .where((entry) => connectionId == null || entry.value == connectionId)
+          .map((entry) => entry.key)
+          .toList();
+      if (pending.isEmpty) return;
       await Future.wait(
-        _tasks.toList().map(
+        pending.map(
           (task) =>
               task.then<void>((_) {}, onError: (Object _, StackTrace _) {}),
         ),

@@ -22,6 +22,13 @@ import 'sync_cipher.dart';
 import 'sync_provider_adapter.dart';
 import 'storage_usage.dart';
 
+enum StorageClearStage { verifying, waiting, deleting, finishing }
+
+/// The server may have consumed the code; retry must request a fresh one.
+class StorageClearNotConfirmed extends SyncProviderFailure {
+  const StorageClearNotConfirmed() : super(SyncProviderFailureKind.unavailable);
+}
+
 enum StorageConnectionAction {
   preparing,
   awaitingConsent,
@@ -350,7 +357,11 @@ class StorageConnectionController extends ChangeNotifier {
       if (error is _StorageAuthorizationCancelled) rethrow;
       if (!_active) throw StateError('Storage account session has ended');
       final failure = _failure(error);
-      _errors[provider] = failure.kind;
+      // A rejected clear code is not a broken provider connection.
+      if (action != StorageConnectionAction.clearing ||
+          _connections[provider]?.state == 'clearing') {
+        _errors[provider] = failure.kind;
+      }
       throw failure;
     } finally {
       _busy.remove(provider);
@@ -849,22 +860,55 @@ class StorageConnectionController extends ChangeNotifier {
     String provider,
     String requestId,
     String code,
-    Future<void> Function() drain,
-  ) => _perform(provider, StorageConnectionAction.clearing, () async {
-    await _discardAuthorization(provider);
+    Future<void> Function() drain, {
+    void Function(StorageClearStage stage)? onProgress,
+  }) => _perform(provider, StorageConnectionAction.clearing, () async {
+    const stepTimeout = Duration(seconds: 45);
+    onProgress?.call(StorageClearStage.verifying);
+    await _discardAuthorization(provider).timeout(stepTimeout);
     final capability = await _capability(provider);
     _guard();
-    final result = await call('beginStorageClear', {
-      'provider': provider,
-      'deviceId': deviceId,
-      'capability': capability,
-      'requestId': requestId,
-      'code': code,
-    });
-    _guard();
-    final operationId = result['operationId'] as String;
-    await _reload(provider);
-    await drain();
+    late final String operationId;
+    try {
+      final result = await call('beginStorageClear', {
+        'provider': provider,
+        'deviceId': deviceId,
+        'capability': capability,
+        'requestId': requestId,
+        'code': code,
+      }).timeout(stepTimeout);
+      _guard();
+      final id = result is Map ? result['operationId'] : null;
+      if (id is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(id)) {
+        throw const FormatException('Invalid clear operation');
+      }
+      operationId = id;
+    } catch (error) {
+      _guard();
+      // A lost response is not evidence of a bad code. Refresh metadata once,
+      // but do not delete anything without the acknowledged operation id.
+      try {
+        await _reload(provider).timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // Offline metadata cannot resolve whether the server consumed the code.
+      }
+      _guard();
+      if (error is FirebaseFunctionsException &&
+          const [
+            'permission-denied',
+            'unauthenticated',
+            'failed-precondition',
+            'invalid-argument',
+            'resource-exhausted',
+            'aborted',
+          ].contains(error.code)) {
+        rethrow;
+      }
+      throw const StorageClearNotConfirmed();
+    }
+    onProgress?.call(StorageClearStage.waiting);
+    await _reload(provider).timeout(stepTimeout);
+    await drain().timeout(stepTimeout);
     _guard();
     final connection = _connections[provider];
     if (connection == null) {
@@ -888,16 +932,21 @@ class StorageConnectionController extends ChangeNotifier {
       authorization: authorization,
     );
     try {
-      await cleanup.clearLibrary();
+      onProgress?.call(StorageClearStage.deleting);
+      await ProviderHttp.withOperationTimeout(
+        const Duration(minutes: 5),
+        cleanup.clearLibrary,
+      );
       if (!current()) throw StateError('Clear operation replaced');
+      onProgress?.call(StorageClearStage.finishing);
       await call('finishStorageClear', {
         'provider': provider,
         'deviceId': deviceId,
         'capability': capability,
         'operationId': operationId,
-      });
+      }).timeout(stepTimeout);
       _guard();
-      await _reload(provider);
+      await _reload(provider).timeout(stepTimeout);
     } finally {
       cleanup.dispose();
     }

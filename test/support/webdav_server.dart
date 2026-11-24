@@ -11,6 +11,7 @@ class WebDavServer {
   final files = <String, Uint8List>{};
   final requests = <http.Request>[];
   bool ignoreConditions = false, omitEtags = false;
+  bool weakWriteEtag = false;
   String? listingHref;
   int? failStatus;
 
@@ -35,7 +36,15 @@ class WebDavServer {
         }
         final existed = files.containsKey(path);
         files[path] = Uint8List.fromList(request.bodyBytes);
-        return http.Response('', existed ? 204 : 201);
+        return http.Response(
+          '',
+          existed ? 204 : 201,
+          headers: {
+            if (!omitEtags)
+              'etag':
+                  '${weakWriteEtag ? 'W/' : ''}"${sha256.convert(files[path]!)}"',
+          },
+        );
       case 'GET':
         return files.containsKey(path)
             ? http.Response.bytes(files[path]!, 200)

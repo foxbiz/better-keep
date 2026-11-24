@@ -526,6 +526,13 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
             final failure = connection?.state == 'reconnect_required'
                 ? SyncProviderFailureKind.reconnectRequired
                 : session.connections.errors[provider] ?? progress?.failure;
+            final clearing =
+                connection?.state == 'clearing' ||
+                session.connections.actions[provider] ==
+                    StorageConnectionAction.clearing;
+            final clearingBusy =
+                session.connections.actions[provider] ==
+                StorageConnectionAction.clearing;
             final formats = MaterialLocalizations.of(context);
             final time = last?.toLocal();
             return AlertDialog(
@@ -546,7 +553,8 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
                               '${formats.formatMediumDate(time)} ${formats.formatTimeOfDay(TimeOfDay.fromDateTime(time))}',
                             ),
                     ),
-                    if (progress?.pendingLocalChanges == true &&
+                    if (!clearing &&
+                        progress?.pendingLocalChanges == true &&
                         progress?.running != true) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -555,18 +563,29 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
                             : context.l10n.externalSyncState('pending'),
                       ),
                     ],
-                    if (feedback case final result?) ...[
+                    if (clearing) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        clearingBusy
+                            ? context.l10n.externalSyncClearing
+                            : failure == SyncProviderFailureKind.rateLimited
+                            ? context.l10n.externalSyncClearRateLimited
+                            : context.l10n.externalSyncClearRetryError,
+                      ),
+                    ] else if (feedback case final result?) ...[
                       const SizedBox(height: 12),
                       Text(result.localized(context.l10n)),
                     ] else if (failure != null) ...[
                       const SizedBox(height: 12),
                       Text(context.l10n.externalSyncFailure(failure.name)),
                     ],
-                    if (feedback == null &&
+                    if (!clearing &&
+                        feedback == null &&
                         (progress?.notesRequiringUnlock ?? 0) > 0) ...[
                       const SizedBox(height: 12),
                       Text(context.l10n.externalSyncUnlockSketches),
-                    ] else if (feedback == null &&
+                    ] else if (!clearing &&
+                        feedback == null &&
                         (progress?.blockedEntities ?? 0) > 0 &&
                         failure != SyncProviderFailureKind.sourceRead) ...[
                       const SizedBox(height: 12),
@@ -576,7 +595,15 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
                 ),
               ),
               actions: [
-                if ((progress?.blockedEntities ?? 0) > 0)
+                if (clearing && !clearingBusy)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _clearSyncedData(session, provider);
+                    },
+                    child: Text(context.l10n.retry),
+                  ),
+                if (!clearing && (progress?.blockedEntities ?? 0) > 0)
                   TextButton(
                     onPressed: () {
                       Navigator.pop(context);
@@ -584,7 +611,8 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
                     },
                     child: Text(context.l10n.syncViewNotes),
                   ),
-                if (connection?.enabled == true &&
+                if (!clearing &&
+                    connection?.enabled == true &&
                     connection?.isReady == true &&
                     session.connections.isSelected(provider))
                   TextButton(

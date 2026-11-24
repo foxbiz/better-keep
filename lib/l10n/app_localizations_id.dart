@@ -3778,7 +3778,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get externalSyncClearMessage =>
-      'Hapus salinan tersinkron dan nonaktifkan sinkronisasi. Catatan lokal tetap tersimpan; data yang hanya ada di penyedia akan hilang.';
+      'Hapus salinan tersinkron dari penyedia ini dan jeda sinkronisasinya. Catatan lokal tetap ada; data yang hanya ada di penyedia akan hilang. Penyedia lain tidak terpengaruh.';
 
   @override
   String get externalSyncClearing => 'Menghapus data tersinkron…';
@@ -3789,7 +3789,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get externalSyncClearDone =>
-      'Data tersinkron dihapus. Sinkronisasi nonaktif. Catatan lokal tetap tersimpan. Penyedia Anda mungkin menyimpan file yang dihapus di sampah.';
+      'Salinan tersinkron dari penyedia ini telah dihapus. Sinkronisasinya dijeda. Catatan lokal tetap tersimpan. File yang dihapus mungkin masih ada di sampah penyedia.';
 
   @override
   String get externalSyncClearCodeSent =>
@@ -3797,7 +3797,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get externalSyncClearCodeError =>
-      'Tidak dapat menghapus data tersinkron. Periksa kode dan koneksi Anda, atau minta kode baru. Jika penghapusan sudah dimulai, sinkronisasi tetap nonaktif hingga selesai.';
+      'Kode tidak dapat diverifikasi. Periksa kode dan koneksi Anda, atau minta kode baru.';
 
   @override
   String get externalSyncClearSendError =>
@@ -3938,4 +3938,30 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get syncNoteOpenFailed =>
       'Catatan ini tidak dapat dibuka. Coba lagi, atau buka di perangkat lain.';
+
+  @override
+  String get externalSyncClearRetryError =>
+      'Penghapusan belum selesai. Coba lagi untuk melanjutkan. Sinkronisasi penyedia ini tetap dijeda.';
+
+  @override
+  String get externalSyncClearVerifying => 'Memverifikasi kode…';
+
+  @override
+  String get externalSyncClearWaiting =>
+      'Menghentikan sinkronisasi penyedia ini…';
+
+  @override
+  String get externalSyncClearFinishing => 'Menyelesaikan penghapusan…';
+
+  @override
+  String get externalSyncClearWorkingHint =>
+      'Pustaka besar mungkin memerlukan beberapa menit. Anda dapat menutup dialog ini dan tetap menggunakan Better Keep. Biarkan aplikasi terbuka sampai pembersihan selesai.';
+
+  @override
+  String get externalSyncClearUnconfirmed =>
+      'Kami tidak dapat memastikan apakah pembersihan sudah dimulai. Minta kode baru untuk mencoba lagi.';
+
+  @override
+  String get externalSyncClearRateLimited =>
+      'Tunggu beberapa menit, lalu coba bersihkan lagi.';
 }

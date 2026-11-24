@@ -1104,10 +1104,10 @@
   "externalSyncCapacityLoading": "Memeriksa penyimpanan…",
   "externalSyncCapacityUnavailable": "Informasi penyimpanan tidak tersedia",
   "externalSyncClear": "Hapus data tersinkron",
-  "externalSyncClearCodeError": "Tidak dapat menghapus data tersinkron. Periksa kode dan koneksi Anda, atau minta kode baru. Jika penghapusan sudah dimulai, sinkronisasi tetap nonaktif hingga selesai.",
+  "externalSyncClearCodeError": "Kode tidak dapat diverifikasi. Periksa kode dan koneksi Anda, atau minta kode baru.",
   "externalSyncClearCodeSent": "Masukkan kode yang dikirim ke email Anda.",
-  "externalSyncClearDone": "Data tersinkron dihapus. Sinkronisasi nonaktif. Catatan lokal tetap tersimpan. Penyedia Anda mungkin menyimpan file yang dihapus di sampah.",
-  "externalSyncClearMessage": "Hapus salinan tersinkron dan nonaktifkan sinkronisasi. Catatan lokal tetap tersimpan; data yang hanya ada di penyedia akan hilang.",
+  "externalSyncClearDone": "Salinan tersinkron dari penyedia ini telah dihapus. Sinkronisasinya dijeda. Catatan lokal tetap tersimpan. File yang dihapus mungkin masih ada di sampah penyedia.",
+  "externalSyncClearMessage": "Hapus salinan tersinkron dari penyedia ini dan jeda sinkronisasinya. Catatan lokal tetap ada; data yang hanya ada di penyedia akan hilang. Penyedia lain tidak terpengaruh.",
   "externalSyncClearPending": "Penghapusan belum selesai · Ketuk untuk mencoba lagi",
   "externalSyncClearSendCode": "Kirim kode",
   "externalSyncClearSendError": "Tidak dapat mengirim kode. Pastikan email akun Anda sudah diverifikasi, tunggu satu menit, lalu coba lagi.",
@@ -1149,5 +1149,12 @@
   "syncNotesNeedUnlock": "Beberapa catatan perlu dibuka kuncinya sebelum dapat disinkronkan.",
   "syncRetryScheduled": "Sinkronisasi akan segera dicoba lagi.",
   "syncRetryNow": "Coba sekarang",
-  "syncNoteOpenFailed": "Catatan ini tidak dapat dibuka. Coba lagi, atau buka di perangkat lain."
+  "syncNoteOpenFailed": "Catatan ini tidak dapat dibuka. Coba lagi, atau buka di perangkat lain.",
+  "externalSyncClearRetryError": "Penghapusan belum selesai. Coba lagi untuk melanjutkan. Sinkronisasi penyedia ini tetap dijeda.",
+  "externalSyncClearVerifying": "Memverifikasi kode…",
+  "externalSyncClearWaiting": "Menghentikan sinkronisasi penyedia ini…",
+  "externalSyncClearFinishing": "Menyelesaikan penghapusan…",
+  "externalSyncClearWorkingHint": "Pustaka besar mungkin memerlukan beberapa menit. Anda dapat menutup dialog ini dan tetap menggunakan Better Keep. Biarkan aplikasi terbuka sampai pembersihan selesai.",
+  "externalSyncClearUnconfirmed": "Kami tidak dapat memastikan apakah pembersihan sudah dimulai. Minta kode baru untuk mencoba lagi.",
+  "externalSyncClearRateLimited": "Tunggu beberapa menit, lalu coba bersihkan lagi."
 }

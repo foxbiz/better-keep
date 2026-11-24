@@ -237,6 +237,20 @@ entries are reused only for matching Drive ID/version, Dropbox ID/rev or strong 
 Missing/stale entries fall back to original encrypted commits. The cache never changes
 inventory, conflict ordering or note/attachment/database formats.
 
+A successful new commit upload also seeds the index from the version returned by that
+same write (Drive ID/version, Dropbox ID/rev, or strong DAV ETag). This includes Dropbox
+batch commits, so the first upload after clearing a provider can publish a usable index
+without downloading its own commits. Missing/weak receipts retain the scan/read fallback;
+existing-file conflicts still validate the stored commit. Maintenance remains optional and
+download-only passes never write an index. Existing libraries need no account reset or
+provider clear: a normal scan can repair an absent/incomplete cache. Metadata-check logs
+record cache hit/read counts and elapsed time, plus index-write counts/timing or redacted
+failure types; they contain no note identifiers, contents, account IDs or credentials.
+Successful scan/write summaries are sampled once per minute per category per adapter; a failed
+scan resets its diagnostic clock/counts. Publication's lazy index load has a five-second total
+budget, and optional seeding failures cannot fail an acknowledged upload. A timed-out reader's
+cache instance is discarded so its late completion cannot replace repaired metadata.
+
 ### Linked pages and bounded rewrite cost
 
 The head contains entries and an authenticated `next` reference, or `null` for the tail.
@@ -926,8 +940,9 @@ uses the existing email configuration/secret. Deploy these before releasing this
 client, after explicit deployment approval.
 
 After OTP verification, the backend disables the connection and clears its active
-selection in the same transaction. The clearing device drains its local sync,
-then deletes only the current library's provider objects. Credentials stay encrypted
+selection in the same transaction only if that provider is selected. Clearing an inactive
+provider leaves the active provider unchanged. The clearing device drains only work for the
+target replica (including retired/queued work), then deletes only that library's provider objects. Credentials stay encrypted
 and deletion runs directly on the client. Other accounts' libraries and local notes
 are not deleted. Existing provider refresh work must finish before clearing starts;
 only the clearing device may refresh credentials during cleanup. Interrupted cleanup
@@ -935,7 +950,27 @@ remains paused and can be resumed with a fresh code. This operation permanently
 removes remote-only notes/media from the active library; export or download them first.
 Provider retention/trash policies can delay reclaimed space.
 
-Completion rotates a storage epoch and leaves sync off. The next explicit selection
+The dialog shows verification, waiting for target sync, deletion and finalization stages.
+Once verification succeeds, Close/back dismisses the dialog without cancelling the account's
+cleanup; the provider card and Details show the ongoing or interrupted operation. Closing the
+app or signing out can still interrupt it. A late result never closes a different screen.
+An unconfirmed begin response triggers one bounded metadata refresh and asks for a fresh code,
+without claiming the code was invalid or starting deletion with an unacknowledged operation id.
+A rejected code does not mark an otherwise ready provider as needing reconnection.
+Each verification/drain/finalization step has a 45-second bound; provider cleanup has a
+five-minute operation deadline that prevents late follow-up requests. After clearing starts, a failure leaves the connection
+in its retryable clearing state; late drain completion cannot start deletion. Drive
+validates each whole listing batch before up to four concurrent deletions, then re-lists;
+Dropbox submits only the library root via `delete_batch` and polls `delete_batch/check` at
+two-second intervals until every submitted entry succeeds or is already missing. Unknown,
+failed or incomplete job results never authorize completion. Dropbox batch write throttling
+retains its rate-limit classification and Retry-After delay; cleanup guidance asks for a manual
+retry rather than promising automatic sync. Details prioritizes cleanup status over generic
+sync failures and offers Retry when cleanup is interrupted.
+These changes are client-only, but release still requires the existing backend clear-selection
+transaction and rules to be deployed. Confirm that prerequisite before shipping the client.
+
+Completion rotates a storage epoch and leaves this provider paused. The next explicit selection
 uses a namespace derived from the user's encryption key, provider, and epoch, plus
 new provider-scoped acknowledgements/cursors. It uploads retained local notes into
 that fresh space. A raw server-supplied folder path is never trusted. This separates

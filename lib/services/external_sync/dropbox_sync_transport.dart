@@ -13,6 +13,7 @@ import '../bounded_async.dart';
 import 'sync_provider_adapter.dart';
 
 class DropboxSyncTransport
+    with SyncFileWriteReceipts
     implements
         SyncFileTransport,
         SyncFileCleanup,
@@ -86,11 +87,64 @@ class DropboxSyncTransport
 
   @override
   Future<void> clearLibrary() async {
-    // Do not initialize/create folders: cleanup must work when storage is full.
-    final result = await _call('delete_v2', {'path': root});
-    if (result.statusCode != 200 && !_error(result, 'path_lookup/not_found')) {
-      ProviderHttp.fail(result);
+    // Large folders must use Dropbox's asynchronous deletion API. A synchronous
+    // delete can time out after Dropbox accepted it, leaving an ambiguous retry.
+    // Do not initialize folders: cleanup must also work when storage is full.
+    var response = await _call('delete_batch', {
+      'entries': [
+        {'path': root},
+      ],
+    });
+    String? job;
+    for (var poll = 0; poll < 150; poll++) {
+      if (response.statusCode != 200) ProviderHttp.fail(response);
+      final data = jsonDecode(response.body);
+      if (data is! Map) throw const FormatException('Invalid delete result');
+      switch (data['.tag']) {
+        case 'complete':
+          final entries = data['entries'];
+          if (entries is! List ||
+              entries.length != 1 ||
+              entries.single is! Map) {
+            throw const FormatException('Invalid delete entries');
+          }
+          final entry = entries.single as Map;
+          if (entry['.tag'] == 'success') return;
+          final failure = entry['failure'];
+          if (entry['.tag'] == 'failure' &&
+              failure is Map &&
+              failure['.tag'] == 'path_lookup' &&
+              failure['path_lookup'] is Map &&
+              failure['path_lookup']['.tag'] == 'not_found') {
+            return;
+          }
+          final rateLimited =
+              failure is Map && failure['.tag'] == 'too_many_write_operations';
+          final seconds = int.tryParse(response.headers['retry-after'] ?? '');
+          throw SyncProviderFailure(
+            rateLimited
+                ? SyncProviderFailureKind.rateLimited
+                : SyncProviderFailureKind.unavailable,
+            retryAfter: rateLimited && seconds != null && seconds >= 0
+                ? Duration(seconds: seconds)
+                : null,
+          );
+        case 'async_job_id':
+          if (job != null ||
+              data['async_job_id'] is! String ||
+              (data['async_job_id'] as String).isEmpty) {
+            throw const FormatException('Invalid delete job');
+          }
+          job = data['async_job_id'] as String;
+        case 'in_progress':
+          if (job == null) throw const FormatException('Missing delete job');
+          await Future<void>.delayed(const Duration(seconds: 2));
+        default:
+          throw const FormatException('Invalid delete status');
+      }
+      response = await _call('delete_batch/check', {'async_job_id': job});
     }
+    throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
   }
 
   bool _initialized = false;
@@ -266,6 +320,7 @@ class DropboxSyncTransport
 
   @override
   Future<bool> create(String name, Uint8List bytes) async {
+    clearWriteReceipt(name);
     await _initialize();
     final commit = <String, Object?>{
       'path': _path(name),
@@ -301,7 +356,14 @@ class DropboxSyncTransport
         'commit': commit,
       }, data: Uint8List.sublistView(bytes, offset));
     }
-    if (response.statusCode == 200) return true;
+    if (response.statusCode == 200) {
+      try {
+        _recordCreated(name, jsonDecode(response.body));
+      } on FormatException {
+        // The upload succeeded; an absent receipt only disables index seeding.
+      }
+      return true;
+    }
     if (_error(response, 'path/conflict')) return false;
     _failWriteResponse(response);
   }
@@ -315,6 +377,9 @@ class DropboxSyncTransport
       throw const SyncProviderFailure(SyncProviderFailureKind.unsupported);
     }
     final names = files.keys.toList();
+    for (final name in names) {
+      clearWriteReceipt(name);
+    }
     final paths = names.map(_path).toList();
     await _initialize();
     final entries = List<Map<String, Object?>?>.filled(names.length, null);
@@ -356,6 +421,8 @@ class DropboxSyncTransport
         throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
       }
       if (result['.tag'] == 'success') {
+        // Dropbox's HTTP union inlines FileMetadata beside .tag.
+        _recordCreated(names[i], result);
         created[names[i]] = true;
         continue;
       }
@@ -376,6 +443,12 @@ class DropboxSyncTransport
       throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
     }
     return created;
+  }
+
+  void _recordCreated(String name, Object? value) {
+    if (value is Map && value['id'] is String && value['rev'] is String) {
+      recordWriteReceipt(name, jsonEncode([value['id'], value['rev']]));
+    }
   }
 
   static const _writeFailures = {

@@ -1104,10 +1104,10 @@
   "externalSyncCapacityLoading": "Verificando armazenamento…",
   "externalSyncCapacityUnavailable": "Informações de armazenamento indisponíveis",
   "externalSyncClear": "Apagar dados sincronizados",
-  "externalSyncClearCodeError": "Não foi possível apagar os dados sincronizados. Verifique o código e sua conexão ou solicite um novo código. Se a exclusão já começou, a sincronização permanecerá desativada até a conclusão.",
+  "externalSyncClearCodeError": "Não foi possível verificar o código. Confira o código e sua conexão ou solicite um novo código.",
   "externalSyncClearCodeSent": "Digite o código enviado ao seu e-mail.",
-  "externalSyncClearDone": "Dados sincronizados apagados. A sincronização está desativada. As notas locais foram mantidas. Seu provedor pode manter os arquivos excluídos na lixeira.",
-  "externalSyncClearMessage": "Apagar as cópias sincronizadas e desativar a sincronização. As notas locais serão mantidas; os dados que existem apenas no provedor serão perdidos.",
+  "externalSyncClearDone": "Cópias sincronizadas removidas deste provedor. Sua sincronização está pausada. As notas locais foram mantidas. Os arquivos excluídos podem permanecer na lixeira do provedor.",
+  "externalSyncClearMessage": "Exclua as cópias sincronizadas deste provedor e pause sua sincronização. As notas locais permanecem; os dados armazenados apenas no provedor serão perdidos. Outros provedores não serão afetados.",
   "externalSyncClearPending": "Exclusão incompleta · Toque para tentar novamente",
   "externalSyncClearSendCode": "Enviar código",
   "externalSyncClearSendError": "Não foi possível enviar um código. Verifique se o e-mail da sua conta foi confirmado, aguarde um minuto e tente novamente.",
@@ -1149,5 +1149,12 @@
   "syncNotesNeedUnlock": "Algumas notas precisam ser desbloqueadas antes de sincronizar.",
   "syncRetryScheduled": "A sincronização tentará novamente em breve.",
   "syncRetryNow": "Tentar agora",
-  "syncNoteOpenFailed": "Não foi possível abrir esta nota. Tente novamente ou abra em outro dispositivo."
+  "syncNoteOpenFailed": "Não foi possível abrir esta nota. Tente novamente ou abra em outro dispositivo.",
+  "externalSyncClearRetryError": "A limpeza não foi concluída. Tente novamente para continuar. A sincronização deste provedor permanece pausada.",
+  "externalSyncClearVerifying": "Verificando código…",
+  "externalSyncClearWaiting": "Parando a sincronização deste provedor…",
+  "externalSyncClearFinishing": "Finalizando a limpeza…",
+  "externalSyncClearWorkingHint": "Bibliotecas grandes podem levar alguns minutos. Você pode fechar esta janela e continuar usando o Better Keep. Mantenha o app aberto até a limpeza terminar.",
+  "externalSyncClearUnconfirmed": "Não foi possível confirmar se a limpeza começou. Solicite um novo código para tentar novamente.",
+  "externalSyncClearRateLimited": "Aguarde alguns minutos e tente limpar novamente."
 }

@@ -109,7 +109,7 @@ void main() {
           show ? findsOneWidget : findsNothing,
         );
         expect(find.byType(CircularProgressIndicator), findsNothing);
-        double shaftLength() {
+        List<Offset> shaftPoints() {
           final canvas = TestRecordingCanvas();
           tester
               .widget<CustomPaint>(download)
@@ -119,21 +119,25 @@ void main() {
               .map((call) => call.invocation)
               .singleWhere((call) => call.memberName == #drawLine)
               .positionalArguments;
-          return ((shaft[1] as Offset) - (shaft[0] as Offset)).distance;
+          return shaft.take(2).cast<Offset>().toList();
         }
 
         final center = tester.getCenter(download);
-        final before = shaftLength();
+        final before = shaftPoints();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 700));
         expect(tester.getCenter(download), center);
-        expect(shaftLength(), isNot(closeTo(before, 1)));
+        expect(shaftPoints(), isNot(before));
+        expect(
+          (shaftPoints()[1] - shaftPoints()[0]).distance,
+          (before[1] - before[0]).distance,
+        );
         reduceMotion.value = true;
         await tester.pump();
-        final still = shaftLength();
-        expect(still, greaterThan(0));
+        final still = shaftPoints();
+        expect((still[1] - still[0]).distance, greaterThan(0));
         await tester.pump(const Duration(milliseconds: 700));
-        expect(shaftLength(), still);
+        expect(shaftPoints(), still);
         reduceMotion.value = false;
         await tester.pump();
       }

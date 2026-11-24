@@ -3838,7 +3838,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get externalSyncClearMessage =>
-      'Apagar as cópias sincronizadas e desativar a sincronização. As notas locais serão mantidas; os dados que existem apenas no provedor serão perdidos.';
+      'Exclua as cópias sincronizadas deste provedor e pause sua sincronização. As notas locais permanecem; os dados armazenados apenas no provedor serão perdidos. Outros provedores não serão afetados.';
 
   @override
   String get externalSyncClearing => 'Apagando dados sincronizados…';
@@ -3849,7 +3849,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get externalSyncClearDone =>
-      'Dados sincronizados apagados. A sincronização está desativada. As notas locais foram mantidas. Seu provedor pode manter os arquivos excluídos na lixeira.';
+      'Cópias sincronizadas removidas deste provedor. Sua sincronização está pausada. As notas locais foram mantidas. Os arquivos excluídos podem permanecer na lixeira do provedor.';
 
   @override
   String get externalSyncClearCodeSent =>
@@ -3857,7 +3857,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get externalSyncClearCodeError =>
-      'Não foi possível apagar os dados sincronizados. Verifique o código e sua conexão ou solicite um novo código. Se a exclusão já começou, a sincronização permanecerá desativada até a conclusão.';
+      'Não foi possível verificar o código. Confira o código e sua conexão ou solicite um novo código.';
 
   @override
   String get externalSyncClearSendError =>
@@ -3998,4 +3998,30 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get syncNoteOpenFailed =>
       'Não foi possível abrir esta nota. Tente novamente ou abra em outro dispositivo.';
+
+  @override
+  String get externalSyncClearRetryError =>
+      'A limpeza não foi concluída. Tente novamente para continuar. A sincronização deste provedor permanece pausada.';
+
+  @override
+  String get externalSyncClearVerifying => 'Verificando código…';
+
+  @override
+  String get externalSyncClearWaiting =>
+      'Parando a sincronização deste provedor…';
+
+  @override
+  String get externalSyncClearFinishing => 'Finalizando a limpeza…';
+
+  @override
+  String get externalSyncClearWorkingHint =>
+      'Bibliotecas grandes podem levar alguns minutos. Você pode fechar esta janela e continuar usando o Better Keep. Mantenha o app aberto até a limpeza terminar.';
+
+  @override
+  String get externalSyncClearUnconfirmed =>
+      'Não foi possível confirmar se a limpeza começou. Solicite um novo código para tentar novamente.';
+
+  @override
+  String get externalSyncClearRateLimited =>
+      'Aguarde alguns minutos e tente limpar novamente.';
 }

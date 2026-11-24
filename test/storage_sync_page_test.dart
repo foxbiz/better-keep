@@ -359,10 +359,271 @@ void main() {
     expect(connections.calls, ['clear-code:dropbox', 'clear:dropbox']);
     expect(find.byType(AlertDialog), findsNothing);
     expect(
-      find.textContaining('Synced data cleared. Sync is off.'),
+      find.textContaining('Synced copies cleared from this provider.'),
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'clear progress is visible and cleanup failures do not blame the code',
+    (tester) async {
+      connections.values['dropbox'] = _connection('dropbox', enabled: false);
+      connections.values['google_drive'] = _connection('google_drive');
+      connections.clearGate = Completer<void>();
+      connections.failClear = true;
+      await tester.binding.setSurfaceSize(const Size(320, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await mount(tester, textScale: 1.8);
+      await tester.pumpAndSettle();
+      await menu(tester, 'dropbox', 'Clear synced data');
+      expect(
+        find.textContaining('Other providers are not affected.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('turn sync off'), findsNothing);
+      await tester.tap(find.text('Send code'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+      await tester.pump();
+      expect(find.text('Clearing synced data…'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.textContaining('Keep the app open'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      connections.clearGate!.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Clearing did not finish. Retry to continue.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Could not verify the code'), findsNothing);
+      expect(find.text('Send code'), findsOneWidget);
+      expect(connections.values['google_drive']!.enabled, true);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'rejected retry code stays on verification after an interrupted clear',
+    (tester) async {
+      connections.values['dropbox'] = _connection(
+        'dropbox',
+        enabled: false,
+        state: 'clearing',
+      );
+      connections.rejectClearCode = true;
+      await mount(tester);
+      await tester.pumpAndSettle();
+      await menu(tester, 'dropbox', 'Clear synced data');
+      await tester.tap(find.text('Send code'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not verify the code'), findsOneWidget);
+      expect(find.textContaining('Clearing did not finish'), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'verification throttling explains waiting and keeps Cancel wording',
+    (tester) async {
+      connections.values['dropbox'] = _connection('dropbox');
+      connections.verificationGate = Completer<void>();
+      connections.rateLimitVerification = true;
+      await mount(tester);
+      await tester.pumpAndSettle();
+      await menu(tester, 'dropbox', 'Clear synced data');
+      await tester.tap(find.text('Send code'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+      await tester.pump();
+      expect(find.widgetWithText(TextButton, 'Close'), findsNothing);
+      final cancel = find.widgetWithText(TextButton, 'Cancel');
+      expect(tester.widget<TextButton>(cancel).onPressed, isNull);
+      connections.verificationGate!.complete();
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(tester.element(cancel))!;
+      expect(find.text(l10n.externalSyncClearRateLimited), findsOneWidget);
+      expect(find.textContaining('stays paused'), findsNothing);
+      expect(connections.values['dropbox']!.state, 'ready');
+      expect(find.textContaining('Could not verify the code'), findsNothing);
+      await tester.tap(cancel);
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'unconfirmed verification offers a fresh code without blaming the user',
+    (tester) async {
+      connections.values['dropbox'] = _connection('dropbox');
+      connections.uncertainClearCode = true;
+      await mount(tester);
+      await tester.pumpAndSettle();
+      await menu(tester, 'dropbox', 'Clear synced data');
+      await tester.tap(find.text('Send code'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining("We couldn't confirm whether clearing started"),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Could not verify the code'), findsNothing);
+      expect(find.text('Send code'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  for (final fails in [false, true]) {
+    testWidgets(
+      'dismissed cleanup cannot close a later dialog (failure=$fails)',
+      (tester) async {
+        connections.values['dropbox'] = _connection('dropbox');
+        connections.values['google_drive'] = _connection('google_drive');
+        connections.clearGate = Completer<void>();
+        connections.failClear = fails;
+        await mount(tester);
+        await tester.pumpAndSettle();
+        await menu(tester, 'dropbox', 'Clear synced data');
+        await tester.tap(find.text('Send code'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), '123456');
+        await tester.pump();
+        await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+        await tester.pump();
+        expect(find.textContaining('close this dialog'), findsOneWidget);
+        await tester.tap(find.widgetWithText(TextButton, 'Close'));
+        if (!fails) connections.clearGate!.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(StorageSyncPage), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+        await menu(tester, 'google_drive', 'Sync details');
+        if (fails) connections.clearGate!.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Google Drive'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
+  testWidgets(
+    'cleanup completion removes only its dialog when another route covers it',
+    (tester) async {
+      connections.values['dropbox'] = _connection('dropbox');
+      connections.clearGate = Completer<void>();
+      await mount(tester);
+      await tester.pumpAndSettle();
+      await menu(tester, 'dropbox', 'Clear synced data');
+      await tester.tap(find.text('Send code'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+      await tester.pump();
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Text('Another screen')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      connections.clearGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Another screen'), findsOneWidget);
+      expect(find.byType(AlertDialog, skipOffstage: false), findsNothing);
+      navigator.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(StorageSyncPage), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final (busy, failure) in [
+    (false, SyncProviderFailureKind.unavailable),
+    (true, SyncProviderFailureKind.unavailable),
+    (false, SyncProviderFailureKind.rateLimited),
+  ]) {
+    testWidgets('details prioritizes cleanup (busy=$busy, failure=$failure)', (
+      tester,
+    ) async {
+      connections.values['dropbox'] = _connection(
+        'dropbox',
+        enabled: false,
+        state: 'clearing',
+      );
+      connections.failures['dropbox'] = failure;
+      (service.session!.scheduler as _Scheduler).progress['dropbox:1'] =
+          SyncConnectionProgress(
+            pendingLocalChanges: true,
+            retryAt: DateTime.now().add(const Duration(minutes: 1)),
+          );
+      if (busy) {
+        connections.states['dropbox'] = StorageConnectionAction.clearing;
+      }
+      await mount(tester);
+      await tester.pumpAndSettle();
+      await menu(tester, 'dropbox', 'Sync details');
+      final dialog = find.byType(AlertDialog);
+      expect(
+        find.descendant(
+          of: dialog,
+          matching: find.textContaining('Could not reach'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: dialog,
+          matching: find.textContaining(
+            busy
+                ? 'Clearing synced data'
+                : failure == SyncProviderFailureKind.rateLimited
+                ? 'Please wait a few minutes'
+                : 'Clearing did not finish',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Sync will retry shortly.'), findsNothing);
+      expect(
+        find.textContaining('Sync will retry automatically'),
+        findsNothing,
+      );
+      if (!busy) {
+        await tester.tap(find.text('Retry'));
+        await tester.pumpAndSettle();
+        expect(find.text('Send code'), findsOneWidget);
+        await tester.tap(find.text('Cancel'));
+      } else {
+        await tester.tap(find.text('Close'));
+      }
+      await tester.pumpAndSettle();
+    });
+  }
 
   for (final scale in [1.0, 1.8]) {
     testWidgets('clear-code dialog fits with keyboard at text scale $scale', (
@@ -1237,6 +1498,12 @@ class _Connections extends ChangeNotifier
   bool failAuthorization = false;
   final failures = <String, SyncProviderFailureKind>{};
   bool failNextcloud = false;
+  Completer<void>? clearGate;
+  bool failClear = false;
+  bool rejectClearCode = false;
+  bool rateLimitVerification = false;
+  Completer<void>? verificationGate;
+  bool uncertainClearCode = false;
   NextcloudLoginFlow Function(Uri)? loginFactory;
   @override
   NextcloudLoginFlow createNextcloudLogin(Uri server) => loginFactory!(server);
@@ -1288,11 +1555,22 @@ class _Connections extends ChangeNotifier
     String provider,
     String requestId,
     String code,
-    Future<void> Function() drain,
-  ) async {
+    Future<void> Function() drain, {
+    void Function(StorageClearStage stage)? onProgress,
+  }) async {
     expect(requestId, 'request');
     expect(code, '123456');
     calls.add('clear:$provider');
+    onProgress?.call(StorageClearStage.verifying);
+    await verificationGate?.future;
+    if (rateLimitVerification) {
+      throw const SyncProviderFailure(SyncProviderFailureKind.rateLimited);
+    }
+    if (rejectClearCode) throw StateError('Code rejected');
+    if (uncertainClearCode) throw const StorageClearNotConfirmed();
+    onProgress?.call(StorageClearStage.deleting);
+    await clearGate?.future;
+    if (failClear) throw StateError('Cleanup failed');
   }
 
   @override

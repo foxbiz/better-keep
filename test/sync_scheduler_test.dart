@@ -11,6 +11,39 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
+    'connection drain waits for retired work but not another provider',
+    (tester) async {
+      final gates = {
+        'dropbox:1': Completer<void>(),
+        'drive:1': Completer<void>(),
+      };
+      final scheduler = SyncScheduler(
+        isCurrent: () => true,
+        sync: (adapter) => gates[adapter.connectionId]!.future,
+      );
+      addTearDown(scheduler.dispose);
+      final drive = _Provider('drive:1');
+      scheduler.setAdapters([_Provider('dropbox:1'), drive]);
+      await tester.pump();
+      scheduler.setAdapters([drive]);
+      var drained = false, allDrained = false;
+      final drain = scheduler
+          .waitForIdle(connectionId: 'dropbox:1')
+          .then((_) => drained = true);
+      final all = scheduler.waitForIdle().then((_) => allDrained = true);
+      await tester.pump();
+      expect(drained, false);
+      gates['dropbox:1']!.complete();
+      await tester.pump();
+      expect(drained, true);
+      expect(allDrained, false);
+      gates['drive:1']!.complete();
+      await tester.pump();
+      await Future.wait([drain, all]);
+    },
+  );
+
+  testWidgets(
     'blocked-only manual work clears intent without enabling later edits',
     (tester) async {
       var uploads = 0, pendingIntent = false;

@@ -3806,7 +3806,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get externalSyncClearMessage =>
-      'Delete synced copies and turn sync off. Local notes stay; provider-only data will be lost.';
+      'Delete synced copies from this provider and pause its sync. Local notes stay; provider-only data will be lost. Other providers are not affected.';
 
   @override
   String get externalSyncClearing => 'Clearing synced data…';
@@ -3816,14 +3816,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get externalSyncClearDone =>
-      'Synced data cleared. Sync is off. Local notes were kept. Your provider may retain deleted files in its trash.';
+      'Synced copies cleared from this provider. Its sync is paused. Local notes were kept. Deleted files may remain in the provider’s trash.';
 
   @override
   String get externalSyncClearCodeSent => 'Enter the code sent to your email.';
 
   @override
   String get externalSyncClearCodeError =>
-      'Could not clear synced data. Check the code and your connection, or request a new code. If clearing started, sync stays off until it finishes.';
+      'Could not verify the code. Check the code and your connection, or request a new code.';
 
   @override
   String get externalSyncClearSendError =>
@@ -3963,4 +3963,29 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncNoteOpenFailed =>
       'This note couldn\'t be opened. Try again, or open it on another device.';
+
+  @override
+  String get externalSyncClearRetryError =>
+      'Clearing did not finish. Retry to continue. Sync for this provider stays paused.';
+
+  @override
+  String get externalSyncClearVerifying => 'Verifying code…';
+
+  @override
+  String get externalSyncClearWaiting => 'Stopping sync for this provider…';
+
+  @override
+  String get externalSyncClearFinishing => 'Finishing cleanup…';
+
+  @override
+  String get externalSyncClearWorkingHint =>
+      'Large libraries may take a few minutes. You can close this dialog and keep using Better Keep. Keep the app open until cleanup finishes.';
+
+  @override
+  String get externalSyncClearUnconfirmed =>
+      'We couldn\'t confirm whether clearing started. Request a new code to try again.';
+
+  @override
+  String get externalSyncClearRateLimited =>
+      'Please wait a few minutes, then try clearing again.';
 }

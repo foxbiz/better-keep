@@ -3790,7 +3790,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get externalSyncClearMessage =>
-      'Eşitlenen kopyaları silin ve eşitlemeyi kapatın. Yerel notlar kalır; yalnızca sağlayıcıda bulunan veriler kaybolur.';
+      'Bu sağlayıcıdaki eşitlenmiş kopyaları silin ve eşitlemesini duraklatın. Yerel notlar kalır; yalnızca sağlayıcıda bulunan veriler kaybolur. Diğer sağlayıcılar etkilenmez.';
 
   @override
   String get externalSyncClearing => 'Eşitlenen veriler siliniyor…';
@@ -3801,7 +3801,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get externalSyncClearDone =>
-      'Eşitlenen veriler silindi. Eşitleme kapalı. Yerel notlar korundu. Sağlayıcınız silinen dosyaları çöp kutusunda tutabilir.';
+      'Bu sağlayıcıdaki eşitlenmiş kopyalar temizlendi. Eşitlemesi duraklatıldı. Yerel notlar korundu. Silinen dosyalar sağlayıcının çöp kutusunda kalabilir.';
 
   @override
   String get externalSyncClearCodeSent =>
@@ -3809,7 +3809,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get externalSyncClearCodeError =>
-      'Eşitlenen veriler silinemedi. Kodu ve bağlantınızı kontrol edin veya yeni bir kod isteyin. Silme işlemi başladıysa tamamlanana kadar eşitleme kapalı kalır.';
+      'Kod doğrulanamadı. Kodu ve bağlantınızı kontrol edin veya yeni bir kod isteyin.';
 
   @override
   String get externalSyncClearSendError =>
@@ -3950,4 +3950,30 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get syncNoteOpenFailed =>
       'Bu not açılamadı. Yeniden deneyin veya başka bir cihazda açın.';
+
+  @override
+  String get externalSyncClearRetryError =>
+      'Temizleme tamamlanmadı. Devam etmek için yeniden deneyin. Bu sağlayıcının eşitlemesi duraklatılmış olarak kalır.';
+
+  @override
+  String get externalSyncClearVerifying => 'Kod doğrulanıyor…';
+
+  @override
+  String get externalSyncClearWaiting =>
+      'Bu sağlayıcının eşitlemesi durduruluyor…';
+
+  @override
+  String get externalSyncClearFinishing => 'Temizleme tamamlanıyor…';
+
+  @override
+  String get externalSyncClearWorkingHint =>
+      'Büyük kitaplıklar birkaç dakika sürebilir. Bu pencereyi kapatıp Better Keep\'i kullanmaya devam edebilirsiniz. Temizleme bitene kadar uygulamayı açık tutun.';
+
+  @override
+  String get externalSyncClearUnconfirmed =>
+      'Temizlemenin başlayıp başlamadığını doğrulayamadık. Yeniden denemek için yeni bir kod isteyin.';
+
+  @override
+  String get externalSyncClearRateLimited =>
+      'Birkaç dakika bekleyip temizlemeyi yeniden deneyin.';
 }

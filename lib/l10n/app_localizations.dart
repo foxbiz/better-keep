@@ -6645,7 +6645,7 @@ abstract class AppLocalizations {
   /// No description provided for @externalSyncClearMessage.
   ///
   /// In en, this message translates to:
-  /// **'Delete synced copies and turn sync off. Local notes stay; provider-only data will be lost.'**
+  /// **'Delete synced copies from this provider and pause its sync. Local notes stay; provider-only data will be lost. Other providers are not affected.'**
   String get externalSyncClearMessage;
 
   /// No description provided for @externalSyncClearing.
@@ -6663,7 +6663,7 @@ abstract class AppLocalizations {
   /// No description provided for @externalSyncClearDone.
   ///
   /// In en, this message translates to:
-  /// **'Synced data cleared. Sync is off. Local notes were kept. Your provider may retain deleted files in its trash.'**
+  /// **'Synced copies cleared from this provider. Its sync is paused. Local notes were kept. Deleted files may remain in the provider’s trash.'**
   String get externalSyncClearDone;
 
   /// No description provided for @externalSyncClearCodeSent.
@@ -6675,7 +6675,7 @@ abstract class AppLocalizations {
   /// No description provided for @externalSyncClearCodeError.
   ///
   /// In en, this message translates to:
-  /// **'Could not clear synced data. Check the code and your connection, or request a new code. If clearing started, sync stays off until it finishes.'**
+  /// **'Could not verify the code. Check the code and your connection, or request a new code.'**
   String get externalSyncClearCodeError;
 
   /// No description provided for @externalSyncClearSendError.
@@ -6917,6 +6917,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This note couldn\'t be opened. Try again, or open it on another device.'**
   String get syncNoteOpenFailed;
+
+  /// No description provided for @externalSyncClearRetryError.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing did not finish. Retry to continue. Sync for this provider stays paused.'**
+  String get externalSyncClearRetryError;
+
+  /// No description provided for @externalSyncClearVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying code…'**
+  String get externalSyncClearVerifying;
+
+  /// No description provided for @externalSyncClearWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopping sync for this provider…'**
+  String get externalSyncClearWaiting;
+
+  /// No description provided for @externalSyncClearFinishing.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing cleanup…'**
+  String get externalSyncClearFinishing;
+
+  /// No description provided for @externalSyncClearWorkingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Large libraries may take a few minutes. You can close this dialog and keep using Better Keep. Keep the app open until cleanup finishes.'**
+  String get externalSyncClearWorkingHint;
+
+  /// No description provided for @externalSyncClearUnconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t confirm whether clearing started. Request a new code to try again.'**
+  String get externalSyncClearUnconfirmed;
+
+  /// No description provided for @externalSyncClearRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait a few minutes, then try clearing again.'**
+  String get externalSyncClearRateLimited;
 }
 
 class _AppLocalizationsDelegate

@@ -8,7 +8,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
+import '../../utils/logger.dart';
 
 import 'provider_http.dart';
 import 'sync_cipher.dart';
@@ -34,6 +34,30 @@ abstract interface class SmallSyncFileReader {
 abstract interface class BatchSyncFileWriter {
   /// Values indicate creation (true) or an existing file (false).
   Future<Map<String, bool>> createBatch(Map<String, Uint8List> files);
+}
+
+/// Version receipts from successful creates, never from a later metadata probe.
+/// Optional: servers without trustworthy write receipts retain scan/read fallback.
+mixin SyncFileWriteReceipts {
+  final _createdVersions = <String, List<String>>{};
+
+  void clearWriteReceipt(String name) => _createdVersions.remove(name);
+
+  void recordWriteReceipt(String name, String? version) {
+    if (!RegExp(r'^c-[0-9a-f]{64}\.json$').hasMatch(name) ||
+        version == null ||
+        version.isEmpty ||
+        version.length > 1024) {
+      return;
+    }
+    // Only commit receipts survive; failed/partial batches cannot grow this map.
+    if (_createdVersions.length >= 128) {
+      _createdVersions.remove(_createdVersions.keys.first);
+    }
+    _createdVersions[name] = [version];
+  }
+
+  List<String>? takeWriteReceipt(String name) => _createdVersions.remove(name);
 }
 
 class SmallSyncReadLimitExceeded implements Exception {
@@ -118,9 +142,13 @@ class FileSyncAdapter
   Set<String>? _unseenIndexNames;
   String? _scanCursor;
   bool _scanComplete = false;
+  Future<void>? _indexLoading;
+  Stopwatch? _scanClock;
+  int _cacheHits = 0, _commitReads = 0;
   final DateTime Function() _now;
   DateTime? _indexRetryAfter;
   final _reportedIndexFailures = <String>{};
+  final _lastDiagnostic = <String, DateTime>{};
   final Future<SyncRevision> Function(
     SyncRevision revision,
     Future<Uint8List> Function(String) readObject,
@@ -142,6 +170,24 @@ class FileSyncAdapter
     String? cursor, {
     void Function(int count)? onCheckedNotes,
   }) async {
+    try {
+      return await _changes(cursor, onCheckedNotes: onCheckedNotes);
+    } catch (_) {
+      // A resumed attempt excludes the failed page and time spent paused.
+      _scanClock = null;
+      _cacheHits = _commitReads = 0;
+      rethrow;
+    }
+  }
+
+  Future<SyncChangePage> _changes(
+    String? cursor, {
+    void Function(int count)? onCheckedNotes,
+  }) async {
+    if (cursor == null || _scanClock == null) {
+      _scanClock = Stopwatch()..start();
+      _cacheHits = _commitReads = 0;
+    }
     if (cursor == null) {
       _unseenIndexNames = _index?.names;
       _scanComplete = false;
@@ -161,34 +207,8 @@ class FileSyncAdapter
     final reloadIndex = cursor == null && _index?.dirty == false;
     if ((!_indexAttempted || reloadIndex) &&
         (cursor == null || names.isNotEmpty)) {
-      _indexAttempted = true;
-      // Idle incremental checks need no cache request. Once commits change,
-      // merge them into the shared cache so fresh devices benefit after restarts.
-      if (transport is SyncIndexFileTransport) {
-        var index = SyncMetadataIndex(cipher, connectionId);
-        _canWriteIndex = false;
-        try {
-          _canWriteIndex = await index.loadChain(
-            (name) =>
-                (transport as SyncIndexFileTransport).readIndex(name: name),
-            readValidated: transport is SyncValidatedIndexFileTransport
-                ? (transport as SyncValidatedIndexFileTransport)
-                      .readValidatedIndex
-                : null,
-          );
-        } catch (error) {
-          _reportIndexFailure('read', error);
-        }
-        if (!_canWriteIndex && reloadIndex) {
-          // The failed remote load never exposed partial data. Keep the last
-          // authenticated metadata, still checked against current inventory and
-          // versions, but require all pages to be rewritten after a full scan.
-          index = _index!;
-          index.invalidateRemotePages();
-        }
-        _index = index;
-        if (cursor == null) _unseenIndexNames = index.names;
-      }
+      await _loadIndex(reloadIndex: reloadIndex);
+      if (cursor == null) _unseenIndexNames = _index?.names;
     }
     var checkedNotes = 0;
     final revisions = List<SyncRevision?>.filled(names.length, null);
@@ -199,7 +219,13 @@ class FileSyncAdapter
       final versions = page.commitVersions[name];
       final cached = _index?.lookup(name, versions);
       var cacheable = true;
-      final revision = cached != null && commitName(cached) == name
+      final hit = cached != null && commitName(cached) == name;
+      if (hit) {
+        _cacheHits++;
+      } else {
+        _commitReads++;
+      }
+      final revision = hit
           ? cached
           : await _readCommit(name, onMultipleCopies: () => cacheable = false);
       if (cacheable) {
@@ -223,11 +249,63 @@ class FileSyncAdapter
       _scanComplete = true;
       _canWriteIndex = true;
     }
+    if (!page.hasMore) {
+      if (_cacheHits + _commitReads > 0) {
+        _logDiagnostic(
+          'scan',
+          '[EXTERNAL_SYNC] Metadata check: '
+              'cached=$_cacheHits fetched=$_commitReads '
+              'elapsedMs=${_scanClock?.elapsedMilliseconds ?? 0}',
+        );
+      }
+      _scanClock = null;
+    }
     return SyncChangePage(
       revisions: revisions.cast<SyncRevision>(),
       cursor: page.cursor,
       hasMore: page.hasMore,
     );
+  }
+
+  Future<void> _loadIndex({bool reloadIndex = false, Duration? timeout}) =>
+      _indexLoading ??= _readIndex(reloadIndex: reloadIndex, timeout: timeout)
+          .whenComplete(() {
+            _indexLoading = null;
+          });
+
+  Future<void> _readIndex({
+    required bool reloadIndex,
+    Duration? timeout,
+  }) async {
+    _indexAttempted = true;
+    if (transport is SyncIndexFileTransport) {
+      var index = SyncMetadataIndex(cipher, connectionId);
+      _canWriteIndex = false;
+      try {
+        Future<bool> load() => index.loadChain(
+          (name) => (transport as SyncIndexFileTransport).readIndex(name: name),
+          readValidated: transport is SyncValidatedIndexFileTransport
+              ? (transport as SyncValidatedIndexFileTransport)
+                    .readValidatedIndex
+              : null,
+        );
+        _canWriteIndex = timeout == null
+            ? await load()
+            : await ProviderHttp.withOperationTimeout(timeout, load);
+      } catch (error) {
+        // A timed-out reader may finish later; never expose its mutable cache.
+        index = SyncMetadataIndex(cipher, connectionId);
+        _reportIndexFailure('read', error);
+      }
+      if (!_canWriteIndex && reloadIndex) {
+        // The failed remote load never exposed partial data. Keep the last
+        // authenticated metadata, still checked against current inventory and
+        // versions, but require all pages to be rewritten after a full scan.
+        index = _index!;
+        index.invalidateRemotePages();
+      }
+      _index = index;
+    }
   }
 
   @override
@@ -244,6 +322,7 @@ class FileSyncAdapter
         _unseenIndexNames = null;
         _scanComplete = false;
       }
+      final dirty = index.dirty;
       final clock = Stopwatch()..start();
       await index.upload((name, bytes) async {
         final remaining = SyncMetadataIndex.writeTimeout - clock.elapsed;
@@ -259,6 +338,13 @@ class FileSyncAdapter
         );
       });
       _indexRetryAfter = null;
+      if (dirty) {
+        _logDiagnostic(
+          'write',
+          '[EXTERNAL_SYNC] Metadata index saved: '
+              'entries=${index.names.length} elapsedMs=${clock.elapsedMilliseconds}',
+        );
+      }
     } catch (error) {
       // Cache failures, including programming errors, cannot fail durable sync.
       // Report the type once per operation without payloads or credentials.
@@ -267,10 +353,23 @@ class FileSyncAdapter
     }
   }
 
+  void _logDiagnostic(String category, String message) {
+    final now = _now();
+    final previous = _lastDiagnostic[category];
+    if (previous != null &&
+        now.difference(previous) < const Duration(minutes: 1)) {
+      return;
+    }
+    _lastDiagnostic[category] = now;
+    unawaited(AppLogger.log(message));
+  }
+
   void _reportIndexFailure(String operation, Object error) {
-    if (kDebugMode && _reportedIndexFailures.add(operation)) {
-      debugPrint(
-        'Sync metadata index $operation skipped (${error.runtimeType})',
+    if (_reportedIndexFailures.add(operation)) {
+      unawaited(
+        AppLogger.log(
+          '[EXTERNAL_SYNC] Metadata index $operation skipped (${error.runtimeType})',
+        ),
       );
     }
   }
@@ -331,6 +430,34 @@ class FileSyncAdapter
       if (!existing.sameContent(revision)) {
         throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
       }
+    } else {
+      await _rememberPublished(revision);
+    }
+  }
+
+  Future<void> _rememberPublished(SyncRevision revision) async {
+    try {
+      final files = transport;
+      if (files is! SyncFileWriteReceipts) return;
+      final name = commitName(revision);
+      final versions = (files as SyncFileWriteReceipts).takeWriteReceipt(name);
+      if (versions == null) return;
+      // Old commits need the normal payload-based fingerprint migration before
+      // they can enter the cache, even if this upload returned a fresh version.
+      if (normalizeLegacyRevision != null &&
+          _needsLegacyFingerprint(revision)) {
+        return;
+      }
+      // A restarted session may have an empty incremental listing before its
+      // first upload. Load the existing cache lazily, never on idle polling.
+      if (!_indexAttempted || _indexLoading != null) {
+        await _loadIndex(timeout: SyncMetadataIndex.writeTimeout);
+      }
+      _index?.remember(name, versions, revision);
+      _unseenIndexNames?.remove(name);
+    } catch (error) {
+      // Optional cache work must never fail an acknowledged upload.
+      _reportIndexFailure('seed', error);
     }
   }
 
@@ -360,6 +487,9 @@ class FileSyncAdapter
       if (files.isEmpty) return;
       final created = await _createBatch(files);
       for (final revision in pending) {
+        if (created[commitName(revision)]!) {
+          await _rememberPublished(revision);
+        }
         if (!created[commitName(revision)]! &&
             !(await _readCommit(commitName(revision))).sameContent(revision)) {
           throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
@@ -420,6 +550,11 @@ class FileSyncAdapter
     return copies;
   }
 
+  static bool _needsLegacyFingerprint(SyncRevision revision) =>
+      !revision.deleted &&
+      revision.contentFingerprint != null &&
+      revision.legacyContentFingerprints.isEmpty;
+
   Future<SyncRevision> _readCommit(
     String name, {
     void Function()? onMultipleCopies,
@@ -440,10 +575,7 @@ class FileSyncAdapter
         throw const SyncProviderFailure(SyncProviderFailureKind.corruptData);
       }
       final normalize = normalizeLegacyRevision;
-      if (normalize != null &&
-          !revision.deleted &&
-          revision.contentFingerprint != null &&
-          revision.legacyContentFingerprints.isEmpty) {
+      if (normalize != null && _needsLegacyFingerprint(revision)) {
         try {
           // Legacy normalization can fetch a large payload. Only metadata reads
           // run concurrently; keep full-payload buffering bounded to one here.

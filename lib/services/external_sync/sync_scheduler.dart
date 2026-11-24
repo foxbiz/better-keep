@@ -73,7 +73,7 @@ class SyncScheduler extends ChangeNotifier {
   final DateTime Function() now;
   final Duration saveDebounce;
   final _entries = <String, _ScheduledConnection>{};
-  final _tasks = <Future<void>>{};
+  final _tasks = <Future<void>, String>{};
   final _serial = AsyncKeyedSerializer<String>();
   Timer? _save;
   bool _automatic;
@@ -261,7 +261,7 @@ class SyncScheduler extends ChangeNotifier {
           }
         });
     entry.running = task;
-    _tasks.add(task);
+    _tasks[task] = entry.adapter.connectionId;
     return task;
   }
 
@@ -457,9 +457,14 @@ class SyncScheduler extends ChangeNotifier {
     });
   }
 
-  Future<void> waitForIdle() async {
-    while (_tasks.isNotEmpty) {
-      await Future.wait(_tasks.toList());
+  Future<void> waitForIdle({String? connectionId}) async {
+    while (true) {
+      final pending = _tasks.entries
+          .where((entry) => connectionId == null || entry.value == connectionId)
+          .map((entry) => entry.key)
+          .toList();
+      if (pending.isEmpty) return;
+      await Future.wait(pending);
     }
   }
 

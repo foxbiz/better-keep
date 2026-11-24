@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show listEquals;
 
+import '../bounded_async.dart';
 import 'file_sync_adapter.dart';
 import 'provider_http.dart';
 import 'sync_provider_adapter.dart';
@@ -16,6 +17,7 @@ import 'sync_provider_adapter.dart';
 /// Flat, app-private storage avoids folder creation races. Drive allows duplicate
 /// names: all matching immutable copies are returned for protocol validation.
 class GoogleDriveSyncTransport
+    with SyncFileWriteReceipts
     implements
         SyncFileTransport,
         SyncFileCopies,
@@ -78,34 +80,30 @@ class GoogleDriveSyncTransport
         for (var indexBatch = 0; indexBatch < 10000; indexBatch++) {
           final ids = await _indexIds(name: null);
           if (ids.isEmpty) return;
-          for (final id in ids) {
-            final response = await _request('DELETE', _fileUri(id));
-            if (response.statusCode != 204 && response.statusCode != 404) {
-              _fail(response);
-            }
-          }
+          await _deleteFiles(ids);
         }
         throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
       }
+      // Validate the entire batch before dispatching any deletion.
+      final ids = <String>[];
       for (final file in files) {
         if (_logicalName(file) == null) {
           throw const FormatException('Foreign file in library cleanup');
         }
-        final id = _string(file, 'id');
-        final response = await _request(
-          'DELETE',
-          Uri.https(
-            'www.googleapis.com',
-            '/',
-          ).replace(pathSegments: ['drive', 'v3', 'files', id]),
-        );
-        if (response.statusCode != 204 && response.statusCode != 404) {
-          _fail(response);
-        }
+        ids.add(_string(file, 'id'));
       }
+      await _deleteFiles(ids);
     }
     throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
   }
+
+  Future<void> _deleteFiles(List<String> ids) =>
+      forEachBounded(ids, (id) async {
+        final response = await _request('DELETE', _fileUri(id));
+        if (response.statusCode != 204 && response.statusCode != 404) {
+          _fail(response);
+        }
+      }, concurrency: 4);
 
   String _remoteName(String name) {
     if (!RegExp(r'^(o-[0-9a-f]{64}|c-[0-9a-f]{64}\.json)$').hasMatch(name)) {
@@ -497,6 +495,7 @@ class GoogleDriveSyncTransport
 
   @override
   Future<bool> create(String name, Uint8List bytes) async {
+    clearWriteReceipt(name);
     if (bytes.isEmpty) {
       throw ArgumentError('Encrypted sync objects cannot be empty');
     }
@@ -538,20 +537,20 @@ class GoogleDriveSyncTransport
         'POST',
         Uri.https('www.googleapis.com', '/upload/drive/v3/files', {
           'uploadType': 'multipart',
-          'fields': 'id',
+          'fields': 'id,version',
         }),
         headers: {'Content-Type': 'multipart/related; boundary=$boundary'},
         body: body.takeBytes(),
         requestTimeout: requestTimeout,
       );
       if (result.statusCode != 200 && result.statusCode != 201) _fail(result);
-      return _string(_json(result), 'id');
+      return _recordUpload(metadata, _json(result));
     }
     final start = await _request(
       'POST',
       Uri.https('www.googleapis.com', '/upload/drive/v3/files', {
         'uploadType': 'resumable',
-        'fields': 'id',
+        'fields': 'id,version',
       }),
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
@@ -590,7 +589,7 @@ class GoogleDriveSyncTransport
       );
       if (end == bytes.length &&
           (result.statusCode == 200 || result.statusCode == 201)) {
-        return _string(_json(result), 'id');
+        return _recordUpload(metadata, _json(result));
       }
       if (result.statusCode == 308) {
         final range = result.headers['range'];
@@ -614,6 +613,19 @@ class GoogleDriveSyncTransport
       _fail(result);
     }
     throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
+  }
+
+  String _recordUpload(
+    Map<String, Object?> metadata,
+    Map<String, dynamic> result,
+  ) {
+    final id = _string(result, 'id');
+    final properties = metadata['appProperties'];
+    final name = properties is Map ? properties['logical'] : null;
+    if (name is String && result['version'] is String) {
+      recordWriteReceipt(name, jsonEncode([id, result['version']]));
+    }
+    return id;
   }
 
   static List<Map<String, dynamic>> _files(Object? value) {

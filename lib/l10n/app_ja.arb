@@ -1104,10 +1104,10 @@
   "externalSyncCapacityLoading": "ストレージを確認中…",
   "externalSyncCapacityUnavailable": "ストレージ情報を取得できません",
   "externalSyncClear": "同期済みデータを削除",
-  "externalSyncClearCodeError": "同期済みデータを削除できませんでした。コードと接続を確認するか、新しいコードをリクエストしてください。削除が開始されている場合、完了するまで同期はオフのままです。",
+  "externalSyncClearCodeError": "コードを確認できませんでした。コードと接続を確認するか、新しいコードをリクエストしてください。",
   "externalSyncClearCodeSent": "メールで届いたコードを入力してください。",
-  "externalSyncClearDone": "同期済みデータを削除しました。同期はオフです。端末内のノートは保持されています。削除したファイルがプロバイダーのゴミ箱に残る場合があります。",
-  "externalSyncClearMessage": "同期済みのコピーを削除して同期をオフにします。端末内のノートは保持されますが、プロバイダーにしかないデータは失われます。",
+  "externalSyncClearDone": "このプロバイダーの同期済みコピーを削除しました。同期は一時停止中です。端末内のノートは保持されました。削除したファイルはプロバイダーのゴミ箱に残る場合があります。",
+  "externalSyncClearMessage": "このプロバイダーの同期済みコピーを削除し、同期を一時停止します。端末内のノートは残りますが、プロバイダーにしかないデータは失われます。他のプロバイダーには影響しません。",
   "externalSyncClearPending": "削除が未完了です · タップして再試行",
   "externalSyncClearSendCode": "コードを送信",
   "externalSyncClearSendError": "コードを送信できませんでした。アカウントのメールアドレスが確認済みであることを確認し、1分待ってから再試行してください。",
@@ -1149,5 +1149,12 @@
   "syncNotesNeedUnlock": "一部のノートは同期する前にロック解除が必要です。",
   "syncRetryScheduled": "まもなく同期を再試行します。",
   "syncRetryNow": "今すぐ再試行",
-  "syncNoteOpenFailed": "このノートを開けませんでした。もう一度試すか、別の端末で開いてください。"
+  "syncNoteOpenFailed": "このノートを開けませんでした。もう一度試すか、別の端末で開いてください。",
+  "externalSyncClearRetryError": "削除が完了しませんでした。再試行して続けてください。このプロバイダーの同期は一時停止したままです。",
+  "externalSyncClearVerifying": "コードを確認中…",
+  "externalSyncClearWaiting": "このプロバイダーの同期を停止中…",
+  "externalSyncClearFinishing": "削除を完了しています…",
+  "externalSyncClearWorkingHint": "大きなライブラリでは数分かかることがあります。この画面を閉じてBetter Keepを使い続けられます。削除が終わるまでアプリを開いたままにしてください。",
+  "externalSyncClearUnconfirmed": "削除が開始されたか確認できませんでした。新しいコードを取得して再試行してください。",
+  "externalSyncClearRateLimited": "数分待ってから、削除を再試行してください。"
 }

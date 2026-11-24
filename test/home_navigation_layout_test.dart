@@ -86,12 +86,12 @@ void main() {
       matching: find.byType(Scrollable),
     );
     await tester.scrollUntilVisible(
-      find.text('Upgrade to Pro'),
+      find.text('Upgrade'),
       140,
       scrollable: menu,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Upgrade to Pro').hitTestable(), findsOneWidget);
+    expect(find.text('Upgrade').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.scrollUntilVisible(
       find.text('Archive'),

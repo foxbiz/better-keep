@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../components/otp_input_field.dart';
 import '../../services/external_sync/library_sync_session.dart';
+import '../../services/external_sync/storage_connection_controller.dart';
+import '../../services/external_sync/sync_provider_adapter.dart';
 import '../../utils/l10n_helper.dart';
 
 /// No deletion runs until the backend consumes a provider/account-bound OTP.
@@ -23,6 +25,10 @@ class _StorageClearDialogState extends State<StorageClearDialog> {
   final _code = TextEditingController();
   String? _requestId, _error;
   bool _busy = false;
+  bool _dismissed = false;
+  bool get _canDismiss =>
+      !_busy || (_stage != null && _stage != StorageClearStage.verifying);
+  StorageClearStage? _stage;
   Timer? _resendTimer;
   int _resendSeconds = 0;
   @override
@@ -72,30 +78,68 @@ class _StorageClearDialogState extends State<StorageClearDialog> {
       _busy = true;
       _error = null;
     });
+    final session = widget.session;
+    final provider = widget.provider;
+    final initialConnection = session.connections.connections[provider];
+    if (initialConnection == null) {
+      setState(() {
+        _busy = false;
+        _error = context.l10n.externalSyncUnavailable;
+      });
+      return;
+    }
+    final connectionId = initialConnection.replicaId;
+    final route = ModalRoute.of(context);
+    final navigator = Navigator.of(context);
     try {
-      await widget.session.connections.clearSyncedData(
-        widget.provider,
+      await session.connections.clearSyncedData(
+        provider,
         _requestId!,
         _code.text,
         () async {
-          await widget.session.scheduler.waitForIdle();
-          await widget.session.engine.waitForIdle();
+          await session.scheduler.waitForIdle(connectionId: connectionId);
+          await session.engine.waitForIdle(connectionId: connectionId);
+        },
+        onProgress: (stage) {
+          if (mounted && !_dismissed) setState(() => _stage = stage);
         },
       );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (_) {
-      if (mounted) {
+      if (mounted && !_dismissed && route?.isActive == true) {
+        if (route!.isCurrent) {
+          navigator.pop(true);
+        } else {
+          navigator.removeRoute(route, true);
+        }
+      }
+    } catch (error) {
+      if (mounted && !_dismissed) {
         setState(() {
-          _error = context.l10n.externalSyncClearCodeError;
-          if (widget.session.connections.connections[widget.provider]?.state ==
-              'clearing') {
-            _requestId = null;
-          }
+          final current = session.connections.connections[provider];
+          final started =
+              (_stage != null && _stage != StorageClearStage.verifying) ||
+              (current?.state == 'clearing' &&
+                  current?.clearOperationId !=
+                      initialConnection.clearOperationId);
+          final uncertain = error is StorageClearNotConfirmed;
+          _error = uncertain
+              ? context.l10n.externalSyncClearUnconfirmed
+              : error is SyncProviderFailure &&
+                    error.kind == SyncProviderFailureKind.rateLimited
+              ? context.l10n.externalSyncClearRateLimited
+              : started
+              ? context.l10n.externalSyncClearRetryError
+              : context.l10n.externalSyncClearCodeError;
+          if (started || uncertain) _requestId = null;
           _code.clear();
         });
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _stage = null;
+        });
+      }
     }
   }
 
@@ -104,7 +148,10 @@ class _StorageClearDialogState extends State<StorageClearDialog> {
     final l10n = context.l10n;
     final verifying = _requestId != null;
     return PopScope(
-      canPop: !_busy,
+      canPop: _canDismiss,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _dismissed = true;
+      },
       child: AlertDialog(
         scrollable: true,
         insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -112,7 +159,7 @@ class _StorageClearDialogState extends State<StorageClearDialog> {
         contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
         actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
         title: Text(
-          verifying
+          verifying && _stage == null
               ? l10n.externalSyncClearVerifyTitle
               : l10n.externalSyncClear,
           style: Theme.of(context).textTheme.titleLarge,
@@ -123,12 +170,26 @@ class _StorageClearDialogState extends State<StorageClearDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                verifying
-                    ? l10n.externalSyncClearCodeSent
-                    : l10n.externalSyncClearMessage,
-              ),
-              if (verifying) ...[
+              if (_stage != null) ...[
+                Text(switch (_stage!) {
+                  StorageClearStage.verifying =>
+                    l10n.externalSyncClearVerifying,
+                  StorageClearStage.waiting => l10n.externalSyncClearWaiting,
+                  StorageClearStage.deleting => l10n.externalSyncClearing,
+                  StorageClearStage.finishing =>
+                    l10n.externalSyncClearFinishing,
+                }),
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+                const SizedBox(height: 12),
+                if (_canDismiss) Text(l10n.externalSyncClearWorkingHint),
+              ] else
+                Text(
+                  verifying
+                      ? l10n.externalSyncClearCodeSent
+                      : l10n.externalSyncClearMessage,
+                ),
+              if (verifying && _stage == null) ...[
                 const SizedBox(height: 16),
                 OtpInputField(
                   controller: _code,
@@ -173,8 +234,16 @@ class _StorageClearDialogState extends State<StorageClearDialog> {
                       vertical: 12,
                     ),
                   ),
-                  onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: Text(l10n.cancel, textAlign: TextAlign.center),
+                  onPressed: !_canDismiss
+                      ? null
+                      : () {
+                          _dismissed = true;
+                          Navigator.pop(context);
+                        },
+                  child: Text(
+                    _busy && _canDismiss ? l10n.close : l10n.cancel,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -206,7 +275,7 @@ class _StorageClearDialogState extends State<StorageClearDialog> {
                             strokeWidth: 2,
                             semanticsLabel: verifying
                                 ? l10n.externalSyncClearing
-                                : l10n.externalSyncClearSendCode,
+                                : l10n.sendingVerificationCode,
                           ),
                         )
                       : Text(

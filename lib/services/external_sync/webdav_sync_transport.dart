@@ -17,6 +17,7 @@ import 'sync_provider_adapter.dart';
 /// WebDAV adapter. ETags detect changed immutable commit files; they are never
 /// used as note timestamps. No Firebase proxy or arbitrary redirect is used.
 class WebDavSyncTransport
+    with SyncFileWriteReceipts
     implements
         SyncFileTransport,
         SmallSyncFileReader,
@@ -538,6 +539,7 @@ class WebDavSyncTransport
 
   @override
   Future<bool> create(String name, Uint8List bytes) async {
+    clearWriteReceipt(name);
     await _initialize();
     final response = await _request(
       'PUT',
@@ -548,7 +550,13 @@ class WebDavSyncTransport
       },
       body: bytes,
     );
-    if (response.statusCode == 201) return true;
+    if (response.statusCode == 201) {
+      final etag = response.headers['etag'];
+      if (etag != null && !etag.startsWith('W/')) {
+        recordWriteReceipt(name, etag);
+      }
+      return true;
+    }
     if (response.statusCode == 412) return false;
     if (response.statusCode == 204) {
       throw const SyncProviderFailure(SyncProviderFailureKind.unsupported);

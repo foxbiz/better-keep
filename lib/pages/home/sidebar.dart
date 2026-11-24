@@ -161,7 +161,7 @@ class _SidebarState extends State<Sidebar> {
                     }
                     return _buildTile(
                       Icons.workspace_premium,
-                      context.l10n.upgradeToPro,
+                      context.l10n.upgrade,
                       () {
                         if (!widget.persistent) Navigator.pop(context);
                         showPaywall(context);
