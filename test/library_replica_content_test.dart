@@ -1,3 +1,4 @@
+import 'support/dropbox_http_fixture.dart';
 import 'support/drive_http_fixture.dart';
 
 import 'package:better_keep/services/cloud_operation.dart';
@@ -50,7 +51,6 @@ import 'package:better_keep/services/external_sync/sync_replica_engine.dart';
 import 'package:better_keep/services/external_sync/sync_replica_store.dart';
 import 'package:better_keep/services/external_sync/sync_revision.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -307,7 +307,10 @@ void main() {
         });
       }
     });
-    final dropbox = _DropboxServer();
+    final dropbox = DropboxHttpFixture(
+      accessToken: 'synthetic-access',
+      pageSize: 1 << 30,
+    );
     final dropboxHttp = MockClient(dropbox.handle);
     addTearDown(dropboxHttp.close);
     final source = FileSyncAdapter(
@@ -521,7 +524,10 @@ void main() {
   });
 
   test('clean login restores the library through saved grants without old files or cursors', () async {
-    final provider = _DropboxServer();
+    final provider = DropboxHttpFixture(
+      accessToken: 'synthetic-access',
+      pageSize: 1 << 30,
+    );
     final provisioning = await SyncCipher.create(
       'synthetic-user',
       Uint8List(32),
@@ -2060,92 +2066,6 @@ class _Device {
     await session.close();
     await db.close();
     await root.delete(recursive: true);
-  }
-}
-
-/// In-memory Dropbox API boundary: production controller, broker, transport,
-/// encryption and library code run above it without real accounts or network.
-class _DropboxServer {
-  final files = <String, Uint8List>{};
-  final sessions = <String, Uint8List>{};
-  int sessionId = 0;
-
-  Future<http.Response> handle(http.Request request) async {
-    expect(request.headers['authorization'], 'Bearer synthetic-access');
-    expect(request.method, 'POST');
-    final args = jsonDecode(
-      request.headers['dropbox-api-arg'] ?? request.body,
-    ) as Map<String, dynamic>;
-    switch (request.url.path) {
-      case '/2/files/create_folder_v2':
-        return http.Response('{}', 200);
-      case '/2/files/list_folder':
-      case '/2/files/list_folder/continue':
-        final offset = args['cursor'] == null
-            ? 0
-            : int.parse(args['cursor'] as String);
-        return http.Response(
-          jsonEncode({
-            'entries': files.keys
-                .skip(offset)
-                .map((path) => {'.tag': 'file', 'name': p.basename(path)})
-                .toList(),
-            'cursor': '${files.length}',
-            'has_more': false,
-          }),
-          200,
-        );
-      case '/2/files/upload_session/start':
-        expect(args['close'], isTrue);
-        final id = 'session-${sessionId++}';
-        sessions[id] = Uint8List.fromList(request.bodyBytes);
-        return http.Response(jsonEncode({'session_id': id}), 200);
-      case '/2/files/upload_session/finish_batch_v2':
-        final results = <Map<String, Object?>>[];
-        for (final entry in args['entries'] as List) {
-          final cursor = entry['cursor'] as Map;
-          final commit = entry['commit'] as Map;
-          final bytes = sessions.remove(cursor['session_id'])!;
-          expect(cursor['offset'], bytes.length);
-          expect(commit['mode'], 'add');
-          expect(commit['strict_conflict'], isTrue);
-          expect(commit['autorename'], isFalse);
-          final path = commit['path'] as String;
-          if (files.containsKey(path)) {
-            results.add({
-              '.tag': 'failure',
-              'failure': {
-                '.tag': 'path',
-                'path': {
-                  '.tag': 'conflict',
-                  'conflict': {'.tag': 'file'},
-                },
-              },
-            });
-          } else {
-            files[path] = bytes;
-            results.add({'.tag': 'success'});
-          }
-        }
-        return http.Response(jsonEncode({'entries': results}), 200);
-      case '/2/files/upload':
-        expect(args['mode'], 'add');
-        expect(args['strict_conflict'], isTrue);
-        final path = args['path'] as String;
-        if (files.containsKey(path)) {
-          return http.Response('{"error_summary":"path/conflict/file"}', 409);
-        }
-        files[path] = Uint8List.fromList(request.bodyBytes);
-        return http.Response('{}', 200);
-      case '/2/files/download':
-        final bytes = files[args['path']];
-        expect(bytes, isNotNull);
-        return http.Response.bytes(bytes!, 200);
-      default:
-        throw StateError(
-          'Unexpected synthetic Dropbox route: ${request.url.path}',
-        );
-    }
   }
 }
 

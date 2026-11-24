@@ -1,8 +1,10 @@
+import '../test/support/dropbox_http_fixture.dart';
 import '../test/support/drive_http_fixture.dart';
 
 import 'package:better_keep/services/external_sync/google_drive_sync_transport.dart';
 
 import 'package:better_keep/services/external_sync/sync_replica_engine.dart';
+import 'package:better_keep/services/external_sync/sync_metadata_index.dart';
 
 import '../test/support/offline_firebase.dart';
 
@@ -81,6 +83,14 @@ import 'package:sqflite/sqflite.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (const bool.fromEnvironment('DRIVE_RESTORE_BENCHMARK')) {
+    _registerDriveRestoreBenchmark();
+    return;
+  }
+  if (const bool.fromEnvironment('DOWNLOAD_RESUME_QA')) {
+    _registerDownloadResumeTest();
+    return;
+  }
   if (const bool.fromEnvironment('UPLOAD_RESUME_QA')) {
     _registerUploadResumeTest();
     return;
@@ -123,7 +133,7 @@ void main() {
         await files.documentDir,
         'sync-restore-qa-${DateTime.now().microsecondsSinceEpoch}',
       );
-      final server = _DropboxBoundary();
+      final server = DropboxHttpFixture();
       final replicas = <_Replica>[];
       addTearDown(() async {
         for (final replica in replicas) {
@@ -186,6 +196,7 @@ void main() {
         );
       }
       final writes = server.uploads;
+      final indexWrites = server.indexWrites;
       server.delay = const Duration(milliseconds: 100);
       final clock = Stopwatch()..start();
       final interrupted = Completer<void>();
@@ -274,6 +285,11 @@ void main() {
         server.uploads,
         writes,
         reason: 'Free initial restore is download-only',
+      );
+      expect(
+        server.indexWrites,
+        indexWrites,
+        reason: 'Download-only also skips cache writes',
       );
       expect(server.maxConcurrentDownloads, inInclusiveRange(8, 16));
       final row = (await b.db.query(
@@ -502,7 +518,7 @@ void main() {
         await files.documentDir,
         'scan-restart-${DateTime.now().microsecondsSinceEpoch}',
       );
-      final server = _DropboxBoundary()..pageSize = 2;
+      final server = DropboxHttpFixture()..pageSize = 2;
       final open = <_Replica>[];
       Future<_Replica> device(String name, {bool restore = false}) async {
         final replica = await _Replica.create(
@@ -669,7 +685,7 @@ void main() {
       final files = await fileSystem();
       final run = DateTime.now().microsecondsSinceEpoch;
       final root = p.join(await files.documentDir, 'sync-qa-$run');
-      final server = _DropboxBoundary();
+      final server = DropboxHttpFixture();
       final replicas = <_Replica>[];
       Future<_Replica> create(String name) async {
         final replica = await _Replica.create(
@@ -879,6 +895,129 @@ void main() {
   );
 }
 
+void _registerDriveRestoreBenchmark() {
+  const count = int.fromEnvironment('DRIVE_RESTORE_NOTES', defaultValue: 1040);
+  testWidgets('Drive restores $count notes with bounded requests', (
+    tester,
+  ) async {
+    initializeDb();
+    final files = await fileSystem();
+    final root = p.join(
+      await files.documentDir,
+      'drive-restore-qa-${DateTime.now().microsecondsSinceEpoch}',
+    );
+    final drive = DriveHttpFixture();
+    final server = DropboxHttpFixture();
+    final replicas = <_Replica>[];
+    addTearDown(() async {
+      for (final replica in replicas) {
+        await replica.session.close();
+        replica.client.close();
+        await replica.db.close();
+        await deleteDatabase(replica.db.path);
+      }
+      await _deleteTestFiles(files, root);
+    });
+    final source = await _Replica.create(
+      files,
+      p.join(root, 'source'),
+      server,
+      drive: drive,
+    );
+    replicas.add(source);
+    await source.db.transaction((txn) async {
+      for (var i = 0; i < count; i++) {
+        await txn.insert('note', {
+          'id': i + 1,
+          'sync_id': 'benchmark-$i',
+          'title': 'QA restore $i',
+          'content': jsonEncode([
+            {'insert': 'Private QA note $i\n'},
+          ]),
+          'created_at': '2030-01-01T00:00:00.000Z',
+          'updated_at': '2030-01-01T00:00:00.000Z',
+          'attachments': '[]',
+        });
+      }
+    });
+    await source.sync();
+    for (final indexed in [false, true]) {
+      final clock = Stopwatch();
+      int? firstNoteMs;
+      final receiver = await _Replica.create(
+        files,
+        p.join(root, 'receiver-$indexed'),
+        server,
+        drive: drive,
+        onApplied: (change) async {
+          if (change.revision.kind == SyncEntityKind.note) {
+            firstNoteMs ??= clock.elapsedMilliseconds;
+          }
+        },
+      );
+      replicas.add(receiver);
+      drive.readLatency = const Duration(milliseconds: 20);
+      drive.requests = drive.mediaReads = drive.lookups = drive.peakReads = 0;
+      clock.start();
+      await receiver.sync();
+      clock.stop();
+      final rows = await receiver.db.query('note', orderBy: 'sync_id');
+      expect(rows, hasLength(count));
+      for (final row in rows) {
+        final i = int.parse((row['sync_id'] as String).split('-').last);
+        expect(row['title'], 'QA restore $i');
+        expect(
+          row['content'],
+          jsonEncode([
+            {'insert': 'Private QA note $i\n'},
+          ]),
+        );
+      }
+      final metrics = {
+        'indexed': indexed,
+        'notes': count,
+        'requestLatencyMs': drive.readLatency.inMilliseconds,
+        'firstNoteMs': firstNoteMs,
+        'totalMs': clock.elapsedMilliseconds,
+        'requests': drive.requests,
+        'mediaReads': drive.mediaReads,
+        'lookups': drive.lookups,
+        'peakReads': drive.peakReads,
+      };
+      final uploads = drive.uploads;
+      final requests = drive.requests;
+      await receiver.sync();
+      expect(
+        drive.uploads,
+        uploads,
+        reason: 'Unchanged restore must not echo uploads',
+      );
+      expect(drive.requests - requests, lessThan(5));
+      debugPrint('DRIVE RESTORE BENCHMARK ${jsonEncode(metrics)}');
+      final pages =
+          (count + SyncMetadataIndex.maxPageEntries - 1) ~/
+          SyncMetadataIndex.maxPageEntries;
+      expect(
+        drive.indexWrites,
+        pages,
+        reason: 'The first validated restore builds one reusable chain',
+      );
+      if (indexed) {
+        expect(
+          metrics['mediaReads'],
+          count + pages,
+          reason: 'Only index pages and encrypted note payloads are downloaded',
+        );
+        expect(
+          metrics['lookups'],
+          count + pages,
+          reason: 'Cached commits do not need individual name lookups',
+        );
+      }
+    }
+  }, timeout: const Timeout(Duration(minutes: 10)));
+}
+
 Future<void> _deleteTestFiles(FileSystem files, String directory) async {
   for (final entry in await files.list(directory)) {
     final path = p.isAbsolute(entry) ? entry : p.join(directory, entry);
@@ -914,7 +1053,7 @@ Future<void> _automaticMatrix(WidgetTester tester) async {
     await files.documentDir,
     'automatic-qa-${DateTime.now().microsecondsSinceEpoch}',
   );
-  final server = _DropboxBoundary();
+  final server = DropboxHttpFixture();
   addTearDown(() async {
     for (final replica in replicas) {
       await replica.session.close();
@@ -1130,6 +1269,169 @@ class _ReadyConnection extends ChangeNotifier
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+// Holds one real applied download until a foreground wake, then reports the
+// interrupted pass's cancellation late. No refresh/syncNow starts recovery.
+void _registerDownloadResumeTest() {
+  testWidgets(
+    'Dropbox download resumes after background without manual refresh',
+    (tester) async {
+      initializeDb();
+      final files = await fileSystem();
+      final root = p.join(
+        await files.documentDir,
+        'download-resume-qa-${DateTime.now().microsecondsSinceEpoch}',
+      );
+      final server = DropboxHttpFixture();
+      final replicas = <_Replica>[];
+      addTearDown(() async {
+        for (final replica in replicas) {
+          await replica.session.close();
+          replica.client.close();
+          await replica.db.close();
+          await deleteDatabase(replica.db.path);
+        }
+        await _deleteTestFiles(files, root);
+      });
+      final source = await _Replica.create(
+        files,
+        p.join(root, 'source'),
+        server,
+      );
+      replicas.add(source);
+      final image = Uint8List.fromList([0, 255, 3, 8, 128]);
+      final imagePath = p.join(source.root, 'image.png');
+      await files.writeBytes(imagePath, image);
+      const count = 104;
+      await source.db.transaction((txn) async {
+        for (var i = 0; i < count; i++) {
+          await txn.insert('note', {
+            'id': i + 1,
+            'sync_id': 'download-resume-$i',
+            'title': 'Resume QA $i',
+            'content': jsonEncode([
+              {'insert': 'Resume content $i\n'},
+            ]),
+            'created_at': '2030-01-01T00:00:00.000Z',
+            'updated_at': '2030-01-01T00:00:01.000Z',
+            'attachments': jsonEncode(
+              i == 0
+                  ? [
+                      {
+                        'id': 'image',
+                        'type': 'image',
+                        'data': {
+                          'src': imagePath,
+                          'size': image.length,
+                          'index': 0,
+                          'aspectRatio': '1:1',
+                          'lastModified': '',
+                        },
+                      },
+                    ]
+                  : [],
+            ),
+          });
+        }
+      });
+      await source.sync();
+      final writes = server.uploads;
+      final indexWrites = server.indexWrites;
+      final paused = Completer<void>();
+      final resumed = Completer<void>();
+      var applied = 0;
+      final receiver = await _Replica.create(
+        files,
+        p.join(root, 'receiver'),
+        server,
+        restoreOnStart: true,
+        onApplied: (change) async {
+          if (change.revision.kind == SyncEntityKind.note && ++applied == 5) {
+            paused.complete();
+            await resumed.future;
+            throw const SyncReplicaCancelled();
+          }
+        },
+      );
+      replicas.add(receiver);
+      final lifecycle = _DownloadResumeLifecycle(receiver.session, resumed);
+      WidgetsBinding.instance.addObserver(lifecycle);
+      addTearDown(() {
+        WidgetsBinding.instance.removeObserver(lifecycle);
+        if (!resumed.isCompleted) resumed.complete();
+      });
+      await paused.future.timeout(const Duration(minutes: 2));
+      debugPrint('DOWNLOAD RESUME READY FOR BACKGROUND');
+      if (!const bool.fromEnvironment('DOWNLOAD_RESUME_OS_LIFECYCLE')) {
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.paused);
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      }
+      await resumed.future.timeout(const Duration(minutes: 2));
+      await receiver.session.scheduler.waitForIdle();
+      final rows = await receiver.db.query('note');
+      expect(rows, hasLength(count));
+      for (final row in rows) {
+        final id = int.parse((row['sync_id'] as String).split('-').last);
+        expect(row['title'], 'Resume QA $id');
+        expect(
+          row['content'],
+          jsonEncode([
+            {'insert': 'Resume content $id\n'},
+          ]),
+        );
+        if (id == 0) {
+          final attachment =
+              (jsonDecode(row['attachments'] as String) as List).single;
+          expect(
+            await receiver.session.attachments.read(
+              attachment['data']['src'] as String,
+            ),
+            image,
+          );
+        }
+      }
+      expect(
+        server.uploads,
+        writes,
+        reason: 'Free restoration must not upload',
+      );
+      expect(server.indexWrites, indexWrites);
+      expect(
+        receiver
+            .session
+            .scheduler
+            .progress[receiver.adapter.connectionId]!
+            .failure,
+        isNull,
+      );
+      debugPrint(
+        'DOWNLOAD RESUME PASS: 104 notes and media; no manual refresh or uploads',
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
+}
+
+class _DownloadResumeLifecycle extends WidgetsBindingObserver {
+  _DownloadResumeLifecycle(this.session, this.resumed);
+  final LibrarySyncSession session;
+  final Completer<void> resumed;
+  bool backgrounded = false;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    session.setForeground(state == AppLifecycleState.resumed);
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      backgrounded = true;
+      debugPrint('DOWNLOAD RESUME BACKGROUNDED');
+    }
+    if (state == AppLifecycleState.resumed &&
+        backgrounded &&
+        !resumed.isCompleted) {
+      resumed.complete();
+    }
+  }
+}
+
 // Exercises the same session startup/lifecycle used by the app, with native
 // SQLite/files and real encrypted provider transports. No live account access.
 void _registerUploadResumeTest() {
@@ -1144,7 +1446,7 @@ void _registerUploadResumeTest() {
       'upload-resume-qa-${processRun.isEmpty ? DateTime.now().microsecondsSinceEpoch : processRun}',
     );
     final checkpointPath = p.join(root, 'provider-fixture.json');
-    final dropbox = _DropboxBoundary();
+    final dropbox = DropboxHttpFixture();
     final drive = DriveHttpFixture();
     final live = <_Replica>[];
     Future<void> stop(_Replica replica) async {
@@ -1465,7 +1767,7 @@ class _Replica {
   static Future<_Replica> create(
     FileSystem files,
     String root,
-    _DropboxBoundary server, {
+    DropboxHttpFixture server, {
     DriveHttpFixture? drive,
     String uid = 'isolated-platform-qa',
     FirebaseFirestore? firestore,
@@ -1580,110 +1882,6 @@ class _Replica {
   }
 }
 
-class _DropboxBoundary {
-  final files = <String, Uint8List>{};
-  final sessions = <String, Uint8List>{};
-  int sessionSequence = 0;
-  int requests = 0, uploads = 0, downloads = 0;
-  int concurrentDownloads = 0, maxConcurrentDownloads = 0;
-  Duration delay = Duration.zero;
-  int pageSize = 100;
-  Future<void> Function(int offset)? beforeContinue;
-  int? failDownloadAt, loseUploadAckAt;
-  bool offline = false;
-  Future<http.Response> handle(http.Request request) async {
-    requests++;
-    if (offline) return http.Response('unavailable', 503);
-    final downloading = request.url.path == '/2/files/download';
-    final downloadNumber = downloading ? downloads + 1 : null;
-    if (downloading) {
-      downloads++;
-      concurrentDownloads++;
-      if (concurrentDownloads > maxConcurrentDownloads) {
-        maxConcurrentDownloads = concurrentDownloads;
-      }
-    }
-    if (delay != Duration.zero) await Future<void>.delayed(delay);
-    if (downloading) {
-      concurrentDownloads--;
-      if (downloadNumber == failDownloadAt) {
-        return http.Response('unavailable', 503);
-      }
-    }
-    expect(request.headers['authorization'], 'Bearer synthetic');
-    final args =
-        jsonDecode(request.headers['dropbox-api-arg'] ?? request.body) as Map;
-    switch (request.url.path) {
-      case '/2/files/create_folder_v2':
-        return http.Response('{}', 200);
-      case '/2/files/list_folder':
-      case '/2/files/list_folder/continue':
-        final offset = int.parse(args['cursor'] as String? ?? '0');
-        if (request.url.path.endsWith('/continue')) {
-          await beforeContinue?.call(offset);
-        }
-        final end = (offset + pageSize).clamp(0, files.length);
-        return http.Response(
-          jsonEncode({
-            'entries': files.keys
-                .skip(offset)
-                .take(pageSize)
-                .map((path) => {'.tag': 'file', 'name': p.basename(path)})
-                .toList(),
-            'cursor': '$end',
-            'has_more': end < files.length,
-          }),
-          200,
-        );
-      case '/2/files/upload_session/start':
-        expect(args['close'], isTrue);
-        final id = '${++sessionSequence}';
-        sessions[id] = Uint8List.fromList(request.bodyBytes);
-        return http.Response(jsonEncode({'session_id': id}), 200);
-      case '/2/files/upload_session/finish_batch_v2':
-        final results = <Map<String, Object?>>[];
-        for (final entry in args['entries'] as List) {
-          final cursor = entry['cursor'] as Map;
-          final commit = entry['commit'] as Map;
-          final bytes = sessions.remove(cursor['session_id'])!;
-          expect(cursor['offset'], bytes.length);
-          expect(commit['mode'], 'add');
-          expect(commit['autorename'], isFalse);
-          expect(commit['strict_conflict'], isTrue);
-          final path = commit['path'] as String;
-          uploads++;
-          if (files.containsKey(path)) {
-            results.add({
-              '.tag': 'failure',
-              'failure': {
-                '.tag': 'path',
-                'path': {'.tag': 'conflict'},
-              },
-            });
-          } else {
-            files[path] = bytes;
-            results.add({'.tag': 'success', 'name': p.basename(path)});
-          }
-          if (uploads == loseUploadAckAt) return http.Response('lost ack', 503);
-        }
-        return http.Response(jsonEncode({'entries': results}), 200);
-      case '/2/files/upload':
-        uploads++;
-        final path = args['path'] as String;
-        if (files.containsKey(path)) {
-          return http.Response('{"error_summary":"path/conflict/file"}', 409);
-        }
-        files[path] = Uint8List.fromList(request.bodyBytes);
-        if (uploads == loseUploadAckAt) return http.Response('lost ack', 503);
-        return http.Response('{}', 200);
-      case '/2/files/download':
-        return http.Response.bytes(files[args['path']]!, 200);
-      default:
-        throw StateError('Unexpected Dropbox route ${request.url.path}');
-    }
-  }
-}
-
 // Opt-in stress fixtures are supplied from a local defines file; no live
 // credentials, downloaded photos, or generated libraries are committed.
 Future<void> _stressMatrix(WidgetTester tester) async {
@@ -1719,7 +1917,7 @@ Future<void> _stressMatrix(WidgetTester tester) async {
     await files.documentDir,
     'sync-stress-${DateTime.now().microsecondsSinceEpoch}',
   );
-  final server = _DropboxBoundary();
+  final server = DropboxHttpFixture();
   final active = <String, _Replica>{};
   Future<_Replica> open(String name) async {
     final replica = await _Replica.create(

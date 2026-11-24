@@ -159,7 +159,19 @@ class SyncScheduler extends ChangeNotifier {
     if (!_active || foreground == _foreground) return;
     _foreground = foreground;
     _cancelTimers();
-    if (foreground) unawaited(_requestAll());
+    if (foreground) {
+      for (final entry in _entries.values) {
+        if (entry.running != null) {
+          // The interrupted pass can settle after this lifecycle event. Keep
+          // the wake distinct from continuation callbacks, which may be dropped
+          // on neutral cancellation to prevent retry spin.
+          entry.resumeRequested = true;
+        } else if (entry.needsRestore) {
+          entry.restoreAttempts = 0;
+        }
+      }
+      unawaited(_requestAll());
+    }
   }
 
   void _cancelTimers() {
@@ -238,6 +250,15 @@ class SyncScheduler extends ChangeNotifier {
             );
             notifyListeners();
           }
+          if (_owns(entry) &&
+              _foreground &&
+              entry.resumeRequested &&
+              entry.running == null) {
+            entry.resumeRequested = false;
+            if (entry.needsRestore) entry.restoreAttempts = 0;
+            // Retain normal backoff/authorization gates and download-only mode.
+            unawaited(_request(entry));
+          }
         });
     entry.running = task;
     _tasks.add(task);
@@ -248,6 +269,7 @@ class SyncScheduler extends ChangeNotifier {
     force |= entry.forceAgain;
     do {
       if (!_owns(entry) || !_foreground) return;
+      entry.resumeRequested = false;
       var restoring = false;
       // Metadata persistence failures must not masquerade as network outages.
       var accessingLocalState = true;
@@ -462,5 +484,5 @@ class _ScheduledConnection {
   Timer? retry;
   int failures = 0, stalledPasses = 0;
   int restoreAttempts = 0;
-  bool again = false, forceAgain = false;
+  bool again = false, forceAgain = false, resumeRequested = false;
 }

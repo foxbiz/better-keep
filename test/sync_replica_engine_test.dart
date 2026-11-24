@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:better_keep/models/app_progress.dart';
@@ -52,6 +53,65 @@ void main() {
     );
   });
   tearDown(() => db.close());
+
+  test(
+    'download-only restore never writes an index; normal sync maintains it',
+    () async {
+      final adapter = _IndexedAdapter('index')..incoming = [revision(1)];
+      adapter.maintain = () async {
+        expect(await db.query('applied'), hasLength(1));
+        expect(await store.incomingNoteCount('index'), 0);
+      };
+      content.failApply = true;
+      await expectLater(
+        engine.sync(adapter, downloadOnly: true),
+        throwsStateError,
+      );
+      expect(adapter.maintained, 0);
+      content.failApply = false;
+      await engine.sync(adapter, downloadOnly: true);
+      expect(adapter.maintained, 0);
+      expect(adapter.published, isEmpty);
+      await engine.sync(adapter);
+      expect(adapter.maintained, 1);
+    },
+  );
+
+  test(
+    'note uploads precede index maintenance; failed uploads skip it',
+    () async {
+      final adapter = _IndexedAdapter('index');
+      await save(revision(1));
+      adapter.failPublish = true;
+      await expectLater(
+        engine.sync(adapter),
+        throwsA(isA<SyncProviderFailure>()),
+      );
+      expect(adapter.maintained, 0);
+      adapter.failPublish = false;
+      adapter.maintain = () async {
+        expect(adapter.published.single.revisionId, revision(1).revisionId);
+        expect(await store.pending('index'), isEmpty);
+      };
+      await engine.sync(adapter);
+      expect(adapter.maintained, 1);
+    },
+  );
+
+  test(
+    'failed or cancelled discovery cannot publish a partial index',
+    () async {
+      for (final failure in <Object>[
+        const SyncProviderFailure(SyncProviderFailureKind.unavailable),
+        const SyncReplicaCancelled(),
+      ]) {
+        final adapter = _IndexedAdapter('index')
+          ..listChanges = (_) async => throw failure;
+        await expectLater(engine.sync(adapter), throwsA(same(failure)));
+        expect(adapter.maintained, 0);
+      }
+    },
+  );
 
   test(
     'legacy SQLite counts only scoped live notes and probes once per database',
@@ -622,17 +682,35 @@ void main() {
       greaterThan(0),
     );
     expect(
-      SyncRevision.nextTimestamp(
-        DateTime.fromMicrosecondsSinceEpoch(1),
-        revision(5),
-      ),
-      6,
-    );
-    expect(
       SyncRevision.decode(revision(2).encode()).encode(),
       revision(2).encode(),
     );
     expect(() => SyncRevision.decode('{"version":2}'), throwsFormatException);
+  });
+
+  test('revision decoding retains identifier, timestamp and object bounds', () {
+    for (final invalid in <Map<String, Object?>>[
+      {'entityId': ''},
+      {'entityId': 'a' * 257},
+      {'entityId': 'bad\u0000id'},
+      {'revisionId': ''},
+      {'revisionId': 'a' * 257},
+      {'revisionId': 'bad\u0000id'},
+      {'modifiedAtMicros': -1},
+      {'modifiedAtMicros': 9007199254740992},
+      {'payloadObjectId': 'not-a-hash'},
+      {
+        'blobIds': ['not-a-hash'],
+      },
+    ]) {
+      expect(
+        () => SyncRevision.decode(
+          jsonEncode({...revision(2).toJson(), ...invalid}),
+        ),
+        throwsFormatException,
+        reason: invalid.keys.single,
+      );
+    }
   });
 
   test(
@@ -641,8 +719,10 @@ void main() {
       await save(revision(1));
       final failed = _Adapter('failed')..failPublish = true;
       final healthy = _Adapter('healthy');
-      final failures = await engine.syncAll([failed, healthy]);
-      expect(failures.keys, ['failed']);
+      await Future.wait([
+        expectLater(engine.sync(failed), throwsA(isA<SyncProviderFailure>())),
+        engine.sync(healthy),
+      ]);
       expect(await store.pending('healthy'), isEmpty);
       expect((await store.pending('failed')).single.revisionId, 'revision-1');
       expect(healthy.events, ['object', 'commit']);
@@ -1396,6 +1476,17 @@ class _Content implements SyncReplicaContent, SmallSyncReplicaContent {
   Future<void> apply(Transaction txn, SyncRevision revision) async {
     await txn.insert('applied', {'revision': revision.encode()});
     if (failApply) throw StateError('Simulated apply failure');
+  }
+}
+
+class _IndexedAdapter extends _Adapter implements SyncIndexMaintenance {
+  _IndexedAdapter(super.connectionId);
+  int maintained = 0;
+  Future<void> Function()? maintain;
+  @override
+  Future<void> maintainIndex() async {
+    maintained++;
+    await maintain?.call();
   }
 }
 

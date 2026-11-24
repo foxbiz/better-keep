@@ -99,6 +99,14 @@ its PIN/editor routes. Provider setup failures retain provider-level guidance,
 and generic local-access errors do not assume the device is out of storage.
 Cancelled passes retain upload intent without a network error, success stamp or
 backoff retry; a subsequent manual/foreground request can resume them.
+A foreground wake is kept separately from ordinary continuation callbacks until the
+in-flight pass settles, including when it reports cancellation after resuming. Free
+initial downloads receive up to three transient attempts per foreground visit; a new
+visit renews unfinished restoration without enabling uploads or repeating completed
+restores. Existing provider backoff, authorization and permanent-failure gates remain.
+This resumes downloads when the app becomes active; it does not promise OS background
+execution while iOS suspends the process.
+
 Local-storage feedback intentionally takes precedence over generic failure.
 
 Upload continuation requires a newly captured revision or a durable provider
@@ -135,6 +143,22 @@ with `--dart-define=UPLOAD_RESUME_QA=true` exercises an encrypted 104-note/image
 Dropbox-to-Drive switch, on-disk reopen, foreground resume and restore without
 manual refresh. The transport boundary is synthetic; SQLite, files, encryption,
 providers and scheduler are real.
+
+`--dart-define=DOWNLOAD_RESUME_QA=true` runs a 104-note/media Dropbox download
+interruption test. Add `--dart-define=DOWNLOAD_RESUME_OS_LIFECYCLE=true`, wait for
+`DOWNLOAD RESUME READY FOR BACKGROUND`, background the QA app and reopen it. The test
+uses real lifecycle callbacks to release a late cancellation, then checks complete
+restoration without manual refresh, duplicate notes or Free-plan uploads. Without the
+OS flag it injects the same lifecycle sequence for repeatable automation.
+
+Local validation on 24 November 2026: the download-resume fixture passed on the iOS
+26.3 simulator and Android emulator after opening OS Settings to background the QA
+app and then reopening it. Both recovered all 104 notes and media without a refresh
+or outgoing uploads. Cancellation was deliberately delivered after the foreground
+event; this verifies the race, not unrestricted OS background downloading. The five
+new scheduler cases failed before the fix; all 104 scheduler/refresh/content tests
+and targeted analysis passed afterward. Live-provider/physical-iPhone confirmation
+remains separate from these synthetic-provider lifecycle tests.
 
 For an OS force-stop test, also pass a unique
 `--dart-define=UPLOAD_RESUME_PROCESS=<run-id>`. The first launch reports
@@ -202,7 +226,84 @@ Native provider authentication returns to the app through the platform SDK or
 an authentication session. Web uses a user-initiated popup. Browser tab closure
 is best effort. Storage credentials never pass through the backend callback.
 
-## Replication implementation and prior verification history
+## Metadata index
+
+External providers may store `metadata-index-v3.json`, a disposable, HMAC-authenticated
+plaintext cache of opaque revision IDs, edit timestamps, encrypted-object references,
+keyed fingerprints and provider version tokens. Note text and attachments remain encrypted.
+Every page is bound to its filename, account key, library and connection. Authentication is
+checked before decoding the inner payload. The current provider listing remains authoritative:
+entries are reused only for matching Drive ID/version, Dropbox ID/rev or strong DAV ETags.
+Missing/stale entries fall back to original encrypted commits. The cache never changes
+inventory, conflict ordering or note/attachment/database formats.
+
+### Linked pages and bounded rewrite cost
+
+The head contains entries and an authenticated `next` reference, or `null` for the tail.
+Continuation names are stable: `metadata-index-v3-page-1.json`, `...-2.json`, and so on.
+Each file is at most 8 MiB and 4,096 entries; a conservative encoded-size budget can split it
+sooner. There is no fixed total entry/page cap. Provider quotas and device resources still
+apply. Encoded pages are processed individually, but decoded metadata and page tracking grow
+with the library. Historical revisions and tombstones remain indexed while their commits exist.
+
+A loaded or acknowledged page's immutable entries and next link are remembered within the adapter
+session. Maintenance compares entry identities and links before encoding; it authenticates and
+uploads only changed pages, tail first, updating the head last only
+if it changed. A usual tail edit/append rewrites one page; extending a full tail writes that
+page's new link plus the new page. Updating a page does not change earlier links. Page-boundary
+changes caused by large metadata growth or pruning can still rewrite subsequent pages.
+Snapshot partitioning/comparison and decoded memory remain proportional to history size; JSON
+encoding, authentication and network writes are limited to changed pages.
+
+Stable page names reuse provider files instead of retaining another chain per edit. After a
+library shrinks, unused trailing page slots can remain up to its historical high-water mark;
+concurrent Drive creates can also leave duplicate files. These are cache-only and removed by
+explicit whole-library cleanup. Normal sync does not delete remote files. Pre-release v1/v2
+caches are ignored/rebuilt and removed by explicit cleanup, not migrated or trusted as v3.
+
+### Validation and concurrency
+
+Readers validate each page's MAC, scope, authenticated filename, link syntax and entry uniqueness.
+Paths/URLs, cycles, duplicate entries, missing pages and malformed data invalidate the entire
+attempted cache load; no partially decoded cache is exposed. Older note clients ignore index
+filenames; Drive pages use a separate `indexLibrary` property outside legacy commit queries.
+
+Pages are independently authenticated mutable cache hints, not an atomic inventory snapshot.
+An interrupted or competing writer may leave a mixture of individually valid old/new pages.
+This is safe only because every entry is checked against current provider version tokens and
+its expected commit name before use. Stale/missing entries are read from the original commits;
+an invalid/duplicate/cyclic chain falls back as a whole. Changes to this invariant must not
+make the index authoritative. Readers may observe fallback work during concurrent updates.
+
+A full scan rechecks a clean remote cache, allowing missing/corrupt pages to be rebuilt without
+restarting. If that reload fails, previously authenticated in-memory entries remain available for
+lookups against current provider versions; remote page acknowledgements are invalidated, and
+republishing waits for a complete validated scan. Missing/stale entries still read their original
+commits. Dirty/interrupted snapshots are retained until maintenance finishes; incremental polling
+does not reload the cache. Drive tries at most three duplicate candidates per page,
+serially, rejecting malformed or unauthenticated copies and pinning only an accepted head. If no
+candidate validates, the ordinary commit scan remains the fallback.
+
+Publication requires a successfully loaded chain or a complete scan. Failed cache reads followed
+by incremental listings cannot replace a full cache with partial data. Only validated complete
+scans prune absent names. Download-only passes never publish. Maintenance follows validated
+incoming work and pending note uploads.
+
+Optional writes share five seconds per pass. On failure/exhaustion, acknowledged page contents
+and the pending snapshot remain in the adapter for retry after five minutes on a later normal
+sync. Unacknowledged pages retry; edits during a pending snapshot remain dirty for a subsequent
+snapshot. Restart can require re-uploading pages, but loading a valid chain restores page tracking and
+allows unchanged pages to be skipped. Index progress is not a persistent database or upload intent.
+Each index read has a 60-second HTTP cap; Drive lookups use 10 seconds. Stricter configured HTTP
+timeouts win. Expiry prevents late follow-up requests but cannot undo an already accepted write.
+Sanitized debug diagnostics report error types only.
+
+Drive caches the head ID and invalidates it on 404 or cleanup. Explicit whole-library cleanup
+accepts only the exact v1 filename, v2 head/hash-page names and v3 head/page names, all with matching
+library prefix/property, and re-lists bounded batches until empty. Normal reads/writes accept
+v3 names only. Dropbox/WebDAV/Nextcloud clear the same account library directory as before.
+
+## Replication architecture
 
 - `SyncVersion` shares logical edit identity between Firebase, the local journal
   and encrypted `SyncRevision` manifests. Timestamp ordering and ties are common.
@@ -342,10 +443,6 @@ is best effort. Storage credentials never pass through the backend callback.
   disposal clears credentials and prevents late writes from restoring them.
   Web persistence is disabled. Tests mock the secure-storage boundary; real OS
   keychain behavior and lifecycle integration remain acceptance work.
-- Current-stage tests include backend credential races, synthetic OAuth exchange,
-  Firestore-emulator consent/registration races, server-only rules, client
-  capability isolation and in-flight credential disposal. Real grants and
-  provider interoperability remain untested.
 - `SyncScheduler` uses two-second save debounce and launch/resume reconciliation
   when automatic access is enabled; manual reconciliation remains free. It has
   independent provider backoff and sanitized
@@ -371,10 +468,6 @@ is best effort. Storage credentials never pass through the backend callback.
   Firebase fan-out. Superseded callbacks cannot overwrite newer UI models. Order
   refresh reads durable state without restamping and defers visual changes while
   dragging; deletion removes stale in-memory snapshots.
-- Session-stage verification uses in-memory databases, temporary files and fake
-  providers: encrypted-source round trips, mutation races, cache recovery, paging,
-  connection replacement, independent retries and retirement during downloads.
-  Tests cover encryption at the file boundary; no live account or keychain was used.
 - `SyncStatusStore` retains successful pass times locally, scoped to account,
   encryption library and connection generation. Schema v12 includes its table.
   Monotonic writes survive restart and clock reversal; failed or partial passes
@@ -563,7 +656,7 @@ is best effort. Storage credentials never pass through the backend callback.
   current journal revision before recording its status. The regression test failed
   before the fix and passes afterward.
 
-## Credential security and device pairing (2026-10-24)
+## Credential security and device pairing
 
 Provider credentials and account details are encrypted on the client using a
 separate HKDF purpose derived from the existing note-encryption master key.
@@ -572,49 +665,11 @@ user, encryption library, provider, connection generation and OAuth client ID.
 Note/media formats and the replica engine are unchanged. The backend stores
 ciphertext and capability hashes; it cannot open the new envelopes.
 
-Pairing uses **one scan with a temporary QR secret**. Manual code comparison
-retains the two-device confirmation fallback.
-
-1. The new device creates its request from its own public key, device ID,
-   account/environment identity, protocol version and a random 256-bit request ID.
-   It also generates an independent random 256-bit pairing secret. The public
-   `toJson()` request goes to Firebase; the versioned QR wrapper containing the
-   secret lives only in native secure storage or browser memory and on screen.
-   Do not log, upload or share that QR. It contains no master key or credentials.
-2. The trusted device scans the QR, checks its public identity against the pending
-   request, and immediately approves the exact verified key. It transactionally
-   rechecks the request and wraps the master key in the existing request-bound
-   encrypted format. It never uses a replacement public key fetched afterward.
-3. The trusted device adds a version-1 HMAC-SHA-256 proof over the domain-separated
-   handoff fingerprint. That fingerprint binds the complete request, sender public
-   key, ciphertext and nonce. Firebase receives the proof, never the secret.
-   HMAC is the standard shared-secret message-authentication construction described
-   in [RFC 2104](https://www.rfc-editor.org/rfc/rfc2104).
-4. The new device verifies the proof using its locally stored secret and accepts
-   only that exact handoff. It needs no return scan or confirmation button. It
-   stores the accepted fingerprint before stripping the secret from local storage,
-   so a crash between these writes can resume the same handoff safely. A different
-   handoff cannot replace an already accepted fingerprint.
-
-The public request and wrapped-key formats remain version 2; the private QR
-wrapper and optional `pairing_proof` have their own strict version 1. Server
-request parsing rejects private wrappers and extra fields. Unknown proof versions
-and malformed tags fail closed. The security code is still the first 128 bits of
-SHA-256 over the public, canonical, domain-separated request payload. Comparing
-that code does not expose or authenticate the QR secret, so code-based approval
-still displays a return QR/code that the new device must verify explicitly.
-Older public-only requests also use this fallback. Generate a **new verification
-code** to enable one-scan pairing for a request created before this update.
-
-Requests and their QR secrets expire after ten minutes. Regeneration creates a
-new request and secret; cancellation/logout clears local pairing state. Key or
-account changes invalidate pending operations. Accepted native handoffs restore
-after expiry only if their exact fingerprint matches; they no longer need the
-consumed secret. Browser reload discards the secret along with all encryption
-keys. First-device setup, recovery and existing approved devices remain usable.
-All approving devices must be updated before claiming backend-substitution
-protection; older clients retain their earlier unverified behavior. Protection
-also assumes the pairing QR is scanned privately and the client is trustworthy.
+Device pairing and approved-browser persistence follow the shared
+[E2EE protocol](E2EE.md#2-adding-a-new-device). QR pairing and the eight-digit
+camera-free fallback authenticate the same request-bound handoff. Keep protocol
+versions, expiry rules, legacy compatibility and security limitations in that
+canonical document rather than duplicating them here.
 
 Firebase coordinates revisions and 60-second refresh leases. The shared Google
 exchange function handles code exchange and refresh transiently; other grants
@@ -780,104 +835,18 @@ No live database query, deployment, secret deletion, grant revocation, or accoun
 configuration was performed by the agent. Earlier screenshots of the old Google
 connection flow are not evidence for the new direct-authorization flow.
 
-## Validation and remaining real-device acceptance
+## Validation and release acceptance
 
-Focused automated coverage includes one-scan secret isolation/authentication,
-manual two-direction QR/code matching, substituted
-recipient/sender keys and ciphertext, account/environment binding, expiry,
-replay/downgrade rejection, regeneration/cancellation during key-cache writes,
-purpose/context isolation, browser migration,
-PKCE callback validation, consent cancellation, direct token HTTP, refresh leases,
-rotation retries, generation races, legacy transition, and synthetic replica restore.
-Backend tests run with synthetic ciphertext and a separate demo Firestore emulator;
-no test depends on a real provider grant or user files.
+Unit and widget tests cover replica ordering, source/media recovery, provider
+isolation, credential lifecycle and sync feedback. The platform integration suite
+exercises real SQLite, files and encryption with synthetic provider HTTP. Backend
+and pairing tests use isolated demo emulators. Historical run counts and device
+session logs are available in Git history; they are not current release evidence.
 
-User-reported device verification on 2026-10-24: sync is working on the primary
-iPhone and new browser, with the test note visible in both supplied screenshots.
-The user also reported duplicate labels only in the tab bar. The display fix now
-reloads the model's deduplicated label list after sync events, including in the
-label dialog; it does not merge or delete stored replicas. Its 33 focused widget,
-dialog and filtering tests and targeted static analysis passed. Confirmation of
-the corrected tabs on the rebuilt devices is still pending. The sync report does
-not by itself verify token expiry/refresh, browser reload, deletions or media.
+Verify the following against the release candidate:
 
-Direct Android/web authorization verification (2026-10-25–26):
-
-- HTTPS browser retest on 2026-10-26 exposed a FlutterFire emulator-routing
-  issue after reload: the SDK skips explicit Auth emulator setup when its
-  session hint matches, but restores that hint automatically only on localhost.
-  Fresh emulator app initialization now clears only that app's routing hint
-  before explicit setup. The browser regression and five backend/identity tests
-  passed, with focused analysis clean. Real HTTPS emulator sign-in then reached
-  device verification, and the user approved the fresh browser. It restored the
-  selected Android Drive identity. Direct Drive consent returned a reconnect
-  error; browser provider authorization and media download remain unverified.
-
-- Real Samsung Android device: Google consent completed, connected account and
-  quota displayed, one QA text note with a sketch reported a successful manual
-  Drive sync. A cold restart preserved the note and provider selection; a second
-  manual sync succeeded without another Google prompt. Firebase remained signed
-  into the same emulator QA account. This proves the Android upload/restart path,
-  not yet a second-device media download or conflict test.
-- 80 focused Flutter tests passed (one browser-only case skipped), including
-  account binding, local token renewal, concurrent broker access, cancellation,
-  connection-generation races and preserving existing encrypted reusable grants.
-  41 browser regressions passed in isolated Chrome. One additional browser
-  token-cache regression passed with a synthetic public client ID; it checks
-  explicit-consent retry and logout cleanup.
-- Real approved browser session restored the selected Android-created Drive
-  connection on 2026-10-26. Manual sync correctly required local Drive consent.
-  The first direct browser authorization attempt returned the generic connection
-  error. The user's Google error screenshot confirmed `400 origin_mismatch`:
-  the development origin must be registered under Authorized JavaScript origins
-  on the web client matching `GOOGLE_DRIVE_WEB_CLIENT_ID`. This is an origin
-  configuration issue, not a hosted callback mismatch. Real browser authorization
-  and the note/sketch download remain unverified until that configuration is
-  corrected and consent completes. Device approval alone is not evidence of
-  provider authorization success.
-- Android debug and web debug builds passed; web Wasm compilation dry run passed.
-  Focused analysis passed. The latest iOS simulator build was blocked by stale
-  Swift package artifact paths pointing to the checkout's previous location;
-  macOS was not reached in that chained build. Windows/Linux runtime checks
-  remain pending. Earlier build results below predate this authorization update.
-
-Local verification completed for this change:
-
-- Shared account-grant update: 75 focused checks passed, plus 12 Chrome checks
-  covering grant restore/rotation, credential tampering and browser storage.
-  The provider settings suite passed 21 checks after adding the initial-setup
-  limitation message. Environment-example policy checks, static analysis and
-  the updated web debug build also passed. These use synthetic provider tokens;
-  they do not establish real Google/Dropbox authorization success.
-- Latest full Flutter suite: 1,488 passed after guarding sync diagnostics when
-  Firebase is not configured. The shared-grant suite also passed all 3 tests in
-  Chrome, including overlapping refresh requests with Firebase's lease-busy
-  error, encrypted token rotation and restore after reload. The 7 focused backend
-  coordinator/security checks and static analysis passed. These checks use
-  synthetic grants; remaining device checks are listed below.
-- After the one-scan change, all 63 focused protocol,
-  approval-service, pairing-widget and offline-startup checks passed, including
-  cancellation during acceptance-fingerprint and key-cache writes.
-- Full Functions suite: 191 passed; TypeScript and script type checking passed.
-- Isolated ciphertext endpoint and Firestore-rules checks: 10 passed.
-- Browser storage migration/session test passed in Chrome. Camera-denied and
-  camera-free verification widget tests passed.
-- The web debug build and Wasm compilation dry run also passed after the one-scan
-  change; native-device pairing still needs the user's acceptance check.
-- Android debug and iOS simulator builds passed again after the shared-grant
-  update. The Android build reported future Kotlin plugin compatibility warnings;
-  iOS reported existing Swift Package Manager support warnings for two plugins.
-  Earlier macOS debug and web debug builds passed; the web Wasm dry run
-  passed. These builds were not installed, launched, signed for distribution or
-  deployed. The merged Android manifest keeps camera hardware optional and includes
-  the storage callback scheme. Windows/Linux builds and real-device authorization
-  still require platform checks.
-- Final project static analysis and whitespace checks passed.
-
-Before release, the user will run these on their devices and report results:
-
-- Pair with one QR scan and no return dialog; test the full-code fallback in both
-  directions and deny camera permission;
+- Pair with one QR scan and no return dialog; test the eight-digit camera-free fallback
+  and deny camera permission;
   expire/regenerate/cancel requests; retry after logout and restart.
 - Authorize Google, Dropbox and Nextcloud on the intended platforms; confirm
   return-to-app behavior, declined Drive permission handling and unchanged Firebase

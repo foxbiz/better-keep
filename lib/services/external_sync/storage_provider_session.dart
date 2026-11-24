@@ -21,7 +21,11 @@ import 'storage_usage.dart';
 /// Owns the network client and broker for exactly one connection generation.
 /// Retained adapter references stop working as soon as this session is retired.
 class StorageProviderSession
-    implements SyncProviderAdapter, SmallSyncObjectReader, BatchSyncWriter {
+    implements
+        SyncProviderAdapter,
+        SmallSyncObjectReader,
+        BatchSyncWriter,
+        SyncIndexMaintenance {
   StorageProviderSession({
     required this.connection,
     this.clearing = false,
@@ -173,6 +177,8 @@ class StorageProviderSession
   @override
   Future<Uint8List> readObject(String objectId) =>
       _use((a) => a.readObject(objectId));
+  @override
+  Future<void> maintainIndex() => _use((a) => a.maintainIndex());
   @override
   Future<void> putObject(String objectId, Uint8List encryptedBytes) =>
       _use((a) => a.putObject(objectId, encryptedBytes));

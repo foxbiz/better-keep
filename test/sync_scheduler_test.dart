@@ -426,38 +426,41 @@ void main() {
     expect(restores, 0);
   });
 
-  testWidgets('free restore stops after three failures until manual retry', (
-    tester,
-  ) async {
-    var restores = 0, uploads = 0;
-    final scheduler = SyncScheduler(
-      automatic: false,
-      isCurrent: () => true,
-      now: tester.binding.clock.now,
-      restore: (_) async {
-        restores++;
-        throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
-      },
-      sync: (_) async {
-        uploads++;
-      },
-    );
-    addTearDown(scheduler.dispose);
-    scheduler.setAdapters([_Provider('dropbox:1')]);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pump(const Duration(seconds: 10));
-    expect(restores, 3);
-    expect(scheduler.progress['dropbox:1']!.retryAt, isNull);
-    scheduler.setForeground(false);
-    scheduler.setForeground(true);
-    scheduler.remoteChanged('dropbox:1');
-    await tester.pump(const Duration(hours: 1));
-    expect(restores, 3);
-    await scheduler.syncNow();
-    expect(uploads, 1);
-    expect(scheduler.progress['dropbox:1']!.failure, isNull);
-  });
+  testWidgets(
+    'free restore bounds retries per foreground visit and permits manual retry',
+    (tester) async {
+      var restores = 0, uploads = 0;
+      final scheduler = SyncScheduler(
+        automatic: false,
+        isCurrent: () => true,
+        now: tester.binding.clock.now,
+        restore: (_) async {
+          restores++;
+          throw const SyncProviderFailure(SyncProviderFailureKind.unavailable);
+        },
+        sync: (_) async {
+          uploads++;
+        },
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('dropbox:1')]);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 10));
+      expect(restores, 3);
+      expect(scheduler.progress['dropbox:1']!.retryAt, isNull);
+      scheduler.setForeground(false);
+      scheduler.setForeground(true);
+      scheduler.remoteChanged('dropbox:1');
+      await tester.pump(const Duration(hours: 1));
+      expect(restores, 6);
+      await tester.pump(const Duration(hours: 1));
+      expect(restores, 6);
+      await scheduler.syncNow();
+      expect(uploads, 1);
+      expect(scheduler.progress['dropbox:1']!.failure, isNull);
+    },
+  );
 
   testWidgets('free restores once and manual sync joins an in-flight restore', (
     tester,
@@ -576,6 +579,87 @@ void main() {
       expect(scheduler.progress['drive']!.running, false);
     });
   }
+
+  for (final automatic in [false, true]) {
+    for (final cancellation in [
+      const SyncReplicaCancelled(),
+      const CloudOperationCancelled(),
+    ]) {
+      testWidgets(
+        'foreground wake survives late ${cancellation.runtimeType} (automatic=$automatic)',
+        (tester) async {
+          final release = Completer<void>();
+          var calls = 0;
+          Future<void> run(SyncProviderAdapter _) async {
+            if (++calls == 1) {
+              await release.future;
+              throw cancellation;
+            }
+          }
+
+          final scheduler = SyncScheduler(
+            automatic: automatic,
+            isCurrent: () => true,
+            sync: automatic
+                ? run
+                : (_) async => fail('A Free restore must not upload'),
+            restore: run,
+          );
+          addTearDown(scheduler.dispose);
+          scheduler.setAdapters([_Provider('dropbox:1')]);
+          await tester.pump();
+          expect(calls, 1);
+          scheduler.setForeground(false);
+          scheduler.setForeground(true);
+          // The old pass only reports cancellation after the foreground event.
+          release.complete();
+          await tester.pump();
+          await scheduler.waitForIdle();
+          expect(calls, 2);
+          expect(scheduler.progress['dropbox:1']!.failure, isNull);
+          expect(scheduler.progress['dropbox:1']!.lastSuccess, isNotNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'foreground retries an unfinished Free restore after its transient allowance is exhausted',
+    (tester) async {
+      var restores = 0;
+      final scheduler = SyncScheduler(
+        automatic: false,
+        now: tester.binding.clock.now,
+        isCurrent: () => true,
+        sync: (_) async => fail('Restoration must not enable uploads'),
+        restore: (_) async {
+          if (++restores <= 3) {
+            throw const SyncProviderFailure(
+              SyncProviderFailureKind.unavailable,
+            );
+          }
+        },
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.setAdapters([_Provider('dropbox:1')]);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 10));
+      expect(restores, 3);
+      await tester.pump(const Duration(hours: 1));
+      expect(restores, 3, reason: 'No unbounded retry loop');
+      scheduler.setForeground(false);
+      scheduler.setForeground(true);
+      await tester.pump();
+      expect(restores, 4);
+      expect(scheduler.progress['dropbox:1']!.lastSuccess, isNotNull);
+      scheduler.setForeground(false);
+      scheduler.setForeground(true);
+      scheduler.localChanged();
+      await tester.pump(const Duration(hours: 1));
+      expect(restores, 4, reason: 'A completed Free restore stays complete');
+    },
+  );
 
   testWidgets('free retries a failed initial download after resume', (
     tester,

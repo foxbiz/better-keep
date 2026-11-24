@@ -21,7 +21,30 @@ class ProviderHttp {
   final Future<String> Function(String rejectedToken)? refreshRejectedToken;
   final bool Function()? isCurrent;
 
+  static final _operationKey = Object();
+  static _ProviderOperation? get _operation =>
+      Zone.current[_operationKey] as _ProviderOperation?;
+
+  /// Bounds a whole optional operation, including authentication and multiple
+  /// requests. Expiry rejects late responses and prevents follow-up requests.
+  /// Requests already accepted by the remote server cannot be rolled back.
+  static Future<T> withOperationTimeout<T>(
+    Duration timeout,
+    Future<T> Function() action,
+  ) {
+    final operation = _ProviderOperation(_operation);
+    return runZoned(() async {
+      try {
+        operation.guard();
+        return await action().timeout(timeout);
+      } finally {
+        operation.close();
+      }
+    }, zoneValues: {_operationKey: operation});
+  }
+
   void _guard() {
+    _operation?.guard();
     if (isCurrent != null && !isCurrent!()) {
       throw StateError('Provider session has ended');
     }
@@ -36,8 +59,8 @@ class ProviderHttp {
     void Function(List<int>)? onResponseChunk,
     SyncProviderFailureKind sizeFailure = SyncProviderFailureKind.corruptData,
     Exception? sizeException,
+    Duration? requestTimeout,
   }) async {
-    _guard();
     if (uri.scheme != 'https' || uri.userInfo.isNotEmpty || uri.hasFragment) {
       throw const SyncProviderFailure(SyncProviderFailureKind.unsupported);
     }
@@ -49,8 +72,14 @@ class ProviderHttp {
       StreamIterator<List<int>>? chunks;
       var finished = false;
       try {
-        return await (() async {
+        Future<http.Response> readResponse() async {
           final response = await client.send(request);
+          try {
+            _guard();
+          } catch (_) {
+            await response.stream.listen(null).cancel();
+            rethrow;
+          }
           if (finished) {
             await response.stream.listen(null).cancel();
             throw TimeoutException('Provider request expired');
@@ -93,7 +122,14 @@ class ProviderHttp {
             request: response.request,
             reasonPhrase: response.reasonPhrase,
           );
-        })().timeout(timeout);
+        }
+
+        final reading = readResponse();
+        return await (_operation?.wait(reading) ?? reading).timeout(
+          requestTimeout != null && requestTimeout < timeout
+              ? requestTimeout
+              : timeout,
+        );
       } finally {
         finished = true;
         await chunks?.cancel();
@@ -147,4 +183,25 @@ class ProviderHttp {
           : null,
     );
   }
+}
+
+/// One operation's lifetime, independent of any individual HTTP timeout.
+class _ProviderOperation {
+  _ProviderOperation(this.parent);
+  final _ProviderOperation? parent;
+  final _ended = Completer<void>();
+
+  void guard() {
+    parent?.guard();
+    if (_ended.isCompleted) throw TimeoutException('Provider operation ended');
+  }
+
+  Future<T> wait<T>(Future<T> request) => Future.any([
+    request,
+    _ended.future.then<T>(
+      (_) => throw TimeoutException('Provider operation ended'),
+    ),
+  ]);
+
+  void close() => _ended.complete();
 }

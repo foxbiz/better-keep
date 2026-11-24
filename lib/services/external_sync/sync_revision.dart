@@ -30,9 +30,6 @@ class SyncRevision extends SyncVersion {
     if (this.blobIds.length > SyncLimits.attachmentCount) {
       throw const FormatException('Too many sync attachments');
     }
-    for (final id in [entityId, revisionId, ...this.blobIds]) {
-      _validateId(id);
-    }
     for (final id in [
       ...this.blobIds,
       ?payloadObjectId,
@@ -45,9 +42,6 @@ class SyncRevision extends SyncVersion {
         );
       }
     }
-    if (modifiedAtMicros < 0 || modifiedAtMicros > 9007199254740991) {
-      throw const FormatException('Invalid revision timestamp');
-    }
     if (deleted) {
       if (payloadObjectId != null || this.blobIds.isNotEmpty) {
         throw const FormatException('Tombstones cannot reference content');
@@ -56,7 +50,6 @@ class SyncRevision extends SyncVersion {
       if (payloadObjectId == null) {
         throw const FormatException('Missing revision payload');
       }
-      _validateId(payloadObjectId!);
     }
   }
 
@@ -68,13 +61,6 @@ class SyncRevision extends SyncVersion {
   /// The codec validates these against the decrypted payload before applying it.
   final List<String> legacyContentFingerprints;
   final List<String> blobIds;
-
-  static int nextTimestamp(DateTime now, SyncRevision? previous) {
-    final time = now.toUtc().microsecondsSinceEpoch;
-    return previous != null && previous.modifiedAtMicros >= time
-        ? previous.modifiedAtMicros + 1
-        : time;
-  }
 
   /// Independently encrypted representations can share a logical revision only
   /// when their keyed content fingerprints match, including authenticated aliases
@@ -148,11 +134,5 @@ class SyncRevision extends SyncVersion {
           const [],
       blobIds: (json['blobIds'] as List).cast<String>(),
     );
-  }
-
-  static void _validateId(String id) {
-    if (id.isEmpty || id.length > 256 || RegExp(r'[\x00-\x1f]').hasMatch(id)) {
-      throw const FormatException('Invalid sync identifier');
-    }
   }
 }

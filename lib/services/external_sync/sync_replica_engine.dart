@@ -109,23 +109,6 @@ class SyncReplicaEngine {
     return task;
   }
 
-  /// A failure on one connection cannot cancel another connection's work.
-  Future<Map<String, Object>> syncAll(
-    Iterable<SyncProviderAdapter> adapters,
-  ) async {
-    final failures = <String, Object>{};
-    await Future.wait(
-      adapters.map((adapter) async {
-        try {
-          await sync(adapter);
-        } catch (error) {
-          failures[adapter.connectionId] = error;
-        }
-      }),
-    );
-    return failures;
-  }
-
   Future<void> _track(Future<void> operation) {
     late final Future<void> task;
     task = operation.whenComplete(() => _tasks.remove(task));
@@ -258,6 +241,11 @@ class SyncReplicaEngine {
       stage: NoteTransferStage.uploading,
       onProgress: (value) => onProgress?.call(adapter, value),
     );
+    if (adapter is SyncIndexMaintenance) {
+      _guard();
+      await (adapter as SyncIndexMaintenance).maintainIndex();
+      _guard();
+    }
   }
 
   Future<void> _publishPending(

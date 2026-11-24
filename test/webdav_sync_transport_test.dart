@@ -9,6 +9,8 @@ import 'package:better_keep/services/external_sync/sync_revision.dart';
 import 'package:crypto/crypto.dart';
 import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
 import 'package:better_keep/services/external_sync/webdav_sync_transport.dart';
+import 'package:better_keep/services/external_sync/nextcloud_sync_transport.dart';
+import 'package:better_keep/services/external_sync/sync_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -27,6 +29,54 @@ void main() {
         appPassword: () async => 'app-password',
         libraryId: id ?? library,
       );
+
+  for (final nextcloud in [false, true]) {
+    test(
+      'bounded small reads preserve DAV errors and large-file fallback: Nextcloud=$nextcloud',
+      () async {
+        var status = 200;
+        var bytes = Uint8List.fromList([1, 2, 3]);
+        final client = MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.followRedirects, isFalse);
+          expect(request.url.host, 'example.test');
+          return http.Response.bytes(bytes, status);
+        });
+        addTearDown(client.close);
+        final dav = nextcloud
+            ? NextcloudSyncTransport(
+                httpClient: ProviderHttp(client),
+                server: Uri.parse('https://example.test'),
+                username: 'qa',
+                appPassword: () async => 'fixture',
+                libraryId: library,
+              )
+            : WebDavSyncTransport(
+                httpClient: ProviderHttp(client),
+                server: Uri.parse('https://example.test/dav'),
+                username: 'qa',
+                appPassword: () async => 'fixture',
+                libraryId: library,
+              );
+        expect(await dav.readSmall(media), bytes);
+        status = 401;
+        await expectLater(
+          dav.readSmall(media),
+          throwsA(
+            isA<SyncProviderFailure>().having(
+              (failure) => failure.kind,
+              'kind',
+              SyncProviderFailureKind.reconnectRequired,
+            ),
+          ),
+        );
+        status = 200;
+        bytes = Uint8List(SyncLimits.prefetchBytes + 1);
+        expect(await dav.readSmall(media), isNull);
+        expect(await dav.read(media), bytes);
+      },
+    );
+  }
 
   for (final failFirst in [false, true]) {
     test(

@@ -1,6 +1,7 @@
 import 'sync_limits.dart';
 import 'dav_listing_reader.dart';
 import 'storage_usage.dart';
+import 'sync_metadata_index.dart';
 
 import 'dart:convert';
 import 'dart:math';
@@ -16,7 +17,12 @@ import 'sync_provider_adapter.dart';
 /// WebDAV adapter. ETags detect changed immutable commit files; they are never
 /// used as note timestamps. No Firebase proxy or arbitrary redirect is used.
 class WebDavSyncTransport
-    implements SyncFileTransport, SyncFileCleanup, StorageUsageReader {
+    implements
+        SyncFileTransport,
+        SmallSyncFileReader,
+        SyncIndexFileTransport,
+        SyncFileCleanup,
+        StorageUsageReader {
   WebDavSyncTransport({
     required this.httpClient,
     required Uri server,
@@ -152,6 +158,8 @@ class WebDavSyncTransport
     Map<String, String> headers = const {},
     Uint8List? body,
     int maxResponseBytes = SyncLimits.metadataBytes,
+    Exception? sizeException,
+    Duration? requestTimeout,
   }) async => httpClient.send(
     method,
     uri,
@@ -162,6 +170,8 @@ class WebDavSyncTransport
     },
     body: body,
     maxResponseBytes: maxResponseBytes,
+    sizeException: sizeException,
+    requestTimeout: requestTimeout,
   );
 
   Future<void> _initialize() {
@@ -394,7 +404,16 @@ class WebDavSyncTransport
       _remaining = null;
       _scanId = null;
     }
-    return SyncFilePage(names: page, cursor: nextCursor, hasMore: hasMore);
+    return SyncFilePage(
+      names: page,
+      cursor: nextCursor,
+      hasMore: hasMore,
+      commitVersions: {
+        for (final name in page)
+          // Weak ETags do not establish byte identity.
+          if (!current[name]!.startsWith('W/')) name: [current[name]!],
+      },
+    );
   }
 
   Map<String, String> _parseListing(String body) {
@@ -456,13 +475,62 @@ class WebDavSyncTransport
   }
 
   @override
-  Future<Uint8List> read(String name) async {
+  Future<Uint8List> read(String name) => _read(name);
+
+  @override
+  Future<Uint8List?> readIndex({
+    String name = SyncMetadataIndex.fileName,
+  }) async {
+    SyncMetadataIndex.validateFileName(name);
+    final response = await _request(
+      'GET',
+      _uri([libraryId, name]),
+      maxResponseBytes: SyncMetadataIndex.maxBytes,
+      requestTimeout: SyncMetadataIndex.requestTimeout,
+    );
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) ProviderHttp.fail(response);
+    return response.bodyBytes;
+  }
+
+  @override
+  Future<void> writeIndex(
+    Uint8List bytes, {
+    String name = SyncMetadataIndex.fileName,
+  }) async {
+    SyncMetadataIndex.validateWrite(name, bytes);
+    await _initialize();
+    final response = await _request(
+      'PUT',
+      _uri([libraryId, name]),
+      headers: {'Content-Type': 'application/json'},
+      body: bytes,
+      requestTimeout: SyncMetadataIndex.requestTimeout,
+    );
+    if (![200, 201, 204].contains(response.statusCode)) {
+      ProviderHttp.fail(response);
+    }
+  }
+
+  @override
+  Future<Uint8List?> readSmall(String name) async {
+    try {
+      return await _read(name, small: true);
+    } on SmallSyncReadLimitExceeded {
+      return null;
+    }
+  }
+
+  Future<Uint8List> _read(String name, {bool small = false}) async {
     final response = await _request(
       'GET',
       _file(name),
-      maxResponseBytes: name.startsWith('c-')
+      maxResponseBytes: small
+          ? SyncLimits.prefetchBytes
+          : name.startsWith('c-')
           ? SyncLimits.commitBytes
           : SyncLimits.objectBytes,
+      sizeException: small ? const SmallSyncReadLimitExceeded() : null,
     );
     if (response.statusCode != 200) ProviderHttp.fail(response);
     return response.bodyBytes;

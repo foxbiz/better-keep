@@ -1,5 +1,6 @@
 import 'sync_limits.dart';
 import 'storage_usage.dart';
+import 'sync_metadata_index.dart';
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -17,6 +18,7 @@ class DropboxSyncTransport
         SyncFileCleanup,
         StorageUsageReader,
         SmallSyncFileReader,
+        SyncIndexFileTransport,
         BatchSyncFileWriter {
   DropboxSyncTransport({
     required this.httpClient,
@@ -104,6 +106,7 @@ class DropboxSyncTransport
     String route,
     Map<String, Object?> args, {
     Uint8List? data,
+    Duration? requestTimeout,
   }) async {
     final content = data != null;
     return httpClient.send(
@@ -120,6 +123,7 @@ class DropboxSyncTransport
         if (content) 'Dropbox-API-Arg': jsonEncode(args),
       },
       body: data ?? Uint8List.fromList(utf8.encode(jsonEncode(args))),
+      requestTimeout: requestTimeout,
     );
   }
 
@@ -162,6 +166,7 @@ class DropboxSyncTransport
       throw const FormatException('Invalid Dropbox listing');
     }
     final names = <String>[];
+    final versions = <String, List<String>>{};
     for (final item in json['entries'] as List) {
       if (item is! Map<String, dynamic>) {
         throw const FormatException('Invalid Dropbox entry');
@@ -171,6 +176,11 @@ class DropboxSyncTransport
       final name = item['name'];
       if (name is! String) throw const FormatException('Invalid Dropbox file');
       names.add(name);
+      if (item['id'] is String && item['rev'] is String) {
+        versions[name] = [
+          jsonEncode([item['id'], item['rev']]),
+        ];
+      }
     }
     _initialized = true;
     return SyncFilePage(
@@ -178,11 +188,53 @@ class DropboxSyncTransport
       names: names,
       cursor: json['cursor'] as String,
       hasMore: json['has_more'] as bool,
+      commitVersions: versions,
     );
   }
 
   @override
   Future<Uint8List> read(String name) => _read(name);
+
+  @override
+  Future<Uint8List?> readIndex({
+    String name = SyncMetadataIndex.fileName,
+  }) async {
+    SyncMetadataIndex.validateFileName(name);
+    final response = await httpClient.send(
+      'POST',
+      Uri.https('content.dropboxapi.com', '/2/files/download'),
+      headers: {
+        'Authorization': 'Bearer ${await accessToken()}',
+        'Dropbox-API-Arg': jsonEncode({'path': '$root/$name'}),
+      },
+      maxResponseBytes: SyncMetadataIndex.maxBytes,
+      requestTimeout: SyncMetadataIndex.requestTimeout,
+    );
+    if (_error(response, 'path/not_found')) return null;
+    if (response.statusCode != 200) ProviderHttp.fail(response);
+    return response.bodyBytes;
+  }
+
+  @override
+  Future<void> writeIndex(
+    Uint8List bytes, {
+    String name = SyncMetadataIndex.fileName,
+  }) async {
+    SyncMetadataIndex.validateWrite(name, bytes);
+    await _initialize();
+    final response = await _call(
+      'upload',
+      {
+        'path': '$root/$name',
+        'mode': 'overwrite',
+        'autorename': false,
+        'mute': true,
+      },
+      data: bytes,
+      requestTimeout: SyncMetadataIndex.requestTimeout,
+    );
+    if (response.statusCode != 200) _failWriteResponse(response);
+  }
 
   @override
   Future<Uint8List?> readSmall(String name) async {

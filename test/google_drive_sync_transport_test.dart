@@ -7,6 +7,7 @@ import 'package:better_keep/services/external_sync/provider_http.dart';
 import 'package:better_keep/services/external_sync/sync_cipher.dart';
 import 'package:better_keep/services/external_sync/sync_provider_adapter.dart';
 import 'package:better_keep/services/external_sync/sync_revision.dart';
+import 'package:better_keep/services/external_sync/sync_limits.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -32,6 +33,81 @@ void main() {
       );
   http.Response json(Object data, [int status = 200]) =>
       http.Response(jsonEncode(data), status);
+
+  test(
+    'bounded Drive prefetch validates every duplicate object copy',
+    () async {
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      final logical = 'o-${sha256.convert(bytes)}';
+      var corrupt = false;
+      final reads = <String>[];
+      final drive = transport(
+        MockClient((request) async {
+          if (request.url.queryParameters['alt'] == 'media') {
+            final id = request.url.pathSegments.last;
+            reads.add(id);
+            return http.Response.bytes(
+              corrupt && id == 'two' ? [9] : bytes,
+              200,
+            );
+          }
+          return json({
+            'files': [metadata('one', logical), metadata('two', logical)],
+          });
+        }),
+      );
+      expect(await drive.readSmall(logical), bytes);
+      expect(reads, ['one', 'two']);
+      corrupt = true;
+      await expectLater(
+        drive.readSmall(logical),
+        throwsA(
+          isA<SyncProviderFailure>().having(
+            (failure) => failure.kind,
+            'kind',
+            SyncProviderFailureKind.corruptData,
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'large Drive objects fall back without relaxing regular size validation',
+    () async {
+      final logical = 'o-${'d' * 64}';
+      final bytes = Uint8List(SyncLimits.prefetchBytes + 1);
+      final drive = transport(
+        MockClient((request) async {
+          if (request.url.queryParameters['alt'] == 'media') {
+            return http.Response.bytes(bytes, 200);
+          }
+          return json({
+            'files': [metadata('one', logical)],
+          });
+        }),
+      );
+      expect(await drive.readSmall(logical), isNull);
+      expect(await drive.read(logical), bytes);
+      expect(await drive.readSmall(name), isNull);
+    },
+  );
+
+  test('Drive prefetch bounds the combined size of duplicate copies', () async {
+    final logical = 'o-${'d' * 64}';
+    final bytes = Uint8List(SyncLimits.prefetchBytes ~/ 2 + 1);
+    final drive = transport(
+      MockClient((request) async {
+        if (request.url.queryParameters['alt'] == 'media') {
+          return http.Response.bytes(bytes, 200);
+        }
+        return json({
+          'files': [metadata('one', logical), metadata('two', logical)],
+        });
+      }),
+    );
+    expect(await drive.readSmall(logical), isNull);
+  });
 
   test('bootstrap captures boundary before listing and drains changes without a gap', () async {
     final calls = <String>[];

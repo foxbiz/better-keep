@@ -28,6 +28,13 @@ abstract interface class SmallSyncObjectReader {
   Future<Uint8List?> readSmallObject(String objectId);
 }
 
+/// Called after validated incoming work and note uploads, never download-only.
+/// Implementations bound the wait and contain failures: this is optional cache
+/// maintenance, never authoritative note state.
+abstract interface class SyncIndexMaintenance {
+  Future<void> maintainIndex();
+}
+
 /// Optional immutable batch writes. A failed batch must not be acknowledged;
 /// retrying any subset must validate existing content rather than overwrite it.
 abstract interface class BatchSyncWriter {
