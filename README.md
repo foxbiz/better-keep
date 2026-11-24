@@ -227,13 +227,10 @@ Firestore, and Storage emulators (synthetic accounts only):
 npm --prefix functions run test:deletion
 ```
 
-Automatic deletion fails closed unless `ACCOUNT_DELETION_ENABLED=true` is set
-on the worker. Legacy schedules have no verified request record and remain on
-hold; do not convert them into verified requests without renewed user consent.
-Keep the deletion scheduler paused during rollout and incident review. Deploy
-protected-field Firestore rules first, then the backend with deletion disabled.
-See [account deletion operations](docs/ACCOUNT_DELETION.md) for the token-expiry
-wait, partial-deletion recovery procedure, release gate, and remaining rollout checks.
+Account deletion runs without an environment flag; legacy/unverified requests remain held.
+Deploy protected-field rules and retention indexes before the backend, and verify Scheduler state.
+See [account deletion operations](docs/ACCOUNT_DELETION.md) for index readiness, token-expiry
+waiting periods, recovery procedures, and rollout checks.
 The suite covers cancellation/worker races, OTP replay, provider sign-in hooks,
 reminders, and complete deletion/retry using synthetic data. OAuth provider
 consent screens and real email delivery still require separate live validation.

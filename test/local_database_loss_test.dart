@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:better_keep/config.dart';
 import 'package:better_keep/services/database.dart';
 import 'package:better_keep/services/local_storage_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,50 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
+
+  test(
+    'a newer schema is rejected without changing its version or data',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'downgrade-fixture-',
+      );
+      final previousPath = await databaseFactory.getDatabasesPath();
+      await databaseFactory.setDatabasesPath(directory.path);
+      Database? db;
+      addTearDown(() async {
+        await db?.close();
+        await databaseFactory.setDatabasesPath(previousPath);
+        await directory.delete(recursive: true);
+      });
+      SharedPreferences.setMockInitialValues({});
+      final recovery = LocalStorageRecovery(
+        await SharedPreferences.getInstance(),
+      );
+      db = await initDatabase(detectDataLoss: true);
+      final fixturePath = db.path;
+      await db.execute('CREATE TABLE future_data (value TEXT)');
+      await db.insert('future_data', {'value': 'preserve me'});
+      await db.setVersion(databaseVersion + 1);
+      await db.close();
+
+      await expectLater(
+        initDatabase(detectDataLoss: true),
+        throwsA(
+          isA<DatabaseUpdateRequired>().having(
+            (error) => error.message,
+            'message',
+            contains('Update the app'),
+          ),
+        ),
+      );
+      db = await databaseFactory.openDatabase(fixturePath);
+      expect(await db.getVersion(), databaseVersion + 1);
+      expect(await db.query('future_data'), [
+        {'value': 'preserve me'},
+      ]);
+      expect(recovery.pending, false);
+    },
+  );
 
   test(
     'fresh v14 schema is safe; only confirmed recreation requests logout',

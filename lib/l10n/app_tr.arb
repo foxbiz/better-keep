@@ -22,6 +22,8 @@
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Better Keep başlatılamadı",
+	"updateApp": "Uygulamayı güncelle",
+	"databaseUpdateRequired": "Yerel verileriniz Better Keep’in daha yeni bir sürümüyle oluşturulmuş. Açmak için uygulamayı güncelleyin. Verileriniz değiştirilmedi. Uygulamayı kaldırmayın veya depolama alanını temizlemeyin.",
 	"startupRetryMessage": "Uygulama açılırken bir sorun oluştu. Lütfen tekrar deneyin.",
 	"startupRestartMessage": "Uygulama açılırken bir sorun oluştu. Tekrar denemek için uygulamayı kapatıp yeniden açın.",
 	"accountNotFound": "Bu e-posta adresiyle eşleşen bir hesap bulunamadı.",

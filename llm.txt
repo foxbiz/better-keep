@@ -609,14 +609,14 @@ The reproducible iOS preview/cold/warm/cancel/copy-failure UI gate is documented
 `test/ios_image_share_ui/README.md`. Its disposable simulator fixture requires a
 test-only LOCAL_DATA_KEY and asserts encrypted attachments before reporting success.
 
-## Account deletion hardening (local, not deployed)
+## Account deletion
 
 - `functions/src/accountDeletionLifecycle.ts`: atomic OTP/schedule/audit proof, transactional
   cancellation, claim leases, token-drain checkpoint, and reminder proof validation.
 - Backend-only collections: `accountDeletionRequests` (incident audit retention hold) and
   `accountDeletionWorker/scan` (bounded worker pagination cursor).
-- The worker is disabled unless `ACCOUNT_DELETION_ENABLED=true`; Scheduler was paused
-  during incident response; recheck its status before any approved production operation. No deployment/re-enablement without explicit permission.
+- Deletion and terminal audit cleanup run without environment enable flags. Verify Scheduler state
+  and deploy the retention indexes before cleanup; see the operations guide for rollout requirements.
 - `functions/scripts/runTests.mjs` keeps test manifests out of package.json. The isolated
   `tool/test_account_deletion.sh` suite participates in `npm run release` through the
   `firebase-emulator-deletion` suite.

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:better_keep/services/local_storage_recovery.dart';
+import 'package:better_keep/services/database.dart' show DatabaseUpdateRequired;
 import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/services/file_system.dart'
     show
@@ -598,6 +599,7 @@ class _BetterKeepState extends State<BetterKeep> {
       if (_databaseStartupError != null) {
         return _buildLocalizedStartupApp(
           home: AppStartupErrorView(
+            requiresAppUpdate: _databaseStartupError is DatabaseUpdateRequired,
             onLibrarySignOut: _databaseStartupError is LocalLibraryUnavailable
                 ? () async {
                     try {

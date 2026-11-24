@@ -22,6 +22,8 @@
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "无法启动 Better Keep",
+	"updateApp": "更新应用",
+	"databaseUpdateRequired": "本地数据由较新版本的 Better Keep 创建。请更新应用以打开数据。您的数据未被更改。请勿卸载应用或清除其存储空间。",
 	"startupRetryMessage": "打开应用时出现问题。请重试。",
 	"startupRestartMessage": "打开应用时出现问题。请关闭并重新打开应用后重试。",
 	"accountNotFound": "未找到使用此电子邮件的账户。",

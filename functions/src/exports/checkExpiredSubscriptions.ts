@@ -2,6 +2,10 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { auth, db, emailPassword, googlePlayCredentials } from "../config";
 import {
+	formatEmailDate,
+	generateTransactionalEmail,
+} from "../email_templates";
+import {
 	endUnqueryableGooglePlaySubscription,
 	isGooglePlayGoneError,
 	refreshGooglePlaySubscription,
@@ -64,42 +68,23 @@ export default onSchedule(
 							from: `"${senderName}" <${senderEmail}>`,
 							to: email,
 							subject: "Your Better Keep Pro subscription is expiring soon",
-							html: `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                  <meta charset="utf-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                </head>
-                <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
-                  <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <h1 style="color: #333; font-size: 24px; margin-bottom: 16px;">Subscription Expiring Soon</h1>
-                    <p style="color: #666; font-size: 16px; line-height: 1.5;">
-                      Your Better Keep Pro subscription will expire on <strong>${expiresAt.toLocaleDateString()}</strong>.
-                    </p>
-                    <p style="color: #666; font-size: 16px; line-height: 1.5;">
-                      To continue enjoying unlimited locked notes and cloud sync, make sure your subscription auto-renews or resubscribe.
-                    </p>
-                    <div style="margin: 24px 0;">
-							<a href="${manageUrl}" style="display: inline-block; background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-                        Manage Subscription
-                      </a>
-                    </div>
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
-                    <p style="color: #999; font-size: 12px;">
-                      If you have questions, contact us at support@betterkeep.app
-                    </p>
-                    <p style="color: #bbb; font-size: 11px; margin-top: 8px;">
-                      Better Keep by Foxbiz Software Pvt. Ltd.
-                    </p>
-                  </div>
-                </body>
-                </html>
-              `,
-							text: `Your Better Keep Pro subscription will expire on ${expiresAt.toLocaleDateString()}. To continue enjoying Pro features, make sure your subscription auto-renews.`,
+							...generateTransactionalEmail({
+								title: "Your subscription is ending soon",
+								category: "Subscription",
+								paragraphs: [
+									"Your Better Keep Pro subscription is due to expire. To keep unlimited locked notes and cloud sync, check that auto-renewal is enabled or resubscribe.",
+								],
+								details: [
+									{
+										label: "Expiry date",
+										value: formatEmailDate(expiresAt),
+									},
+								],
+								action: { label: "Manage subscription", url: manageUrl },
+							}),
 						});
 
-						console.log(`Sent expiry warning to ${email}`);
+						console.log("Sent subscription expiry warning");
 					}
 
 					// Mark as notified

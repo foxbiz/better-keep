@@ -51,9 +51,8 @@ before(async () => {
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 	origin = `http://127.0.0.1:${server.address().port}`;
 });
-// Tests deliberately mutate worker configuration; node:test runs them serially.
+// Each test starts from the beginning of the worker scan.
 beforeEach(async () => {
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	await db.collection("accountDeletionWorker").doc("scan").delete();
 });
 after(async () => {
@@ -134,7 +133,6 @@ async function schedule(f, {completeRevocation = true} = {}) {
 	return (await f.user.get()).data().scheduledDeletion;
 }
 async function drainTokens(f, s) {
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	await tick("processScheduledDeletions");
 	assert.equal((await auth.getUser(f.uid)).disabled, true);
 	assert.equal(
@@ -278,16 +276,12 @@ test("custom OAuth completion cancels pending deletion before issuing the sign-i
 	}
 });
 
-test("HTTP cancellation leaves notes intact and worker default is disabled", async () => {
+test("HTTP cancellation leaves notes intact when the worker runs", async () => {
 	const f = await fixture();
 	const s = await schedule(f);
 	await age(f, s);
-	delete process.env.ACCOUNT_DELETION_ENABLED;
-	await tick("processScheduledDeletions");
-	assert.equal((await f.user.get()).exists, true);
 	// Fresh authentication via a custom token is unnecessary for the endpoint's owner check in this emulator.
 	assert.equal((await call("cancelScheduledDeletion", f.token)).status, 200);
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	await tick("processScheduledDeletions");
 	assert.equal(
 		(await f.user.collection("notes").doc("retained-note").get()).exists,
@@ -319,7 +313,6 @@ test("real handler deletes an eligible synthetic account completely and preserve
 	await legacy.user.update({
 		scheduledDeletion: { deleteAt: Timestamp.fromMillis(0) },
 	});
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	await tick("processScheduledDeletions");
 	assert.equal((await f.user.get()).exists, false);
 	assert.equal((await f.user.collection("notes").get()).empty, true);
@@ -389,7 +382,6 @@ test("partial deletion retains a non-cancellable claim and retry finishes withou
 			throw new Error("Synthetic storage outage");
 		},
 	});
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	try {
 		const response = await fetch(`${origin}/processScheduledDeletions`, {
 			method: "POST",
@@ -407,10 +399,6 @@ test("partial deletion retains a non-cancellable claim and retry finishes withou
 	await f.user.update({
 		"scheduledDeletion.leaseUntil": Timestamp.fromMillis(0),
 	});
-	// Emergency disable must also stop partial work, even after its lease expires.
-	delete process.env.ACCOUNT_DELETION_ENABLED;
-	await tick("processScheduledDeletions");
-	assert.equal((await f.user.get()).exists, true);
 	assert.equal(
 		(await storage.bucket().file(`users/${f.uid}/attachment`).exists())[0],
 		true,
@@ -424,7 +412,6 @@ test("partial deletion retains a non-cancellable claim and retry finishes withou
 			details: { reason: "account-deletion-in-progress" },
 		},
 	);
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	await tick("processScheduledDeletions");
 	assert.equal((await f.user.get()).exists, false);
 	assert.equal(
@@ -440,7 +427,6 @@ test("missing Auth and forged reminder proof are held without destroying data or
 	const s = await schedule(f);
 	await age(f, s);
 	await auth.deleteUser(f.uid);
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	const warnings = [];
 	const warn = console.warn;
 	console.warn = (...args) => warnings.push(args);
@@ -522,7 +508,6 @@ test("held records spanning query pages do not starve an eligible request", asyn
 	const f = await fixture();
 	const s = await schedule(f);
 	await age(f, s);
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	await tick("processScheduledDeletions");
 	assert.equal((await f.user.get()).data().scheduledDeletion.state, "deleting");
 	assert.equal((await auth.getUser(f.uid)).disabled, true);
@@ -536,7 +521,6 @@ test("bounded worker resumes from its checkpoint instead of skipping the remaini
 		await age(f, s);
 		fixtures.push(f);
 	}
-	process.env.ACCOUNT_DELETION_ENABLED = "true";
 	await tick("processScheduledDeletions");
 	const countDisabled = async () =>
 		(await Promise.all(fixtures.map((f) => auth.getUser(f.uid)))).filter(
@@ -583,24 +567,16 @@ test("reminder delivery failure fails the job and a later retry marks success", 
 	);
 });
 
-test("paused deletion refuses new OTPs and schedules and suppresses reminders", async () => {
+test("deletion OTPs, scheduling and reminders work without an enable flag", async () => {
 	const f = await fixture();
 	const s = await schedule(f);
 	await age(f, s, 29.5);
-	// Scheduling revokes f's token. Use a fresh account to exercise the pause gate,
-	// while retaining f's scheduled request to check reminder suppression.
-	const requester = await fixture();
-	delete process.env.ACCOUNT_DELETION_ENABLED;
 	const count = emails.length;
-	for (const name of ["sendDeletionOtp", "scheduleAccountDeletion"]) {
-		const result = await call(name, requester.token, { otp: "123456" });
-		assert.equal(result.error.details.reason, "account-deletion-paused");
-	}
 	await tick("sendDeletionReminders");
-	assert.equal(emails.length, count);
+	assert.equal(emails.slice(count).filter((mail) => mail.to === f.email).length, 1);
 	assert.equal(
 		(await f.user.get()).data().scheduledDeletion.reminderSent,
-		false,
+		true,
 	);
 });
 

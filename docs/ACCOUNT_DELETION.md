@@ -1,14 +1,11 @@
 # Account deletion operations
 
-This describes the local hardening changes. It does not authorize production deployment,
-queries, data edits, scheduler changes, or execution of cleanup jobs.
+Lifecycle, audit retention, and recovery procedures for account deletion.
 
 ## Lifecycle and safeguards
 
-1. While `ACCOUNT_DELETION_ENABLED=true`, an authenticated owner requests an emailed OTP.
-   When paused, both OTP issuance and scheduling return `unavailable` with reason
-   `account-deletion-paused`; the client shows a support message. Repeated requests within 60 seconds
-   return cooldown details without replacing the original code. The client permits entering
+1. An authenticated owner requests an emailed OTP; no environment enable flag is required.
+   Repeated requests within 60 seconds return cooldown details without replacing the original code. The client permits entering
    that code after a cancelled or timed-out email request.
 2. `scheduleDeletion` atomically consumes the OTP, creates a 30-day schedule in
    `revoking` state and an audit record with matching owner, dates and verification.
@@ -30,12 +27,13 @@ queries, data edits, scheduler changes, or execution of cleanup jobs.
    Keep cancellation before sign-in/token issuance completes. Moving it to a later client
    step creates a window in which authentication can succeed but the worker can still claim
    pending deletion; its Auth metadata snapshot is read outside the Firestore transaction.
-4. Reminders are suppressed while deletion is paused. They require a matching backend proof and a future deadline, and use an explicit
+4. Reminders have a separate Scheduler job; pause it separately during incidents.
+   They require a matching backend proof and a future deadline, and use an explicit
    UTC date/time. Successful sends are marked conditionally. SMTP cannot participate in a
    Firestore transaction: a cancellation during sending can still produce a stale email,
    and an ambiguous SMTP response can cause a retry duplicate. Neither can recreate a
    deletion request. Delivery failures fail the scheduled invocation for retry/monitoring.
-5. After the grace period, an enabled worker transactionally claims a verified request as
+5. After the grace period, the worker transactionally claims a verified request as
    `deleting`. Cancellation then fails with an actionable support message. The worker disables
    the Auth user and revokes refresh tokens, records `authInvalidatedAt`, and waits at least
    **65 minutes** before any purge. A later daily invocation resumes after this wait; the
@@ -87,9 +85,8 @@ this phase.
 A process crash during dispatch, or failure of both completion and compensation writes,
 leaves the request fenced. Monitor failed trigger executions and `revoking` requests older
 than ten minutes. Restore the dependency first. Expiry alone never authorizes takeover.
-The trigger continues securing accepted requests even when `ACCOUNT_DELETION_ENABLED` is
-off; that switch prevents new requests and destructive cleanup, not completion of an
-accepted session-safety step.
+The trigger continues securing accepted requests even when the deletion scheduler is paused;
+pausing a scheduled worker does not stop this accepted session-safety step.
 
 ### Account-scoped recovery
 
@@ -120,15 +117,14 @@ and Firestore on loopback with an explicit `demo-*` project, preventing mixed ta
 If another retry claims the released attempt, the command may report in-progress; inspect
 that invocation rather than resetting it. If the recovery command itself crashes after
 dispatch, repeat the incident checks against its **new** attempt ID. Reusing a stale attempt
-ID fails closed. No recovery command was run against development or production records
-during local validation.
+ID fails closed.
 
 ## Emergency stop and partial-deletion recovery
 
-- Keep Cloud Scheduler paused and `ACCOUNT_DELETION_ENABLED` unset/false during the incident
-  and rollout. The switch stops **all new invocations**, including partial retries. It does
-  not interrupt code already running with a previously loaded configuration. Pausing Scheduler
-  also does not cancel an in-flight invocation; verify it has stopped before recovery edits.
+- Pause the deletion, reminder, and audit-cleanup Cloud Scheduler jobs during an incident.
+  There is no environment kill switch. Pausing Scheduler does not stop in-flight functions,
+  direct invocations, or new callable OTP/scheduling requests. Verify running work has stopped
+  before recovery edits; stopping callable requests requires a separately approved backend change.
 - A `deleting` account is deliberately quarantined, not permanently unrecoverable. Do not
   reset it to `pending`, clear its marker, force `completed`, or send an account-restored
   email merely because the lease expired. Some data might already be gone.
@@ -136,8 +132,8 @@ during local validation.
   compare root schedule, audit proof, lease, Auth state, logs, and remaining data. Preserve
   incident evidence; never copy tokens, OTPs, email addresses or note contents into reports.
 - If the request was legitimate and the user still wants deletion, repair the failed dependency,
-  validate the matching proof, and obtain approval for resuming deletion. Enable the worker and
-  resume the scheduler only when **all eligible requests** are cleared for processing; this is
+  validate the matching proof, and obtain approval for resuming deletion. Resume the scheduler
+  only when **all eligible requests** are cleared for processing; this is
   a global worker, not a single-account recovery command. Existing claims resume after leases
   expire and token waiting periods pass. Verify the final audit state and cleanup inventory.
 - If the request is disputed, retain the stop. Determine whether any purge ran. Restore missing
@@ -161,73 +157,35 @@ SMTP success followed by a process failure can still duplicate a
 notice. Legacy schedules without an audit record cannot produce this notification; cancellation
 still succeeds. Deploy the new trigger with the callable changes to avoid a notification gap.
 
-Audit records currently have **no automatic retention deletion**. This is an explicit incident
-hold, not a claim of complete erasure of operational metadata. They contain UID and lifecycle
-metadata, not note content, OTPs or tokens. Before enabling deletion, approve and implement a
-retention policy for terminal records (and any billing/operational records outside this flow).
-Do not prune pending/deleting proofs or incident evidence with an indiscriminate TTL.
+## Audit retention
 
-## Proposed retention policy (not enabled)
+`cleanupDeletionAuditRecords` runs daily at 04:00 UTC without an environment flag. It removes
+`completed` and `cancelled` audit records at least **90 days** after their terminal timestamp,
+only when `retentionHold` is explicitly `false`. Each deletion transaction rechecks the state,
+timestamp, hold, UID, and whether the user still references the request. It never deletes accounts.
 
-Owner approval and implementation are required before enabling account deletion:
+New audit records have `retentionHold: false`. Missing or malformed hold values preserve older
+records; there is no automatic backfill. Active and held audits remain until separately reviewed.
+An audit retention hold does not pause account deletion. The 90-day window is operational,
+not a legal retention determination; billing, logs, and backups have separate retention policies.
 
-- Keep terminal `completed` and `cancelled` audit records for **90 days** after their terminal
-  timestamp for support and incident investigation. Store only request ID, UID, lifecycle
-  timestamps, state and notification markers; never notes, tokens, OTPs or email addresses.
-- Delete terminal records after 90 days only when no incident/dispute hold applies. A cleanup
-  job must transactionally recheck terminal state, deadline and explicit hold before deletion.
-  Use neither a blanket TTL nor a TTL on pending/deleting records.
-- Retain pending/deleting and incident-held records until the workflow or investigation is
-  resolved. Review held records monthly under an approved, read-only inventory procedure.
-- Retain only aggregate, non-identifying deletion counters after audit removal. Define log,
-  backup and billing retention separately; audit removal alone does not erase those copies.
-- Before rollout, test retention boundaries, concurrent state changes and hold enforcement
-  using disposable staging records, then obtain approval to activate the policy.
+Two composite indexes support the cleanup queries: `state`, `retentionHold`, and either
+`completedAt` or `cancelledAt`. The job scans up to five 100-record pages per state. Checkpoints
+under `accountDeletionWorker/auditRetention_{state}` let later runs continue past skipped
+records, then wrap to revisit them. Logs contain aggregate scanned/deleted/skipped counts;
+persistent skips need operator review. After 480 seconds it stops starting new work and saves
+partial-page progress; logs flag budget exhaustion. In-flight operations may outlast that budget.
 
-This is a proposed operational window, not a legal retention determination. No TTL, cleanup
-job, production query or data deletion has been enabled by this change.
+## Deployment and validation
 
-## Rollout and verification
-
-1. Keep the deletion scheduler paused. Obtain deployment permission.
-2. Deploy protected-field Firestore rules **first**, then backend functions with deletion disabled.
-   Older clients lose their direct-write cancellation fallback; server cancellation remains supported.
-3. Verify disabled-worker logs and deployed rules. Release the client changes through the normal
-   app release process. Do not infer live provider/SMTP behavior from emulator results.
-4. Run `npm --prefix functions run test:deletion` for isolated synthetic Auth/Firestore/Storage
-   regression tests (requires Bash, including Git Bash/WSL on Windows). This suite is included in `npm test release` and therefore `npm run release`
-   and the release CI workflow. Run focused Flutter auth tests and the full rules suite as well.
-5. In staging, verify native/custom-provider sign-in, OTP cooldown after timeout, cancellation,
-   token expiry and resumable-upload behavior, reminder delivery, partial failure/retry, and support
-   messaging. Confirm backups/recovery procedures and audit retention before enabling production.
-6. Obtain explicit approval before enabling deletion or resuming Scheduler. Monitor the worker's
-   processed/succeeded/failed/held/waitingForTokens counters and reminder failures. Cloud log metrics
-   and alerts require separate production configuration; adding log output does not create alerts.
-
-## Read-only checks awaiting an approved environment
-
-The deletion query uses the ascending `scheduledDeletion.deleteAt` single-field index with
-its ascending document-name suffix. There is no exemption for this field in the repository;
-[Firebase documents this default ordering](https://firebase.google.com/docs/firestore/query-data/index-overview#default_ordering_and_the_name_field).
-Inspect deployed exemptions and run the exact paged query in staging with permission before
-enabling the worker. Emulator success alone does not establish deployed index availability.
-
-For an approved held-request inventory, use a read-only report with a pseudonymous account
-reference, request ID, state, schedule/deadline, proof validity, last-sign-in comparison,
-lease status and hold reason. Exclude email, note content, OTPs and tokens. Decide each
-legacy/unproven request individually; do not backfill authorization proof or use TTL to
-clear disputed schedules. No inventory query or mutation was performed by this follow-up.
-
-An account-scoped recovery command needs separate design/review of backup restoration,
-request identity and lease checks before it can safely replace the manual recovery plan.
-The current worker cannot target one account. This remains an explicit operational gap;
-never resume the global worker merely to recover one disputed account.
-
-
-## Release gates
-
-- Verify the revocation and cancellation-notification triggers exist with retries enabled.
-- Verify both the environment switch and Scheduler state; an enabled switch cannot detect a paused job.
-- Inventory legacy/unproven schedules with permission and resolve their retention/consent separately.
-- Test real ID-token expiry, resumable uploads and interrupted deletion in a disposable staging account.
-- Approve and implement the proposed retention policy before enabling cleanup; the proposal alone is not a purge job.
+- Deploy protected-field rules and the retention indexes first. Confirm both indexes are `READY`
+  before deploying cleanup; deployment activates the job without a flag.
+- Deploy the revocation and cancellation-notification triggers with the callables, and verify
+  retries and Scheduler state. Deletion, reminders, and audit cleanup have separate jobs.
+- Run `npm --prefix functions run test:deletion` for isolated Auth/Firestore/Storage regression
+  tests. The suite also runs in release CI. Run focused Flutter auth tests and the full rules suite.
+- Validate sign-in/cancellation, OTP cooldown, real token expiry and resumable uploads, reminder
+  delivery, and interrupted deletion in a disposable staging account. Emulator results do not
+  establish live provider/SMTP behavior or deployed index readiness.
+- Verify recovery procedures and monitor deletion and reminder failures. The worker is global;
+  do not resume it merely to recover one disputed account.

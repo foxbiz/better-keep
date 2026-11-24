@@ -51,8 +51,10 @@ test("emulator email logs complete plaintext without SMTP or secret access", asy
 	}
 });
 
-test("production email propagates transporter failures", async () => {
-	const failure = new Error("SMTP unavailable");
+test("production email fails without exposing SMTP recipient details to caller logs", async () => {
+	const failure = Object.assign(new Error("550 rejected recipient@example.test"), {
+		code: "EENVELOPE", response: "Rejected recipient@example.test",
+	});
 
 	await assert.rejects(
 		deliverEmail(
@@ -71,7 +73,13 @@ test("production email propagates transporter failures", async () => {
 				}),
 			},
 		),
-		failure,
+		(error) => {
+			assert.equal(error.message, "Email delivery failed (EENVELOPE)");
+			assert.ok(!JSON.stringify(error).includes("recipient@example.test"));
+			assert.ok(!error.stack.includes("recipient@example.test"));
+			assert.equal(error.cause, undefined);
+			return true;
+		},
 	);
 });
 

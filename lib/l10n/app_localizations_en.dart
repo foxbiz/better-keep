@@ -109,6 +109,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unableToStartApp => 'Unable to start Better Keep';
 
   @override
+  String get updateApp => 'Update the app';
+
+  @override
+  String get databaseUpdateRequired =>
+      'Your local data was created by a newer version of Better Keep. Update the app to open it. Your data has not been changed. Do not uninstall the app or clear its storage.';
+
+  @override
   String get startupRetryMessage =>
       'Something went wrong while opening the app. Please try again.';
 

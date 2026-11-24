@@ -222,6 +222,18 @@ abstract class AppLocalizations {
   /// **'Unable to start Better Keep'**
   String get unableToStartApp;
 
+  /// No description provided for @updateApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the app'**
+  String get updateApp;
+
+  /// No description provided for @databaseUpdateRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Your local data was created by a newer version of Better Keep. Update the app to open it. Your data has not been changed. Do not uninstall the app or clear its storage.'**
+  String get databaseUpdateRequired;
+
   /// Retryable startup failure guidance
   ///
   /// In en, this message translates to:

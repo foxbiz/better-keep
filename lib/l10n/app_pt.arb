@@ -22,6 +22,8 @@
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Não foi possível iniciar o Better Keep",
+	"updateApp": "Atualizar o app",
+	"databaseUpdateRequired": "Seus dados locais foram criados por uma versão mais recente do Better Keep. Atualize o app para abri-los. Seus dados não foram alterados. Não desinstale o app nem limpe seu armazenamento.",
 	"startupRetryMessage": "Ocorreu um problema ao abrir o app. Tente novamente.",
 	"startupRestartMessage": "Ocorreu um problema ao abrir o app. Feche e abra o app novamente para tentar de novo.",
 	"accountNotFound": "Nenhuma conta foi encontrada com este e-mail.",

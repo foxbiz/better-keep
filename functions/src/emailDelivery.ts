@@ -41,7 +41,18 @@ export async function deliverEmail(
 		return "logged";
 	}
 
-	const transporter = dependencies.createTransporter();
-	await transporter.sendMail(mailOptions);
+	try {
+		const transporter = dependencies.createTransporter();
+		await transporter.sendMail(mailOptions);
+	} catch (error) {
+		// SMTP errors can include recipient addresses and server responses. Keep
+		// a diagnostic code without propagating those payloads into caller logs.
+		const errorCode = (error as { code?: unknown } | null)?.code;
+		const code =
+			typeof errorCode === "string" && /^[A-Z_]{1,32}$/.test(errorCode)
+				? errorCode
+				: "SMTP_ERROR";
+		throw new Error(`Email delivery failed (${code})`);
+	}
 	return "sent";
 }

@@ -63,6 +63,7 @@ test("OTP is single-use under concurrent requests; proof and 30-day schedule com
 	).data();
 	assert.equal(proof.uid, f.uid);
 	assert.equal(proof.verification, "email_otp");
+	assert.equal(proof.retentionHold, false);
 });
 
 test("failed OTP attempts commit and the sixth attempt is blocked", async () => {

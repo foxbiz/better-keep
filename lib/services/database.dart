@@ -26,6 +26,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+class DatabaseUpdateRequired extends StateError {
+  DatabaseUpdateRequired()
+    : super(
+        'This data was created by a newer version of Better Keep. '
+        'Update the app to open it.',
+      );
+}
+
 Future<Database> initDatabase({bool detectDataLoss = false}) async {
   final dbPath = await activeDatabasePath();
 
@@ -52,6 +60,9 @@ Future<Database> initDatabase({bool detectDataLoss = false}) async {
       await SyncMutationJournal.install(db);
     },
     onUpgrade: upgradeDatabase,
+    onDowngrade: (_, oldVersion, newVersion) {
+      throw DatabaseUpdateRequired();
+    },
     version: databaseVersion,
   );
 

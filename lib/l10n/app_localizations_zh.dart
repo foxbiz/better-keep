@@ -98,6 +98,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToStartApp => '无法启动 Better Keep';
 
   @override
+  String get updateApp => '更新应用';
+
+  @override
+  String get databaseUpdateRequired =>
+      '本地数据由较新版本的 Better Keep 创建。请更新应用以打开数据。您的数据未被更改。请勿卸载应用或清除其存储空间。';
+
+  @override
   String get startupRetryMessage => '打开应用时出现问题。请重试。';
 
   @override

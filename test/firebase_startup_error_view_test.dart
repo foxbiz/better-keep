@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:better_keep/config.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:better_keep/components/app_startup_view.dart';
@@ -37,6 +40,62 @@ void main() {
     supportedLocales: betterKeepSupportedLocales,
     home: home,
   );
+
+  testWidgets('newer database offers updating instead of retry or sign-out', (
+    tester,
+  ) async {
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    String? openedUrl;
+    var launchSucceeds = true;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      openedUrl = (call.arguments as Map)['url'] as String;
+      return launchSucceeds;
+    });
+    addTearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      );
+    });
+    final strings = lookupAppLocalizations(const Locale('ja'));
+    await tester.pumpWidget(
+      host(
+        AppStartupErrorView(
+          requiresAppUpdate: true,
+          onRetry: () => fail('Incompatible data must not offer Retry'),
+          onLibrarySignOut: () =>
+              fail('Incompatible data must not offer Sign out'),
+        ),
+        locale: const Locale('ja'),
+      ),
+    );
+    expect(find.text(strings.databaseUpdateRequired), findsOneWidget);
+    expect(find.text(strings.retry), findsNothing);
+    expect(find.text(strings.signOut), findsNothing);
+    for (final target in {
+      TargetPlatform.android: playStoreUrl,
+      TargetPlatform.iOS: appStoreUrl,
+      TargetPlatform.windows: microsoftStoreUrl,
+      TargetPlatform.linux: 'https://betterkeep.app',
+    }.entries) {
+      debugDefaultTargetPlatformOverride = target.key;
+      await tester.tap(find.widgetWithText(FilledButton, strings.updateApp));
+      await tester.pumpAndSettle();
+      expect(openedUrl, target.value);
+    }
+    launchSucceeds = false;
+    await tester.tap(find.widgetWithText(FilledButton, strings.updateApp));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(
+      tester.widget<SelectableText>(find.byType(SelectableText)).data,
+      'https://betterkeep.app',
+    );
+    debugDefaultTargetPlatformOverride = null;
+  });
 
   testWidgets(
     'runtime file access gates an open library and Retry reopens it',

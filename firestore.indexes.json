@@ -1,6 +1,24 @@
 {
 	"indexes": [
 		{
+			"collectionGroup": "accountDeletionRequests",
+			"queryScope": "COLLECTION",
+			"fields": [
+				{ "fieldPath": "state", "order": "ASCENDING" },
+				{ "fieldPath": "retentionHold", "order": "ASCENDING" },
+				{ "fieldPath": "completedAt", "order": "ASCENDING" }
+			]
+		},
+		{
+			"collectionGroup": "accountDeletionRequests",
+			"queryScope": "COLLECTION",
+			"fields": [
+				{ "fieldPath": "state", "order": "ASCENDING" },
+				{ "fieldPath": "retentionHold", "order": "ASCENDING" },
+				{ "fieldPath": "cancelledAt", "order": "ASCENDING" }
+			]
+		},
+		{
 			"collectionGroup": "adminBillingActivities",
 			"queryScope": "COLLECTION",
 			"density": "SPARSE_ALL",

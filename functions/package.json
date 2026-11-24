@@ -3,6 +3,7 @@
 	"description": "Cloud Functions for Better Keep",
 	"scripts": {
 		"build": "tsc",
+		"lint": "biome lint src",
 		"typecheck:scripts": "tsc --project tsconfig.scripts.json",
 		"test": "node scripts/runTests.mjs",
 		"validate:deploy-env": "node scripts/validateDeploymentEnv.mjs",

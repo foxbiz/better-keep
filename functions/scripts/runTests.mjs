@@ -39,6 +39,7 @@ const suites = {
 		"test/syncCommitStamp.test.js",
 		"test/legacySyncStamp.test.js",
 		"test/emailDelivery.test.js",
+		"test/emailTemplates.test.js",
 		"test/adminAccess.test.js",
 		"test/adminAudit.test.js",
 		"test/adminContract.test.js",
@@ -52,6 +53,7 @@ const suites = {
 		"test/boundedConcurrency.test.js",
 		"test/checkExistingSubscription.test.js",
 		"test/processScheduledDeletions.test.js",
+		"test/deletionAuditRetention.test.js",
 		"test/reconcileProviderSubscriptions.test.js",
 		"test/revenueLedger.test.js",
 		"test/revenueOutbox.test.js",
@@ -66,6 +68,7 @@ const suites = {
 		"test/subscriptionReconciler.test.js",
 	],
 	deletion: [
+		"functions/test/deletionAuditRetention.emulator.test.js",
 		"functions/test/accountDeletionLifecycle.emulator.test.js",
 		"functions/test/accountDeletion.e2e.test.js",
 		"test/firestore_rules/account_deletion_rules_test.mjs",

@@ -3,6 +3,9 @@ import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:better_keep/components/storage_warning.dart';
 import 'package:flutter/material.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/config.dart';
+import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// A localized, implementation-agnostic loading screen used before the main
 /// application shell is ready.
@@ -29,7 +32,14 @@ class AppStartupLoadingView extends StatelessWidget {
 /// A localized startup failure screen that deliberately keeps diagnostics out
 /// of user-visible copy. Callers are responsible for logging the root cause.
 class AppStartupErrorView extends StatelessWidget {
-  const AppStartupErrorView({super.key, this.onRetry, this.onLibrarySignOut});
+  const AppStartupErrorView({
+    super.key,
+    this.onRetry,
+    this.onLibrarySignOut,
+    this.requiresAppUpdate = false,
+  });
+
+  final bool requiresAppUpdate;
 
   final VoidCallback? onLibrarySignOut;
 
@@ -37,7 +47,7 @@ class AppStartupErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final retry = onRetry;
+    final retry = requiresAppUpdate ? null : onRetry;
 
     return Scaffold(
       body: SafeArea(
@@ -57,7 +67,9 @@ class AppStartupErrorView extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      context.l10n.unableToStartApp,
+                      requiresAppUpdate
+                          ? context.l10n.updateApp
+                          : context.l10n.unableToStartApp,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -67,13 +79,23 @@ class AppStartupErrorView extends StatelessWidget {
                     const SizedBox(height: 12),
                     const StorageWarning(),
                     Text(
-                      onLibrarySignOut != null
+                      requiresAppUpdate
+                          ? context.l10n.databaseUpdateRequired
+                          : onLibrarySignOut != null
                           ? context.l10n.localLibraryUnavailable
                           : retry == null
                           ? context.l10n.startupRestartMessage
                           : context.l10n.startupRetryMessage,
                       textAlign: TextAlign.center,
                     ),
+                    if (requiresAppUpdate) ...[
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () => _openUpdate(context),
+                        icon: const Icon(Icons.system_update),
+                        label: Text(context.l10n.updateApp),
+                      ),
+                    ],
                     if (retry != null) ...[
                       const SizedBox(height: 20),
                       FilledButton.icon(
@@ -82,7 +104,7 @@ class AppStartupErrorView extends StatelessWidget {
                         label: Text(context.l10n.retry),
                       ),
                     ],
-                    if (onLibrarySignOut != null)
+                    if (!requiresAppUpdate && onLibrarySignOut != null)
                       TextButton(
                         onPressed: () async {
                           if (await confirmDeviceSignOut(
@@ -101,6 +123,41 @@ class AppStartupErrorView extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _openUpdate(BuildContext context) async {
+    final url = kIsWeb
+        ? 'https://betterkeep.app'
+        : switch (defaultTargetPlatform) {
+            TargetPlatform.android => playStoreUrl,
+            TargetPlatform.iOS => appStoreUrl,
+            TargetPlatform.windows => microsoftStoreUrl,
+            _ => 'https://betterkeep.app',
+          };
+    try {
+      if (await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {
+      // Keep the update path accessible when no external handler is available.
+    }
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.l10n.updateApp),
+        content: SelectableText(url),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(context.l10n.close),
+          ),
+        ],
       ),
     );
   }

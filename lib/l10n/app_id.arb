@@ -22,6 +22,8 @@
 
 	"appTitle": "Better Keep",
 	"unableToStartApp": "Tidak dapat memulai Better Keep",
+	"updateApp": "Perbarui aplikasi",
+	"databaseUpdateRequired": "Data lokal Anda dibuat oleh versi Better Keep yang lebih baru. Perbarui aplikasi untuk membukanya. Data Anda tidak diubah. Jangan hapus aplikasi atau penyimpanannya.",
 	"startupRetryMessage": "Terjadi masalah saat membuka aplikasi. Silakan coba lagi.",
 	"startupRestartMessage": "Terjadi masalah saat membuka aplikasi. Tutup lalu buka kembali aplikasi untuk mencoba lagi.",
 	"accountNotFound": "Tidak ada akun yang ditemukan dengan email ini.",

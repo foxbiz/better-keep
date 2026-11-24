@@ -1,7 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError } from "firebase-functions/v2/https";
-import { requireDeletionEnabled } from "../accountDeletionLifecycle";
 import { auth, db, emailPassword } from "../config";
 import { generateOtpEmailHtml, generateOtpEmailText } from "../email_templates";
 import { onNonReviewCall } from "../nonReviewCallable";
@@ -20,7 +19,6 @@ export default onNonReviewCall(
 				"User must be signed in to request OTP",
 			);
 		}
-		requireDeletionEnabled();
 		const userId = request.auth.uid;
 
 		try {

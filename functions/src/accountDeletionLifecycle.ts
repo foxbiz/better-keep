@@ -14,16 +14,6 @@ const AUDIT_COLLECTION = "accountDeletionRequests";
 // ID tokens live for one hour. Allow five minutes for clock skew/in-flight refresh.
 export const DELETION_TOKEN_DRAIN_MS = 65 * 60 * 1000;
 
-export function requireDeletionEnabled(): void {
-	if (process.env.ACCOUNT_DELETION_ENABLED !== "true") {
-		throw new HttpsError(
-			"unavailable",
-			"Account deletion is temporarily paused. Contact support@betterkeep.app.",
-			{ reason: "account-deletion-paused" },
-		);
-	}
-}
-
 export function deletionDateLabel(date: Timestamp): string {
 	return `${date.toDate().toLocaleString("en-US", {
 		year: "numeric",
@@ -110,6 +100,7 @@ export async function scheduleDeletion(
 			deleteAt: schedule.deleteAt,
 			source: "scheduleAccountDeletion",
 			verification: "email_otp",
+			retentionHold: false,
 		});
 		return schedule;
 	});

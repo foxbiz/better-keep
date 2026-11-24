@@ -22,11 +22,6 @@ export default onSchedule(
 		maxBackoffSeconds: 3600,
 	},
 	async () => {
-		// This stops new AND partially completed deletions. Never silently drain on disable.
-		if (process.env.ACCOUNT_DELETION_ENABLED !== "true") {
-			console.warn("Automatic account deletion is disabled");
-			return;
-		}
 		const now = Timestamp.now();
 		// Persist scan position so held requests cannot starve later eligible accounts.
 		const checkpointRef = db.collection("accountDeletionWorker").doc("scan");

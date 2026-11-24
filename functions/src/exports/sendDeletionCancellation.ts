@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { auth, databaseId, db, emailPassword } from "../config";
+import { generateTransactionalEmail } from "../email_templates";
 import { sendEmail } from "../utils";
 
 // Sign-in hooks cancel before the client runs. Observe the durable lifecycle
@@ -46,7 +47,17 @@ export default onDocumentUpdated(
 			from: `"${process.env.EMAIL_NAME}" <${process.env.EMAIL_FROM}>`,
 			to: user.email,
 			subject: "Account deletion request cancelled - Better Keep Notes",
-			text: "Signing in cancelled your previous account deletion request. That request will not delete your account. If you did not sign in, secure your account and contact support@betterkeep.app.",
+			...generateTransactionalEmail({
+				title: "Account deletion cancelled",
+				category: "Account update",
+				paragraphs: [
+					"Signing in cancelled your previous account deletion request. That request will not delete your account.",
+				],
+				notice: {
+					title: "Didn’t sign in?",
+					text: "Secure your account and contact support@betterkeep.app.",
+				},
+			}),
 		});
 		// SMTP is not transactional. A crash after delivery can repeat the notice;
 		// successful delivery markers suppress subsequent event retries.

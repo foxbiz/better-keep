@@ -6,6 +6,7 @@ import {
 	markDeletionReminderSent,
 } from "../accountDeletionLifecycle";
 import { auth, db, emailPassword } from "../config";
+import { generateTransactionalEmail } from "../email_templates";
 import { sendEmail } from "../utils";
 
 /**
@@ -23,7 +24,6 @@ export default onSchedule(
 		timeoutSeconds: 540,
 	},
 	async () => {
-		if (process.env.ACCOUNT_DELETION_ENABLED !== "true") return;
 		const now = Timestamp.now();
 
 		console.log(
@@ -88,69 +88,31 @@ export default onSchedule(
 				const mailOptions = {
 					from: `"${senderName}" <${senderEmail}>`,
 					to: email,
-					subject: "⚠️ Reminder: Scheduled Account Deletion - Better Keep Notes",
-					html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            </head>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
-              <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                <div style="background: #d32f2f; color: white; padding: 16px; border-radius: 8px; text-align: center; margin-bottom: 24px;">
-                  <h1 style="margin: 0; font-size: 24px;">⚠️ Account Deletion Reminder</h1>
-                </div>
-                <p style="color: #333; font-size: 16px; line-height: 1.5;">
-                  Your Better Keep Notes account is scheduled for <strong>permanent deletion</strong>.
-                </p>
-                <div style="background: #ffebee; border-radius: 8px; padding: 16px; margin: 24px 0; border: 2px solid #d32f2f;">
-                  <p style="color: #c62828; font-size: 16px; margin: 0; font-weight: bold; text-align: center;">
-                    Eligible for deletion from: ${deleteDate}
-                  </p>
-                </div>
-                <h2 style="color: #333; font-size: 18px; margin-top: 24px;">What will be deleted:</h2>
-                <ul style="color: #666; font-size: 14px; line-height: 1.8; padding-left: 20px;">
-                  <li>All your notes and their contents</li>
-                  <li>All attachments and media files</li>
-                  <li>All labels and organization data</li>
-                  <li>Your account and login credentials</li>
-                </ul>
-                <div style="background: #e3f2fd; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
-                  <h2 style="color: #1565c0; font-size: 18px; margin-top: 0;">Want to keep your account?</h2>
-                  <p style="color: #1976d2; font-size: 14px; margin-bottom: 0;">
-                    Simply <strong>sign in to the Better Keep app</strong> before the date above to cancel pending deletion.
-                  </p>
-                </div>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
-                <p style="color: #999; font-size: 12px; text-align: center;">
-                  If you have questions, contact us at support@betterkeep.app
-                </p>
-                <p style="color: #bbb; font-size: 11px; margin-top: 8px; text-align: center;">
-                  Better Keep by Foxbiz Software Pvt. Ltd.
-                </p>
-              </div>
-            </body>
-            </html>
-          `,
-					text: `
-ACCOUNT DELETION REMINDER
-
-Your Better Keep Notes account is scheduled for permanent deletion.
-
-Eligible for deletion from: ${deleteDate}
-
-What will be deleted:
-- All your notes and their contents
-- All attachments and media files
-- All labels and organization data
-- Your account and login credentials
-
-Want to keep your account?
-Simply sign in to the Better Keep app before the date above to cancel pending deletion.
-
-This is an automated reminder. If you did not schedule this deletion, please sign in immediately or contact support.
-          `,
+					subject: "Reminder: Scheduled Account Deletion - Better Keep Notes",
+					...generateTransactionalEmail({
+						title: "Your account is scheduled for deletion",
+						category: "Account reminder",
+						tone: "danger",
+						paragraphs: [
+							"This is a reminder that your Better Keep Notes account is scheduled for permanent deletion.",
+						],
+						details: [
+							{ label: "Eligible for deletion from", value: deleteDate },
+						],
+						list: {
+							title: "What will be deleted",
+							items: [
+								"All your notes and their contents",
+								"All attachments and media files",
+								"All labels and organization data",
+								"Your account and login credentials",
+							],
+						},
+						notice: {
+							title: "To keep your account",
+							text: `Sign in to Better Keep before ${deleteDate} to cancel pending deletion. If you did not schedule this deletion, sign in immediately or contact support.`,
+						},
+					}),
 				};
 
 				const latest = (await doc.ref.get()).data()?.scheduledDeletion;

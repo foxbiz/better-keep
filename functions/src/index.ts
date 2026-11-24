@@ -61,6 +61,7 @@ import verifyPasswordResetOtp from "./exports/verifyPasswordResetOtp";
 import verifyPurchase from "./exports/verifyPurchase";
 import verifyRazorpaySubscription from "./exports/verifyRazorpaySubscription";
 
+export { default as cleanupDeletionAuditRecords } from "./exports/cleanupDeletionAuditRecords";
 export { default as revokeScheduledDeletionSessions } from "./exports/revokeScheduledDeletionSessions";
 export {
 	acquireStorageRefreshLease,

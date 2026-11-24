@@ -103,6 +103,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get unableToStartApp => 'Better Keep başlatılamadı';
 
   @override
+  String get updateApp => 'Uygulamayı güncelle';
+
+  @override
+  String get databaseUpdateRequired =>
+      'Yerel verileriniz Better Keep’in daha yeni bir sürümüyle oluşturulmuş. Açmak için uygulamayı güncelleyin. Verileriniz değiştirilmedi. Uygulamayı kaldırmayın veya depolama alanını temizlemeyin.';
+
+  @override
   String get startupRetryMessage =>
       'Uygulama açılırken bir sorun oluştu. Lütfen tekrar deneyin.';
 

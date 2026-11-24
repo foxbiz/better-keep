@@ -37,6 +37,8 @@
 	"@appTitle": { "description": "The name of the application" },
 	"unableToStartApp": "Unable to start Better Keep",
 	"@unableToStartApp": { "description": "Title shown when the app cannot finish starting" },
+	"updateApp": "Update the app",
+	"databaseUpdateRequired": "Your local data was created by a newer version of Better Keep. Update the app to open it. Your data has not been changed. Do not uninstall the app or clear its storage.",
 	"startupRetryMessage": "Something went wrong while opening the app. Please try again.",
 	"@startupRetryMessage": { "description": "Retryable startup failure guidance" },
 	"startupRestartMessage": "Something went wrong while opening the app. Close and reopen it to try again.",

@@ -109,7 +109,7 @@ export default onNonReviewCall(
 
 			const emailConfig: OtpEmailConfig = {
 				title: `Link ${providerName} Account`,
-				description: `You requested to link your <strong>${providerName}</strong> account to Better Keep. Enter this code to verify:`,
+				description: `You requested to link your ${providerName} account to Better Keep. Enter this code to verify:`,
 				otp: otp,
 				theme: "primary",
 				securityNote:

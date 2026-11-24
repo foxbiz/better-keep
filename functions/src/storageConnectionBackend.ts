@@ -350,7 +350,7 @@ export const requestStorageClearOtp = onNonReviewCall(
 			);
 			const config = {
 				title: "Clear synced data",
-				description: `Remove this Better Keep account's synced data from ${context.provider}. Notes on your devices will remain. Sync will be turned off. Enter this code in the app to confirm:`,
+				description: `Remove this Better Keep account's synced data from ${context.provider} and pause sync for this provider. Notes on your devices stay; other providers are not affected. Enter this code in the app to confirm:`,
 				otp: code,
 				theme: "danger" as const,
 				securityNote:
