@@ -75,6 +75,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version-file: .fvmrc
           cache: true
 
       - name: Install matched Chrome and ChromeDriver
@@ -135,6 +136,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version-file: .fvmrc
           cache: true
 
       - name: Get dependencies
@@ -206,6 +208,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version-file: .fvmrc
           cache: true
 
       - name: Get dependencies
@@ -309,6 +312,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version-file: .fvmrc
           cache: true
 
       - name: Get dependencies

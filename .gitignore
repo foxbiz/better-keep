@@ -31,6 +31,7 @@ docs/reviews/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.fvm/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/

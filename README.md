@@ -35,7 +35,7 @@ Available on **Android**, **iOS**, **macOS**, **Windows**, and **Web**.
 
 ## Under the hood (developer notes)
 
-- Flutter 3.10+ with a lightweight global `AppState` pub/sub instead of heavy state frameworks.
+- Flutter 3.47.8 (pinned in `.fvmrc`) with a lightweight global `AppState` pub/sub instead of heavy state frameworks.
 - Persistent storage via `sqflite` (and `sqflite_common_ffi` for desktop) with thin model layers in `lib/models`.
 - Rich editor and previews courtesy of `flutter_quill`; read-only rendering reuses the same deltas.
 - AES-256-GCM protection for PIN-locked notes, with legacy XOR decryption retained only to migrate older data (`lib/utils/encryption.dart`).

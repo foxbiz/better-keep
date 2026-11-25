@@ -1,3 +1,4 @@
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/services/e2ee/secure_storage.dart';
 
 import 'dart:convert';
@@ -112,12 +113,16 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     _searchFocusNode.addListener(() {
       setState(() {
         _shouldAnimateIcon = true;
-        _searchMode = _searchFocusNode.hasFocus;
+        _searchMode = _searchFocusNode.hasFocus || _searchStaysBesideNote;
       });
     });
 
     _searchController.addListener(() {
-      setState(() {});
+      setState(() {
+        if (_searchController.text.isEmpty && !_searchFocusNode.hasFocus) {
+          _searchMode = false;
+        }
+      });
     });
 
     AppState.subscribe("show_notes", _showNotesListener);
@@ -505,6 +510,12 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   }
 
   void _showNotesListener(dynamic payload) async {
+    // Only the notes section has a search field, and so a way to end a search.
+    if (AppState.showNotes != NoteType.all &&
+        (_searchMode || _searchController.text.isNotEmpty)) {
+      _searchController.clear();
+      _searchMode = false;
+    }
     setState(() {});
   }
 
@@ -545,6 +556,15 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       }
     }
   }
+
+  /// What opens from the search results takes the focus, but on an iPhone Duo
+  /// the results can still be seen beside it. They also stay while a PIN is
+  /// asked for, and while folded, for the list to have them when it unfolds.
+  bool get _searchStaysBesideNote =>
+      isIPhoneDuo &&
+      _searchMode &&
+      _searchController.text.isNotEmpty &&
+      ModalRoute.of(context)?.isCurrent == false;
 
   PreferredSizeWidget _buildAppBar() {
     final leading = _buildLeading();

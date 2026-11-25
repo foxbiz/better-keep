@@ -975,6 +975,305 @@ void main() {
     });
   }
 
+  for (final mode in [NoteViewMode.grid, NoteViewMode.folderLabels]) {
+    for (final locked in [false, true]) {
+      testWidgets('search results stay beside the note that opens from them '
+          '($mode${locked ? ', locked' : ''})', (tester) async {
+        debugIsIPhoneDuoOverride = true;
+        addTearDown(() => debugIsIPhoneDuoOverride = null);
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(951, 669);
+        addTearDown(tester.view.reset);
+        AppState.set('notes_view_mode', mode);
+        await _insertSearchNotes(tester, database);
+        await tester.pumpWidget(
+          _app(const NotePaneHost(child: Home()), platform: TargetPlatform.iOS),
+        );
+        await _drainDatabaseWork(tester);
+        await _searchForMilk(tester);
+        final home = tester.element(find.byType(Home));
+        if (locked) {
+          // The PIN is asked for before the note opens, and takes the focus.
+          unawaited(
+            showDialog<void>(
+              context: home,
+              builder: (_) => const Dialog(child: TextField(autofocus: true)),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.widget<Notes>(find.byType(Notes)).searchMode, isTrue);
+          Navigator.pop(tester.element(find.byType(Dialog)));
+          openNote(home, tester.widget<NoteCard>(find.byType(NoteCard)).note);
+        } else {
+          await tester.tap(find.byType(NoteCard));
+        }
+        await _drainDatabaseWork(tester);
+        await tester.pump(const Duration(seconds: 1));
+        await _drainDatabaseWork(tester);
+        final editor = find.byType(NoteEditor);
+        expect(editor, findsOneWidget);
+        expect(tester.widget<Notes>(find.byType(Notes)).searchMode, isTrue);
+        expect(
+          tester.widget<NoteCard>(find.byType(NoteCard)).note.title,
+          'Milk',
+        );
+
+        final clear = find.descendant(
+          of: find.byType(Home),
+          matching: find.byIcon(Icons.clear),
+        );
+        await tester.tap(clear);
+        await _drainDatabaseWork(tester);
+        expect(tester.widget<Notes>(find.byType(Notes)).searchMode, isFalse);
+        expect(tester.widget<Notes>(find.byType(Notes)).searchQuery, isEmpty);
+        expect(clear, findsNothing);
+        expect(editor, findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainDatabaseWork(tester);
+      });
+    }
+  }
+
+  for (final (name, size, platform) in [
+    ('phone', const Size(400, 850), TargetPlatform.android),
+    ('iPhone', const Size(400, 850), TargetPlatform.iOS),
+    ('iPad', const Size(1180, 820), TargetPlatform.iOS),
+    ('desktop', const Size(1400, 900), TargetPlatform.macOS),
+  ]) {
+    for (final active in [true, false]) {
+      testWidgets('another section is not filtered by the search left behind '
+          '($name, ${active ? 'active' : 'dismissed'})', (tester) async {
+        debugIsIPhoneDuoOverride = false;
+        addTearDown(() => debugIsIPhoneDuoOverride = null);
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.reset);
+        await _insertSearchNotes(tester, database);
+        await tester.runAsync(
+          () => database.insert(
+            Note.model,
+            Note(id: 9, title: 'Filed', content: '[]', archived: true).toJson(),
+          ),
+        );
+        await tester.pumpWidget(
+          _app(const NotePaneHost(child: Home()), platform: platform),
+        );
+        await _drainDatabaseWork(tester);
+        await _searchForMilk(tester);
+        if (!active) FocusManager.instance.primaryFocus!.unfocus();
+        Future<void> open(IconData section) async {
+          if (size.width < 800) {
+            await tester.dragFrom(const Offset(2, 400), const Offset(300, 0));
+            await tester.pump(const Duration(seconds: 1));
+          }
+          await tester.tap(
+            find.descendant(
+              of: find.byType(Sidebar),
+              matching: find.byIcon(section),
+            ),
+          );
+          await _drainDatabaseWork(tester);
+          await tester.pump(const Duration(seconds: 1));
+          await _drainDatabaseWork(tester);
+        }
+
+        final notes = find.byType(Notes);
+        await open(Icons.archive);
+        expect(AppState.showNotes, NoteType.archived);
+        expect(tester.widget<Notes>(notes).searchMode, isFalse);
+        expect(tester.widget<Notes>(notes).searchQuery, isEmpty);
+        expect(
+          tester.widget<NoteCard>(find.byType(NoteCard)).note.title,
+          'Filed',
+        );
+        expect(tester.widget<AppBar>(find.byType(AppBar)).leading, isNotNull);
+
+        await open(Icons.note);
+        expect(tester.widget<Notes>(notes).searchMode, isFalse);
+        expect(find.byType(NoteCard), findsNWidgets(2));
+        final field = tester.widget<TextField>(find.byType(TextField));
+        expect(field.focusNode!.hasFocus, isFalse);
+        await _searchForMilk(tester);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainDatabaseWork(tester);
+      });
+    }
+  }
+
+  testWidgets('search results are there when a Duo unfolds', (tester) async {
+    debugIsIPhoneDuoOverride = true;
+    addTearDown(() => debugIsIPhoneDuoOverride = null);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(466, 678);
+    addTearDown(tester.view.reset);
+    AppState.set('notes_view_mode', NoteViewMode.folderLabels);
+    await _insertSearchNotes(tester, database);
+    await tester.pumpWidget(
+      _app(const NotePaneHost(child: Home()), platform: TargetPlatform.iOS),
+    );
+    await _drainDatabaseWork(tester);
+    await _searchForMilk(tester);
+    await tester.tap(find.byType(NoteCard));
+    await _drainDatabaseWork(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(NoteEditor), findsOneWidget);
+    expect(find.byType(Notes), findsNothing, reason: 'covered by the note');
+
+    tester.view.physicalSize = const Size(951, 669);
+    await _drainDatabaseWork(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(NoteEditor), findsOneWidget);
+    expect(tester.widget<Notes>(find.byType(Notes)).searchMode, isTrue);
+    expect(tester.widget<NoteCard>(find.byType(NoteCard)).note.title, 'Milk');
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainDatabaseWork(tester);
+  });
+
+  testWidgets('a cancelled PIN returns to the search', (tester) async {
+    debugIsIPhoneDuoOverride = true;
+    addTearDown(() => debugIsIPhoneDuoOverride = null);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(951, 669);
+    addTearDown(tester.view.reset);
+    await _insertSearchNotes(tester, database);
+    await tester.pumpWidget(
+      _app(const NotePaneHost(child: Home()), platform: TargetPlatform.iOS),
+    );
+    await _drainDatabaseWork(tester);
+    await _searchForMilk(tester);
+    unawaited(
+      showDialog<void>(
+        context: tester.element(find.byType(Home)),
+        builder: (_) => const Dialog(child: TextField(autofocus: true)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    Navigator.pop(tester.element(find.byType(Dialog)));
+    await _drainDatabaseWork(tester);
+    await tester.pump(const Duration(seconds: 1));
+    final notes = find.byType(Notes);
+    expect(tester.widget<Notes>(notes).searchMode, isTrue);
+    expect(tester.widget<Notes>(notes).searchQuery, 'Milk');
+    await tester.tap(find.byIcon(Icons.clear));
+    await _drainDatabaseWork(tester);
+    expect(tester.widget<Notes>(notes).searchMode, isFalse);
+    expect(tester.widget<Notes>(notes).searchQuery, isEmpty);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainDatabaseWork(tester);
+  });
+
+  testWidgets('search ends with the section it was in', (tester) async {
+    debugIsIPhoneDuoOverride = true;
+    addTearDown(() => debugIsIPhoneDuoOverride = null);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(951, 669);
+    addTearDown(tester.view.reset);
+    await _insertSearchNotes(tester, database);
+    await tester.pumpWidget(
+      _app(const NotePaneHost(child: Home()), platform: TargetPlatform.iOS),
+    );
+    await _drainDatabaseWork(tester);
+    await _searchForMilk(tester);
+    await tester.tap(find.byType(NoteCard));
+    await _drainDatabaseWork(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.widget<Notes>(find.byType(Notes)).searchMode, isTrue);
+
+    // There is no menu button while searching, but the drawer can be swiped in.
+    await tester.dragFrom(const Offset(2, 400), const Offset(300, 0));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(Drawer),
+        matching: find.byIcon(Icons.archive),
+      ),
+    );
+    await _drainDatabaseWork(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(AppState.showNotes, NoteType.archived);
+    final notes = tester.widget<Notes>(find.byType(Notes));
+    expect(notes.searchMode, isFalse);
+    expect(notes.searchQuery, isEmpty);
+    final bar = tester.widget<AppBar>(
+      find.descendant(of: find.byType(Home), matching: find.byType(AppBar)),
+    );
+    expect(bar.leading, isNotNull);
+    expect(find.byType(NoteEditor), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainDatabaseWork(tester);
+  });
+
+  for (final duo in [true, false]) {
+    testWidgets('closing a note returns to the search it opened from '
+        '(${duo ? 'iPhone Duo' : 'other devices'})', (tester) async {
+      debugIsIPhoneDuoOverride = duo;
+      addTearDown(() => debugIsIPhoneDuoOverride = null);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(951, 669);
+      addTearDown(tester.view.reset);
+      await _insertSearchNotes(tester, database);
+      await tester.pumpWidget(
+        _app(const NotePaneHost(child: Home()), platform: TargetPlatform.iOS),
+      );
+      await _drainDatabaseWork(tester);
+      await _searchForMilk(tester);
+      await tester.tap(find.byType(NoteCard));
+      await _drainDatabaseWork(tester);
+      await tester.pump(const Duration(seconds: 1));
+      final notes = find.byType(Notes, skipOffstage: false);
+      expect(tester.widget<Notes>(notes).searchMode, duo);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NoteEditor),
+          matching: find.byType(BackButton),
+        ),
+      );
+      await _drainDatabaseWork(tester);
+      await tester.pump(const Duration(seconds: 1));
+      await _drainDatabaseWork(tester);
+      expect(find.byType(NoteEditor), findsNothing);
+      expect(tester.widget<Notes>(notes).searchMode, isTrue);
+      expect(tester.widget<Notes>(notes).searchQuery, 'Milk');
+      await tester.tap(find.byIcon(Icons.clear));
+      await _drainDatabaseWork(tester);
+      expect(tester.widget<Notes>(notes).searchMode, isFalse);
+      expect(tester.widget<Notes>(notes).searchQuery, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainDatabaseWork(tester);
+    });
+  }
+
+  for (final duo in [true, false]) {
+    testWidgets('search ends when its field loses focus on the home screen '
+        '(${duo ? 'iPhone Duo' : 'other devices'})', (tester) async {
+      debugIsIPhoneDuoOverride = duo;
+      addTearDown(() => debugIsIPhoneDuoOverride = null);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(951, 669);
+      addTearDown(tester.view.reset);
+      await _insertSearchNotes(tester, database);
+      await tester.pumpWidget(_app(const NotePaneHost(child: Home())));
+      await _drainDatabaseWork(tester);
+      await _searchForMilk(tester);
+      FocusManager.instance.primaryFocus!.unfocus();
+      await _drainDatabaseWork(tester);
+      expect(tester.widget<Notes>(find.byType(Notes)).searchMode, isFalse);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainDatabaseWork(tester);
+    });
+  }
+
   for (final action in [Icons.done, Icons.notifications_off_outlined]) {
     testWidgets('a card changes the note that is open beside it ($action)', (
       tester,
@@ -1098,6 +1397,34 @@ class _SlowNote extends Note {
     bool trackSync = true,
     ModelChangeOrigin origin = ModelChangeOrigin.local,
   ]) async => 1;
+}
+
+Future<void> _insertSearchNotes(WidgetTester tester, Database database) =>
+    tester.runAsync(() async {
+      for (final (index, title) in ['Milk', 'Bread'].indexed) {
+        await database.insert(
+          Note.model,
+          Note(
+            id: index + 1,
+            title: title,
+            plainText: title,
+            content: '[{"insert":"$title\\n"}]',
+          ).toJson(),
+        );
+      }
+    });
+
+Future<void> _searchForMilk(WidgetTester tester) async {
+  final search = find.descendant(
+    of: find.byType(Home),
+    matching: find.byType(TextField),
+  );
+  await tester.tap(search);
+  await tester.enterText(search, 'Milk');
+  await tester.pump(const Duration(milliseconds: 300));
+  await _drainDatabaseWork(tester);
+  expect(tester.widget<Notes>(find.byType(Notes)).searchMode, isTrue);
+  expect(find.byType(NoteCard), findsOneWidget);
 }
 
 Future<void> _drainDatabaseWork(WidgetTester tester) async {

@@ -21,7 +21,7 @@ Non-batch external publication runs at most four note workers per pending page. 
 
 Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app inspired by Google Keep. Built with **Flutter** (Dart), backed by **Firebase** (Auth, Firestore, Storage, Cloud Functions). Features rich-text editing, E2E encryption, AI audio transcription (Whisper), reminders, sketches, labels, folders, and subscription monetization.
 
-- **Version**: 1.5.0+115
+- **Version**: 1.5.0+117
 - **License**: PolyForm Noncommercial 1.0.0
 - **Publisher**: Foxbiz Software Pvt. Ltd.
 - **Firebase Project**: `better-keep-notes`
@@ -50,6 +50,8 @@ that note takes its place and moves the note to the list's side: editable beside
 sketch, and for reading beside a checklist, because a checklist also writes the
 text of the note. The editor and the page stay ordinary routes whose position
 follows the window and fills it while folded, so folding never rebuilds them.
+Search stays on beside what opens from its results, though its field loses focus.
+On every device, leaving the notes section ends a search and clears its text.
 Every layout made for iPhone Duo depends on `isIPhoneDuo`
 (`services/iphone_duo.dart`), which is detected once before the app is shown; a
 window of the same size on any other device keeps its own layout. `DuoSafeArea`
@@ -89,7 +91,7 @@ generic tooling check requires every Flutter test to appear in `release-core`.
 
 | Layer | Technology |
 |---|---|
-| Framework | Flutter 3.10+ (Dart SDK ^3.10.0) |
+| Framework | Flutter 3.47.8, pinned for CI and Xcode Cloud in `.fvmrc` (Dart SDK ^3.13.0) |
 | Rich Text | flutter_quill v11+ (Delta JSON format) |
 | Local DB | SQLite via sqflite (sqflite_common_ffi for desktop/web) |
 | Cloud DB | Firebase Firestore |
