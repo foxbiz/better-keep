@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/components/quill_input_semantics.dart';
 
 import 'package:better_keep/dialogs/snackbar.dart';
@@ -12,7 +13,8 @@ import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/quill_config.dart';
 import 'package:better_keep/utils/utils.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -31,17 +33,28 @@ class RichChecklistEditor extends StatefulWidget {
     super.key,
     required this.note,
     required this.session,
+    this.onPreview,
+    this.previewWanted,
   }) : collectionSession = null;
 
   const RichChecklistEditor.collection({
     super.key,
     required this.note,
     required this.collectionSession,
+    this.onPreview,
+    this.previewWanted,
   }) : session = null;
 
   final Note note;
   final ChecklistBlockEditSession? session;
   final ChecklistCollectionEditSession? collectionSession;
+
+  /// Called with the whole note body shortly after each change, so that a note
+  /// beside the checklist can show it. The note is only changed by a save.
+  final ValueChanged<List<Map<String, dynamic>>>? onPreview;
+
+  /// Whether the note can be seen. Nothing is prepared for it while it cannot.
+  final ValueListenable<bool>? previewWanted;
 
   @override
   State<RichChecklistEditor> createState() => _RichChecklistEditorState();
@@ -52,20 +65,29 @@ class RichChecklistCollectionEditor extends StatelessWidget {
     super.key,
     required this.note,
     required this.session,
+    this.onPreview,
+    this.previewWanted,
   });
 
   final Note note;
   final ChecklistCollectionEditSession session;
+  final ValueChanged<List<Map<String, dynamic>>>? onPreview;
+  final ValueListenable<bool>? previewWanted;
 
   @override
-  Widget build(BuildContext context) =>
-      RichChecklistEditor.collection(note: note, collectionSession: session);
+  Widget build(BuildContext context) => RichChecklistEditor.collection(
+    note: note,
+    collectionSession: session,
+    onPreview: onPreview,
+    previewWanted: previewWanted,
+  );
 }
 
 class _RichChecklistEditorState extends State<RichChecklistEditor>
     with WidgetsBindingObserver {
   static const _autosaveDelay = Duration(seconds: 1);
   static const _rowCommitDelay = Duration(milliseconds: 180);
+  static const _previewDelay = Duration(milliseconds: 60);
   static const _minimumFirstLineExtent = 42.0;
   static const _emptyRowBackspaceSentinel = '\u2060';
 
@@ -90,6 +112,8 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
   VoidCallback? _pendingCompositionMutation;
   Timer? _rowCommitTimer;
   Timer? _autosaveTimer;
+  Timer? _previewTimer;
+  bool _previewIsStale = false;
   Future<void> _saveTail = Future<void>.value();
   String? _activeItemId;
   String? _draggedItemId;
@@ -220,6 +244,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
         : const [];
     _lastPersistedContent = widget.note.content;
     widget.note.sub('changed', _onNoteChanged);
+    widget.previewWanted?.addListener(_onPreviewWanted);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _bindCompositionListener();
     });
@@ -230,6 +255,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     WidgetsBinding.instance.removeObserver(this);
     _rowCommitTimer?.cancel();
     _autosaveTimer?.cancel();
+    _previewTimer?.cancel();
     _rowChanges?.cancel();
     _rowComposingRange?.removeListener(_onCompositionChanged);
     _rowController.dispose();
@@ -239,6 +265,7 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
       ..dispose();
     _scrollController.dispose();
     widget.note.unsub('changed', _onNoteChanged);
+    widget.previewWanted?.removeListener(_onPreviewWanted);
     super.dispose();
   }
 
@@ -251,8 +278,37 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
     }
   }
 
+  void _schedulePreview() {
+    final onPreview = widget.onPreview;
+    if (onPreview == null) return;
+    _previewIsStale = true;
+    if (widget.previewWanted?.value == false) return;
+    _previewTimer ??= Timer(_previewDelay, () {
+      _previewTimer = null;
+      if (!mounted || _closing || widget.previewWanted?.value == false) return;
+      _previewIsStale = false;
+      try {
+        onPreview(
+          _codec
+              .replaceCollectionDocuments(
+                bodyDelta: _bodyDelta,
+                collection: _collection,
+              )
+              .bodyDelta,
+        );
+      } catch (_) {
+        // The save reports a collection that cannot be written back.
+      }
+    });
+  }
+
+  void _onPreviewWanted() {
+    if (_previewIsStale) _schedulePreview();
+  }
+
   void _onHistoryChanged() {
     _syncVisibleEntries();
+    _schedulePreview();
     if (_applyingRowDocument) {
       return;
     }
@@ -1573,43 +1629,46 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
                   total: _collectionMode
                       ? _collection.totalCount
                       : _activeSection.totalCount,
+                  backgroundColor: backgroundColor,
                   foregroundColor: foregroundColor,
                 ),
               ),
             ],
           ),
-          body: Column(
-            children: [
-              if (_externalConflict)
-                MaterialBanner(
-                  content: Text(context.l10n.checklistChangedElsewhere),
-                  actions: [
-                    TextButton(
-                      onPressed: _externalNote == null
-                          ? null
-                          : () => _reloadFromNote(_externalNote!),
-                      child: Text(context.l10n.reloadChecklist),
-                    ),
-                    TextButton(
-                      onPressed: _keepLocalAfterConflict,
-                      child: Text(context.l10n.keepChecklistEdits),
-                    ),
-                  ],
-                ),
-              Expanded(
-                child: _collectionMode
-                    ? _buildCollectionList(
-                        backgroundColor,
-                        foregroundColor,
-                        placeholderColor,
-                      )
-                    : _buildSingleSectionList(
-                        backgroundColor,
-                        foregroundColor,
-                        placeholderColor,
+          body: DuoSafeArea(
+            child: Column(
+              children: [
+                if (_externalConflict)
+                  MaterialBanner(
+                    content: Text(context.l10n.checklistChangedElsewhere),
+                    actions: [
+                      TextButton(
+                        onPressed: _externalNote == null
+                            ? null
+                            : () => _reloadFromNote(_externalNote!),
+                        child: Text(context.l10n.reloadChecklist),
                       ),
-              ),
-            ],
+                      TextButton(
+                        onPressed: _keepLocalAfterConflict,
+                        child: Text(context.l10n.keepChecklistEdits),
+                      ),
+                    ],
+                  ),
+                Expanded(
+                  child: _collectionMode
+                      ? _buildCollectionList(
+                          backgroundColor,
+                          foregroundColor,
+                          placeholderColor,
+                        )
+                      : _buildSingleSectionList(
+                          backgroundColor,
+                          foregroundColor,
+                          placeholderColor,
+                        ),
+                ),
+              ],
+            ),
           ),
           bottomNavigationBar: _readOnly || !_hasEditableSections
               ? null
@@ -1962,11 +2021,14 @@ class _RichChecklistEditorState extends State<RichChecklistEditor>
                       child: Icon(Icons.chevron_right, color: foregroundColor),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      '${context.l10n.completedTasks} ($count)',
-                      style: TextStyle(
-                        color: foregroundColor,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Text(
+                        '${context.l10n.completedTasks} ($count)',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: foregroundColor,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],

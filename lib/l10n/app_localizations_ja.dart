@@ -3817,4 +3817,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get externalSyncClearRateLimited => '数分待ってから、削除を再試行してください。';
+
+  @override
+  String get editNote => 'メモを編集';
 }

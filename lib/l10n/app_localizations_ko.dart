@@ -3815,4 +3815,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get externalSyncClearRateLimited => '몇 분 기다린 후 다시 정리해 주세요.';
+
+  @override
+  String get editNote => '메모 편집';
 }

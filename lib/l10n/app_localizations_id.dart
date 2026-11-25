@@ -3971,4 +3971,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get externalSyncClearRateLimited =>
       'Tunggu beberapa menit, lalu coba bersihkan lagi.';
+
+  @override
+  String get editNote => 'Edit catatan';
 }

@@ -43,8 +43,8 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/pages/home/notes.dart';
 import 'package:better_keep/pages/home/home_layout.dart';
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/pages/home/sidebar.dart';
-import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/pages/user_page.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/note_sort_service.dart';
@@ -65,6 +65,7 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> with TickerProviderStateMixin {
   late bool _usePersistentSidebar;
   late bool _selectionMode;
+  bool _closingNote = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final _libraryHasNotes = ValueNotifier(true);
@@ -512,10 +513,37 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
   }
 
   void _selectedNotesListener(dynamic notes) {
+    if (!_selectionMode && (notes as List).isNotEmpty) {
+      final openNote = NotePaneHost.openNoteOf(context);
+      final closing = NotePaneHost.closeNote(context);
+      if (openNote != null) {
+        unawaited(_closeBeforeActions(openNote, closing ?? Future.value(true)));
+      }
+    }
     setState(() {
       _selectionMode = (notes as List).isNotEmpty;
       _shouldAnimateIcon = true;
     });
+  }
+
+  /// Actions on selected notes wait for an editor that holds one of them, and
+  /// are not offered if it could not be saved.
+  Future<void> _closeBeforeActions(Note note, Future<bool> closing) async {
+    _closingNote = true;
+    var closed = false;
+    try {
+      closed = await closing;
+    } finally {
+      if (mounted) {
+        setState(() => _closingNote = false);
+        AppState.selectedNotes = [
+          if (closed)
+            for (final selected in AppState.selectedNotes)
+              // The list may still hold the note as it was before its last edit.
+              note.id != null && selected.id == note.id ? note : selected,
+        ];
+      }
+    }
   }
 
   PreferredSizeWidget _buildAppBar() {
@@ -555,7 +583,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
           actions: [
             for (var i = 0; i < actions.length; i++) ...[
               if (i > 0) const SizedBox(width: 8),
-              actions[i],
+              _closingNote ? IgnorePointer(child: actions[i]) : actions[i],
             ],
           ],
         ),
@@ -680,6 +708,10 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
             if (confirmation != true) {
               return;
+            }
+            if (mounted) {
+              final closing = NotePaneHost.closeNote(context);
+              if (closing != null && !await closing) return;
             }
 
             final notesToDelete = await Note.get(NoteType.trashed);
@@ -944,11 +976,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
         });
       },
       onDefaultAction: () {
-        showPage(
-          context,
-          NoteEditor(note: _createNewNote(content: '[]')),
-          allowFullScreen: true,
-        );
+        openNote(context, _createNewNote(content: '[]'));
       },
       items: [
         BubbleMenuItem(
@@ -1057,7 +1085,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
       if (!added || !mounted) return;
 
       if (mounted) {
-        showPage(context, NoteEditor(note: note), allowFullScreen: true);
+        openNote(context, note);
       }
     }
   }
@@ -1190,7 +1218,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
 
       // Open the note in editor
       if (mounted) {
-        showPage(context, NoteEditor(note: note), allowFullScreen: true);
+        openNote(context, note);
       }
     } catch (error, stackTrace) {
       AppLogger.error('Failed to prepare an image note', error, stackTrace);
@@ -1228,11 +1256,7 @@ class _HomeState extends State<Home> with TickerProviderStateMixin {
     await note.save();
 
     if (mounted) {
-      showPage(
-        context,
-        NoteEditor(note: note, autoFocus: true, deleteIfUnchanged: true),
-        allowFullScreen: true,
-      );
+      openNote(context, note, autoFocus: true, deleteIfUnchanged: true);
     }
   }
 }

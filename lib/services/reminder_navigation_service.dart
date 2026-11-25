@@ -1,13 +1,12 @@
 import 'dart:async';
 
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/dialogs/unlock_note_dialog.dart';
 import 'package:better_keep/models/note.dart';
-import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/reminder_session_service.dart';
 import 'package:better_keep/services/firebase_scoped_preferences.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -269,11 +268,7 @@ class ReminderNavigationService {
   }
 
   Future<void> _openEditor(BuildContext context, Note note) {
-    final route = showPage(
-      context,
-      NoteEditor(note: note),
-      allowFullScreen: true,
-    );
+    final route = openNote(context, note);
     unawaited(_observeRoute(route, note.id));
     return Future<void>.value();
   }

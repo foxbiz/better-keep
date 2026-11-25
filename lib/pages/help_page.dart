@@ -1,3 +1,4 @@
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/components/google_keep_import_card.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
@@ -72,22 +73,24 @@ class HelpPage extends StatelessWidget {
     ];
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.help)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const GoogleKeepImportCard(),
-          const SizedBox(height: 24),
-          Text(
-            context.l10n.frequentlyAskedQuestions,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          ...faqs.map((faq) => _buildFaqItem(context, faq)),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 16),
-          _buildContactSection(context),
-        ],
+      body: DuoSafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const GoogleKeepImportCard(),
+            const SizedBox(height: 24),
+            Text(
+              context.l10n.frequentlyAskedQuestions,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ...faqs.map((faq) => _buildFaqItem(context, faq)),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+            _buildContactSection(context),
+          ],
+        ),
       ),
     );
   }

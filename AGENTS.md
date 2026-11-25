@@ -44,6 +44,20 @@ targets, 8 dp gaps between actions and compact 6 dp outer gutters, respecting
 each side's own safe inset. The avatar has a 20 dp radius (40 dp diameter) inside
 its 48 dp target. This navigation policy is intentionally separate from windowed
 editor/page routing.
+On an iPhone Duo only, the sidebar needs 600 dp of height, and an open window
+shows a note beside the list (`note_pane.dart`). A sketch or checklist opened from
+that note takes its place and moves the note to the list's side: editable beside a
+sketch, and for reading beside a checklist, because a checklist also writes the
+text of the note. The editor and the page stay ordinary routes whose position
+follows the window and fills it while folded, so folding never rebuilds them.
+Every layout made for iPhone Duo depends on `isIPhoneDuo`
+(`services/iphone_duo.dart`), which is detected once before the app is shown; a
+window of the same size on any other device keeps its own layout. `DuoSafeArea`
+clears the status area at the side. Change a note from the list through
+`NotePaneHost.currentCopyOf`, because its editor may be open beside the list.
+Whatever signs out, erases or rewrites notes must await `NotePaneHost.closeNote`
+first when it starts from the list; `showPage` already does.
+`test/other_devices_test.dart` guards every other device.
 Selection counts scale down only when they exceed the remaining title space.
 Preserve the original sidebar tile styling: full-width square selection when
 expanded, original icon/label spacing and animated collapse.
@@ -154,6 +168,7 @@ better-keep/
 │   │   ├── home/                 # Main screen (home, notes grid, sidebar, labels, folders)
 │   │   │   ├── home.dart         # Dashboard shell with sidebar + notes grid
 │   │   │   ├── home_layout.dart  # Height, width, safe-area and text-size navigation policy
+│   │   │   ├── note_pane.dart    # iPhone Duo: note beside the list, page beside a note
 │   │   │   ├── notes.dart        # Masonry grid / list / folder view
 │   │   │   ├── sidebar.dart      # Navigation sidebar (labels, archive, trash, folders)
 │   │   │   ├── labels.dart       # Label management
@@ -513,7 +528,7 @@ pending_remote_sync: id, item_id, item_type, operation, ...
 7. **Web has limitations**: File system, camera, OAuth, and Razorpay all use web-specific stubs
 8. **Test risky paths**: Run focused regressions for sync, key recovery, account transitions, and database upgrades. Local tests do not replace native/provider acceptance checks.
 9. **No comments**: The codebase avoids comments — follow this convention
-10. **Keep this file updated**: After adding/removing files, changing architecture, or updating dependencies, update `llm.txt`
+10. **Keep this file updated**: After adding/removing files, changing architecture, or updating dependencies, update `AGENTS.md`
 
 ---
 

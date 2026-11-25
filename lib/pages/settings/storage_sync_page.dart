@@ -7,6 +7,7 @@ import 'storage_clear_dialog.dart';
 import 'storage_usage_text.dart';
 import 'sync_issues_page.dart';
 
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
@@ -665,111 +666,115 @@ class _StorageSyncPageState extends State<StorageSyncPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(context.l10n.externalSyncTitle)),
-    body: AnimatedBuilder(
-      animation: Listenable.merge([
-        _service,
-        _firebase,
-        PlanService.instance.entitlementsNotifier,
-      ]),
-      builder: (context, _) {
-        final session = _service.session;
-        return RadioGroup<String>(
-          groupValue: _firebase.selectedProvider,
-          onChanged: (provider) {
-            if (provider != null) _choose(provider);
-          },
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
-                    child: Text(
-                      context.l10n.externalSyncDescription,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  _tile(
-                    id: 'firebase',
-                    title: context.l10n.externalSyncCloud,
-                    icon: Icons.cloud_outlined,
-                    subtitle:
-                        !_firebase.firebaseAvailable &&
-                            !_firebase.allowsDownload(_firebase.accountId)
-                        ? context.l10n.externalSyncCloudDownloadDescription
-                        : context.l10n.externalSyncCloudDescription,
-                    selected: _firebase.selectedProvider == 'firebase',
-                    onTap: _firebase.accountId == null
-                        ? _account
-                        : _busy
-                        ? null
-                        : _firebase.firebaseAvailable
-                        ? () => _select('firebase')
-                        : _firebase.allowsDownload(_firebase.accountId)
-                        ? null
-                        : _restoreFirebaseDownloads,
-                    radioEnabled: _firebase.firebaseAvailable,
-                  ),
-                  if (session != null)
-                    for (final provider
-                        in StorageConnectionController.providers)
-                      _provider(session, provider),
-                  if (_firebase.accountId != null)
-                    _tile(
-                      id: 'none',
-                      title: context.l10n.externalSyncOff,
-                      icon: Icons.cloud_off_outlined,
-                      subtitle: _firebase.selectedProvider != 'none'
-                          ? context.l10n.externalSyncOffDescription
-                          : _firebase.allowsDownload(_firebase.accountId)
-                          ? context.l10n.externalSyncDownloadsOn
-                          : context.l10n.externalSyncAllPaused,
-                      selected: _firebase.selectedProvider == 'none',
-                      onTap: _busy ? null : () => _select('none'),
-                    ),
-                  if (_busy || _service.initializing)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: LinearProgressIndicator(),
-                    ),
-                  if (_firebase.failed ||
-                      _service.failure != null ||
-                      session?.connections.metadataFailure != null)
+    body: DuoSafeArea(
+      child: AnimatedBuilder(
+        animation: Listenable.merge([
+          _service,
+          _firebase,
+          PlanService.instance.entitlementsNotifier,
+        ]),
+        builder: (context, _) {
+          final session = _service.session;
+          return RadioGroup<String>(
+            groupValue: _firebase.selectedProvider,
+            onChanged: (provider) {
+              if (provider != null) _choose(provider);
+            },
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                  children: [
                     Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
                       child: Text(
-                        context.l10n.externalSyncFailure('unavailable'),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+                        context.l10n.externalSyncDescription,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
-                  if (_firebase.failed)
-                    TextButton.icon(
-                      onPressed: _busy
+                    _tile(
+                      id: 'firebase',
+                      title: context.l10n.externalSyncCloud,
+                      icon: Icons.cloud_outlined,
+                      subtitle:
+                          !_firebase.firebaseAvailable &&
+                              !_firebase.allowsDownload(_firebase.accountId)
+                          ? context.l10n.externalSyncCloudDownloadDescription
+                          : context.l10n.externalSyncCloudDescription,
+                      selected: _firebase.selectedProvider == 'firebase',
+                      onTap: _firebase.accountId == null
+                          ? _account
+                          : _busy
                           ? null
-                          : () => _firebase.retry().catchError((Object _) {}),
-                      icon: const Icon(Icons.refresh),
-                      label: Text(context.l10n.retry),
+                          : _firebase.firebaseAvailable
+                          ? () => _select('firebase')
+                          : _firebase.allowsDownload(_firebase.accountId)
+                          ? null
+                          : _restoreFirebaseDownloads,
+                      radioEnabled: _firebase.firebaseAvailable,
                     ),
-                  if (session == null)
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      title: Text(context.l10n.externalSyncUnavailable),
-                      subtitle: Text(context.l10n.externalSyncAccount),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _account,
-                    ),
-                ],
+                    if (session != null)
+                      for (final provider
+                          in StorageConnectionController.providers)
+                        _provider(session, provider),
+                    if (_firebase.accountId != null)
+                      _tile(
+                        id: 'none',
+                        title: context.l10n.externalSyncOff,
+                        icon: Icons.cloud_off_outlined,
+                        subtitle: _firebase.selectedProvider != 'none'
+                            ? context.l10n.externalSyncOffDescription
+                            : _firebase.allowsDownload(_firebase.accountId)
+                            ? context.l10n.externalSyncDownloadsOn
+                            : context.l10n.externalSyncAllPaused,
+                        selected: _firebase.selectedProvider == 'none',
+                        onTap: _busy ? null : () => _select('none'),
+                      ),
+                    if (_busy || _service.initializing)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: LinearProgressIndicator(),
+                      ),
+                    if (_firebase.failed ||
+                        _service.failure != null ||
+                        session?.connections.metadataFailure != null)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          context.l10n.externalSyncFailure('unavailable'),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    if (_firebase.failed)
+                      TextButton.icon(
+                        onPressed: _busy
+                            ? null
+                            : () => _firebase.retry().catchError((Object _) {}),
+                        icon: const Icon(Icons.refresh),
+                        label: Text(context.l10n.retry),
+                      ),
+                    if (session == null)
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                        ),
+                        title: Text(context.l10n.externalSyncUnavailable),
+                        subtitle: Text(context.l10n.externalSyncAccount),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _account,
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     ),
   );
 

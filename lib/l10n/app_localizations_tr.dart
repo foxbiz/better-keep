@@ -3983,4 +3983,7 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get externalSyncClearRateLimited =>
       'Birkaç dakika bekleyip temizlemeyi yeniden deneyin.';
+
+  @override
+  String get editNote => 'Notu düzenle';
 }

@@ -1158,5 +1158,6 @@
   "externalSyncClearFinishing": "Menyelesaikan penghapusan…",
   "externalSyncClearWorkingHint": "Pustaka besar mungkin memerlukan beberapa menit. Anda dapat menutup dialog ini dan tetap menggunakan Better Keep. Biarkan aplikasi terbuka sampai pembersihan selesai.",
   "externalSyncClearUnconfirmed": "Kami tidak dapat memastikan apakah pembersihan sudah dimulai. Minta kode baru untuk mencoba lagi.",
-  "externalSyncClearRateLimited": "Tunggu beberapa menit, lalu coba bersihkan lagi."
+  "externalSyncClearRateLimited": "Tunggu beberapa menit, lalu coba bersihkan lagi.",
+  "editNote": "Edit catatan"
 }

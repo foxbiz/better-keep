@@ -6971,6 +6971,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please wait a few minutes, then try clearing again.'**
   String get externalSyncClearRateLimited;
+
+  /// Button that returns to editing a note shown beside another page
+  ///
+  /// In en, this message translates to:
+  /// **'Edit note'**
+  String get editNote;
 }
 
 class _AppLocalizationsDelegate

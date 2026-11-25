@@ -1,3 +1,4 @@
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 
 import 'dart:async';
@@ -20,7 +21,6 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:better_keep/models/reminder.dart';
-import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/sketch_preview_repair_service.dart';
@@ -903,7 +903,7 @@ class _NoteCardState extends State<NoteCard>
     }
 
     if (mounted) {
-      showPage(context, NoteEditor(note: widget.note), allowFullScreen: true);
+      openNote(context, widget.note);
     }
   }
 
@@ -1005,7 +1005,12 @@ class _NoteCardState extends State<NoteCard>
     );
   }
 
-  Widget _buildCheckboxProgress(Note note, Color secondaryColor) {
+  Widget _buildCheckboxProgress(
+    Note note,
+    Color noteColor,
+    Color foregroundColor,
+  ) {
+    final secondaryColor = foregroundColor.withAlpha(180);
     final checkboxCount = note.checkboxCount;
     final progress = note.checkboxProgress;
 
@@ -1028,13 +1033,19 @@ class _NoteCardState extends State<NoteCard>
           child: LinearProgressIndicator(
             value: progress,
             minHeight: 4,
-            backgroundColor: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest,
+            backgroundColor:
+                isDark(noteColor) ==
+                    (Theme.of(context).brightness == Brightness.dark)
+                ? Theme.of(context).colorScheme.surfaceContainerHighest
+                : foregroundColor.withAlpha(30),
             valueColor: AlwaysStoppedAnimation<Color>(
-              progress == 1.0
-                  ? Colors.green
-                  : Theme.of(context).colorScheme.primary,
+              visibleOn(
+                noteColor,
+                progress == 1.0
+                    ? Colors.green
+                    : Theme.of(context).colorScheme.primary,
+                fallback: secondaryColor,
+              ),
             ),
           ),
         ),
@@ -1571,10 +1582,16 @@ class _NoteCardState extends State<NoteCard>
                               return;
                             }
 
-                            final result = await note.setReminder(newReminder);
+                            // The note may have been edited meanwhile.
+                            final current = context.mounted
+                                ? NotePaneHost.currentCopyOf(context, note)
+                                : note;
+                            final result = await current.setReminder(
+                              newReminder,
+                            );
                             if (!mounted || !context.mounted) return;
                             if (result.persisted) {
-                              _lastReminder = note.reminder;
+                              _lastReminder = current.reminder;
                               _scheduleReminderExpiration();
                               setState(() {});
                             }
@@ -1666,7 +1683,7 @@ class _NoteCardState extends State<NoteCard>
             ),
             if (note.hasCheckboxes) ...[
               SizedBox(height: 10),
-              _buildCheckboxProgress(note, secondaryColor),
+              _buildCheckboxProgress(note, noteColor, foregroundColor),
             ],
             if (AppState.showNotes == NoteType.reminder && note.hasReminder)
               _ReminderCardActions(
@@ -1692,7 +1709,7 @@ class _NoteCardState extends State<NoteCard>
 
   Future<void> _handleRemoveReminder(Note note) async {
     final message = context.l10n.reminderRemoved;
-    await note.deleteReminder();
+    await NotePaneHost.currentCopyOf(context, note).deleteReminder();
     snackbar(message, Colors.green);
     if (mounted) {
       setState(() {});
@@ -1720,7 +1737,7 @@ class _NoteCardState extends State<NoteCard>
   Future<void> _handleReminderDone(Note note) async {
     // Only for non-repeating reminders
     snackbar(context.l10n.reminderCompleted, Colors.green);
-    await note.done();
+    await NotePaneHost.currentCopyOf(context, note).done();
 
     if (mounted) {
       setState(() {});

@@ -4031,4 +4031,7 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get externalSyncClearRateLimited =>
       'Aguarde alguns minutos e tente limpar novamente.';
+
+  @override
+  String get editNote => 'Editar nota';
 }

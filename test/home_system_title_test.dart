@@ -17,7 +17,11 @@ import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
+import 'package:better_keep/models/reminder.dart';
 import 'package:better_keep/pages/home/home.dart';
+import 'package:better_keep/pages/home/note_pane.dart';
+import 'package:better_keep/pages/note_editor/note_editor.dart';
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/pages/home/sidebar.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/state.dart';
@@ -907,6 +911,109 @@ void main() {
     }
   });
 
+  for (final saves in [true, false]) {
+    testWidgets('actions wait for a note beside the list '
+        '${saves ? 'to be saved' : 'that cannot be saved'}', (tester) async {
+      debugIsIPhoneDuoOverride = true;
+      addTearDown(() => debugIsIPhoneDuoOverride = null);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(951, 669);
+      addTearDown(tester.view.reset);
+      final open = _SlowNote(id: 1, title: 'Before', content: '[]');
+      await tester.runAsync(() => database.insert(Note.model, open.toJson()));
+      await tester.pumpWidget(_app(const NotePaneHost(child: Home())));
+      await _drainDatabaseWork(tester);
+      final home = tester.element(find.byType(Home));
+      expect(NotePaneHost.openNoteOf(home), isNull);
+      openNote(home, open);
+      await _drainDatabaseWork(tester);
+      expect(NotePaneHost.openNoteOf(home), same(open));
+      final editor = find.byType(NoteEditor);
+      await tester.enterText(
+        find.descendant(of: editor, matching: find.byType(TextField)).first,
+        'After',
+      );
+      // The list holds the note as it was before the edit.
+      final listed = Note(id: 1, title: 'Before', content: '[]');
+      expect(NotePaneHost.currentCopyOf(home, listed), same(open));
+      final other = _SlowNote(id: 2, title: 'Other');
+      expect(NotePaneHost.currentCopyOf(home, other), same(other));
+      AppState.selectedNotes = [listed, other];
+      await tester.pump();
+      final archive = find.descendant(
+        of: find.descendant(
+          of: find.byType(Home),
+          matching: find.byType(AppBar),
+        ),
+        matching: find.byIcon(Icons.archive),
+      );
+      await tester.tap(archive, warnIfMissed: false);
+      await tester.pump();
+      expect(listed.archived, isFalse);
+      expect(open.archived, isFalse);
+      expect(AppState.selectedNotes, hasLength(2));
+
+      open.saving.complete(saves ? 1 : -1);
+      await _drainDatabaseWork(tester);
+      if (saves) {
+        await tester.pump(const Duration(seconds: 1));
+        expect(editor, findsNothing);
+        expect(AppState.selectedNotes, [same(open), same(other)]);
+        expect(open.title, 'After');
+        await tester.tap(archive);
+        await _drainDatabaseWork(tester);
+        expect(open.archived, isTrue);
+        expect(AppState.selectedNotes, isEmpty);
+      } else {
+        expect(editor, findsOneWidget);
+        expect(AppState.selectedNotes, isEmpty);
+        expect(archive, findsNothing);
+      }
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainDatabaseWork(tester);
+    });
+  }
+
+  for (final action in [Icons.done, Icons.notifications_off_outlined]) {
+    testWidgets('a card changes the note that is open beside it ($action)', (
+      tester,
+    ) async {
+      debugIsIPhoneDuoOverride = true;
+      addTearDown(() => debugIsIPhoneDuoOverride = null);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(951, 669);
+      addTearDown(tester.view.reset);
+      AppState.showNotes = NoteType.reminder;
+      final reminder = Reminder(
+        dateTime: DateTime.now().add(const Duration(days: 1)),
+        type: ReminderType.notification,
+      );
+      final open = _SlowNote(id: 1, title: 'Open', content: '[]')
+        ..reminder = reminder;
+      await tester.runAsync(() => database.insert(Note.model, open.toJson()));
+      await tester.pumpWidget(_app(const NotePaneHost(child: Home())));
+      await _drainDatabaseWork(tester);
+      final listed = tester.widget<NoteCard>(find.byType(NoteCard)).note;
+      expect(listed, isNot(same(open)));
+      openNote(tester.element(find.byType(Home)), open);
+      await _drainDatabaseWork(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NoteCard),
+          matching: find.byIcon(action),
+        ),
+      );
+      await tester.pump();
+      expect(open.changes, [action == Icons.done ? 'done' : 'removed']);
+      expect(listed.completed, isFalse);
+      expect(listed.reminder, isNotNull);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainDatabaseWork(tester);
+    });
+  }
+
   testWidgets('system configure stays sort-only and hides during selection', (
     tester,
   ) async {
@@ -954,6 +1061,43 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainDatabaseWork(tester);
   });
+}
+
+class _SlowNote extends Note {
+  _SlowNote({super.id, super.title, super.content});
+
+  final saving = Completer<int>();
+  final changes = <String>[];
+
+  @override
+  Future<int> done() async {
+    changes.add('done');
+    return 1;
+  }
+
+  @override
+  Future<int> deleteReminder() async {
+    changes.add('removed');
+    return 1;
+  }
+
+  @override
+  Future<int> saveEditorSnapshot({
+    required String title,
+    required String content,
+    required String plainText,
+    bool trackSync = true,
+  }) async {
+    final result = await saving.future;
+    if (result >= 0) this.title = title;
+    return result;
+  }
+
+  @override
+  Future<int> save([
+    bool trackSync = true,
+    ModelChangeOrigin origin = ModelChangeOrigin.local,
+  ]) async => 1;
 }
 
 Future<void> _drainDatabaseWork(WidgetTester tester) async {

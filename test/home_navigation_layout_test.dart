@@ -1,3 +1,4 @@
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/components/logo.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/note.dart';
@@ -25,6 +26,24 @@ void main() {
         reason: '$size',
       );
     }
+    addTearDown(() => debugIsIPhoneDuoOverride = null);
+    // iPhone Duo keeps its status area beside the content.
+    debugIsIPhoneDuoOverride = true;
+    const duoInsets = EdgeInsets.only(right: 84, bottom: 34);
+    for (final (size, expected) in [
+      (const Size(466, 678), false),
+      (const Size(951, 669), true),
+      (const Size(669, 951), false),
+    ]) {
+      expect(
+        hasRoomForHomeSidebar(
+          MediaQueryData(size: size, viewPadding: duoInsets),
+        ),
+        expected,
+        reason: 'iPhone Duo $size',
+      );
+    }
+    debugIsIPhoneDuoOverride = null;
     const desktop = MediaQueryData(size: Size(1024, 768));
     expect(
       hasRoomForHomeSidebar(

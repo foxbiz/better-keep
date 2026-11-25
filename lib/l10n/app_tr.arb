@@ -3217,5 +3217,6 @@
   "externalSyncClearFinishing": "Temizleme tamamlanıyor…",
   "externalSyncClearWorkingHint": "Büyük kitaplıklar birkaç dakika sürebilir. Bu pencereyi kapatıp Better Keep'i kullanmaya devam edebilirsiniz. Temizleme bitene kadar uygulamayı açık tutun.",
   "externalSyncClearUnconfirmed": "Temizlemenin başlayıp başlamadığını doğrulayamadık. Yeniden denemek için yeni bir kod isteyin.",
-  "externalSyncClearRateLimited": "Birkaç dakika bekleyip temizlemeyi yeniden deneyin."
+  "externalSyncClearRateLimited": "Birkaç dakika bekleyip temizlemeyi yeniden deneyin.",
+  "editNote": "Notu düzenle"
 }

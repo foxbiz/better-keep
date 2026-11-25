@@ -1,3 +1,4 @@
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/services/monetization/monetization.dart';
 import 'package:better_keep/services/monetization/razorpay_service.dart';
 import 'package:better_keep/ui/paywall/purchase_feedback_listener.dart';
@@ -475,125 +476,127 @@ class _PaywallPageState extends State<PaywallPage> {
             onPressed: () => Navigator.pop(context, false),
           ),
         ),
-        body: Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (widget.feature != null ||
-                          widget.customMessage != null) ...[
-                        Text(
-                          _getMessage(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+        body: DuoSafeArea(
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (widget.feature != null ||
+                            widget.customMessage != null) ...[
+                          Text(
+                            _getMessage(context),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      _FeatureComparisonCard(plan: _selectedPlan),
-                      const SizedBox(height: 24),
-                      if (SubscriptionService.instance.usesRazorpay) ...[
-                        _buildCurrencySelector(theme),
-                        const SizedBox(height: 16),
-                      ],
-                      if (widget.feature == null) ...[
-                        SegmentedButton<UserPlan>(
-                          segments: [
-                            ButtonSegment(
-                              value: UserPlan.lite,
-                              label: Text(context.l10n.lite),
-                            ),
-                            ButtonSegment(
-                              value: UserPlan.pro,
-                              label: Text(context.l10n.pro),
-                            ),
-                          ],
-                          selected: {_selectedPlan},
-                          onSelectionChanged: _isBusy
-                              ? null
-                              : (values) => setState(
-                                  () => _selectedPlan = values.single,
-                                ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      const SizedBox(height: 8),
-
-                      // Pricing section
-                      if (_isLoadingProducts) ...[
-                        // Loading products
+                          const SizedBox(height: 16),
+                        ],
+                        _FeatureComparisonCard(plan: _selectedPlan),
                         const SizedBox(height: 24),
-                        const Center(child: CircularProgressIndicator()),
-                        const SizedBox(height: 16),
+                        if (SubscriptionService.instance.usesRazorpay) ...[
+                          _buildCurrencySelector(theme),
+                          const SizedBox(height: 16),
+                        ],
+                        if (widget.feature == null) ...[
+                          SegmentedButton<UserPlan>(
+                            segments: [
+                              ButtonSegment(
+                                value: UserPlan.lite,
+                                label: Text(context.l10n.lite),
+                              ),
+                              ButtonSegment(
+                                value: UserPlan.pro,
+                                label: Text(context.l10n.pro),
+                              ),
+                            ],
+                            selected: {_selectedPlan},
+                            onSelectionChanged: _isBusy
+                                ? null
+                                : (values) => setState(
+                                    () => _selectedPlan = values.single,
+                                  ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        const SizedBox(height: 8),
+
+                        // Pricing section
+                        if (_isLoadingProducts) ...[
+                          // Loading products
+                          const SizedBox(height: 24),
+                          const Center(child: CircularProgressIndicator()),
+                          const SizedBox(height: 16),
+                          Text(
+                            context.l10n.loadingPrices,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                        ] else if (_pricesAvailable ||
+                            SubscriptionService.instance.usesRazorpay) ...[
+                          SubscriptionPurchaseOptions(
+                            monthlyPrice: _monthlyPrice!,
+                            yearlyPrice: _yearlyPrice!,
+                            savePercentage: _savePercentage,
+                            isBusy: _isBusy,
+                            progressLabel: _progressLabel(context),
+                            onSubscribe: (yearly) =>
+                                _handleSubscribe(yearly: yearly),
+                          ),
+                        ] else ...[
+                          // Products failed to load
+                          Text(
+                            context.l10n.somethingWentWrongCheckConnection,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.error,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          TextButton.icon(
+                            onPressed: _loadProducts,
+                            icon: const Icon(Icons.refresh),
+                            label: Text(context.l10n.reloadPrices),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+
+                        // Restore info
+                        const _RestoreInfoText(),
+                        const SizedBox(height: 24),
+
+                        // Terms
                         Text(
-                          context.l10n.loadingPrices,
-                          style: theme.textTheme.bodyMedium?.copyWith(
+                          context.l10n.subscriptionAutoRenewTerms,
+                          style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.outline,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 24),
-                      ] else if (_pricesAvailable ||
-                          SubscriptionService.instance.usesRazorpay) ...[
-                        SubscriptionPurchaseOptions(
-                          monthlyPrice: _monthlyPrice!,
-                          yearlyPrice: _yearlyPrice!,
-                          savePercentage: _savePercentage,
-                          isBusy: _isBusy,
-                          progressLabel: _progressLabel(context),
-                          onSubscribe: (yearly) =>
-                              _handleSubscribe(yearly: yearly),
-                        ),
-                      ] else ...[
-                        // Products failed to load
-                        Text(
-                          context.l10n.somethingWentWrongCheckConnection,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.error,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
                         const SizedBox(height: 16),
-                        TextButton.icon(
-                          onPressed: _loadProducts,
-                          icon: const Icon(Icons.refresh),
-                          label: Text(context.l10n.reloadPrices),
-                        ),
+
+                        // Terms and Privacy links
+                        const _LegalLinks(),
+                        const SizedBox(height: 16),
+
+                        // Self-host contact info
+                        _SelfHostContactInfo(theme: theme),
+                        const SizedBox(height: 24),
                       ],
-                      const SizedBox(height: 24),
-
-                      // Restore info
-                      const _RestoreInfoText(),
-                      const SizedBox(height: 24),
-
-                      // Terms
-                      Text(
-                        context.l10n.subscriptionAutoRenewTerms,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Terms and Privacy links
-                      const _LegalLinks(),
-                      const SizedBox(height: 16),
-
-                      // Self-host contact info
-                      _SelfHostContactInfo(theme: theme),
-                      const SizedBox(height: 24),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

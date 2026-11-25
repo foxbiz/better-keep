@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
 import 'package:better_keep/components/page_pattern_painter.dart';
 import 'package:better_keep/components/sketch_painter.dart';
@@ -240,6 +241,11 @@ class _SketchPageState extends State<SketchPage>
   double? _pendingDotPressure;
 
   bool _hasFitted = false;
+
+  /// Viewport and insets of the last layout, and the transform it was given.
+  Size _fittedViewport = Size.zero;
+  EdgeInsets _fittedPadding = EdgeInsets.zero;
+  Matrix4? _fittedTransform;
   SketchTool _selectedTool = SketchTool.pen;
 
   /// Whether move/pan mode is active (not a drawing tool)
@@ -1113,7 +1119,12 @@ class _SketchPageState extends State<SketchPage>
             Positioned.fill(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  if (!_hasFitted) {
+                  if (isIPhoneDuo) {
+                    _updateViewport(
+                      constraints.biggest,
+                      MediaQuery.paddingOf(context),
+                    );
+                  } else if (!_hasFitted) {
                     _hasFitted = true;
                     _fitToScreen(constraints.maxWidth, constraints.maxHeight);
                   }
@@ -2161,6 +2172,50 @@ class _SketchPageState extends State<SketchPage>
       ..setEntry(0, 0, scale)
       ..setEntry(1, 1, scale)
       ..setEntry(2, 2, scale);
+  }
+
+  /// Fits a new canvas, and keeps it in place when the window resizes: an
+  /// untouched canvas is refitted, while a canvas the user zoomed or panned
+  /// keeps its scale and the point at the centre of the visible area.
+  void _updateViewport(Size viewport, EdgeInsets padding) {
+    if (!_hasFitted) {
+      _hasFitted = true;
+      _fitToArea(viewport, padding);
+    } else if (viewport != _fittedViewport || padding != _fittedPadding) {
+      final current = _transformationController.value;
+      if (current == _fittedTransform) {
+        _fitToArea(viewport, padding);
+      } else {
+        final delta =
+            padding.deflateRect(Offset.zero & viewport).center -
+            _fittedPadding.deflateRect(Offset.zero & _fittedViewport).center;
+        _transformationController.value = current.clone()
+          ..setEntry(0, 3, current.entry(0, 3) + delta.dx)
+          ..setEntry(1, 3, current.entry(1, 3) + delta.dy);
+      }
+    }
+    _fittedViewport = viewport;
+    _fittedPadding = padding;
+  }
+
+  void _fitToArea(Size viewport, EdgeInsets padding) {
+    // Side insets matter too: a foldable keeps its status area on one side.
+    final area = padding.deflateRect(Offset.zero & viewport);
+    final double scale =
+        min(area.width / _canvasSize.width, area.height / _canvasSize.height) *
+        0.95;
+    final origin =
+        area.center -
+        Offset(_canvasSize.width, _canvasSize.height) * (scale / 2);
+
+    final transform = Matrix4.identity()
+      ..setEntry(0, 3, origin.dx)
+      ..setEntry(1, 3, origin.dy)
+      ..setEntry(0, 0, scale)
+      ..setEntry(1, 1, scale)
+      ..setEntry(2, 2, scale);
+    _fittedTransform = transform.clone();
+    _transformationController.value = transform;
   }
 
   void _startStroke(double x, double y, double? pressure) {

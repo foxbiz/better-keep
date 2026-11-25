@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show compute, kDebugMode;
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/components/sync_provider_tile.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/external_sync/external_sync_service.dart';
@@ -402,138 +403,140 @@ class _NerdStatsPageState extends State<NerdStatsPage> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                _buildStatCard(),
-                if (_listedProvider == 'firebase') ...[
-                  const Divider(),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: ValueListenableBuilder<SyncProgress>(
-                      valueListenable: NoteSyncService().syncStatus,
-                      builder: (context, status, child) {
-                        if (status.isEmpty) return const SizedBox.shrink();
-                        return Card(
-                          color: Colors.blue.withValues(alpha: 0.1),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              "Status: ${status.phase.name}",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+      body: DuoSafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                children: [
+                  _buildStatCard(),
+                  if (_listedProvider == 'firebase') ...[
+                    const Divider(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: ValueListenableBuilder<SyncProgress>(
+                        valueListenable: NoteSyncService().syncStatus,
+                        builder: (context, status, child) {
+                          if (status.isEmpty) return const SizedBox.shrink();
+                          return Card(
+                            color: Colors.blue.withValues(alpha: 0.1),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Text(
+                                "Status: ${status.phase.name}",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      "Pending Sync Items ($_pendingTotal)",
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  ..._pendingItems.map(
-                    (item) => ListTile(
-                      title: Text(item.action.name.toUpperCase()),
-                      subtitle: Text(
-                        "Local: ${item.localId}\nRemote: ${item.remoteId ?? 'N/A'}\nStatus: ${item.status}",
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () async {
-                          final preference = FirebaseSyncPreference.instance;
-                          if (preference.selectedProvider != 'firebase' ||
-                              preference.accountId != _listedAccount) {
-                            return;
-                          }
-                          await item.discardPendingIfUnchanged();
-                          _refresh();
+                          );
                         },
                       ),
                     ),
-                  ),
-                  if (_pendingItems.length < _pendingTotal)
-                    TextButton(
-                      onPressed: () {
-                        _pendingLimit += _pageSize;
-                        _refresh();
-                      },
-                      child: const Text('Show more'),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        "Pending Sync Items ($_pendingTotal)",
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
-                  const Divider(),
-                ],
-                // OPFS section (Web only)
-                if (kIsWeb) ...[_buildOpfsSection(), const Divider()],
-                // SQLite Database Viewer (debug only - exposes raw DB access)
-                if (kDebugMode) ...[
-                  _buildDatabaseViewerSection(),
-                  const Divider(),
-                ],
-                if (_listedProvider == 'firebase') _buildCacheDebugSection(),
-                const Divider(),
-                ListTile(
-                  title: const Text("View Sync Logs"),
-                  subtitle: const Text("Check errors and debugging info"),
-                  trailing: const Icon(Icons.description),
-                  onTap: () {
-                    showPage(context, const LogViewerPage());
-                  },
-                ),
-                if (_listedProvider == 'firebase')
-                  ListTile(
-                    title: const Text("Clear Sync Track"),
-                    subtitle: const Text(
-                      "Deletes all pending sync items (Dangerous)",
-                    ),
-                    trailing: const Icon(
-                      Icons.delete_forever,
-                      color: Colors.red,
-                    ),
-                    onTap: () async {
-                      final database = AppState.db;
-                      final account = _listedAccount;
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Clear Sync Track?'),
-                          content: const Text(
-                            'This will delete all pending sync items. '
-                            'This action cannot be undone and may cause sync issues.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red,
-                              ),
-                              child: const Text('Delete All'),
-                            ),
-                          ],
+                    ..._pendingItems.map(
+                      (item) => ListTile(
+                        title: Text(item.action.name.toUpperCase()),
+                        subtitle: Text(
+                          "Local: ${item.localId}\nRemote: ${item.remoteId ?? 'N/A'}\nStatus: ${item.status}",
                         ),
-                      );
-                      if (mounted &&
-                          confirm == true &&
-                          identical(database, AppState.get('db')) &&
-                          account ==
-                              FirebaseSyncPreference.instance.accountId &&
-                          FirebaseSyncPreference.instance.selectedProvider ==
-                              'firebase') {
-                        await NoteSyncTrack.clearPending();
-                        _refresh();
-                      }
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () async {
+                            final preference = FirebaseSyncPreference.instance;
+                            if (preference.selectedProvider != 'firebase' ||
+                                preference.accountId != _listedAccount) {
+                              return;
+                            }
+                            await item.discardPendingIfUnchanged();
+                            _refresh();
+                          },
+                        ),
+                      ),
+                    ),
+                    if (_pendingItems.length < _pendingTotal)
+                      TextButton(
+                        onPressed: () {
+                          _pendingLimit += _pageSize;
+                          _refresh();
+                        },
+                        child: const Text('Show more'),
+                      ),
+                    const Divider(),
+                  ],
+                  // OPFS section (Web only)
+                  if (kIsWeb) ...[_buildOpfsSection(), const Divider()],
+                  // SQLite Database Viewer (debug only - exposes raw DB access)
+                  if (kDebugMode) ...[
+                    _buildDatabaseViewerSection(),
+                    const Divider(),
+                  ],
+                  if (_listedProvider == 'firebase') _buildCacheDebugSection(),
+                  const Divider(),
+                  ListTile(
+                    title: const Text("View Sync Logs"),
+                    subtitle: const Text("Check errors and debugging info"),
+                    trailing: const Icon(Icons.description),
+                    onTap: () {
+                      showPage(context, const LogViewerPage());
                     },
                   ),
-              ],
-            ),
+                  if (_listedProvider == 'firebase')
+                    ListTile(
+                      title: const Text("Clear Sync Track"),
+                      subtitle: const Text(
+                        "Deletes all pending sync items (Dangerous)",
+                      ),
+                      trailing: const Icon(
+                        Icons.delete_forever,
+                        color: Colors.red,
+                      ),
+                      onTap: () async {
+                        final database = AppState.db;
+                        final account = _listedAccount;
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Clear Sync Track?'),
+                            content: const Text(
+                              'This will delete all pending sync items. '
+                              'This action cannot be undone and may cause sync issues.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                ),
+                                child: const Text('Delete All'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (mounted &&
+                            confirm == true &&
+                            identical(database, AppState.get('db')) &&
+                            account ==
+                                FirebaseSyncPreference.instance.accountId &&
+                            FirebaseSyncPreference.instance.selectedProvider ==
+                                'firebase') {
+                          await NoteSyncTrack.clearPending();
+                          _refresh();
+                        }
+                      },
+                    ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -1580,85 +1583,87 @@ class _LogViewerPageState extends State<LogViewerPage> {
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Sticky tag filter
-                if (_availableTags.isNotEmpty)
-                  Material(
-                    elevation: 2,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: colorScheme.outlineVariant,
-                            width: 1,
-                          ),
+      body: DuoSafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  // Sticky tag filter
+                  if (_availableTags.isNotEmpty)
+                    Material(
+                      elevation: 2,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            'Filter by tag:',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButton<String?>(
-                              value: _selectedTag,
-                              isExpanded: true,
-                              hint: const Text('All tags'),
-                              items: [
-                                const DropdownMenuItem<String?>(
-                                  value: null,
-                                  child: Text('All tags'),
-                                ),
-                                ..._availableTags.map((tag) {
-                                  return DropdownMenuItem<String?>(
-                                    value: tag,
-                                    child: Text(tag),
-                                  );
-                                }),
-                              ],
-                              onChanged: _onTagSelected,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surface,
+                          border: Border(
+                            bottom: BorderSide(
+                              color: colorScheme.outlineVariant,
+                              width: 1,
                             ),
                           ),
-                        ],
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              'Filter by tag:',
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButton<String?>(
+                                value: _selectedTag,
+                                isExpanded: true,
+                                hint: const Text('All tags'),
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('All tags'),
+                                  ),
+                                  ..._availableTags.map((tag) {
+                                    return DropdownMenuItem<String?>(
+                                      value: tag,
+                                      child: Text(tag),
+                                    );
+                                  }),
+                                ],
+                                onChanged: _onTagSelected,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  // Log entries
+                  Expanded(
+                    child: _filteredLogs.isEmpty
+                        ? Center(
+                            child: Text(
+                              _parsedLogs.isEmpty
+                                  ? 'No logs found'
+                                  : 'No logs match the current filter',
+                              style: theme.textTheme.bodyLarge,
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadLogs,
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _filteredLogs.length,
+                              itemBuilder: (context, index) {
+                                return _buildLogEntry(_filteredLogs[index]);
+                              },
+                            ),
+                          ),
                   ),
-                // Log entries
-                Expanded(
-                  child: _filteredLogs.isEmpty
-                      ? Center(
-                          child: Text(
-                            _parsedLogs.isEmpty
-                                ? 'No logs found'
-                                : 'No logs match the current filter',
-                            style: theme.textTheme.bodyLarge,
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadLogs,
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _filteredLogs.length,
-                            itemBuilder: (context, index) {
-                              return _buildLogEntry(_filteredLogs[index]);
-                            },
-                          ),
-                        ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 

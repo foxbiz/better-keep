@@ -3995,4 +3995,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get externalSyncClearRateLimited =>
       'Please wait a few minutes, then try clearing again.';
+
+  @override
+  String get editNote => 'Edit note';
 }

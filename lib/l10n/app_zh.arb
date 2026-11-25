@@ -1158,5 +1158,6 @@
   "externalSyncClearFinishing": "正在完成清理…",
   "externalSyncClearWorkingHint": "大型资料库可能需要几分钟。你可以关闭此对话框并继续使用 Better Keep。请保持应用打开，直到清理完成。",
   "externalSyncClearUnconfirmed": "无法确认清理是否已开始。请获取新验证码后重试。",
-  "externalSyncClearRateLimited": "请等待几分钟，然后再尝试清理。"
+  "externalSyncClearRateLimited": "请等待几分钟，然后再尝试清理。",
+  "editNote": "编辑笔记"
 }

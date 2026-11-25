@@ -1,3 +1,4 @@
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/services/e2ee/recovery_key.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -172,222 +173,226 @@ class _SetupRecoveryKeyPageState extends State<SetupRecoveryKeyPage> {
               : context.l10n.setupRecoveryKey,
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_error != null) ...[
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                    if (widget.legacyRecovery && !_verifyExisting)
-                      TextButton(
-                        onPressed: _prepareRecovery,
-                        child: Text(context.l10n.retry),
-                      ),
-                  ],
-                  if (!_verifyExisting) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      context.l10n.recoveryPassphraseDescription,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.errorContainer
-                            .withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.warning_amber_rounded,
-                            color: Theme.of(context).colorScheme.error,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              context.l10n.recoveryPassphraseWarning,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context).colorScheme.error,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (widget.isUpdate) ...[
-                    TextFormField(
-                      controller: _currentController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: context.l10n.currentPassphrase,
-                      ),
-                      validator: (value) => value == null || value.isEmpty
-                          ? context.l10n.currentPassphrase
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passphraseController,
-                    obscureText: _obscurePassphrase,
-                    autofocus: true,
-                    textInputAction: TextInputAction.next,
-                    onFieldSubmitted: (_) => _confirmFocusNode.requestFocus(),
-                    decoration: InputDecoration(
-                      labelText: context.l10n.recoveryPassphrase,
-                      hintText: _verifyExisting
-                          ? null
-                          : context.l10n.enterAStrongPassphrase,
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassphrase
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                        onPressed: () => setState(
-                          () => _obscurePassphrase = !_obscurePassphrase,
+      body: DuoSafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_error != null) ...[
+                      Text(
+                        _error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
                         ),
                       ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return context.l10n.pleaseEnterPassphrase;
-                      }
-                      if (!_verifyExisting && value.length < 6) {
-                        return context.l10n.passphraseMinLength;
-                      }
-                      return null;
-                    },
-                  ),
-                  // Real-time strength warning
-                  if (!_verifyExisting && _strengthWarning != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.tertiary,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _strengthWarning!,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                  ),
-                            ),
-                          ),
-                        ],
+                      if (widget.legacyRecovery && !_verifyExisting)
+                        TextButton(
+                          onPressed: _prepareRecovery,
+                          child: Text(context.l10n.retry),
+                        ),
+                    ],
+                    if (!_verifyExisting) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        context.l10n.recoveryPassphraseDescription,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                  if (!_verifyExisting) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.errorContainer
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Theme.of(context).colorScheme.error,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                context.l10n.recoveryPassphraseWarning,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .error,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (widget.isUpdate) ...[
+                      TextFormField(
+                        controller: _currentController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: context.l10n.currentPassphrase,
+                        ),
+                        validator: (value) => value == null || value.isEmpty
+                            ? context.l10n.currentPassphrase
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     const SizedBox(height: 16),
                     TextFormField(
-                      controller: _confirmController,
-                      obscureText: _obscureConfirm,
-                      focusNode: _confirmFocusNode,
+                      controller: _passphraseController,
+                      obscureText: _obscurePassphrase,
+                      autofocus: true,
                       textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) => _hintFocusNode.requestFocus(),
+                      onFieldSubmitted: (_) => _confirmFocusNode.requestFocus(),
                       decoration: InputDecoration(
-                        labelText: context.l10n.confirmPassphrase,
-                        hintText: context.l10n.reenterPassphrase,
+                        labelText: context.l10n.recoveryPassphrase,
+                        hintText: _verifyExisting
+                            ? null
+                            : context.l10n.enterAStrongPassphrase,
                         border: const OutlineInputBorder(),
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscureConfirm
+                            _obscurePassphrase
                                 ? Icons.visibility
                                 : Icons.visibility_off,
                           ),
                           onPressed: () => setState(
-                            () => _obscureConfirm = !_obscureConfirm,
+                            () => _obscurePassphrase = !_obscurePassphrase,
                           ),
                         ),
                       ),
                       validator: (value) {
-                        if (value != _passphraseController.text) {
-                          return context.l10n.passphrasesDoNotMatch;
+                        if (value == null || value.isEmpty) {
+                          return context.l10n.pleaseEnterPassphrase;
+                        }
+                        if (!_verifyExisting && value.length < 6) {
+                          return context.l10n.passphraseMinLength;
                         }
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _hintController,
-                      focusNode: _hintFocusNode,
-                      textInputAction: TextInputAction.done,
-                      decoration: InputDecoration(
-                        labelText: context.l10n.hintOptional,
-                        hintText: context.l10n.hintToRemember,
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.lightbulb_outline),
+                    // Real-time strength warning
+                    if (!_verifyExisting && _strengthWarning != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.tertiary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _strengthWarning!,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (!_verifyExisting) ...[
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _confirmController,
+                        obscureText: _obscureConfirm,
+                        focusNode: _confirmFocusNode,
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) => _hintFocusNode.requestFocus(),
+                        decoration: InputDecoration(
+                          labelText: context.l10n.confirmPassphrase,
+                          hintText: context.l10n.reenterPassphrase,
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureConfirm
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscureConfirm = !_obscureConfirm,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value != _passphraseController.text) {
+                            return context.l10n.passphrasesDoNotMatch;
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _hintController,
+                        focusNode: _hintFocusNode,
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                          labelText: context.l10n.hintOptional,
+                          hintText: context.l10n.hintToRemember,
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.lightbulb_outline),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 32),
+                    FilledButton.icon(
+                      onPressed:
+                          _isLoading ||
+                              (widget.legacyRecovery &&
+                                  _error != null &&
+                                  !_verifyExisting)
+                          ? null
+                          : _save,
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.save),
+                      label: Text(
+                        _isLoading
+                            ? context.l10n.saving
+                            : _verifyExisting
+                            ? context.l10n.verify
+                            : context.l10n.saveRecoveryKey,
                       ),
                     ),
+                    if (widget.legacyRecovery)
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(context.l10n.notNow),
+                      ),
                   ],
-                  const SizedBox(height: 32),
-                  FilledButton.icon(
-                    onPressed:
-                        _isLoading ||
-                            (widget.legacyRecovery &&
-                                _error != null &&
-                                !_verifyExisting)
-                        ? null
-                        : _save,
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.save),
-                    label: Text(
-                      _isLoading
-                          ? context.l10n.saving
-                          : _verifyExisting
-                          ? context.l10n.verify
-                          : context.l10n.saveRecoveryKey,
-                    ),
-                  ),
-                  if (widget.legacyRecovery)
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(context.l10n.notNow),
-                    ),
-                ],
+                ),
               ),
             ),
           ),

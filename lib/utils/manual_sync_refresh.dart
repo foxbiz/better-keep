@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/utils/logger.dart';
 
 import 'package:better_keep/models/app_progress.dart';
@@ -309,7 +310,8 @@ void showSyncRefreshFeedback(BuildContext context, SyncRefreshOutcome outcome) {
     case SyncRefreshOutcome.notesNeedAttention:
     case SyncRefreshOutcome.retryScheduled:
       if (AppState.showSyncProgress &&
-          ModalRoute.of(context)?.isCurrent == true &&
+          (ModalRoute.of(context)?.isCurrent == true ||
+              NotePaneHost.isSideBySide(context)) &&
           (SyncPresentation.instance.value.isFailure ||
               SyncPresentation.instance.value.phase ==
                   SyncPhase.retryScheduled)) {

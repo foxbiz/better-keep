@@ -3721,4 +3721,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get externalSyncClearRateLimited => '请等待几分钟，然后再尝试清理。';
+
+  @override
+  String get editNote => '编辑笔记';
 }

@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:better_keep/services/iphone_duo.dart';
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/components/quill_input_semantics.dart';
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_embed_builders.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_embed_editing.dart';
 import 'package:better_keep/models/note_table.dart';
@@ -67,17 +70,30 @@ import 'package:metadata_fetch/metadata_fetch.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 
+/// Lets the owner of a [NoteEditor] close it as its back button would.
+class NoteEditorHandle {
+  Future<bool> Function()? _close;
+
+  bool get isAttached => _close != null;
+
+  /// Saves and pops the editor. False if it is still open, because it could not
+  /// be saved or has not been built.
+  Future<bool> close() async => await _close?.call() ?? false;
+}
+
 class NoteEditor extends StatefulWidget {
   final Note? note;
   final bool autoFocus;
   final bool deleteIfUnchanged;
   final ImageAttachmentPreparationService? imageAttachmentPreparationService;
+  final NoteEditorHandle? handle;
   const NoteEditor({
     super.key,
     this.note,
     this.autoFocus = false,
     this.deleteIfUnchanged = false,
     this.imageAttachmentPreparationService,
+    this.handle,
   });
 
   @override
@@ -129,6 +145,16 @@ class _NoteEditorState extends State<NoteEditor>
   bool _isLockRemovalQueued = false;
   bool _isClosing = false;
   bool _allowPop = false;
+  Future<bool>? _closing;
+
+  /// Whether another page is open beside this note, and makes it read-only.
+  bool _hasPageBeside = false;
+  bool _isReference = false;
+
+  /// Where editing resumes once that page has closed.
+  ({bool inTitle, int? offset})? _resumeAt;
+  QuillController? _preview;
+  final ValueNotifier<bool> _previewWanted = ValueNotifier(false);
   Metadata? _linkMetadata;
   bool _isLoadingMetadata = false;
 
@@ -347,6 +373,7 @@ class _NoteEditorState extends State<NoteEditor>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.handle?._close = _closeEditor;
     if (widget.note == null) {
       _note = Note(content: '');
     } else {
@@ -769,8 +796,11 @@ class _NoteEditorState extends State<NoteEditor>
         renderEditor.localToGlobal(caretRect.topLeft),
       );
       final media = MediaQuery.of(context);
+      final sides = isIPhoneDuo ? media.padding : EdgeInsets.zero;
       final availableWidth =
-          stackRenderObject.size.width - (_checklistPopupScreenInset * 2);
+          stackRenderObject.size.width -
+          sides.horizontal -
+          (_checklistPopupScreenInset * 2);
       if (availableWidth < 120) return null;
       final popupMaxWidth = availableWidth
           .clamp(0.0, _checklistPopupMaxWidth)
@@ -799,8 +829,9 @@ class _NoteEditorState extends State<NoteEditor>
           : caretTop.dx - 14;
       final left = preferredLeft
           .clamp(
-            _checklistPopupScreenInset,
+            sides.left + _checklistPopupScreenInset,
             stackRenderObject.size.width -
+                sides.right -
                 popupWidth -
                 _checklistPopupScreenInset,
           )
@@ -919,11 +950,102 @@ class _NoteEditorState extends State<NoteEditor>
         ?.showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Shows the edits of a checklist open beside this note, which become part of
+  /// [_controller], and of its undo history, when the checklist closes.
+  void _showPreview(List<Map<String, dynamic>> bodyDelta) {
+    if (!mounted || !_isReference) return;
+    final document = documentFromJsonSafe(bodyDelta)
+      ..setCustomRules(customQuillRules);
+    final retired = _preview;
+    setState(() {
+      _preview = QuillController(
+        document: document,
+        selection: const TextSelection.collapsed(offset: 0),
+        readOnly: true,
+      );
+    });
+    _retirePreview(retired);
+  }
+
+  void _endPreview() {
+    if (!mounted) return;
+    final retired = _preview;
+    setState(() => _preview = null);
+    _retirePreview(retired);
+  }
+
+  void _retirePreview(QuillController? controller) {
+    if (controller == null) return;
+    // It is still in the tree until the next frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _hasPageBeside = NotePaneHost.hasPageBeside(context);
+    _isReference = NotePaneHost.isReference(context);
+    _previewWanted.value = _isReference;
+  }
+
+  /// Closes the page that makes this note read-only, then edits the note where
+  /// [tap] was, or else where it was last edited.
+  void _editAgain([Offset? tap]) {
+    if (_note.readOnly || _note.trashed) return;
+    final body = _editorKey.currentState?.renderEditor;
+    final hasBody = body != null && body.attached && body.hasSize;
+    _resumeAt = (
+      inTitle:
+          tap != null && hasBody && tap.dy < body.localToGlobal(Offset.zero).dy,
+      offset: tap != null && hasBody
+          ? body.getPositionForOffset(tap).offset
+          : null,
+    );
+    unawaited(NotePaneHost.closePageBeside(context));
+  }
+
+  void _resumeEditing() {
+    final resumeAt = _resumeAt;
+    _resumeAt = null;
+    if (resumeAt == null || !mounted) return;
+    if (resumeAt.inTitle) {
+      _titleFocusNode.requestFocus();
+      return;
+    }
+    final offset = resumeAt.offset;
+    if (offset != null) {
+      _controller.updateSelection(
+        TextSelection.collapsed(
+          offset: offset.clamp(0, _controller.document.length - 1),
+        ),
+        ChangeSource.local,
+      );
+    }
+    _focusNode.requestFocus();
+  }
+
   Future<void> _waitForChecklistRouteFrame() async {
     await WidgetsBinding.instance.endOfFrame;
   }
 
+  Future<dynamic> _openChecklist(
+    Widget Function(ValueChanged<List<Map<String, dynamic>>> onPreview) page,
+  ) async {
+    var isOpen = true;
+    final result = await openBesideNote(
+      context,
+      // A preview on its way when the checklist closes must not arrive.
+      page((bodyDelta) {
+        if (isOpen) _showPreview(bodyDelta);
+      }),
+    );
+    isOpen = false;
+    _endPreview();
+    return result;
+  }
+
   Future<void> _openFocusedChecklistEditor() async {
+    if (_hasPageBeside) return;
     _changeTimer?.cancel();
     _cancelChecklistPopupAutoHide();
     _isChecklistPopupPressed = false;
@@ -952,16 +1074,21 @@ class _NoteEditorState extends State<NoteEditor>
     await _waitForChecklistRouteFrame();
     if (!mounted) return;
 
-    final result = await showPage(
-      context,
-      RichChecklistEditor(note: _note, session: session),
-      allowFullScreen: true,
+    final result = await _openChecklist(
+      (onPreview) => RichChecklistEditor(
+        note: _note,
+        session: session,
+        onPreview: onPreview,
+        previewWanted: _previewWanted,
+      ),
     );
     if (!mounted || result is! RichChecklistEditorResult) return;
     await _applyChecklistEditorResult(result, previousSelection);
+    _resumeEditing();
   }
 
   Future<void> _openChecklistCollectionEditor() async {
+    if (_hasPageBeside) return;
     _changeTimer?.cancel();
     _cancelChecklistPopupAutoHide();
     _isChecklistPopupPressed = false;
@@ -980,13 +1107,17 @@ class _NoteEditorState extends State<NoteEditor>
     await _waitForChecklistRouteFrame();
     if (!mounted) return;
 
-    final result = await showPage(
-      context,
-      RichChecklistCollectionEditor(note: _note, session: session),
-      allowFullScreen: true,
+    final result = await _openChecklist(
+      (onPreview) => RichChecklistCollectionEditor(
+        note: _note,
+        session: session,
+        onPreview: onPreview,
+        previewWanted: _previewWanted,
+      ),
     );
     if (!mounted || result is! RichChecklistCollectionEditorResult) return;
     await _applyChecklistCollectionEditorResult(result, previousSelection);
+    _resumeEditing();
   }
 
   Future<void> _applyChecklistEditorResult(
@@ -1637,6 +1768,8 @@ class _NoteEditorState extends State<NoteEditor>
     _titleFocusNode.dispose();
     _checklistPopupFocusNode.dispose();
     _note.unsub("changed", _onNoteChanged);
+    _retirePreview(_preview);
+    _previewWanted.dispose();
     _attachmentRepairSubscription?.cancel();
     _quillScrollController.dispose();
     _carouselScrollController.dispose();
@@ -1722,7 +1855,10 @@ class _NoteEditorState extends State<NoteEditor>
           children: [
             Scaffold(
               floatingActionButton:
-                  _showAttachmentFab && !_note.readOnly && !_note.trashed
+                  _showAttachmentFab &&
+                      !_note.readOnly &&
+                      !_note.trashed &&
+                      !_hasPageBeside
                   ? BubbleMenu(
                       fabIcon: Icons.attach_file,
                       fabSize: 56,
@@ -1747,352 +1883,438 @@ class _NoteEditorState extends State<NoteEditor>
                       ],
                     )
                   : null,
-              appBar: NoteEditorAppBar(
-                backgroundColor: backgroundColor,
-                foregroundColor: foregroundColor,
-                leadingWidth: largeScreen ? 96 : null,
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    BackButton(
-                      color: foregroundColor,
-                      onPressed: () => unawaited(_closeEditor()),
-                    ),
-                    if (largeScreen)
-                      IconButton(
-                        color: foregroundColor,
-                        onPressed: () {
-                          setState(() {
-                            AppState.editorFullScreen =
-                                !AppState.editorFullScreen;
-                          });
-                        },
-                        icon: Icon(
-                          AppState.editorFullScreen
-                              ? Icons.fullscreen_exit
-                              : Icons.fullscreen,
-                        ),
-                      ),
-                  ],
-                ),
-                title: ValueListenableBuilder<({int checked, int total})>(
+              appBar: PreferredSize(
+                preferredSize: const Size.fromHeight(kToolbarHeight),
+                child: ValueListenableBuilder<({int checked, int total})>(
                   valueListenable: _checklistProgress,
-                  builder: (context, progress, _) => NoteCheckboxProgressTitle(
-                    checked: progress.checked,
-                    total: progress.total,
-                    foregroundColor: foregroundColor,
-                    onTap: progress.total == 0
-                        ? null
-                        : () => unawaited(_openChecklistCollectionEditor()),
+                  builder: (context, progress, _) => LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (_isReference) {
+                        return NoteEditorAppBar(
+                          backgroundColor: backgroundColor,
+                          foregroundColor: foregroundColor,
+                          leading: const SizedBox.shrink(),
+                          actions: [
+                            if (!_note.readOnly && !_note.trashed)
+                              IconButton(
+                                key: const ValueKey('note_editor_edit_again'),
+                                color: foregroundColor,
+                                onPressed: _editAgain,
+                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: context.l10n.editNote,
+                              ),
+                          ],
+                        );
+                      }
+                      final inMenu = NoteEditorAppBarActions.actionsInMenu(
+                        width:
+                            constraints.maxWidth -
+                            MediaQuery.paddingOf(context).horizontal,
+                        leadingWidth: largeScreen
+                            ? 96
+                            : _hasPageBeside
+                            ? 0
+                            : kToolbarHeight,
+                        titleWidth: NoteCheckboxProgressTitle.requiredWidth(
+                          context,
+                          checked: progress.checked,
+                          total: progress.total,
+                          withIcon: isIPhoneDuo,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        alwaysMoveColor: !wideAppBar,
+                      );
+                      return NoteEditorAppBar(
+                        backgroundColor: backgroundColor,
+                        foregroundColor: foregroundColor,
+                        leadingWidth: largeScreen
+                            ? 96
+                            : _hasPageBeside
+                            ? 0
+                            : null,
+                        // Leaving, and actions that could take the note away,
+                        // wait until the page beside it has closed.
+                        leading: _hasPageBeside
+                            ? const SizedBox.shrink()
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  BackButton(
+                                    color: foregroundColor,
+                                    onPressed: () => unawaited(_closeEditor()),
+                                  ),
+                                  if (largeScreen)
+                                    IconButton(
+                                      color: foregroundColor,
+                                      onPressed: () {
+                                        setState(() {
+                                          AppState.editorFullScreen =
+                                              !AppState.editorFullScreen;
+                                        });
+                                      },
+                                      icon: Icon(
+                                        AppState.editorFullScreen
+                                            ? Icons.fullscreen_exit
+                                            : Icons.fullscreen,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                        title: NoteCheckboxProgressTitle(
+                          checked: progress.checked,
+                          total: progress.total,
+                          backgroundColor: backgroundColor,
+                          foregroundColor: foregroundColor,
+                          onTap: progress.total == 0 || _hasPageBeside
+                              ? null
+                              : () =>
+                                    unawaited(_openChecklistCollectionEditor()),
+                        ),
+                        actions: _note.trashed
+                            ? [
+                                IconButton(
+                                  key: const ValueKey(
+                                    'note_editor_search_action',
+                                  ),
+                                  color: foregroundColor,
+                                  onPressed: _openFind,
+                                  icon: const Icon(Icons.search),
+                                  tooltip: context.l10n.findInNote,
+                                ),
+                                IconButton(
+                                  color: foregroundColor,
+                                  onPressed: () async {
+                                    final navigator = Navigator.of(context);
+                                    await _note.restoreFromTrash();
+                                    if (mounted) {
+                                      navigator.pop();
+                                    }
+                                  },
+                                  icon: Icon(Icons.restore_from_trash),
+                                  tooltip: context.l10n.restore,
+                                ),
+                              ]
+                            : [
+                                NoteEditorAppBarActions(
+                                  note: _note,
+                                  foregroundColor: foregroundColor,
+                                  onSearch: _openFind,
+                                  onColor: () => unawaited(_pickNoteColor()),
+                                  onReminder: () => unawaited(_editReminder()),
+                                  onPin: _togglePinned,
+                                  onLabels: () => unawaited(_editLabels()),
+                                  overflowMenu: _hasPageBeside
+                                      ? const SizedBox.shrink()
+                                      : _buildNoteOverflowMenu(inMenu),
+                                  inMenu: inMenu,
+                                ),
+                              ],
+                      );
+                    },
                   ),
                 ),
-                actions: _note.trashed
-                    ? [
-                        IconButton(
-                          key: const ValueKey('note_editor_search_action'),
-                          color: foregroundColor,
-                          onPressed: _openFind,
-                          icon: const Icon(Icons.search),
-                          tooltip: context.l10n.findInNote,
-                        ),
-                        IconButton(
-                          color: foregroundColor,
-                          onPressed: () async {
-                            final navigator = Navigator.of(context);
-                            await _note.restoreFromTrash();
-                            if (mounted) {
-                              navigator.pop();
-                            }
-                          },
-                          icon: Icon(Icons.restore_from_trash),
-                          tooltip: context.l10n.restore,
-                        ),
-                      ]
-                    : [
-                        NoteEditorAppBarActions(
-                          note: _note,
-                          foregroundColor: foregroundColor,
-                          onSearch: _openFind,
-                          onColor: () => unawaited(_pickNoteColor()),
-                          onReminder: () => unawaited(_editReminder()),
-                          onPin: _togglePinned,
-                          onLabels: () => unawaited(_editLabels()),
-                          overflowMenu: _buildNoteOverflowMenu(
-                            showColor: !wideAppBar,
-                          ),
-                          showColor: wideAppBar,
-                        ),
-                      ],
               ),
               backgroundColor: backgroundColor,
-              body: Column(
-                children: [
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    child: NoteFindBar(
-                      controller: _findController,
-                      canEdit: !_note.readOnly && !_note.trashed,
-                      backgroundColor: backgroundColor,
-                      foregroundColor: foregroundColor,
-                      onClose: _closeFind,
-                      onReplace: () =>
-                          unawaited(_replaceFindMatch(replaceAll: false)),
-                      onReplaceAll: () =>
-                          unawaited(_replaceFindMatch(replaceAll: true)),
+              body: DuoSafeArea(
+                child: Column(
+                  children: [
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      child: IgnorePointer(
+                        ignoring: _isReference,
+                        child: NoteFindBar(
+                          controller: _findController,
+                          canEdit: !_note.readOnly && !_note.trashed,
+                          backgroundColor: backgroundColor,
+                          foregroundColor: foregroundColor,
+                          onClose: _closeFind,
+                          onReplace: () =>
+                              unawaited(_replaceFindMatch(replaceAll: false)),
+                          onReplaceAll: () =>
+                              unawaited(_replaceFindMatch(replaceAll: true)),
+                        ),
+                      ),
                     ),
-                  ),
-                  Expanded(
-                    child: _NoteEditorScrollSurface(
-                      key: const ValueKey('note_editor_scroll_surface'),
-                      controller: _quillScrollController,
-                      onTap: _note.readOnly || _note.trashed
-                          ? null
-                          : _focusEditorAtEnd,
-                      child: Column(
-                        children: [
-                          NoteAttachmentsCarousel(
-                            note: _note,
-                            onPop: () => setState(() {}),
-                            scrollController: _carouselScrollController,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16, right: 16),
-                            child: Focus(
-                              onKeyEvent: (node, event) {
-                                if (event is KeyDownEvent) {
-                                  if (event.logicalKey ==
-                                          LogicalKeyboardKey.enter ||
-                                      event.logicalKey ==
-                                          LogicalKeyboardKey.tab) {
-                                    _handleTitleEnterPressed();
-                                    return KeyEventResult.handled;
-                                  }
-                                }
-                                return KeyEventResult.ignored;
-                              },
-                              child: TextField(
-                                controller: _titleController,
-                                focusNode: _titleFocusNode,
-                                autofocus:
-                                    widget.autoFocus ||
-                                    (!_note.readOnly && _note.content == ''),
-                                readOnly: _note.readOnly || _note.trashed,
-                                maxLines: null,
-                                keyboardType: TextInputType.text,
-                                textInputAction: TextInputAction.next,
-                                onSubmitted: (_) => _handleTitleEnterPressed(),
-                                onEditingComplete: _handleTitleEnterPressed,
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w600,
-                                  color: foregroundColor,
+                    Expanded(
+                      child: _NoteEditorScrollSurface(
+                        key: const ValueKey('note_editor_scroll_surface'),
+                        controller: _quillScrollController,
+                        onTap: _note.readOnly || _note.trashed
+                            ? null
+                            : (position) => _isReference
+                                  ? _editAgain(position)
+                                  : _focusEditorAtEnd(),
+                        child: IgnorePointer(
+                          // It can still be scrolled.
+                          ignoring: _isReference,
+                          child: Column(
+                            children: [
+                              IgnorePointer(
+                                ignoring: _hasPageBeside,
+                                child: NoteAttachmentsCarousel(
+                                  note: _note,
+                                  onPop: () => setState(() {}),
+                                  scrollController: _carouselScrollController,
                                 ),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.only(bottom: 8),
-                                  border: InputBorder.none,
-                                  hintText: context.l10n.titleYourThought,
-                                  hintStyle: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w600,
-                                    color: placeholderColor,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 16,
+                                  right: 16,
+                                ),
+                                child: Focus(
+                                  onKeyEvent: (node, event) {
+                                    if (event is KeyDownEvent) {
+                                      if (event.logicalKey ==
+                                              LogicalKeyboardKey.enter ||
+                                          event.logicalKey ==
+                                              LogicalKeyboardKey.tab) {
+                                        _handleTitleEnterPressed();
+                                        return KeyEventResult.handled;
+                                      }
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: TextField(
+                                    controller: _titleController,
+                                    focusNode: _titleFocusNode,
+                                    autofocus:
+                                        widget.autoFocus ||
+                                        (!_note.readOnly &&
+                                            _note.content == ''),
+                                    readOnly: _note.readOnly || _note.trashed,
+                                    maxLines: null,
+                                    keyboardType: TextInputType.text,
+                                    textInputAction: TextInputAction.next,
+                                    onSubmitted: (_) =>
+                                        _handleTitleEnterPressed(),
+                                    onEditingComplete: _handleTitleEnterPressed,
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w600,
+                                      color: foregroundColor,
+                                    ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.only(
+                                        bottom: 8,
+                                      ),
+                                      border: InputBorder.none,
+                                      hintText: context.l10n.titleYourThought,
+                                      hintStyle: TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w600,
+                                        color: placeholderColor,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                          _NoteEditorMetadata(
-                            updatedAt: _note.updatedAt,
-                            labels: _note.labels,
-                            foregroundColor: foregroundColor,
-                          ),
-                          Theme(
-                            data: Theme.of(context).copyWith(
-                              checkboxTheme: CheckboxThemeData(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                side: BorderSide(
-                                  width: 2,
-                                  color: foregroundColor,
-                                ),
-                                splashRadius: 24,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.padded,
+                              _NoteEditorMetadata(
+                                updatedAt: _note.updatedAt,
+                                labels: _note.labels,
+                                foregroundColor: foregroundColor,
                               ),
-                            ),
-                            child: DefaultTextStyle(
-                              style: TextStyle(color: foregroundColor),
-                              child: Focus(
-                                onKeyEvent: _handleKeyPressed,
-                                child: Listener(
-                                  behavior: HitTestBehavior.translucent,
-                                  onPointerDown: (_) =>
-                                      _handleChecklistEditorTap(),
-                                  child: QuillEditor.basic(
-                                    scrollController: _quillScrollController,
-                                    focusNode: _focusNode,
-                                    controller: _controller,
-                                    config: QuillEditorConfig(
-                                      editorKey: _editorKey,
-                                      onTapDown: (details, _) =>
-                                          _embedEditing.handlesTapDown(
-                                            _controller,
-                                            details,
-                                            _editorKey.currentState,
-                                            _focusNode,
-                                          ),
-                                      onTapUp: (details, _) =>
-                                          _embedEditing.handlesTapUp(
-                                            _controller,
-                                            details,
-                                            _focusNode,
-                                            _editorKey.currentState,
-                                          ),
-                                      onSingleLongTapStart: (details, _) =>
-                                          _embedEditing.handlesGesture(
-                                            _controller,
-                                            details.globalPosition,
-                                          ),
-                                      onSingleLongTapMoveUpdate: (details, _) =>
-                                          _embedEditing.handlesGesture(
-                                            _controller,
-                                            details.globalPosition,
-                                          ),
-                                      onSingleLongTapEnd: (details, _) =>
-                                          _embedEditing.handlesGesture(
-                                            _controller,
-                                            details.globalPosition,
-                                          ),
-                                      checkBoxReadOnly: _note.trashed,
-                                      scrollable: false,
-                                      padding: EdgeInsets.only(
-                                        top: 0,
-                                        bottom: 32,
-                                        left: 16,
-                                        right: 16,
-                                      ),
-                                      readOnlyMouseCursor:
-                                          SystemMouseCursors.alias,
-                                      showCursor:
-                                          !_note.readOnly &&
-                                          !_note.trashed &&
-                                          _embedEditing.controller == null,
-                                      enableInteractiveSelection: true,
-                                      enableSelectionToolbar:
-                                          _embedEditing.controller == null,
-                                      placeholder: context.l10n.startWriting,
-                                      customLeadingBlockBuilder:
-                                          customLeadingBlockBuilder,
-                                      onKeyPressed: _handleEditorKey,
-                                      customActions:
-                                          _verticalSelectionAction == null
-                                          ? null
-                                          : <Type, Action<Intent>>{
-                                              ExtendSelectionVerticallyToAdjacentLineIntent:
-                                                  _verticalSelectionAction!,
-                                            },
-                                      customRecognizerBuilder:
-                                          interceptDesktopLinkTaps
-                                          ? _buildDesktopLinkRecognizer
-                                          : null,
-                                      textSpanBuilder:
-                                          (
-                                            context,
-                                            node,
-                                            nodeOffset,
-                                            text,
-                                            style,
-                                            recognizer,
-                                          ) => NoteSearchHighlighter.build(
-                                            node: node,
-                                            nodeOffset: nodeOffset,
-                                            text: text,
-                                            style: style,
-                                            recognizer: recognizer,
-                                            matches:
-                                                _findController.renderedMatches,
-                                            activeMatch:
-                                                _findController.currentMatch,
-                                            matchColor: isDark(backgroundColor)
-                                                ? Colors.amber.withValues(
-                                                    alpha: 0.34,
-                                                  )
-                                                : Colors.yellow.withValues(
-                                                    alpha: 0.56,
-                                                  ),
-                                            activeMatchColor:
-                                                isDark(backgroundColor)
-                                                ? Colors.orangeAccent
-                                                      .withValues(alpha: 0.62)
-                                                : Colors.orange.withValues(
-                                                    alpha: 0.58,
-                                                  ),
-                                          ),
-                                      customStyles: buildQuillStyles(
-                                        foregroundColor: foregroundColor,
-                                        backgroundColor: backgroundColor,
-                                        placeholderColor: placeholderColor,
-                                        comfortableLists: true,
-                                      ),
-                                      embedBuilders: noteEmbedBuilders(
-                                        note: _note,
-                                        editing: _embedEditing,
-                                      ),
-                                      customLinkPrefixes: const ['audio://'],
-                                      linkActionPickerDelegate:
-                                          _audioLinkActionPicker,
-                                      onLaunchUrl: (url) {
-                                        return;
-                                      },
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  checkboxTheme: CheckboxThemeData(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
-                                  ).withWebInputSemantics(),
+                                    side: BorderSide(
+                                      width: 2,
+                                      color: foregroundColor,
+                                    ),
+                                    splashRadius: 24,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.padded,
+                                  ),
+                                ),
+                                child: DefaultTextStyle(
+                                  style: TextStyle(color: foregroundColor),
+                                  child: Focus(
+                                    onKeyEvent: _handleKeyPressed,
+                                    child: Listener(
+                                      behavior: HitTestBehavior.translucent,
+                                      onPointerDown: (_) =>
+                                          _handleChecklistEditorTap(),
+                                      child: QuillEditor.basic(
+                                        scrollController:
+                                            _quillScrollController,
+                                        focusNode: _focusNode,
+                                        controller: _preview ?? _controller,
+                                        config: QuillEditorConfig(
+                                          editorKey: _editorKey,
+                                          onTapDown: (details, _) =>
+                                              _embedEditing.handlesTapDown(
+                                                _controller,
+                                                details,
+                                                _editorKey.currentState,
+                                                _focusNode,
+                                              ),
+                                          onTapUp: (details, _) =>
+                                              _embedEditing.handlesTapUp(
+                                                _controller,
+                                                details,
+                                                _focusNode,
+                                                _editorKey.currentState,
+                                              ),
+                                          onSingleLongTapStart: (details, _) =>
+                                              _embedEditing.handlesGesture(
+                                                _controller,
+                                                details.globalPosition,
+                                              ),
+                                          onSingleLongTapMoveUpdate:
+                                              (details, _) =>
+                                                  _embedEditing.handlesGesture(
+                                                    _controller,
+                                                    details.globalPosition,
+                                                  ),
+                                          onSingleLongTapEnd: (details, _) =>
+                                              _embedEditing.handlesGesture(
+                                                _controller,
+                                                details.globalPosition,
+                                              ),
+                                          checkBoxReadOnly: _note.trashed,
+                                          scrollable: false,
+                                          padding: EdgeInsets.only(
+                                            top: 0,
+                                            bottom: 32,
+                                            left: 16,
+                                            right: 16,
+                                          ),
+                                          readOnlyMouseCursor:
+                                              SystemMouseCursors.alias,
+                                          showCursor:
+                                              !_note.readOnly &&
+                                              !_note.trashed &&
+                                              _embedEditing.controller == null,
+                                          enableInteractiveSelection: true,
+                                          enableSelectionToolbar:
+                                              _embedEditing.controller == null,
+                                          placeholder:
+                                              context.l10n.startWriting,
+                                          customLeadingBlockBuilder:
+                                              customLeadingBlockBuilder,
+                                          onKeyPressed: _handleEditorKey,
+                                          customActions:
+                                              _verticalSelectionAction == null
+                                              ? null
+                                              : <Type, Action<Intent>>{
+                                                  ExtendSelectionVerticallyToAdjacentLineIntent:
+                                                      _verticalSelectionAction!,
+                                                },
+                                          customRecognizerBuilder:
+                                              interceptDesktopLinkTaps
+                                              ? _buildDesktopLinkRecognizer
+                                              : null,
+                                          textSpanBuilder:
+                                              (
+                                                context,
+                                                node,
+                                                nodeOffset,
+                                                text,
+                                                style,
+                                                recognizer,
+                                              ) => NoteSearchHighlighter.build(
+                                                node: node,
+                                                nodeOffset: nodeOffset,
+                                                text: text,
+                                                style: style,
+                                                recognizer: recognizer,
+                                                matches: _findController
+                                                    .renderedMatches,
+                                                activeMatch: _findController
+                                                    .currentMatch,
+                                                matchColor:
+                                                    isDark(backgroundColor)
+                                                    ? Colors.amber.withValues(
+                                                        alpha: 0.34,
+                                                      )
+                                                    : Colors.yellow.withValues(
+                                                        alpha: 0.56,
+                                                      ),
+                                                activeMatchColor:
+                                                    isDark(backgroundColor)
+                                                    ? Colors.orangeAccent
+                                                          .withValues(
+                                                            alpha: 0.62,
+                                                          )
+                                                    : Colors.orange.withValues(
+                                                        alpha: 0.58,
+                                                      ),
+                                              ),
+                                          customStyles: buildQuillStyles(
+                                            foregroundColor: foregroundColor,
+                                            backgroundColor: backgroundColor,
+                                            placeholderColor: placeholderColor,
+                                            comfortableLists: true,
+                                          ),
+                                          embedBuilders: noteEmbedBuilders(
+                                            note: _note,
+                                            editing: _embedEditing,
+                                          ),
+                                          customLinkPrefixes: const [
+                                            'audio://',
+                                          ],
+                                          linkActionPickerDelegate:
+                                              _audioLinkActionPicker,
+                                          onLaunchUrl: (url) {
+                                            return;
+                                          },
+                                        ),
+                                      ).withWebInputSemantics(),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              ..._note.recordings.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final recording = entry.value;
+                                _audioPlayerKeys[recording.src] ??= GlobalKey();
+                                return NoteAudioPlayer(
+                                  key: _audioPlayerKeys[recording.src],
+                                  recording: recording,
+                                  noteLocked: _note.locked,
+                                  noteSessionUnlocked: _note.unlocked,
+                                  passwordProtectedDecoder:
+                                      _note.decryptAttachmentForSession,
+                                  onDelete: () async {
+                                    _removeAudioTagsForIndex(index);
+                                    await _note.removeRecording(recording.src);
+                                    _audioPlayerKeys.remove(recording.src);
+                                    setState(() {});
+                                  },
+                                  onUpdate: (updatedRecording) async {
+                                    await _note.updateRecording(
+                                      updatedRecording,
+                                    );
+                                    setState(() {});
+                                  },
+                                );
+                              }),
+                            ],
                           ),
-                          ..._note.recordings.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final recording = entry.value;
-                            _audioPlayerKeys[recording.src] ??= GlobalKey();
-                            return NoteAudioPlayer(
-                              key: _audioPlayerKeys[recording.src],
-                              recording: recording,
-                              noteLocked: _note.locked,
-                              noteSessionUnlocked: _note.unlocked,
-                              passwordProtectedDecoder:
-                                  _note.decryptAttachmentForSession,
-                              onDelete: () async {
-                                _removeAudioTagsForIndex(index);
-                                await _note.removeRecording(recording.src);
-                                _audioPlayerKeys.remove(recording.src);
-                                setState(() {});
-                              },
-                              onUpdate: (updatedRecording) async {
-                                await _note.updateRecording(updatedRecording);
-                                setState(() {});
-                              },
-                            );
-                          }),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                  if (!_note.trashed && !_note.readOnly)
-                    _buildLinkPreview(backgroundColor, foregroundColor),
-                  if (!_note.trashed && !_note.readOnly)
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOutCubic,
-                      child: _showAttachmentFab
-                          ? const SizedBox.shrink()
-                          : _buildToolbar(),
-                    ),
-                ],
+                    if (!_note.trashed && !_note.readOnly && !_isReference)
+                      _buildLinkPreview(backgroundColor, foregroundColor),
+                    if (!_note.trashed && !_note.readOnly && !_isReference)
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutCubic,
+                        child: _showAttachmentFab
+                            ? const SizedBox.shrink()
+                            : _buildToolbar(),
+                      ),
+                  ],
+                ),
               ),
             ),
-            if (_checklistPromptController.state.isVisible &&
+            if (!_hasPageBeside &&
+                _checklistPromptController.state.isVisible &&
                 _checklistPopupGeometry != null)
               _buildChecklistPopup(),
           ],
@@ -2289,7 +2511,7 @@ class _NoteEditorState extends State<NoteEditor>
   void _handleSketchAttachment() async {
     if (_checkAttachmentLimit()) return;
 
-    await showPage(
+    await openBesideNote(
       context,
       SketchPage(
         note: _note,
@@ -2297,7 +2519,7 @@ class _NoteEditorState extends State<NoteEditor>
           backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
         ),
       ),
-      allowFullScreen: true,
+      noteStaysEditable: true,
     );
     _scrollToAttachments();
   }
@@ -2488,7 +2710,8 @@ class _NoteEditorState extends State<NoteEditor>
 
   Future<bool> _persistSnapshot(_NoteEditorSaveSnapshot snapshot) async {
     if (widget.deleteIfUnchanged && _initialPlainText != null) {
-      if (snapshot.plainText == _initialPlainText) {
+      if (snapshot.plainText == _initialPlainText &&
+          _note.attachments.isEmpty) {
         if (_note.id == null) return true;
         try {
           return await _note.delete() >= 0;
@@ -2526,8 +2749,12 @@ class _NoteEditorState extends State<NoteEditor>
     }
   }
 
-  Future<void> _closeEditor([Object? result]) async {
-    if (_isClosing || _allowPop) return;
+  /// False if the note could not be saved and stays open.
+  Future<bool> _closeEditor([Object? result]) =>
+      _closing ??= _saveAndPop(result).whenComplete(() => _closing = null);
+
+  Future<bool> _saveAndPop(Object? result) async {
+    if (_isClosing || _allowPop) return true;
 
     _changeTimer?.cancel();
     _cancelChecklistPopupAutoHide();
@@ -2539,7 +2766,7 @@ class _NoteEditorState extends State<NoteEditor>
     final saved = await _enqueueSave();
     if (!saved) {
       _cancelCloseAfterFailure();
-      return;
+      return false;
     }
 
     if (AppState.forgetLockedNotePassword && _note.locked) {
@@ -2552,16 +2779,17 @@ class _NoteEditorState extends State<NoteEditor>
           stackTrace,
         );
         _cancelCloseAfterFailure();
-        return;
+        return false;
       }
     }
 
-    if (!mounted) return;
+    if (!mounted) return true;
     setState(() => _allowPop = true);
     await WidgetsBinding.instance.endOfFrame;
     if (mounted) {
       Navigator.of(context).pop(result);
     }
+    return true;
   }
 
   void _cancelCloseAfterFailure() {
@@ -3159,7 +3387,7 @@ class _NoteEditorState extends State<NoteEditor>
     }
   }
 
-  Widget _buildNoteOverflowMenu({required bool showColor}) {
+  Widget _buildNoteOverflowMenu(Set<NoteEditorMenuAction> actions) {
     return NoteEditorOverflowMenu(
       note: _note,
       lockBusy: _isLockQueued || _isLockRemovalQueued,
@@ -3172,7 +3400,16 @@ class _NoteEditorState extends State<NoteEditor>
       onShare: () => unawaited(_shareCurrentNote()),
       onDuplicate: () => unawaited(_duplicateCurrentNote()),
       onDelete: () => unawaited(_moveCurrentNoteToTrash()),
-      onColor: showColor ? () => unawaited(_pickNoteColor()) : null,
+      onColor: actions.contains(NoteEditorMenuAction.color)
+          ? () => unawaited(_pickNoteColor())
+          : null,
+      onLabels: actions.contains(NoteEditorMenuAction.labels)
+          ? () => unawaited(_editLabels())
+          : null,
+      onReminder: actions.contains(NoteEditorMenuAction.reminder)
+          ? () => unawaited(_editReminder())
+          : null,
+      onPin: actions.contains(NoteEditorMenuAction.pin) ? _togglePinned : null,
     );
   }
 
@@ -3269,14 +3506,17 @@ class _NoteEditorScrollSurface extends StatelessWidget {
   });
 
   final ScrollController controller;
-  final VoidCallback? onTap;
+  final ValueChanged<Offset>? onTap;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final onTap = this.onTap;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onTap: onTap,
+      onTapUp: onTap == null
+          ? null
+          : (details) => onTap(details.globalPosition),
       child: SingleChildScrollView(controller: controller, child: child),
     );
   }

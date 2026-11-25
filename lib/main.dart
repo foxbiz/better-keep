@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/services/local_storage_recovery.dart';
 import 'package:better_keep/services/database.dart' show DatabaseUpdateRequired;
 import 'package:better_keep/services/firebase_scoped_preferences.dart';
@@ -92,6 +93,7 @@ void main() async {
     AppState.init(prefs: prefsInstance),
     // Detect physical vs emulator Android so the correct emulator host is used
     FirebaseEmulatorConfig.initDeviceInfo(),
+    detectIPhoneDuo(),
   ]);
 
   FirebaseEmulatorConfig.init(prefsInstance);

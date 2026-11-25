@@ -1158,5 +1158,6 @@
   "externalSyncClearFinishing": "Finalizando a limpeza…",
   "externalSyncClearWorkingHint": "Bibliotecas grandes podem levar alguns minutos. Você pode fechar esta janela e continuar usando o Better Keep. Mantenha o app aberto até a limpeza terminar.",
   "externalSyncClearUnconfirmed": "Não foi possível confirmar se a limpeza começou. Solicite um novo código para tentar novamente.",
-  "externalSyncClearRateLimited": "Aguarde alguns minutos e tente limpar novamente."
+  "externalSyncClearRateLimited": "Aguarde alguns minutos e tente limpar novamente.",
+  "editNote": "Editar nota"
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/components/device_verification.dart';
 
 import 'dart:io';
@@ -176,16 +177,18 @@ class _UserPageState extends State<UserPage> {
             ),
           ],
         ),
-        body: RefreshIndicator(
-          onRefresh: _fetchE2EEInfo,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: _buildDeviceSection(context),
+        body: DuoSafeArea(
+          child: RefreshIndicator(
+            onRefresh: _fetchE2EEInfo,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: _buildDeviceSection(context),
+                  ),
                 ),
               ),
             ),
@@ -219,110 +222,115 @@ class _UserPageState extends State<UserPage> {
           const SizedBox(width: 8),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _handleRefresh,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Pending Approvals Alert (only show on primary device)
-                    if (_pendingApprovals.isNotEmpty && _isFirstDevice)
-                      _buildPendingApprovalsAlert(context),
+      body: DuoSafeArea(
+        child: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Pending Approvals Alert (only show on primary device)
+                      if (_pendingApprovals.isNotEmpty && _isFirstDevice)
+                        _buildPendingApprovalsAlert(context),
 
-                    // Share Access Requests Alert
-                    if (_pendingShareRequests.isNotEmpty)
-                      _buildPendingShareRequestsAlert(context),
+                      // Share Access Requests Alert
+                      if (_pendingShareRequests.isNotEmpty)
+                        _buildPendingShareRequestsAlert(context),
 
-                    UserAvatar(heroTag: 'user_avatar', showProBorder: true),
-                    const SizedBox(height: 8),
-                    if (email != null)
-                      Text(email, style: Theme.of(context).textTheme.bodyLarge),
-                    const SizedBox(height: 32),
-
-                    if (_isLoading)
-                      const Padding(
-                        padding: EdgeInsets.all(32.0),
-                        child: CircularProgressIndicator(),
-                      )
-                    else ...[
-                      // Stats Row
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildStatItem(
-                              context,
-                              _totalNotes.toString(),
-                              context.l10n.notes_,
-                              Icons.note_outlined,
-                            ),
-                            _buildStatItem(
-                              context,
-                              _upcomingReminders.toString(),
-                              context.l10n.reminders,
-                              Icons.alarm_outlined,
-                            ),
-                            _buildStatItem(
-                              context,
-                              _totalMedia.toString(),
-                              context.l10n.media,
-                              Icons.image_outlined,
-                            ),
-                          ],
+                      UserAvatar(heroTag: 'user_avatar', showProBorder: true),
+                      const SizedBox(height: 8),
+                      if (email != null)
+                        Text(
+                          email,
+                          style: Theme.of(context).textTheme.bodyLarge,
                         ),
-                      ),
-
                       const SizedBox(height: 32),
 
-                      if (!_isManagedReview) ...[
-                        // Subscription Section
-                        _buildSubscriptionSection(context),
-                        const SizedBox(height: 32),
+                      if (_isLoading)
+                        const Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: CircularProgressIndicator(),
+                        )
+                      else ...[
+                        // Stats Row
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Card(
-                            margin: EdgeInsets.zero,
-                            clipBehavior: Clip.antiAlias,
-                            child: SyncProviderTile(
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const StorageSyncPage(),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _buildStatItem(
+                                context,
+                                _totalNotes.toString(),
+                                context.l10n.notes_,
+                                Icons.note_outlined,
+                              ),
+                              _buildStatItem(
+                                context,
+                                _upcomingReminders.toString(),
+                                context.l10n.reminders,
+                                Icons.alarm_outlined,
+                              ),
+                              _buildStatItem(
+                                context,
+                                _totalMedia.toString(),
+                                context.l10n.media,
+                                Icons.image_outlined,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        if (!_isManagedReview) ...[
+                          // Subscription Section
+                          _buildSubscriptionSection(context),
+                          const SizedBox(height: 32),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Card(
+                              margin: EdgeInsets.zero,
+                              clipBehavior: Clip.antiAlias,
+                              child: SyncProviderTile(
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const StorageSyncPage(),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 32),
-                        // Connected Accounts Section
-                        _buildConnectedPlatformsSection(context),
-                        const SizedBox(height: 32),
-                        // E2EE Section
-                        E2EEStatusCard(
-                          status: E2EEService.instance.status.value,
-                          approvedDeviceCount: _devices
-                              .where((device) => device.isApproved)
-                              .length,
-                          hasRecoveryKey: _hasRecoveryKey,
-                          onManageRecoveryKey: _manageRecoveryKey,
-                          onSetupE2ee: _setupE2EE,
-                        ),
-                        const SizedBox(height: 32),
-                        if (_devices.isNotEmpty ||
-                            _isLoadingDevices ||
-                            _devicesError != null)
-                          _buildDeviceSection(context),
-                        const SizedBox(height: 32),
-                        _buildDangerZone(context),
+                          const SizedBox(height: 32),
+                          // Connected Accounts Section
+                          _buildConnectedPlatformsSection(context),
+                          const SizedBox(height: 32),
+                          // E2EE Section
+                          E2EEStatusCard(
+                            status: E2EEService.instance.status.value,
+                            approvedDeviceCount: _devices
+                                .where((device) => device.isApproved)
+                                .length,
+                            hasRecoveryKey: _hasRecoveryKey,
+                            onManageRecoveryKey: _manageRecoveryKey,
+                            onSetupE2ee: _setupE2EE,
+                          ),
+                          const SizedBox(height: 32),
+                          if (_devices.isNotEmpty ||
+                              _isLoadingDevices ||
+                              _devicesError != null)
+                            _buildDeviceSection(context),
+                          const SizedBox(height: 32),
+                          _buildDangerZone(context),
+                        ],
                       ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

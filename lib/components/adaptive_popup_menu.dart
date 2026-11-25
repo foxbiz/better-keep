@@ -1,3 +1,4 @@
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:flutter/material.dart';
 
 /// Controller for managing the popup menu state
@@ -146,6 +147,9 @@ class AdaptivePopupMenu extends StatefulWidget {
 
 class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
     with SingleTickerProviderStateMixin {
+  /// Content fills this width on large screens unless it fits its content.
+  static const _maxPopupWidth = 400.0;
+
   late AdaptivePopupController _controller;
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
@@ -153,6 +157,7 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
+  Size _screenSize = Size.zero;
 
   @override
   void initState() {
@@ -186,6 +191,21 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Folding, rotating or resizing moves the button. Measure it again once
+    // the new layout is done, so an open popup follows it.
+    final size = MediaQuery.sizeOf(context);
+    final changed = isIPhoneDuo && size != _screenSize;
+    _screenSize = size;
+    if (changed && _overlayEntry != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _overlayEntry?.markNeedsBuild();
+      });
+    }
+  }
+
+  @override
   void deactivate() {
     // Close overlay immediately when widget is removed from tree
     // This handles cases like auth state changes during navigation
@@ -215,24 +235,39 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
   void _showOverlay() {
     if (_overlayEntry != null) return;
 
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+    final openedBox = context.findRenderObject() as RenderBox?;
+    if (openedBox == null) return;
 
-    final screenSize = MediaQuery.of(context).size;
-    final buttonOffset = renderBox.localToGlobal(Offset.zero);
-    final buttonSize = renderBox.size;
-
-    final isMobile = screenSize.width < 600;
+    final openedSize = MediaQuery.sizeOf(context);
+    final openedOffset = openedBox.localToGlobal(Offset.zero);
+    final openedButton = openedBox.size;
 
     // Gap between button and popup
     const gap = 8.0;
     const screenPadding = 16.0;
 
     _overlayEntry = OverlayEntry(
-      builder: (context) {
+      builder: (overlayContext) {
+        var insets = EdgeInsets.zero;
+        var screenSize = openedSize;
+        var buttonOffset = openedOffset;
+        var buttonSize = openedButton;
+        if (isIPhoneDuo) {
+          // A SafeArea around the button hides its insets from this context,
+          // and a pane is smaller than the overlay its popups are drawn in.
+          insets = MediaQuery.paddingOf(overlayContext);
+          screenSize = MediaQuery.sizeOf(overlayContext);
+          final renderBox = context.findRenderObject() as RenderBox;
+          buttonOffset = renderBox.localToGlobal(Offset.zero);
+          buttonSize = renderBox.size;
+        }
+        final isMobile = screenSize.width < 600;
+        final leftInset = insets.left + screenPadding;
+        final rightInset = insets.right + screenPadding;
+
         // For mobile: use Positioned to ensure popup stays on screen
         if (isMobile) {
-          final popupWidth = screenSize.width - (screenPadding * 2);
+          final popupWidth = screenSize.width - leftInset - rightInset;
 
           // Calculate vertical position
           double top;
@@ -255,8 +290,8 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
               ),
               // The popup - centered horizontally on mobile
               Positioned(
-                left: screenPadding,
-                right: screenPadding,
+                left: leftInset,
+                right: rightInset,
                 bottom: widget.direction == PopupDirection.above
                     ? screenSize.height - buttonOffset.dy + gap
                     : null,
@@ -284,7 +319,11 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
         }
 
         // For larger screens: use CompositedTransformFollower
-        final popupWidth = widget.width ?? _calculatePopupWidth(screenSize);
+        final popupWidth =
+            widget.width ??
+            (widget.fitContent || !isIPhoneDuo
+                ? _calculatePopupWidth(screenSize)
+                : _maxPopupWidth);
 
         // Calculate horizontal offset to keep popup on screen
         double horizontalOffset = 0;
@@ -292,10 +331,10 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
         final popupLeft = buttonCenterX - popupWidth / 2;
         final popupRight = buttonCenterX + popupWidth / 2;
 
-        if (popupLeft < screenPadding) {
-          horizontalOffset = screenPadding - popupLeft;
-        } else if (popupRight > screenSize.width - screenPadding) {
-          horizontalOffset = (screenSize.width - screenPadding) - popupRight;
+        if (popupLeft < leftInset) {
+          horizontalOffset = leftInset - popupLeft;
+        } else if (popupRight > screenSize.width - rightInset) {
+          horizontalOffset = (screenSize.width - rightInset) - popupRight;
         }
 
         return Stack(
@@ -379,7 +418,7 @@ class _AdaptivePopupMenuState extends State<AdaptivePopupMenu>
     // On mobile: use provided width or full screen width
     // On larger screens: fit to content with max constraint
     final double effectiveMaxWidth =
-        width?.clamp(0.0, maxWidth) ?? (isMobile ? maxWidth : 400);
+        width?.clamp(0.0, maxWidth) ?? (isMobile ? maxWidth : _maxPopupWidth);
 
     Widget content = Material(
       elevation: 16,

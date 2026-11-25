@@ -1,3 +1,4 @@
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/services/note_sync_batch.dart';
 import 'package:better_keep/services/sync_presentation.dart';
 import 'package:better_keep/components/sync_progress_widget.dart';
@@ -20,12 +21,10 @@ import 'package:better_keep/components/note_card.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sort.dart';
 import 'package:better_keep/pages/home/labels.dart';
-import 'package:better_keep/pages/note_editor/note_editor.dart';
 import 'package:better_keep/services/note_sort_service.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
-import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -186,11 +185,16 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
+  /// Only read when needed: reading it subscribes the whole grid to changes.
+  bool get _isVisible =>
+      ModalRoute.isCurrentOf(context) != false ||
+      NotePaneHost.isSideBySide(context);
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _noteCards.clear();
-    if (_refreshOnReturn && ModalRoute.isCurrentOf(context) != false) {
+    if (_refreshOnReturn && _isVisible) {
       _refreshOnReturn = false;
       _fetchData();
     }
@@ -216,7 +220,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _refreshAfterRestore() async {
-    if (ModalRoute.isCurrentOf(context) == false) {
+    if (!_isVisible) {
       _refreshOnReturn = true;
     } else if (_activeReorderController != null) {
       _pendingRefreshAfterDrag = true;
@@ -1157,7 +1161,7 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
     }
     // Bulk downloads must not rebuild the entire grid behind another page.
     // Subscribe to route changes and reload committed state once on return.
-    if (ModalRoute.isCurrentOf(context) == false) {
+    if (!_isVisible) {
       _refreshOnReturn = true;
       if (_activeReorderController != null) {
         _pendingRefreshAfterDrag = false;
@@ -1293,16 +1297,9 @@ class NotesState extends State<Notes> with SingleTickerProviderStateMixin {
                       color = currentFolder.color!;
                     }
                   }
-                  showPage(
+                  openNote(
                     context,
-                    NoteEditor(
-                      note: Note(
-                        content: '[]',
-                        labels: labels.join(','),
-                        color: color,
-                      ),
-                    ),
-                    allowFullScreen: true,
+                    Note(content: '[]', labels: labels.join(','), color: color),
                   );
                 },
                 child: Text(context.l10n.createYourFirstNote),

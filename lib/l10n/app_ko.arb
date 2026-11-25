@@ -1158,5 +1158,6 @@
   "externalSyncClearFinishing": "삭제 마무리 중…",
   "externalSyncClearWorkingHint": "라이브러리가 크면 몇 분 정도 걸릴 수 있습니다. 이 창을 닫고 Better Keep을 계속 사용할 수 있습니다. 정리가 끝날 때까지 앱을 열어 두세요.",
   "externalSyncClearUnconfirmed": "정리가 시작되었는지 확인할 수 없습니다. 새 코드를 요청해 다시 시도하세요.",
-  "externalSyncClearRateLimited": "몇 분 기다린 후 다시 정리해 주세요."
+  "externalSyncClearRateLimited": "몇 분 기다린 후 다시 정리해 주세요.",
+  "editNote": "메모 편집"
 }

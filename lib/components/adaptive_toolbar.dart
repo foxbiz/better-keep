@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/state.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/utils.dart';
@@ -79,17 +80,19 @@ class _AdaptiveToolbarState extends State<AdaptiveToolbar> {
       disabledColor = Colors.white38;
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        showToggleLayout = _scrollController.position.maxScrollExtent > 0;
-      } else {
-        showToggleLayout = isGridMode;
-      }
+    if (!isIPhoneDuo) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          showToggleLayout = _scrollController.position.maxScrollExtent > 0;
+        } else {
+          showToggleLayout = isGridMode;
+        }
 
-      if (mounted) {
-        setState(() {});
-      }
-    });
+        if (mounted) {
+          setState(() {});
+        }
+      });
+    }
 
     AppState.subscribe("toolbar_grid_modes", _updateLayoutMode);
     super.initState();
@@ -175,6 +178,18 @@ class _AdaptiveToolbarState extends State<AdaptiveToolbar> {
     });
   }
 
+  /// The toggle widens the row, so once shown it stays until everything fits.
+  bool _onScrollMetricsChanged(ScrollMetricsNotification notification) {
+    if (!isIPhoneDuo || notification.metrics.axis != Axis.horizontal) {
+      return false;
+    }
+    final overflows = notification.metrics.maxScrollExtent > 0;
+    if (mounted && overflows != showToggleLayout) {
+      setState(() => showToggleLayout = overflows);
+    }
+    return false;
+  }
+
   Widget _buildScrollLayout(double buttonSize, double rowHeight) {
     List<Widget> children = [];
 
@@ -189,11 +204,14 @@ class _AdaptiveToolbarState extends State<AdaptiveToolbar> {
     return SizedBox(
       key: const ValueKey('scroll_layout'),
       height: rowHeight,
-      child: CustomScrollView(
-        scrollDirection: Axis.horizontal,
-        controller: _scrollController,
-        slivers: children,
-        shrinkWrap: true,
+      child: NotificationListener<ScrollMetricsNotification>(
+        onNotification: _onScrollMetricsChanged,
+        child: CustomScrollView(
+          scrollDirection: Axis.horizontal,
+          controller: _scrollController,
+          slivers: children,
+          shrinkWrap: true,
+        ),
       ),
     );
   }

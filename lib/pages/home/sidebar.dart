@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/components/logo.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/config.dart';
 import 'package:better_keep/dialogs/labels.dart';
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/reminder.dart';
@@ -75,6 +77,17 @@ class _SidebarState extends State<Sidebar> {
     }
   }
 
+  /// Beside an open note, the note is the top route of the navigator, not the
+  /// drawer.
+  void _closeDrawer() {
+    if (widget.persistent) return;
+    if (isIPhoneDuo) {
+      Scaffold.maybeOf(context)?.closeDrawer();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   void _handleInstallTap() {
     final info = _installInfo;
     if (info == null) return;
@@ -99,26 +112,24 @@ class _SidebarState extends State<Sidebar> {
                   child: FittedBox(fit: BoxFit.scaleDown, child: Logo()),
                 ),
               _buildTile(Icons.note, context.l10n.notes, () {
-                if (!widget.persistent) Navigator.pop(context);
+                _closeDrawer();
                 AppState.showNotes = NoteType.all;
               }, selected: AppState.showNotes == NoteType.all),
-              _buildTile(Icons.label, context.l10n.labels, () {
-                labels(context);
-              }),
+              _buildTile(Icons.label, context.l10n.labels, _openLabels),
               _buildTile(Icons.archive, context.l10n.archive, () {
-                if (!widget.persistent) Navigator.pop(context);
+                _closeDrawer();
                 AppState.showNotes = NoteType.archived;
               }, selected: AppState.showNotes == NoteType.archived),
               _buildTile(Icons.alarm, context.l10n.reminders, () {
-                if (!widget.persistent) Navigator.pop(context);
+                _closeDrawer();
                 AppState.showNotes = NoteType.reminder;
               }, selected: AppState.showNotes == NoteType.reminder),
               _buildTile(Icons.delete, context.l10n.trash, () {
-                if (!widget.persistent) Navigator.pop(context);
+                _closeDrawer();
                 AppState.showNotes = NoteType.trashed;
               }, selected: AppState.showNotes == NoteType.trashed),
               _buildTile(Icons.settings, context.l10n.settings, () {
-                if (!widget.persistent) Navigator.pop(context);
+                _closeDrawer();
                 showPage(context, const Settings());
               }),
               if (!kIsWeb && Platform.isAndroid)
@@ -163,7 +174,7 @@ class _SidebarState extends State<Sidebar> {
                       Icons.workspace_premium,
                       context.l10n.upgrade,
                       () {
-                        if (!widget.persistent) Navigator.pop(context);
+                        _closeDrawer();
                         showPaywall(context);
                       },
                     );
@@ -175,6 +186,12 @@ class _SidebarState extends State<Sidebar> {
         ],
       ),
     );
+  }
+
+  Future<void> _openLabels() async {
+    final closing = NotePaneHost.closeNote(context);
+    if (closing != null && (!await closing || !mounted)) return;
+    await labels(context);
   }
 
   Widget _buildInstallButton() {

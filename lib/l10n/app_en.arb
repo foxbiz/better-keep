@@ -3537,5 +3537,7 @@
   "externalSyncClearFinishing": "Finishing cleanup…",
   "externalSyncClearWorkingHint": "Large libraries may take a few minutes. You can close this dialog and keep using Better Keep. Keep the app open until cleanup finishes.",
   "externalSyncClearUnconfirmed": "We couldn't confirm whether clearing started. Request a new code to try again.",
-  "externalSyncClearRateLimited": "Please wait a few minutes, then try clearing again."
+  "externalSyncClearRateLimited": "Please wait a few minutes, then try clearing again.",
+  "editNote": "Edit note",
+  "@editNote": { "description": "Button that returns to editing a note shown beside another page" }
 }

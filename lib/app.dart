@@ -1,3 +1,4 @@
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/dialogs/confirm_device_sign_out.dart';
 import 'package:better_keep/services/e2ee/device_authorization.dart';
 
@@ -240,7 +241,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               AppLogger.log(
                 '[Auth] Session invalid, showing Home with warning banner',
               );
-              return Home();
+              return const NotePaneHost(child: Home());
             }
             return StreamBuilder<User?>(
               stream: AuthService.userStream,
@@ -378,7 +379,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                                 ),
                               ),
                             ),
-                            AuthenticatedStartupRoute.home => Home(),
+                            AuthenticatedStartupRoute.home =>
+                              const NotePaneHost(child: Home()),
                           };
                         },
                       );

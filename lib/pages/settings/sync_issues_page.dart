@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:better_keep/pages/home/note_pane.dart';
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -22,7 +24,13 @@ Future<void> showSyncIssuesPage(
   final activeService = service ?? ExternalSyncService.instance;
   final session = activeService.session;
   if (session == null || !session.isCurrent) return;
-  await Navigator.of(context).push<void>(
+  final navigator = Navigator.of(context);
+  final closing = NotePaneHost.closeNote(context);
+  if (closing != null &&
+      (!await closing || !session.isCurrent || !navigator.mounted)) {
+    return;
+  }
+  await navigator.push<void>(
     MaterialPageRoute(
       builder: (_) => SyncIssuesPage(service: activeService, session: session),
     ),
@@ -229,113 +237,115 @@ class _SyncIssuesPageState extends State<SyncIssuesPage> {
     final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.syncIssuesTitle)),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Column(
-            children: [
-              Expanded(
-                child: FutureBuilder<List<SyncNoteIssue>>(
-                  future: _notes,
-                  builder: (context, snapshot) {
-                    final notes = snapshot.data ?? [];
-                    final loading =
-                        snapshot.connectionState != ConnectionState.done;
-                    final message = snapshot.hasError
-                        ? l10n.externalSyncFailure('localStorage')
-                        : notes.isEmpty
-                        ? l10n.syncIssuesEmpty
-                        : null;
-                    return ListView.builder(
-                      itemCount:
-                          1 + (loading || message != null ? 1 : notes.length),
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(l10n.syncIssuesHint),
-                                if (_openFailed) ...[
-                                  const SizedBox(height: 12),
-                                  Text(l10n.syncNoteOpenFailed),
+      body: DuoSafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Column(
+              children: [
+                Expanded(
+                  child: FutureBuilder<List<SyncNoteIssue>>(
+                    future: _notes,
+                    builder: (context, snapshot) {
+                      final notes = snapshot.data ?? [];
+                      final loading =
+                          snapshot.connectionState != ConnectionState.done;
+                      final message = snapshot.hasError
+                          ? l10n.externalSyncFailure('localStorage')
+                          : notes.isEmpty
+                          ? l10n.syncIssuesEmpty
+                          : null;
+                      return ListView.builder(
+                        itemCount:
+                            1 + (loading || message != null ? 1 : notes.length),
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(l10n.syncIssuesHint),
+                                  if (_openFailed) ...[
+                                    const SizedBox(height: 12),
+                                    Text(l10n.syncNoteOpenFailed),
+                                  ],
+                                  if (_feedback case final feedback?
+                                      when !feedback.isEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    Text(feedback.localized(l10n)),
+                                  ],
                                 ],
-                                if (_feedback case final feedback?
-                                    when !feedback.isEmpty) ...[
-                                  const SizedBox(height: 12),
-                                  Text(feedback.localized(l10n)),
-                                ],
-                              ],
+                              ),
+                            );
+                          }
+                          if (loading || message != null) {
+                            return Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Center(
+                                child: loading
+                                    ? const CircularProgressIndicator()
+                                    : Text(message!),
+                              ),
+                            );
+                          }
+                          final issue = notes[index - 1];
+                          final date = DateTime.tryParse(issue.updatedAt ?? '')
+                              ?.toLocal();
+                          final title = issue.locked
+                              ? l10n.noteLocked
+                              : issue.title.trim().isEmpty
+                              ? l10n.untitledNote
+                              : issue.title.trim();
+                          return ListTile(
+                            leading: Icon(
+                              issue.locked
+                                  ? Icons.lock_outline
+                                  : Icons.description_outlined,
                             ),
-                          );
-                        }
-                        if (loading || message != null) {
-                          return Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Center(
-                              child: loading
-                                  ? const CircularProgressIndicator()
-                                  : Text(message!),
+                            title: Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
+                            subtitle: Text(
+                              [
+                                if (issue.reason ==
+                                    SyncCaptureFailure.unlockRequired)
+                                  l10n.unlockNote
+                                else
+                                  l10n.syncIssueUploadFailed,
+                                if (date != null)
+                                  MaterialLocalizations.of(context)
+                                      .formatMediumDate(date),
+                              ].join(' · '),
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _busy ? null : () => _open(issue),
                           );
-                        }
-                        final issue = notes[index - 1];
-                        final date = DateTime.tryParse(issue.updatedAt ?? '')
-                            ?.toLocal();
-                        final title = issue.locked
-                            ? l10n.noteLocked
-                            : issue.title.trim().isEmpty
-                            ? l10n.untitledNote
-                            : issue.title.trim();
-                        return ListTile(
-                          leading: Icon(
-                            issue.locked
-                                ? Icons.lock_outline
-                                : Icons.description_outlined,
-                          ),
-                          title: Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            [
-                              if (issue.reason ==
-                                  SyncCaptureFailure.unlockRequired)
-                                l10n.unlockNote
-                              else
-                                l10n.syncIssueUploadFailed,
-                              if (date != null)
-                                MaterialLocalizations.of(context)
-                                    .formatMediumDate(date),
-                            ].join(' · '),
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: _busy ? null : () => _open(issue),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: FilledButton.icon(
-                    onPressed: _busy ? null : _retry,
-                    icon: _retrying
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh),
-                    label: Text(_retrying ? l10n.loading : l10n.syncRetryNow),
+                        },
+                      );
+                    },
                   ),
                 ),
-              ),
-            ],
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _retry,
+                      icon: _retrying
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh),
+                      label: Text(_retrying ? l10n.loading : l10n.syncRetryNow),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
